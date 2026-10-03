@@ -1,5 +1,6 @@
 import type React from "react";
 import { cn } from "@/lib/utils";
+import type { WithoutTitle } from "./tooltip";
 
 const TONE_CLASS = {
   default: "hover:bg-accent hover:text-foreground",
@@ -15,7 +16,9 @@ export function IconButton({
   tone = "default",
   className,
   ...props
-}: React.ComponentProps<"button"> & { tone?: keyof typeof TONE_CLASS }) {
+}: WithoutTitle<React.ComponentProps<"button">> & {
+  tone?: keyof typeof TONE_CLASS;
+}) {
   return (
     <button
       type="button"

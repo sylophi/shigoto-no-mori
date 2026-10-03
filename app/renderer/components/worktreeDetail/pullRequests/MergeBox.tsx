@@ -168,10 +168,8 @@ export function MergeBox({
           <div className="inline-flex items-stretch">
             {mode === "armed" ? (
               disableButton
-            ) : blocked ? (
-              <SimpleTooltip tip={blocked}>{mergeButton}</SimpleTooltip>
             ) : (
-              mergeButton
+              <SimpleTooltip tip={blocked}>{mergeButton}</SimpleTooltip>
             )}
             {others.length > 0 && (
               <DropdownMenu>

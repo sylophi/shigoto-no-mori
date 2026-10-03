@@ -82,7 +82,7 @@ function TransferButtons({
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
           label="Mirror to…"
-          title="Keep a live copy of this worktree on another device"
+          tip="Keep a live copy of this worktree on another device"
           disabledReason={mirrorBlocker}
           onClick={() => setOpen("mirror")}
         />
@@ -92,7 +92,7 @@ function TransferButtons({
           rank={LABEL_RANK.transplant}
           icon={<Shovel />}
           label="Transplant to…"
-          title="Move this worktree to another device"
+          tip="Move this worktree to another device"
           onClick={() => setOpen("transplant")}
         />
       )}

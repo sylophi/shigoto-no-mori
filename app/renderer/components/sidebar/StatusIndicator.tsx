@@ -32,7 +32,7 @@ export function ChangedFilesPill({ worktree }: StatusIndicatorProps) {
   const noun = worktree.changedCount === 1 ? "file" : "files";
   const label = `${worktree.changedCount} ${noun} changed`;
   return (
-    <StatusPill icon={FileDiff} tone="amber" title={label} aria-label={label}>
+    <StatusPill icon={FileDiff} tone="amber" tip={label} aria-label={label}>
       {worktree.changedCount}
     </StatusPill>
   );
@@ -57,7 +57,7 @@ export function RemoteSyncPill({ worktree }: StatusIndicatorProps) {
         <StatusPill
           icon={CloudUpload}
           tone="violet"
-          title="Branch not yet published"
+          tip="Branch not yet published"
           aria-label="Unpublished branch"
         />
       );
@@ -66,7 +66,7 @@ export function RemoteSyncPill({ worktree }: StatusIndicatorProps) {
         <StatusPill
           icon={ArrowUp}
           tone="emerald"
-          title={`${state.ahead} commit${state.ahead === 1 ? "" : "s"} to push`}
+          tip={`${state.ahead} commit${state.ahead === 1 ? "" : "s"} to push`}
           aria-label={`${state.ahead} ahead`}
         >
           {state.ahead}
@@ -77,7 +77,7 @@ export function RemoteSyncPill({ worktree }: StatusIndicatorProps) {
         <StatusPill
           icon={ArrowDown}
           tone="sky"
-          title={`${state.behind} commit${state.behind === 1 ? "" : "s"} to pull`}
+          tip={`${state.behind} commit${state.behind === 1 ? "" : "s"} to pull`}
           aria-label={`${state.behind} behind`}
         >
           {state.behind}
@@ -88,7 +88,7 @@ export function RemoteSyncPill({ worktree }: StatusIndicatorProps) {
         <StatusPill
           icon={ArrowDownUp}
           tone="indigo"
-          title={`Mergeable: ${state.ahead} ahead, ${state.behind} behind`}
+          tip={`Mergeable: ${state.ahead} ahead, ${state.behind} behind`}
           aria-label={`${state.ahead} ahead, ${state.behind} behind`}
         >
           {state.ahead}/{state.behind}
@@ -99,7 +99,7 @@ export function RemoteSyncPill({ worktree }: StatusIndicatorProps) {
         <StatusPill
           icon={GitCompareArrows}
           tone="rose"
-          title={`Diverged: ${state.ahead} ahead, ${state.behind} behind`}
+          tip={`Diverged: ${state.ahead} ahead, ${state.behind} behind`}
           aria-label={`Diverged ${state.ahead}/${state.behind}`}
         >
           {state.ahead}/{state.behind}

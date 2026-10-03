@@ -1,6 +1,7 @@
 import { createContext, use, type ReactNode } from "react";
 import { Command } from "cmdk";
 import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // Whether the pane an item sits in holds the keys. The palette has two
@@ -25,7 +26,7 @@ export function PaletteItem({
   onSelect,
   disabled,
   selected,
-  title,
+  tip,
   className,
   children,
 }: {
@@ -33,37 +34,36 @@ export function PaletteItem({
   onSelect: () => void;
   disabled?: boolean;
   selected?: boolean;
-  title?: string;
+  tip?: string;
   className?: string;
   children: ReactNode;
 }) {
-  if (use(PaneKeys)) {
-    return (
-      <Command.Item
-        value={value}
-        onSelect={onSelect}
-        disabled={disabled}
-        title={title}
-        className={cn(ITEM_CLASS, "aria-disabled:opacity-50", className)}
-      >
-        {children}
-      </Command.Item>
-    );
-  }
-  return (
+  const item = use(PaneKeys) ? (
+    <Command.Item
+      value={value}
+      onSelect={onSelect}
+      disabled={disabled}
+      className={cn(ITEM_CLASS, "aria-disabled:opacity-50", className)}
+    >
+      {children}
+    </Command.Item>
+  ) : (
     <button
       type="button"
       tabIndex={-1}
       onMouseDown={keepFocusInInput}
       onClick={onSelect}
       disabled={disabled}
-      title={title}
       data-selected={selected || undefined}
       className={cn(RESTING_ITEM_CLASS, className)}
     >
       {children}
     </button>
   );
+  // Most rows (every worktree) never have a tip, and the palette holds
+  // a lot of them: a tooltip only where a row can have one.
+  if (tip === undefined) return item;
+  return <SimpleTooltip tip={tip}>{item}</SimpleTooltip>;
 }
 
 const HEADING_CLASS =

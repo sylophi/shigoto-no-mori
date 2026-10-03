@@ -4,6 +4,7 @@ import type { DetectedLauncher } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
@@ -113,12 +114,11 @@ export function LaunchToolsPanel({
 // interactive toggles instead. See DetectedToolsSection.
 function ToolPill({ entry }: { entry: DetectedLauncher }) {
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60"
-      title="Not installed"
-    >
-      <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
-      {entry.label}
-    </span>
+    <SimpleTooltip tip="Not installed">
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60">
+        <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
+        {entry.label}
+      </span>
+    </SimpleTooltip>
   );
 }

@@ -33,7 +33,6 @@ export function QuickCreateButton({
       onClick={(event) => createFrom(event, project.id)}
       disabled={creating}
       aria-label={label}
-      title={label}
       {...PROJECT_ACTION_HOOKS}
       className={cn(
         PROJECT_MENU_TRIGGER_CLASS,

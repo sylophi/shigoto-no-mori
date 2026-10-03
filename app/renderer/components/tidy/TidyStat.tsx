@@ -1,3 +1,4 @@
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface TidyStatProps {
@@ -29,12 +30,11 @@ export function TidyStat({
       >
         {value}
       </span>
-      <span
-        className="truncate text-xs text-muted-foreground phone:whitespace-normal"
-        title={detail}
-      >
-        {detail}
-      </span>
+      <SimpleTooltip whenTruncated tip={detail}>
+        <span className="truncate text-xs text-muted-foreground phone:whitespace-normal">
+          {detail}
+        </span>
+      </SimpleTooltip>
     </div>
   );
 }

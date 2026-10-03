@@ -19,7 +19,6 @@ export function CopyButton({ value, label = "Copy" }: CopyButtonProps) {
       type="button"
       onClick={copy}
       aria-label={label}
-      title={label}
       data-icon-button
       // Always shown in the phone layout: nothing hovers on a touch
       // screen, so a control that waits for the cursor never appears.

@@ -91,11 +91,6 @@ export function DangerZone() {
           size="sm"
           disabled={nuking}
           onClick={handleNuke}
-          title={
-            armed
-              ? "Click again to confirm. This cannot be undone."
-              : "Wipe all shigomori data"
-          }
         >
           <Flame />
           {nuking

@@ -12,6 +12,7 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { DeviceBadge, useDeviceBadges } from "@/components/sidebar/DeviceBadge";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { rowDeviceId } from "@/lib/routePaths";
 import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
@@ -571,15 +572,16 @@ function ListInput({
 // ⌫) goes back to the list.
 function PickedChip({ row, onBack }: { row: PaletteRow; onBack: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onBack}
-      onMouseDown={keepFocusInInput}
-      title="Back (⌫)"
-      className="flex max-w-[50%] shrink-0 items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-xs"
-    >
-      <PickedLabel row={row} />
-    </button>
+    <SimpleTooltip tip="Back (⌫)">
+      <button
+        type="button"
+        onClick={onBack}
+        onMouseDown={keepFocusInInput}
+        className="flex max-w-[50%] shrink-0 items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-xs"
+      >
+        <PickedLabel row={row} />
+      </button>
+    </SimpleTooltip>
   );
 }
 

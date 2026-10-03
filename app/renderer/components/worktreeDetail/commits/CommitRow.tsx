@@ -46,7 +46,6 @@ export function CommitRow({
     <button
       type="button"
       onClick={onClick}
-      title="View this commit's diff"
       className="-mx-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
     >
       <div className="flex min-w-0 flex-1 flex-col items-start gap-1">

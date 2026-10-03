@@ -44,10 +44,7 @@ export function FileViewer({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-        <span
-          className="min-w-0 flex-1 truncate font-mono text-xs select-text"
-          title={path}
-        >
+        <span className="min-w-0 flex-1 truncate font-mono text-xs select-text">
           {cut >= 0 && (
             <span className="text-muted-foreground">
               {path.slice(0, cut + 1)}
@@ -70,7 +67,6 @@ export function FileViewer({
                   notifyError("Couldn't reveal the file", err),
                 );
             }}
-            title="Reveal in Finder"
             aria-label="Reveal in Finder"
             className="shrink-0 p-0.5"
           >

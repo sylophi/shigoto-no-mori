@@ -24,7 +24,7 @@ export function PullRequestPill({ pr, stack }: PullRequestPillProps) {
   // The number shows outright, since it's what you'd quote to someone.
   const text = position ? `#${pr.number} ${position}` : `#${pr.number}`;
   return (
-    <StatusPill icon={Icon} tone={tone} title={title} aria-label={title}>
+    <StatusPill icon={Icon} tone={tone} tip={title} aria-label={title}>
       {text}
     </StatusPill>
   );

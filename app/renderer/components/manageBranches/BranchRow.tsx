@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
@@ -90,7 +91,6 @@ export function BranchRow({
           type="button"
           onClick={() => toWorktree(projectId, worktree.id)}
           className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          title={`Checked out in ${worktree.name}`}
         >
           {worktree.isPrimary ? (
             <House className="size-3" />
@@ -106,24 +106,26 @@ export function BranchRow({
           <IconButton
             onClick={() => setDraft(name)}
             aria-label={`Rename ${name}`}
-            title="Rename"
           >
             <Pencil className="size-3.5" />
           </IconButton>
-          <IconButton
-            onClick={() => setConfirmingDelete(true)}
-            disabled={checkedOut || del.isPending}
-            aria-label={`Delete ${name}`}
-            title={
+          <SimpleTooltip
+            tip={
               checkedOut
                 ? "Switch to a different branch in this worktree first"
-                : "Delete"
+                : undefined
             }
-            tone="destructive"
-            className="disabled:opacity-30"
           >
-            <Trash2 className="size-3.5" />
-          </IconButton>
+            <IconButton
+              onClick={() => setConfirmingDelete(true)}
+              disabled={checkedOut || del.isPending}
+              aria-label={`Delete ${name}`}
+              tone="destructive"
+              className="disabled:opacity-30"
+            >
+              <Trash2 className="size-3.5" />
+            </IconButton>
+          </SimpleTooltip>
         </div>
       )}
 
