@@ -7,6 +7,7 @@
 // header is the whole card.
 import { useState } from "react";
 import { Pencil, X } from "lucide-react";
+import type { PortForwardWorktree } from "@shared/ipc/modules/portForward";
 import type { CustomPort, WorktreePort } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
@@ -27,6 +28,7 @@ export function PortRow({
   entry,
   taken,
   deviceId,
+  worktree,
   remote,
   granted,
   onUpdate,
@@ -36,6 +38,7 @@ export function PortRow({
   // Every listed port, for the edit form's duplicate check.
   taken: readonly WorktreePort[];
   deviceId: string;
+  worktree: PortForwardWorktree;
   remote: boolean;
   granted: boolean;
   // Present only when this row may be changed (a custom entry, and the
@@ -133,6 +136,7 @@ export function PortRow({
         <ForwardControl
           deviceId={deviceId}
           remotePort={port}
+          worktree={worktree}
           listening={listening}
           granted={granted}
         />

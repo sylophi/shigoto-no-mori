@@ -14,6 +14,10 @@
 import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { errorMessageOf } from "@shared/errors";
 import { FORWARD_TOO_MANY_CONNS } from "@shared/ipc/modules/forward";
+import type {
+  PortForwardSummary,
+  PortForwardWorktree,
+} from "@shared/ipc/modules/portForward";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
@@ -46,10 +50,21 @@ export function watchPortForwards(queryClient: QueryClient): void {
   });
 }
 
-function usePortForwardList() {
+type PortForwardList = { forwards: PortForwardSummary[] };
+
+// `select` narrows what a consumer re-renders on: the list refetches on
+// every conn open and close, and a projection that comes out equal
+// leaves its consumer alone.
+function usePortForwardList<T = PortForwardList>(
+  select?: (list: PortForwardList) => T,
+) {
   return useQuery({
     queryKey: queryKeys.portForwards(),
     queryFn: () => window.api.portForward.list(),
+    select,
+    // The sidebar reads it on every peer row, and the web client's
+    // loopback refuses the channel: nothing to ask there.
+    enabled: canForwardPorts,
     meta: { silentError: true },
   });
 }
@@ -107,13 +122,41 @@ export function usePortForwards(deviceId: string) {
   };
 }
 
+// What the marks on a peer's worktree (the sidebar row, the Ports
+// button) say while this machine forwards its ports, matched on the
+// worktree each forward was switched on from (the note on the
+// contract's worktree field). Undefined while nothing is forwarded.
+export function useWorktreeForwardTip(
+  deviceId: string,
+  worktree: { projectId: string; id: string },
+): string | undefined {
+  const { data } = usePortForwardList((list) => {
+    const pairs = list.forwards
+      .filter(
+        (forward) =>
+          forward.deviceId === deviceId &&
+          forward.worktree?.projectId === worktree.projectId &&
+          forward.worktree.worktreeId === worktree.id,
+      )
+      .map(
+        (forward) => `${forward.remotePort} to localhost:${forward.localPort}`,
+      );
+    return pairs.length > 0 ? `Forwarding ${pairs.join(", ")}` : undefined;
+  });
+  return data;
+}
+
 // One port's forward as a switch: `apply` asks the engine for the
 // wanted state, off or on at a local port. The engine owns the rest: a
 // start on a pair it already holds is a no-op, and one naming another
 // local port moves the listener. One mutation, so the row has a single
 // pending flag and a single error to show inline. Nothing here toasts:
 // the row is the place the failure belongs.
-export function usePortForwardControl(deviceId: string, remotePort: number) {
+export function usePortForwardControl(
+  deviceId: string,
+  remotePort: number,
+  worktree: PortForwardWorktree,
+) {
   const { data } = usePortForwardList();
   const forward = data?.forwards.find(
     (entry) => entry.deviceId === deviceId && entry.remotePort === remotePort,
@@ -127,6 +170,7 @@ export function usePortForwardControl(deviceId: string, remotePort: number) {
           deviceId,
           remotePort,
           localPort: target.localPort,
+          worktree,
         });
       } else if (forward !== undefined) {
         await window.api.portForward.stop(forward.forwardId);

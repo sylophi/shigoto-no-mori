@@ -13,6 +13,7 @@ import {
   RowDeviceBadge,
   type SidebarDeviceBadge,
 } from "./DeviceBadge";
+import { ForwardMark } from "./ForwardMark";
 import { PullRequestPill } from "./PullRequestPill";
 import type { InboxShelf } from "./sidebarRow";
 import { ChangedFilesPill, RemoteSyncPill } from "./StatusIndicator";
@@ -128,15 +129,18 @@ export function WorktreeEntry({
           and side by side the longer one just eats the other. */}
       <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground/70">
         <EntryName worktree={worktree} />
-        {inline && (
-          // Pulled in vertically: the device tile stands taller than
-          // the line, and letting it set the line's height would make
-          // a peer's row taller than a local one.
-          <span className="-my-1 inline-flex shrink-0 items-center gap-1">
-            {mirror && <MirrorBadge mirror={mirror} />}
-            {device && <RowDeviceBadge badge={device} />}
-          </span>
-        )}
+        {/* Pulled in vertically: the device tile stands taller than the
+            line, and letting it set the line's height would make a
+            peer's row taller than a local one. The forward mark rides
+            here on either row: it is about this worktree, not where it
+            lives, which the inbox's context line says. */}
+        <span className="-my-1 inline-flex shrink-0 items-center gap-1">
+          {device && (
+            <ForwardMark deviceId={device.deviceId} worktree={worktree} />
+          )}
+          {inline && mirror && <MirrorBadge mirror={mirror} />}
+          {inline && device && <RowDeviceBadge badge={device} />}
+        </span>
       </span>
     </button>
   );

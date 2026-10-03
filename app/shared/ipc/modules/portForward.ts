@@ -2,7 +2,7 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import { PortNumberSchema } from "@shared/schemas";
+import { PortNumberSchema, WorktreeScopedPayloadSchema } from "@shared/schemas";
 
 // Client-scoped control surface for the port-forward engine. The engine
 // binds real TCP listeners on THIS machine's loopback
@@ -19,11 +19,23 @@ import { PortNumberSchema } from "@shared/schemas";
 // a forward it was told about.
 const ForwardIdSchema = HexId32Schema;
 
+// The peer's worktree a forward was switched on from (its Ports
+// dialog), so the sidebar and the Ports button can say that worktree is
+// being forwarded without reading every peer worktree's port list.
+// Absent for a forward started from the devices page. A label only: the
+// engine forwards by (device, port) either way, and the dialog's
+// switches match by port, so a forward another worktree (or the devices
+// page) started shows on in the dialog but marks only its own worktree.
+const PortForwardWorktreeSchema = WorktreeScopedPayloadSchema;
+
+export type PortForwardWorktree = z.infer<typeof PortForwardWorktreeSchema>;
+
 const PortForwardStartPayloadSchema = z.strictObject({
   deviceId: DeviceIdSchema,
   remotePort: PortNumberSchema,
   // Omitted means an ephemeral local port, the common case.
   localPort: PortNumberSchema.optional(),
+  worktree: PortForwardWorktreeSchema.optional(),
 });
 
 const PortForwardStartResultSchema = z.strictObject({
@@ -41,6 +53,7 @@ const PortForwardSummarySchema = z.strictObject({
   remotePort: PortNumberSchema,
   localPort: PortNumberSchema,
   connCount: z.number().int().min(0),
+  worktree: PortForwardWorktreeSchema.optional(),
 });
 
 export type PortForwardSummary = z.infer<typeof PortForwardSummarySchema>;

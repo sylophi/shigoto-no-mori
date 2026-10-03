@@ -12,6 +12,7 @@
 // since the fix (pick another local port) is right here.
 import { useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
+import type { PortForwardWorktree } from "@shared/ipc/modules/portForward";
 import { digitsOnly, parsePortNumber } from "@shared/schemas";
 import { Input } from "@/components/ui/input";
 import { TONE_TEXT } from "@/components/ui/status-dot";
@@ -28,10 +29,13 @@ export function ForwardControl({
   deviceId,
   remotePort,
   listening,
+  worktree,
   granted,
 }: {
   deviceId: string;
   remotePort: number;
+  // The worktree whose Ports dialog this is, recorded on the forward.
+  worktree: PortForwardWorktree;
   // Whether a server is behind the port over there right now.
   listening: boolean;
   // Whether this device may drive verbs on the peer. A live forward can
@@ -41,7 +45,7 @@ export function ForwardControl({
 }) {
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const { forward, apply, isPending, error, clearError } =
-    usePortForwardControl(deviceId, remotePort);
+    usePortForwardControl(deviceId, remotePort, worktree);
   const { localPort: preferred, setLocalPort } = useForwardLocalPort(
     deviceId,
     remotePort,
