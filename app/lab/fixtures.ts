@@ -9,6 +9,7 @@ import type {
   Project,
   ProjectIcon,
   Release,
+  ShigomoriConfig,
   Worktree,
 } from "@shared/schemas";
 
@@ -572,6 +573,22 @@ export const labGlobalConfig = {
   githubCli: true,
   directConnections: true,
 };
+
+// Every project's config as the lab serves it (shigomori:read): the
+// stub's shape with a create lifecycle on it (carry-over and a setup
+// script), so the pull dialogs' setup switch and their running steps
+// have every phase to name. Fresh on each call, as a read would be.
+export function labProjectConfig(): ShigomoriConfig {
+  return {
+    defaultBranch: "main",
+    scripts: { setup: "pnpm install" },
+    carryOver: [
+      { path: ".env.local", mode: "copy" },
+      { path: ".claude/settings.local.json", mode: "symlink" },
+    ],
+    launchers: [],
+  };
+}
 
 // ---- ports ----
 

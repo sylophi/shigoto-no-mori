@@ -69,6 +69,7 @@ import {
   labCustomPorts,
   labDisks,
   labGlobalConfig,
+  labProjectConfig,
   labReleases,
   labListeningPorts,
   labPoolPorts,
@@ -427,18 +428,8 @@ function hostHandlersFor(
         Object.assign(entry, { listening: labListeningPorts.has(entry.port) }),
       ),
     }),
-    // The stub's shape with a full create lifecycle on it (carry-over,
-    // a setup script, and ports below), so the pull dialogs' setup
-    // switch and their running steps have every phase to name.
-    "shigomori:read": () => ({
-      defaultBranch: "main",
-      scripts: { setup: "pnpm install" },
-      carryOver: [
-        { path: ".env.local", mode: "copy" },
-        { path: ".claude/settings.local.json", mode: "symlink" },
-      ],
-      launchers: [],
-    }),
+    // With ports below, the full create lifecycle (fixtures.ts).
+    "shigomori:read": () => labProjectConfig(),
     "portPool:isActive": () => true,
     "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,

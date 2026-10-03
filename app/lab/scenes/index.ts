@@ -2,8 +2,10 @@
 // still renders without the app, and what the marketing site shows.
 import { DevicesScene } from "./DevicesScene";
 import { RowScene } from "./RowScene";
+import { TransplantScene } from "./TransplantScene";
 
 export const scenes = {
   row: RowScene,
   devices: DevicesScene,
+  transplant: TransplantScene,
 };

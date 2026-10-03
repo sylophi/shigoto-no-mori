@@ -4,29 +4,15 @@
 // them around what only it shows. The destination is this machine
 // unless the flow is a transplant to a peer (DestinationScope), so
 // `localProject` and `thisDeviceLabel` name the landing side, whichever
-// machine that is.
+// machine that is. What each piece reads is here, and how it looks is
+// PullReviewView.tsx.
 import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
-import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  Check,
-} from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { Project, Worktree } from "@shared/schemas";
 import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
-import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip-button";
-import { PathSpan } from "@/components/ui/path-span";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { StatusDot } from "@/components/ui/status-dot";
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useBranches } from "@/hooks/git/useBranches";
 import {
@@ -41,17 +27,22 @@ import {
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import { pluralize } from "@/lib/pluralize";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import { cn } from "@/lib/utils";
 import {
   CloneDestinationSection,
   type LandingTarget,
 } from "./cloneDestination";
 import type { PullChoiceState } from "./ignoreChoice";
 import { PullLeaveOut } from "./PullLeaveOut";
+import {
+  DestinationFolderView,
+  DestinationRowView,
+  PullReviewFooterView,
+  PullReviewStepView,
+  ReviewDevicesColumnView,
+  SourceCardView,
+} from "./PullReviewView";
 import { SetupToggle } from "./SetupToggle";
-import { FlowBody, FlowFooter } from "./FlowChrome";
 import { isReadyTarget, type PeerTarget } from "./peerTargets";
 import { type Landing, LANDS_HERE } from "./pullSteps";
 
@@ -115,81 +106,8 @@ function useLocalCollision(
   return { landingBranch, held, holder, refusal };
 }
 
-// One device of the column: the mark a pick fills, the device, two
-// lines about it and a trailing tag. The destination, the devices that
-// could be it and the source all wear it.
-function DeviceRow({
-  className,
-  mark,
-  icon,
-  title,
-  note,
-  trailing,
-  soft = false,
-  onPick,
-  disabled = false,
-}: {
-  className: string;
-  // The icon and the second line a step back, as the destination's
-  // filled row wears them.
-  soft?: boolean;
-  // Absent on a row that is no pick at all (the source among targets).
-  mark?: ReactNode;
-  // What the device looks like (DeviceGlyph), never a shape picked here.
-  icon: DeviceIcon;
-  title: string;
-  note: string;
-  trailing?: ReactNode;
-  // Makes the row a radio to pick the device by.
-  onPick?: () => void;
-  disabled?: boolean;
-}) {
-  const body = (
-    <>
-      {mark}
-      <DeviceGlyph icon={icon} className={cn("size-4", soft && "opacity-70")} />
-      <span className="min-w-0 flex-1 leading-tight">
-        <span className="block truncate font-medium">{title}</span>
-        <span className={cn("block truncate text-2xs", soft && "opacity-70")}>
-          {note}
-        </span>
-      </span>
-      {trailing}
-    </>
-  );
-  const shape = "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm";
-  if (onPick === undefined) {
-    return <li className={cn(shape, className)}>{body}</li>;
-  }
-  return (
-    <li>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={false}
-        disabled={disabled}
-        onClick={onPick}
-        className={cn(
-          shape,
-          "w-full text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-          className,
-        )}
-      >
-        {body}
-      </button>
-    </li>
-  );
-}
-
-const EMPTY_MARK = (
-  <span
-    aria-hidden
-    className="size-4 shrink-0 rounded-full bg-muted-foreground/20"
-  />
-);
-
-// The landing device, filled: it has the repo, or gets it (the clone
-// the flow makes first, which has no branches to collide with yet).
+// The landing device, filled (DestinationRowView), with its device and
+// its side of the collision check.
 function DestinationRow({
   worktree,
   target,
@@ -208,103 +126,26 @@ function DestinationRow({
     target.project,
     worktree,
   );
-  const holds = target.project
-    ? `has ${target.project.name}`
-    : `gets ${target.clone.projectName}`;
   return (
-    <DeviceRow
-      className={
-        held
-          ? "bg-amber-500/10 text-foreground"
-          : "bg-accent text-accent-foreground"
-      }
-      mark={
-        <span
-          aria-hidden
-          className={cn(
-            "flex size-4 shrink-0 items-center justify-center rounded-full",
-            held
-              ? "bg-amber-500 text-background"
-              : "bg-primary text-primary-foreground",
-          )}
-        >
-          {held ? (
-            <AlertTriangle className="size-2.5" />
-          ) : (
-            <Check className="size-2.5" />
-          )}
-        </span>
-      }
+    <DestinationRowView
+      worktree={worktree}
       icon={destinationIcon}
-      soft
-      title={thisDeviceLabel}
-      note={
-        held
-          ? holder === undefined
-            ? `already has ${landingBranch}`
-            : `already has ${landingBranch} in ${holder.name}`
-          : landingBranch !== worktree.branch
-            ? `${holds}, copy on ${landingBranch}`
-            : holds
+      thisDeviceLabel={thisDeviceLabel}
+      holds={
+        target.project
+          ? `has ${target.project.name}`
+          : `gets ${target.clone.projectName}`
       }
-      trailing={
-        <StatusDot
-          tone={held ? "amber" : "emerald"}
-          label={<span className="text-xs">{tag}</span>}
-        />
-      }
-    />
-  );
-}
-
-// A device that could be the destination and is not (or not yet), as
-// the row to pick it by: one with a checkout of the repo, or one that
-// would clone it first (named as the destination row names a clone).
-// One that cannot take the worktree right now stays listed, off, with
-// the reason: a row that vanished would not say why.
-function PeerTargetRow({
-  target,
-  projectName,
-  onPick,
-}: {
-  target: PeerTarget;
-  projectName: string;
-  onPick: (deviceId: string) => void;
-}) {
-  const ready = isReadyTarget(target);
-  return (
-    <DeviceRow
-      className={cn(
-        "bg-muted/40 text-muted-foreground",
-        ready ? "hover:bg-muted hover:text-foreground" : "opacity-60",
-      )}
-      mark={EMPTY_MARK}
-      icon={target.icon}
-      title={target.label}
-      note={
-        target.project ? `has ${target.project.name}` : `gets ${projectName}`
-      }
-      trailing={
-        target.block !== undefined && (
-          <span className="text-xs">
-            {target.block === "offline" ? "not connected" : "read-only"}
-          </span>
-        )
-      }
-      onPick={() => onPick(target.deviceId)}
-      disabled={!ready}
+      collision={{ landingBranch, held, holderName: holder?.name }}
+      tag={tag}
     />
   );
 }
 
 // The review step's right-hand column, the transplant's and the
-// mirror's: the two devices (the one landing the branch, the source
-// beneath it), the folder it lands in, and the setup switch. Read under
-// the destination's scope, since every fact in it is that machine's.
-// The mirror ticks the source row, because there the source keeps its
-// copy. A flow to a peer swaps the two rows' tags (there the source is
-// this device) and lists every device that could take the worktree,
-// the picked one as the destination and the rest as rows to pick.
+// mirror's (ReviewDevicesColumnView): the two devices, the folder it
+// lands in, and the setup switch. Read under the destination's scope,
+// since every fact in it is that machine's.
 export function ReviewDevicesColumn({
   heading,
   sourceNote,
@@ -333,68 +174,36 @@ export function ReviewDevicesColumn({
 }) {
   // The source is the device the dialog sits under.
   const sourceIcon = useDeviceIcon(useHostScope().deviceId);
-  const destination = target !== null && (
-    <DestinationRow
-      worktree={worktree}
-      target={target}
-      thisDeviceLabel={thisDeviceLabel}
-      tag={toPeer ? "destination" : "this device"}
-    />
-  );
   return (
     <DestinationScope>
-      <div className="flex min-w-0 flex-col gap-5">
-        <section className="space-y-2">
-          <SectionHeading>{heading}</SectionHeading>
-          <ul
-            className="space-y-1.5"
-            role={toPeer ? "radiogroup" : undefined}
-            aria-label={toPeer ? "Destination device" : undefined}
-          >
-            {toPeer === undefined
-              ? destination
-              : toPeer.targets.map((candidate) =>
-                  candidate.deviceId === toPeer.pickedId ? (
-                    <Fragment key={candidate.deviceId}>{destination}</Fragment>
-                  ) : (
-                    <PeerTargetRow
-                      key={candidate.deviceId}
-                      target={candidate}
-                      projectName={projectName}
-                      onPick={toPeer.onPick}
-                    />
-                  ),
-                )}
-            {/* Among rows to pick from, the source is not one: it sits
-                apart, unfilled, and without the mark a pick would
-                fill (unless the mark says it keeps its copy). */}
-            <DeviceRow
-              className={cn(
-                "text-muted-foreground",
-                toPeer ? "mt-3" : "bg-muted/40",
-              )}
-              mark={
-                (!toPeer || sourceKeeps) && (
-                  <span
-                    aria-hidden
-                    className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20"
-                  >
-                    {sourceKeeps && <Check className="size-2.5" />}
-                  </span>
-                )
-              }
-              icon={sourceIcon}
-              title={sourceDeviceLabel}
-              note={sourceNote}
-              trailing={
-                <span className="text-xs">
-                  {toPeer ? "this device" : "source"}
-                </span>
-              }
+      <ReviewDevicesColumnView
+        heading={heading}
+        sourceNote={sourceNote}
+        sourceKeeps={sourceKeeps}
+        toPeer={
+          toPeer && {
+            targets: toPeer.targets.map((candidate) => ({
+              ...candidate,
+              ready: isReadyTarget(candidate),
+            })),
+            pickedId: toPeer.pickedId,
+            onPick: toPeer.onPick,
+          }
+        }
+        projectName={projectName}
+        destination={
+          target !== null && (
+            <DestinationRow
+              worktree={worktree}
+              target={target}
+              thisDeviceLabel={thisDeviceLabel}
+              tag={toPeer ? "destination" : "this device"}
             />
-          </ul>
-        </section>
-
+          )
+        }
+        sourceIcon={sourceIcon}
+        sourceDeviceLabel={sourceDeviceLabel}
+      >
         {target?.project && (
           <>
             <DestinationFolder
@@ -417,16 +226,13 @@ export function ReviewDevicesColumn({
             thisDeviceLabel={thisDeviceLabel}
           />
         )}
-      </div>
+      </ReviewDevicesColumnView>
     </DestinationScope>
   );
 }
 
-// The review step's footer band, the transplant's and the mirror's:
-// the collision refusal or the wait's reason when there is one, the
-// flow's own reassurance when there is not, and the start button held
-// until both clear. A flow to a peer with no destination picked yet
-// has nothing to check, and the band asks for the pick.
+// The review step's footer band (PullReviewFooterView), with the
+// collision refusal it reads on the landing device.
 export function PullReviewFooter({
   worktree,
   target,
@@ -454,27 +260,17 @@ export function PullReviewFooter({
   onStart: () => void;
 }) {
   const { refusal } = useLocalCollision(target?.project, worktree, landing);
-  const unpicked = target === null;
   return (
-    <FlowFooter
-      note={
-        refusal ??
-        blocked ??
-        (unpicked ? "Pick the device it goes to." : idleNote)
-      }
-    >
-      <Button variant="ghost" size="sm" onClick={onCancel}>
-        Cancel
-      </Button>
-      <Button
-        size="sm"
-        onClick={onStart}
-        disabled={refusal !== null || waiting || unpicked}
-      >
-        {startLabel}
-        <ArrowRight />
-      </Button>
-    </FlowFooter>
+    <PullReviewFooterView
+      refusal={refusal}
+      unpicked={target === null}
+      waiting={waiting}
+      blocked={blocked}
+      idleNote={idleNote}
+      startLabel={startLabel}
+      onCancel={onCancel}
+      onStart={onStart}
+    />
   );
 }
 
@@ -531,62 +327,56 @@ export function PullReviewStep({
   afterLeaveOut?: ReactNode;
 }) {
   return (
-    <>
-      <FlowBody>
-        <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="flex min-w-0 flex-col gap-5">
-            <section className="space-y-2">
-              <SectionHeading>Source</SectionHeading>
-              <SourceCard
-                worktree={worktree}
-                project={project}
-                sourceDeviceLabel={sourceDeviceLabel}
-              />
-            </section>
-
-            {beforeLeaveOut}
-
-            <PullLeaveOut
-              pull={pull}
-              worktree={{
-                projectId: project.id,
-                id: worktree.id,
-                path: worktree.path,
-              }}
-            />
-
-            {afterLeaveOut}
-          </div>
-
-          <ReviewDevicesColumn
-            heading={heading}
-            sourceNote={sourceNote}
-            sourceKeeps={sourceKeeps}
-            toPeer={toPeer}
-            worktree={worktree}
-            projectName={project.name}
-            target={target}
-            sourceDeviceLabel={sourceDeviceLabel}
-            thisDeviceLabel={thisDeviceLabel}
-            pull={pull}
-          />
-        </div>
-      </FlowBody>
-
-      <DestinationScope>
-        <PullReviewFooter
+    <PullReviewStepView
+      source={
+        <SourceCard
           worktree={worktree}
-          target={target}
-          landing={landing}
-          waiting={pull.waiting}
-          blocked={pull.blocked}
-          idleNote={idleNote}
-          startLabel={startLabel}
-          onCancel={onCancel}
-          onStart={onStart}
+          project={project}
+          sourceDeviceLabel={sourceDeviceLabel}
         />
-      </DestinationScope>
-    </>
+      }
+      beforeLeaveOut={beforeLeaveOut}
+      leaveOut={
+        <PullLeaveOut
+          pull={pull}
+          worktree={{
+            projectId: project.id,
+            id: worktree.id,
+            path: worktree.path,
+          }}
+        />
+      }
+      afterLeaveOut={afterLeaveOut}
+      devices={
+        <ReviewDevicesColumn
+          heading={heading}
+          sourceNote={sourceNote}
+          sourceKeeps={sourceKeeps}
+          toPeer={toPeer}
+          worktree={worktree}
+          projectName={project.name}
+          target={target}
+          sourceDeviceLabel={sourceDeviceLabel}
+          thisDeviceLabel={thisDeviceLabel}
+          pull={pull}
+        />
+      }
+      footer={
+        <DestinationScope>
+          <PullReviewFooter
+            worktree={worktree}
+            target={target}
+            landing={landing}
+            waiting={pull.waiting}
+            blocked={pull.blocked}
+            idleNote={idleNote}
+            startLabel={startLabel}
+            onCancel={onCancel}
+            onStart={onStart}
+          />
+        </DestinationScope>
+      }
+    />
   );
 }
 
@@ -601,7 +391,7 @@ export function SourceCard({
 }) {
   const { deviceId } = useHostScope();
   const device = useRemoteDevice(deviceId);
-  const status = device ? deviceStatusView(device.status) : null;
+  const icon = useDeviceIcon(deviceId);
   // The card sits in the source device's scope, so this is the PEER's
   // home, and a transplant already holds the grant that read needs.
   // Refused or not yet answered, the path shows as it is.
@@ -611,63 +401,21 @@ export function SourceCard({
     worktree.branch,
   );
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm">
-        <DeviceGlyph
-          icon={useDeviceIcon(deviceId)}
-          className="size-4 text-muted-foreground"
-        />
-        <span className="font-medium">{sourceDeviceLabel}</span>
-        {status && (
-          <StatusDot
-            tone={status.tone}
-            label={
-              <span className="text-xs text-muted-foreground">
-                {status.label.toLowerCase()}
-              </span>
-            }
-          />
-        )}
-        <span className="ml-auto truncate text-xs text-muted-foreground">
-          {project.name}
-        </span>
-      </div>
-      <div className="space-y-2 px-3 py-2.5">
-        <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono">
-          <span className="text-sm font-semibold">{worktree.branch}</span>
-          <span className="text-xs text-muted-foreground">{worktree.name}</span>
-        </p>
-        <PathSpan
-          path={worktree.path}
-          home={runtime?.homedir ?? null}
-          className="min-w-0 truncate font-mono text-xs text-muted-foreground"
-        />
-        <div className="flex flex-wrap gap-1.5">
-          <Chip
-            className="font-mono tabular-nums"
-            aria-label={`${worktree.ahead} ahead, ${worktree.behind} behind`}
-          >
-            <ArrowUp aria-hidden className="size-3" />
-            {worktree.ahead}
-            <ArrowDown aria-hidden className="ml-0.5 size-3" />
-            {worktree.behind}
-          </Chip>
-          <Chip>
-            {worktree.changedCount > 0
-              ? pluralize(worktree.changedCount, "uncommitted file")
-              : "clean tree"}
-          </Chip>
-          {!prPending && <Chip>{pr ? `PR #${pr.number}` : "no PR yet"}</Chip>}
-        </div>
-      </div>
-    </div>
+    <SourceCardView
+      worktree={worktree}
+      project={project}
+      sourceDeviceLabel={sourceDeviceLabel}
+      icon={icon}
+      status={device ? deviceStatusView(device.status) : null}
+      home={runtime?.homedir ?? null}
+      pr={pr}
+      prPending={prPending}
+    />
   );
 }
 
-// Where the worktree lands: the local layout's base folder plus the
-// source's own folder name (pullWorktreeName). The name is left open
-// only when the source's folder is not a valid managed dirname, in
-// which case the create picks a fresh pool name on arrival.
+// Where the worktree lands (DestinationFolderView): the local layout's
+// base folder plus the source's own folder name (pullWorktreeName).
 function DestinationFolder({
   localProject,
   thisDeviceLabel,
@@ -677,29 +425,11 @@ function DestinationFolder({
   thisDeviceLabel: string;
   name: string | undefined;
 }) {
-  // Plain text on purpose: a measured PathSpan would abbreviate the
-  // base folder to make room for the placeholder beside it.
-  const base = useWorktreeBaseLabel(localProject);
-  const shownName = name ?? "‹new name›";
   return (
-    <section className="space-y-2">
-      <SectionHeading>Folder on {thisDeviceLabel}</SectionHeading>
-      <div className="rounded-lg border border-border bg-card px-3 py-2.5 font-mono text-xs">
-        {base === null ? (
-          <Skeleton className="h-3.5 w-2/3" />
-        ) : (
-          <p className="truncate" title={`${base}/${shownName}`}>
-            <span className="text-muted-foreground">{base}/</span>
-            <span
-              className={
-                name === undefined ? "text-muted-foreground" : undefined
-              }
-            >
-              {shownName}
-            </span>
-          </p>
-        )}
-      </div>
-    </section>
+    <DestinationFolderView
+      thisDeviceLabel={thisDeviceLabel}
+      base={useWorktreeBaseLabel(localProject)}
+      name={name}
+    />
   );
 }
