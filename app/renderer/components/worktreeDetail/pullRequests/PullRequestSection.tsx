@@ -1,4 +1,3 @@
-import { SectionHeading } from "@/components/ui/section-heading";
 import { useRepoMergeConfig } from "@/hooks/githubCli/useRepoMergeConfig";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
@@ -6,6 +5,7 @@ import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest
 import type { Worktree } from "@shared/schemas";
 import { PullRequestBody } from "./PullRequestBody";
 import { PullRequestRefreshButton } from "./PullRequestRefreshButton";
+import { PullRequestSectionView } from "./PullRequestSectionView";
 
 export function PullRequestSection({ worktree }: { worktree: Worktree }) {
   // Skip the PR query on detached HEAD. There's no branch to ask gh
@@ -34,11 +34,9 @@ export function PullRequestSection({ worktree }: { worktree: Worktree }) {
     Object.hasOwn(projectPrs, worktree.branch);
   if (!pr && !holdPlace) return null;
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-1">
-        <SectionHeading>Pull request</SectionHeading>
-        <PullRequestRefreshButton worktree={worktree} />
-      </div>
+    <PullRequestSectionView
+      refresh={<PullRequestRefreshButton worktree={worktree} />}
+    >
       {pr && (
         <PullRequestBody
           worktree={worktree}
@@ -47,6 +45,6 @@ export function PullRequestSection({ worktree }: { worktree: Worktree }) {
           lastMergeMethod={shigomori?.lastMergeMethod}
         />
       )}
-    </section>
+    </PullRequestSectionView>
   );
 }

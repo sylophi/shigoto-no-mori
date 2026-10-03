@@ -9,6 +9,7 @@ import { ClosedPullRequestBox } from "./ClosedPullRequestBox";
 import { MergedPrimaryBranchBox } from "./MergedPrimaryBranchBox";
 import { MergeBox } from "./MergeBox";
 import { PullRequestIdentity } from "./PullRequestIdentity";
+import { PullRequestBodyView } from "./PullRequestSectionView";
 import { StackList } from "./StackList";
 
 export function PullRequestBody({
@@ -26,7 +27,7 @@ export function PullRequestBody({
   const stack = usePullRequestStack(worktree.projectId, worktree.branch);
 
   return (
-    <div className="space-y-4">
+    <PullRequestBodyView>
       <PullRequestIdentity worktree={worktree} pr={pr} />
       {stack && <StackList worktree={worktree} stack={stack} />}
       {isOpen && (
@@ -44,6 +45,6 @@ export function PullRequestBody({
       {pr.state === "MERGED" && worktree.isPrimary && (
         <MergedPrimaryBranchBox worktree={worktree} />
       )}
-    </div>
+    </PullRequestBodyView>
   );
 }

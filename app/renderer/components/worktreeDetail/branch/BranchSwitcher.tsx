@@ -10,6 +10,7 @@ import { type BranchEntry } from "@/components/shared/BranchCombobox";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
+import { BRANCH_SWITCHER_TRIGGER_CLASS } from "./BranchTitleView";
 
 export function BranchSwitcher({
   worktree,
@@ -81,7 +82,7 @@ export function BranchSwitcher({
         aria-label="Switch branch"
         title="Switch branch"
         data-icon-button
-        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
+        className={BRANCH_SWITCHER_TRIGGER_CLASS}
       >
         <ChevronsUpDown aria-hidden className="size-3.5" />
       </Combobox.Trigger>

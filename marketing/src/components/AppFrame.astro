@@ -1,0 +1,57 @@
+---
+// The app in one of the page's frames, where a screenshot would be: a
+// scene of the app's own views (the app's lab/scenes), put in as
+// children, rendered at build time into an AppSurface. The scene lays
+// out at its natural size, the size of the window it draws, and
+// scripts/frames.ts scales it to the frame.
+//
+// It reads as a picture: one stop for a screen reader, described by
+// `label`, and nothing in it takes a click or the keyboard.
+import AppSurface from "./AppSurface.astro";
+
+interface Props {
+  // What the frame shows, for screen readers. Empty for a decorative
+  // frame, which is then hidden from them.
+  label: string;
+  frame: "window" | "phone" | "floating" | "card-shot" | "framed";
+  // The scene's natural size in CSS pixels.
+  size: [number, number];
+  theme?: "light" | "dark";
+  doubutsu?: boolean;
+  phone?: boolean;
+  desktop?: boolean;
+  class?: string;
+}
+const {
+  label,
+  frame,
+  size: [width, height],
+  theme,
+  doubutsu,
+  phone,
+  desktop,
+  class: className,
+} = Astro.props;
+---
+
+<figure
+  class:list={[frame, "app-frame", className]}
+  role={label === "" ? undefined : "img"}
+  aria-label={label || undefined}
+  aria-hidden={label === "" ? "true" : undefined}
+  data-width={width}
+>
+  <div class="app-frame-view" style={`--frame-w: ${width}; --frame-h: ${height}`}>
+    <AppSurface
+      theme={theme}
+      doubutsu={doubutsu}
+      phone={phone}
+      desktop={desktop}
+      width={width}
+      height={height}
+    >
+      <slot />
+    </AppSurface>
+  </div>
+  <slot name="over" />
+</figure>

@@ -10,7 +10,7 @@ export function DiffButton({
   changedFiles: number;
   additions: number;
   deletions: number;
-  onClick: () => void;
+  onClick?: () => void;
 }) {
   const fileNoun = changedFiles === 1 ? "file" : "files";
   return (

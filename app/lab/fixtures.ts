@@ -6,9 +6,13 @@ import type { DeviceInfo } from "@shared/hub/protocol";
 import type {
   CommitSummary,
   CustomPort,
+  LauncherEntry,
+  PackageScriptSortMode,
+  PackageScriptsResult,
   Project,
   ProjectIcon,
   Release,
+  ShigomoriConfig,
   Worktree,
 } from "@shared/schemas";
 
@@ -572,6 +576,56 @@ export const labGlobalConfig = {
   githubCli: true,
   directConnections: true,
 };
+
+// ---- launching ----
+
+// The launch tools detected on Studio Mac, and the row every project
+// shows: those, a custom tool and GitHub.
+export const labDetectedLaunchers = [
+  { kind: "detected", id: "vscode", label: "VS Code", available: true },
+  { kind: "detected", id: "terminal", label: "Terminal", available: true },
+  { kind: "detected", id: "finder", label: "Finder", available: true },
+] as const satisfies readonly LauncherEntry[];
+
+export const labLauncherEntries: LauncherEntry[] = [
+  ...labDetectedLaunchers,
+  { kind: "custom", id: "claude", label: "Claude Code" },
+  { kind: "web", id: "web:github", label: "GitHub" },
+];
+
+// Every worktree's package.json scripts, two of them run lately.
+export const labPackageScripts: PackageScriptsResult = {
+  scripts: {
+    dev: "vite dev --port 5173",
+    test: "vitest run",
+    "theme:check": "node scripts/check-theme-contract.mjs",
+  },
+  packageManager: "pnpm",
+  usage: {
+    dev: { lastUsed: now - 12 * 60_000, recentCount: 9 },
+    test: { lastUsed: now - 26 * 60_000, recentCount: 3 },
+  },
+  launchRow: [],
+};
+
+// The order the scripts list in.
+export const labPackageScriptSort: PackageScriptSortMode = "manifest";
+
+// The project config (.shigomori), with a full create lifecycle on it
+// (carry-over, a setup script, and the port pool), so the pull
+// dialogs' setup switch and their running steps have every phase to
+// name.
+export const labShigomoriConfig: ShigomoriConfig = {
+  defaultBranch: "main",
+  scripts: { setup: "pnpm install" },
+  carryOver: [
+    { path: ".env.local", mode: "copy" },
+    { path: ".claude/settings.local.json", mode: "symlink" },
+  ],
+  launchers: [],
+};
+
+export const labPortPoolActive = true;
 
 // ---- ports ----
 

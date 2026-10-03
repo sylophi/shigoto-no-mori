@@ -9,15 +9,13 @@
 // checkout can be mirrored but not transplanted: it is the project
 // itself and cannot be torn down.
 import { useState } from "react";
-import { RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import {
   useLocalMirrorBlocker,
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { FooterActionButton } from "./FooterActionButton";
-import { LABEL_RANK } from "./footerFit";
+import { FooterLeadingVerbView } from "./FooterLeadingVerbView";
 import { usePeerTargets } from "./flow/peerTargets";
 import { MirrorToDialog } from "./mirror/MirrorDialog";
 import { TransplantToDialog } from "./transplant/TransplantDialog";
@@ -78,21 +76,14 @@ function TransferButtons({
     <>
       {/* App only, like "Mirror here": the daemon lives in main. */}
       {canOpen && canForwardPorts && !mirrored && (
-        <FooterActionButton
-          rank={LABEL_RANK.mirrorTo}
-          icon={<RefreshCw />}
-          label="Mirror to…"
-          title="Keep a live copy of this worktree on another device"
-          disabledReason={mirrorBlocker}
+        <FooterLeadingVerbView
+          verb={{ kind: "mirrorTo", disabledReason: mirrorBlocker }}
           onClick={() => setOpen("mirror")}
         />
       )}
       {canOpen && !worktree.isPrimary && (
-        <FooterActionButton
-          rank={LABEL_RANK.transplant}
-          icon={<Shovel />}
-          label="Transplant to…"
-          title="Move this worktree to another device"
+        <FooterLeadingVerbView
+          verb={{ kind: "transplantTo" }}
           onClick={() => setOpen("transplant")}
         />
       )}
