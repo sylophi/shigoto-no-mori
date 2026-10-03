@@ -13,6 +13,7 @@
 import { useEffect } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { SidebarViewSchema } from "@shared/schemas";
+import { ForestPageView } from "@/components/ForestPageView";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import {
@@ -44,8 +45,8 @@ export function ForestPage() {
     return <CenteredMessage>Pick a worktree from the sidebar.</CenteredMessage>;
   }
   return (
-    <div data-doubutsu-page="forest" className="flex h-full flex-col">
+    <ForestPageView>
       <Sidebar footer={false} view={view} />
-    </div>
+    </ForestPageView>
   );
 }

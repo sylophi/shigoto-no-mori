@@ -18,7 +18,6 @@
 // the machines that don't hold the repo yet (AddToDeviceSubmenu). A
 // member with no session gets no actions, the same as a missing local
 // project.
-import { MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,7 +34,6 @@ import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { localDeviceId } from "@/lib/queryKeys";
-import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
 import { AddToDeviceSubmenu } from "./AddToDeviceSubmenu";
 import {
@@ -46,10 +44,7 @@ import {
   type ProjectMenuRemoveArm,
 } from "./ProjectMenuItems";
 import { QuickCreateButton } from "./QuickCreateButton";
-import {
-  PROJECT_ACTION_HOOKS,
-  PROJECT_MENU_TRIGGER_CLASS,
-} from "./sidebarChrome";
+import { ProjectMenuTriggerButton } from "./ProjectGroupActionsView";
 import type { RemoteProjectMember } from "./sidebarRow";
 
 export interface GroupMember {
@@ -157,18 +152,11 @@ export function ProjectGroupActions({
       <DropdownMenu onOpenChange={onOpenChange}>
         <DropdownMenuTrigger
           render={
-            <button
+            <ProjectMenuTriggerButton
               ref={triggerRef}
-              type="button"
-              aria-label={`More actions for ${name}`}
-              {...PROJECT_ACTION_HOOKS}
-              className={cn(
-                PROJECT_MENU_TRIGGER_CLASS,
-                isHovered ? "opacity-100" : "opacity-0",
-              )}
-            >
-              <MoreHorizontal className="size-3.5" />
-            </button>
+              name={name}
+              isHovered={isHovered}
+            />
           }
         />
         <DropdownMenuContent align="end" sideOffset={2}>

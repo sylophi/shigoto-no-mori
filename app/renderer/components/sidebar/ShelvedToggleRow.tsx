@@ -4,7 +4,7 @@ interface ShelvedToggleRowProps {
   shelf: GroupShelf;
   count: number;
   expanded: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
 }
 
 export function ShelvedToggleRow({
