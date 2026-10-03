@@ -1145,3 +1145,11 @@ code {
   display: flex;
   gap: 1.25rem;
 }
+
+/* --- The app's views (components/AppSurface.astro) ------------------ */
+
+/* Hidden until the app's stylesheet, inside the surface, shows it. */
+.app-surface {
+  display: block;
+  visibility: hidden;
+}

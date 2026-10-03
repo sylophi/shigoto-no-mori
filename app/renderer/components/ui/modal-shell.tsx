@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { cn } from "@/lib/utils";
+import { ModalShellView } from "./modal-shell-view";
 
 // The open shells, bottom to top. Escape reaches the top one only, so
 // a picker over a dialog closes alone and the dialog under it stays.
@@ -61,27 +61,14 @@ export function ModalShell({
   // header's positioned title. Mounting at the body root puts it in
   // the root context, above everything, in all four theme modes.
   return createPortal(
-    <div
-      role="presentation"
+    <ModalShellView
+      popoverClassName={popoverClassName}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      // The before: is the 10vh a short dialog hangs from, so it doesn't
-      // jump as it grows. A taller dialog eats that gap first, then caps
-      // at the window, where its scrolling body takes the rest (any
-      // wrappers above that body need min-h-0).
-      className="fixed inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] before:h-[calc(10vh-1rem)]"
     >
-      <div
-        data-slot="modal-shell"
-        className={cn(
-          "flex max-h-full w-full max-w-xl shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5",
-          popoverClassName,
-        )}
-      >
-        {children}
-      </div>
-    </div>,
+      {children}
+    </ModalShellView>,
     document.body,
   );
 }

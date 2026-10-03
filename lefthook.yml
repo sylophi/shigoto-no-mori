@@ -27,6 +27,11 @@ pre-commit:
             run: pnpm -C app run format:check
           - name: theme-contract
             run: pnpm -C app test theme-contract
+          # The scenes (the app's views over the lab's fixtures, which
+          # the marketing site renders) still render without the app.
+          - name: scenes
+            glob: "{app/renderer/**,app/shared/**,app/lab/**,app/test/scenes.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test scenes
           - name: host-boundary
             glob: "{app/host/**,app/main/**,app/renderer/**,app/shared/**,app/web/**,app/test/host-boundary.mts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test host-boundary

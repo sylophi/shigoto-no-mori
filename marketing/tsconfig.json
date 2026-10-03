@@ -1,5 +1,12 @@
 {
   "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    // The app's import aliases (astro.config.ts), for its views.
+    "paths": {
+      "@/*": ["../app/renderer/*"],
+      "@shared/*": ["../app/shared/*"]
+    }
+  },
   // The built demo (`pnpm demo`) is the app's minified output, not ours to check.
   "exclude": ["dist", "public/demo"]
 }

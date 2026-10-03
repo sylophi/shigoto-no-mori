@@ -150,3 +150,37 @@ desktop window. `pnpm lab:demo --outDir <dir>` builds it to be served
 from `/demo/`, which the marketing build does for itself. So the
 fixtures are public: keep them fictional, and check the site's frames
 after changing what they show.
+
+## Views and scenes
+
+The marketing site shows the app by rendering its React components at
+build time, with no app running. That works for components that take
+their data as props, which this calls views. A scene composes views
+over the lab's fixtures into one of the site's pictures.
+
+- **A view** is `FooView` in its own `FooView.tsx`, beside the component
+  that feeds it. It takes plain data as props and renders it. It
+  calls no hook that reads a query, the router, a store or `window`,
+  and it imports no module that reads `window` or `window.api` as it
+  loads (`lib/queryKeys`, `lib/localHost`, `hooks/remote/useHostScope`,
+  the run and lifecycle stores, and anything that imports them). Type
+  imports are fine, since they leave nothing behind. Pure leaves
+  (`components/ui/*`'s primitives, `lib/*` helpers) are fine too.
+- **The component that feeds it** keeps its name, props and behaviour.
+  It calls the hooks and renders the view, so nothing changes for the
+  rest of the app (sidebar/inbox/InboxRow.tsx and InboxRowView.tsx are
+  the pattern).
+- What used to be read inline becomes a prop: whether there is a local
+  host (`hasLocalHost`), a dev build, the phone layout, the time
+  (`now`, so "14m ago" holds still), a looked-up icon.
+- Menus and dialogs a scene shows open are drawn inline, without their
+  portals: `ui/menu-view.tsx` and `ui/modal-shell-view.tsx` carry the
+  live ones' slots and classes.
+- **A scene** lives in `lab/scenes/`, builds its props from the
+  fixtures through `lab/scenes/world.ts`, and is listed in
+  `lab/scenes/index.ts`. `pnpm test scenes` renders every one in Node,
+  where anything that reaches for the app fails, and the marketing
+  site renders them the same way.
+
+A view should draw exactly what its component drew. To check, shoot
+the lab before and after (`lab/shoot.mts`) and compare the images.

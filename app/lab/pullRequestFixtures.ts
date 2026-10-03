@@ -83,6 +83,13 @@ export function labPullRequests(projectId: string) {
   return LAB_SM_PROJECT_IDS.has(projectId) ? labPosedPullRequests() : {};
 }
 
+// The same, posed by argument rather than by the URL, for the scenes
+// (lab/scenes), which render where there is no URL to read.
+export function labPullRequestsFor(projectId: string, merged = false) {
+  if (!LAB_SM_PROJECT_IDS.has(projectId)) return {};
+  return merged ? LAB_PRS_MERGED : LAB_PRS;
+}
+
 // The stacked PRs carry no checks, so the stack poses with and without
 // the checks chip. #148 carries whatever ?checks= poses.
 export function labPullRequestDetail(branch: string) {

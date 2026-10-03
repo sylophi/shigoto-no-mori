@@ -16,7 +16,7 @@ interface StatusIndicatorProps {
 
 // The palette's row has room for one pill, so uncommitted work wins and
 // the remote state waits its turn. The sidebar's rows have the room for
-// both, and render them side by side (WorktreeEntry).
+// both, and render them side by side (WorktreeEntryView).
 export function StatusIndicator({ worktree }: StatusIndicatorProps) {
   return worktree.changedCount > 0 ? (
     <ChangedFilesPill worktree={worktree} />

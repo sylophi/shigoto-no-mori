@@ -1,0 +1,11 @@
+---
+import AppSurface from "../components/AppSurface.astro";
+import "../styles/app-fonts.css";
+import "../styles/global.css";
+import { RowScene } from "../../../app/lab/scenes/RowScene";
+---
+<html><body style="background:#eee;padding:40px">
+<AppSurface><div style="width:240px;background:var(--sidebar,#cdeedd)"><RowScene /></div></AppSurface>
+<div style="height:20px"></div>
+<AppSurface theme="dark"><div style="width:240px"><RowScene /></div></AppSurface>
+</body></html>

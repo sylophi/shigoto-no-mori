@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
+import type { WorktreeRowLook } from "./rowState";
 import type { Worktree } from "@shared/schemas";
 import {
   fillRoutePath,
@@ -9,18 +10,12 @@ import {
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
 
-export interface WorktreeRowState {
-  isSelected: boolean;
+export interface WorktreeRowState extends WorktreeRowLook {
   open: () => void;
-  activity: ScriptActivityKind | null;
-  isDeleting: boolean;
-  // Hover title, or undefined when the row is in no state worth naming.
-  // A tooltip that only repeats the branch already on screen is noise.
-  title: string | undefined;
 }
 
 // What the two sidebar rows share in behaviour (their shared look is
-// WorktreeEntry): "am I the open one", "what's running here", "where
+// WorktreeEntryView): "am I the open one", "what's running here", "where
 // does a click go" and "what do I say on hover" have the same answers
 // in the tree and the inbox, and answering them twice is how the two
 // silently drift.
@@ -71,14 +66,4 @@ function describeRow(
   if (activity === "failed") return "A script failed here";
   if (shelved) return "Shelved";
   return undefined;
-}
-
-// What is happening in a worktree right now, if anything. A delete in
-// flight outranks a running script: it spans the cleanup scripts and
-// the final git remove, while the script activity covers only cleanup,
-// so the trash stays up for the whole mutation.
-export function activityMark(
-  state: Pick<WorktreeRowState, "activity" | "isDeleting">,
-): ScriptActivityKind | null {
-  return state.isDeleting ? "teardown" : state.activity;
 }

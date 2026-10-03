@@ -4,30 +4,30 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { VillagerFace } from "@/components/shared/VillagerSays";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
-import { useResident } from "@/hooks/villagers/useResident";
+import type { Resident } from "@/hooks/villagers/useResident";
 import type { StackPosition } from "@shared/pullRequestStack";
 import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
 import {
-  MirrorBadge,
-  RowDeviceBadge,
+  DeviceBadge,
+  MirrorBadgeView,
   type SidebarDeviceBadge,
-} from "./DeviceBadge";
-import { ForwardMark } from "./ForwardMark";
+} from "./DeviceBadgeView";
+import { ForwardMarkView } from "./ForwardMarkView";
 import { PullRequestPill } from "./PullRequestPill";
+import { activityMark, type WorktreeRowLook } from "./rowState";
 import type { InboxShelf } from "./sidebarRow";
 import { ChangedFilesPill, RemoteSyncPill } from "./StatusIndicator";
-import { activityMark, type WorktreeRowState } from "./useWorktreeRowState";
 
-interface WorktreeEntryProps extends ComponentProps<"button"> {
+export interface WorktreeEntryViewProps extends ComponentProps<"button"> {
   worktree: Worktree;
   pr: PullRequest | undefined;
   stack: StackPosition | null;
   // The peer the worktree lives on, absent for this machine's own, and
   // the peer a local one is mirrored with.
-  device: SidebarDeviceBadge | undefined;
-  mirror: SidebarDeviceBadge | undefined;
-  state: WorktreeRowState;
+  device?: SidebarDeviceBadge;
+  mirror?: SidebarDeviceBadge;
+  look: WorktreeRowLook;
   // The fold or shelf the row was filed behind (sidebarRow), null for
   // the open rows.
   shelf: InboxShelf | null;
@@ -36,10 +36,16 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
   // Absent (the tree, which shows one project at a time), those marks
   // fold into the two lines below.
   context?: ReactNode;
+  // What useWorktreeEntry looks up: the villager who lives here, the
+  // ports forwarded from it, and whether this window shows device
+  // badges on rows (Settings, Appearance).
+  resident: Resident | null;
+  forwardTip: string | undefined;
+  showDeviceBadges: boolean;
 }
 
-// A worktree in the sidebar, the tree's row (WorktreeRow) and the
-// inbox's (InboxRow) alike: the branch with every status the row has
+// A worktree in the sidebar, the tree's row (WorktreeRowView) and the
+// inbox's (InboxRowView) alike: the branch with every status the row has
 // room for, over the worktree's own name.
 //
 //   [icon] project                                  14m ago   (inbox)
@@ -51,33 +57,31 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
 // the trash standing alone reads as "destroying". Children lead the
 // button (the tree's stack connector). Props pass through to the
 // button, so a menu trigger can render it as its own element.
-export function WorktreeEntry({
+export function WorktreeEntryView({
   worktree,
   pr,
   stack,
   device,
   mirror,
-  state,
+  look,
   shelf,
   context,
+  resident,
+  forwardTip,
+  showDeviceBadges,
   className,
   children,
-  onClick,
   ...button
-}: WorktreeEntryProps) {
-  const { isSelected, isDeleting } = state;
+}: WorktreeEntryViewProps) {
+  const { isSelected, isDeleting } = look;
   // The tree's row, which has no context line to carry these marks.
   const inline = context === undefined;
-  const mark = inline ? activityMark(state) : null;
+  const mark = inline ? activityMark(look) : null;
   return (
     <button
       type="button"
-      title={state.title}
+      title={look.title}
       {...button}
-      onClick={(event) => {
-        onClick?.(event);
-        state.open();
-      }}
       className={cn(
         "relative flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors",
         // data-popup-open is Base UI's mark on a trigger whose menu is
@@ -129,18 +133,20 @@ export function WorktreeEntry({
           sharing one with the project: they're both "where is this",
           and side by side the longer one just eats the other. */}
       <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground/70">
-        <EntryName worktree={worktree} />
+        <EntryName worktree={worktree} resident={resident} />
         {/* Pulled in vertically: the device tile stands taller than the
             line, and letting it set the line's height would make a
             peer's row taller than a local one. The forward mark rides
             here on either row: it is about this worktree, not where it
             lives, which the inbox's context line says. */}
         <span className="-my-1 inline-flex shrink-0 items-center gap-1">
-          {device && (
-            <ForwardMark deviceId={device.deviceId} worktree={worktree} />
+          {device && <ForwardMarkView tip={forwardTip} />}
+          {inline && mirror && (
+            <MirrorBadgeView mirror={mirror} showBadge={showDeviceBadges} />
           )}
-          {inline && mirror && <MirrorBadge mirror={mirror} />}
-          {inline && device && <RowDeviceBadge badge={device} />}
+          {inline && device && showDeviceBadges && (
+            <DeviceBadge badge={device} />
+          )}
         </span>
       </span>
     </button>
@@ -154,8 +160,13 @@ export function WorktreeEntry({
 // life, the villager whose home this is sits beside the name, as their
 // face sits beside the title on the worktree page. It's decoration
 // here, so it stays out of the row's label and hover title.
-function EntryName({ worktree }: { worktree: Worktree }) {
-  const resident = useResident(worktree);
+function EntryName({
+  worktree,
+  resident,
+}: {
+  worktree: Worktree;
+  resident: Resident | null;
+}) {
   return (
     <>
       {!worktree.shelved && (

@@ -1,27 +1,17 @@
-// Compact device attribution for the merged tree: one mark per
+// Compact device attribution for the merged tree, with the data the
+// badges need (their look is DeviceBadgeView.tsx): one mark per
 // contributing device on project headers, and the single-mark form on
-// remote worktree rows. The mark is the device's glyph on a tile in
-// its connection tone (shared/DeviceGlyph.tsx DeviceMark), the same
-// tile its row wears on the devices page, so a badge and a dot can
-// never disagree about a machine, and the name rides the tooltip.
-import { RefreshCw } from "lucide-react";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
-import { DeviceMark } from "@/components/shared/DeviceGlyph";
-import type { StatusTone } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+// remote worktree rows.
+import {
+  DeviceBadge,
+  MirrorBadgeView,
+  type SidebarDeviceBadge,
+} from "./DeviceBadgeView";
 import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 
-export interface SidebarDeviceBadge {
-  deviceId: string;
-  label: string;
-  icon: DeviceIcon;
-  tone: StatusTone;
-  // Only for the tooltip's wording: an unreachable device's rows are
-  // its last known state, which the tone alone doesn't say.
-  reachable: boolean;
-}
+export { DeviceBadge, type SidebarDeviceBadge };
 
 // Every peer on the account as a badge, by device id: the lookup behind
 // a badge that names a device by id alone (a local row's mirror). Off
@@ -43,18 +33,6 @@ export function useDeviceBadges(): ReadonlyMap<string, SidebarDeviceBadge> {
   return badges;
 }
 
-export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
-  return (
-    <SimpleTooltip
-      tip={`${badge.label}${badge.reachable ? "" : " (not reachable right now, last known state)"}`}
-    >
-      <span className="inline-flex shrink-0" aria-label={`On ${badge.label}`}>
-        <DeviceMark icon={badge.icon} tone={badge.tone} />
-      </span>
-    </SimpleTooltip>
-  );
-}
-
 // A sidebar row's badge: the same badge, while this window has Show
 // device icons on (Settings, Appearance). The palette and the inbox's
 // create target draw DeviceBadge bare, since there the device is the
@@ -64,21 +42,11 @@ export function RowDeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
   return show ? <DeviceBadge badge={badge} /> : null;
 }
 
-// The mark a local worktree wears for the peer it is mirrored with: the
-// mirror glyph and the peer's badge. Worn in the sidebar's rows and the
-// palette's.
+// The mark a local worktree wears for the peer it is mirrored with
+// (MirrorBadgeView), its badge gated like RowDeviceBadge.
 export function MirrorBadge({ mirror }: { mirror: SidebarDeviceBadge }) {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1">
-      <SimpleTooltip tip={`Mirrored with ${mirror.label}`}>
-        <RefreshCw
-          aria-label={`Mirrored with ${mirror.label}`}
-          className="size-3 text-emerald-600 dark:text-emerald-400"
-        />
-      </SimpleTooltip>
-      <RowDeviceBadge badge={mirror} />
-    </span>
-  );
+  const show = useShowDeviceBadges();
+  return <MirrorBadgeView mirror={mirror} showBadge={show} />;
 }
 
 // The project-header cluster: one badge per contributing peer device,

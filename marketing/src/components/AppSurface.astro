@@ -1,0 +1,56 @@
+---
+// A piece of the app on the page: the app's own React views, put in
+// as children and rendered to HTML at build time, with no app running.
+// They render into a shadow root (declared in the HTML, so no script
+// makes it) holding the app's stylesheet, so the app's styles and the
+// page's never meet. Inside, the two elements the app styles as <html>
+// and <body> (plugins/shadowAppCss.ts) wear the theme the app would
+// put on <html>.
+//
+// The views are a picture of the app, not a working one, so the
+// surface is inert: nothing in it takes a click or the keyboard, and a
+// screen reader reads the figure's description in its place.
+import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@shared/themes";
+import appCss from "../styles/app.css?url";
+
+interface Props {
+  theme?: "light" | "dark";
+  // The Animal Crossing look, the app's default. Off is the neutral one.
+  doubutsu?: boolean;
+  // A doubutsu palette (the app's shared/themes.ts), else the default
+  // for the theme.
+  palette?: string;
+  // The phone layout of the web app.
+  phone?: boolean;
+  // The desktop window, whose page is transparent under the sidebar.
+  desktop?: boolean;
+  class?: string;
+}
+const {
+  theme = "light",
+  doubutsu = true,
+  palette,
+  phone,
+  desktop,
+  class: className,
+} = Astro.props;
+const dark = theme === "dark";
+---
+
+<div class:list={["app-surface", className]} inert>
+  <template shadowrootmode="open">
+    <link rel="stylesheet" href={appCss} />
+    <div
+      class:list={["app-html", { dark, doubutsu }]}
+      style={`color-scheme: ${theme}`}
+      data-theme-scope
+      data-palette={doubutsu
+        ? (palette ?? (dark ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME))
+        : undefined}
+      data-layout={phone ? "phone" : undefined}
+      data-shell={desktop ? "desktop" : undefined}
+    >
+      <div class="app-body"><slot /></div>
+    </div>
+  </template>
+</div>
