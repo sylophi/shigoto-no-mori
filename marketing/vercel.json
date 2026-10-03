@@ -1,6 +1,6 @@
 {
   "framework": "astro",
-  "installCommand": "pnpm install --frozen-lockfile && pnpm -C ../app install --frozen-lockfile --ignore-scripts",
+  "installCommand": "pnpm -C ../app install --frozen-lockfile --ignore-scripts && pnpm install --frozen-lockfile",
   "headers": [
     {
       "source": "/_astro/(.*)",

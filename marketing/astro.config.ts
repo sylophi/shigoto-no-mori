@@ -51,8 +51,10 @@ export default defineConfig({
         "@/": app("renderer/"),
         "@shared/": app("shared/"),
       },
-      // One React for the page and the app's views, which would
-      // otherwise reach the app's own copy from where they live.
+      // One React for the page and the app's views: this project's
+      // react and react-dom are links to the app's own copies
+      // (package.json), so the views' libraries, which load from the
+      // app's node_modules, and the renderer here meet the same one.
       dedupe: ["react", "react-dom"],
     },
     server: { fs: { allow: [".", app("")] } },

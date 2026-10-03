@@ -6,8 +6,8 @@ except that it draws the app with the app's own components, from
 `../app` (see below), so the app's dependencies need installing too.
 
 ```sh
+pnpm -C ../app install   # first: this project's React is a link to the app's
 pnpm install
-pnpm -C ../app install
 pnpm dev      # local preview with reload, on the port port-pool gave this worktree
 pnpm check    # type-check the pages, components and scripts (build runs it too)
 pnpm build    # static output in dist/
