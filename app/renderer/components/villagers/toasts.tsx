@@ -110,13 +110,26 @@ export function toastVillagerSuccess(
 // Animal Crossing comes with it (DESIGN.md, "Village life: rarity"): a
 // rare character speaks in a dialogue box, and a legendary one writes a
 // letter. Everyone else, and several at once, get a toast with their
-// faces. All of it goes to the village lane (VillageToaster).
-export function toastVillagerMove(news: MoveNews, id: string): void {
+// faces. All of it goes to the village lane (VillageToaster). An id
+// still showing is replaced in place, its time starting over, and
+// `onClose` hears when it goes, timed out or sent away. The villagers
+// who `joined` it (by slug) pop into the faces, and the title ticks
+// over to name them.
+export function toastVillagerMove(
+  news: MoveNews,
+  id: string,
+  { joined, onClose }: { joined?: ReadonlySet<string>; onClose: () => void },
+): void {
   const lane = {
     id,
     toasterId: VILLAGE_TOASTER,
     testId: id,
-    duration: MOVE_TOAST_MS[news.rarity],
+    // sonner starts a toast's time over only when its duration changes,
+    // a hover having paused it or not, so news that grows lasts a
+    // millisecond longer for each worktree in it.
+    duration: MOVE_TOAST_MS[news.rarity] + news.worktreeIds.length,
+    onDismiss: onClose,
+    onAutoClose: onClose,
   };
   const [speaker] = news.speakers;
   if (news.words !== null) {
@@ -129,14 +142,24 @@ export function toastVillagerMove(news: MoveNews, id: string): void {
     );
     return;
   }
+  const title =
+    news.line === null ? news.title : <VillagerSays line={news.line} />;
   toast.success(
-    news.line === null ? news.title : <VillagerSays line={news.line} />,
+    !joined?.size ? (
+      title
+    ) : (
+      // Keyed by the title, so each change starts the tick over.
+      <span key={news.title} className="villager-tick block">
+        {title}
+      </span>
+    ),
     {
       ...lane,
       // Moving out, the front face wears a moving box, not the check.
       ...faceOptions(
         news.speakers,
         news.kind === "out" ? <MovingBoxBadge /> : <SuccessBadge />,
+        joined,
       ),
       // sonner draws an element given as the action as it is, at the
       // end of the row.
@@ -159,17 +182,19 @@ export function toastVillagerMove(news: MoveNews, id: string): void {
 }
 
 // The faces in the icon slot, overlapping like a group photo, the check
-// on the front one. Only speakers with a face are in it. With none, the
-// toast keeps its plain check.
+// on the front one. Only speakers with a face are in it, the last three,
+// so one who joins news already showing (`joined`) pops in at the
+// front. With none, the toast keeps its plain check.
 function faceOptions(
   speakers: readonly Speaker[],
   badge: ReactNode = <SuccessBadge />,
+  joined: ReadonlySet<string> = new Set(),
 ): ExternalToast {
   const faces = speakers
     .filter((speaker): speaker is Speaker & { face: string } =>
       Boolean(speaker.face),
     )
-    .slice(0, 3);
+    .slice(-3);
   if (faces.length === 0) return {};
   return {
     icon: (
@@ -180,6 +205,7 @@ function faceOptions(
             className={cn(
               "flex rounded-full bg-popover",
               index > 0 && "-ml-3 ring-2 ring-popover",
+              joined.has(speaker.slug) && "villager-join",
             )}
           >
             <VillagerFace

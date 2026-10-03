@@ -219,6 +219,8 @@ packed in their box in the dialogue, and a legendary one's letter is a
 farewell, with their photo taped in the corner in place of the stamp and
 signed "Your friend". In a crowd (a Tidy run) the rare and legendary keep
 their own moments, rarest on top, and the regulars share one toast.
+Villagers moving one at a time join the news still showing about their
+kind of move, so it grows rather than stacking, until it closes.
 
 Everyday toasts (a commit) stay small for everyone: the face, and a
 common villager's catchphrase. The dialogue box and the letter take
