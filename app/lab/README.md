@@ -184,3 +184,6 @@ over the lab's fixtures into one of the site's pictures.
 
 A view should draw exactly what its component drew. To check, shoot
 the lab before and after (`lab/shoot.mts`) and compare the images.
+To see a scene beside the live app, the lab serves a viewer at
+`/scenes.html?scene=<name>` (lab/scenes/viewer.tsx), which takes the
+lab's appearance poses and shoots like any other.
