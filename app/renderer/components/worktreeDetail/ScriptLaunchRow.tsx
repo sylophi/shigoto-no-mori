@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useLocalGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
@@ -223,16 +224,19 @@ function ScriptLaunchButton({
   };
 
   return (
-    <ScriptPill
-      name={name}
-      busy={busy}
-      disabled={state.cancelling || !canRun}
-      onClick={handleClick}
-      aria-label={actionLabel}
-      title={
+    <SimpleTooltip
+      tip={
         disabledReason ?? `${actionLabel}\n${command}\n⌘click to view output`
       }
-    />
+    >
+      <ScriptPill
+        name={name}
+        busy={busy}
+        disabled={state.cancelling || !canRun}
+        onClick={handleClick}
+        aria-label={actionLabel}
+      />
+    </SimpleTooltip>
   );
 }
 

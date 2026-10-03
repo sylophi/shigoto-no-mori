@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface ScriptRowProps {
   worktree: Worktree;
@@ -31,27 +32,35 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
 
   return (
     <div className={cn("flex items-stretch text-xs")}>
-      <button
-        type="button"
-        onClick={busy ? stop : start}
-        disabled={state.cancelling || !canRun}
-        aria-label={actionLabel}
-        title={
+      <SimpleTooltip
+        tip={
           disabledReason ??
           (command ? `${actionLabel}\n${command}` : actionLabel)
         }
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-          busy ? "text-destructive hover:bg-destructive/10" : "hover:bg-accent",
-        )}
       >
-        {busy ? (
-          <Square aria-hidden className="size-3 shrink-0" />
-        ) : (
-          <Play aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-        )}
-        <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
-      </button>
+        <button
+          type="button"
+          onClick={busy ? stop : start}
+          disabled={state.cancelling || !canRun}
+          aria-label={actionLabel}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+            busy
+              ? "text-destructive hover:bg-destructive/10"
+              : "hover:bg-accent",
+          )}
+        >
+          {busy ? (
+            <Square aria-hidden className="size-3 shrink-0" />
+          ) : (
+            <Play
+              aria-hidden
+              className="size-3 shrink-0 text-muted-foreground"
+            />
+          )}
+          <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
+        </button>
+      </SimpleTooltip>
 
       {/* Capped at half the row so a long status (a failed run's exit
           code and age) in a narrow grid column truncates instead of
@@ -61,7 +70,6 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
           type="button"
           onClick={openConsole}
           aria-label={`View ${label} output`}
-          title="View output"
           className="flex max-w-1/2 min-w-0 items-center gap-2 border-l border-border px-2.5 py-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         >
           <span className="min-w-0 truncate">

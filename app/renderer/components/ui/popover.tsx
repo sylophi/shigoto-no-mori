@@ -6,6 +6,7 @@ import {
   FLOATING_POSITIONER_CLASS,
   FLOATING_SURFACE_CLASS,
 } from "./floating-surface";
+import type { WithoutTitle } from "./tooltip";
 
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
@@ -13,7 +14,9 @@ function Popover({ ...props }: PopoverPrimitive.Root.Props) {
 
 // No data-slot: it would replace the wrapped element's own (see
 // DropdownMenuTrigger).
-function PopoverTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
+function PopoverTrigger({
+  ...props
+}: WithoutTitle<PopoverPrimitive.Trigger.Props>) {
   return <PopoverPrimitive.Trigger {...props} />;
 }
 

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useUpdater } from "@/hooks/system/useUpdater";
@@ -55,7 +56,7 @@ export function VersionSection({
   const kind = state?.kind ?? "idle";
   const ready = state?.kind === "ready" ? state : null;
   const busy = kind === "checking" || kind === "downloading";
-  const blockedTitle = canCommand ? undefined : peerReadOnlyNote("this device");
+  const blockedTip = canCommand ? undefined : peerReadOnlyNote("this device");
   // No state to show: the first read failed. Over a wire that is
   // still dialing, or on a peer build without the channel, the error
   // looks the same, so say only what is known and offer a retry.
@@ -93,16 +94,17 @@ export function VersionSection({
             ) : ready ? (
               <RestartToUpdateButton version={ready.version} />
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy || !canCommand}
-                title={blockedTitle}
-                onClick={() => check.mutate()}
-              >
-                {busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                {kind === "checking" ? "Checking…" : "Check for updates"}
-              </Button>
+              <SimpleTooltip tip={blockedTip}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || !canCommand}
+                  onClick={() => check.mutate()}
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                  {kind === "checking" ? "Checking…" : "Check for updates"}
+                </Button>
+              </SimpleTooltip>
             )}
           </div>
         </div>
@@ -161,19 +163,22 @@ function RestartToUpdateButton({ version }: { version: string }) {
   const { install } = useUpdater();
   const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
   return (
-    <Button
-      size="sm"
-      disabled={install.isPending || !canCommand}
-      title={canCommand ? undefined : peerReadOnlyNote("this device")}
-      aria-pressed={remote ? confirm.armed : undefined}
-      onClick={() =>
-        remote ? confirm.trigger(() => install.mutate()) : install.mutate()
-      }
+    <SimpleTooltip
+      tip={canCommand ? undefined : peerReadOnlyNote("this device")}
     >
-      <RefreshCw />
-      {confirm.armed
-        ? "Click again to confirm"
-        : `Restart to update to v${version}`}
-    </Button>
+      <Button
+        size="sm"
+        disabled={install.isPending || !canCommand}
+        aria-pressed={remote ? confirm.armed : undefined}
+        onClick={() =>
+          remote ? confirm.trigger(() => install.mutate()) : install.mutate()
+        }
+      >
+        <RefreshCw />
+        {confirm.armed
+          ? "Click again to confirm"
+          : `Restart to update to v${version}`}
+      </Button>
+    </SimpleTooltip>
   );
 }

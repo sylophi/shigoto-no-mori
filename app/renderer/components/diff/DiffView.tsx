@@ -290,7 +290,6 @@ export function DiffView({
             {phone && (singleFile || allFiles.length >= SHEET_MIN_FILES) && (
               <ChipButton
                 onClick={() => setFileSheetOpen(true)}
-                title={filesLabel}
                 aria-label={`${filesLabel} (${indexEntries.length})`}
                 className="py-1.5"
               >

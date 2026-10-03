@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { PullRequestTone } from "@/lib/pullRequest";
 
@@ -19,7 +20,7 @@ const TONE_CLASSES: Record<PillTone, string> = {
 interface StatusPillProps {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   tone: PillTone;
-  title: string;
+  tip: string;
   "aria-label": string;
   children?: ReactNode;
 }
@@ -29,22 +30,23 @@ interface StatusPillProps {
 export function StatusPill({
   icon: Icon,
   tone,
-  title,
+  tip,
   "aria-label": ariaLabel,
   children,
 }: StatusPillProps) {
   return (
-    <span
-      title={title}
-      aria-label={ariaLabel}
-      className={cn(
-        "inline-flex shrink-0 items-center text-3xs",
-        children != null && "tabular gap-0.5",
-        TONE_CLASSES[tone],
-      )}
-    >
-      <Icon aria-hidden className="size-3" />
-      {children}
-    </span>
+    <SimpleTooltip tip={tip}>
+      <span
+        aria-label={ariaLabel}
+        className={cn(
+          "inline-flex shrink-0 items-center text-3xs",
+          children != null && "tabular gap-0.5",
+          TONE_CLASSES[tone],
+        )}
+      >
+        <Icon aria-hidden className="size-3" />
+        {children}
+      </span>
+    </SimpleTooltip>
   );
 }

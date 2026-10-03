@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import { withToggled } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
@@ -44,7 +45,7 @@ import { IconButton } from "@/components/ui/icon-button";
 const OPTIONS = (Object.keys(IGNORE_BASE_COPY) as IgnoreBase[]).map((base) => ({
   value: base,
   label: IGNORE_BASE_COPY[base].label,
-  title: IGNORE_BASE_COPY[base].title,
+  tip: IGNORE_BASE_COPY[base].tip,
 }));
 
 // What the picker browses: the folder browser's own props, less the
@@ -139,15 +140,16 @@ export function LeaveOutPicker<E extends PickerEntry>({
             />
           ))}
           {!disabled && (
-            <Button
-              variant="ghost"
-              size="sm"
-              title={copy.hint}
-              onClick={() => setPicking(true)}
-            >
-              <Plus />
-              {copy.add}
-            </Button>
+            <SimpleTooltip tip={copy.hint}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPicking(true)}
+              >
+                <Plus />
+                {copy.add}
+              </Button>
+            </SimpleTooltip>
           )}
         </div>
       )}
@@ -215,9 +217,9 @@ function Trailing({
         : null;
   if (why !== null) {
     return (
-      <span className="px-2 text-2xs text-muted-foreground/70" title={why[1]}>
-        {why[0]}
-      </span>
+      <SimpleTooltip tip={why[1]}>
+        <span className="px-2 text-2xs text-muted-foreground/70">{why[0]}</span>
+      </SimpleTooltip>
     );
   }
   return (
@@ -289,9 +291,9 @@ function IgnoredList({
           style={{ columnWidth: `${longest}ch` }}
         >
           {paths.map((path) => (
-            <li key={path} className="truncate py-0.5" title={path}>
-              {path}
-            </li>
+            <SimpleTooltip whenTruncated key={path} tip={path}>
+              <li className="truncate py-0.5">{path}</li>
+            </SimpleTooltip>
           ))}
           {total > paths.length && (
             <li className="py-0.5 text-muted-foreground [column-span:all]">
@@ -324,9 +326,11 @@ function ChosenRow({
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
       <MaterialIcon kind="file" name={basename} className="size-4" />
-      <span className="min-w-0 flex-1 truncate font-mono text-xs" title={path}>
-        {path}
-      </span>
+      <SimpleTooltip whenTruncated tip={path}>
+        <span className="min-w-0 flex-1 truncate font-mono text-xs">
+          {path}
+        </span>
+      </SimpleTooltip>
       {!disabled && (
         <IconButton
           onClick={onRemove}

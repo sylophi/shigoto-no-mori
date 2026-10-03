@@ -151,7 +151,6 @@ export function ProjectRow({
             // at rest, so there it takes a place of its own before them.
             <span
               aria-label={pluralize(branches, "worktree")}
-              title={pluralize(branches, "worktree")}
               className={cn(
                 "pointer-events-none absolute right-2 text-3xs text-muted-foreground tabular-nums transition-opacity phone:static phone:px-1",
                 // The actions also come up for an open menu and for

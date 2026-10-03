@@ -1,3 +1,4 @@
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
 
@@ -7,8 +8,8 @@ export function RelativeDate({ date }: { date: string }) {
   const now = useNow();
   const value = new Date(date);
   return (
-    <span title={value.toLocaleString()}>
-      {formatRelativeTime(value.getTime(), now)}
-    </span>
+    <SimpleTooltip tip={value.toLocaleString()}>
+      <span>{formatRelativeTime(value.getTime(), now)}</span>
+    </SimpleTooltip>
   );
 }

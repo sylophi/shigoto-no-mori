@@ -34,6 +34,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   StatusDot,
   type StatusTone,
@@ -270,7 +271,7 @@ function Stats({
       <Stat label={filesLabel} paused={session.paused}>
         {session.local.files.toLocaleString()}
       </Stat>
-      <Stat label="Git" title={session.git?.detail} paused={session.paused}>
+      <Stat label="Git" tip={session.git?.detail} paused={session.paused}>
         <StatusDot
           tone={git.tone}
           label={<span className={TONE_TEXT[git.tone]}>{git.label}</span>}
@@ -285,31 +286,30 @@ function Stats({
 // that lost everything.
 function Stat({
   label,
-  title,
+  tip,
   paused = false,
   children,
 }: {
   label: string;
-  title?: string;
+  tip?: string;
   paused?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className="min-w-0 rounded-lg bg-muted/40 px-3 py-2 leading-tight"
-      title={title}
-    >
-      <dt className="text-3xs tracking-wide text-muted-foreground uppercase">
-        {label}
-      </dt>
-      <dd className="mt-0.5 truncate text-sm font-medium tabular-nums">
-        {paused ? (
-          <span className="text-muted-foreground">paused</span>
-        ) : (
-          children
-        )}
-      </dd>
-    </div>
+    <SimpleTooltip tip={tip}>
+      <div className="min-w-0 rounded-lg bg-muted/40 px-3 py-2 leading-tight">
+        <dt className="text-3xs tracking-wide text-muted-foreground uppercase">
+          {label}
+        </dt>
+        <dd className="mt-0.5 truncate text-sm font-medium tabular-nums">
+          {paused ? (
+            <span className="text-muted-foreground">paused</span>
+          ) : (
+            children
+          )}
+        </dd>
+      </div>
+    </SimpleTooltip>
   );
 }
 

@@ -45,11 +45,6 @@ export function DetectedToolsSection({
                   variant={isHidden ? "outline" : "secondary"}
                   size="sm"
                   aria-pressed={!isHidden}
-                  title={
-                    isHidden
-                      ? `Show ${tool.label} in the Launch section`
-                      : `Hide ${tool.label} from the Launch section`
-                  }
                   className={cn(isHidden && "opacity-50 hover:opacity-100")}
                   onClick={() => onToggle(tool.id)}
                 >

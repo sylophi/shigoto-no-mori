@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -50,7 +51,7 @@ export function ScriptStatusBadge({
   }
   if (state.status === "exited") {
     const when = state.endedAt;
-    const timeTitle = when ? new Date(when).toLocaleString() : undefined;
+    const timeTip = when ? new Date(when).toLocaleString() : undefined;
     const suffix = when !== null ? ` · ${formatRelativeTime(when, now)}` : "";
     // exitCode === null happens when the process was killed by signal
     // (the user clicked Stop, the app quit, or the worktree was
@@ -58,23 +59,21 @@ export function ScriptStatusBadge({
     // colour and copy match the muted "done" treatment.
     if (state.exitCode === null || state.exitCode === 0) {
       return (
-        <span
-          className="tabular shrink-0 text-xs text-muted-foreground select-text"
-          title={timeTitle}
-        >
-          {state.exitCode === null ? "stopped" : "done"}
-          {suffix}
-        </span>
+        <SimpleTooltip tip={timeTip}>
+          <span className="tabular shrink-0 text-xs text-muted-foreground select-text">
+            {state.exitCode === null ? "stopped" : "done"}
+            {suffix}
+          </span>
+        </SimpleTooltip>
       );
     }
     return (
-      <span
-        className="tabular shrink-0 font-mono text-xs text-destructive select-text"
-        title={timeTitle}
-      >
-        failed · exit {state.exitCode}
-        <span className="font-sans text-muted-foreground">{suffix}</span>
-      </span>
+      <SimpleTooltip tip={timeTip}>
+        <span className="tabular shrink-0 font-mono text-xs text-destructive select-text">
+          failed · exit {state.exitCode}
+          <span className="font-sans text-muted-foreground">{suffix}</span>
+        </span>
+      </SimpleTooltip>
     );
   }
   if (state.status === "errored") {

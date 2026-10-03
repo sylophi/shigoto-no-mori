@@ -7,8 +7,6 @@ interface FoldHeaderProps {
   expanded: boolean;
   onToggle: () => void;
   Icon?: LucideIcon;
-  // A tooltip saying what the fold holds.
-  hint?: string;
 }
 
 // A header that folds the rows under it: label, hairline rule, chevron.
@@ -21,14 +19,12 @@ export function FoldHeader({
   expanded,
   onToggle,
   Icon,
-  hint,
 }: FoldHeaderProps) {
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
-      title={hint}
       className="mt-2 flex w-full items-center gap-2 px-2 py-1 text-left text-muted-foreground transition-colors hover:text-foreground"
     >
       {Icon && <Icon aria-hidden className="size-3 shrink-0" />}

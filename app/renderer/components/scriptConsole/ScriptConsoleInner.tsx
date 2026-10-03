@@ -1,6 +1,7 @@
 import { Play, Square } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -65,15 +66,12 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
                 {state.cancelling ? "Stopping…" : "Stop"}
               </Button>
             ) : (
-              <Button
-                size="sm"
-                onClick={start}
-                disabled={!canRun}
-                title={disabledReason}
-              >
-                <Play />
-                {state.status === "idle" ? "Run" : "Run again"}
-              </Button>
+              <SimpleTooltip tip={disabledReason}>
+                <Button size="sm" onClick={start} disabled={!canRun}>
+                  <Play />
+                  {state.status === "idle" ? "Run" : "Run again"}
+                </Button>
+              </SimpleTooltip>
             )}
           </div>
         </div>

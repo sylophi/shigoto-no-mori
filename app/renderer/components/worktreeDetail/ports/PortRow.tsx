@@ -103,30 +103,26 @@ export function PortRow({
           <div className="ml-auto flex items-center gap-0.5">
             {!remote && <OpenLocalhostButton port={port} />}
             {onUpdate !== undefined && (
-              <SimpleTooltip tip="Edit this port">
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  aria-label={`Edit port ${port}`}
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={() => setEditing(true)}
-                >
-                  <Pencil />
-                </Button>
-              </SimpleTooltip>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                aria-label={`Edit port ${port}`}
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setEditing(true)}
+              >
+                <Pencil />
+              </Button>
             )}
             {onRemove !== undefined && (
-              <SimpleTooltip tip="Remove this port">
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  aria-label={`Remove port ${port}`}
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={onRemove}
-                >
-                  <X />
-                </Button>
-              </SimpleTooltip>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                aria-label={`Remove port ${port}`}
+                className="text-muted-foreground hover:text-foreground"
+                onClick={onRemove}
+              >
+                <X />
+              </Button>
             )}
           </div>
         </div>

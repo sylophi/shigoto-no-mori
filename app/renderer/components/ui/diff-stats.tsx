@@ -12,7 +12,6 @@ export function DiffStats({
   return (
     <span
       aria-label={label}
-      title={label}
       className="tabular inline-flex shrink-0 items-center gap-1.5 font-mono text-xs"
     >
       <span className="text-green-500">+{additions}</span>

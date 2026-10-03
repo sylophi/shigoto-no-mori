@@ -3,11 +3,12 @@ import type * as React from "react";
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 
 import { cn } from "@/lib/utils";
+import type { WithoutTitle } from "./tooltip";
 
 function Switch({
   className,
   ...props
-}: React.ComponentProps<typeof SwitchPrimitive.Root>) {
+}: WithoutTitle<React.ComponentProps<typeof SwitchPrimitive.Root>>) {
   return (
     <SwitchPrimitive.Root
       data-slot="switch"

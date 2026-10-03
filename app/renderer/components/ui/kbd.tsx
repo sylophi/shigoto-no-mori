@@ -1,7 +1,11 @@
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import type { WithoutTitle } from "./tooltip";
 
-export function Kbd({ className, ...props }: ComponentProps<"kbd">) {
+export function Kbd({
+  className,
+  ...props
+}: WithoutTitle<ComponentProps<"kbd">>) {
   return (
     <kbd
       className={cn(
@@ -13,7 +17,10 @@ export function Kbd({ className, ...props }: ComponentProps<"kbd">) {
   );
 }
 
-export function KbdGroup({ className, ...props }: ComponentProps<"kbd">) {
+export function KbdGroup({
+  className,
+  ...props
+}: WithoutTitle<ComponentProps<"kbd">>) {
   return (
     <kbd
       className={cn("inline-flex items-center gap-1.5", className)}

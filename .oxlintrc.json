@@ -25,6 +25,7 @@
     "typescript/no-non-null-assertion": "error",
     "shigomori/no-double-cast": "error",
     "shigomori/disable-needs-reason": "error",
+    "shigomori/no-native-tooltip": "error",
     "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
     "no-restricted-imports": [
       "error",

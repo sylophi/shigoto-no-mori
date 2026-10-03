@@ -3,6 +3,7 @@ import type * as React from "react";
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 
 import { MenuPopupSurface } from "./dropdown-menu";
+import type { WithoutTitle } from "./tooltip";
 
 // Right-click flavour of ui/dropdown-menu. Base UI's ContextMenu differs
 // from Menu only in its Root (anchors at the pointer) and Trigger (opens
@@ -18,7 +19,9 @@ function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
 
 // No data-slot: it would replace the wrapped row's own (see
 // DropdownMenuTrigger).
-function ContextMenuTrigger({ ...props }: ContextMenuPrimitive.Trigger.Props) {
+function ContextMenuTrigger({
+  ...props
+}: WithoutTitle<ContextMenuPrimitive.Trigger.Props>) {
   return <ContextMenuPrimitive.Trigger {...props} />;
 }
 

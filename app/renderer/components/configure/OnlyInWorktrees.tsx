@@ -1,4 +1,5 @@
 import type { RepoEntryHolder } from "@/hooks/remote/useRepoListing";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface OnlyInWorktreesProps {
@@ -19,7 +20,7 @@ export function OnlyInWorktrees({
   return (
     <FoundNote
       note={`in ${names}`}
-      title={`Not in the main checkout. Found in: ${names}`}
+      tip={`Not in the main checkout. Found in: ${names}`}
       className={className}
     />
   );
@@ -42,7 +43,7 @@ export function FoundOnDevices({
   return (
     <FoundNote
       note={`on ${names}`}
-      title={`Not in every device's main checkout. Found on: ${names}`}
+      tip={`Not in every device's main checkout. Found on: ${names}`}
       className={className}
     />
   );
@@ -50,19 +51,20 @@ export function FoundOnDevices({
 
 function FoundNote({
   note,
-  title,
+  tip,
   className,
 }: {
   note: string;
-  title: string;
+  tip: string;
   className?: string;
 }) {
   return (
-    <span
-      className={cn("truncate text-2xs text-muted-foreground/70", className)}
-      title={title}
-    >
-      {note}
-    </span>
+    <SimpleTooltip tip={tip}>
+      <span
+        className={cn("truncate text-2xs text-muted-foreground/70", className)}
+      >
+        {note}
+      </span>
+    </SimpleTooltip>
   );
 }

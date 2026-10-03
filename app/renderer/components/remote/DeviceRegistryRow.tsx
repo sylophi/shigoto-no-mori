@@ -23,6 +23,7 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { CommandAccess } from "@/hooks/remote/useCommandAccess";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
@@ -161,12 +162,11 @@ export function DeviceRegistryRow({
               />
               {isThisDevice && !renaming && <RowTag>{traits.selfLabel}</RowTag>}
               {showId && (
-                <span
-                  title={device.deviceId}
-                  className="font-mono text-2xs text-muted-foreground/70 select-text"
-                >
-                  {abbreviateId(device.deviceId)}
-                </span>
+                <SimpleTooltip tip={device.deviceId}>
+                  <span className="font-mono text-2xs text-muted-foreground/70 select-text">
+                    {abbreviateId(device.deviceId)}
+                  </span>
+                </SimpleTooltip>
               )}
             </div>
 

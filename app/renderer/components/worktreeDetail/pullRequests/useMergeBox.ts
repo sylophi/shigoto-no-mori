@@ -40,17 +40,17 @@ export type MergeBoxMode = "merge" | "arm" | "armed";
 export const STACK_REACH_OPTIONS: readonly {
   value: StackReach;
   label: string;
-  title: string;
+  tip: string;
 }[] = [
   {
     value: "upTo",
     label: "Up to here",
-    title: "Merge from the bottom of the stack up to this pull request",
+    tip: "Merge from the bottom of the stack up to this pull request",
   },
   {
     value: "stack",
     label: "Whole stack",
-    title: "Merge every open pull request in the stack",
+    tip: "Merge every open pull request in the stack",
   },
 ];
 

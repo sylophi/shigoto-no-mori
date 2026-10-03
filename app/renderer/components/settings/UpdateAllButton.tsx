@@ -22,7 +22,6 @@ export function UpdateAllButton({ chip = false }: { chip?: boolean }) {
   const common = {
     disabled: install.isPending,
     "aria-pressed": confirm.armed,
-    title: `Update ${count} devices, downloading the update first where needed`,
     onClick: () => confirm.trigger(() => install.mutate()),
     children: (
       <>

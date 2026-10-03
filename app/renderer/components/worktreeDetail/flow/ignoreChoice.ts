@@ -59,7 +59,7 @@ export {
 export const IGNORE_BASE_COPY = {
   everything: {
     label: "Nothing",
-    title: "Copy every file, gitignored ones included",
+    tip: "Copy every file, gitignored ones included",
     add: "Leave something out",
     hint: "Pick ignored files or folders to leave out.",
     lead: "Except these, which are left out:",
@@ -68,7 +68,7 @@ export const IGNORE_BASE_COPY = {
   },
   gitignored: {
     label: "Gitignored",
-    title: "Skip whatever .gitignore matches",
+    tip: "Skip whatever .gitignore matches",
     add: "Bring something anyway",
     hint: "Pick ignored files or folders to bring anyway.",
     lead: "Except these, which are brought anyway:",

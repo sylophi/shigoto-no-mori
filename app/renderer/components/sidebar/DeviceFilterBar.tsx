@@ -16,6 +16,7 @@ import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@/components/ui/button";
 import type { StatusTone } from "@/components/ui/status-dot";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
 import { deviceAbbrev } from "@/lib/deviceAbbrev";
 import { deviceTitle } from "@/lib/remote/deviceStatus";
@@ -72,33 +73,33 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
       {pills.map((pill) => {
         const checked = pill.id === selectedId;
         return (
-          <Button
-            key={pill.id}
-            variant="outline"
-            size="xs"
-            role="radio"
-            aria-checked={checked}
-            aria-label={pill.title}
-            tabIndex={checked ? 0 : -1}
-            title={pill.title}
-            onClick={() => pick(pill.id)}
-            onKeyDown={onKeyDown}
-            // The picked pill wears the accent fill every selection in
-            // the app wears, hover included, over the variant's own
-            // fill. (doubutsu fills outline buttons from an unlayered
-            // rule, so it re-fills the picked pill itself: see
-            // sidebar-device-filter.)
-            className={cn(
-              "font-normal",
-              checked &&
-                "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
-            )}
-          >
-            {pill.icon && (
-              <DeviceLead icon={pill.icon} tone={pill.tone} size="xs" />
-            )}
-            <span className="max-w-32 truncate">{pill.label}</span>
-          </Button>
+          <SimpleTooltip key={pill.id} tip={pill.title}>
+            <Button
+              variant="outline"
+              size="xs"
+              role="radio"
+              aria-checked={checked}
+              aria-label={pill.title}
+              tabIndex={checked ? 0 : -1}
+              onClick={() => pick(pill.id)}
+              onKeyDown={onKeyDown}
+              // The picked pill wears the accent fill every selection in
+              // the app wears, hover included, over the variant's own
+              // fill. (doubutsu fills outline buttons from an unlayered
+              // rule, so it re-fills the picked pill itself: see
+              // sidebar-device-filter.)
+              className={cn(
+                "font-normal",
+                checked &&
+                  "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
+              )}
+            >
+              {pill.icon && (
+                <DeviceLead icon={pill.icon} tone={pill.tone} size="xs" />
+              )}
+              <span className="max-w-32 truncate">{pill.label}</span>
+            </Button>
+          </SimpleTooltip>
         );
       })}
     </div>

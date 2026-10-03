@@ -19,7 +19,6 @@ export function FilesButton({ worktree }: { worktree: Worktree }) {
       rank={LABEL_RANK.files}
       icon={<FolderSearch />}
       label="Files"
-      title="Browse this worktree's files"
       onClick={() => toFiles(worktree.projectId, worktree.id)}
     />
   );

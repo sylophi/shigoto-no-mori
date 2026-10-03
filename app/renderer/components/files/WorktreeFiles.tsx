@@ -116,7 +116,6 @@ function FilesView({
               {phone && selected !== null && (
                 <ChipButton
                   onClick={() => setTreeSheetOpen(true)}
-                  title="Browse files"
                   aria-label="Browse files"
                   className="py-1.5"
                 >
@@ -125,7 +124,6 @@ function FilesView({
               )}
               <ChipButton
                 onClick={refresh}
-                title="Refresh files"
                 aria-label="Refresh files"
                 className="py-1.5"
               >

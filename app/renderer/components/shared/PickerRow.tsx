@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { MaterialIcon } from "@/components/ui/material-icon";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // What a picker row needs of an entry. The carry-over candidate, the
@@ -52,13 +53,12 @@ export function PickerRow({
         expanded={isFolder && highlighted}
         className="size-4"
       />
-      <span
-        className="min-w-0 flex-1 truncate font-mono text-xs"
-        title={entry.name}
-      >
-        {entry.name}
-        {isFolder ? "/" : ""}
-      </span>
+      <SimpleTooltip whenTruncated tip={entry.name}>
+        <span className="min-w-0 flex-1 truncate font-mono text-xs">
+          {entry.name}
+          {isFolder ? "/" : ""}
+        </span>
+      </SimpleTooltip>
       {provenance}
       {trailing}
     </li>

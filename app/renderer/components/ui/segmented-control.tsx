@@ -1,14 +1,18 @@
 import type { ReactNode } from "react";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export interface SegmentedOption<T extends string> {
   value: T;
   label: ReactNode;
-  // Shown as a native tooltip on the option button.
-  title?: string;
+  // Shown as a tooltip on the option button.
+  tip?: string;
+  // The option's name for assistive tech when its label is an icon
+  // alone: the tooltip is visual only.
+  ariaLabel?: string;
   // Greys out this option alone (the control-level `disabled` greys out
   // all of them). For choices that exist but aren't available right now.
-  // Pair it with `title`, and say why somewhere the eye will land.
+  // Pair it with `tip`, and say why somewhere the eye will land.
   disabled?: boolean;
 }
 
@@ -46,28 +50,29 @@ export function SegmentedControl<T extends string>({
       )}
     >
       {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          disabled={disabled || opt.disabled}
-          title={opt.title}
-          aria-pressed={value === opt.value}
-          className={cn(
-            // Concentric with the track: the option radius is the
-            // rounded-md outer radius (--radius * 0.8) minus the p-0.5
-            // track padding, so it stays correct when a theme scales
-            // --radius (doubutsu bumps it to 1rem).
-            "inline-flex items-center gap-1 rounded-[calc(var(--radius)*0.8-2px)] transition-colors",
-            optionClassName ?? "px-3 py-1 text-xs",
-            value === opt.value
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:text-foreground",
-            (disabled || opt.disabled) && "cursor-not-allowed opacity-50",
-          )}
-        >
-          {opt.label}
-        </button>
+        <SimpleTooltip key={opt.value} tip={opt.tip}>
+          <button
+            type="button"
+            onClick={() => onChange(opt.value)}
+            disabled={disabled || opt.disabled}
+            aria-pressed={value === opt.value}
+            aria-label={opt.ariaLabel}
+            className={cn(
+              // Concentric with the track: the option radius is the
+              // rounded-md outer radius (--radius * 0.8) minus the p-0.5
+              // track padding, so it stays correct when a theme scales
+              // --radius (doubutsu bumps it to 1rem).
+              "inline-flex items-center gap-1 rounded-[calc(var(--radius)*0.8-2px)] transition-colors",
+              optionClassName ?? "px-3 py-1 text-xs",
+              value === opt.value
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground",
+              (disabled || opt.disabled) && "cursor-not-allowed opacity-50",
+            )}
+          >
+            {opt.label}
+          </button>
+        </SimpleTooltip>
       ))}
     </div>
   );

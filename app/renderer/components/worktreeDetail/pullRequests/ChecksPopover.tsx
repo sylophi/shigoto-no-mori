@@ -23,7 +23,7 @@ export function ChecksPopover({ pr }: { pr: PullRequestDetail }) {
     <Popover>
       <PopoverTrigger
         render={
-          <ChipButton title="Show checks">
+          <ChipButton>
             <ChecksSummaryIcon tone={summary.tone} />
             {summary.label}
             <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />

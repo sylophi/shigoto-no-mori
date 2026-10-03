@@ -2,25 +2,10 @@ import { Archive, EyeOff, GitMerge, type LucideIcon } from "lucide-react";
 import { FoldHeader } from "../FoldHeader";
 import type { InboxShelf } from "../sidebarRow";
 
-const SHELVES: Record<
-  InboxShelf,
-  { label: string; Icon: LucideIcon; hint: string }
-> = {
-  shelved: {
-    label: "Shelved",
-    Icon: Archive,
-    hint: "Worktrees you've put out of focus",
-  },
-  merged: {
-    label: "Merged",
-    Icon: GitMerge,
-    hint: "Branches already landed on the primary, or with a merged PR",
-  },
-  hidden: {
-    label: "Hidden",
-    Icon: EyeOff,
-    hint: "Worktrees that start with a hidden prefix",
-  },
+const SHELVES: Record<InboxShelf, { label: string; Icon: LucideIcon }> = {
+  shelved: { label: "Shelved", Icon: Archive },
+  merged: { label: "Merged", Icon: GitMerge },
+  hidden: { label: "Hidden", Icon: EyeOff },
 };
 
 interface InboxShelfRowProps {
@@ -39,7 +24,7 @@ export function InboxShelfRow({
   expanded,
   onToggle,
 }: InboxShelfRowProps) {
-  const { label, Icon, hint } = SHELVES[shelf];
+  const { label, Icon } = SHELVES[shelf];
   return (
     <FoldHeader
       label={label}
@@ -47,7 +32,6 @@ export function InboxShelfRow({
       expanded={expanded}
       onToggle={onToggle}
       Icon={Icon}
-      hint={hint}
     />
   );
 }

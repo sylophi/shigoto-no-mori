@@ -688,7 +688,7 @@ function DestinationFolder({
         {base === null ? (
           <Skeleton className="h-3.5 w-2/3" />
         ) : (
-          <p className="truncate" title={`${base}/${shownName}`}>
+          <p className="truncate">
             <span className="text-muted-foreground">{base}/</span>
             <span
               className={

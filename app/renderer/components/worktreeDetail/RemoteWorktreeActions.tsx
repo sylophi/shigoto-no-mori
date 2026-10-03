@@ -29,6 +29,7 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { FooterActionButton } from "./FooterActionButton";
 import { LABEL_RANK } from "./footerFit";
 import { MirrorDialog } from "./mirror/MirrorDialog";
@@ -77,7 +78,8 @@ function TransferActions({
 }
 
 // Muted footer text, the shape the read-only note in the same footer
-// uses. It truncates on a narrow window, so the title repeats it. The
+// uses. It truncates on a narrow window, and then its tooltip shows it
+// whole. The
 // branch names spell out DEFAULT_BRANCH_CANDIDATES in
 // shared/git/defaultBranch.mts (the renderer bundle cannot import .mts),
 // so a change there changes this sentence.
@@ -86,12 +88,11 @@ const NO_IDENTITY_NOTE =
 
 function NoIdentityNote() {
   return (
-    <span
-      className="min-w-0 truncate text-xs text-muted-foreground"
-      title={NO_IDENTITY_NOTE}
-    >
-      {NO_IDENTITY_NOTE}
-    </span>
+    <SimpleTooltip whenTruncated tip={NO_IDENTITY_NOTE}>
+      <span className="min-w-0 truncate text-xs text-muted-foreground">
+        {NO_IDENTITY_NOTE}
+      </span>
+    </SimpleTooltip>
   );
 }
 
@@ -137,7 +138,7 @@ function TransferButtons({
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
           label="Mirror here"
-          title="Keep a live copy of this worktree here"
+          tip="Keep a live copy of this worktree here"
           disabledReason={blocker}
           onClick={() => setMirrorOpen(true)}
         />
@@ -153,7 +154,7 @@ function TransferButtons({
           rank={LABEL_RANK.transplant}
           icon={<Shovel />}
           label="Transplant here"
-          title="Move this worktree here"
+          tip="Move this worktree here"
           onClick={() => setTransplantOpen(true)}
         />
       )}

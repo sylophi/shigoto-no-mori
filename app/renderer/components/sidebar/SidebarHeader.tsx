@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { hasLocalHost } from "@/lib/localHost";
 import { cn, dragRegion } from "@/lib/utils";
 
@@ -100,21 +101,22 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: ThemeHeaderProps) {
             // drag region, so the click lands without carving a no-drag
             // hole). Last in the stack, so it paints over the badge it
             // overlaps and keeps a whole hit target.
-            <button
-              type="button"
-              onClick={onRevealProd}
-              title="Dev build. Click to preview production styling"
-              className={cn(
-                STICKER,
-                "bg-primary text-primary-foreground",
-                // Under a badge it counter-tilts and overlaps by a hair,
-                // so the two read as a pile rather than a list. Alone it
-                // keeps the sticker's own angle.
-                badge !== undefined && "-mt-px rotate-[8deg]",
-              )}
-            >
-              dev
-            </button>
+            <SimpleTooltip tip="Dev build. Click to preview production styling">
+              <button
+                type="button"
+                onClick={onRevealProd}
+                className={cn(
+                  STICKER,
+                  "bg-primary text-primary-foreground",
+                  // Under a badge it counter-tilts and overlaps by a hair,
+                  // so the two read as a pile rather than a list. Alone it
+                  // keeps the sticker's own angle.
+                  badge !== undefined && "-mt-px rotate-[8deg]",
+                )}
+              >
+                dev
+              </button>
+            </SimpleTooltip>
           )}
         </span>
         <span
@@ -159,18 +161,19 @@ function DefaultSidebarHeader({
         // off it. Reads instantly, still lets the wordmark sit right.
         // Doubles as the reveal-prod affordance, so it carves a no-drag
         // hole out of the title bar for its own click.
-        <button
-          type="button"
-          onClick={onRevealProd}
-          title="Dev build. Click to preview production styling"
-          style={dragRegion("no-drag")}
-          className={cn(
-            HEADER_CHIP,
-            "transition-colors hover:border-foreground/25 hover:text-foreground",
-          )}
-        >
-          dev
-        </button>
+        <SimpleTooltip tip="Dev build. Click to preview production styling">
+          <button
+            type="button"
+            onClick={onRevealProd}
+            style={dragRegion("no-drag")}
+            className={cn(
+              HEADER_CHIP,
+              "transition-colors hover:border-foreground/25 hover:text-foreground",
+            )}
+          >
+            dev
+          </button>
+        </SimpleTooltip>
       )}
     </div>
   );

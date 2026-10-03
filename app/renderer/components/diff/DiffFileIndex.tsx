@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useShortPath } from "@/hooks/ui/useShortPath";
 import {
   CONFIRM_QUICK_MS,
@@ -143,7 +144,6 @@ export function DiffFileIndex({
           <button
             type="button"
             onClick={onToggleAll}
-            title={allCollapsed ? "Expand all files" : "Collapse all files"}
             aria-label={
               allCollapsed ? "Expand all files" : "Collapse all files"
             }
@@ -229,7 +229,6 @@ function SelectAllCheckbox({ changes }: { changes: DiffChangesControls }) {
         changes.onSetStaged(changes.files.flatMap(changedFilePaths), next)
       }
       aria-label={checked ? "Leave every file out" : "Include every file"}
-      title={checked ? "Leave every file out" : "Include every file"}
       className="shrink-0"
     />
   );
@@ -278,7 +277,6 @@ function DiscardMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Discard changes"
-        title="Discard changes"
         disabled={total === 0}
         data-icon-button
         className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 data-popup-open:bg-accent data-popup-open:text-foreground"
@@ -371,7 +369,7 @@ function IndexRow({
   const { mark, label, className } = entry.mark;
   const { row } = entry;
   const select = () => onSelect(entry.key);
-  const title = entry.prevPath
+  const tip = entry.prevPath
     ? `${label}: ${entry.prevPath} → ${entry.path}`
     : `${label}: ${entry.path}`;
 
@@ -405,59 +403,61 @@ function IndexRow({
             onClick={(e) => e.stopPropagation()}
             className="flex shrink-0"
           >
-            <Checkbox
-              checked={row.staged === "all"}
-              indeterminate={row.staged === "partial"}
-              disabled={busy}
-              onCheckedChange={(next) =>
-                onSetStaged(changedFilePaths(row), next)
-              }
-              aria-label={
-                row.staged === "all"
-                  ? `Leave ${row.path} out of the commit`
-                  : `Include ${row.path} in the commit`
-              }
-              title={
+            <SimpleTooltip
+              tip={
                 row.staged === "partial"
                   ? "Partly staged: tick to include the whole file"
-                  : row.staged === "all"
-                    ? "Included in the commit"
-                    : "Not included in the commit"
+                  : undefined
               }
-            />
+            >
+              <Checkbox
+                checked={row.staged === "all"}
+                indeterminate={row.staged === "partial"}
+                disabled={busy}
+                onCheckedChange={(next) =>
+                  onSetStaged(changedFilePaths(row), next)
+                }
+                aria-label={
+                  row.staged === "all"
+                    ? `Leave ${row.path} out of the commit`
+                    : `Include ${row.path} in the commit`
+                }
+              />
+            </SimpleTooltip>
           </span>
         )}
-      <button
-        type="button"
-        data-slot="diff-index-jump"
-        onClick={select}
-        title={title}
-        className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
-      >
-        <span
-          aria-hidden
-          className={cn("w-2 shrink-0 font-mono text-3xs", className)}
+      <SimpleTooltip tip={tip}>
+        <button
+          type="button"
+          data-slot="diff-index-jump"
+          onClick={select}
+          className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
         >
-          {mark}
-        </span>
-        <span
-          ref={pathRef}
-          className="min-w-0 flex-1 truncate font-mono text-2xs"
-        >
-          {cut >= 0 && (
-            <span className="text-muted-foreground">
-              {display.slice(0, cut + 1)}
-            </span>
+          <span
+            aria-hidden
+            className={cn("w-2 shrink-0 font-mono text-3xs", className)}
+          >
+            {mark}
+          </span>
+          <span
+            ref={pathRef}
+            className="min-w-0 flex-1 truncate font-mono text-2xs"
+          >
+            {cut >= 0 && (
+              <span className="text-muted-foreground">
+                {display.slice(0, cut + 1)}
+              </span>
+            )}
+            {display.slice(cut + 1)}
+          </span>
+          {entry.stats && !discardArmed && (
+            <DiffStats
+              additions={entry.stats.additions}
+              deletions={entry.stats.deletions}
+            />
           )}
-          {display.slice(cut + 1)}
-        </span>
-        {entry.stats && !discardArmed && (
-          <DiffStats
-            additions={entry.stats.additions}
-            deletions={entry.stats.deletions}
-          />
-        )}
-      </button>
+        </button>
+      </SimpleTooltip>
       {row && (
         <Button
           variant="ghost-destructive"
@@ -473,7 +473,6 @@ function IndexRow({
               ? `Confirm discarding ${entry.path}`
               : `Discard changes to ${entry.path}`
           }
-          title={discardArmed ? "Click again to discard" : "Discard changes"}
           className={cn(
             "h-5 shrink-0 transition-opacity",
             discardArmed

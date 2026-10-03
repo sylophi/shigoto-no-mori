@@ -57,7 +57,6 @@ export function ThemePicker<Id extends LightTheme | DarkTheme>({
             type="button"
             aria-pressed={selected}
             disabled={disabled}
-            title={option.blurb}
             onClick={() => {
               if (!selected) onChange(shown);
             }}

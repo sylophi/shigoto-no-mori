@@ -150,19 +150,15 @@ export function PortsDialog({
                 : undefined
             }
           >
-            {/* The span is the trigger: a disabled button dispatches no
-                pointer events, and disabled is when the tip matters. */}
-            <span className="inline-flex">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={atCap || !canAdd}
-                onClick={() => setAdding(true)}
-              >
-                <Plus />
-                Add port
-              </Button>
-            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={atCap || !canAdd}
+              onClick={() => setAdding(true)}
+            >
+              <Plus />
+              Add port
+            </Button>
           </SimpleTooltip>
         )}
         <Button variant="ghost" size="sm" onClick={onClose}>

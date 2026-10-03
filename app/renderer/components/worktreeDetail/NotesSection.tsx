@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Textarea } from "@/components/ui/textarea";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useWorktreeData,
@@ -67,15 +68,16 @@ function NotesSectionInner({
         <SectionHeading>Notes</SectionHeading>
         <span className="text-xs text-muted-foreground/60">{status}</span>
       </div>
-      <Textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        rows={3}
-        readOnly={!granted}
-        title={!granted ? peerReadOnlyNote() : undefined}
-        className="w-full resize-y px-3 py-2 text-sm read-only:opacity-60"
-      />
+      <SimpleTooltip tip={!granted ? peerReadOnlyNote() : undefined}>
+        <Textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          rows={3}
+          readOnly={!granted}
+          className="w-full resize-y px-3 py-2 text-sm read-only:opacity-60"
+        />
+      </SimpleTooltip>
     </section>
   );
 }
