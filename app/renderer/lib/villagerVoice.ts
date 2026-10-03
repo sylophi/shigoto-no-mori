@@ -321,6 +321,15 @@ export function moveNews(
   };
 }
 
+// Whose news a villager's move is part of, within one device's moves of
+// one kind: every regular villager shares one, and a rare or legendary
+// character has their own. moveNewsFor splits by it, and a later move
+// joins the news of its group while that still shows
+// (lib/villagers/moves.ts).
+export function moveGroup(speaker: Speaker): string {
+  return speaker.rarity === "common" ? "" : speaker.slug;
+}
+
 // All the news for one device's moves of one kind. A rare or legendary
 // character's is theirs alone, even in a crowd (their dialogue box, or
 // their letter), and every regular villager shares one. In the order to
@@ -331,19 +340,14 @@ export function moveNewsFor(
   speakers: ReadonlyMap<string, Speaker>,
   device?: string,
 ): MoveNews[] {
-  const special = new Map<string, MoveSubject[]>();
-  const regulars: MoveSubject[] = [];
+  const groups = new Map<string, MoveSubject[]>();
   for (const worktree of worktrees) {
     const speaker = speakers.get(worktree.id);
     if (speaker === undefined) continue;
-    if (speaker.rarity === "common") regulars.push(worktree);
-    else
-      special.set(speaker.slug, [
-        ...(special.get(speaker.slug) ?? []),
-        worktree,
-      ]);
+    const group = moveGroup(speaker);
+    groups.set(group, [...(groups.get(group) ?? []), worktree]);
   }
-  return [...special.values(), regulars]
+  return [...groups.values()]
     .flatMap((group) => {
       const news = moveNews(kind, group, speakers, device);
       return news === null ? [] : [news];

@@ -19,9 +19,11 @@
 //
 // Moves wait a moment before they are told, so several at once come
 // out together, and a hold (holdVillagerMoves) keeps them waiting for
-// as long as a batch runs. A flow that tells of a worktree coming or
-// going itself (a transplant, a mirror) quiets its moves
-// (quietVillagerMoves), so one action is one piece of news.
+// as long as a batch runs. Moves made one at a time join the news
+// still showing about the same kind of move, until it closes. A flow
+// that tells of a worktree coming or going itself (a transplant, a
+// mirror) quiets its moves (quietVillagerMoves), so one action is one
+// piece of news.
 import type { QueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
 import { toastVillagerMove } from "@/components/villagers/toasts";
@@ -30,8 +32,11 @@ import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";
 import { remoteDeviceById } from "@/lib/remote/devices";
 import {
   type MoveKind,
+  moveNews,
+  moveGroup,
   moveNewsFor,
   netMoves,
+  type Speaker,
   worktreeMoves,
 } from "@/lib/villagerVoice";
 import { speakersFor } from "./speakers";
@@ -47,6 +52,13 @@ const lastSeen = new Map<string, Worktree[]>();
 // Moves not yet told, by device.
 const pending = new Map<string, { in: Worktree[]; out: Worktree[] }>();
 let holds = 0;
+// News still showing, by device, kind and group (moveGroup), with the
+// worktrees it tells of and their speakers by worktree id, until it
+// closes.
+const showing = new Map<
+  string,
+  { id: string; worktrees: Worktree[]; speakers: Map<string, Speaker> }
+>();
 // Worktrees whose moves are someone else's news, by id or name, until
 // when.
 const quiet = new Map<string, number>();
@@ -135,6 +147,14 @@ function settled(moves: { in: Worktree[]; out: Worktree[] }) {
   };
 }
 
+// Forgets the news under `key` once its toast closes, unless a newer
+// one has taken its place.
+function forget(key: string, id: string): () => void {
+  return () => {
+    if (showing.get(key)?.id === id) showing.delete(key);
+  };
+}
+
 async function tell(queryClient: QueryClient): Promise<void> {
   const batch = [...pending];
   pending.clear();
@@ -156,9 +176,41 @@ async function tell(queryClient: QueryClient): Promise<void> {
         ["out", movedOut],
       ];
       for (const [kind, worktrees] of told) {
-        for (const news of moveNewsFor(kind, worktrees, speakers, device)) {
-          const ids = news.worktreeIds.join(",");
-          toastVillagerMove(news, `villagers:${kind}:${deviceId}:${ids}`);
+        for (const fresh of moveNewsFor(kind, worktrees, speakers, device)) {
+          const key = [deviceId, kind, moveGroup(fresh.speakers[0])].join(
+            "\u0000",
+          );
+          const shown = showing.get(key);
+          const ids = new Set(fresh.worktreeIds);
+          const moved = [
+            ...(shown?.worktrees.filter((w) => !ids.has(w.id)) ?? []),
+            ...worktrees.filter((w) => ids.has(w.id)),
+          ];
+          const voices = new Map(
+            moved.flatMap((w) => {
+              const speaker = speakers.get(w.id) ?? shown?.speakers.get(w.id);
+              return speaker === undefined ? [] : [[w.id, speaker] as const];
+            }),
+          );
+          const news = moveNews(kind, moved, voices, device) ?? fresh;
+          // Told again under its id, a toast still showing changes in
+          // place.
+          const id =
+            shown?.id ?? `villagers:${kind}:${deviceId}:${[...ids].join(",")}`;
+          const before = new Set(
+            [...(shown?.speakers.values() ?? [])].map((s) => s.slug),
+          );
+          showing.set(key, { id, worktrees: moved, speakers: voices });
+          toastVillagerMove(news, id, {
+            joined:
+              shown &&
+              new Set(
+                fresh.speakers
+                  .map((s) => s.slug)
+                  .filter((slug) => !before.has(slug)),
+              ),
+            onClose: forget(key, id),
+          });
         }
       }
     }),

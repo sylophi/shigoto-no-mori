@@ -15,7 +15,8 @@
 //   rarest sets how long it stays
 // - several moving at once share one line, a numbered twin counts once,
 //   and a move on another device names it
-// - a rare or legendary one in a crowd keeps their own moment
+// - a rare or legendary one in a crowd keeps their own moment, and a
+//   later move joins the news of its own group
 // - moves net out one for one by project and name (a relocate is none)
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test villager-voice.
@@ -26,6 +27,7 @@ import {
   MOVE_TOAST_MS,
   moveNews,
   moveNewsFor,
+  moveGroup,
   netMoves,
   rarest,
   speakerFor,
@@ -273,6 +275,12 @@ try {
       assert.deepEqual(
         moveNewsFor("in", [worktree("snug-otter")], new Map()),
         [],
+      );
+      // A later move joins the news of its group: the regulars', or
+      // the character's own.
+      assert.deepEqual(
+        news.map((n) => moveGroup(n.speakers[0])),
+        ["", "katrina", "tom-nook"],
       );
     },
   );
