@@ -3,6 +3,7 @@
 // a remote host scope. The local pages stay chipless, since this machine is the default,
 // not a state worth announcing.
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView, deviceTitle } from "@/lib/remote/deviceStatus";
@@ -19,16 +20,14 @@ export function DeviceChip() {
   if (!remote || device === undefined) return null;
   const status = deviceStatusView(device.status);
   return (
-    <span
-      data-slot="device-chip"
-      // The name is the chip. The connection state stays on the dot's
-      // tone and the tooltip, so the header reads "on Thinkpad", not a
-      // status report.
-      title={deviceTitle(device.label, status)}
-      className={DEVICE_PILL_CLASS}
-    >
-      <DeviceLead icon={device.icon} tone={status.tone} />
-      <span className="max-w-32 truncate">{device.label}</span>
-    </span>
+    // The name is the chip. The connection state stays on the dot's
+    // tone and the tooltip, so the header reads "on Thinkpad", not a
+    // status report.
+    <SimpleTooltip tip={deviceTitle(device.label, status)}>
+      <span data-slot="device-chip" className={DEVICE_PILL_CLASS}>
+        <DeviceLead icon={device.icon} tone={status.tone} />
+        <span className="max-w-32 truncate">{device.label}</span>
+      </span>
+    </SimpleTooltip>
   );
 }

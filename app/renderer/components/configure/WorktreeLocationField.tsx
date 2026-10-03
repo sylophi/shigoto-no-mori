@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { PathSpan } from "@/components/ui/path-span";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { LAYOUT_OPTIONS } from "@/components/worktreeLocation/layoutOptions";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
@@ -58,15 +59,18 @@ export function WorktreeLocationField({
             )
           )}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={blocked}
-          title={blocked ? "Save or discard your changes first" : undefined}
-          onClick={() => toProjectPage("worktreeLocation", projectId)}
+        <SimpleTooltip
+          tip={blocked ? "Save or discard your changes first" : undefined}
         >
-          Change…
-        </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={blocked}
+            onClick={() => toProjectPage("worktreeLocation", projectId)}
+          >
+            Change…
+          </Button>
+        </SimpleTooltip>
       </div>
     </div>
   );

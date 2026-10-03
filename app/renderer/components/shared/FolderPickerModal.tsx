@@ -6,6 +6,7 @@ import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
@@ -151,21 +152,22 @@ export function FolderPickerModal({
             placeholder="Enter a path (e.g. ~/projects/)"
             className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
           />
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={confirm}
-            disabled={!canConfirm}
-            aria-label={`${confirmLabel} (${confirmKbd})`}
-            title={`${confirmLabel} (${confirmKbd})`}
-          >
-            <span>{confirmLabel}</span>
-            <KbdGroup className="pointer-events-none">
-              <Kbd>{confirmKbd}</Kbd>
-            </KbdGroup>
-          </Button>
+          <SimpleTooltip tip={`${confirmLabel} (${confirmKbd})`}>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={confirm}
+              disabled={!canConfirm}
+              aria-label={`${confirmLabel} (${confirmKbd})`}
+            >
+              <span>{confirmLabel}</span>
+              <KbdGroup className="pointer-events-none">
+                <Kbd>{confirmKbd}</Kbd>
+              </KbdGroup>
+            </Button>
+          </SimpleTooltip>
         </div>
         {hint && (
           <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">

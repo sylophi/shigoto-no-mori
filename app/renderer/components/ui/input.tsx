@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
+import type { WithoutTitle } from "./tooltip";
 
 // Single source of truth for text-field chrome. Sizing, font, and layout
 // stay at the call site; this carries the surface + focus treatment so
@@ -8,7 +9,10 @@ import { cn } from "@/lib/utils";
 export const fieldClass =
   "rounded-md border border-input bg-background transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
 
-export function Input({ className, ...props }: ComponentProps<"input">) {
+export function Input({
+  className,
+  ...props
+}: WithoutTitle<ComponentProps<"input">>) {
   return (
     <input data-slot="input" className={cn(fieldClass, className)} {...props} />
   );

@@ -16,7 +16,7 @@ export function WorktreePrimarySyncPill({ worktree }: { worktree: Worktree }) {
       tone="sky"
       icon={ArrowDown}
       label={`Sync ${pluralize(worktree.behindPrimary, "commit")} from ${branchName}`}
-      title={`git fetch && git rebase ${branchName}, falling back to a merge on conflict`}
+      tip={`git fetch && git rebase ${branchName}, falling back to a merge on conflict`}
       pending={sync.isPending}
       onClick={() =>
         sync.mutate({

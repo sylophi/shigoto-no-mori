@@ -11,6 +11,7 @@ import type { Project, Worktree } from "@shared/schemas";
 import { DiffStats } from "@/components/ui/diff-stats";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { changeEntries } from "@/lib/patchFiles";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
@@ -107,9 +108,9 @@ function ChangedFiles({
             >
               {mark.mark}
             </span>
-            <span className="min-w-0 flex-1 truncate" title={entry.path}>
-              {entry.path}
-            </span>
+            <SimpleTooltip whenTruncated tip={entry.path}>
+              <span className="min-w-0 flex-1 truncate">{entry.path}</span>
+            </SimpleTooltip>
             {stats && (
               <DiffStats
                 additions={stats.additions}
@@ -153,9 +154,9 @@ function CarryOverList({
                 aria-hidden
                 className="size-3 shrink-0 text-muted-foreground"
               />
-              <span className="min-w-0 flex-1 truncate" title={row.path}>
-                {row.path}
-              </span>
+              <SimpleTooltip whenTruncated tip={row.path}>
+                <span className="min-w-0 flex-1 truncate">{row.path}</span>
+              </SimpleTooltip>
               <RowTag>{row.tag}</RowTag>
             </li>
           ))}

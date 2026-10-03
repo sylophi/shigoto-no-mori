@@ -1,7 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { cn } from "@/lib/utils";
@@ -23,21 +22,19 @@ export function PullRequestRefreshButton({ worktree }: { worktree: Worktree }) {
   const fetching = useIsFetching({ queryKey }) > 0;
   const spinning = useDelayedFlag(fetching);
   return (
-    <SimpleTooltip tip="Refresh pull request">
-      <Button
-        size="icon-xs"
-        variant="ghost"
-        aria-label="Refresh pull request"
-        className="-my-1 text-muted-foreground/70 hover:text-foreground"
-        onClick={() => {
-          void queryClient.invalidateQueries(
-            { queryKey, exact: true },
-            { cancelRefetch: false },
-          );
-        }}
-      >
-        <RefreshCw aria-hidden className={cn(spinning && "animate-spin")} />
-      </Button>
-    </SimpleTooltip>
+    <Button
+      size="icon-xs"
+      variant="ghost"
+      aria-label="Refresh pull request"
+      className="-my-1 text-muted-foreground/70 hover:text-foreground"
+      onClick={() => {
+        void queryClient.invalidateQueries(
+          { queryKey, exact: true },
+          { cancelRefetch: false },
+        );
+      }}
+    >
+      <RefreshCw aria-hidden className={cn(spinning && "animate-spin")} />
+    </Button>
   );
 }

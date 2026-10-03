@@ -143,7 +143,6 @@ function FolderRows({
               ? 0
               : -1
           }
-          title={path}
           ref={selected ? revealRow : undefined}
           onClick={() =>
             entry.isDirectory ? onToggleFolder(path, !open) : onSelectFile(path)

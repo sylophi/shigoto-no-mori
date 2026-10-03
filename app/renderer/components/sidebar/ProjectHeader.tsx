@@ -1,12 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Project } from "@shared/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { TerrierMark } from "./TerrierMark";
@@ -44,9 +39,8 @@ const baseClass =
   "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium";
 
 // Header row shared by the healthy and missing-project branches. The
-// project name is `truncate`d, with a Tooltip that only opens when the
-// text actually overflows. `useIsTruncated` suppresses redundant
-// tooltips on names that already fit.
+// project name is `truncate`d, and its tooltip only opens while it is
+// cut off.
 export function ProjectHeader({
   project,
   iconFrom,
@@ -61,13 +55,7 @@ export function ProjectHeader({
   arrangeMode,
   reorderable = true,
 }: ProjectHeaderProps) {
-  // Keyed on what swaps or refills the name span, which a ResizeObserver
-  // on the old span would miss.
-  const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>(
-    `${arrangeMode}:${missing}:${expanded}:${project.name}`,
-  );
-  // The same lead and name in every branch; only one branch mounts, so
-  // the ref lands once.
+  // The same lead and name in every branch.
   const lead = missing ? (
     <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
   ) : (
@@ -79,7 +67,6 @@ export function ProjectHeader({
   );
   const name = (
     <span
-      ref={nameRef}
       className={cn("min-w-0 truncate", missing && "line-through decoration-1")}
     >
       {project.name}
@@ -147,9 +134,8 @@ export function ProjectHeader({
   );
 
   return (
-    <Tooltip disabled={!isTruncated}>
-      <TooltipTrigger render={trigger} />
-      <TooltipContent>{project.name}</TooltipContent>
-    </Tooltip>
+    <SimpleTooltip whenTruncated tip={project.name}>
+      {trigger}
+    </SimpleTooltip>
   );
 }

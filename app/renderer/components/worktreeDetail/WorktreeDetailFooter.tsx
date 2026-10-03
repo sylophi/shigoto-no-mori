@@ -262,7 +262,7 @@ function NormalRow({
               autoPull: !worktree.autoPull,
             })
           }
-          title={autoPullUi.title}
+          tip={autoPullUi.tip}
         />
       )}
       {isManagedWorktree(worktree) && (
@@ -280,7 +280,7 @@ function NormalRow({
               shelved: !worktree.shelved,
             })
           }
-          title={
+          tip={
             worktree.shelved
               ? "Unshelve (bring back to the main list)"
               : "Shelve (hide from the main list)"
@@ -299,7 +299,7 @@ function NormalRow({
           aria-pressed={confirmDelete}
           disabled={busy || deleteBlockedReason !== undefined}
           onClick={onDelete}
-          title={
+          tip={
             deleteBlockedReason ??
             (confirmDelete ? "Click again to confirm" : "Delete worktree")
           }
@@ -317,15 +317,13 @@ const AUTO_PULL_UI = {
     label: "Auto-pull on",
     className:
       "shrink-0 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300",
-    title:
-      "Auto-pull is on: this worktree fast-forwards from its upstream after each fetch while it has no local commits, changes or running scripts. Click to turn off.",
+    tip: "Auto-pull is on: this worktree fast-forwards from its upstream after each fetch while it has no local commits, changes or running scripts. Click to turn off.",
   },
   off: {
     Icon: RefreshCwOff,
     label: "Auto-pull",
     className: "shrink-0 text-muted-foreground hover:text-foreground",
-    title:
-      "Auto-pull: fast-forward from the upstream automatically while this worktree has no local commits, changes or running scripts",
+    tip: "Auto-pull: fast-forward from the upstream automatically while this worktree has no local commits, changes or running scripts",
   },
 };
 

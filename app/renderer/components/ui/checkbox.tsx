@@ -4,6 +4,7 @@ import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 import { Check, Minus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import type { WithoutTitle } from "./tooltip";
 
 // The app's checkbox, on the same Base UI footing as `ui/switch.tsx`.
 // Base UI renders a real hidden input underneath, so native semantics,
@@ -28,7 +29,7 @@ export function Checkbox({
   className,
   variant = "default",
   ...props
-}: React.ComponentProps<typeof CheckboxPrimitive.Root> & {
+}: WithoutTitle<React.ComponentProps<typeof CheckboxPrimitive.Root>> & {
   variant?: "default" | "destructive";
 }) {
   const destructive = variant === "destructive";

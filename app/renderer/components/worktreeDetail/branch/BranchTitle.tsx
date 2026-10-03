@@ -97,7 +97,6 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
       <h1
         ref={titleRef}
         className="min-w-0 truncate font-mono text-2xl font-medium tracking-tight"
-        title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
       >
         <BranchLabel
           branch={worktree.branch}
@@ -110,7 +109,6 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
           type="button"
           onClick={begin}
           aria-label="Rename branch"
-          title="Rename branch"
           data-icon-button
           className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 phone:opacity-100"
         >

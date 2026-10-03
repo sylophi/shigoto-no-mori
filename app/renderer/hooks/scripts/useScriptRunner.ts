@@ -29,7 +29,7 @@ export interface ScriptRunner {
   busy: boolean;
   // Whether a run can be dispatched from here. A run is a command, so
   // on a peer it waits for that device's grant. Locally always true.
-  // `disabledReason` is the title the UI shows on the dead affordance.
+  // `disabledReason` is the tip the UI shows on the dead affordance.
   canRun: boolean;
   disabledReason: string | undefined;
   start: () => void;

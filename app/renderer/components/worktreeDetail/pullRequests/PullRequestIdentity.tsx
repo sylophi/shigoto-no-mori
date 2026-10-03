@@ -1,4 +1,5 @@
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -43,7 +44,7 @@ export function PullRequestIdentity({
   }, []);
 
   const updatedDate = new Date(pr.updatedAt);
-  const updatedTitle = updatedDate.toLocaleString();
+  const updatedTip = updatedDate.toLocaleString();
   const updatedLabel = `, last updated ${formatRelativeTime(updatedDate.getTime(), now)}`;
 
   const openDiff = () => {
@@ -56,7 +57,7 @@ export function PullRequestIdentity({
       <MetaSentence
         authorLogin={pr.authorLogin}
         baseRefName={pr.baseRefName}
-        updatedTitle={updatedTitle}
+        updatedTip={updatedTip}
         trailing={trailing}
       />
       {pr.changedFiles > 0 && (
@@ -115,23 +116,22 @@ export function PullRequestIdentity({
 function MetaSentence({
   authorLogin,
   baseRefName,
-  updatedTitle,
+  updatedTip,
   trailing,
 }: {
   authorLogin: string;
   baseRefName: string;
-  updatedTitle: string;
+  updatedTip: string;
   trailing: string | null;
 }) {
   return (
-    <p
-      className="text-xs text-muted-foreground select-text"
-      title={updatedTitle}
-    >
-      <span className="text-foreground/80">@{authorLogin}</span> is merging into{" "}
-      <span className="font-mono text-foreground/80">{baseRefName}</span>
-      {trailing}
-    </p>
+    <SimpleTooltip tip={updatedTip}>
+      <p className="text-xs text-muted-foreground select-text">
+        <span className="text-foreground/80">@{authorLogin}</span> is merging
+        into <span className="font-mono text-foreground/80">{baseRefName}</span>
+        {trailing}
+      </p>
+    </SimpleTooltip>
   );
 }
 
@@ -152,7 +152,6 @@ export function PullRequestTitleLink({
         "rounded text-left text-foreground transition-colors select-text hover:text-primary focus-visible:outline-2 focus-visible:outline-ring",
         className,
       )}
-      title={`Open #${pr.number} on GitHub`}
     >
       {pr.title}
     </button>

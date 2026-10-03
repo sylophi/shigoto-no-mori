@@ -8,6 +8,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
@@ -70,16 +71,12 @@ export function NewWorktreeButton({
     const only = targets[0];
     if (only === undefined) {
       return (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled
-          title="Nowhere to create a worktree yet"
-          className="w-full"
-        >
-          <Plus aria-hidden />
-          New worktree
-        </Button>
+        <SimpleTooltip tip="Nowhere to create a worktree yet">
+          <Button variant="outline" size="sm" disabled className="w-full">
+            <Plus aria-hidden />
+            New worktree
+          </Button>
+        </SimpleTooltip>
       );
     }
     return (
@@ -135,22 +132,23 @@ function SingleTargetButton({ target }: { target: CreateTarget }) {
     ? `${target.project.name} on ${target.peer.badge.label}`
     : target.project.name;
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={isPending}
-      aria-busy={isPending}
-      title={`New worktree in ${where} (hold ⇧ to pick a base)`}
-      onClick={(event) => createFrom(event, target.project.id)}
-      className="w-full"
-    >
-      {isPending ? (
-        <Loader2 aria-hidden className="animate-spin" />
-      ) : (
-        <Plus aria-hidden />
-      )}
-      {isPending ? "Creating worktree…" : "New worktree"}
-    </Button>
+    <SimpleTooltip tip={`New worktree in ${where} (hold ⇧ to pick a base)`}>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={isPending}
+        aria-busy={isPending}
+        onClick={(event) => createFrom(event, target.project.id)}
+        className="w-full"
+      >
+        {isPending ? (
+          <Loader2 aria-hidden className="animate-spin" />
+        ) : (
+          <Plus aria-hidden />
+        )}
+        {isPending ? "Creating worktree…" : "New worktree"}
+      </Button>
+    </SimpleTooltip>
   );
 }
 

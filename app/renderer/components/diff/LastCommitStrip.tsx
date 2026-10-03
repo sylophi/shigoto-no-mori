@@ -1,6 +1,7 @@
 import { PencilLine, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RelativeDate } from "@/components/ui/relative-date";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { CommitSummary } from "@shared/schemas";
 
 // The commit HEAD is on, with the two things the changes page can do
@@ -34,33 +35,30 @@ export function LastCommitStrip({
         <p className="text-2xs text-muted-foreground">
           Last commit, <RelativeDate date={commit.date} />
         </p>
-        <p className="truncate text-xs" title={commit.subject}>
-          {commit.subject}
-        </p>
+        <SimpleTooltip whenTruncated tip={commit.subject}>
+          <p className="truncate text-xs">{commit.subject}</p>
+        </SimpleTooltip>
       </div>
       {!amending && (
         <>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={onAmend}
-            disabled={busy}
-            title="Fold the next commit into this one, editing its message"
-          >
-            <PencilLine />
-            Amend
-          </Button>
-          {canUndo && (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={onUndo}
-              disabled={busy}
-              title="Undo this commit; its changes come back staged"
-            >
-              <Undo2 />
-              Undo
+          <SimpleTooltip tip="Fold the next commit into this one, editing its message">
+            <Button variant="ghost" size="xs" onClick={onAmend} disabled={busy}>
+              <PencilLine />
+              Amend
             </Button>
+          </SimpleTooltip>
+          {canUndo && (
+            <SimpleTooltip tip="Undo this commit; its changes come back staged">
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={onUndo}
+                disabled={busy}
+              >
+                <Undo2 />
+                Undo
+              </Button>
+            </SimpleTooltip>
           )}
         </>
       )}

@@ -118,7 +118,7 @@ export interface SettingsSection {
   icon?: LucideIcon;
   deviceIcon?: DeviceIcon;
   tone?: StatusTone;
-  title?: string;
+  tip?: string;
   update?: string;
 }
 
@@ -157,7 +157,6 @@ export function settingsSections(
       label: local.name,
       deviceIcon: local.icon,
       tone: solo ? undefined : THIS_DEVICE_VIEW.tone,
-      title: "This device: the machine this window runs on",
       update,
     });
   }
@@ -169,7 +168,7 @@ export function settingsSections(
       label: device.label,
       deviceIcon: device.icon,
       tone,
-      title: `${device.label}: ${label}`,
+      tip: `${device.label}: ${label}`,
       update,
     });
   }

@@ -37,7 +37,6 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
           <button
             type="button"
             onClick={() => nav.toDiff(worktree.projectId, worktree.id)}
-            title="Review, commit or discard the uncommitted changes"
             className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
           >
             <FileDiff aria-hidden className="size-3.5" />
@@ -77,7 +76,6 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
             <button
               type="button"
               onClick={() => setHistoryOpen(true)}
-              title="Browse full branch history"
               className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
             >
               <History aria-hidden className="size-3.5" />

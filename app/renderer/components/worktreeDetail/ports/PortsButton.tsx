@@ -3,7 +3,7 @@
 // Ports dialog. Always there: reading the list needs no grant, and a
 // worktree with no ports says so in the dialog. On a peer's worktree
 // whose ports this machine forwards, the glyph takes the live tone,
-// which still shows once the label folds, and the title lists them.
+// which still shows once the label folds, and the tip lists them.
 import { useState } from "react";
 import { Cable } from "lucide-react";
 import type { Worktree } from "@shared/schemas";
@@ -30,7 +30,7 @@ export function PortsButton({ worktree }: { worktree: Worktree }) {
           />
         }
         label="Ports"
-        title={forwardTip ?? "See this worktree's ports"}
+        tip={forwardTip}
         onClick={() => setOpen(true)}
       />
       {open && (

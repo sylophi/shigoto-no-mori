@@ -1,5 +1,6 @@
 import { FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { tildify } from "@shared/projectPaths";
 import type { WorktreeLayout } from "@shared/schemas";
@@ -88,12 +89,11 @@ export function LayoutOptionItem({
           </p>
         )}
         {previewPath && (
-          <p
-            className="truncate font-mono text-xs text-foreground/70 select-text"
-            title={previewPath}
-          >
-            {previewPath}
-          </p>
+          <SimpleTooltip whenTruncated tip={previewPath}>
+            <p className="truncate font-mono text-xs text-foreground/70 select-text">
+              {previewPath}
+            </p>
+          </SimpleTooltip>
         )}
         {option.value === "custom" && (
           <div className="space-y-1 pt-1">

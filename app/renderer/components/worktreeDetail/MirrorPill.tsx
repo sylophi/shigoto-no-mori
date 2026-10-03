@@ -16,6 +16,7 @@ import type { ComponentType, SVGProps } from "react";
 import type { Worktree } from "@shared/schemas";
 import { Chip } from "@/components/ui/chip-button";
 import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
 import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
 import {
@@ -33,23 +34,25 @@ function StatusChip({
   tone,
   icon: Icon,
   label,
-  title,
+  tip,
   spinning = false,
 }: {
   tone: StatusTone;
   icon: IconType;
   label: string;
-  title: string;
+  tip: string;
   spinning?: boolean;
 }) {
   return (
-    <Chip className={cn("tabular shrink-0", TONE_TEXT[tone])} title={title}>
-      <Icon
-        aria-hidden
-        className={cn("size-3.5", spinning && "animate-spin")}
-      />
-      {label}
-    </Chip>
+    <SimpleTooltip tip={tip}>
+      <Chip className={cn("tabular shrink-0", TONE_TEXT[tone])}>
+        <Icon
+          aria-hidden
+          className={cn("size-3.5", spinning && "animate-spin")}
+        />
+        {label}
+      </Chip>
+    </SimpleTooltip>
   );
 }
 
@@ -75,7 +78,7 @@ function SessionLine({ link }: { link: WorktreeMirrorLink }) {
           tone="emerald"
           icon={RefreshCw}
           label="Mirrored"
-          title="A peer keeps a live copy of this worktree"
+          tip="A peer keeps a live copy of this worktree"
         />
         <span className="text-muted-foreground">to {other}</span>
       </>
@@ -98,7 +101,7 @@ function SessionLine({ link }: { link: WorktreeMirrorLink }) {
           tone={view.tone}
           icon={RefreshCw}
           label={view.label}
-          title={view.detail || view.label}
+          tip={view.detail || view.label}
           spinning={view.spinning}
         />
       )}

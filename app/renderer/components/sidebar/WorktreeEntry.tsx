@@ -72,7 +72,6 @@ export function WorktreeEntry({
   return (
     <button
       type="button"
-      title={state.title}
       {...button}
       onClick={(event) => {
         onClick?.(event);
@@ -111,7 +110,6 @@ export function WorktreeEntry({
             "min-w-0 flex-1 truncate font-mono text-xs",
             isSelected && "font-medium",
           )}
-          title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
         >
           <BranchLabel branch={worktree.branch} detached={worktree.detached} />
         </span>
@@ -152,7 +150,7 @@ export function WorktreeEntry({
 // root apart from a worktree named after the project. Under Village
 // life, the villager whose home this is sits beside the name, as their
 // face sits beside the title on the worktree page. It's decoration
-// here, so it stays out of the row's label and hover title.
+// here, so it stays out of the row's label and hover tip.
 function EntryName({ worktree }: { worktree: Worktree }) {
   const resident = useResident(worktree);
   return (

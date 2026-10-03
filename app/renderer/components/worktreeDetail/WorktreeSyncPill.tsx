@@ -10,6 +10,7 @@ import {
 } from "@/hooks/worktrees/useWorktreeSync";
 import { pluralize } from "@/lib/pluralize";
 import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { SyncActionButton } from "./SyncActionButton";
 
 interface WorktreeSyncPillProps {
@@ -45,9 +46,9 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         tone="violet"
         icon={CloudUpload}
         label="Publish branch"
-        title={
+        tip={
           state.canPublish
-            ? "Push branch to remote with upstream tracking"
+            ? undefined
             : "No git remote is configured for this project"
         }
         disabled={!state.canPublish}
@@ -63,7 +64,6 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         tone="emerald"
         icon={ArrowUp}
         label={`Push ${pluralize(state.ahead, "commit")}`}
-        title="git push"
         pending={push.isPending}
         onClick={() => push.mutate(input)}
       />
@@ -76,11 +76,6 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         tone="sky"
         icon={ArrowDown}
         label={`Pull ${pluralize(state.behind, "commit")}`}
-        title={
-          worktree.autoPull
-            ? "git pull --ff-only. Auto-pull is on: the app fast-forwards after its next fetch, as long as the worktree has no uncommitted changes or running script."
-            : "git pull --ff-only"
-        }
         pending={pull.isPending}
         onClick={() => pull.mutate(input)}
       />
@@ -92,7 +87,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SyncActionButton
         tone="indigo"
         label={`Pull and push ↑${state.ahead}↓${state.behind}`}
-        title="git pull --rebase, falling back to a merge on conflict, then git push"
+        tip="git pull --rebase, falling back to a merge on conflict, then git push"
         pending={pullAndPush.isPending}
         onClick={() => pullAndPush.mutate(input)}
       />
@@ -106,16 +101,19 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
   // offer it. The user picks which side wins.
   const busy = pushForce.isPending || overwrite.isPending;
   return (
-    <span
-      title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split. Pick which side wins.`}
-      className="inline-flex shrink-0 items-center gap-1 self-center text-xs"
-    >
-      <span className="px-1.5 text-rose-500">Overwrite:</span>
+    <span className="inline-flex shrink-0 items-center gap-1 self-center text-xs">
+      {/* On the label, not the row: each button has its own tip, and
+          two tooltips would stack. */}
+      <SimpleTooltip
+        tip={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split. Pick which side wins.`}
+      >
+        <span className="px-1.5 text-rose-500">Overwrite:</span>
+      </SimpleTooltip>
       <SyncActionButton
         tone="rose"
         icon={ArrowUp}
         label={confirmPushForce.armed ? "Confirm?" : `Push ${state.ahead}`}
-        title={
+        tip={
           confirmPushForce.armed
             ? "Click again to confirm"
             : "git push --force-with-lease (overwrites the remote)"
@@ -131,7 +129,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         tone="rose"
         icon={ArrowDown}
         label={confirmOverwrite.armed ? "Confirm?" : `Pull ${state.behind}`}
-        title={
+        tip={
           confirmOverwrite.armed
             ? "Click again to confirm"
             : "git fetch && git reset --hard @{u} (overwrites local)"

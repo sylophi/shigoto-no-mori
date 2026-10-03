@@ -8,32 +8,25 @@ import { openExternalUrl } from "@/lib/openExternal";
 
 export function OpenLocalhostButton({
   port,
-  disabled = false,
-  disabledTip,
+  disabledReason,
 }: {
   port: number;
-  disabled?: boolean;
-  // Why Open is unavailable, shown in place of the address.
-  disabledTip?: string;
+  // Why Open is unavailable. Disables the button and becomes its tip.
+  disabledReason?: string;
 }) {
   const url = `http://localhost:${port}`;
   return (
-    // The span is the tooltip's trigger: a disabled button dispatches no
-    // pointer events, and the disabled state is exactly the one whose
-    // reason the tip carries.
-    <SimpleTooltip tip={disabled && disabledTip ? disabledTip : `Open ${url}`}>
-      <span className="inline-flex">
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          aria-label={`Open ${url}`}
-          disabled={disabled}
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => openExternalUrl(url, "Couldn't open the port")}
-        >
-          <ExternalLink />
-        </Button>
-      </span>
+    <SimpleTooltip tip={disabledReason}>
+      <Button
+        size="icon-xs"
+        variant="ghost"
+        aria-label={`Open ${url}`}
+        disabled={disabledReason !== undefined}
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => openExternalUrl(url, "Couldn't open the port")}
+      >
+        <ExternalLink />
+      </Button>
     </SimpleTooltip>
   );
 }

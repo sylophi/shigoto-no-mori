@@ -50,7 +50,6 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
         <IconButton
           onClick={onClear}
           aria-label="Clear log"
-          title="Clear log"
           // Above the terminal, whose hover-revealed scrollbar shares
           // this corner once the output overflows (the terminal wrapper
           // isolates xterm's own z-indexes, so any positive value wins).

@@ -2,6 +2,7 @@ import { FileDiff } from "lucide-react";
 import { WorktreeMoveDetails } from "@/components/shared/WorktreeMoveDetails";
 import { Checkbox } from "@/components/ui/checkbox";
 import { type RowStatus } from "@/components/ui/row-status";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { tildify } from "@shared/projectPaths";
 import type { Worktree } from "@shared/schemas";
@@ -48,9 +49,9 @@ export function ConvertRow({
         branch={worktree.branch}
         detached={detached}
         fromPath={oldPath}
-        fromTitle={worktree.path}
+        fromTip={worktree.path}
         toPath={proposedPath}
-        toTitle={proposedPath}
+        toTip={proposedPath}
         status={status}
         labels={{
           running: "Converting",
@@ -59,13 +60,12 @@ export function ConvertRow({
         }}
         branchAdornment={
           dirty && (
-            <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-3xs font-medium text-amber-600 dark:text-amber-400"
-              title="Uncommitted changes will be wiped"
-            >
-              <FileDiff aria-hidden className="size-3" />
-              {worktree.changedCount} uncommitted
-            </span>
+            <SimpleTooltip tip="Uncommitted changes will be wiped">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-3xs font-medium text-amber-600 dark:text-amber-400">
+                <FileDiff aria-hidden className="size-3" />
+                {worktree.changedCount} uncommitted
+              </span>
+            </SimpleTooltip>
           )
         }
       />

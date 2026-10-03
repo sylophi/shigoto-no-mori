@@ -6,6 +6,7 @@ import { ModePicker } from "./ModePicker";
 import { OnlyInWorktrees } from "./OnlyInWorktrees";
 import { ChipButton } from "@/components/ui/chip-button";
 import { IconButton } from "@/components/ui/icon-button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface CarryOverRowProps {
   entry: CarryOverEntry;
@@ -41,23 +42,23 @@ export function CarryOverRow({
           name={basename}
           className="size-4"
         />
-        <span
-          className={cn(
-            "min-w-0 truncate font-mono text-xs",
-            missing && "text-destructive",
-          )}
-          title={entry.path}
-        >
-          {entry.path}
-        </span>
-        {missing && (
+        <SimpleTooltip whenTruncated tip={entry.path}>
           <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-1.5 py-0.5 text-3xs font-medium text-destructive"
-            title="Source doesn't exist in the main checkout or any worktree. New worktrees will skip this entry."
+            className={cn(
+              "min-w-0 truncate font-mono text-xs",
+              missing && "text-destructive",
+            )}
           >
-            <AlertTriangle className="size-3" />
-            missing
+            {entry.path}
           </span>
+        </SimpleTooltip>
+        {missing && (
+          <SimpleTooltip tip="Source doesn't exist in the main checkout or any worktree. New worktrees will skip this entry.">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-1.5 py-0.5 text-3xs font-medium text-destructive">
+              <AlertTriangle className="size-3" />
+              missing
+            </span>
+          </SimpleTooltip>
         )}
         {stat && (
           <OnlyInWorktrees
@@ -67,12 +68,11 @@ export function CarryOverRow({
           />
         )}
         {covered && (
-          <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-3xs font-medium text-amber-600 dark:text-amber-400"
-            title=".worktreeinclude now covers this path; this entry will be removed the next time a worktree is created."
-          >
-            covered
-          </span>
+          <SimpleTooltip tip=".worktreeinclude now covers this path; this entry will be removed the next time a worktree is created.">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-3xs font-medium text-amber-600 dark:text-amber-400">
+              covered
+            </span>
+          </SimpleTooltip>
         )}
       </span>
       {fromInclude ? (
@@ -80,23 +80,22 @@ export function CarryOverRow({
           <span className="shrink-0 text-2xs text-muted-foreground/70">
             used by <span className="font-mono">.worktreeinclude</span>
           </span>
-          <ChipButton
-            disabled
-            className="shrink-0 cursor-not-allowed"
-            title="Matches a pattern in the repo's .worktreeinclude file, so it's copied into every new worktree. Edit that file to change or remove it."
-          >
-            <CopyIcon className="size-3" />
-            Copy
-          </ChipButton>
-          <button
-            type="button"
-            disabled
-            aria-label={`Remove ${entry.path}`}
-            title="Remove it by editing .worktreeinclude in the repo."
-            className="rounded-md p-1 text-muted-foreground/40"
-          >
-            <X className="size-3.5" />
-          </button>
+          <SimpleTooltip tip="Matches a pattern in the repo's .worktreeinclude file, so it's copied into every new worktree. Edit that file to change or remove it.">
+            <ChipButton disabled className="shrink-0 cursor-not-allowed">
+              <CopyIcon className="size-3" />
+              Copy
+            </ChipButton>
+          </SimpleTooltip>
+          <SimpleTooltip tip="Remove it by editing .worktreeinclude in the repo.">
+            <button
+              type="button"
+              disabled
+              aria-label={`Remove ${entry.path}`}
+              className="rounded-md p-1 text-muted-foreground/40"
+            >
+              <X className="size-3.5" />
+            </button>
+          </SimpleTooltip>
         </>
       ) : (
         <>

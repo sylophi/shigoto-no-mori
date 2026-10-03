@@ -126,7 +126,7 @@ export function PathPickerModal<E extends PickerEntry>({
     <ModalShell onClose={onClose}>
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
         {!atRoot && (
-          <IconButton onClick={goUp} aria-label="Go up" title="Go up">
+          <IconButton onClick={goUp} aria-label="Go up">
             <ArrowLeft className="size-4" />
           </IconButton>
         )}

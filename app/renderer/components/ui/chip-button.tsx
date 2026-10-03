@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
+import type { WithoutTitle } from "./tooltip";
 
 // The chip shape, shared by the quiet action chip below and the
 // read-only chips that name a fact (a project a device hosts, a live
@@ -9,7 +10,10 @@ const CHIP_CLASS =
   "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs ring-1 ring-border ring-inset";
 
 // Non-interactive chip: names something, does nothing.
-export function Chip({ className, ...props }: ComponentProps<"span">) {
+export function Chip({
+  className,
+  ...props
+}: WithoutTitle<ComponentProps<"span">>) {
   return (
     <span data-slot="chip" className={cn(CHIP_CLASS, className)} {...props} />
   );
@@ -22,7 +26,7 @@ export function ChipButton({
   className,
   type = "button",
   ...props
-}: ComponentProps<"button">) {
+}: WithoutTitle<ComponentProps<"button">>) {
   return (
     <button
       data-slot="chip"

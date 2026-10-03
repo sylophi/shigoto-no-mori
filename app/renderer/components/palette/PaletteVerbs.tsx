@@ -109,7 +109,7 @@ interface Verb {
   // What the query matches, when not the label.
   search?: string;
   disabled?: boolean;
-  title?: string;
+  tip?: string;
 }
 
 const ICON_CLASS = "size-3.5 shrink-0 text-muted-foreground/80";
@@ -141,7 +141,7 @@ function VerbGroup({
             value={verb.key}
             onSelect={verb.run}
             disabled={verb.disabled}
-            title={verb.title}
+            tip={verb.tip}
             className="text-xs"
           >
             {verb.icon}
@@ -196,7 +196,7 @@ function WorktreeVerbs({
       key: "pr",
       label: `Open pull request #${pr.number}`,
       icon: iconOf(GitPullRequest),
-      title: pr.title,
+      tip: pr.title,
       run: () => {
         actions.close();
         openPullRequest(pr.url);
@@ -228,7 +228,7 @@ function WorktreeVerbs({
             key: "copy-path",
             label: "Copy path",
             icon: iconOf(Copy),
-            title: worktree.path,
+            tip: worktree.path,
             run: () => {
               void navigator.clipboard.writeText(worktree.path);
               actions.close();
@@ -415,7 +415,7 @@ function ScriptVerb({
         if (!busy) start();
         actions.go(entry, "script", { scriptKey: slotToParam(slot) });
       }}
-      title={disabledReason ?? command}
+      tip={disabledReason ?? command}
     >
       <Play className={ICON_CLASS} />
       <span className="shrink-0 font-mono">{name}</span>

@@ -62,13 +62,9 @@ type PrFolderSource = "pr" | "branch" | "custom";
 // Branch leads: it's what `prFolderFrom` starts on, and a control whose
 // default sits in the middle reads as if something was already changed.
 const PR_FOLDER_OPTIONS = [
-  {
-    value: "branch",
-    label: "Branch",
-    title: "Name the folder after the PR's head branch",
-  },
-  { value: "pr", label: "PR", title: "Name the folder after the PR number" },
-  { value: "custom", label: "Custom", title: "Type your own folder name" },
+  { value: "branch", label: "Branch" },
+  { value: "pr", label: "PR" },
+  { value: "custom", label: "Custom" },
 ] as const satisfies readonly SegmentedOption<PrFolderSource>[];
 
 // The source the form opens on. Gives way to "branch-from" when the
@@ -334,7 +330,7 @@ function NewWorktreeForm({
               value: "pull-request",
               label: "From pull request",
               disabled: prOptionOff !== undefined,
-              title: prOptionOff,
+              tip: prOptionOff,
             },
             { value: "branch-from", label: "Branch from source" },
             { value: "checkout", label: "Check out source" },

@@ -17,6 +17,7 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { EmptyPanel } from "@/components/ui/empty-panel";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import {
@@ -164,7 +165,7 @@ export function DeviceTabBar({
       ? [
           {
             id: ALL_DEVICES_TAB_ID,
-            title: "Settings every device shares",
+            tip: undefined,
             lead: <MonitorSmartphone className="size-3.5 shrink-0" />,
             label: "All devices",
           },
@@ -172,7 +173,7 @@ export function DeviceTabBar({
       : []),
     ...tabs.map((tab) => ({
       id: tab.deviceId,
-      title: deviceTitle(tab.label, tab.status),
+      tip: deviceTitle(tab.label, tab.status),
       // The device's connection dot, then its glyph: this device has
       // no connection to show and wears the glyph alone.
       lead: <DeviceLead icon={tab.icon} tone={tab.status?.tone} />,
@@ -202,30 +203,30 @@ export function DeviceTabBar({
       {pills.map((pill) => {
         const selected = pill.id === selectedId;
         return (
-          <button
-            key={pill.id}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            tabIndex={selected ? 0 : -1}
-            data-slot="device-chip"
-            title={pill.title}
-            onClick={() => onSelect(pill.id)}
-            onKeyDown={onKeyDown}
-            // A page header puts the row under the window's drag strip
-            // (AppShell): each pill carves its own click out of it.
-            style={dragRegion("no-drag")}
-            className={cn(
-              DEVICE_PILL_CLASS,
-              "transition-colors",
-              selected
-                ? "border-transparent bg-accent text-accent-foreground"
-                : "hover:text-foreground",
-            )}
-          >
-            {pill.lead}
-            <span className="max-w-40 truncate">{pill.label}</span>
-          </button>
+          <SimpleTooltip key={pill.id} tip={pill.tip}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              tabIndex={selected ? 0 : -1}
+              data-slot="device-chip"
+              onClick={() => onSelect(pill.id)}
+              onKeyDown={onKeyDown}
+              // A page header puts the row under the window's drag strip
+              // (AppShell): each pill carves its own click out of it.
+              style={dragRegion("no-drag")}
+              className={cn(
+                DEVICE_PILL_CLASS,
+                "transition-colors",
+                selected
+                  ? "border-transparent bg-accent text-accent-foreground"
+                  : "hover:text-foreground",
+              )}
+            >
+              {pill.lead}
+              <span className="max-w-40 truncate">{pill.label}</span>
+            </button>
+          </SimpleTooltip>
         );
       })}
     </div>

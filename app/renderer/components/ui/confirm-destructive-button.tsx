@@ -1,5 +1,6 @@
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface ConfirmDestructiveButtonProps {
   armed: boolean;
@@ -27,28 +28,29 @@ export function ConfirmDestructiveButton({
   disabledReason,
 }: ConfirmDestructiveButtonProps) {
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline-destructive"
-      disabled={pending || disabled || disabledReason !== undefined}
-      title={disabledReason}
-      aria-pressed={armed}
-      onClick={onClick}
-    >
-      {pending ? (
-        <>
-          <Loader2 aria-hidden className="size-3.5 animate-spin" />
-          {pendingLabel}
-        </>
-      ) : armed ? (
-        "Click again to confirm"
-      ) : (
-        <>
-          <Trash2 aria-hidden className="size-3.5" />
-          {idleLabel}
-        </>
-      )}
-    </Button>
+    <SimpleTooltip tip={disabledReason}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline-destructive"
+        disabled={pending || disabled || disabledReason !== undefined}
+        aria-pressed={armed}
+        onClick={onClick}
+      >
+        {pending ? (
+          <>
+            <Loader2 aria-hidden className="size-3.5 animate-spin" />
+            {pendingLabel}
+          </>
+        ) : armed ? (
+          "Click again to confirm"
+        ) : (
+          <>
+            <Trash2 aria-hidden className="size-3.5" />
+            {idleLabel}
+          </>
+        )}
+      </Button>
+    </SimpleTooltip>
   );
 }

@@ -161,25 +161,20 @@ function ListMenu({
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-      {/* The tooltip hangs on a wrapper span, not the trigger button:
-          merged onto the button, the tooltip would put
-          data-popup-open next to aria-haspopup, which doubutsu
-          styles as "menu open". Disabled while the menu is open so
-          the tip can't cover the popup. */}
+      {/* Disabled while the menu is open so the tip can't cover the
+          popup. */}
       <SimpleTooltip tip={tip} disabled={menuOpen}>
-        <span className="inline-flex">
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label={tip}
-                className={SIDEBAR_ICON_BUTTON}
-              >
-                <ArrowUpDown className="size-3.5" />
-              </button>
-            }
-          />
-        </span>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              aria-label={tip}
+              className={SIDEBAR_ICON_BUTTON}
+            >
+              <ArrowUpDown className="size-3.5" />
+            </button>
+          }
+        />
       </SimpleTooltip>
       {/* Anchored under the trigger now that it sits at the top of the
           sidebar rather than the bottom. */}

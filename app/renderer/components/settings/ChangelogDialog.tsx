@@ -102,7 +102,6 @@ export function ChangelogDialog({
             variant="ghost"
             size="icon-sm"
             aria-label="All releases on GitHub"
-            title="All releases on GitHub"
             onClick={() => openExternalUrl(RELEASES_PAGE_URL)}
           >
             <ExternalLink />
@@ -184,7 +183,6 @@ function ReleaseEntry({
           )}
           <IconButton
             aria-label={`v${entry.version} on GitHub`}
-            title="Open on GitHub"
             onClick={() => openExternalUrl(entry.url)}
           >
             <ExternalLink className="size-3.5" />

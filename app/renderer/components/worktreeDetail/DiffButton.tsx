@@ -17,7 +17,6 @@ export function DiffButton({
     <button
       type="button"
       onClick={onClick}
-      title="View pull request diff"
       className="tabular inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
     >
       <span>

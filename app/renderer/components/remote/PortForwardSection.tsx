@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Chip, ChipButton } from "@/components/ui/chip-button";
 import { ExternalLink } from "@/components/ui/external-link";
 import { Input } from "@/components/ui/input";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { usePortForwards } from "@/hooks/remote/usePortForwards";
 
 export function PortForwardSection({
@@ -90,12 +91,13 @@ export function PortForwardSection({
             />
           </ExternalLink>
           {forward.connCount > 0 && (
-            <span
-              className="tabular ml-1 text-3xs text-muted-foreground/70"
-              title={`${forward.connCount} open ${forward.connCount === 1 ? "connection" : "connections"}`}
+            <SimpleTooltip
+              tip={`${forward.connCount} open ${forward.connCount === 1 ? "connection" : "connections"}`}
             >
-              {forward.connCount}
-            </span>
+              <span className="tabular ml-1 text-3xs text-muted-foreground/70">
+                {forward.connCount}
+              </span>
+            </SimpleTooltip>
           )}
           <Button
             type="button"

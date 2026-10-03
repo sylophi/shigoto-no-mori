@@ -1,9 +1,5 @@
 import { Archive, FolderTree, House } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Worktree } from "@shared/schemas";
 
 const KINDS = {
@@ -29,16 +25,11 @@ export function WorktreeKindIcon({
   const kind = kindOf(worktree);
   if (!kind) return null;
   const { Icon, label } = KINDS[kind];
-  const icon = (
-    <span className="inline-flex shrink-0">
-      <Icon aria-label={label} className="size-3 text-muted-foreground/70" />
-    </span>
-  );
-  if (!showTooltip) return icon;
   return (
-    <Tooltip>
-      <TooltipTrigger render={icon} />
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <SimpleTooltip tip={showTooltip && label}>
+      <span className="inline-flex shrink-0">
+        <Icon aria-label={label} className="size-3 text-muted-foreground/70" />
+      </span>
+    </SimpleTooltip>
   );
 }

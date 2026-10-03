@@ -3,6 +3,7 @@ import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
@@ -221,14 +222,15 @@ export function WorktreeDetailInner({
       >
         {party && <BirthdayParty villager={party} />}
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <button
-            type="button"
-            onClick={() => toProjectPage("configure", worktree.projectId)}
-            className="-mx-1 shrink-0 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
-            title={`Configure ${project.name}`}
-          >
-            {project.name}
-          </button>
+          <SimpleTooltip tip={`Configure ${project.name}`}>
+            <button
+              type="button"
+              onClick={() => toProjectPage("configure", worktree.projectId)}
+              className="-mx-1 shrink-0 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
+            >
+              {project.name}
+            </button>
+          </SimpleTooltip>
           {/* A phone has no room for the path (it shortens to noise
               at that width), so the breadcrumb stops at the project
               and the trailing marks push themselves to the edge. */}

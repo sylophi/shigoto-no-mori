@@ -217,9 +217,9 @@ export function LocationForm({
                   branch={wt.branch}
                   detached={wt.detached}
                   fromPath={tildify(wt.path, home)}
-                  fromTitle={wt.path}
+                  fromTip={wt.path}
                   toPath={tildify(destination, home)}
-                  toTitle={destination}
+                  toTip={destination}
                   status={status.get(wt.id) ?? { kind: "idle" }}
                   labels={{
                     running: "Moving",

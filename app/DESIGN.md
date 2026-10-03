@@ -48,6 +48,19 @@ Rules that keep both themes cheap to maintain:
   variants matter). Text fields use `ui/input.tsx` / `ui/textarea.tsx`,
   chips use `ui/chip-button.tsx`, few-way toggles use
   `ui/segmented-control.tsx`. Don't re-inline their class strings.
+- **Hover hints are the app's tooltip**, `SimpleTooltip` from
+  `ui/tooltip.tsx`, never a `title` attribute: the browser's tooltip
+  wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches
+  `title` on DOM elements, and the `ui/` wrappers leave `title` out of
+  their props. The tooltip is visual only, so an icon-only control
+  still needs its `aria-label`.
+- **When in doubt, no tooltip.** A hint is for what the screen doesn't
+  say and the user can't infer: why a control is disabled, what a bare
+  mark or abbreviation stands for, a shortcut or a hidden gesture, the
+  exact value behind a rounded one (the timestamp behind "3d ago").
+  Text already on screen gets one only while it's cut off
+  (`whenTruncated`). A familiar icon (pencil, trash, copy, refresh) or
+  a label says enough on its own, and a chevron says where a row leads.
 - **doubutsu.css may only select**: theme tokens, `data-slot` /
   `data-doubutsu-zone` / `data-doubutsu-page` attributes, upstream
   library attributes (Base UI `data-highlighted` etc.), and plain

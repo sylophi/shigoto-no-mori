@@ -1,5 +1,6 @@
 import type { ClipboardEvent } from "react";
 import { CopyButton } from "@/components/ui/copy-button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useShortPath } from "@/hooks/ui/useShortPath";
 
@@ -29,17 +30,18 @@ export function PathSpan({
   const [ref, display] = useShortPath(path, home);
   if (copyable) {
     return (
-      <span
-        ref={ref}
-        className={cn(
-          "group/copy flex min-w-0 items-center gap-1 select-text",
-          className,
-        )}
-        title={path}
-      >
-        <span className="min-w-0 truncate">{display}</span>
-        <CopyButton value={path} label="Copy path" />
-      </span>
+      <SimpleTooltip tip={path}>
+        <span
+          ref={ref}
+          className={cn(
+            "group/copy flex min-w-0 items-center gap-1 select-text",
+            className,
+          )}
+        >
+          <span className="min-w-0 truncate">{display}</span>
+          <CopyButton value={path} label="Copy path" />
+        </span>
+      </SimpleTooltip>
     );
   }
   const handleCopy = (e: ClipboardEvent<HTMLSpanElement>) => {
@@ -47,13 +49,14 @@ export function PathSpan({
     e.clipboardData.setData("text/plain", path);
   };
   return (
-    <span
-      ref={ref}
-      className={cn("select-text", className)}
-      title={path}
-      onCopy={handleCopy}
-    >
-      {display}
-    </span>
+    <SimpleTooltip tip={path}>
+      <span
+        ref={ref}
+        className={cn("select-text", className)}
+        onCopy={handleCopy}
+      >
+        {display}
+      </span>
+    </SimpleTooltip>
   );
 }

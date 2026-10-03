@@ -1,6 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Pin } from "lucide-react";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // Same padding and type as ScriptRow, whose cell is also a wide button
@@ -62,19 +63,22 @@ export function ArrangeScriptRow({
         <ScriptCellContent name={name} />
       </div>
       {pinned !== undefined && (
-        <button
-          type="button"
-          onClick={() => onPin(!pinned)}
-          aria-label={pinLabel}
-          aria-pressed={pinned}
-          title={pinned ? `Unpin ${name} from the Launch section` : pinLabel}
-          className={cn(
-            PIN,
-            "transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
-          )}
+        <SimpleTooltip
+          tip={pinned ? `Unpin ${name} from the Launch section` : pinLabel}
         >
-          <PinIcon pinned={pinned} />
-        </button>
+          <button
+            type="button"
+            onClick={() => onPin(!pinned)}
+            aria-label={pinLabel}
+            aria-pressed={pinned}
+            className={cn(
+              PIN,
+              "transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
+            )}
+          >
+            <PinIcon pinned={pinned} />
+          </button>
+        </SimpleTooltip>
       )}
     </div>
   );

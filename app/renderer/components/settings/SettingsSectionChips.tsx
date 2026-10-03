@@ -4,6 +4,7 @@
 // the edge. The same store underneath, so the header and the panels
 // follow a pick here exactly as they follow the sidebar's.
 import { ChipButton } from "@/components/ui/chip-button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import type { RemoteDevice } from "@/lib/remote/devices";
@@ -36,19 +37,19 @@ export function SettingsSectionChips({
   const chip = (section: SettingsSection) => {
     const active = activeTab === section.id;
     return (
-      <ChipButton
-        key={section.id}
-        aria-current={active ? "true" : undefined}
-        aria-controls={settingsPanelId(section.id)}
-        title={section.title}
-        onClick={() => selectSettingsTab(section.id)}
-        className={cn(
-          "max-w-48 shrink-0 py-1.5",
-          active && "bg-accent text-foreground",
-        )}
-      >
-        <SectionLabel section={section} />
-      </ChipButton>
+      <SimpleTooltip key={section.id} tip={section.tip}>
+        <ChipButton
+          aria-current={active ? "true" : undefined}
+          aria-controls={settingsPanelId(section.id)}
+          onClick={() => selectSettingsTab(section.id)}
+          className={cn(
+            "max-w-48 shrink-0 py-1.5",
+            active && "bg-accent text-foreground",
+          )}
+        >
+          <SectionLabel section={section} />
+        </ChipButton>
+      </SimpleTooltip>
     );
   };
   // Update all heads the device chips, where the sidebar puts it on

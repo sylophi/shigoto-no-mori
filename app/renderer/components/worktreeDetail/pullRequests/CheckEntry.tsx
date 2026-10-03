@@ -40,7 +40,6 @@ export function CheckEntry({ check }: { check: PullRequestCheck }) {
     <button
       type="button"
       onClick={() => openExternalUrl(url, "Couldn't open check")}
-      title={url}
       className="group/check flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
     >
       {Body}

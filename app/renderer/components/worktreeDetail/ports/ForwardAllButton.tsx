@@ -24,7 +24,6 @@ import {
   usePortForwards,
 } from "@/hooks/remote/usePortForwards";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { pluralize } from "@/lib/pluralize";
 import { notifyError } from "@/lib/toast";
 
 type Mode = "start" | "stop";
@@ -102,6 +101,12 @@ export function ForwardAllButton({
   // stop out of reach. Stopping is a local act, so it never needs the
   // grant.
   const canStart = granted && toStart.length > 0;
+  // Why Start is off, if it is. Stop is never off for a reason of its own.
+  const startBlocker = !granted
+    ? peerReadOnlyNote()
+    : toStart.length === 0
+      ? "No ports to forward"
+      : undefined;
   const canStop = toStop.length > 0;
   const modes: Mode[] = canStop
     ? canStart
@@ -122,46 +127,26 @@ export function ForwardAllButton({
         return (
           <SimpleTooltip
             key={mode}
-            tip={
-              bulk.isPending
-                ? undefined
-                : describeTip(mode, toStart.length, toStop.length, granted)
-            }
+            tip={mode === "start" && !bulk.isPending ? startBlocker : undefined}
           >
-            {/* The span is the trigger: a disabled button dispatches no
-                pointer events, and disabled is when the tip matters. */}
-            <span className="inline-flex">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={
-                  bulk.isPending ||
-                  configQuery.isPending ||
-                  (mode === "start" && !canStart)
-                }
-                onClick={() => bulk.mutate(mode)}
-              >
-                {face.icon}
-                {face.label}
-              </Button>
-            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={
+                bulk.isPending ||
+                configQuery.isPending ||
+                (mode === "start" && !canStart)
+              }
+              onClick={() => bulk.mutate(mode)}
+            >
+              {face.icon}
+              {face.label}
+            </Button>
           </SimpleTooltip>
         );
       })}
     </>
   );
-}
-
-function describeTip(
-  mode: Mode,
-  toStart: number,
-  toStop: number,
-  granted: boolean,
-): string {
-  if (mode === "stop") return `Stop ${pluralize(toStop, "forward")}`;
-  if (!granted) return peerReadOnlyNote();
-  if (toStart === 0) return "No ports to forward";
-  return `Forward ${pluralize(toStart, "port")}`;
 }
 
 // One toast for the whole action: the single failure in the engine's

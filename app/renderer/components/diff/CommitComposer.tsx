@@ -43,7 +43,7 @@ export function CommitComposer({
 }) {
   const included = includedFiles(files).length;
   const conflicted = files.some((file) => file.conflicted);
-  const copy = buttonCopy({
+  const label = buttonLabel({
     pending,
     amending: amend !== null,
     total: files.length,
@@ -89,7 +89,6 @@ export function CommitComposer({
             onClick={amend.onCancel}
             disabled={pending}
             aria-label="Stop amending"
-            title="Stop amending"
           >
             <X />
           </Button>
@@ -134,7 +133,6 @@ export function CommitComposer({
         size="sm"
         disabled={!canCommit}
         onClick={submit}
-        title={copy.title}
         className="w-full justify-start"
       >
         {pending ? (
@@ -143,7 +141,7 @@ export function CommitComposer({
           <GitCommitHorizontal aria-hidden />
         )}
         <span className="min-w-0 flex-1 truncate text-left">
-          {copy.label}
+          {label}
           {!worktree.detached && !amend && (
             <>
               {" "}
@@ -161,9 +159,9 @@ export function CommitComposer({
   );
 }
 
-// What the button says it will do, and the longer version on hover.
-// Ticked files go. With nothing ticked, everything listed goes.
-function buttonCopy({
+// What the button says it will do. Ticked files go. With nothing
+// ticked, everything listed goes.
+function buttonLabel({
   pending,
   amending,
   total,
@@ -173,22 +171,13 @@ function buttonCopy({
   amending: boolean;
   total: number;
   included: number;
-}): { label: string; title: string } {
-  if (pending) {
-    return { label: amending ? "Amending…" : "Committing…", title: "" };
-  }
+}): string {
+  if (pending) return amending ? "Amending…" : "Committing…";
   const what = pluralize(included > 0 ? included : total, "file");
   const scope = included > 0 ? what : `all ${what}`;
-  const title =
-    total === 0
-      ? "Only the message changes"
-      : included > 0
-        ? `Commit the ${what} ticked`
-        : "Nothing is ticked, so every listed file is committed";
   if (amending) {
-    const label = total === 0 ? "Amend the message" : `Amend with ${scope}`;
-    return { label, title };
+    return total === 0 ? "Amend the message" : `Amend with ${scope}`;
   }
-  if (total === 0) return { label: "Nothing to commit", title: "" };
-  return { label: `Commit ${scope}`, title };
+  if (total === 0) return "Nothing to commit";
+  return `Commit ${scope}`;
 }

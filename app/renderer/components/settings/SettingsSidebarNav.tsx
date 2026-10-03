@@ -1,6 +1,7 @@
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { StatusDot } from "@/components/ui/status-dot";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
@@ -121,20 +122,21 @@ function NavRow({
   active: boolean;
 }) {
   return (
-    <button
-      type="button"
-      aria-current={active ? "true" : undefined}
-      aria-controls={settingsPanelId(section.id)}
-      title={section.title}
-      onClick={() => selectSettingsTab(section.id)}
-      className={cn(
-        "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/60",
-        active
-          ? "bg-accent font-medium text-accent-foreground"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      <SectionLabel section={section} />
-    </button>
+    <SimpleTooltip tip={section.tip}>
+      <button
+        type="button"
+        aria-current={active ? "true" : undefined}
+        aria-controls={settingsPanelId(section.id)}
+        onClick={() => selectSettingsTab(section.id)}
+        className={cn(
+          "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/60",
+          active
+            ? "bg-accent font-medium text-accent-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <SectionLabel section={section} />
+      </button>
+    </SimpleTooltip>
   );
 }

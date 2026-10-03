@@ -1,7 +1,16 @@
 "use client";
 
-import type { ReactElement, ReactNode } from "react";
+import {
+  cloneElement,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+  useRef,
+} from "react";
+import { mergeProps } from "@base-ui/react/merge-props";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
+import type { HTMLProps } from "@base-ui/react/types";
+import { isTruncated } from "@/hooks/ui/useIsTruncated";
 
 import { cn } from "@/lib/utils";
 
@@ -37,16 +46,18 @@ function TooltipContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
+  anchor,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
   >) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
+        anchor={anchor}
         align={align}
         alignOffset={alignOffset}
         side={side}
@@ -69,29 +80,81 @@ function TooltipContent({
   );
 }
 
+// The browser's own tooltip is banned (no-native-tooltip in
+// lint/shigomori.mts). A wrapper that passes its props to the DOM drops
+// `title` from them with this, so `<Button title>` fails to type check
+// where the lint rule, which can't see through a component, would miss
+// it. Wrap the element in SimpleTooltip instead.
+type WithoutTitle<Props> = Omit<Props, "title">;
+
+type TooltipChild = ReactElement<
+  HTMLProps & { ref?: Ref<HTMLElement>; disabled?: boolean }
+>;
+
 // Drop-in replacement for a native `title` hint: wraps one element
 // with a styled tooltip without adding DOM (TooltipTrigger merges onto
 // the child via the render prop, so the child needs to accept ref and
 // event props on its root; plain DOM elements always do). A falsy tip
-// renders the child bare, mirroring `title={undefined}`. Newlines in
-// string tips are preserved like multiline titles were. `delay`
-// overrides the provider's opening delay for this trigger.
+// shows nothing, mirroring `title={undefined}`, and keeps the same
+// tree, so a tip that comes and goes doesn't remount the child (and
+// take its focus). A disabled child still shows its tip (often the
+// reason it's disabled), from a `display: contents` span around it:
+// React drops mouse handlers on a disabled element, and Base UI opens
+// on mousemove, but a wrapper's still run, and the span adds no box.
+// (So a child that turns disabled is remounted into the span.)
+// Newlines in string tips are preserved like multiline titles were.
+// `delay` overrides the provider's opening delay for this trigger.
+// `whenTruncated` is for a tip that only repeats text on screen in
+// full: it opens only while that text is cut off.
 function SimpleTooltip({
   tip,
   disabled,
   delay,
+  whenTruncated,
   children,
 }: {
   tip: ReactNode;
   disabled?: boolean;
   delay?: number;
-  children: ReactElement;
+  whenTruncated?: boolean;
+  children: TooltipChild;
 }) {
-  if (!tip) return children;
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const childDisabled = Boolean(children.props.disabled);
   return (
-    <Tooltip disabled={disabled}>
-      <TooltipTrigger render={children} delay={delay} />
-      <TooltipContent>
+    <Tooltip
+      disabled={disabled || !tip}
+      onOpenChange={(open, details) => {
+        if (open && whenTruncated && !overflows(details.trigger)) {
+          details.cancel();
+        }
+      }}
+    >
+      {childDisabled ? (
+        <TooltipTrigger
+          render={
+            <span ref={wrapperRef} className="contents">
+              {children}
+            </span>
+          }
+          delay={delay}
+        />
+      ) : (
+        <TooltipTrigger
+          ref={children.props.ref}
+          render={withoutOpenState(children)}
+          delay={delay}
+        />
+      )}
+      {/* A contents span has no box to place the tip against, so it
+          points at the child. */}
+      <TooltipContent
+        anchor={
+          childDisabled
+            ? () => wrapperRef.current?.firstElementChild ?? null
+            : undefined
+        }
+      >
         {/* One wrapper span keeps a mixed text/element tip a single
             flex item: TooltipContent is inline-flex with a gap, which
             would otherwise space out every text run. pre-line preserves
@@ -102,6 +165,28 @@ function SimpleTooltip({
   );
 }
 
+// Renders the child as the trigger, less the trigger's
+// data-popup-open: an open menu, popover or context menu marks its
+// trigger with that same attribute, so a hint over one (or over a row
+// its context menu lights) would show it open. Otherwise Base UI's own
+// merge for an element render: the child's props win, handlers chain,
+// and the ref is the trigger's, which carries the child's (passed as
+// the trigger's ref above).
+function withoutOpenState(child: TooltipChild) {
+  return ({
+    "data-popup-open": _open,
+    ...props
+  }: HTMLProps & { "data-popup-open"?: string }) =>
+    cloneElement(child, { ...mergeProps(props, child.props), ref: props.ref });
+}
+
+// Whether the trigger, or anything in it, is cut off.
+function overflows(trigger: Element | undefined): boolean {
+  if (!trigger) return false;
+  return [trigger, ...trigger.querySelectorAll("*")].some(isTruncated);
+}
+
+export type { WithoutTitle };
 export {
   SimpleTooltip,
   Tooltip,

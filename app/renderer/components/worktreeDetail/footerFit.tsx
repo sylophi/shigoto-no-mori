@@ -112,33 +112,28 @@ export function useFittedLabels(
 }
 
 // A footer verb: an icon and a label that can collapse. Collapsed, the
-// label stays for screen readers (sr-only) and shows as a tooltip. The
-// title, a longer hint, gives way to it so two don't stack. A disabled
-// button gets no pointer events and so no tooltip, so there the title
-// stays and names the verb. No rank: the label never collapses (an
-// armed delete asking for its second click).
+// label stays for screen readers (sr-only) and shows as the tooltip,
+// ahead of the tip (a longer hint) when there is one. Expanded, the tip
+// shows alone. No rank: the label never collapses (an armed delete
+// asking for its second click).
 export function FooterVerb({
   rank,
   icon,
   label,
-  title,
-  disabled,
+  tip,
   ...props
-}: Omit<ComponentProps<typeof Button>, "children" | "title"> & {
+}: Omit<ComponentProps<typeof Button>, "children"> & {
   rank: number | undefined;
   icon: ReactNode;
   label: string;
-  title?: string;
+  tip?: string;
 }) {
   const through = useContext(CollapsedThrough);
   const collapsed = rank !== undefined && rank <= through;
-  let hint = title;
-  if (collapsed) {
-    hint = disabled ? (title ? `${label}: ${title}` : label) : undefined;
-  }
+  const shown = collapsed ? (tip ? `${label}: ${tip}` : label) : tip;
   return (
-    <SimpleTooltip tip={label} disabled={!collapsed || disabled}>
-      <Button size="xs" disabled={disabled} title={hint} {...props}>
+    <SimpleTooltip tip={shown}>
+      <Button size="xs" {...props}>
         {icon}
         <span data-label-rank={rank} className="data-collapsed:sr-only">
           {label}

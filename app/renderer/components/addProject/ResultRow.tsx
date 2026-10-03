@@ -1,6 +1,7 @@
 import { Command } from "cmdk";
 import { Check, FolderGit2, Square } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { ensureTrailingSep } from "@shared/projectPaths";
 import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 
@@ -50,9 +51,9 @@ export function ResultRow({
           className="min-w-0 flex-1 truncate font-mono"
         />
       ) : (
-        <span className="min-w-0 flex-1 truncate font-mono" title={path}>
-          {relative}
-        </span>
+        <SimpleTooltip whenTruncated tip={path}>
+          <span className="min-w-0 flex-1 truncate font-mono">{relative}</span>
+        </SimpleTooltip>
       )}
     </Command.Item>
   );

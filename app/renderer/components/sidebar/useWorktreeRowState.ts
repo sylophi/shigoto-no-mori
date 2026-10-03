@@ -14,16 +14,12 @@ export interface WorktreeRowState {
   open: () => void;
   activity: ScriptActivityKind | null;
   isDeleting: boolean;
-  // Hover title, or undefined when the row is in no state worth naming.
-  // A tooltip that only repeats the branch already on screen is noise.
-  title: string | undefined;
 }
 
 // What the two sidebar rows share in behaviour (their shared look is
-// WorktreeEntry): "am I the open one", "what's running here", "where
-// does a click go" and "what do I say on hover" have the same answers
-// in the tree and the inbox, and answering them twice is how the two
-// silently drift.
+// WorktreeEntry): "am I the open one", "what's running here" and
+// "where does a click go" have the same answers in the tree and the
+// inbox, and answering them twice is how the two silently drift.
 // `deviceId` names the peer a remote row belongs to. Absent, the row
 // is this machine's.
 export function useWorktreeRowState(
@@ -55,22 +51,7 @@ export function useWorktreeRowState(
     open: () => void navigate({ to: route, params }),
     activity,
     isDeleting,
-    title: describeRow(activity, isDeleting, worktree.shelved),
   };
-}
-
-function describeRow(
-  activity: ScriptActivityKind | null,
-  isDeleting: boolean,
-  shelved: boolean,
-): string | undefined {
-  if (isDeleting) return "Deleting worktree";
-  if (activity === "setup") return "Running setup";
-  if (activity === "teardown") return "Running teardown";
-  if (activity === "package") return "Running a script";
-  if (activity === "failed") return "A script failed here";
-  if (shelved) return "Shelved";
-  return undefined;
 }
 
 // What is happening in a worktree right now, if anything. A delete in

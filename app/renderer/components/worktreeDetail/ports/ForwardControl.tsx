@@ -165,8 +165,7 @@ export function ForwardControl({
         </span>
         <OpenLocalhostButton
           port={localPort}
-          disabled={!live}
-          disabledTip="Switch the forward on to open it"
+          disabledReason={live ? undefined : "Switch the forward on to open it"}
         />
       </div>
 

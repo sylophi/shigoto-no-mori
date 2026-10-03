@@ -1,4 +1,5 @@
 import { VillagerFace } from "@/components/shared/VillagerSays";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Resident } from "@/hooks/villagers/useResident";
 import { PartyFace } from "./BirthdayFace";
 
@@ -19,12 +20,14 @@ export function ResidentFace({
     ? `Happy birthday, ${profile.name}!`
     : `${profile.name} lives here`;
   return (
-    <span role="img" aria-label={label} title={label} className="shrink-0">
-      {party ? (
-        <PartyFace face={face} rarity={rarity} className="size-8" />
-      ) : (
-        <VillagerFace face={face} className="size-8" />
-      )}
-    </span>
+    <SimpleTooltip tip={label}>
+      <span role="img" aria-label={label} className="shrink-0">
+        {party ? (
+          <PartyFace face={face} rarity={rarity} className="size-8" />
+        ) : (
+          <VillagerFace face={face} className="size-8" />
+        )}
+      </span>
+    </SimpleTooltip>
   );
 }

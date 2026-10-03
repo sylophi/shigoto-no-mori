@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   BrowseKeyHints,
   BrowseUpItem,
@@ -461,31 +462,32 @@ export function AddProjectView({
             placeholder="Folder path, or a git URL to clone"
             className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
           />
-          <button
-            type="button"
-            onMouseDown={keepFocusInInput}
-            onClick={() => void primaryAction()}
-            disabled={!canPrimary || addProject.isPending}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={`${submitLabel} (${submitKbd})`}
-            title={`${submitLabel} (${submitKbd})`}
-          >
-            {cloneMode ? (
-              <GitBranch className="size-3.5" />
-            ) : targetIsGitRepo ? (
-              <FolderGit2 className="size-3.5" />
-            ) : (
-              <FolderSearch className="size-3.5" />
-            )}
-            <span>
-              {addProject.isPending && targetIsGitRepo
-                ? "Adding…"
-                : submitLabel}
-            </span>
-            <KbdGroup className="pointer-events-none">
-              <Kbd>{submitKbd}</Kbd>
-            </KbdGroup>
-          </button>
+          <SimpleTooltip tip={`${submitLabel} (${submitKbd})`}>
+            <button
+              type="button"
+              onMouseDown={keepFocusInInput}
+              onClick={() => void primaryAction()}
+              disabled={!canPrimary || addProject.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`${submitLabel} (${submitKbd})`}
+            >
+              {cloneMode ? (
+                <GitBranch className="size-3.5" />
+              ) : targetIsGitRepo ? (
+                <FolderGit2 className="size-3.5" />
+              ) : (
+                <FolderSearch className="size-3.5" />
+              )}
+              <span>
+                {addProject.isPending && targetIsGitRepo
+                  ? "Adding…"
+                  : submitLabel}
+              </span>
+              <KbdGroup className="pointer-events-none">
+                <Kbd>{submitKbd}</Kbd>
+              </KbdGroup>
+            </button>
+          </SimpleTooltip>
         </div>
 
         {clone !== null && (
@@ -541,7 +543,6 @@ export function AddProjectView({
                         variant="outline"
                         size="xs"
                         onClick={() => void submit(entryPath)}
-                        title={`Add ${entry.name} as a project`}
                       >
                         Add
                       </Button>

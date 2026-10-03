@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type Tone = "violet" | "emerald" | "sky" | "indigo" | "rose";
@@ -23,7 +24,7 @@ interface SyncActionButtonProps {
   tone: Tone;
   icon?: IconType;
   label: string;
-  title: string;
+  tip?: string;
   pending: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -33,30 +34,31 @@ export function SyncActionButton({
   tone,
   icon: Icon,
   label,
-  title,
+  tip,
   pending,
   disabled,
   onClick,
 }: SyncActionButtonProps) {
   const DisplayIcon = pending ? Loader2 : Icon;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled || pending}
-      title={title}
-      className={cn(
-        "tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs transition-colors focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
-        TONE_CLASSES[tone],
-      )}
-    >
-      {label}
-      {DisplayIcon && (
-        <DisplayIcon
-          aria-hidden
-          className={cn("size-3.5", pending && "animate-spin")}
-        />
-      )}
-    </button>
+    <SimpleTooltip tip={tip}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled || pending}
+        className={cn(
+          "tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs transition-colors focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
+          TONE_CLASSES[tone],
+        )}
+      >
+        {label}
+        {DisplayIcon && (
+          <DisplayIcon
+            aria-hidden
+            className={cn("size-3.5", pending && "animate-spin")}
+          />
+        )}
+      </button>
+    </SimpleTooltip>
   );
 }

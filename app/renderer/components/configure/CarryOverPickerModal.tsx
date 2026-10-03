@@ -1,5 +1,6 @@
 import { Copy as CopyIcon, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useCarryOverListing } from "@/hooks/projects/useCarryOverListing";
 import type { CarryOverEntry } from "@shared/schemas";
 import { OnlyInWorktrees } from "./OnlyInWorktrees";
@@ -44,12 +45,11 @@ export function CarryOverPickerModal({
         selectedPaths.has(path) ? (
           <span className="px-2 text-2xs text-muted-foreground">Added</span>
         ) : isCovered(path) ? (
-          <span
-            className="px-2 text-2xs text-amber-600 dark:text-amber-400"
-            title=".worktreeinclude already copies this path into every new worktree."
-          >
-            covered
-          </span>
+          <SimpleTooltip tip=".worktreeinclude already copies this path into every new worktree.">
+            <span className="px-2 text-2xs text-amber-600 dark:text-amber-400">
+              covered
+            </span>
+          </SimpleTooltip>
         ) : entry.ignored ? (
           <div
             className="inline-flex items-center gap-1"
@@ -57,34 +57,35 @@ export function CarryOverPickerModal({
             onKeyDown={(e) => e.stopPropagation()}
             role="presentation"
           >
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              onClick={() => onPick({ path, mode: "symlink" })}
-              title="Edits stay in sync with the main checkout"
-            >
-              <LinkIcon />
-              Symlink
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              onClick={() => onPick({ path, mode: "copy" })}
-              title="Independent snapshot at worktree creation"
-            >
-              <CopyIcon />
-              Copy
-            </Button>
+            <SimpleTooltip tip="Edits stay in sync with the main checkout">
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={() => onPick({ path, mode: "symlink" })}
+              >
+                <LinkIcon />
+                Symlink
+              </Button>
+            </SimpleTooltip>
+            <SimpleTooltip tip="Independent snapshot at worktree creation">
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={() => onPick({ path, mode: "copy" })}
+              >
+                <CopyIcon />
+                Copy
+              </Button>
+            </SimpleTooltip>
           </div>
         ) : (
-          <span
-            className="px-2 text-2xs text-muted-foreground/70"
-            title="Tracked by git. Only ignored files and folders can be carried over."
-          >
-            tracked
-          </span>
+          <SimpleTooltip tip="Tracked by git. Only ignored files and folders can be carried over.">
+            <span className="px-2 text-2xs text-muted-foreground/70">
+              tracked
+            </span>
+          </SimpleTooltip>
         )
       }
       onClose={onClose}

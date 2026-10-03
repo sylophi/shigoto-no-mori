@@ -3,6 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RowStatusBadge, type RowStatus } from "@/components/ui/row-status";
 import { RowTag } from "@/components/ui/row-tag";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { InlineError } from "@/components/ui/inline-error";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatBytes } from "@/lib/formatBytes";
@@ -45,7 +46,7 @@ export function TidyRow({
   } = entry;
   const now = useNow();
   const interactive = !disabled && status.kind !== "done";
-  const ageTitle =
+  const ageTip =
     ageAt !== null
       ? `Last commit ${new Date(ageAt).toLocaleString()}`
       : undefined;
@@ -91,20 +92,23 @@ export function TidyRow({
             />
           </span>
           <span aria-hidden>·</span>
-          <span className="shrink-0" title={ageTitle}>
-            {ageAt !== null
-              ? `committed ${formatRelativeTime(ageAt, now)}`
-              : "no commits"}
-          </span>
+          <SimpleTooltip tip={ageTip}>
+            <span className="shrink-0">
+              {ageAt !== null
+                ? `committed ${formatRelativeTime(ageAt, now)}`
+                : "no commits"}
+            </span>
+          </SimpleTooltip>
           {editedSince !== null && (
             <>
               <span aria-hidden>·</span>
-              <span
-                className="shrink-0"
-                title={`Files changed ${new Date(editedSince).toLocaleString()}`}
+              <SimpleTooltip
+                tip={`Files changed ${new Date(editedSince).toLocaleString()}`}
               >
-                edited {formatRelativeTime(editedSince, now)}
-              </span>
+                <span className="shrink-0">
+                  edited {formatRelativeTime(editedSince, now)}
+                </span>
+              </SimpleTooltip>
             </>
           )}
         </div>
@@ -121,20 +125,14 @@ export function TidyRow({
 
       <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
         {disk ? (
-          <span
-            className="text-sm tabular-nums"
-            title={`${disk.bytes.toLocaleString()} bytes on disk`}
-          >
+          <span className="text-sm tabular-nums">
             {disk.partial ? "~" : ""}
             {formatBytes(disk.bytes)}
           </span>
         ) : diskFailed ? (
-          <span
-            className="text-sm text-muted-foreground"
-            title="Couldn't measure this worktree"
-          >
-            &mdash;
-          </span>
+          <SimpleTooltip tip="Couldn't measure this worktree">
+            <span className="text-sm text-muted-foreground">&mdash;</span>
+          </SimpleTooltip>
         ) : (
           <Skeleton className="h-4 w-14" />
         )}

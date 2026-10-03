@@ -8,6 +8,7 @@ import {
   FLOATING_SURFACE_CLASS,
 } from "./floating-surface";
 import { ChevronRightIcon, CheckIcon } from "lucide-react";
+import type { WithoutTitle } from "./tooltip";
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
@@ -17,7 +18,9 @@ function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
 // its render prop, so a slot set here would replace the rendered
 // Button's data-slot="button", and doubutsu.css would stop styling it
 // as a button.
-function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
+function DropdownMenuTrigger({
+  ...props
+}: WithoutTitle<MenuPrimitive.Trigger.Props>) {
   return <MenuPrimitive.Trigger {...props} />;
 }
 
@@ -104,7 +107,7 @@ function DropdownMenuItem({
   className,
   variant = "default",
   ...props
-}: MenuPrimitive.Item.Props & {
+}: WithoutTitle<MenuPrimitive.Item.Props> & {
   variant?: "default" | "destructive";
 }) {
   return (
@@ -129,7 +132,7 @@ function DropdownMenuSubTrigger({
   variant = "default",
   children,
   ...props
-}: MenuPrimitive.SubmenuTrigger.Props & {
+}: WithoutTitle<MenuPrimitive.SubmenuTrigger.Props> & {
   variant?: "default" | "destructive";
 }) {
   return (
@@ -185,7 +188,7 @@ function DropdownMenuRadioItem({
   className,
   children,
   ...props
-}: MenuPrimitive.RadioItem.Props) {
+}: WithoutTitle<MenuPrimitive.RadioItem.Props>) {
   return (
     <MenuPrimitive.RadioItem
       data-slot="dropdown-menu-radio-item"

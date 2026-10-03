@@ -13,11 +13,7 @@ export function VillagerSays({ line }: { line: VillagerLine }) {
   return (
     <>
       {line.lead}
-      <span
-        data-slot="villager-voice"
-        title={`${line.speaker}'s catchphrase`}
-        className="text-muted-foreground"
-      >
+      <span data-slot="villager-voice" className="text-muted-foreground">
         {line.tail}
       </span>
     </>

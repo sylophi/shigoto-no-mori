@@ -6,6 +6,7 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useNow } from "@/hooks/ui/useNow";
 import { pullRequestBlockedBy } from "@/lib/pullRequest";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -146,45 +147,48 @@ function PullRequestRow({
   const Icon = pr.isDraft ? GitPullRequestDraft : GitPullRequest;
   const taken = occupiedBy !== undefined;
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      disabled={disabled || taken}
-      title={
+    <SimpleTooltip
+      tip={
         taken
           ? `${pr.headRefName} is already checked out in ${occupiedBy.name}`
           : undefined
       }
-      className={cn(
-        "flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors",
-        selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-        (disabled || taken) &&
-          "cursor-not-allowed opacity-50 hover:bg-transparent",
-      )}
     >
-      <Icon
+      <button
+        type="button"
+        role="radio"
+        aria-checked={selected}
+        onClick={onSelect}
+        disabled={disabled || taken}
         className={cn(
-          "mt-0.5 size-4 shrink-0",
-          pr.isDraft ? "text-muted-foreground" : "text-emerald-500",
+          "flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors",
+          selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+          (disabled || taken) &&
+            "cursor-not-allowed opacity-50 hover:bg-transparent",
         )}
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm">
-          {pr.title}{" "}
-          <span className="text-muted-foreground/60">#{pr.number}</span>
+      >
+        <Icon
+          className={cn(
+            "mt-0.5 size-4 shrink-0",
+            pr.isDraft ? "text-muted-foreground" : "text-emerald-500",
+          )}
+        />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-sm">
+            {pr.title}{" "}
+            <span className="text-muted-foreground/60">#{pr.number}</span>
+          </span>
+          <span className="truncate text-xs text-muted-foreground">
+            @{pr.authorLogin} ·{" "}
+            <span className="font-mono">{pr.headRefName}</span>
+            {pr.headRepo && <> · fork {pr.headRepo}</>}
+            {taken && <> · in {occupiedBy.name}</>}
+          </span>
         </span>
-        <span className="truncate text-xs text-muted-foreground">
-          @{pr.authorLogin} ·{" "}
-          <span className="font-mono">{pr.headRefName}</span>
-          {pr.headRepo && <> · fork {pr.headRepo}</>}
-          {taken && <> · in {occupiedBy.name}</>}
+        <span className="shrink-0 pt-0.5 text-xs text-muted-foreground/70">
+          {formatRelativeTime(new Date(pr.updatedAt).getTime(), now)}
         </span>
-      </span>
-      <span className="shrink-0 pt-0.5 text-xs text-muted-foreground/70">
-        {formatRelativeTime(new Date(pr.updatedAt).getTime(), now)}
-      </span>
-    </button>
+      </button>
+    </SimpleTooltip>
   );
 }
