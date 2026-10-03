@@ -99,6 +99,21 @@ export function labPullRequestDetail(branch: string) {
   return { ...LAB_PR_DETAIL, ...slim, ...labChecks([]) };
 }
 
+// The same, posed by argument for the scenes: #148 with its default two
+// passing checks, the stacked PRs with none.
+export function labPullRequestDetailFor(
+  projectId: string,
+  branch: string,
+  merged = false,
+) {
+  const slim = (
+    labPullRequestsFor(projectId, merged) as Record<string, typeof LAB_PR_SLIM>
+  )[branch];
+  if (!slim) return null;
+  if (slim === LAB_PR_SLIM) return LAB_PR_DETAIL;
+  return { ...LAB_PR_DETAIL, ...slim, ...labChecks([]) };
+}
+
 const labCheck = (
   name: string,
   bucket: PullRequestCheckBucket,

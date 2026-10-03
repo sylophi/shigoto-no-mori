@@ -67,12 +67,18 @@ import {
   accountDevices,
   forests,
   labCustomPorts,
+  labDetectedLaunchers,
   labDisks,
   labGlobalConfig,
+  labLauncherEntries,
+  labPackageScriptSort,
+  labPackageScripts,
+  labPortPoolActive,
   labReleases,
   labListeningPorts,
   labPoolPorts,
   labRemoteUrls,
+  labShigomoriConfig,
   projectIconFor,
   worktree as worktreeFixture,
 } from "./fixtures";
@@ -430,16 +436,8 @@ function hostHandlersFor(
     // The stub's shape with a full create lifecycle on it (carry-over,
     // a setup script, and ports below), so the pull dialogs' setup
     // switch and their running steps have every phase to name.
-    "shigomori:read": () => ({
-      defaultBranch: "main",
-      scripts: { setup: "pnpm install" },
-      carryOver: [
-        { path: ".env.local", mode: "copy" },
-        { path: ".claude/settings.local.json", mode: "symlink" },
-      ],
-      launchers: [],
-    }),
-    "portPool:isActive": () => true,
+    "shigomori:read": () => labShigomoriConfig,
+    "portPool:isActive": () => labPortPoolActive,
     "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (Thinkpad alone by default) have an
@@ -471,29 +469,13 @@ function hostHandlersFor(
         emit("updater:state", { kind: "idle" });
       }, 2_500);
     },
-    "launchers:detect": () => [...LAB_DETECTED],
+    "launchers:detect": () => [...labDetectedLaunchers],
     "launchers:forProject": () => ({
-      entries: [
-        ...LAB_DETECTED,
-        { kind: "custom", id: "claude", label: "Claude Code" },
-        { kind: "web", id: "web:github", label: "GitHub" },
-      ],
+      entries: labLauncherEntries,
       hiddenCount: 0,
     }),
-    "packageScripts:list": () => ({
-      scripts: {
-        dev: "vite dev --port 5173",
-        test: "vitest run",
-        "theme:check": "node scripts/check-theme-contract.mjs",
-      },
-      packageManager: "pnpm",
-      usage: {
-        dev: { lastUsed: Date.now() - 12 * 60_000, recentCount: 9 },
-        test: { lastUsed: Date.now() - 26 * 60_000, recentCount: 3 },
-      },
-      launchRow: [],
-    }),
-    "packageScripts:getSort": () => "manifest",
+    "packageScripts:list": () => labPackageScripts,
+    "packageScripts:getSort": () => labPackageScriptSort,
     "packageScripts:getOrder": () => [],
     "githubCli:readiness": () => ({ installed: true, authed: true }),
     "terrier:readiness": () => ({
@@ -1013,12 +995,6 @@ async function labSyncPull(
     ...(files ? { files: { crossed: true, conflicts: 0 } } : {}),
   };
 }
-
-const LAB_DETECTED = [
-  { kind: "detected", id: "vscode", label: "VS Code", available: true },
-  { kind: "detected", id: "terminal", label: "Terminal", available: true },
-  { kind: "detected", id: "finder", label: "Finder", available: true },
-] as const;
 
 // ---- lab-mutable account/presence state ----
 

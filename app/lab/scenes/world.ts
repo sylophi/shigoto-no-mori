@@ -5,12 +5,46 @@
 // query.
 import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadgeView";
 import type { WorktreeRowLook } from "@/components/sidebar/rowState";
+import type { FooterLeadingVerb } from "@/components/worktreeDetail/FooterLeadingVerbView";
+import {
+  type LifecycleRow,
+  lifecycleRowsOf,
+} from "@/components/worktreeDetail/scripts/lifecycleRows";
+import {
+  type SortableEntry,
+  sortEntries,
+} from "@/components/worktreeDetail/scripts/sortPackageScripts";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDeviceStatus } from "@/lib/remote/devices";
-import { pullRequestStackPosition } from "@shared/pullRequestStack";
-import type { Project, PullRequest, Worktree } from "@shared/schemas";
-import { accountDevices, forests, projectIconFor } from "../fixtures";
-import { labPullRequestsFor } from "../pullRequestFixtures";
+import { mirrorEngineBlocker } from "@shared/ipc/modules/mirror";
+import {
+  type PullRequestStack,
+  pullRequestStackFor,
+  pullRequestStackPosition,
+  stackCleanupFor,
+  trunkOf,
+} from "@shared/pullRequestStack";
+import {
+  isRealBranch,
+  type Project,
+  type PullRequest,
+  type PullRequestDetail,
+  type Worktree,
+} from "@shared/schemas";
+import {
+  accountDevices,
+  forests,
+  labDisks,
+  labPackageScriptSort,
+  labPackageScripts,
+  labPortPoolActive,
+  labShigomoriConfig,
+  projectIconFor,
+} from "../fixtures";
+import {
+  labPullRequestDetailFor,
+  labPullRequestsFor,
+} from "../pullRequestFixtures";
 
 // The moment the scenes are drawn at, which "14m ago" counts back from.
 // The fixtures date themselves back from the same moment (their module
@@ -87,4 +121,119 @@ export function pullRequestOf(
     PullRequest
   >;
   return { pr: prs[branch], stack: pullRequestStackPosition(prs, branch) };
+}
+
+// ---- the worktree page (DetailScene.tsx) ----
+
+// The folder a device's paths shorten against (~/...).
+export function homeOf(deviceId: string): string {
+  const disk = labDisks[deviceId];
+  if (!disk) throw new Error(`[scenes] no disk for ${deviceId}`);
+  return disk.home;
+}
+
+// Every checkout of a project's repo across the account's devices, with
+// whether that device takes commands from this one.
+function checkoutsOf(project: Project): {
+  worktrees: Worktree[];
+  grantsCaller: boolean;
+}[] {
+  return Object.values(forests).flatMap((forest) =>
+    forest.projects
+      .filter(
+        (candidate) =>
+          candidate.id === project.id ||
+          (project.identity != null && candidate.identity === project.identity),
+      )
+      .map((candidate) => ({
+        worktrees: forest.worktrees[candidate.id] ?? [],
+        grantsCaller: forest.grantsCaller,
+      })),
+  );
+}
+
+// A branch's PR as the worktree page reads it, with the stack it sits
+// in (the whole chain, as the stack list draws it).
+export function pullRequestDetailOf(
+  project: Project,
+  branch: string,
+  merged = false,
+): { pr: PullRequestDetail | null; stack: PullRequestStack | null } {
+  const prs = labPullRequestsFor(project.id, merged) as Record<
+    string,
+    PullRequest
+  >;
+  const own = Object.values(forests).find((forest) =>
+    forest.projects.some((candidate) => candidate.id === project.id),
+  );
+  return {
+    pr: labPullRequestDetailFor(
+      project.id,
+      branch,
+      merged,
+    ) as PullRequestDetail | null,
+    stack: pullRequestStackFor(
+      prs,
+      branch,
+      trunkOf(own?.worktrees[project.id]),
+    ),
+  };
+}
+
+// How many worktrees the closed PR box's stack cleanup takes: the
+// merged layers' worktrees on every device that takes commands.
+export function stackCleanupCountOf(
+  project: Project,
+  stack: PullRequestStack | null,
+): number {
+  if (!stack) return 0;
+  return checkoutsOf(project)
+    .filter(({ grantsCaller }) => grantsCaller)
+    .reduce(
+      (count, { worktrees }) =>
+        count + (stackCleanupFor(stack, worktrees)?.worktrees.length ?? 0),
+      0,
+    );
+}
+
+// The package.json scripts in the order the project sorts them, which
+// the Launch row and the Scripts section share.
+export function packageScriptsOf(): SortableEntry[] {
+  return sortEntries(
+    Object.entries(labPackageScripts.scripts),
+    labPackageScriptSort,
+    labPackageScripts.usage,
+    [],
+  );
+}
+
+// The Scripts section's lifecycle rows for a worktree.
+export function lifecycleOf(worktree: Worktree): LifecycleRow[] {
+  return lifecycleRowsOf({
+    setupCommand: labShigomoriConfig.scripts?.setup?.trim() ?? "",
+    teardownCommand: labShigomoriConfig.scripts?.teardown?.trim() ?? "",
+    portPoolActive: labPortPoolActive,
+    path: worktree.path,
+  });
+}
+
+// The footer's leading verbs on this machine's own worktree page:
+// Files and Ports, then the ways to another device. The lab's mirror
+// engine is stopped until a mirror starts, so Mirror to… is off.
+export function footerVerbsOf(
+  worktree: Worktree,
+  project: Project,
+): FooterLeadingVerb[] {
+  const verbs: FooterLeadingVerb[] = [{ kind: "files" }, { kind: "ports" }];
+  const transferable =
+    !worktree.detached &&
+    isRealBranch(worktree.branch) &&
+    project.identity != null;
+  if (!transferable) return verbs;
+  verbs.push({
+    kind: "mirrorTo",
+    disabledReason: mirrorEngineBlocker("stopped"),
+  });
+  if (!worktree.isPrimary) verbs.push({ kind: "transplantTo" });
+  return verbs;
 }
