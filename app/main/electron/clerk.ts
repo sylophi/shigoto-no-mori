@@ -25,7 +25,7 @@ import {
   rendererSchemeOrigin,
 } from "@shared/packaging/rendererScheme.mts";
 
-function rendererScheme(): string {
+export function rendererScheme(): string {
   return rendererSchemeName(app.isPackaged ? "prod" : "dev");
 }
 

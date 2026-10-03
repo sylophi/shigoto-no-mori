@@ -22,6 +22,7 @@ import {
   LEGACY_DATA_DIR_POINTER_FILE,
   legacyDataDirName,
 } from "../shared/packaging/cliDist.mts";
+import { deepLinkOrigin } from "../shared/packaging/rendererScheme.mts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
 const flavor = process.argv.includes("--dev") ? "dev" : "prod";
@@ -45,6 +46,7 @@ const ldflags = [
   `-X main.aliasName=${cliAliasName(flavor)}`,
   `-X main.appBundleID=${APP_BUNDLE_ID}`,
   `-X main.updateFeedRepo=${UPDATE_FEED_REPO}`,
+  `-X main.deepLinkOrigin=${deepLinkOrigin(flavor)}`,
   "-s",
   "-w",
 ].join(" ");

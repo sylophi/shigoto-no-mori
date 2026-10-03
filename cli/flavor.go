@@ -25,6 +25,9 @@ var (
 	// refuses that command, but the default keeps `go run ./cli`
 	// pointing somewhere real.
 	updateFeedRepo = "sylophi/shigoto-no-mori"
+	// Where the app's deep links start (shared/packaging/rendererScheme.mts
+	// deepLinkOrigin). `sm link` builds on it.
+	deepLinkOrigin = "shigomori-dev://open"
 )
 
 // CFBundleExecutable of the installed app: stable across bundle moves
