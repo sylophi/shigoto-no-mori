@@ -2,6 +2,7 @@
 // worktree on Studio Mac (this machine), nothing running in it. The
 // live page (WorktreeDetailInner) fills the same view with the sections
 // that read the app, and this one with their views.
+import { RelativeDateView } from "@/components/ui/relative-date-view";
 import { FooterLeadingVerbView } from "@/components/worktreeDetail/FooterLeadingVerbView";
 import { LaunchSectionView } from "@/components/worktreeDetail/LaunchSectionView";
 import { LauncherRowView } from "@/components/worktreeDetail/LauncherRowView";
@@ -148,7 +149,12 @@ function CommitsSection({ worktree }: { worktree: Worktree }) {
         />
       }
       commits={commits}
-      renderCommit={(commit) => <CommitRowView commit={commit} now={NOW} />}
+      renderCommit={(commit) => (
+        <CommitRowView
+          commit={commit}
+          age={<RelativeDateView date={commit.date} now={NOW} />}
+        />
+      )}
       primarySync={
         showPrimarySync && (
           <WorktreePrimarySyncPillView

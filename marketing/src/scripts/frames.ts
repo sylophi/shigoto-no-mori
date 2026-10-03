@@ -51,5 +51,13 @@ export function fitAppFrames(): void {
       placePins(figure, surface);
     };
     new ResizeObserver(fit).observe(view);
+    // The view's box holds still while the scene inside it settles,
+    // so the pins are placed again once the app's stylesheet (in the
+    // surface, where it holds up neither this script nor the first
+    // paint) and the faces have loaded.
+    surface.shadowRoot
+      ?.querySelector("link[rel=stylesheet]")
+      ?.addEventListener("load", fit);
+    void document.fonts.ready.then(fit);
   }
 }

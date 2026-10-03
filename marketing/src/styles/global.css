@@ -1126,8 +1126,12 @@ code {
 
 /* --- The app's views (components/AppSurface.astro) ------------------ */
 
-/* Hidden until the app's stylesheet, inside the surface, shows it. */
+/* Hidden until the app's stylesheet, inside the surface, shows it.
+   Nothing of the page's is inherited into it (its type size and
+   weight, say): the app's views start from a document's defaults, as
+   they do in the app. */
 .app-surface {
+  all: initial;
   display: block;
   visibility: hidden;
 }

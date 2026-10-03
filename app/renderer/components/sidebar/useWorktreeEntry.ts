@@ -32,9 +32,8 @@ export function useWorktreeEntry(
   const running = useWorktreeScriptActivity(worktree.id, deviceId);
   const isDeleting = useIsDeletingWorktree(worktree.id, deviceId);
   const resident = useResident(worktree);
-  // Only a peer's worktree can be forwarded from, and no forward names
-  // an empty device.
-  const forwardTip = useWorktreeForwardTip(deviceId ?? "", worktree);
+  // Only a peer's worktree can be forwarded from.
+  const forwardTip = useWorktreeForwardTip(deviceId, worktree);
   const showDeviceBadges = useShowDeviceBadges();
   const params = {
     deviceId: routeDeviceId(deviceId),

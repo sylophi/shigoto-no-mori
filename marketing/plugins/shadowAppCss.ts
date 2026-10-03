@@ -16,9 +16,15 @@ import type { Plugin } from "vite";
 // The stylesheet this applies to.
 const APP_CSS = "/src/styles/app.css";
 
-// A document-level selector as a whole token: not inside a class or
-// attribute name, so `.dark-html` or `[data-html]` stay as they are.
-const DOCUMENT = /(?<![\w-])(:root|html|body)(?![\w-])/g;
+// A document-level selector as a whole token: not a class, an id, an
+// attribute's name or value, or part of any of them, so `.body`,
+// `.dark-html`, `[data-slot=body]` and `.group\/body` stay as they
+// are.
+const DOCUMENT = /(?<![\w\-.#=[\\/"'])(:root|html|body)(?![\w-])/g;
+
+// The surface's name as a container, so a breakpoint asks it and not
+// a container some view makes of its own (Tailwind's @container).
+const SURFACE = "app-surface";
 
 // A media query on the viewport's width alone, like Tailwind's
 // breakpoints: "(width >= 48rem)", "(min-width: 40rem)".
@@ -32,9 +38,14 @@ export function scopeAppCss(root: Root): void {
   // A surface draws a window at that window's size, whatever the
   // page's, so the app's breakpoints ask the surface (a size container)
   // rather than the viewport: a desktop window on a phone keeps its
-  // desktop layout, and a phone stays a phone on a desktop.
+  // desktop layout, and a phone stays a phone on a desktop. A rule on
+  // the surface's own element (the app's html) can't ask this way, a
+  // container not being inside itself. The app has none.
   root.walkAtRules("media", (rule) => {
-    if (WIDTH_QUERY.test(rule.params.trim())) rule.name = "container";
+    const query = rule.params.trim();
+    if (!WIDTH_QUERY.test(query)) return;
+    rule.name = "container";
+    rule.params = `${SURFACE} ${query}`;
   });
   root.walkRules((rule) => {
     rule.selector = rule.selector.replace(DOCUMENT, (token) =>
@@ -44,8 +55,8 @@ export function scopeAppCss(root: Root): void {
   // The container the breakpoints above ask.
   root.append(
     cssRule({ selector: ".app-html" }).append({
-      prop: "container-type",
-      value: "inline-size",
+      prop: "container",
+      value: `${SURFACE} / inline-size`,
     }),
   );
   // The page hides a surface until this sheet has loaded (a stylesheet

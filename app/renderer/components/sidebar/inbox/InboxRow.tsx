@@ -13,7 +13,7 @@ import type { SidebarDeviceBadge } from "../DeviceBadge";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import type { InboxShelf } from "../sidebarRow";
 import { useWorktreeEntry } from "../useWorktreeEntry";
-import { InboxRowView } from "./InboxRowView";
+import { ActivityAgeView, InboxRowView } from "./InboxRowView";
 
 interface InboxRowProps {
   worktree: Worktree;
@@ -45,7 +45,6 @@ export function InboxRow({
 }: InboxRowProps) {
   const entry = useWorktreeEntry(worktree, device?.deviceId);
   const projectIconSrc = useProjectIcon(worktree.projectId, device?.deviceId);
-  const now = useNow();
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   const peerApi = useRemoteDeviceApi(device?.deviceId);
 
@@ -55,7 +54,7 @@ export function InboxRow({
       worktree={worktree}
       project={project}
       projectIconSrc={projectIconSrc}
-      now={now}
+      age={<ActivityAge worktree={worktree} />}
       pr={pr}
       stack={stack}
       device={device}
@@ -80,4 +79,10 @@ export function InboxRow({
       </ContextMenuContent>
     </ContextMenu>
   );
+}
+
+// The row's age, a leaf of its own on the shared clock, so a tick
+// redraws this and not the row.
+function ActivityAge({ worktree }: { worktree: Worktree }) {
+  return <ActivityAgeView worktree={worktree} now={useNow()} />;
 }

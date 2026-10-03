@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { useNow } from "@/hooks/ui/useNow";
+import { RelativeDate } from "@/components/ui/relative-date";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
@@ -37,7 +37,6 @@ export function CommitRow({
   onNavigate,
 }: CommitRowProps) {
   const nav = useWorktreeNav();
-  const now = useNow();
   const onClick = () => {
     onNavigate?.();
     nav.toCommit(worktree.projectId, worktree.id, commit.hash);
@@ -46,8 +45,7 @@ export function CommitRow({
   const row = (
     <CommitRowView
       commit={commit}
-      now={now}
-      dateTitle={new Date(commit.date).toLocaleString()}
+      age={<RelativeDate date={commit.date} />}
       onClick={onClick}
     />
   );

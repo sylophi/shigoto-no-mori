@@ -1,7 +1,11 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { ProjectIconView } from "@/components/shared/ProjectIconView";
-import { worktreeLastActivityAt, type Project } from "@shared/schemas";
+import {
+  worktreeLastActivityAt,
+  type Project,
+  type Worktree,
+} from "@shared/schemas";
 import { ActivityIcon } from "../ActivityIcon";
 import { DeviceBadge, MirrorBadgeView } from "../DeviceBadgeView";
 import { activityMark, type WorktreeRowLook } from "../rowState";
@@ -14,8 +18,10 @@ type InboxRowViewProps = Omit<WorktreeEntryViewProps, "context"> & {
   project: Project;
   // The project's logo, as ProjectIconView takes it.
   projectIconSrc: string | null | undefined;
-  // The time "14m ago" counts back from.
-  now: number;
+  // When the worktree last moved: ActivityAge, which follows the clock
+  // on its own so a tick redraws it alone, or ActivityAgeView for a
+  // picture.
+  age: ReactNode;
 };
 
 // The inbox row answers a different question from the tree row. In the
@@ -35,10 +41,10 @@ type InboxRowViewProps = Omit<WorktreeEntryViewProps, "context"> & {
 export function InboxRowView({
   project,
   projectIconSrc,
-  now,
+  age,
   ...entry
 }: InboxRowViewProps & ComponentProps<"button">) {
-  const { worktree, device, mirror, showDeviceBadges } = entry;
+  const { device, mirror, showDeviceBadges } = entry;
   return (
     <WorktreeEntryView
       {...entry}
@@ -61,11 +67,7 @@ export function InboxRowView({
           {mirror && (
             <MirrorBadgeView mirror={mirror} showBadge={showDeviceBadges} />
           )}
-          <TrailingSlot
-            activityAt={worktreeLastActivityAt(worktree)}
-            look={entry.look}
-            now={now}
-          />
+          <TrailingSlot look={entry.look} age={age} />
         </div>
       }
     />
@@ -77,13 +79,11 @@ export function InboxRowView({
 // flight displaces it. Those are happening now, so they outrank a
 // timestamp.
 function TrailingSlot({
-  activityAt,
   look,
-  now,
+  age,
 }: {
-  activityAt: number;
   look: WorktreeRowLook;
-  now: number;
+  age: ReactNode;
 }) {
   const mark = activityMark(look);
   return (
@@ -91,13 +91,23 @@ function TrailingSlot({
       data-slot="row-activity"
       className="ml-auto flex shrink-0 items-center"
     >
-      {mark ? (
-        <ActivityIcon kind={mark} />
-      ) : (
-        <span className="tabular">
-          {activityAt > 0 ? formatRelativeTime(activityAt, now) : "no activity"}
-        </span>
-      )}
+      {mark ? <ActivityIcon kind={mark} /> : age}
+    </span>
+  );
+}
+
+// "14m ago": when a worktree last moved, counted back from `now`.
+export function ActivityAgeView({
+  worktree,
+  now,
+}: {
+  worktree: Worktree;
+  now: number;
+}) {
+  const activityAt = worktreeLastActivityAt(worktree);
+  return (
+    <span className="tabular">
+      {activityAt > 0 ? formatRelativeTime(activityAt, now) : "no activity"}
     </span>
   );
 }

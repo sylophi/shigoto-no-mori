@@ -12,6 +12,7 @@
 // build does, since they are TSX behind the app's aliases.
 // Run: pnpm test scenes.
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -27,7 +28,7 @@ assert.equal(
 );
 
 const vite = await createServer({
-  configFile: new URL("../lab/vite.config.ts", import.meta.url).pathname,
+  configFile: fileURLToPath(new URL("../lab/vite.config.ts", import.meta.url)),
   server: { middlewareMode: true, hmr: false, ws: false },
   appType: "custom",
   logLevel: "error",

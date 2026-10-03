@@ -5,7 +5,10 @@
 // everything a row looks up comes in as SidebarRowLookups, and nothing
 // acts.
 import { DeviceBadgeClusterView } from "@/components/sidebar/DeviceBadgeView";
-import { InboxRowView } from "@/components/sidebar/inbox/InboxRowView";
+import {
+  ActivityAgeView,
+  InboxRowView,
+} from "@/components/sidebar/inbox/InboxRowView";
 import { InboxShelfRow } from "@/components/sidebar/inbox/InboxShelfRow";
 import {
   ProjectGroupActionsView,
@@ -179,7 +182,7 @@ export function SidebarRowContent({
           worktree={row.worktree}
           project={row.project}
           projectIconSrc={lookups.iconSrcOf(row.project, row.device?.deviceId)}
-          now={lookups.now}
+          age={<ActivityAgeView worktree={row.worktree} now={lookups.now} />}
           pr={row.pr}
           stack={row.stack}
           device={row.device}

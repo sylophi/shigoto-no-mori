@@ -1,5 +1,8 @@
 // The close-ups: one part of the app on its own, outside a window.
-import { InboxRowView } from "@/components/sidebar/inbox/InboxRowView";
+import {
+  ActivityAgeView,
+  InboxRowView,
+} from "@/components/sidebar/inbox/InboxRowView";
 import { GENTLE_GECKO_ID } from "../fixtures";
 import { LaunchSection } from "./WorktreeDetailPane";
 import {
@@ -21,7 +24,7 @@ export function RowScene() {
         worktree={worktree}
         project={project}
         projectIconSrc={iconSrcOf(project.name)}
-        now={NOW}
+        age={<ActivityAgeView worktree={worktree} now={NOW} />}
         {...pullRequestOf(project.id, worktree.branch)}
         device={badgeOf(deviceId)}
         look={QUIET_LOOK}

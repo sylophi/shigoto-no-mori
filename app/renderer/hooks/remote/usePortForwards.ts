@@ -58,6 +58,7 @@ type PortForwardList = { forwards: PortForwardSummary[] };
 // leaves its consumer alone.
 function usePortForwardList<T = PortForwardList>(
   select?: (list: PortForwardList) => T,
+  enabled = true,
 ) {
   return useQuery({
     queryKey: queryKeys.portForwards(),
@@ -65,7 +66,7 @@ function usePortForwardList<T = PortForwardList>(
     select,
     // The sidebar reads it on every peer row, and the web client's
     // loopback refuses the channel: nothing to ask there.
-    enabled: canForwardPorts,
+    enabled: canForwardPorts && enabled,
     meta: { silentError: true },
   });
 }
@@ -124,13 +125,18 @@ export function usePortForwards(deviceId: string) {
 }
 
 // The forward tip of a peer's worktree (lib/remote/forwardTip.ts), off
-// the live list.
+// the live list. This machine's own worktree (no `deviceId`) has none,
+// and reads nothing.
 export function useWorktreeForwardTip(
-  deviceId: string,
+  deviceId: string | undefined,
   worktree: { projectId: string; id: string },
 ): string | undefined {
-  const { data } = usePortForwardList((list) =>
-    worktreeForwardTip(list.forwards, deviceId, worktree),
+  const { data } = usePortForwardList(
+    (list) =>
+      deviceId === undefined
+        ? undefined
+        : worktreeForwardTip(list.forwards, deviceId, worktree),
+    deviceId !== undefined,
   );
   return data;
 }

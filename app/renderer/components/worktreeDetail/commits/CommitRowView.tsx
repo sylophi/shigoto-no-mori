@@ -2,23 +2,21 @@
 // hangs the rewrite menu off it): subject, hash, author, age and the
 // diff stats. Props pass through to the button, so a menu trigger can
 // render it as its own element.
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { DiffStats } from "@/components/ui/diff-stats";
-import { RelativeDateView } from "@/components/ui/relative-date-view";
 import type { CommitSummary } from "@shared/schemas";
 
 export function CommitRowView({
   commit,
-  now,
-  dateTitle,
+  age,
   ...props
 }: {
   commit: CommitSummary;
-  // The time "14m ago" counts back from.
-  now: number;
-  // The age's hover text, the full date in the reader's locale.
-  dateTitle?: string;
+  // How long ago it was made: RelativeDate, which follows the clock on
+  // its own so a tick redraws it alone, or RelativeDateView for a
+  // picture.
+  age: ReactNode;
 } & ComponentProps<"button">) {
   return (
     <button
@@ -38,7 +36,7 @@ export function CommitRowView({
           <span aria-hidden className="text-muted-foreground/40">
             ·
           </span>
-          <RelativeDateView date={commit.date} now={now} title={dateTitle} />
+          {age}
         </div>
       </div>
       {(commit.additions > 0 || commit.deletions > 0) && (
