@@ -1,4 +1,2 @@
 # Astro's generated types.
 .astro/
-# The app's UI lab, built by `pnpm demo` for the live frames.
-public/demo/

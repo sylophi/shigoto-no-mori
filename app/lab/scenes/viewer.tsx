@@ -20,6 +20,8 @@ const name = pose.get("scene");
 const Scene = name ? scenes[name as keyof typeof scenes] : undefined;
 const root = document.getElementById("root");
 if (!root) throw new Error("#root missing from scenes.html");
+// The viewport, which a window scene fills (h-full).
+root.style.height = "100dvh";
 
 createRoot(root).render(
   Scene ? (

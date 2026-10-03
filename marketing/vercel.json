@@ -21,17 +21,12 @@
       ]
     },
     {
-      "source": "/demo/assets/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    },
-    {
       "source": "/(.*)",
       "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.github.com; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+        },
         {
           "key": "Strict-Transport-Security",
           "value": "max-age=31536000; includeSubDomains"
@@ -43,28 +38,6 @@
         {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
-        }
-      ]
-    },
-    {
-      "source": "/((?!demo/).*)",
-      "headers": [
-        {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
-        }
-      ]
-    },
-    {
-      "source": "/demo/(.*)",
-      "headers": [
-        {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://github.com https://*.githubusercontent.com; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'none'"
-        },
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex"
         }
       ]
     }

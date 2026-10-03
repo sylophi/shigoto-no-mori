@@ -13,8 +13,7 @@
   // theme classes; AppShell keeps it in step with resizes afterwards.
   // Outside the try: it reads no storage, so a storage-blocked context
   // must not lose it. The breakpoint must match
-  // renderer/hooks/ui/useViewport.ts (and lab/demo/main.tsx, which
-  // stamps it the same way).
+  // renderer/hooks/ui/useViewport.ts.
   if (!window.matchMedia("(min-width: 48rem)").matches) {
     html.dataset.layout = "phone";
   }

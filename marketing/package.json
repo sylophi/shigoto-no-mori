@@ -3,10 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "demo": "pnpm -C ../app lab:demo --outDir \"$PWD/public/demo\"",
-    "dev": "node ../app/scripts/ensure-ports.mts && pnpm demo && astro dev",
+    "dev": "node ../app/scripts/ensure-ports.mts && astro dev",
     "check": "astro check",
-    "build": "pnpm demo && astro check && astro build",
+    "build": "astro check && astro build",
     "preview": "astro preview"
   },
   "dependencies": {

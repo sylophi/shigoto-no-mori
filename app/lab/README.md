@@ -3,9 +3,8 @@
 Design-exploration harness: the real app UI mounted in a browser over
 a fixture `window.api` (four devices, mixed presence, shared and
 remote-only projects, two of them terrier-sourced), so every multi-device surface can be posed and
-screenshotted without a device hub, a second machine, or Clerk. Nothing
-here ships in the app. The marketing site does run it, though: its
-frames of the app are this lab (see Marketing frames below).
+screenshotted without a device hub, a second machine, or Clerk. Dev-only;
+nothing here ships.
 
 Two flavors:
 
@@ -138,18 +137,6 @@ blocks on visible text, which is how a take waits out a posed
 transfer. Output is webm; set `FFMPEG` to a binary to get an mp4
 beside it. The sync verbs are posed, so a recording shows the UI of a
 flow, not a transfer.
-
-## Marketing frames
-
-shigomori.com shows the app by running this lab in iframes
-(`marketing/README.md`). `lab/demo/` is its entry: the lab's boot on
-the same fixtures and poses, plus `?shell=web` for the web shell (the
-phone layout under 768px), with storage kept per frame, no focus
-taken until a visitor clicks in, and the traffic lights drawn on the
-desktop window. `pnpm lab:demo --outDir <dir>` builds it to be served
-from `/demo/`, which the marketing build does for itself. So the
-fixtures are public: keep them fictional, and check the site's frames
-after changing what they show.
 
 ## Views and scenes
 

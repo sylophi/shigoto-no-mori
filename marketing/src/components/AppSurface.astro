@@ -24,6 +24,10 @@ interface Props {
   phone?: boolean;
   // The desktop window, whose page is transparent under the sidebar.
   desktop?: boolean;
+  // The size the views lay out at, in CSS pixels. Unset, they size the
+  // surface themselves.
+  width?: number;
+  height?: number;
   class?: string;
 }
 const {
@@ -32,17 +36,23 @@ const {
   palette,
   phone,
   desktop,
+  width,
+  height,
   class: className,
 } = Astro.props;
 const dark = theme === "dark";
 ---
 
-<div class:list={["app-surface", className]} inert>
+<div
+  class:list={["app-surface", className]}
+  style={width && height ? `width: ${width}px; height: ${height}px` : undefined}
+  inert
+>
   <template shadowrootmode="open">
     <link rel="stylesheet" href={appCss} />
     <div
       class:list={["app-html", { dark, doubutsu }]}
-      style={`color-scheme: ${theme}`}
+      style={`color-scheme: ${theme}; height: 100%`}
       data-theme-scope
       data-palette={doubutsu
         ? (palette ?? (dark ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME))
@@ -50,7 +60,7 @@ const dark = theme === "dark";
       data-layout={phone ? "phone" : undefined}
       data-shell={desktop ? "desktop" : undefined}
     >
-      <div class="app-body"><slot /></div>
+      <div class="app-body" style="height: 100%"><slot /></div>
     </div>
   </template>
 </div>

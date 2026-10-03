@@ -47,6 +47,9 @@ export interface LabSidebarProps {
   dev?: boolean;
   // The footer, which the phone layout's forest page goes without.
   footer?: boolean;
+  // The page open in the main pane, by route, whose button the footer
+  // lights (the Devices page's, say).
+  activePath?: string;
 }
 
 export function LabSidebar({
@@ -56,6 +59,7 @@ export function LabSidebar({
   newWorktreeMenu = false,
   dev = true,
   footer = true,
+  activePath,
 }: LabSidebarProps) {
   const hasLocalHost = shell === "desktop";
   const inbox = view === "inbox";
@@ -103,7 +107,7 @@ export function LabSidebar({
       pinned={model.pinned}
       lookups={labRowLookups(shell, selected)}
       emptyMessage={model.emptyMessage}
-      footer={footer && { updateReady: false }}
+      footer={footer && { updateReady: false, activePath }}
     />
   );
 }
@@ -158,6 +162,11 @@ export function NewWorktreeMenuOverlay({
   return (
     <NewWorktreeMenuView
       targets={labNewWorktreeTargets(shell)}
+      // Where the anchor puts it in a desktop window, for a browser
+      // without anchor positioning, which drops the style's anchor()
+      // values and keeps these. Both count from the window's corner,
+      // so the window is the menu's containing block (relative).
+      className="top-[196px] left-3"
       style={{
         position: "absolute",
         positionAnchor: NEW_WORKTREE_ANCHOR,

@@ -1,4 +1,5 @@
 ---
+import "../styles/app-fonts.css";
 import "../styles/global.css";
 // The two faces the first screen uses, preloaded under the same hashed
 // names the stylesheet asks for.
@@ -96,11 +97,11 @@ const ogImageAlt =
 
     <script>
       import { pointDownloadsAtLatestDmg } from "../scripts/download";
-      import { startLiveFrames } from "../scripts/live";
+      import { fitAppFrames } from "../scripts/frames";
       import { pauseOffscreenWallpaper } from "../scripts/wallpaper";
       pointDownloadsAtLatestDmg();
       pauseOffscreenWallpaper();
-      startLiveFrames();
+      fitAppFrames();
     </script>
   </body>
 </html>

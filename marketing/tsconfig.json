@@ -7,6 +7,5 @@
       "@shared/*": ["../app/shared/*"]
     }
   },
-  // The built demo (`pnpm demo`) is the app's minified output, not ours to check.
-  "exclude": ["dist", "public/demo"]
+  "exclude": ["dist"]
 }

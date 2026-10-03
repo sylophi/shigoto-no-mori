@@ -14,6 +14,13 @@ import {
   SidebarTreeScene,
 } from "./SidebarScenes";
 import { TransplantScene } from "./TransplantScene";
+import {
+  CreateWindowScene,
+  DevicesWindowScene,
+  HeroWindowScene,
+  PhoneWindowScene,
+  StackWindowScene,
+} from "./WindowScenes";
 
 export const scenes = {
   row: RowScene,
@@ -26,4 +33,9 @@ export const scenes = {
   launchRow: LaunchRowScene,
   devices: DevicesScene,
   transplant: TransplantScene,
+  heroWindow: HeroWindowScene,
+  stackWindow: StackWindowScene,
+  createWindow: CreateWindowScene,
+  devicesWindow: DevicesWindowScene,
+  phoneWindow: PhoneWindowScene,
 };

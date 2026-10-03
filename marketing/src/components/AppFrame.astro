@@ -3,7 +3,8 @@
 // scene of the app's own views (the app's lab/scenes), put in as
 // children, rendered at build time into an AppSurface. The scene lays
 // out at its natural size, the size of the window it draws, and
-// scripts/frames.ts scales it to the frame.
+// scripts/frames.ts scales it to the frame. A crop shows the scene's
+// top-left corner only, at that size.
 //
 // It reads as a picture: one stop for a screen reader, described by
 // `label`, and nothing in it takes a click or the keyboard.
@@ -14,18 +15,31 @@ interface Props {
   // frame, which is then hidden from them.
   label: string;
   frame: "window" | "phone" | "floating" | "card-shot" | "framed";
-  // The scene's natural size in CSS pixels.
+  // The scene's natural size in CSS pixels, and the part of it the
+  // frame shows, from its top-left corner, if not all of it.
   size: [number, number];
+  crop?: [number, number];
   theme?: "light" | "dark";
   doubutsu?: boolean;
   phone?: boolean;
   desktop?: boolean;
   class?: string;
 }
+// macOS's window buttons, where trafficLightPosition puts the real
+// ones (the app's main/index.ts), over a desktop window's sidebar.
+// Styled inline: they sit in the surface's shadow root, which only the
+// app's stylesheet reaches.
+const LIGHTS =
+  "position: absolute; top: 16px; left: 16px; z-index: 50; display: flex; gap: 8px";
+const LIGHT =
+  "width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.12);";
+const LIGHT_COLORS = ["#ff5f57", "#febc2e", "#28c840"];
+
 const {
   label,
   frame,
   size: [width, height],
+  crop: [cropWidth, cropHeight] = [width, height],
   theme,
   doubutsu,
   phone,
@@ -39,9 +53,12 @@ const {
   role={label === "" ? undefined : "img"}
   aria-label={label || undefined}
   aria-hidden={label === "" ? "true" : undefined}
-  data-width={width}
+  data-width={cropWidth}
 >
-  <div class="app-frame-view" style={`--frame-w: ${width}; --frame-h: ${height}`}>
+  <div
+    class="app-frame-view"
+    style={`--frame-w: ${cropWidth}; --frame-h: ${cropHeight}`}
+  >
     <AppSurface
       theme={theme}
       doubutsu={doubutsu}
@@ -51,6 +68,15 @@ const {
       height={height}
     >
       <slot />
+      {
+        desktop && (
+          <div aria-hidden="true" style={LIGHTS}>
+            {LIGHT_COLORS.map((color) => (
+              <span style={`${LIGHT} background: ${color}`} />
+            ))}
+          </div>
+        )
+      }
     </AppSurface>
   </div>
   <slot name="over" />

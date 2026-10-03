@@ -1191,9 +1191,6 @@ export function installLabBridge(
   opts: {
     webShell?: boolean;
     villageLife?: boolean;
-    // A dev build, as the lab is: the dev sticker on the brand header
-    // and the theme hotkeys. The marketing frames pose as a release.
-    isDev?: boolean;
   } = {},
 ) {
   WEB_SHELL = opts.webShell === true;
@@ -1430,7 +1427,7 @@ export function installLabBridge(
     deviceId: selfDeviceId,
     appVersion: LAB_APP_VERSION,
     clerkPublishableKey: "pk_test_lab",
-    isDev: opts.isDev ?? true,
+    isDev: true,
     isElectron: !WEB_SHELL,
     ...buildApi({ host: localHost.transport, client: client.transport }),
   };
