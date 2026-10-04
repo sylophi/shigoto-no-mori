@@ -127,7 +127,7 @@ in `dev-app.md`, "When a device is removed".
   the plain dev app's Clerk session may have expired, even while it
   still reads signed in: its device credential outlives the Clerk
   session, and a clone copies the empty session. Open the plain dev
-  app in a weblab session (`"start": "SHIGOMORI_DEBUG_PORT=$PORT PORT= pnpm dev"`,
+  app in a weblab session (`"start": "SHIGOMORI_DEBUG_PORT=$PORT env -u PORT pnpm dev"`,
   `attach` and `address` on a free port), check
   `{ "js": "Boolean(window.Clerk.session)" }`, and if it is false run
   `{ "js": "window.Clerk.openSignIn()" }` and press Continue with
