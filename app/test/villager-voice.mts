@@ -36,7 +36,7 @@ import {
   worktreeMoves,
   type Speaker,
 } from "@/lib/villagerVoice";
-import { worktree as fakeWorktree } from "./fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { lastOf, makeProof } from "./lib/checkKit.mts";
 
 const proof = makeProof("villager-voice proof");

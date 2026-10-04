@@ -9,7 +9,7 @@
 // build of its own, so it needs the primary running, and it keeps the
 // main-process code it booted with across a primary restart (which
 // forge does only on `rs` typed in its terminal, never on its own).
-// test/README.md covers the workflow around it.
+// lab/devices.md covers the workflow around it.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

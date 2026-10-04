@@ -58,7 +58,7 @@ export type LoopbackWire = {
 // Every invoke def of one scope, keyed by channel, for the stub
 // fallback. Built from the same module list buildApi consumes so the
 // inventory cannot drift from the api surface. Exported for the fake host's
-// fixture wire (test/fake-host/bridge.ts), which stubs the same way.
+// fixture wire (lab/fake-host/bridge.ts), which stubs the same way.
 export function invokeIndexFor(scope: ContractScope): Map<string, InvokeDef> {
   const index = new Map<string, InvokeDef>();
   for (const module of allContractModules) {

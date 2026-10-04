@@ -1,5 +1,5 @@
 // The villager data in the fake host: the villagers:* channels
-// (host/lib/villagers.ts), served from test/fake-host/villager-data, a real
+// (host/lib/villagers.ts), served from lab/fake-host/villager-data, a real
 // download made with the app's own downloader by `pnpm villagers:fetch`
 // (scripts/fetch-villager-data.mts). That folder is gitignored and
 // never committed. Without it the data reads as not downloaded, and a

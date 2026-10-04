@@ -8,8 +8,8 @@
 // the same sm binary for every git step against real fixture repos.
 // The account's device registry is the one double (it is an HTTP read
 // of the hub), and the mirror engine is a recording stand-in: its real
-// runs are test/mirror.mts's and the remote smoke's, while what is
-// pinned here is what the control layer asks of it. Asserts:
+// runs are test/mirror.mts's, while what is pinned here is what the
+// control layer asks of it. Asserts:
 //   - with no control.json, a dead pid, a dead port or a wrong token,
 //     the CLI says the app isn't running (coded app-not-running), and
 //     the server refuses a bad hello and serves nothing before one.

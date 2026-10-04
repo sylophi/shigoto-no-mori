@@ -21,9 +21,8 @@ const SELF = "run.mts";
 
 const SUFFIX = ".mts";
 
-// The proofs, which sit at the top of test/. What sits in its folders
-// (the fake host, the remote smoke) is driven with weblab instead, see
-// README.md.
+// The proofs, which sit at the top of test/. Testing by hand, on the
+// real UI, is the lab's (lab/README.md).
 function available() {
   return readdirSync(testDir)
     .filter((file) => file !== SELF && file.endsWith(SUFFIX))

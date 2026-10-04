@@ -1,7 +1,7 @@
 // Downloads the villager data, every villager's face and profile from
 // Nookipedia, with the app's own downloader (host/lib/villagers.ts)
-// into a folder: by default test/fake-host/villager-data, which the
-// fake host serves (test/fake-host/villagerData.ts). The folder is
+// into a folder: by default lab/fake-host/villager-data, which the
+// fake host serves (lab/fake-host/villagerData.ts). The folder is
 // gitignored: the data never enters the repo. Run again, it resumes a
 // stopped download and leaves a finished one alone. Also the way to try
 // the real download by hand, into a scratch folder.
@@ -13,7 +13,7 @@ import { createVillagerData } from "../host/lib/villagers.ts";
 import { appRoot } from "./lib/appRoot.mts";
 
 const folder = resolve(
-  process.argv[2] ?? join(appRoot, "test", "fake-host", "villager-data"),
+  process.argv[2] ?? join(appRoot, "lab", "fake-host", "villager-data"),
 );
 const data = createVillagerData({ dir: () => folder });
 const began = Date.now();

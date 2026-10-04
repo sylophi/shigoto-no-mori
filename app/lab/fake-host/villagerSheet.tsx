@@ -4,7 +4,7 @@
 //   default       the doubutsu overlay (one panel, in ?theme)
 //   ?doubutsu=0   v1 light and dark side by side, since v1's dark
 //                 tokens also apply under a nested .dark
-// The faces come from test/fake-host/villager-data (villagerData.ts), a
+// The faces come from lab/fake-host/villager-data (villagerData.ts), a
 // download that never enters the repo. Without it the sheet says so,
 // and every face renders nothing.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -100,7 +100,7 @@ createRoot(root).render(
     <main className="flex flex-col gap-4 bg-muted p-4">
       {!fakeHasVillagerData && (
         <p className="text-sm text-muted-foreground">
-          No villager data in test/fake-host/villager-data, so no faces. Run{" "}
+          No villager data in lab/fake-host/villager-data, so no faces. Run{" "}
           <span className="font-mono">pnpm villagers:fetch</span> to download
           it.
         </p>

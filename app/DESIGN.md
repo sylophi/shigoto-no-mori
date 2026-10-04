@@ -131,8 +131,8 @@ Rules that keep that working:
 - The `data-*` hooks phone.css selects are verified by
   `pnpm test theme-contract`, like doubutsu's.
 - When changing UI, check it at phone width as well. The fake host's
-  web flavor (`test/README.md`) renders the phone layout at any viewport
-  under 768px with no sign-in.
+  web flavor (`lab/fake-host/README.md`) renders the phone layout at
+  any viewport under 768px with no sign-in.
 
 ## Devices: one identity, drawn one way
 

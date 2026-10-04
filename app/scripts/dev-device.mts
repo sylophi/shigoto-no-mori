@@ -1,5 +1,5 @@
 // One dev window as a device of its own, for weblab to start and
-// attach to (test/README.md):
+// attach to (lab/devices.md):
 //
 //   pnpm device <profile> [--fresh] [--clone-login]
 //

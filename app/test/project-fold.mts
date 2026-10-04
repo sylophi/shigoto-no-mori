@@ -26,7 +26,7 @@ import {
 import type { SidebarRow } from "@/components/sidebar/sidebarRow";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { Project, Worktree, WorktreeSortMode } from "@shared/schemas";
-import { worktree as fakeWorktree } from "./fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { makeProof } from "./lib/checkKit.mts";
 
 const proof = makeProof("project-fold proof");
