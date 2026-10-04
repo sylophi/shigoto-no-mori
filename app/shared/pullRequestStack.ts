@@ -128,7 +128,7 @@ export function stackCleanupFor<
 }
 
 // The same for a worktree by id, from a device's own PR map and rows:
-// what the host's stack removal (and the lab's stand-in) resolve.
+// what the host's stack removal (and the fake host's stand-in) resolve.
 export function stackCleanupForWorktree<
   T extends {
     id: string;

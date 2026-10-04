@@ -1,23 +1,38 @@
-# Manual testing
+# Testing
 
-How to run the real app, drive it from a script, and test remote
-flows on one machine. Written for people and for agents.
+How to check the app by running it: the proofs, a fake host that
+poses any screen in a browser, the real app as several devices on one
+machine, and the remote smoke that runs every remote flow end to end.
+Written for people and for agents.
 
-Commands and paths are relative to this directory (`app/`). `hub/`,
-`cli/` and `lefthook.yml` are one level up, at the repo root.
+Commands and paths are relative to `app/`. `hub/`, `cli/` and
+`lefthook.yml` are one level up, at the repo root, whose
+`package.json` forwards the scripts named here.
 
-The automated checks (`pnpm test <name>` for the proofs in `test/`, and
-the hub's own suite, all listed in `lefthook.yml`) are not covered here.
+This is a reference, not a checklist. Test what your change touches,
+pick your own names and ports, and skip the rest. The one part to keep
+as written is "Sharing the machine".
 
-This is a reference, not a checklist. The commands are examples: test
-what your change touches, pick your own names, ports and order, and
-skip the rest. The one part to keep as written is the next section.
+## What to reach for
+
+| To | Use |
+| --- | --- |
+| Check logic, a contract or a protocol | A proof: `pnpm test <name>` |
+| See any screen in any state, screenshot it, record it | The fake host, in a weblab session |
+| Try a real flow on one device or several | Device windows, in weblab sessions |
+| Run every remote flow end to end | The remote smoke, a weblab code file |
+
+Everything that drives a page or a window goes through
+[weblab](https://github.com/dittofleet/weblab), an MCP server: `new`
+opens a session, `run` runs steps on it, `end` closes it. Its `docs`
+tool is the full reference. What follows is what is particular to this
+repo.
 
 ## Sharing the machine
 
 Other sessions (agents in other worktrees, the owner) may be testing
-at the same time. Profiles, ports and the account's device list are
-shared by the whole machine, not per worktree.
+at the same time. Profiles, debugging ports and the account's device
+list are shared by the whole machine, not per worktree.
 
 - **Put a session tag in every profile name**: `<tag>-a`, not `a`. The
   worktree folder name works. A device's name ends in `[<profile>]`,
@@ -26,47 +41,230 @@ shared by the whole machine, not per worktree.
 - **Touch only what carries your tag**: profiles, devices, and
   processes (match on your worktree path, never on `Electron`). An
   unknown device on the account may be another session's live test.
-- **Debug ports are examples.** Use any free ones.
+- **Debugging ports are examples.** Use any free ones.
+- **Give the fake host this worktree's port.** Each worktree has its
+  own ports in `.env.ports` (port-pool). weblab uses whatever already
+  answers at an address, so a session pointed at another worktree's
+  port would be looking at that worktree's code.
 - **One smoke run at a time.** It uses the fixed profiles `e2e-a` and
   `e2e-b` and wipes them when it starts.
 
-## Quick start: two devices on one machine
+## weblab in this repo
 
-```sh
-# 0. Once per machine: sign the plain dev app in (Continue with
-#    GitHub), then quit it. Skip it unless step 2 boots signed out.
-pnpm dev
+- **Where it starts things.** A session's `start` command runs in its
+  project, the nearest `package.json` at or above `dir`. `dir`
+  defaults to where weblab itself was started, normally the checkout's
+  root, so `pnpm fake-host` and `pnpm device` work as written. A
+  weblab started anywhere else needs `dir` set to the checkout.
+- **What it owns.** When nothing answers at a session's address,
+  weblab runs its `start` and stops it again when the last session
+  there ends. That covers the fake host's vite server and the device
+  windows alike, so `end` is the cleanup, and `end` with no session
+  named ends everything.
+- **Where files go.** Screenshots, videos, traces, console and network
+  logs, and the output of what weblab started, go to its files
+  directory, named in every reply. Nothing lands in the repo. weblab's
+  browser runs on this machine, so it reaches the dev servers here
+  even when the person watching is remote.
+- **Dev noise.** A dev window logs the same lines on every boot. This
+  `ignore` keeps them out of the replies:
+  `["React Grab", "\\[vite\\]", "ws://localhost", "Electron Security Warning", "clerk-telemetry", "development keys", "React DevTools"]`.
 
-# 1. In each terminal: your session tag and two free ports.
-TAG=$(basename "$(git rev-parse --show-toplevel)")
-PORT_A=9222 PORT_B=9223
+## Proofs
 
-# 2. Start the primary dev app as profile "$TAG-a", with a debug port.
-SHIGOMORI_DEBUG_PORT=$PORT_A pnpm dev --profile $TAG-a --fresh --clone-login
+`pnpm test` lists the proofs in this directory, `pnpm test <name>`
+runs one, and several names run in order, stopping at a failure. Each
+is a standalone script that exits non-zero when it fails, and flags
+pass through (`pnpm test socket-host --update`). `lefthook.yml` runs
+each on commit, gated to the files it covers, and
+`lefthook run pre-commit --all-files` runs the lot. The hub has its
+own suite (`hub/`).
 
-# 3. In another terminal, start a second window as profile "$TAG-b".
-SHIGOMORI_DEBUG_PORT=$PORT_B pnpm dev:peer $TAG-b --fresh --clone-login
+## The fake host
 
-# 4. Drive either window from the shell.
-node test/e2e/drive.mts $PORT_A eval 'window.api.hub.status()'
-node test/e2e/drive.mts $PORT_B shot /tmp/$TAG-b.png
+The real UI in a browser over a fake `window.api` (`fake-host/`): four
+devices with mixed presence, shared and remote-only projects (two of
+them terrier-sourced), pull requests in every CI state, villagers. So
+every multi-device screen can be posed and captured without a device
+hub, a second machine, or Clerk. Dev-only: nothing here ships.
+
+Two flavors, each a vite server on this worktree's port from
+`.env.ports` (5191 and 5192 without port-pool):
+
+- **Desktop shell**: `pnpm fake-host` on `FAKE_HOST_PORT`. Mounts the
+  desktop renderer (`renderer/App.tsx`), the page posing as "Studio
+  Mac" over a local forest.
+- **Web shell**: `pnpm fake-host:web` on `FAKE_HOST_WEB_PORT`. Mounts
+  the real web boot (`web/boot`). The page poses as an enrolled browser
+  device, and every machine forest (Studio Mac included) is a peer.
+  Under 768px wide it renders the phone layout.
+
+Open one with weblab's `new`, the worktree's port as the address
+(`grep FAKE_HOST_ .env.ports`; 4752 and 4753 below stand for them):
+
+```json
+{ "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/devices" }
 ```
+
+```json
+{ "name": "phone", "address": 4753, "start": "pnpm fake-host:web", "path": "/devices?theme=light", "viewport": "390x844@3" }
+```
+
+Then pose and capture with `run`: `goto` a new pose, `look` to read
+the page with refs to click, `shot` to screenshot it (the image comes
+back in the reply), `expect` to wait for what should be on screen
+before a shot. A session opened with `"video": true` records until it
+ends, with a drawn cursor that glides to each click; set `FFMPEG` for
+an mp4 beside the webm. The sync verbs are posed, so a recording shows
+the UI of a flow, not a transfer.
+
+```json
+{ "session": "ui", "steps": [
+  { "goto": "/?theme=light&checks=failing&to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum" },
+  { "expect": "happy-hummingbird" },
+  { "shot": "checks-failing" }
+] }
+```
+
+### Poses
+
+Poses ride the URL:
+
+- `?theme=light|dark`, `?doubutsu=0|1`: appearance, seeded pre-paint.
+  `?light=<id>` and `?dark=<id>` pick each appearance's doubutsu
+  palette (the ids in `shared/themes.ts`, default `cream` and
+  `charcoal`).
+- `?peers=sm:connected,tp:connected,mini:online,pc:offline`: presence
+  per device key (`sm` Studio Mac, `tp` Thinkpad, `mini` Mini, `pc`
+  Work PC). The desktop default is `tp:connected`, and the web
+  default adds `sm`.
+- `?updates=sm,tp,mini`: the devices holding a staged update, by the
+  same keys (default `tp`). Every device runs 2.0.3 and the update is
+  2.1.0, so the others count as behind it (the update toast, Update
+  all).
+- `?downloading=sm,tp,mini`: the devices downloading the update.
+- `?crowd=<n>`: up to 20 more projects on Studio Mac, most holding
+  their primary checkout alone, for the forest at the size where
+  finding a project gets hard. Add `&crowdShared=1` to have terrier
+  list them all and the Thinkpad hold most of them too, so nearly
+  every project is terrier's and on a second device (the open
+  project's header shows the paw and its devices).
+- `?view=inbox`: open the sidebar in its inbox view (the toggle flips
+  it in-session either way).
+- `?updatedFrom=<version>`: the build this window last ran, so the fake
+  host's own 2.0.3 boots as an update from it and shows the update toast
+  (e.g. `?updatedFrom=2.0.1`, whose "What's new" lists 2.0.2 and 2.0.3).
+- `?checks=<variant>`: the CI rollup on PR #148 (worktree
+  `happy-hummingbird`,
+  `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum`), with
+  the merge state GitHub would pair with it. Variants are the keys of
+  `FAKE_CHECK_POSES` in `fake-host/pullRequestFixtures.ts`: `none`,
+  `single-passed`, `single-failing`, `passed`, `passed-some-skipped`,
+  `all-skipped`, `auto-merge`, `pending`, `failing`, `failing-blocked`,
+  `failing-and-pending`, `many`. Absent, it keeps two passing checks.
+- Desktop: `?to=/devices` navigates the memory router after mount. Web:
+  the path itself is the route (`/devices/...`).
+- `?villageLife=1`: Village life on in this window's settings (the
+  desktop's: the web shell has none). Off by default, as a fresh
+  install has it.
+- `?signedOut=1`: the desktop signed out of its account (the account
+  status alone: the fixture peers stay), for the settings that need
+  one.
+- `?today=MM-DD` (or `YYYY-MM-DD`): the calendar day, for a villager's
+  birthday (the sidebar cake and the worktree page's party).
+- `?villagers=absent|downloading|ready|failed`: the villager data
+  status, for the control beside Village life in Settings. The
+  default is ready when the fake host holds a download (below), absent
+  otherwise.
+- `?visits=none`: an empty Visitors album (Settings, with Village
+  life on). Without it the album is posed with a spread of visits.
+
+### Controls
+
+Runtime controls on `window.fakeHost`, for a `js` step:
+`setPeer(deviceId, "connected" | "online" | "offline")`,
+`setSocket(phase)`, `navigate(to)` (desktop, no reload),
+`setMirrorConflicts(roots)` (holds those paths still on every mirror
+started in this session, for the conflict chip; start one first, since
+the fixtures seed none), `worktree(deviceId, "add" | "remove", name,
+{ projectId?, changedCount? })` (a worktree made or removed behind the
+app's back, the way `sm` or another device would, for the villagers
+moving in and out, and with changes to commit), plus
+`emitClient`/`emitHost` for raw broadcasts. What the page logs comes
+back in each reply.
+
+### Fixtures
+
+Fixtures live in `fake-host/fixtures.ts`. Each device has a small disk
+there (`fakeDisks`) for the add-project dialog to browse, and adding or
+cloning on one really registers the project, so it folds into the
+sidebar the way a real one would. `fake-host/bridge.ts` serves them and
+answers any unhandled channel with a schema-derived stub (fabricated
+arms allowed: this is a fake, not the fail-closed web bridge). The sync
+verbs really mutate the fixture world, so the transplant and mirror
+flows show their outcome: a posed mirror session cycles every few
+seconds, keeps a history, and folds the peer's sidebar row into the
+local one.
+
+The app downloads the villager faces and profiles from Nookipedia when
+its user asks. The fake host serves its own copy from
+`fake-host/villager-data`, which `pnpm villagers:fetch` downloads with
+the app's own downloader (about 4 MB, once, served by
+`fake-host/villagerData.ts`). Without it the villager data reads as not
+downloaded and no face shows. `/villager-icons.html` on the desktop
+shell is a contact sheet of the faces over the same bridge, with
+Village life on.
+
+## Device windows
+
+The real app, as many devices as a test needs, each a dev window
+weblab starts and attaches to:
+
+```json
+{ "name": "a", "attach": "127.0.0.1:9241", "address": "127.0.0.1:9241", "start": "pnpm device <tag>-a --fresh --clone-login", "startTimeout": 240000, "tab": "shigomori-dev://" }
+```
+
+```json
+{ "name": "b", "attach": "127.0.0.1:9242", "address": "127.0.0.1:9242", "start": "pnpm device <tag>-b --fresh --clone-login", "startTimeout": 240000, "tab": "shigomori-dev://" }
+```
+
+`attach` drives the window over Chromium's debugging port. `address`
+and `start` are what make weblab launch it: nothing answers at the
+port yet, so it runs `pnpm device` with the port in `PORT`, waits for
+the port, attaches, and stops the window when the session ends.
+
+`pnpm device <profile> [--fresh] [--clone-login]`
+(`scripts/dev-device.mts`) runs a dev window as a dev profile (below)
+with its debugging port on `PORT` (or `SHIGOMORI_DEBUG_PORT`). The
+first window of a worktree is the primary, a full `pnpm dev`: the
+build, the renderer's vite server, deep links. A window started while
+that server answers is a peer on the primary's build, so open the
+primary first, and end the peers before it, or everything at once.
 
 Each window's Devices page should list the other device as online,
 then connected. The device names end in `[<tag>-a]` and `[<tag>-b]`.
+Then drive them:
 
-When you are done, revoke both devices before quitting. Closing the
-windows does not unenroll them. See "Cleaning up after a session".
-
-To run every remote flow unattended instead:
-
-```sh
-pnpm test e2e/remote-smoke
+```json
+{ "session": "a", "steps": [
+  { "expect": { "js": "window.api.account.status().then((s) => s.signedIn)" }, "timeout": 60000 },
+  { "js": "window.api.hub.status()" },
+  { "js": "window.api.deviceId", "on": "b" },
+  { "shot": "b-devices", "on": "b" }
+] }
 ```
 
-The sections below explain each piece.
+Drive a window by calling the bridge and asserting on what it returns,
+not on the DOM. The preload exposes the real IPC bridge as
+`window.api` in the page, and a `js` step awaits what a call returns.
+Use the DOM only where a person would click. A session opened with
+`"video": true` records its window, so a real two-device flow can be
+filmed, one video per window.
 
-## Builds and data folders
+When you are done, revoke both devices before ending the sessions.
+Ending a window does not unenroll it. See "Cleaning up".
+
+### Builds and data folders
 
 The app has two builds. Each keeps its own state.
 
@@ -109,6 +307,7 @@ A device is made of two folders:
   different data dirs _and_ different userData. Dev profiles (below)
   provide both.
 
+
 ### Filling a data dir with test repos
 
 There is no shared fixture. Create the repos a test needs with
@@ -123,22 +322,23 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
   the machine's git config.
 - A worktree can only be pulled between devices that hold the same
   repo, matched by root commit. Clone one repo into both profiles
-  instead of creating it twice. `prepareFixture` in
-  `test/e2e/remote-smoke.mts` shows the pattern.
+  instead of creating it twice. `seedFixture` in
+  `remote-smoke/fixture.mts` shows the pattern.
 
-## Running the dev app
 
-`pnpm dev` does the following:
+### Running the dev app
+
+`pnpm dev` (and the primary `pnpm device`) does the following:
 
 1. Builds the dev CLI (`dist-cli/smd`).
 2. Fetches the pinned `cloudflared` binary.
 3. Allocates this worktree's dev server ports with port-pool (into
-   `.env.ports`): the renderer's `PORT`, plus `WEB_PORT`, `LAB_PORT` and
-   `LAB_WEB_PORT` for `pnpm web:dev`, `pnpm lab` and `pnpm lab:web`,
-   which run the same step. A checkout allocated before the pool gained
-   a port is released and allocated afresh, which can move its ports.
-   An older `PORT` line in `.env.local` is no longer read and can be
-   deleted.
+   `.env.ports`): the renderer's `PORT`, plus `WEB_PORT`,
+   `FAKE_HOST_PORT` and `FAKE_HOST_WEB_PORT` for `pnpm web:dev`,
+   `pnpm fake-host` and `pnpm fake-host:web`, which run the same step. A
+   checkout allocated before the pool gained or renamed a port is
+   released and allocated afresh, which can move its ports. A line the
+   pool no longer writes stays in `.env.ports`, unread.
 4. On macOS, clones Electron into a per-worktree bundle under
    `.electron-dev/` and launches from it, so GitHub sign-in can
    deep-link back. The most recently launched worktree owns the
@@ -152,9 +352,9 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 | `SHIGOMORI_PROFILE`                | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
 | `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
 | `SHIGOMORI_DIAL_KINDS`             | Candidate kinds this device dials, e.g. `tunnel`. Dev builds only. See Rules. |
-| `PORT`                             | Renderer port, from `.env.ports`. A real env var overrides it.                |
+| `PORT`                             | Renderer port, from `.env.ports`. A real env var overrides it. To `pnpm device`, the debugging port instead (what weblab's `start` passes); it never reaches the app. |
 | `WEB_PORT`                         | Web client port (`pnpm web:dev`). Same source and override rule.              |
-| `LAB_PORT`, `LAB_WEB_PORT`         | UI lab ports (`pnpm lab`, `pnpm lab:web`). Same source and override rule.     |
+| `FAKE_HOST_PORT`, `FAKE_HOST_WEB_PORT` | Fake host ports (`pnpm fake-host`, `pnpm fake-host:web`). Same source and override rule. |
 | `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`; a real env var overrides it.      |
 | `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule.                                                |
 | `SM_ACCOUNT_WEB_ORIGIN`            | Web client origin the desktop admits. Same override rule.                     |
@@ -167,6 +367,7 @@ them. `sm update` refuses to run with either set. From a terminal,
 pass them to the command instead: `sm update --feed-url <url>` or
 `--releases-url <url>`.
 
+
 ### Theme hotkeys
 
 In a dev build, `Ctrl+T` toggles light/dark, `Ctrl+D` toggles
@@ -174,14 +375,13 @@ doubutsu, `Ctrl+P` cycles the current appearance's doubutsu palette,
 and `Ctrl+R` resets to the saved theme. These are previews and are not
 saved.
 
-## Dev profiles: two devices on one machine
+
+### Dev profiles
 
 Every remote flow needs a second device. A **dev profile** is an extra
 dev instance on this machine with its own data dir, userData, device id
 and sign-in. Two profiles are two devices on the hub. They connect to
 each other over the LAN.
-
-### Layout
 
 ```
 ~/.smd-profiles/<name>/data    data dir
@@ -196,15 +396,9 @@ start them again with `--fresh`.
 Profile names are lowercase letters, digits and dashes, up to 32
 characters. `scripts/lib/devProfile.mts` owns the layout.
 
-### Commands
 
-```sh
-# Primary: a full pnpm dev (build, vite server, deep links) running as profile "<tag>-a".
-pnpm dev --profile <tag>-a [--fresh] [--clone-login]
-
-# Peer: a second window running as profile "<tag>-b", using the primary's build and vite server.
-pnpm dev:peer <tag>-b [--fresh] [--clone-login]
-```
+`pnpm device <name>` runs one (`pnpm dev --profile <name>` too, for a
+primary in a terminal).
 
 | Flag            | Effect                                                                                                                                |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -214,9 +408,12 @@ pnpm dev:peer <tag>-b [--fresh] [--clone-login]
 ### Signing a profile in
 
 The plain dev app (`pnpm dev` without a profile) must be signed in
-once before `--clone-login` works. Cloning only works on macOS. Linux
-and Windows key the dev token store per app name, so the copied file
-decrypts to nothing and the profile boots signed out.
+once before `--clone-login` works, and stay signed in: its Clerk
+session can lapse while its device credential lives on, and then it
+still reads signed in while every clone boots signed out (see
+Troubleshooting). Cloning only works on macOS. Linux and Windows key
+the dev token store per app name, so the copied file decrypts to
+nothing and the profile boots signed out.
 
 Without `--clone-login`, sign in from the profile's own window using a
 method that stays in the window. GitHub sign-in uses a deep link, and
@@ -239,7 +436,7 @@ cloning exists.
 - **Never press Sign out in a cloned window.** A cloned sign-in shares
   one Clerk client with the plain dev app, so signing out ends the
   session for both. End a cloned profile by revoking its device
-  instead: run `window.api.account.signOut()` over CDP, or use the
+  instead: run `window.api.account.signOut()` in a `js` step, or use the
   Devices page of another device. Then run with `--fresh` or delete
   the folders.
 - **`--fresh` is local only.** A device the profile enrolled stays on
@@ -269,39 +466,6 @@ cloning exists.
   lands). The dev hub needs the tunnel secrets configured. The web
   client (below) is the other way.
 
-## Driving a window over CDP
-
-Launch any dev window with `SHIGOMORI_DEBUG_PORT=<port>`. Chromium's
-remote-debugging endpoint opens on that port. `curl localhost:<port>/json`
-lists the targets.
-
-The preload exposes the real IPC bridge as `window.api` in the page.
-Drive the window by calling the bridge and assert on the results, not
-on the DOM.
-
-### Shell driver
-
-```sh
-node test/e2e/drive.mts <port> eval '<expression>'
-node test/e2e/drive.mts <port> wait '<expression>' [timeoutMs]
-node test/e2e/drive.mts <port> shot <file.png>
-```
-
-- `eval` awaits the expression and prints the result as JSON.
-- `wait` polls until the expression is truthy.
-- `shot` writes a PNG of the window.
-
-Examples:
-
-```sh
-node test/e2e/drive.mts 9222 eval 'window.api.hub.status()'
-node test/e2e/drive.mts 9222 eval 'window.api.account.status()'
-node test/e2e/drive.mts 9222 wait 'window.api.account.status().then(s => s.signedIn)' 60000
-node test/e2e/drive.mts 9222 shot /tmp/window.png
-```
-
-For scripted use, `test/e2e/cdp.mts` exports `attachWindow`, which
-returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 
 ### Useful bridge calls
 
@@ -331,6 +495,7 @@ returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 | `window.api.mirror.setIgnores({session, ignoreMode, ignores})`      | Changes what a running mirror leaves out. Re-opens the session and returns the new id. Served to peers like the controls above.                                                                                                                                                                         |
 | `window.api.mirror.history({localWorktreeId})`                      | The mirror's thread of events, kept by the device that runs it and keyed by its local worktree, the original.                                                                                                                                                                                                      |
 
+
 ### Two argument conventions
 
 - `window.api.<module>.<call>` uses the renderer's signature, defined
@@ -342,6 +507,7 @@ returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 
 A rejection with a zod issue list means the payload shape matches the
 wrong convention.
+
 
 ### From a terminal
 
@@ -365,44 +531,40 @@ With the app not running (or another profile's data dir) every verb
 fails with `app-not-running`. `pnpm test control` covers the verbs
 without an app, and the smoke's `cli:` scenario covers them with two.
 
+
 ### DOM hooks
 
 Use the DOM only where a person would click. The sidebar's Devices
 button has `aria-label="Devices"`. Clerk's modal is plain DOM in the
 page, with `.cl-*` classes.
 
-## Cleaning up after a session
 
-Every profile enrolls a device on the dev hub. Quitting, `--fresh`
-and deleting folders are local: the device and its tunnel stay on the
-account until revoked. Quit first, then revoke from another device,
-then delete.
+### Cleaning up
 
-Do not revoke a window from itself with `window.api.account.signOut()`
-unless it was launched with `--fresh --clone-login` in this run. A
-window that booted with its credential on disk (a relaunch) has a live
-Clerk session and no enrollment attempt armed, so ClerkAccountSync
-re-enrolls it the moment the credential clears. The window's **Sign
-out** button is not an option either in a cloned window (see Rules).
+Every profile enrolls a device on the dev hub. Ending a window,
+`--fresh` and deleting folders are local: the device and its tunnel
+stay on the account until revoked. So revoke first, then end.
 
-```sh
-# 1. Quit both terminals (Ctrl+C).
-# 2. Revoke the profile devices from the plain dev app, which stays a
-#    real device. Their names end in "[<profile>]". Either use its
-#    Devices page, or open it with a debug port and revoke the ones
-#    that carry your tag (not every "[...]": those may be another
-#    session's live devices):
-SHIGOMORI_DEBUG_PORT=$PORT_A pnpm dev
-node test/e2e/drive.mts $PORT_A eval "window.api.account.listDevices().then(ds => Promise.all(ds.filter(d => / \[$TAG-[a-z0-9-]+\]$/.test(d.name) && d.deviceId !== window.api.deviceId).map(d => window.api.account.revokeDevice(d.deviceId).then(() => d.name))))"
-# 3. Delete the local halves, or launch with --fresh next time.
-for p in $TAG-a $TAG-b; do rm -rf ~/.smd-profiles/$p "$HOME/Library/Application Support/Shigoto no Mori (dev)/profiles/$p"; done
+A window launched with `--fresh --clone-login` in this run can revoke
+the others and then itself. Not one that booted with its credential
+on disk (a relaunch): it holds a live Clerk session and no enrollment
+attempt armed, so ClerkAccountSync re-enrolls it the moment the
+credential clears. Revoke such a window from another device, and
+never with its **Sign out** button in a cloned window (see Rules).
+
+```json
+{ "session": "a", "steps": [
+  { "js": "window.api.account.listDevices().then((ds) => Promise.all(ds.filter((d) => / \\[<tag>-[a-z0-9-]+\\]$/.test(d.name) && d.deviceId !== window.api.deviceId).map((d) => window.api.account.revokeDevice(d.deviceId).then(() => d.name))))" },
+  { "js": "window.api.account.signOut()" }
+] }
 ```
 
-The same two calls revoke one device by hand:
+Match your own tag, not every `[...]`: those may be another session's
+live devices. Then `end`, and delete the local halves, or launch with
+`--fresh` next time:
 
 ```sh
-node test/e2e/drive.mts 9222 eval 'window.api.account.listDevices()'
-node test/e2e/drive.mts 9222 eval 'window.api.account.revokeDevice("<deviceId>")'
+for p in <tag>-a <tag>-b; do rm -rf ~/.smd-profiles/$p "$HOME/Library/Application Support/Shigoto no Mori (dev)/profiles/$p"; done
 ```
 
 A device removed from the account while it runs signs itself out: a
@@ -419,37 +581,60 @@ dropped (the peers hand it back on the next sign-in), the login item
 is cleared (packaged builds only: a dev run never installs one), and
 the window shows no peers (no device tabs, no device filter) until
 the next sign-in. The devices that stay end their
-mirrors with the removed one the next time they read the registry. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
-`e2e-*` profiles unless run with `--keep`.
+mirrors with the removed one the next time they read the registry. A
+relaunch after `--fresh` is a new device. The remote smoke cleans up
+its own `e2e-*` profiles unless run with `keep`.
 
-## Unattended remote smoke
+## The remote smoke
 
-```sh
-pnpm test e2e/remote-smoke [--keep] [--only=<label part>,...]
+`remote-smoke/` runs the full remote loop with no interaction, as a
+weblab code file on two device windows. Start device a, which seeds
+the fixture first, then run the scenarios on it. They start device b
+themselves:
+
+```json
+{ "name": "a", "attach": "127.0.0.1:9241", "address": "127.0.0.1:9241", "start": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON app/test/remote-smoke/boot.mts a", "startTimeout": 300000, "tab": "shigomori-dev://" }
 ```
 
-`test/e2e/remote-smoke.mts` runs the full remote loop with no
-interaction:
+```json
+{ "session": "a", "file": "app/test/remote-smoke/smoke.mts", "params": { "only": "presence,pull" } }
+```
 
-1. Builds the dev CLI and the file-sync engine.
-2. Creates one repo and clones it into two fresh profiles, `e2e-a`
-   and `e2e-b`. Both sides need the same clone because the pull
-   matches projects by repo identity.
-3. Boots the primary and the peer with cloned sign-ins.
-4. Waits until each holds a direct session to the other, then turns
-   both command-access switches on: a mirror runs on the device holding
-   the original, so one of b's worktrees mirrored onto a is b's session,
+Then `end`, which stops both windows and clears what the run left on
+this machine. The paths above are from the checkout's root, weblab's
+usual `dir`.
+
+- `params.only` runs the scenarios whose label contains one of the
+  comma-separated parts, for a quick pass over one area. The boot and
+  the teardown always run. A scenario that builds on an earlier one's
+  result fails when that one was filtered out, so name both. Without
+  it, every scenario runs, which takes several minutes: `run` replies
+  with what it has after `wait` (45 seconds unless given), and `run`
+  on `a` with no steps collects the rest.
+- `params.keep` (`true`) skips the teardown, leaving both devices
+  enrolled and both windows up for a look.
+- The reply holds the code's return value (the scenarios that passed)
+  or, when any failed, each failure on one line, with a screenshot of
+  both windows per failure. `remote-smoke.log` in weblab's files
+  directory has each scenario's outcome as the run goes.
+
+What a run does:
+
+1. `boot.mts a` builds the dev CLI and the file-sync engine, creates
+   one repo and clones it into two fresh profiles, `e2e-a` and `e2e-b`
+   (both sides need the same clone because the pull matches projects
+   by repo identity), clones the dev sign-in into both, and starts a
+   as the primary.
+2. The scenarios start b as the peer (`boot.mts b`, on a free port),
+   wait until each holds a direct session to the other, then turn both
+   command-access switches on: a mirror runs on the device holding the
+   original, so one of b's worktrees mirrored onto a is b's session,
    asked for over b's switch and landing the copy over a's. The
    scenarios about a refusal turn one off and back on.
-5. Runs the scenarios below.
-6. Revokes what is still enrolled, stops both apps and wipes both
-   profiles. `--keep` skips this and leaves everything running.
-
-`--only` runs the scenarios whose label contains one of the given
-parts, for a quick pass over one area
-(`--only="presence,shared settings"`). The boot and the teardown always
-run. A scenario that builds on an earlier one's result fails when that
-one was filtered out, so name both.
+3. They run the scenarios below.
+4. They revoke what is still enrolled and end b, which clears b's
+   profile. Ending a clears the rest: its profile, the shared origin
+   and the run's scratch directory.
 
 | Scenario     | Asserts                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -488,9 +673,6 @@ one was filtered out, so name both.
 | shared settings: offline catch-up | b is killed, a writes a value, b relaunches. b's copy takes the value once its session lands, with no server having held it. |
 | revoke       | a removes b from the account after starting a mirror each way, each run by the device holding the original. a's roster and registry drop b, and b signs itself out of the account: its hub socket stops, its direct sessions close, the port forward it ran is gone, its mirror onto a ends (the copy on a kept), its shared settings are dropped, and no device tabs remain. a ends its mirror onto b too, once its registry read no longer lists b, the copy on b kept. |
 
-Screenshots and logs go to a temp dir named in the output. A failing
-scenario screenshots both windows first.
-
 Two mirror checks are still by hand. With a mirror running, relocate
 its original on the device running it: that device's session is gone
 from `window.api.mirror.list()`, and the other device's page for the
@@ -500,27 +682,22 @@ forced stop is the "diverged stop" scenario above.
 
 Prerequisites:
 
-- The plain dev app signed in once.
+- The plain dev app signed in, with a live Clerk session (see
+  "Signing a profile in").
 - The Go toolchain (for the dev CLI and file-sync engine builds).
 - No other `pnpm dev` running from the same worktree. The primary
   needs the renderer port.
 
 To add a scenario, add a `scenario("name", async () => { ... })` block
-and assert through the bridge and the disk.
+to `remote-smoke/smoke.mts` and assert through the bridge and the
+disk. The file runs in weblab's runtime, not node: it can import the
+app's modules and npm packages, but not a native addon (`node-pty`,
+so not `host/lib/scripts/process.ts`). What it prints with
+`console.log` goes to weblab's stderr, so it writes its progress to
+the log above.
 
 ## Other tools
 
-- **UI lab** (`pnpm lab`, `lab/README.md`). The real UI over a fixture bridge with
-  four fake devices. Use it to pose and screenshot every multi-device
-  surface without a hub or a second device. Visual only, no behavior.
-  Screenshot it headless with `lab/shoot.mts`, not a browser preview
-  in the chat thread: that browser runs on the viewer's machine and
-  can't reach a dev server here over a remote connection.
-  It is also the place to record a video of a flow (`lab/record.mts`):
-  the transfer and mirror verbs are posed there, so a recording shows
-  the UI, not a real transfer. A video of the real two-device flow
-  needs the profiles above and a screen recorder on the window, and
-  `screencapture -v` needs a permission a remote session cannot grant.
 - **Web client** (`pnpm web:dev`, port `WEB_PORT`). A third device that
   connects through the tunnel only, so it is the way to test the
   tunnel data path on one machine. Launch the desktop with
@@ -555,13 +732,20 @@ and assert through the bridge and the disk.
   lock unless it runs as a profile.
 - **Profile boots signed out after `--clone-login`.** On Linux and
   Windows the copied token store cannot be decrypted. On any platform
-  the plain dev app's Clerk session may have expired: open `pnpm dev`,
-  sign in again, then relaunch the profile. Otherwise sign in from the
-  profile's window.
+  the plain dev app's Clerk session may have expired, even while it
+  still reads signed in: its device credential outlives the Clerk
+  session, and a clone copies the empty session. Open the plain dev
+  app in a weblab session (`"start": "SHIGOMORI_DEBUG_PORT=$PORT PORT= pnpm dev"`,
+  `attach` and `address` on a free port), check
+  `{ "js": "Boolean(window.Clerk.session)" }`, and if it is false run
+  `{ "js": "window.Clerk.openSignIn()" }` and press Continue with
+  GitHub in its window. It signs in again without leaving the account.
+  Then relaunch the profile. Otherwise sign in from the profile's
+  window.
 - **A device from an old profile still shows on the Devices page.**
-  `--fresh` and quitting do not revoke, and a self sign-out over CDP
+  `--fresh` and ending a window do not revoke, and a self sign-out
   re-enrolls a relaunched window. Revoke it from another device. See
-  "Cleaning up after a session".
+  "Cleaning up".
 - **`smd` in a new terminal acts on the plain dev data dir.** To
   target a profile from the shell, set its data dir first:
   `SHIGOMORI_DATA_DIR=~/.smd-profiles/<name>/data smd ...`.

@@ -40,8 +40,8 @@ is its own file. That keeps the page inside the strict CSP in
 
 ## Where the pieces come from
 
-- Screenshots in `src/assets/` are the real app, posed in the UI lab
-  (the app's `lab/README.md`). Desktop views were taken at 1280x800,
+- Screenshots in `src/assets/` are the real app, posed in the fake
+  host (the app's `test/README.md`). Desktop views were taken at 1280x800,
   the phone view at 390x844, and the sidebar row close-up at 4x. They
   were then cropped to twice their largest displayed width. Astro makes
   the smaller sizes phones get. The lab runs in a browser, so macOS

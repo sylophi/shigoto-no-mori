@@ -1,12 +1,12 @@
-// The lab's window.api: the same surface the preload exposes, served
-// entirely from lab/fixtures.ts. The real renderer boots on top of it
-// unmodified: startRemoteDeviceSync, HostScope, the sidebar tree and
-// every remote view all derive from these answers exactly as they
-// would from a live device hub. Channels no fixture handler covers fall
-// back to schema-derived stubs (fabricated arms allowed: this is a
-// design lab, not a product surface).
+// The fake host's window.api: the same surface the preload exposes,
+// served entirely from fixtures.ts. The real renderer
+// boots on top of it unmodified: startRemoteDeviceSync, HostScope, the
+// sidebar tree and every remote view all derive from these answers
+// exactly as they would from a live device hub. Channels no fixture
+// handler covers fall back to schema-derived stubs (fabricated arms
+// allowed: this is a design fake host, not a product surface).
 //
-// window.smLab carries the posing controls: flip a peer's presence,
+// window.fakeHost carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { DeviceInfo } from "@shared/hub/protocol";
@@ -46,33 +46,33 @@ import type {
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import {
-  LAB_DIFF,
-  LAB_REPO_MERGE_CONFIG,
-  labDisableAutoMerge,
-  labMergePullRequest,
-  labPullRequestDetail,
-  labPullRequests,
+  FAKE_DIFF,
+  FAKE_REPO_MERGE_CONFIG,
+  fakeDisableAutoMerge,
+  fakeMergePullRequest,
+  fakePullRequestDetail,
+  fakePullRequests,
 } from "./pullRequestFixtures";
-import { invokeIndexFor } from "../web/ipc/loopback";
-import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults";
+import { invokeIndexFor } from "../../web/ipc/loopback";
+import { NO_STRUCTURAL_STUB, stubValueFor } from "../../web/ipc/stubDefaults";
 import {
   type DeviceForest,
-  type LabDisk,
-  LAB_ACCOUNT_ID,
-  LAB_APP_VERSION,
+  type FakeDisk,
+  FAKE_ACCOUNT_ID,
+  FAKE_APP_VERSION,
   LOCAL_DEVICE_ID,
   MINI_ID,
   THINKPAD_ID,
   WORKPC_ID,
   accountDevices,
   forests,
-  labCustomPorts,
-  labDisks,
-  labGlobalConfig,
-  labReleases,
-  labListeningPorts,
-  labPoolPorts,
-  labRemoteUrls,
+  fakeCustomPorts,
+  fakeDisks,
+  fakeGlobalConfig,
+  fakeReleases,
+  fakeListeningPorts,
+  fakePoolPorts,
+  fakeRemoteUrls,
   projectIconFor,
   worktree as worktreeFixture,
 } from "./fixtures";
@@ -83,8 +83,8 @@ import { villagerHandlersFor } from "./villagerData";
 // schema-derived stub.
 type FixtureHandlers = AllChannelHandlers;
 
-// The posing controls on window.smLab.
-interface LabControls {
+// The posing controls on window.fakeHost.
+interface FakeHostControls {
   setPeer(deviceId: string, state: "connected" | "online" | "offline"): void;
   setSocket(phase: HubStatus["socket"]): void;
   setMirrorConflicts(roots: string[]): void;
@@ -96,16 +96,15 @@ interface LabControls {
   ): void;
   emitClient: FixtureWire["emit"];
   emitHost: FixtureWire["emit"];
-  // Set by lab/boot.tsx once the memory router is up.
+  // Set by boot.tsx once the memory router is up.
   navigate?: (to: string) => void;
 }
 
-// Present only once the lab bridge is installed, so the renderer
+// Present only once the fake host bridge is installed, so the renderer
 // cannot lean on them.
 declare global {
   interface Window {
-    smLab?: LabControls;
-    smLabLog?: string[];
+    fakeHost?: FakeHostControls;
   }
 }
 
@@ -122,7 +121,7 @@ function createFixtureWire(
   handlersFor: (emit: FixtureWire["emit"]) => FixtureHandlers,
   name: string,
 ): FixtureWire {
-  const registry = createSubscriberRegistry(`lab:${name}`);
+  const registry = createSubscriberRegistry(`fake-host:${name}`);
   const index = invokeIndexFor(scope);
   const emit: FixtureWire["emit"] = (channel, payload) =>
     registry.emit(channel, payload);
@@ -138,7 +137,7 @@ function createFixtureWire(
         const def = index.get(channel);
         if (def === undefined) {
           return Promise.reject(
-            new Error(`[lab] no contract entry for ${channel}`),
+            new Error(`[fake-host] no contract entry for ${channel}`),
           );
         }
         const handler = handlers[channel];
@@ -149,7 +148,9 @@ function createFixtureWire(
         }
         const stub = stubValueFor(def.output, { fabricateArms: true });
         if (stub === NO_STRUCTURAL_STUB) {
-          return Promise.reject(new Error(`[lab] no stub for ${channel}`));
+          return Promise.reject(
+            new Error(`[fake-host] no stub for ${channel}`),
+          );
         }
         return Promise.resolve(stub);
       },
@@ -164,7 +165,7 @@ function createFixtureWire(
 // ---- per-device host fixtures ----
 
 // One device's copy of the shared settings, in memory, over the real
-// copy rule, so a pick made in the lab stamps, announces and converges
+// copy rule, so a pick made in the fake host stamps, announces and converges
 // the way it does between machines.
 function sharedSettingsHandlersFor(
   deviceId: string,
@@ -192,13 +193,13 @@ function sharedSettingsHandlersFor(
 
 // A typed path as the device's disk spells it: `~` expanded against
 // that device's home, trailing separators dropped.
-function resolveOnDisk(disk: LabDisk, path: string): string {
+function resolveOnDisk(disk: FakeDisk, path: string): string {
   const expanded =
     path === "~" || path.startsWith("~/") ? disk.home + path.slice(1) : path;
   return expanded.length > 1 ? expanded.replace(/\/+$/, "") : expanded;
 }
 
-function isRepoOnDisk(disk: LabDisk, path: string): boolean {
+function isRepoOnDisk(disk: FakeDisk, path: string): boolean {
   const cut = path.lastIndexOf("/");
   return (disk.dirs[path.slice(0, cut) || "/"] ?? []).some(
     (entry) => entry.name === path.slice(cut + 1) && entry.isGitRepo,
@@ -209,7 +210,7 @@ function isRepoOnDisk(disk: LabDisk, path: string): boolean {
 // joins the device's list with a primary worktree on main, so the add
 // flow has somewhere to land and the sidebar shows it.
 function registerProject(
-  disk: LabDisk,
+  disk: FakeDisk,
   forest: DeviceForest,
   path: string,
   identity: string | null = null,
@@ -222,7 +223,7 @@ function registerProject(
   }
   const name = path.slice(path.lastIndexOf("/") + 1);
   const project: Project = {
-    id: `lab_${forest.projects.length}_${name}`,
+    id: `fake_${forest.projects.length}_${name}`,
     name,
     path,
     pathExists: true,
@@ -233,7 +234,7 @@ function registerProject(
   forest.projects.push(project);
   forest.worktrees[project.id] = [
     worktreeFixture({
-      id: `lab${String(Date.now()).slice(-9)}`,
+      id: `fake${String(Date.now()).slice(-9)}`,
       projectId: project.id,
       name,
       branch: "main",
@@ -248,12 +249,12 @@ function hostHandlersFor(
   forest: DeviceForest,
   emit: FixtureWire["emit"],
 ): FixtureHandlers {
-  const disk = labDisks[forest.deviceId] ?? { home: "/home/rin", dirs: {} };
+  const disk = fakeDisks[forest.deviceId] ?? { home: "/home/rin", dirs: {} };
   mirrorWires.set(forest.deviceId, emit);
   // The worktree data files, seeded from the fixtures and mutated by
   // worktreeData:write so adding and removing ports shows its outcome.
   const worktreeData = new Map<string, ShigomoriWorktreeData>(
-    Object.entries(labCustomPorts).map(([id, ports]) => [id, { ports }]),
+    Object.entries(fakeCustomPorts).map(([id, ports]) => [id, { ports }]),
   );
   const allWorktrees = () => Object.values(forest.worktrees).flat();
   const findWorktree = (worktreeId: string) =>
@@ -291,7 +292,7 @@ function hostHandlersFor(
       }
       entries.push({ name: folder, isGitRepo: true });
       const identity =
-        Object.entries(labRemoteUrls).find(
+        Object.entries(fakeRemoteUrls).find(
           ([, known]) => normalizeRemoteUrl(known) === normalizeRemoteUrl(url),
         )?.[0] ?? `remote:${normalizeRemoteUrl(url)}`;
       return registerProject(disk, forest, `${parent}/${folder}`, identity);
@@ -300,7 +301,7 @@ function hostHandlersFor(
       const identity = forest.projects.find(
         (project) => project.id === projectId,
       )?.identity;
-      return identity ? (labRemoteUrls[identity] ?? null) : null;
+      return identity ? (fakeRemoteUrls[identity] ?? null) : null;
     },
     "runtime:info": () => ({
       dataDir: `${disk.home}/.sm`,
@@ -370,7 +371,7 @@ function hostHandlersFor(
     "worktrees:deleteStack": ({ projectId, worktreeId }) => {
       const rows = forest.worktrees[projectId] ?? [];
       const cleanup = stackCleanupForWorktree(
-        labPullRequests(projectId),
+        fakePullRequests(projectId),
         rows,
         worktreeId,
       );
@@ -385,8 +386,8 @@ function hostHandlersFor(
     },
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
-    "worktrees:fileDiff": () => LAB_DIFF,
-    "worktrees:readFile": ({ path }) => labFile(path),
+    "worktrees:fileDiff": () => FAKE_DIFF,
+    "worktrees:readFile": ({ path }) => fakeFile(path),
     // A worktree with changes lists two of them, and committing takes
     // them all, so the commit flow runs end to end.
     "worktrees:changeStatus": ({ worktreeId }) =>
@@ -412,7 +413,7 @@ function hostHandlersFor(
       committed.changedCount = 0;
       return { hash: "3f2a1b9", worktree: committed };
     },
-    "worktrees:commitDiff": () => LAB_DIFF,
+    "worktrees:commitDiff": () => FAKE_DIFF,
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,
     "worktreeData:write": ({ worktreeId, data }) => {
@@ -421,10 +422,10 @@ function hostHandlersFor(
     // The host's own merge, with the posed liveness mapped on.
     "ports:list": ({ worktreeId }) => ({
       ports: mergeWorktreePorts(
-        labPoolPorts[worktreeId] ?? [],
+        fakePoolPorts[worktreeId] ?? [],
         worktreeData.get(worktreeId)?.ports ?? [],
       ).map((entry) =>
-        Object.assign(entry, { listening: labListeningPorts.has(entry.port) }),
+        Object.assign(entry, { listening: fakeListeningPorts.has(entry.port) }),
       ),
     }),
     // The stub's shape with a full create lifecycle on it (carry-over,
@@ -440,7 +441,7 @@ function hostHandlersFor(
       launchers: [],
     }),
     "portPool:isActive": () => true,
-    "globalConfig:read": () => labGlobalConfig,
+    "globalConfig:read": () => fakeGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (Thinkpad alone by default) have an
     // update staged, so their Settings sections' restart-to-update
@@ -450,9 +451,9 @@ function hostHandlersFor(
     // nothing staged shows the download first.
     "updater:get": () =>
       stagedUpdates.has(forest.deviceId)
-        ? { kind: "ready", version: LAB_UPDATE_VERSION, releaseDate: null }
+        ? { kind: "ready", version: FAKE_UPDATE_VERSION, releaseDate: null }
         : downloadingUpdates.has(forest.deviceId)
-          ? { kind: "downloading", version: LAB_UPDATE_VERSION }
+          ? { kind: "downloading", version: FAKE_UPDATE_VERSION }
           : { kind: "idle" },
     "updater:check": () => undefined,
     "updater:install": () => restartIntoUpdate(),
@@ -464,17 +465,17 @@ function hostHandlersFor(
       downloadingUpdates.add(forest.deviceId);
       emit("updater:state", {
         kind: "downloading",
-        version: LAB_UPDATE_VERSION,
+        version: FAKE_UPDATE_VERSION,
       });
       setTimeout(() => {
         downloadingUpdates.delete(forest.deviceId);
         emit("updater:state", { kind: "idle" });
       }, 2_500);
     },
-    "launchers:detect": () => [...LAB_DETECTED],
+    "launchers:detect": () => [...FAKE_DETECTED],
     "launchers:forProject": () => ({
       entries: [
-        ...LAB_DETECTED,
+        ...FAKE_DETECTED,
         { kind: "custom", id: "claude", label: "Claude Code" },
         { kind: "web", id: "web:github", label: "GitHub" },
       ],
@@ -505,44 +506,44 @@ function hostHandlersFor(
     // answers with the same map, as the real sweep would on each
     // device, so a stack reads the same from every device's rows.
     "githubCli:projectPullRequests": ({ projectId }) =>
-      labPullRequests(projectId),
+      fakePullRequests(projectId),
     "githubCli:worktreePullRequest": ({ branch }) =>
-      labPullRequestDetail(branch),
-    "githubCli:repoMergeConfig": () => LAB_REPO_MERGE_CONFIG,
+      fakePullRequestDetail(branch),
+    "githubCli:repoMergeConfig": () => FAKE_REPO_MERGE_CONFIG,
     // The merge button's outcome, and the PR reading as armed or
-    // merged after it, so the flow can be walked in the lab.
-    "githubCli:mergePullRequest": ({ method }) => labMergePullRequest(method),
-    "githubCli:disablePullRequestAutoMerge": () => labDisableAutoMerge(),
-    "sync:worktreeFolder": ({ relative }) => [...(LAB_TREE[relative] ?? [])],
+    // merged after it, so the flow can be walked in the fake host.
+    "githubCli:mergePullRequest": ({ method }) => fakeMergePullRequest(method),
+    "githubCli:disablePullRequestAutoMerge": () => fakeDisableAutoMerge(),
+    "sync:worktreeFolder": ({ relative }) => [...(FAKE_TREE[relative] ?? [])],
     "sync:ignoredPaths": () => ({
-      paths: [...LAB_IGNORED_PATHS],
-      total: LAB_IGNORED_PATHS.length,
-      patterns: [...LAB_IGNORED_PATHS],
+      paths: [...FAKE_IGNORED_PATHS],
+      total: FAKE_IGNORED_PATHS.length,
+      patterns: [...FAKE_IGNORED_PATHS],
     }),
     // The mirror picture is host-scoped: the forest holding the
     // original reports the session it runs, and the copy's forest the
     // stream it serves. Both refresh off mirror:changed. Copies, since
     // the posed cycle mutates the session in place.
     "mirror:list": () => ({
-      daemon: labMirrors.sessions.length > 0 ? "running" : "stopped",
-      sessions: labMirrors.sessions
-        .filter((session) => labRunners.get(session) === forest.deviceId)
+      daemon: fakeMirrors.sessions.length > 0 ? "running" : "stopped",
+      sessions: fakeMirrors.sessions
+        .filter((session) => fakeRunners.get(session) === forest.deviceId)
         .map((session) => structuredClone(session)),
-      serving: labMirrors.serving
+      serving: fakeMirrors.serving
         .filter((stream) => stream.deviceId === forest.deviceId)
         .map(({ deviceId: _device, ...stream }) => stream),
     }),
     "mirror:history": ({ localWorktreeId }) => ({
-      events: [...(labMirrors.history[localWorktreeId] ?? [])],
+      events: [...(fakeMirrors.history[localWorktreeId] ?? [])],
     }),
     // The controls of a session this forest runs (the manage dialog
     // re-scopes to the runner).
     "mirror:stop": ({ session }) => {
-      const entry = findLabSession(session);
-      labMirrors.sessions = labMirrors.sessions.filter(
+      const entry = findFakeSession(session);
+      fakeMirrors.sessions = fakeMirrors.sessions.filter(
         (s) => s.session !== session,
       );
-      labMirrors.serving = labMirrors.serving.filter(
+      fakeMirrors.serving = fakeMirrors.serving.filter(
         (stream) =>
           !(
             entry !== undefined &&
@@ -572,9 +573,9 @@ function hostHandlersFor(
       ignoreMode: MirrorSession["ignoreMode"];
       ignores: string[];
     }) => {
-      const entry = findLabSession(session);
-      if (entry === undefined) throw new Error("[lab] no such mirror");
-      entry.session = `sync_${labSessionSerial++}`;
+      const entry = findFakeSession(session);
+      if (entry === undefined) throw new Error("[fake-host] no such mirror");
+      entry.session = `sync_${fakeSessionSerial++}`;
       entry.ignoreMode = ignoreMode;
       entry.ignores = ignores;
       entry.createdAt = Date.now();
@@ -592,7 +593,7 @@ function hostHandlersFor(
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {}
       : {
-          "mirror:startTo": (input) => labMirrorStartTo(forest, input),
+          "mirror:startTo": (input) => fakeMirrorStartTo(forest, input),
         }),
     // The cancel, on every forest: the local one for a pull or a send,
     // a peer for the mirror it runs towards here. The posed pull reads
@@ -607,15 +608,15 @@ function hostHandlersFor(
     // local project, and a teardown removes the source row.
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {
-          "sync:pullWorktree": (input) => labSyncPull(forest, emit, input),
+          "sync:pullWorktree": (input) => fakeSyncPull(forest, emit, input),
           // "Mirror here" as the app runs it: the local start asks the
           // forest holding the original to run the mirror towards here.
           "mirror:startFrom": (input) => {
             const runner = forests[input.sourceDeviceId];
             if (runner === undefined) {
-              throw new Error("[lab] no such device to mirror from");
+              throw new Error("[fake-host] no such device to mirror from");
             }
-            return labMirrorStartTo(runner, {
+            return fakeMirrorStartTo(runner, {
               targetDeviceId: LOCAL_DEVICE_ID,
               projectId: input.sourceProjectId,
               worktreeId: input.sourceWorktreeId,
@@ -647,9 +648,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // asked to stop, so the dialogs' Cancel has something to cancel here.
 const posedMoves = new Map<string, { cancelled: boolean }>();
 
-// What git ignores on the posed worktree (LAB_TREE's ignored entries,
+// What git ignores on the posed worktree (FAKE_TREE's ignored entries,
 // folders collapsed), serving as its gitignore rules too.
-const LAB_IGNORED_PATHS = [
+const FAKE_IGNORED_PATHS = [
   ".cache/",
   ".env",
   ".env.local",
@@ -668,16 +669,16 @@ const LAB_IGNORED_PATHS = [
   "tsconfig.tsbuildinfo",
 ];
 
-// What the files page's viewer reads for a LAB_TREE file: something
+// What the files page's viewer reads for a FAKE_TREE file: something
 // the highlighter can dress by extension, the .env as the ignored file
 // a peer with the grant still reads.
-function labFile(path: string) {
-  const contents = LAB_FILES[path];
+function fakeFile(path: string) {
+  const contents = FAKE_FILES[path];
   if (contents === undefined) return { kind: "missing" as const };
   return { kind: "text" as const, contents, size: contents.length };
 }
 
-const LAB_FILES: Record<string, string> = {
+const FAKE_FILES: Record<string, string> = {
   ".env": "DATABASE_URL=postgres://localhost:5432/lab\n",
   ".gitignore": "node_modules\ndist\n.env*\n",
   "package.json": `{
@@ -697,7 +698,7 @@ export function main(root: HTMLElement): void {
 };
 
 // The folder tree the mirror picker browses, one posed worktree.
-const LAB_TREE: Record<
+const FAKE_TREE: Record<
   string,
   { name: string; isDirectory: boolean; ignored: boolean }[]
 > = {
@@ -733,24 +734,24 @@ const LAB_TREE: Record<
 
 // ---- mirror fixtures ----
 //
-// One lab-wide mirror world, since a session on Studio Mac and the
+// One fake host-wide mirror world, since a session on Studio Mac and the
 // stream Thinkpad serves for it are two views of the same fact. Each
 // forest's emitter is remembered so mirror:changed reaches every page,
-// a peer's riding the client wire's peer push (installLabBridge).
-const labMirrors: {
+// a peer's riding the client wire's peer push (installFakeHostBridge).
+const fakeMirrors: {
   sessions: MirrorSession[];
   serving: (MirrorServing & { deviceId: string })[];
   history: Record<string, MirrorEvent[]>;
 } = { sessions: [], serving: [], history: {} };
 // The forest running each session, the one holding the original.
-const labRunners = new WeakMap<MirrorSession, string>();
+const fakeRunners = new WeakMap<MirrorSession, string>();
 const mirrorWires = new Map<string, FixtureWire["emit"]>();
 let pushFromPeer: (
   deviceId: string,
   channel: string,
   payload: unknown,
 ) => void = () => {};
-let labSessionSerial = 1;
+let fakeSessionSerial = 1;
 
 function mirrorChanged() {
   for (const emit of mirrorWires.values()) emit("mirror:changed", undefined);
@@ -761,17 +762,17 @@ function noteMirrorEvent(
   kind: MirrorEvent["kind"],
   detail: string,
 ) {
-  const thread = labMirrors.history[localWorktreeId] ?? [];
+  const thread = fakeMirrors.history[localWorktreeId] ?? [];
   thread.unshift({ at: Date.now(), kind, detail });
-  labMirrors.history[localWorktreeId] = thread.slice(0, MIRROR_HISTORY_LIMIT);
+  fakeMirrors.history[localWorktreeId] = thread.slice(0, MIRROR_HISTORY_LIMIT);
 }
 
-function findLabSession(session: string): MirrorSession | undefined {
-  return labMirrors.sessions.find((s) => s.session === session);
+function findFakeSession(session: string): MirrorSession | undefined {
+  return fakeMirrors.sessions.find((s) => s.session === session);
 }
 
 function setMirrorPaused(session: string, paused: boolean) {
-  const entry = findLabSession(session);
+  const entry = findFakeSession(session);
   if (entry === undefined) return;
   entry.paused = paused;
   entry.status = paused ? "disconnected" : "watching";
@@ -796,7 +797,7 @@ const endpointState = () => ({
 // settles. Afterwards a cycle runs every few seconds so the status is
 // seen moving, and the thread gets a conflict once, for the history
 // to have more than its start.
-async function labMirrorStartTo(
+async function fakeMirrorStartTo(
   runner: DeviceForest,
   input: {
     targetDeviceId: string;
@@ -814,12 +815,12 @@ async function labMirrorStartTo(
     (entry) => entry.id === input.worktreeId,
   );
   if (!target || !emit || !project?.identity || !sourceWorktree) {
-    throw new Error("[lab] no such worktree to mirror");
+    throw new Error("[fake-host] no such worktree to mirror");
   }
   // The rule is the session's, not the send's: a mirror start brings
   // the files through its own session, so the landing poses no files
   // step. A primary's copy lands on its mirror branch and folder.
-  const landed = await labSyncPull(target, emit, {
+  const landed = await fakeSyncPull(target, emit, {
     sourceDeviceId: runner.deviceId,
     sourceProjectId: input.projectId,
     sourceWorktreeId: input.worktreeId,
@@ -831,7 +832,7 @@ async function labMirrorStartTo(
   });
   const tip = sourceWorktree.recentCommits[0]?.hash.slice(0, 7) ?? "58c21fe";
   const session: MirrorSession = {
-    session: `sync_${labSessionSerial++}`,
+    session: `sync_${fakeSessionSerial++}`,
     name: sourceWorktree.branch,
     labels: { copySide: "remote" },
     localRoot: sourceWorktree.path,
@@ -854,9 +855,9 @@ async function labMirrorStartTo(
     remote: endpointState(),
     git: { status: "synced", detail: `both sides at ${tip}` },
   };
-  labMirrors.sessions.push(session);
-  labRunners.set(session, runner.deviceId);
-  labMirrors.serving.push({
+  fakeMirrors.sessions.push(session);
+  fakeRunners.set(session, runner.deviceId);
+  fakeMirrors.serving.push({
     deviceId: input.targetDeviceId,
     channelId: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
     projectId: landed.worktree.projectId,
@@ -872,7 +873,7 @@ async function labMirrorStartTo(
   );
   mirrorChanged();
   void (async () => {
-    const live = () => labMirrors.sessions.includes(session);
+    const live = () => fakeMirrors.sessions.includes(session);
     const step = async (status: MirrorSession["status"], ms: number) => {
       if (!live() || session.paused) return;
       session.status = status;
@@ -902,7 +903,7 @@ async function labMirrorStartTo(
   return { ...landed, session: session.session };
 }
 
-async function labSyncPull(
+async function fakeSyncPull(
   local: DeviceForest,
   emit: FixtureWire["emit"],
   input: {
@@ -973,7 +974,7 @@ async function labSyncPull(
   const project = local.projects.find(
     (entry) => entry.identity === input.sourceIdentity,
   );
-  if (project === undefined) throw new Error("[lab] no identity match");
+  if (project === undefined) throw new Error("[fake-host] no identity match");
   const source = forests[input.sourceDeviceId];
   const sourceList = source?.worktrees[input.sourceProjectId] ?? [];
   const sourceWorktree = sourceList.find(
@@ -1014,18 +1015,18 @@ async function labSyncPull(
   };
 }
 
-const LAB_DETECTED = [
+const FAKE_DETECTED = [
   { kind: "detected", id: "vscode", label: "VS Code", available: true },
   { kind: "detected", id: "terminal", label: "Terminal", available: true },
   { kind: "detected", id: "finder", label: "Finder", available: true },
 ] as const;
 
-// ---- lab-mutable account/presence state ----
+// ---- fake host-mutable account/presence state ----
 
 // Whether Studio Mac accepts commands from the account's other devices
 // (the devices page switch on this device's row).
 let acceptsCommands = true;
-// Devices revoked in this lab session: the fixture registry is static,
+// Devices revoked in this fake host session: the fixture registry is static,
 // so the revoke handler records the id here and the list filters it.
 const revoked = new Set<string>();
 let deviceName = "Studio Mac";
@@ -1038,19 +1039,19 @@ const detectedIcon = (): DeviceIcon => (WEB_SHELL ? "browser" : "mini");
 const peerEntry = (deviceId: string) =>
   accountDevices.find((device) => device.deviceId === deviceId);
 
-// The web-shell pose (lab/web-main.tsx): this page is an enrolled
+// The web-shell pose (web-main.tsx): this page is an enrolled
 // BROWSER device, every machine forest (Studio Mac included) is a
-// peer, and nothing is local. Passed into installLabBridge rather than
+// peer, and nothing is local. Passed into installFakeHostBridge rather than
 // read from a global, since import hoisting evaluates this module
 // before any entry-file code runs.
 let WEB_SHELL = false;
 const WEB_DEVICE_ID = "dev_beefcafe01";
 // Village life on in this window's client config: ?villageLife=1, or
 // the villager contact sheet's say. Off otherwise, as a fresh install
-// has it. The villager data itself is lab/villagerData.ts.
+// has it. The villager data itself is villagerData.ts.
 let villageLife = false;
 
-// Presence the lab can pose: which peers are in the roster, and which
+// Presence the fake host can pose: which peers are in the roster, and which
 // of those have an established direct session. ?peers=tp:connected,
 // mini:online,pc:offline overrides the default (Thinkpad connected,
 // the rest offline, and the web shell also defaults Studio Mac
@@ -1067,7 +1068,7 @@ const directSessions = new Set<string>();
 // ?downloading=sm,tp,mini the ones fetching it.
 const stagedUpdates = new Set<string>();
 const downloadingUpdates = new Set<string>();
-const LAB_UPDATE_VERSION = "2.1.0";
+const FAKE_UPDATE_VERSION = "2.1.0";
 
 function initPresence(): void {
   const pose = new URLSearchParams(location.search);
@@ -1196,7 +1197,7 @@ function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};
   const peerAcceptsCommands: Record<string, boolean> = {};
   for (const id of directSessions) {
-    peerAppVersions[id] = LAB_APP_VERSION;
+    peerAppVersions[id] = FAKE_APP_VERSION;
     peerAcceptsCommands[id] = forests[id]?.grantsCaller ?? false;
   }
   return {
@@ -1208,7 +1209,7 @@ function hubSnapshot(): HubStatus {
   };
 }
 
-export function installLabBridge(
+export function installFakeHostBridge(
   opts: { webShell?: boolean; villageLife?: boolean } = {},
 ) {
   WEB_SHELL = opts.webShell === true;
@@ -1244,7 +1245,7 @@ export function installLabBridge(
   // every host read falls back to the schema stubs (empty lists),
   // matching the real browser bridge's shape.
   const localForest = forests[LOCAL_DEVICE_ID];
-  if (localForest === undefined) throw new Error("[lab] no local forest");
+  if (localForest === undefined) throw new Error("[fake-host] no local forest");
   const localHost = createFixtureWire(
     "host",
     (emit) =>
@@ -1276,7 +1277,7 @@ export function installLabBridge(
   const accountStatus = () => ({
     configured: true,
     signedIn: !signedOut,
-    accountId: signedOut ? "" : LAB_ACCOUNT_ID,
+    accountId: signedOut ? "" : FAKE_ACCOUNT_ID,
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
     deviceIcon: deviceIcon ?? detectedIcon(),
     detectedDeviceIcon: detectedIcon(),
@@ -1350,14 +1351,14 @@ export function installLabBridge(
     },
     "account:enroll": () => accountStatus(),
     "account:signOut": () => undefined,
-    // ?view=inbox poses the sidebar layout over whatever the lab session
+    // ?view=inbox poses the sidebar layout over whatever the fake host session
     // has saved, so a shot can open on either view.
     "clientConfig:read": () => {
       const posedView = new URLSearchParams(location.search).get("view");
       let stored: Record<string, unknown> = {};
       try {
         stored = JSON.parse(
-          localStorage.getItem("sm.lab.clientConfig") ?? "{}",
+          localStorage.getItem("sm.fakeHost.clientConfig") ?? "{}",
         );
       } catch {
         // Corrupt storage reads as defaults.
@@ -1370,13 +1371,15 @@ export function installLabBridge(
         : posed;
     },
     "clientConfig:write": ({ config }) => {
-      localStorage.setItem("sm.lab.clientConfig", JSON.stringify(config));
+      localStorage.setItem("sm.fakeHost.clientConfig", JSON.stringify(config));
     },
     "hub:status": hubSnapshot,
     "hub:invokePeer": ({ deviceId, channel, input }) => {
       const wire = peerWires.get(deviceId);
       if (wire === undefined) {
-        return Promise.reject(new Error(`[lab] unknown peer ${deviceId}`));
+        return Promise.reject(
+          new Error(`[fake-host] unknown peer ${deviceId}`),
+        );
       }
       return wire.transport.invoke(channel, input);
     },
@@ -1384,7 +1387,7 @@ export function installLabBridge(
       window.open(url, "_blank", "noopener,noreferrer");
     },
     "shell:showItemInFolder": () => undefined,
-    "releases:list": () => labReleases,
+    "releases:list": () => fakeReleases,
     "portForward:list": () => ({ forwards: [...forwards.values()] }),
     "portForward:start": async ({
       deviceId,
@@ -1443,19 +1446,19 @@ export function installLabBridge(
 
   const api = {
     deviceId: selfDeviceId,
-    appVersion: LAB_APP_VERSION,
-    clerkPublishableKey: "pk_test_lab",
+    appVersion: FAKE_APP_VERSION,
+    clerkPublishableKey: "pk_test_fake",
     isDev: true,
     isElectron: !WEB_SHELL,
     ...buildApi({ host: localHost.transport, client: client.transport }),
   };
   // The renderer's window.d.ts types window.api off the preload, so
-  // this assignment is the proof the lab bridge has the same surface.
+  // this assignment is the proof the fake host bridge has the same surface.
   window.api = api;
 
   const pushHub = () => client.emit("hub:statusChanged", hubSnapshot());
 
-  window.smLab = {
+  window.fakeHost = {
     setPeer(deviceId, state) {
       roster.delete(deviceId);
       directSessions.delete(deviceId);
@@ -1471,7 +1474,7 @@ export function installLabBridge(
     // on both sides, so the conflict chip and its list can be posed.
     // No roots clears them.
     setMirrorConflicts(roots) {
-      for (const session of labMirrors.sessions) {
+      for (const session of fakeMirrors.sessions) {
         session.conflicts = roots.map((root) => ({
           root,
           localChanges: [{ path: root, kind: "modified" }],
@@ -1487,17 +1490,20 @@ export function installLabBridge(
     // project, and `changedCount` gives an added one changes to commit.
     worktree(deviceId, action, name, { projectId, changedCount = 0 } = {}) {
       const forest = forests[deviceId];
-      if (forest === undefined) throw new Error(`[lab] no device ${deviceId}`);
+      if (forest === undefined)
+        throw new Error(`[fake-host] no device ${deviceId}`);
       const project =
         forest.projects.find((p) => p.id === projectId) ?? forest.projects[0];
       if (project === undefined) {
-        throw new Error(`[lab] no project on ${deviceId} to put ${name} in`);
+        throw new Error(
+          `[fake-host] no project on ${deviceId} to put ${name} in`,
+        );
       }
       const list = (forest.worktrees[project.id] ??= []);
       if (action === "add") {
         list.push(
           worktreeFixture({
-            id: `lab${Date.now().toString(36)}${name}`,
+            id: `fake${Date.now().toString(36)}${name}`,
             projectId: project.id,
             name,
             branch: name,

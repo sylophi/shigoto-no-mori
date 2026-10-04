@@ -8,12 +8,13 @@
 // and a mirrored pair counts once. No count while its listing is
 // loading. Inside a project the tree is that project's header, held
 // over the rows rather than among them, and its rows and no other's,
-// and an open project the build lacks reads as the list. A worktree reveals nothing from the list or from inside another
-// project, and its own row once its project is open. Inside a project
-// the worktrees follow its sort, every device's together, primaries
-// first.
+// and an open project the build lacks reads as the list. A worktree
+// reveals nothing from the list or from inside another project, and its
+// own row once its project is open. Inside a project the worktrees
+// follow its sort, every device's together, primaries first.
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test project-fold.
+// Runs under test/lib/register-ts-alias.mts. Run: pnpm test
+// project-fold.
 import assert from "node:assert/strict";
 import {
   buildSidebarRows,
@@ -25,7 +26,7 @@ import {
 import type { SidebarRow } from "@/components/sidebar/sidebarRow";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { Project, Worktree, WorktreeSortMode } from "@shared/schemas";
-import { worktree as labWorktree } from "../lab/fixtures.ts";
+import { worktree as fakeWorktree } from "./fake-host/fixtures.ts";
 import { makeProof } from "./lib/checkKit.mts";
 
 const proof = makeProof("project-fold proof");
@@ -44,7 +45,7 @@ const worktree = (
   name: string,
   marks: Partial<Worktree> = {},
 ): Worktree =>
-  labWorktree({
+  fakeWorktree({
     id: `${p.name}-${name}`,
     projectId: p.id,
     name,

@@ -4,7 +4,7 @@
 // and protocol imports, into a cycle.
 
 // The platform label a browser enrolls under, beside the desktop's
-// os.platform() values. Producers (the web bridge, the lab) and the
+// os.platform() values. Producers (the web bridge, the fake host) and the
 // consumers that branch on it (the registry row's traits, the kind
 // fallback) share this so a typo cannot silently turn a browser into
 // a desktop row.

@@ -40,7 +40,7 @@
     "renderer/**/*",
     "shared/**/*",
     "web/**/*",
-    "lab/**/*",
+    "test/fake-host/**/*",
     "scripts/**/*.mts",
     "scripts/**/*.cts",
     "test/**/*.mts",

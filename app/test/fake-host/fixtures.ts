@@ -1,7 +1,7 @@
-// The lab's fixture world: one account, four devices, forests shaped
+// The fake host's fixture world: one account, four devices, forests shaped
 // after the owner's v2 flow mockups: Studio Mac local, Thinkpad online
 // with a direct session, Mini and Work PC offline. Pure data, served
-// over fixture transports by the bridge (lab/bridge.ts).
+// over fixture transports by the bridge (bridge.ts).
 import type { DeviceInfo } from "@shared/hub/protocol";
 import type {
   CommitSummary,
@@ -12,8 +12,8 @@ import type {
   Worktree,
 } from "@shared/schemas";
 
-export const LAB_ACCOUNT_ID = "user_2rin8xk3";
-export const LAB_APP_VERSION = "2.0.3";
+export const FAKE_ACCOUNT_ID = "user_2rin8xk3";
+export const FAKE_APP_VERSION = "2.0.3";
 
 export const LOCAL_DEVICE_ID = "dev_8f3ac2e1";
 export const THINKPAD_ID = "dev_1c94b0da";
@@ -24,7 +24,7 @@ const now = Date.now();
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-// Lab-only project icons: a rounded tile with the repo's initial, so
+// Fake host-only project icons: a rounded tile with the repo's initial, so
 // the surfaces that draw project icons (sidebar headers, the device
 // chips on /devices) show one without a real repo behind them. Keyed by
 // name, so the same repo wears the same icon on every device. t3code is
@@ -131,7 +131,7 @@ export type DeviceForest = {
   projects: Project[];
   worktrees: Record<string, Worktree[]>;
   // Whether this device accepts commands from the account's other
-  // devices (its HubStatus.peerAcceptsCommands entry), so the local lab
+  // devices (its HubStatus.peerAcceptsCommands entry), so the local fake host
   // client may mutate it.
   grantsCaller: boolean;
 };
@@ -420,7 +420,7 @@ const thinkpadWorktrees: Record<string, Worktree[]> = {
   ],
 };
 
-// ---- Mini (offline, but the forest exists so the lab can pose "cached
+// ---- Mini (offline, but the forest exists so the fake host can pose "cached
 // snapshot" and reconnect states by flipping it online) ----
 
 const miniProjects: Project[] = [
@@ -468,7 +468,7 @@ const miniWorktrees: Record<string, Worktree[]> = {
 // project's folder is a git repo here too, and each machine has a repo
 // or two it never registered, so a scan finds something. The Thinkpad
 // has no port-pool, which is what cloning one onto it is posed with.
-export type LabDisk = {
+export type FakeDisk = {
   home: string;
   dirs: Record<string, { name: string; isGitRepo: boolean }[]>;
 };
@@ -476,7 +476,7 @@ export type LabDisk = {
 const dir = (name: string) => ({ name, isGitRepo: false });
 const repo = (name: string) => ({ name, isGitRepo: true });
 
-export const labDisks: Record<string, LabDisk> = {
+export const fakeDisks: Record<string, FakeDisk> = {
   [LOCAL_DEVICE_ID]: {
     home: "/Users/rin",
     dirs: {
@@ -526,7 +526,7 @@ export const labDisks: Record<string, LabDisk> = {
 // one thing a repo's checkouts share across devices). A clone of one
 // lands with that identity, so it folds into the sidebar group the
 // other devices' checkouts already sit in.
-export const labRemoteUrls: Record<string, string> = {
+export const fakeRemoteUrls: Record<string, string> = {
   [SM_IDENTITY]: "git@github.com:sylophi/shigoto-no-mori.git",
   [PP_IDENTITY]: "git@github.com:sylophi/port-pool.git",
   [DF_IDENTITY]: "git@github.com:rin/dotfiles.git",
@@ -559,7 +559,7 @@ export const forests: Record<string, DeviceForest> = {
   },
 };
 
-export const labGlobalConfig = {
+export const fakeGlobalConfig = {
   launchScripts: true,
   deleteBranchOnRemove: true,
   autoPopulateInstall: true,
@@ -579,9 +579,9 @@ export const labGlobalConfig = {
 
 // port-pool's allocations by worktree id, in the project's declared
 // order, and the user-added ports (what the worktree data file holds).
-// Which numbers have a server behind them is a flat set: the lab poses
+// Which numbers have a server behind them is a flat set: the fake host poses
 // liveness, it does not run servers.
-export const labPoolPorts: Record<string, { name: string; port: number }[]> = {
+export const fakePoolPorts: Record<string, { name: string; port: number }[]> = {
   wt_sm_badger: [{ name: "renderer", port: 5731 }],
   wt_sm_hum: [{ name: "renderer", port: 5741 }],
   aa11bb22cc33: [{ name: "renderer", port: 5174 }],
@@ -595,22 +595,22 @@ export const labPoolPorts: Record<string, { name: string; port: number }[]> = {
   ],
 };
 
-export const labCustomPorts: Record<string, CustomPort[]> = {
+export const fakeCustomPorts: Record<string, CustomPort[]> = {
   wt_sm_badger: [{ port: 5732, label: "api" }],
   a1b2c3d4e5f6: [{ port: 8787, label: "api" }, { port: 5555 }],
 };
 
-export const labListeningPorts = new Set([5731, 5173, 6006, 8787, 5182]);
+export const fakeListeningPorts = new Set([5731, 5173, 6006, 8787, 5182]);
 
 // ---- releases ----
 
 // The changelog's GitHub releases, newest first as the API lists
 // them: the staged 2.1.0 (?updates) with a screenshot, a beta that
-// only a device on a prerelease sees, the lab's own 2.0.3, and two
+// only a device on a prerelease sees, the fake host's own 2.0.3, and two
 // before it. The notes follow the real ones' shape.
 const RELEASES_URL = "https://github.com/sylophi/shigoto-no-mori/releases/tag";
 
-export const labReleases: Release[] = [
+export const fakeReleases: Release[] = [
   {
     version: "2.1.0",
     notes: [

@@ -3,7 +3,6 @@
 //   pnpm test                  list them
 //   pnpm test socket-host      run test/socket-host.mts
 //   pnpm test mirror account   run several, in order, stopping at a failure
-//   pnpm test e2e/remote-smoke a path under test/ works too
 //   pnpm test socket-host --update   flags pass through to the proof
 //
 // Each proof is a standalone script that exits non-zero when it fails.
@@ -22,9 +21,9 @@ const SELF = "run.mts";
 
 const SUFFIX = ".mts";
 
-// The proofs, which sit at the top of test/. The drivers under e2e/ run
-// by path (`pnpm test e2e/remote-smoke`) and stay off this list: they
-// need two signed-in dev apps, see MANUAL-TESTING.md.
+// The proofs, which sit at the top of test/. What sits in its folders
+// (the fake host, the remote smoke) is driven with weblab instead, see
+// README.md.
 function available() {
   return readdirSync(testDir)
     .filter((file) => file !== SELF && file.endsWith(SUFFIX))

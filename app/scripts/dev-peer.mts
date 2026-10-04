@@ -1,6 +1,7 @@
-// A second dev app on this machine, as its own device:
+// A second dev app on this machine, as its own device. `pnpm device
+// <name>` (dev-device.mts) runs this once a primary is up:
 //
-//   pnpm dev:peer <name> [--fresh] [--clone-login]
+//   node scripts/dev-peer.mts <name> [--fresh] [--clone-login]
 //
 // Runs the dev build the primary `pnpm start` made (its main bundle
 // in .vite/build, which forge points at the primary's vite server) as
@@ -8,7 +9,7 @@
 // build of its own, so it needs the primary running, and it keeps the
 // main-process code it booted with across a primary restart (which
 // forge does only on `rs` typed in its terminal, never on its own).
-// MANUAL-TESTING.md covers the workflow around it.
+// test/README.md covers the workflow around it.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,7 +28,7 @@ import {
   parseDevProfileArgs,
 } from "./lib/devProfile.mts";
 
-const USAGE = "usage: pnpm dev:peer <name> [--fresh] [--clone-login]";
+const USAGE = "usage: pnpm device <name> [--fresh] [--clone-login]";
 
 function die(message: string): never {
   console.error(`[dev-peer] ${message}`);

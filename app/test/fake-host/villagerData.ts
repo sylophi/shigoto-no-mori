@@ -1,5 +1,5 @@
-// The villager data in the lab: the villagers:* channels
-// (host/lib/villagers.ts), served from lab/villager-data, a real
+// The villager data in the fake host: the villagers:* channels
+// (host/lib/villagers.ts), served from test/fake-host/villager-data, a real
 // download made with the app's own downloader by `pnpm villagers:fetch`
 // (scripts/fetch-villager-data.mts). That folder is gitignored and
 // never committed. Without it the data reads as not downloaded, and a
@@ -30,8 +30,8 @@ const [loadProfiles] = Object.values(
 
 const villagers = Object.keys(villagerManifest.villagers).length;
 
-// Whether this checkout holds a lab download.
-export const labHasVillagerData = meta !== undefined;
+// Whether this checkout holds a fake host download.
+export const fakeHasVillagerData = meta !== undefined;
 
 const ABSENT: VillagerDataStatus = { kind: "absent", villagers };
 const READY: Extract<VillagerDataStatus, { kind: "ready" }> = {
@@ -56,7 +56,7 @@ function posedStatus(): VillagerDataStatus {
   const posed = new URLSearchParams(location.search).get("villagers");
   return (
     (posed === null ? undefined : POSES[posed]) ??
-    (labHasVillagerData ? READY : ABSENT)
+    (fakeHasVillagerData ? READY : ABSENT)
   );
 }
 
@@ -73,7 +73,7 @@ export function villagerHandlersFor(): AllChannelHandlers {
     status = ABSENT;
     return status;
   };
-  const shown = () => status.kind === "ready" && labHasVillagerData;
+  const shown = () => status.kind === "ready" && fakeHasVillagerData;
   return {
     "villagers:status": () => status,
     // A download that takes a few seconds, from wherever it stopped.
@@ -108,7 +108,7 @@ export function villagerHandlersFor(): AllChannelHandlers {
 // it: a spread of visits, or none with
 // ?visits=none. Slug, times, and the days ago of the first and last.
 const DAY = 24 * 60 * 60_000;
-const LAB_VISITS: [string, number, number, number][] = [
+const FAKE_VISITS: [string, number, number, number][] = [
   ["raymond", 17, 200, 1],
   ["marshal", 6, 150, 9],
   ["judy", 4, 120, 30],
@@ -136,19 +136,19 @@ const LAB_VISITS: [string, number, number, number][] = [
   ["daisy-mae", 2, 70, 16],
 ];
 
-function poseLabVisits(): void {
+function poseFakeVisits(): void {
   const none = new URLSearchParams(location.search).get("visits") === "none";
   const now = Date.now();
   const log: Record<string, { slug: string; at: number }> = {};
   if (!none) {
-    for (const [slug, count, first, last] of LAB_VISITS) {
+    for (const [slug, count, first, last] of FAKE_VISITS) {
       const step = count > 1 ? (first - last) / (count - 1) : 0;
       for (let i = 0; i < count; i++) {
         const at = now - (last + i * step) * DAY;
-        log[`lab:${slug}-${i}:${at}`] = { slug, at };
+        log[`fake-host:${slug}-${i}:${at}`] = { slug, at };
       }
     }
   }
   localStorage.setItem("villagers.visits", JSON.stringify(log));
 }
-poseLabVisits();
+poseFakeVisits();

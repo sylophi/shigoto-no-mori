@@ -14,8 +14,9 @@ let today = new Date();
 let timer: number | null = null;
 const listeners = new Set<() => void>();
 
-// The UI lab's `?today=` pose (lab/boot.tsx), set before the app mounts,
-// so a birthday can be posed without touching the clock.
+// The fake host's `?today=` pose (test/fake-host/boot.tsx), set before
+// the app mounts, so a birthday can be posed without touching the
+// clock.
 export function poseToday(date: Date): void {
   posed = date;
   today = date;

@@ -36,7 +36,7 @@ import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
-import { worktree as labWorktree } from "../lab/fixtures.ts";
+import { worktree as fakeWorktree } from "./fake-host/fixtures.ts";
 import { makeProof } from "./lib/checkKit.mts";
 
 const proof = makeProof("worktree-palette proof");
@@ -59,7 +59,7 @@ const worktree = (
   lastChangeAt: number,
   marks: Partial<Worktree> = {},
 ): Worktree =>
-  labWorktree({
+  fakeWorktree({
     id,
     projectId,
     name: id,

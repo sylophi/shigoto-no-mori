@@ -19,30 +19,30 @@ import {
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
 // remote work"): a worktree kept identical on two devices, every file,
-// both directions, live. The engine is the file-sync engine (file-sync/engine.go, on
-// Mutagen). The app supervises this device's daemon
-// (main/core/mirror/daemon.ts), bridges its streams to peers as byte
-// channels on the direct socket (openStream below, the channel layer in
-// shared/ipc/socket/channels.ts), and serves `file-sync serve` for
-// peers mirroring FROM here.
+// both directions, live. The engine is the file-sync engine
+// (file-sync/engine.go, on Mutagen). The app supervises this device's
+// daemon (main/core/mirror/daemon.ts), bridges its streams to peers as
+// byte channels on the direct socket (openStream below, the channel
+// layer in shared/ipc/socket/channels.ts), and serves `file-sync serve`
+// for peers mirroring FROM here.
 //
 // Host-scoped: a device's mirrors are facts about that device, and a
-// remote viewer sees them (list is a read). A mirror always runs on
-// the device holding the original. Its one start, startTo, sends one
-// of this device's worktrees to a peer (branch, commits, uncommitted
+// remote viewer sees them (list is a read). A mirror always runs on the
+// device holding the original. Its one start, startTo, sends one of
+// this device's worktrees to a peer (branch, commits, uncommitted
 // changes, through the ordinary move) and opens the mirror on top, so
-// the first cycle has little to move and git agrees on both sides
-// from the first second. A mirror asked for from the copy's side (a
-// peer's page, "mirror it here") is the same start, invoked on the
-// device holding the original with this device as the target: the
-// local orchestrator startFrom asks it, and leaves an invitation
-// behind (host/mirror/invites.ts) so the peer's send, stream and git
-// half land here whatever this device's command-access switch says. The
-// start and the controls (stop, pause, resume, setIgnores) act on a
-// session this device runs, and are offered to peers too: a mirror
-// pairs two devices, and either side's page controls it, the far end
-// through the device that runs the session. They ride that device's
-// command grant like every other mutation.
+// the first cycle has little to move and git agrees on both sides from
+// the first second. A mirror asked for from the copy's side (a peer's
+// page, "mirror it here") is the same start, invoked on the device
+// holding the original with this device as the target: the local
+// orchestrator startFrom asks it, and leaves an invitation behind
+// (host/mirror/invites.ts) so the peer's send, stream and git half land
+// here whatever this device's command-access switch says. The start and
+// the controls (stop, pause, resume, setIgnores) act on a session this
+// device runs, and are offered to peers too: a mirror pairs two
+// devices, and either side's page controls it, the far end through the
+// device that runs the session. They ride that device's command grant
+// like every other mutation.
 
 // Mutagen mints session identifiers ("sync_" plus a base62 body). The
 // daemon echoes them verbatim, so the shape is pinned only loosely.
@@ -106,7 +106,7 @@ export function isHaltedStatus(status: string): boolean {
 }
 
 // The rule in one phrase, the same on every surface that names it:
-// the session's history line, the live card's chip, the lab's posed
+// the session's history line, the live card's chip, the fake host's posed
 // thread. `count` is the paths the rule names, which a rule still
 // being picked knows outright. A session's patterns go through
 // summarizeIgnores, which counts them.
@@ -255,9 +255,10 @@ export type MirrorGitStatus = z.infer<typeof MirrorGitStatusSchema>;
 
 // One session this device runs, as the daemon reports it. The local
 // side is always this device (alpha in Mutagen's terms) and holds the
-// original. The remote side is the copy, on the peer named by
-// deviceId, at remoteRoot, which is its worktree projectId/worktreeId. localProjectId/localWorktreeId
-// are lifted out of the labels the start orchestration wrote.
+// original. The remote side is the copy, on the peer named by deviceId,
+// at remoteRoot, which is its worktree projectId/worktreeId.
+// localProjectId/localWorktreeId are lifted out of the labels the start
+// orchestration wrote.
 export const MirrorSessionSchema = z.strictObject({
   session: MirrorSessionIdSchema,
   name: z.string(),
@@ -394,11 +395,11 @@ const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,
 });
 
-// Stopping removes the copy (on the peer), so it is refused unless the git follower says
-// "synced", the one state where the other side is known to hold the
-// copy's commits. A paused session, an unreachable peer or
-// one too young to have reconciled all report something else. `force`
-// is the user overriding that after being told.
+// Stopping removes the copy (on the peer), so it is refused unless the
+// git follower says "synced", the one state where the other side is
+// known to hold the copy's commits. A paused session, an unreachable
+// peer or one too young to have reconciled all report something else.
+// `force` is the user overriding that after being told.
 const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
   force: z.boolean().optional(),
 });

@@ -1,36 +1,33 @@
-// The remote flows, end to end, on one machine:
+// The remote flows, end to end, on one machine, as a weblab code file
+// (test/README.md, "The remote smoke"). Device a is the session this
+// runs on, which weblab started with boot.mts; the file starts device
+// b itself. Both are driven through the real bridge (window.api) and
+// the real device hub, direct plane, dev CLI and file-sync engine.
 //
-//   pnpm test e2e/remote-smoke [--keep] [--only=<label part>,...]
+// Params (run's params):
+//   only  scenarios whose label contains one of these comma-separated
+//         parts, for a quick pass over one area. The boot, the
+//         connection wait and the teardown always run. A scenario that
+//         leans on an earlier one's result fails its `need` when that
+//         one was filtered out, so name both.
+//   keep  true to leave both devices enrolled and running for a look.
 //
-// Two dev profiles (scripts/lib/devProfile.mts) as two devices of the
-// owner's dev account, both signed in by cloning the plain dev
-// instance's sign-in, driven over CDP (cdp.mts) through the real
-// device hub, direct plane, dev CLI and file-sync engine.
-// MANUAL-TESTING.md lists the scenarios and the prerequisites.
-//
-// One repo is cloned into both forests: the pull matches a local
-// project by repo identity (the root commit), so two seeds would not
-// do, the same clone on two machines is the real shape. Both profiles
-// are wiped before and after, and their devices revoked on the hub in
-// the teardown, so nothing lingers on the account (`--keep` leaves
-// the windows and profiles up for a look). The tunnel path is not
-// covered: on one machine the LAN candidate wins.
+// The teardown revokes what is still enrolled and ends b, which clears
+// b's profile. Ending a (the agent's `end`) clears the rest. The
+// tunnel path is not covered: on one machine the LAN candidate wins.
 import assert from "node:assert/strict";
-import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
-  openSync,
-  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { signalTree } from "../../host/lib/scripts/process.ts";
 import { devProfileNameSuffix } from "../../shared/packaging/appName.mts";
 import { errorMessageOf } from "../../shared/errors.ts";
 import { bringIgnores } from "../../shared/mirrorIgnores.ts";
@@ -39,194 +36,140 @@ import {
   fileEquals,
   freeLoopbackPort,
   readOrNull,
-  appRoot,
-  report,
-  scrubbedGitEnv,
   waitFor,
 } from "../lib/checkKit.mts";
+import { devCliPath, devProfileEnv } from "../../scripts/lib/devProfile.mts";
 import {
-  buildDevCli,
-  cloneDevLogin,
-  devCliPath,
-  devProfileEnv,
-  devProfilePaths,
-  PROFILES_DIR,
-  registerProjects,
-  rmTree,
-  wipeDevProfile,
-  type DevProfile,
-} from "../../scripts/lib/devProfile.mts";
-import { attachWindow, type AppWindow } from "./cdp.mts";
+  bootPidFile,
+  BUILT_ON_A,
+  fixture,
+  git,
+  gitEnv,
+  gitOut,
+  runDir,
+  SETUP_SCRIPT,
+  setupLog,
+  setupRuns,
+} from "./fixture.mts";
 
-const keep = process.argv.includes("--keep");
-// Runs only the scenarios whose label contains one of these, for a
-// quick pass over one area. The boot, the connection wait and the
-// teardown always run. A scenario that leans on an earlier one's result
-// fails its `need` when that one was filtered out, so name both.
-const only = (
-  process.argv.find((arg) => arg.startsWith("--only="))?.slice(7) ?? ""
-)
-  .split(",")
-  .map((part) => part.trim())
-  .filter((part) => part !== "");
-
-// Git against the fixture worktrees, both of which live on this
-// machine: pinned identity, the inherited GIT_* scrubbed (a lefthook
-// run exports GIT_DIR for the real repository).
-const gitEnv = {
-  ...scrubbedGitEnv(),
-  GIT_AUTHOR_NAME: "E2E",
-  GIT_AUTHOR_EMAIL: "e2e@example.com",
-  GIT_COMMITTER_NAME: "E2E",
-  GIT_COMMITTER_EMAIL: "e2e@example.com",
+// What weblab hands a code file, as far as this one uses it
+// (weblab's docs, "Code").
+type Page = { evaluate(expression: string): Promise<unknown> };
+type Step = (step: Record<string, unknown>) => Promise<unknown>;
+type Session = {
+  name: string;
+  page: Page;
+  step: Step;
+  end(): Promise<unknown>;
 };
-// A mirror's git follower writes the copy's index between the test's
-// own git calls, so a call can meet its lock. Git's own advice holds:
-// the lock is momentary, so the call is retried a few times before it
-// counts as a failure.
-const INDEX_LOCK_RETRIES = 10;
-const git = (cwd: string, ...args: string[]): Buffer => {
-  for (let attempt = 0; ; attempt += 1) {
+type Weblab = {
+  page: Page;
+  step: Step;
+  newSession(options: Record<string, unknown>): Promise<Session>;
+  params: { only?: string; keep?: boolean };
+  ctx: { name: string; artifacts: { dir: string } };
+};
+
+// A device window as the scenarios drive it: its weblab session, asked
+// things through the real bridge (`window.api.hub.status()`). The DOM
+// is touched only where a person would click.
+type AppWindow = {
+  session: string;
+  // Runs `expression` in the renderer, awaiting a promise result, and
+  // returns its JSON value. A thrown exception rejects with its text.
+  evaluate: <T = unknown>(expression: string) => Promise<T>;
+  // Polls `expression` (which must evaluate to something truthy when
+  // satisfied) until it is, returning the value, or rejects after
+  // `timeoutMs` naming `what`.
+  waitFor: <T = unknown>(
+    what: string,
+    expression: string,
+    timeoutMs?: number,
+  ) => Promise<T>;
+  // A screenshot into weblab's files directory and its reply.
+  shot: (label: string) => Promise<unknown>;
+};
+
+function appWindow(session: string, page: Page, step: Step): AppWindow {
+  const evaluate = async <T,>(expression: string): Promise<T> => {
     try {
-      return execFileSync("git", args, { cwd, env: gitEnv, stdio: "pipe" });
+      return (await page.evaluate(expression)) as T;
     } catch (error) {
-      const stderr = String((error as { stderr?: Buffer }).stderr ?? "");
-      if (!stderr.includes("index.lock") || attempt >= INDEX_LOCK_RETRIES) {
-        throw error;
+      throw new Error(errorMessageOf(error).replace(/^page\.evaluate: /, ""), {
+        cause: error,
+      });
+    }
+  };
+  // A condition that throws is one that is not met yet (the bridge
+  // not installed, a query not answerable), so the poll keeps going
+  // and the timeout names the last reason.
+  const waitUntil = async <T,>(
+    what: string,
+    expression: string,
+    waitMs = 30_000,
+  ): Promise<T> => {
+    const until = Date.now() + waitMs;
+    let lastError = "";
+    for (;;) {
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
+        const value = await evaluate<T>(expression);
+        if (value) return value;
+        lastError = "";
+      } catch (error) {
+        lastError = errorMessageOf(error);
       }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+      if (Date.now() > until) {
+        throw new Error(
+          `timed out after ${waitMs}ms waiting for ${what}` +
+            (lastError === "" ? "" : ` (last error: ${lastError})`),
+        );
+      }
+      // oxlint-disable-next-line no-await-in-loop -- see above
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  };
+  return {
+    session,
+    evaluate,
+    waitFor: waitUntil,
+    shot: (label) => step({ shot: label }),
+  };
+}
+
+// A process and everything under it, killed at once. The tree is read
+// before the kill, since an orphaned child is re-parented away from it.
+// Not host/lib/scripts/process.ts's signalTree: that module loads
+// node-pty, a native addon weblab's runtime does not load.
+function killTree(pid: number): void {
+  const rows = execFileSync("ps", ["-A", "-o", "pid=,ppid="])
+    .toString()
+    .trim()
+    .split("\n")
+    .map((row) => row.trim().split(/\s+/).map(Number));
+  const tree = [pid];
+  for (let i = 0; i < tree.length; i += 1) {
+    for (const [child, parent] of rows) {
+      if (parent === tree[i] && child !== undefined) tree.push(child);
     }
   }
-};
-const gitOut = (cwd: string, ...args: string[]) =>
-  git(cwd, ...args)
-    .toString()
-    .trim();
-
-const runDir = join(tmpdir(), `sm-e2e-${Date.now()}`);
-mkdirSync(runDir, { recursive: true });
-const log = (line: string) => console.log(`[e2e] ${line}`);
-
-type Fixture = { a: DevProfile; b: DevProfile; origin: string };
-
-// Every run of a's setup script appends the worktree it ran in here,
-// outside both forests so no mirror carries it: the pull scenarios
-// read it to tell a create that ran setup from one told to skip it.
-const setupLog = join(runDir, "setup-runs.log");
-const setupRuns = (): string[] =>
-  existsSync(setupLog)
-    ? readFileSync(setupLog, "utf8").split("\n").filter(Boolean)
-    : [];
-
-// a's setup script: logs the run, then builds an ignored artifact the
-// way an install or a build would, so a transplant that also brings
-// the source's build output has something to disagree with.
-const BUILT_ON_A = "built on a\n";
-const SETUP_SCRIPT = `pwd >> ${JSON.stringify(setupLog)} && mkdir -p build-out && printf 'built on a\\n' > build-out/artifact.txt`;
-
-// Gives the profile's one project a setup script, written straight
-// into its project.json the way Project Settings would.
-function configureSetupScript(profile: DevProfile, command: string): void {
-  const projects = join(profile.dataDir, "projects");
-  const [projectId, ...rest] = readdirSync(projects);
-  assert.ok(
-    projectId !== undefined && rest.length === 0,
-    `expected one project under ${projects}`,
-  );
-  const configPath = join(projects, projectId, "project.json");
-  const config = JSON.parse(readFileSync(configPath, "utf8")) as {
-    scripts?: Record<string, string>;
-  };
-  config.scripts = { ...config.scripts, setup: command };
-  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-}
-
-function prepareFixture(): Fixture {
-  const a = devProfilePaths("e2e-a");
-  const b = devProfilePaths("e2e-b");
-  wipeDevProfile(a);
-  wipeDevProfile(b);
-  buildDevCli();
-
-  const origin = join(PROFILES_DIR, "e2e-origin.git");
-  rmTree(origin);
-  const seed = join(runDir, "seed");
-  mkdirSync(seed, { recursive: true });
-  git(seed, "init", "-q", "-b", "main");
-  writeFileSync(join(seed, "README.md"), "e2e shared repo\n");
-  // What a real project ignores: secrets, build output, a cache. The
-  // pull scenarios put files under each and watch which ones travel.
-  writeFileSync(join(seed, ".gitignore"), ".env\nbuild-out/\ncache/\n");
-  git(seed, "add", ".");
-  git(seed, "commit", "-q", "-m", "Initial");
-  git(seed, "init", "--bare", "-q", "-b", "main", origin);
-  git(seed, "remote", "add", "origin", origin);
-  git(seed, "push", "-q", "origin", "main");
-
-  // A repo only b has, with no remote to clone it from: the mirror
-  // onto a device with no checkout has to bring it over the device
-  // link itself.
-  const lone = join(b.repos, "lone");
-  mkdirSync(lone, { recursive: true });
-  git(lone, "init", "-q", "-b", "main");
-  writeFileSync(join(lone, "README.md"), "only on b\n");
-  git(lone, "add", ".");
-  git(lone, "commit", "-q", "-m", "Initial");
-
-  for (const profile of [a, b]) {
-    mkdirSync(profile.repos, { recursive: true });
-    mkdirSync(profile.dataDir, { recursive: true });
-    git(profile.repos, "clone", "-q", origin, "shared");
-    registerProjects(profile, profile.repos);
-    cloneDevLogin(profile);
+  for (const member of tree) {
+    try {
+      process.kill(member, "SIGKILL");
+    } catch {
+      // Gone already.
+    }
   }
-  configureSetupScript(a, SETUP_SCRIPT);
-  return { a, b, origin };
 }
 
-// Each tree in its own process group, so a kill reaches forge and
-// Electron under the pnpm wrapper, not just the wrapper.
-function launch(
-  name: string,
-  command: string,
-  args: string[],
-  env: NodeJS.ProcessEnv,
-): ChildProcess {
-  const out = openSync(join(runDir, `${name}.log`), "a");
-  const child = spawn(command, args, {
-    cwd: appRoot,
-    env,
-    detached: true,
-    stdio: ["ignore", out, out],
-  });
-  child.on("exit", (code, signal) => log(`${name} exited (${signal ?? code})`));
-  // A spawn failure (no pnpm on PATH) must land in the failures, not
-  // crash past the teardown as an unhandled event.
-  child.on("error", (error) => log(`${name} failed to launch: ${error}`));
-  return child;
-}
-
-const isRunning = (
-  child: ChildProcess,
-): child is ChildProcess & { pid: number } =>
-  child.pid !== undefined &&
-  child.exitCode === null &&
-  child.signalCode === null;
-
-const exited = (child: ChildProcess) =>
-  new Promise<void>((resolve) => {
-    if (!isRunning(child)) resolve();
-    else child.once("exit", () => resolve()).once("error", () => resolve());
-  });
-
-async function killTrees(
-  children: ChildProcess[],
-  signal: NodeJS.Signals,
-): Promise<void> {
-  await Promise.all(
-    children.filter(isRunning).map((child) => signalTree(child.pid, signal)),
-  );
-}
+// The scenarios' progress, a line at a time, into the files directory
+// weblab names in its replies: a long run can be followed there while
+// it goes, and the code's return value has the summary.
+let logFile = "";
+const log = (line: string) => {
+  console.log(`[e2e] ${line}`);
+  if (logFile !== "") appendFileSync(logFile, `${line}\n`);
+};
 
 // The previous scenario's product, or a failure naming what is missing.
 function need<T>(value: T | undefined, from: string): T {
@@ -312,18 +255,13 @@ const waitSignedIn = (w: AppWindow, who: string) =>
 // The teardown's revoke from one window: every device whose name
 // carries the other profile's suffix (so a re-enrolled or never-read
 // peer is still found), then the window's own sign-out.
-async function revokeFrom(port: number, otherSuffix: string): Promise<void> {
-  const w = await attachWindow(port, 5_000);
-  try {
-    await w.evaluate(
-      `window.api.account.listDevices().then((ds) => Promise.all(ds
-        .filter((d) => d.name.endsWith(${JSON.stringify(otherSuffix)}) && d.deviceId !== window.api.deviceId)
-        .map((d) => window.api.account.revokeDevice(d.deviceId))))`,
-    );
-    await w.evaluate("window.api.account.signOut()");
-  } finally {
-    w.close();
-  }
+async function revokeFrom(w: AppWindow, otherSuffix: string): Promise<void> {
+  await w.evaluate(
+    `window.api.account.listDevices().then((ds) => Promise.all(ds
+      .filter((d) => d.name.endsWith(${JSON.stringify(otherSuffix)}) && d.deviceId !== window.api.deviceId)
+      .map((d) => window.api.account.revokeDevice(d.deviceId))))`,
+  );
+  await w.evaluate("window.api.account.signOut()");
 }
 
 // The shared settings, driven through the renderer's own write path
@@ -408,52 +346,69 @@ const waitMirror = (
     90_000,
   );
 
-async function main(): Promise<string[]> {
+export default async function remoteSmoke({
+  page,
+  step,
+  newSession,
+  params,
+  ctx,
+}: Weblab): Promise<{ passed: string[]; skipped: number; log: string }> {
+  logFile = join(ctx.artifacts.dir, "remote-smoke.log");
+  rmSync(logFile, { force: true });
+  const only = (params.only ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part !== "");
+  const keep = params.keep === true;
   const failures: string[] = [];
-  const windows: AppWindow[] = [];
-  const fixture = prepareFixture();
-  const [portA, portB] = await Promise.all([
-    freeLoopbackPort(),
-    freeLoopbackPort(),
-  ]);
+  const passed: string[] = [];
+  const skipped: string[] = [];
 
-  const primary = launch(
-    "primary",
-    "pnpm",
-    ["start", "--profile", fixture.a.name],
-    {
-      ...process.env,
-      SHIGOMORI_DEBUG_PORT: String(portA),
-    },
-  );
-  let peer: ChildProcess | null = null;
-  const launchPeer = () => {
-    peer = launch(
-      "peer",
-      "node",
-      [
-        "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
-        join(appRoot, "scripts", "dev-peer.mts"),
-        fixture.b.name,
-      ],
-      { ...process.env, SHIGOMORI_DEBUG_PORT: String(portB) },
-    );
+  const a = appWindow(ctx.name, page, step);
+  const windows: AppWindow[] = [a];
+  // b starts the way the agent started a: weblab runs boot.mts with
+  // b's port as PORT, waits for the port to answer, and attaches to
+  // the window. The peer needs only a's build and vite server, both
+  // there once a's window exists.
+  const portB = await freeLoopbackPort();
+  const bootB = `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON ${JSON.stringify(join(import.meta.dirname, "boot.mts"))} b`;
+  let bSession: Session | undefined;
+  const startB = async (): Promise<AppWindow> => {
+    log(`b booting on ${portB}`);
+    bSession = await newSession({
+      name: "b",
+      attach: `127.0.0.1:${portB}`,
+      address: `127.0.0.1:${portB}`,
+      start: bootB,
+      startTimeout: 180_000,
+      tab: "shigomori-dev://",
+    });
+    const w = appWindow(bSession.name, bSession.page, bSession.step);
+    windows.push(w);
+    await w.waitFor("b's bridge", 'typeof window.api === "object"', 60_000);
+    return w;
+  };
+  // b gone at once, its whole tree with SIGKILL: the boot wrapper
+  // cannot be tidy about it, and Electron dies mid-socket, which is
+  // the event. Its session goes with it, and its profile stays for the
+  // relaunch.
+  const killB = async (w: AppWindow) => {
+    windows.splice(windows.indexOf(w), 1);
+    killTree(Number(readFileSync(bootPidFile("b"), "utf8")));
+    await bSession?.end();
+    bSession = undefined;
   };
 
   const shoot = (label: string) =>
-    Promise.allSettled(
-      windows.map(async (w) => {
-        const png = await w.screenshot();
-        writeFileSync(join(runDir, `${label}-${w.port}.png`), png);
-      }),
-    );
+    Promise.allSettled(windows.map((w) => w.shot(label)));
   const scenario = async (label: string, fn: () => Promise<void>) => {
     if (only.length > 0 && !only.some((part) => label.includes(part))) {
-      log(`skip ${label}`);
+      skipped.push(label);
       return;
     }
     try {
       await fn();
+      passed.push(label);
       log(`ok   ${label}`);
     } catch (error) {
       failures.push(`${label}: ${errorMessageOf(error)}`);
@@ -463,15 +418,8 @@ async function main(): Promise<string[]> {
   };
 
   try {
-    log(`primary booting on CDP ${portA} (log: ${runDir}/primary.log)`);
-    const a = await attachWindow(portA, 180_000);
-    windows.push(a);
-    // The peer needs only the primary's build and vite server, both
-    // there once its window exists, so it boots while a enrolls.
-    launchPeer();
-    log(`peer booting on CDP ${portB}`);
-    let b = await attachWindow(portB, 120_000);
-    windows.push(b);
+    await a.waitFor("a's bridge", 'typeof window.api === "object"', 60_000);
+    let b = await startB();
     await Promise.all([waitSignedIn(a, "a"), waitSignedIn(b, "b")]);
     const [idA, idB] = await Promise.all([
       a.evaluate<string>("window.api.deviceId"),
@@ -2824,15 +2772,9 @@ async function main(): Promise<string[]> {
     });
 
     await scenario("liveness", async () => {
-      // SIGKILL to the whole peer tree: the wrapper cannot be tidy
-      // about it, and Electron dies mid-socket, which is the event.
-      b.close();
-      windows.splice(windows.indexOf(b), 1);
-      await killTrees([need(peer ?? undefined, "a running peer")], "SIGKILL");
+      await killB(b);
       await waitDropped(a, idB, "a to drop b from its roster after the kill");
-      launchPeer();
-      b = await attachWindow(portB, 120_000);
-      windows.push(b);
+      b = await startB();
       await waitSignedIn(b, "b (relaunched)");
       await Promise.all([
         waitConnected(a, idB, "a (after b's relaunch)"),
@@ -2843,14 +2785,10 @@ async function main(): Promise<string[]> {
     // A pick made while the other device was off reaches it when the
     // session next lands, with nothing in between to have held it.
     await scenario("shared settings: offline catch-up", async () => {
-      b.close();
-      windows.splice(windows.indexOf(b), 1);
-      await killTrees([need(peer ?? undefined, "a running peer")], "SIGKILL");
+      await killB(b);
       await waitDropped(a, idB, "a to drop b from its roster");
       await setSharedSetting(a, "picked-while-b-was-off");
-      launchPeer();
-      b = await attachWindow(portB, 120_000);
-      windows.push(b);
+      b = await startB();
       await waitSignedIn(b, "b (relaunched again)");
       await waitSharedSetting(
         b,
@@ -3010,67 +2948,39 @@ async function main(): Promise<string[]> {
     log(`FAIL setup: ${errorMessageOf(error)}`);
     await shoot("fail-setup");
   } finally {
-    for (const w of windows) w.close();
-    const trees = [primary, ...(peer ? [peer] : [])];
     if (keep) {
-      log("--keep: leaving both windows and profiles up");
-      // Let this process exit while the detached trees live on.
-      for (const tree of trees) tree.unref();
+      log("keep: leaving both devices enrolled and running");
     } else {
-      // Revoke what is still enrolled, through fresh attachments so a
-      // window this run lost track of (a relaunch that failed midway)
-      // is still asked. From a: it removes every device of b's profile
-      // (b may have re-enrolled, or never been read), then signs
-      // itself out, which sticks because a booted fresh in this run
+      // Revoke what is still enrolled. From a: every device of b's
+      // profile (b may have re-enrolled, or never been read), then a's
+      // own sign-out, which sticks because a booted fresh in this run
       // (see the revoke scenario for why b's would not). Without a, b
       // signs itself out as the best that is left. Best effort: a dead
-      // window has nothing to revoke. Then stop both trees and wipe
-      // the local halves.
-      await revokeFrom(portA, devProfileNameSuffix(fixture.b.name)).catch(
+      // window has nothing to revoke. Then b ends, which stops its
+      // window and clears its profile. a's go when a's session ends.
+      await revokeFrom(a, devProfileNameSuffix(fixture.b.name)).catch(
         async (error: unknown) => {
           log(`cleanup: a could not revoke: ${errorMessageOf(error)}`);
-          await revokeFrom(portB, devProfileNameSuffix(fixture.a.name)).catch(
-            (fallbackError: unknown) => {
+          const b = windows.find((w) => w !== a);
+          await b
+            ?.evaluate("window.api.account.signOut()")
+            .catch((fallbackError: unknown) => {
               log(
-                `cleanup: b could not revoke: ${errorMessageOf(fallbackError)}`,
+                `cleanup: b could not sign out: ${errorMessageOf(fallbackError)}`,
               );
-            },
-          );
+            });
         },
       );
-      await killTrees(trees, "SIGTERM");
-      // A cleared timer, so a prompt exit does not leave the loop
-      // idling out the grace period after the report.
-      let graceTimer: NodeJS.Timeout | undefined;
-      const grace = new Promise<void>((resolve) => {
-        graceTimer = setTimeout(resolve, 4000);
+      await bSession?.end().catch((error: unknown) => {
+        log(`cleanup: b did not end: ${errorMessageOf(error)}`);
       });
-      await Promise.race([Promise.all(trees.map(exited)), grace]);
-      clearTimeout(graceTimer);
-      await killTrees(trees, "SIGKILL");
-      // Each wipe stands on its own, and none of them may decide the
-      // run: a throw out of this finally would skip the report, so a
-      // scenario summary this run spent minutes earning would be lost
-      // to a stray file left behind. What is left over is named in the
-      // log, and the next run wipes the profiles again before it seeds.
-      for (const [what, wipe] of [
-        [fixture.a.name, () => wipeDevProfile(fixture.a)],
-        [fixture.b.name, () => wipeDevProfile(fixture.b)],
-        ["the shared origin", () => rmTree(fixture.origin)],
-      ] as const) {
-        try {
-          wipe();
-        } catch (error) {
-          log(`cleanup: couldn't remove ${what}: ${errorMessageOf(error)}`);
-        }
-      }
     }
   }
-  return failures;
+  // One line: weblab's reply quotes a thrown message's first line.
+  if (failures.length > 0) {
+    throw new Error(
+      `${failures.length} of ${failures.length + passed.length} scenarios failed: ${failures.join(" | ")}`,
+    );
+  }
+  return { passed, skipped: skipped.length, log: logFile };
 }
-
-report({
-  name: "remote smoke",
-  failures: await main(),
-  hint: `artifacts: ${runDir}`,
-});
