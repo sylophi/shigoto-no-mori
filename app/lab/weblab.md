@@ -44,10 +44,7 @@ reference. What it gives you here:
   weblab runs its `start`, and stops it when the last session there
   ends. That covers the fake host's vite server and the device windows
   alike, so `end` is the cleanup, and `end` with no session named ends
-  everything. When `end` leaves a server running for another session,
-  that session may be another agent's, in a weblab of its own that
-  `list` does not show. Leave the server alone: the last session
-  stops it.
+  everything.
 - **Where files go.** Screenshots, videos, traces, logs and the output
   of what weblab started go to its files directory, named in every
   reply. Nothing lands in the repo. Its browser runs on this machine,

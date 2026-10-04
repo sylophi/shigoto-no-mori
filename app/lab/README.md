@@ -26,17 +26,12 @@ at the same time. Profiles, debugging ports and the account's device
 list are shared by the whole machine, not per worktree.
 
 - **Put a session tag in every profile name**: `<tag>-a`, not `a`. The
-  worktree folder name works when you are its only agent. Add
-  something of your own when you may not be. A device's name ends in
-  `[<profile>]`, so this keeps device names apart too. Two sessions on
-  one profile name share its folders, and `--fresh` wipes them under
-  the other.
-- **Touch only what you started**: profiles, devices and processes
-  that carry your tag, never one matched on `Electron` or `vite`.
-  Several agents can work in one worktree, so its path alone does not
-  make a process yours. Stop what weblab started with `end`, not by
-  hand. An unknown device on the account may be another session's
-  live test.
+  worktree folder name works. A device's name ends in `[<profile>]`,
+  so this keeps device names apart too. Two sessions on one profile
+  name share its folders, and `--fresh` wipes them under the other.
+- **Touch only what carries your tag**: profiles, devices, and
+  processes (match on your worktree path, never on `Electron`). An
+  unknown device on the account may be another session's live test.
 - **Debugging ports are examples.** Use any free ones.
 - **Give the fake host this worktree's port.** Each worktree has its
   own ports in `.env.ports` (port-pool). weblab uses whatever already
