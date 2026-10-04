@@ -36,7 +36,7 @@ import {
   worktreeMoves,
   type Speaker,
 } from "@/lib/villagerVoice";
-import { worktree as labWorktree } from "../lab/fixtures.ts";
+import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { lastOf, makeProof } from "./lib/checkKit.mts";
 
 const proof = makeProof("villager-voice proof");
@@ -97,7 +97,7 @@ const speaker = (name: string): Speaker => {
 
 let serial = 0;
 const worktree = (name: string, extra: Partial<Worktree> = {}): Worktree =>
-  labWorktree({
+  fakeWorktree({
     id: `wt${++serial}`,
     projectId: "p1",
     name,

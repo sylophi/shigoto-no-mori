@@ -6,9 +6,11 @@ mirroring engine (`file-sync/`) it bundles, and the device hub
 (`hub/`) it talks to, are siblings one level up.
 
 - `DESIGN.md`: rules for the visual layer.
-- `MANUAL-TESTING.md`: running the app, driving it from a script,
-  testing remote flows on one machine.
-- `lab/README.md`: the UI lab, the renderer posed in a browser.
+- `lab/README.md`: testing by hand on the real UI, driven with weblab:
+  the fake host (any screen posed in a browser) and device windows
+  (the real app as several devices on one machine).
+- `test/README.md`: the programmatic checks, the proofs `pnpm test`
+  and lefthook run.
 
 ## Layout
 

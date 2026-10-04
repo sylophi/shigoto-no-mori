@@ -1,4 +1,4 @@
-// The lab's GitHub fixtures: the repo's pull requests by head branch
+// The fake host's GitHub fixtures: the repo's pull requests by head branch
 // (three of them a stack across two devices), the detail with its CI
 // rollup posed by ?checks=, the merged stack posed by ?stack=merged,
 // and one diff for the diff pages. Pure data plus readers of
@@ -14,9 +14,9 @@ import {
 } from "@shared/schemas";
 import { armsAutoMerge } from "@/lib/pullRequest";
 
-const LAB_SM_PROJECT_IDS = new Set(["p_sm", "tp_sm", "mini_sm"]);
+const FAKE_SM_PROJECT_IDS = new Set(["p_sm", "tp_sm", "mini_sm"]);
 
-const labPullRequest = (
+const fakePullRequest = (
   number: number,
   title: string,
   baseRefName: string,
@@ -34,65 +34,65 @@ const labPullRequest = (
 // devices (brave-badger and quiet-quail here, gentle-gecko on the
 // Thinkpad), with the bottom already landed, so the stack list, the
 // pill positions and the "merge up to here" button all pose.
-const LAB_PRS = {
-  "v2-exp/remote-ui-flows": labPullRequest(
+const FAKE_PRS = {
+  "v2-exp/remote-ui-flows": fakePullRequest(
     148,
     "Aggregate worktrees across devices",
     "main",
   ),
-  "fix-stale-locks": labPullRequest(
+  "fix-stale-locks": fakePullRequest(
     150,
     "Refuse a lock file older than the daemon",
     "main",
     "MERGED",
   ),
-  "exp/terrier-sync": labPullRequest(
+  "exp/terrier-sync": fakePullRequest(
     151,
     "Watch the terrier registry for edits",
     "fix-stale-locks",
   ),
-  "port-pool-retry": labPullRequest(
+  "port-pool-retry": fakePullRequest(
     152,
     "Retry the pool lease before giving up",
     "exp/terrier-sync",
   ),
 };
 
-const LAB_PR_SLIM = LAB_PRS["v2-exp/remote-ui-flows"];
+const FAKE_PR_SLIM = FAKE_PRS["v2-exp/remote-ui-flows"];
 
 // ?stack=merged poses the whole stack as landed, so the closed-PR box
 // offers the stack cleanup (the merged layers' worktrees together).
-const LAB_STACK_BRANCHES = new Set([
+const FAKE_STACK_BRANCHES = new Set([
   "fix-stale-locks",
   "exp/terrier-sync",
   "port-pool-retry",
 ]);
-const LAB_PRS_MERGED = Object.fromEntries(
-  Object.entries(LAB_PRS).map(([branch, pr]) => [
+const FAKE_PRS_MERGED = Object.fromEntries(
+  Object.entries(FAKE_PRS).map(([branch, pr]) => [
     branch,
-    LAB_STACK_BRANCHES.has(branch) ? { ...pr, state: "MERGED" as const } : pr,
+    FAKE_STACK_BRANCHES.has(branch) ? { ...pr, state: "MERGED" as const } : pr,
   ]),
 );
 
-function labPosedPullRequests(): Record<string, typeof LAB_PR_SLIM> {
+function fakePosedPullRequests(): Record<string, typeof FAKE_PR_SLIM> {
   const merged = new URLSearchParams(location.search).get("stack") === "merged";
-  return merged ? LAB_PRS_MERGED : LAB_PRS;
+  return merged ? FAKE_PRS_MERGED : FAKE_PRS;
 }
 
-export function labPullRequests(projectId: string) {
-  return LAB_SM_PROJECT_IDS.has(projectId) ? labPosedPullRequests() : {};
+export function fakePullRequests(projectId: string) {
+  return FAKE_SM_PROJECT_IDS.has(projectId) ? fakePosedPullRequests() : {};
 }
 
 // The stacked PRs carry no checks, so the stack poses with and without
 // the checks chip. #148 carries whatever ?checks= poses.
-export function labPullRequestDetail(branch: string) {
-  const slim = labPosedPullRequests()[branch];
+export function fakePullRequestDetail(branch: string) {
+  const slim = fakePosedPullRequests()[branch];
   if (!slim) return null;
-  if (slim === LAB_PR_SLIM) return labPosedChecksDetail();
-  return { ...LAB_PR_DETAIL, ...slim, ...labChecks([]) };
+  if (slim === FAKE_PR_SLIM) return fakePosedChecksDetail();
+  return { ...FAKE_PR_DETAIL, ...slim, ...fakeChecks([]) };
 }
 
-const labCheck = (
+const fakeCheck = (
   name: string,
   bucket: PullRequestCheckBucket,
   linked = true,
@@ -104,13 +104,13 @@ const labCheck = (
   }),
 });
 
-const labChecks = (checkList: PullRequestCheck[]) => ({
+const fakeChecks = (checkList: PullRequestCheck[]) => ({
   checks: summarizeChecks(checkList),
   checkList,
 });
 
 // One CI run, all passing: the poses below set a few jobs' buckets.
-const labCiRun = (
+const fakeCiRun = (
   buckets: Partial<Record<string, PullRequestCheckBucket>> = {},
 ) => [
   ...[
@@ -119,15 +119,15 @@ const labCiRun = (
     "test (macos-latest)",
     "test (ubuntu-latest)",
     "theme:check",
-  ].map((name) => labCheck(name, buckets[name] ?? "passed")),
-  labCheck("Vercel", buckets["Vercel"] ?? "passed", false),
+  ].map((name) => fakeCheck(name, buckets[name] ?? "passed")),
+  fakeCheck("Vercel", buckets["Vercel"] ?? "passed", false),
 ];
 
 // ?checks=<variant> poses #148's CI rollup, paired with the merge state
 // GitHub would report beside it, and for `auto-merge` the auto-merge
 // armed while the checks run. Unknown or absent keeps the default two
 // passing checks.
-const LAB_CHECK_POSES: Record<
+const FAKE_CHECK_POSES: Record<
   string,
   {
     mergeState: PullRequestMergeState;
@@ -138,32 +138,32 @@ const LAB_CHECK_POSES: Record<
   none: { mergeState: "CLEAN", checkList: [] },
   "single-passed": {
     mergeState: "CLEAN",
-    checkList: [labCheck("battery", "passed")],
+    checkList: [fakeCheck("battery", "passed")],
   },
   "single-failing": {
     mergeState: "UNSTABLE",
-    checkList: [labCheck("battery", "failing")],
+    checkList: [fakeCheck("battery", "failing")],
   },
-  passed: { mergeState: "CLEAN", checkList: labCiRun() },
+  passed: { mergeState: "CLEAN", checkList: fakeCiRun() },
   "passed-some-skipped": {
     mergeState: "CLEAN",
     checkList: [
-      ...labCiRun().slice(0, 4),
-      labCheck("release-mac", "skipped"),
-      labCheck("CodeQL", "neutral"),
+      ...fakeCiRun().slice(0, 4),
+      fakeCheck("release-mac", "skipped"),
+      fakeCheck("CodeQL", "neutral"),
     ],
   },
   "all-skipped": {
     mergeState: "CLEAN",
     checkList: [
-      labCheck("release-mac", "skipped"),
-      labCheck("web-client-prod", "skipped"),
-      labCheck("CodeQL", "neutral"),
+      fakeCheck("release-mac", "skipped"),
+      fakeCheck("web-client-prod", "skipped"),
+      fakeCheck("CodeQL", "neutral"),
     ],
   },
   pending: {
     mergeState: "BLOCKED",
-    checkList: labCiRun({
+    checkList: fakeCiRun({
       "test (macos-latest)": "pending",
       "test (ubuntu-latest)": "pending",
       Vercel: "pending",
@@ -172,18 +172,18 @@ const LAB_CHECK_POSES: Record<
   "auto-merge": {
     mergeState: "BLOCKED",
     autoMerge: "squash",
-    checkList: labCiRun({
+    checkList: fakeCiRun({
       "test (macos-latest)": "pending",
       "test (ubuntu-latest)": "pending",
     }),
   },
   failing: {
     mergeState: "UNSTABLE",
-    checkList: labCiRun({ lint: "failing" }),
+    checkList: fakeCiRun({ lint: "failing" }),
   },
   "failing-blocked": {
     mergeState: "BLOCKED",
-    checkList: labCiRun({
+    checkList: fakeCiRun({
       typecheck: "failing",
       "test (macos-latest)": "failing",
       "test (ubuntu-latest)": "failing",
@@ -192,12 +192,12 @@ const LAB_CHECK_POSES: Record<
   "failing-and-pending": {
     mergeState: "BLOCKED",
     checkList: [
-      ...labCiRun({
+      ...fakeCiRun({
         lint: "failing",
         "test (macos-latest)": "pending",
         "test (ubuntu-latest)": "pending",
       }).slice(0, 5),
-      labCheck("release-mac", "skipped"),
+      fakeCheck("release-mac", "skipped"),
     ],
   },
   many: {
@@ -217,75 +217,75 @@ const LAB_CHECK_POSES: Record<
         "e2e / remote-smoke",
         "build (darwin-arm64)",
         "build (darwin-x64)",
-      ].map((name) => labCheck(name, "passed")),
-      labCheck(
+      ].map((name) => fakeCheck(name, "passed")),
+      fakeCheck(
         "e2e / web shell on a narrow phone viewport with the inbox open",
         "failing",
       ),
-      labCheck("build (linux-x64)", "pending"),
-      labCheck("build (win32-x64)", "pending"),
-      labCheck("release-mac", "skipped"),
-      labCheck("web-client-prod", "skipped"),
-      labCheck("CodeQL", "neutral"),
-      labCheck("Vercel (shigomori-web)", "passed", false),
-      labCheck("Vercel (shigomori-site)", "passed", false),
+      fakeCheck("build (linux-x64)", "pending"),
+      fakeCheck("build (win32-x64)", "pending"),
+      fakeCheck("release-mac", "skipped"),
+      fakeCheck("web-client-prod", "skipped"),
+      fakeCheck("CodeQL", "neutral"),
+      fakeCheck("Vercel (shigomori-web)", "passed", false),
+      fakeCheck("Vercel (shigomori-site)", "passed", false),
     ],
   },
 };
 
-function labPosedChecksDetail() {
+function fakePosedChecksDetail() {
   const variant = new URLSearchParams(location.search).get("checks");
-  const pose = variant ? LAB_CHECK_POSES[variant] : undefined;
+  const pose = variant ? FAKE_CHECK_POSES[variant] : undefined;
   const posed = pose
     ? {
-        ...LAB_PR_DETAIL,
+        ...FAKE_PR_DETAIL,
         mergeState: pose.mergeState,
         autoMerge: pose.autoMerge ?? null,
-        ...labChecks(pose.checkList),
+        ...fakeChecks(pose.checkList),
       }
-    : LAB_PR_DETAIL;
+    : FAKE_PR_DETAIL;
   return {
     ...posed,
-    state: labMerged ? ("MERGED" as const) : posed.state,
-    autoMerge: labAutoMerge ? labAutoMerge.method : posed.autoMerge,
+    state: fakeMerged ? ("MERGED" as const) : posed.state,
+    autoMerge: fakeAutoMerge ? fakeAutoMerge.method : posed.autoMerge,
   };
 }
 
 // Every method allowed, so the merge button poses its dropdown, and
 // auto-merge too, so a waiting PR (?checks=pending) poses the
 // auto-merge button.
-export const LAB_REPO_MERGE_CONFIG: RepoMergeConfig = {
+export const FAKE_REPO_MERGE_CONFIG: RepoMergeConfig = {
   merge: true,
   squash: true,
   rebase: true,
   autoMerge: true,
 };
 
-// What the lab's merge button does, by the button's own rule: a PR it
+// What the fake host's merge button does, by the button's own rule: a PR it
 // would arm auto-merge for reads as armed with the method until
 // "Disable auto-merge". Anything else merges, and reads as merged.
 // Page state, so the flow can be posed and recorded. A reload starts
 // over.
-let labAutoMerge: { method: MergeMethod | null } | null = null;
-let labMerged = false;
+let fakeAutoMerge: { method: MergeMethod | null } | null = null;
+let fakeMerged = false;
 
-export function labMergePullRequest(
+export function fakeMergePullRequest(
   method: MergeMethod,
 ): MergePullRequestResult {
-  if (armsAutoMerge(LAB_REPO_MERGE_CONFIG, labPosedChecksDetail(), false)) {
-    labAutoMerge = { method };
+  if (armsAutoMerge(FAKE_REPO_MERGE_CONFIG, fakePosedChecksDetail(), false)) {
+    fakeAutoMerge = { method };
     return { outcome: "auto-merge" };
   }
-  labMerged = true;
+  fakeMerged = true;
   return { outcome: "merged" };
 }
 
-export function labDisableAutoMerge(): void {
-  labAutoMerge = { method: null };
+export function fakeDisableAutoMerge(): void {
+  fakeAutoMerge = { method: null };
 }
 
-const LAB_PR_DETAIL = {
-  ...LAB_PR_SLIM,
+const FAKE_PR_DETAIL = {
+  ...FAKE_PR_SLIM,
   mergeState: "CLEAN" as PullRequestMergeState,
   autoMerge: null as MergeMethod | null,
   authorLogin: "sylophi",
@@ -293,7 +293,7 @@ const LAB_PR_DETAIL = {
   additions: 412,
   deletions: 96,
   changedFiles: 14,
-  ...labChecks([
+  ...fakeChecks([
     { name: "battery", bucket: "passed" },
     { name: "theme:check", bucket: "passed" },
   ]),
@@ -302,7 +302,7 @@ const LAB_PR_DETAIL = {
 // Three files, so the diff pages pose a real file index (the list in
 // the sidebar on a wide viewport) and the phone's sheet, which needs a
 // patch of at least DiffView's SHEET_MIN_FILES.
-export const LAB_DIFF = `diff --git a/renderer/components/sidebar/RowContent.tsx b/renderer/components/sidebar/RowContent.tsx
+export const FAKE_DIFF = `diff --git a/renderer/components/sidebar/RowContent.tsx b/renderer/components/sidebar/RowContent.tsx
 index 4f2c9d1..a91f3c7 100644
 --- a/renderer/components/sidebar/RowContent.tsx
 +++ b/renderer/components/sidebar/RowContent.tsx

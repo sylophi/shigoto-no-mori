@@ -130,9 +130,9 @@ Rules that keep that working:
   pressed state (doubutsu's stripes do).
 - The `data-*` hooks phone.css selects are verified by
   `pnpm test theme-contract`, like doubutsu's.
-- When changing UI, check it at phone width as well. The UI lab's web
-  flavor (`lab/README.md`) renders the phone layout at any viewport
-  under 768px with no sign-in.
+- When changing UI, check it at phone width as well. The fake host's
+  web flavor (`lab/fake-host/README.md`) renders the phone layout at
+  any viewport under 768px with no sign-in.
 
 ## Devices: one identity, drawn one way
 

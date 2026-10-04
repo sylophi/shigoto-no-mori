@@ -1,5 +1,5 @@
-// URL posing for one-shot headless screenshots, shared by both lab
-// entries (lab/main.tsx and lab/web-main.tsx pose identically):
+// URL posing, shared by both fake host entries (main.tsx and
+// web-main.tsx pose identically):
 //   ?theme=light|dark        (default light)
 //   ?doubutsu=0|1            (default 1, matching the product default)
 //   ?light=<id>, ?dark=<id>  the doubutsu palette of each appearance
@@ -19,7 +19,7 @@ import {
   DEFAULT_LIGHT_THEME,
   LIGHT_THEME_IDS,
   type LightTheme,
-} from "../shared/themes";
+} from "../../shared/themes";
 
 function pickOf<Id extends string>(
   raw: string | null,
@@ -47,19 +47,21 @@ export function applyPose(): void {
   localStorage.setItem("shigomori.doubutsu", String(doubutsu));
   localStorage.setItem("shigomori.lightTheme", light);
   localStorage.setItem("shigomori.darkTheme", dark);
-  // Posed over whatever the lab session saved, so a reload keeps the
+  // Posed over whatever the fake host session saved, so a reload keeps the
   // rest of the client config (folds, the sidebar view, quick-create
   // picks) the way the real store would.
   // Parsed here rather than through a renderer helper: this runs
   // before the bridge owns window.api, when no renderer module may load.
   let stored: Record<string, unknown> = {};
   try {
-    stored = JSON.parse(localStorage.getItem("sm.lab.clientConfig") ?? "{}");
+    stored = JSON.parse(
+      localStorage.getItem("sm.fakeHost.clientConfig") ?? "{}",
+    );
   } catch {
     // Corrupt storage reads as defaults.
   }
   localStorage.setItem(
-    "sm.lab.clientConfig",
+    "sm.fakeHost.clientConfig",
     JSON.stringify({
       ...stored,
       theme,
@@ -69,9 +71,9 @@ export function applyPose(): void {
     }),
   );
   // ?updatedFrom=<version>: the build this window last ran, as if the
-  // lab's own (LAB_APP_VERSION) had just updated from it, for the
+  // fake host's own (FAKE_APP_VERSION) had just updated from it, for the
   // update toast (components/UpdateNews.tsx). Absent, the record is
-  // left alone, so the lab's own runs stay quiet.
+  // left alone, so the fake host's own runs stay quiet.
   const updatedFrom = pose.get("updatedFrom");
   if (updatedFrom !== null) {
     localStorage.setItem("shigomori.lastVersion", updatedFrom);

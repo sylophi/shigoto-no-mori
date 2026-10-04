@@ -194,7 +194,7 @@ export const MirrorIgnoresSchema = z
 // Whether a pull with this rule has ignored files to bring: the
 // capture never carries them, and gitignored leaves every one of them
 // behind, so only the other rules reach the files step. The host, the
-// lab and the dialogs all read this one answer.
+// fake host and the dialogs all read this one answer.
 export function pullBringsIgnoredFiles(
   mode: MirrorIgnoreMode | undefined,
 ): boolean {

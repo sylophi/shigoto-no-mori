@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 // A doubutsu character's bare face, by name slug, from this device's
 // villager data, gated by useVillageLife. A name without a face renders
-// nothing, never a stand-in. The lab's contact sheet draws these. A
+// nothing, never a stand-in. The fake host's contact sheet draws these. A
 // product surface shows a villager through VillagerFace (VillagerSays.tsx)
 // instead.
 //

@@ -3,7 +3,7 @@
 // device's own answer (detected at enroll, or picked by its owner on
 // the Devices page) and the hub stores it beside the name, so
 // every device draws every other one the same way. Shared by the hub
-// protocol, both enroll paths (desktop and web), the lab and every
+// protocol, both enroll paths (desktop and web), the fake host and every
 // renderer surface, so the set cannot drift between them. Pure, like
 // the rest of shared/account/: no node, no DOM.
 //

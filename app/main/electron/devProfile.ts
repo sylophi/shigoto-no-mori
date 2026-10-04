@@ -38,7 +38,7 @@ export function initDevProfile(): string | null {
     throw new Error(
       `${DEV_PROFILE_ENV} needs SHIGOMORI_DATA_DIR set to the profile's own ` +
         "data dir. Use `pnpm start --profile <name>` or " +
-        "`pnpm dev:peer <name>`, which set both.",
+        "`pnpm device <name>`, which set both.",
     );
   }
   profile = name;

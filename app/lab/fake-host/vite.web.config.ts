@@ -1,14 +1,14 @@
-// The web-shell flavor of the UI lab (see vite.config.ts): serves
-// lab/web.html for every app path so the web router's browser history
-// works, on its own port beside the desktop lab.
+// The web-shell flavor of the fake host (see vite.config.ts): serves
+// web.html for every app path so the web router's
+// browser history works, on its own port beside the desktop fake host.
 import { defineConfig, type Plugin } from "vite";
-import { labBaseConfig } from "./vite.base";
+import { fakeHostBaseConfig } from "./vite.base";
 
 // Rewrite document requests to the web entry (vite's default SPA
-// fallback only serves index.html, which is the desktop lab's entry).
+// fallback only serves index.html, which is the desktop fake host's entry).
 function webHtmlFallback(): Plugin {
   return {
-    name: "lab-web-html-fallback",
+    name: "fake-host-web-html-fallback",
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
         const url = req.url ?? "/";
@@ -28,7 +28,10 @@ function webHtmlFallback(): Plugin {
   };
 }
 
-const base = labBaseConfig({ portKey: "LAB_WEB_PORT", entry: "web.html" });
+const base = fakeHostBaseConfig({
+  portKey: "FAKE_HOST_WEB_PORT",
+  entry: "web.html",
+});
 
 export default defineConfig({
   ...base,

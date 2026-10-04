@@ -97,6 +97,24 @@ export type DevProfileArgs = {
   rest: string[];
 };
 
+// A launcher's arguments when the profile's name comes first,
+// `<name> [--fresh] [--clone-login]`. Throws on anything else.
+export function parsePositionalDevProfile(argv: string[]): {
+  profile: DevProfile;
+  args: DevProfileArgs;
+} {
+  const [name, ...flags] = argv;
+  if (name === undefined || name.startsWith("--")) {
+    throw new Error("the profile's name comes first");
+  }
+  const args = parseDevProfileArgs(flags);
+  if (args.profile !== null) throw new Error("the name is positional here");
+  if (args.rest.length > 0) {
+    throw new Error(`unknown arguments ${args.rest.join(" ")}`);
+  }
+  return { profile: devProfilePaths(name), args };
+}
+
 export function parseDevProfileArgs(argv: string[]): DevProfileArgs {
   const out: DevProfileArgs = {
     profile: null,
