@@ -1,4 +1,4 @@
-// Terrier integration (github.com/sylophi/terrier): an external
+// Terrier integration (github.com/dittofleet/terrier): an external
 // registry of repo paths, merged into the project list when the global
 // `terrier` toggle is on. The merge is the CLI's (cli/terrier.go, read
 // through `sm projects list`); what the app keeps is the readiness
