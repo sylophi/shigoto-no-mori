@@ -1,0 +1,76 @@
+# The bridge
+
+What a `js` step can ask a device window, and the same verbs from a
+terminal. The preload exposes the real IPC bridge as `window.api` in
+the page; a `js` step awaits what a call returns.
+
+## Useful bridge calls
+
+| Call                                                                | Returns                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `window.api.deviceId`                                               | This window's device id.                                                                                                                                                                                                                                                                             |
+| `window.api.account.status()`                                       | `signedIn`, `accountId`, `deviceName`, `configured`.                                                                                                                                                                                                                                                 |
+| `window.api.account.listDevices()`                                  | The account's device registry from the hub, with `online`.                                                                                                                                                                                                                                           |
+| `window.api.account.setAcceptsCommands(bool)`                       | Flips this device's command-access switch.                                                                                                                                                                                                                                                           |
+| `window.api.account.signOut()`                                      | Revokes this device and clears the credential. Clerk is untouched.                                                                                                                                                                                                                                   |
+| `window.api.hub.status()`                                           | Socket phase, `onlineDeviceIds`, `peerAppVersions` (one key per direct session), `peerAcceptsCommands` (whether each runs this device's commands), `tunnel`.                                                                                                                                         |
+| `window.api.hub.invokePeer({deviceId, channel, input})`             | Any host call on a peer, e.g. `projects:list`, `worktrees:list`, `worktrees:create`.                                                                                                                                                                                                                 |
+| `window.api.sync.pullWorktree({...})`                               | Brings a peer's worktree here. The payload is the contract's, in `shared/ipc/modules/sync.ts`. With `ignoreMode` and `ignores` (the mirror's leave-out rule) it also brings the ignored files the rule admits, through the mirror engine run once and one way, source to here (the `files` step, reported as `files` on the result). `gitignored` has nothing to bring and skips it. |
+| `window.api.sync.sendWorktree({targetDeviceId, projectId, worktreeId, ...})` | The pull turned around: sends one of this device's worktrees to a peer (the local page's "Transplant to"). The peer runs the pull's own landing, asking back over a link this device opens, and its progress (the create's phases included) comes back here. Takes the pull's `runSetup`, `ignoreMode`, `ignores` and `cloneInto`, and returns the pull's result, with `worktree` the copy on the peer. Only the peer has to accept commands. |
+| `window.api.sync.cancelMove({sourceWorktreeId})`                    | Cancels a move in flight, by the source worktree its progress is keyed under: a `pullWorktree` or `sendWorktree` this device runs, or a `mirror.startTo` (asked of the device running it, the peer for "Mirror here"). The move fails with `The move was cancelled`, whatever it was waiting on: the create's CLI child (and the setup script it runs) is killed, the worktree it made is removed with `sm rm --force` (its cleanup on a one-minute clock), a link is reset, a files-step session ended, and a mirror's session terminated if the open outran the cancel. A repo the move cloned first stays as a project. Nothing on the source changes, and no receipt is kept, so no teardown follows. `cancelled: false` means nothing by that key was in flight (the move is over). A caller that goes away (the window reloads, a peer's or the CLI's socket dies) cancels the same way. The dialogs' running step has the Cancel button. Escape and the backdrop still don't close it. |
+| `window.api.sync.teardownSource({direction, deviceId, projectId, worktreeId})` | Second half of a transplant, either way: removes the source while it is still what moved. `deviceId` is the peer the move came from (`pull`) or went to (`send`), and `projectId`/`worktreeId` name the source worktree (the peer's after a pull, this device's after a send). |
+| `window.api.sync.ignoredPaths({projectId, worktreeId})`             | The ignored files on a worktree (`paths`, full `total`) and the gitignore rules behind them (`patterns`). Grant-gated. The transplant dialog lists them, the mirror dialog chooses from them.                                                                                                        |
+| `window.api.sync.worktreeFolder({projectId, worktreeId, relative})` | One folder of a worktree with git's ignore verdict per entry. Grant-gated. The mirror dialog's picker browses it.                                                                                                                                                                                    |
+| `window.api.worktrees.readFile({projectId, worktreeId, path})` | One file of a worktree for the files page: `{kind: "text", contents, size}`, or `binary` / `tooLarge` (over 1 MiB) with the size, or `missing`. Grant-gated like `worktreeFolder`, which the page browses with. |
+| `window.api.projects.carryOverListing({...})` | One folder of a project (`projectId`, `relative`), unioned across its checkouts on that device. Not grant-gated. The carry-over picker browses it, and with `ruleIgnored: true` the Configure page's leave-out picker does, on every device holding the repo. |
+| `window.api.portForward.start({deviceId, remotePort})`              | Forwards a peer's loopback port. Returns `localPort`.                                                                                                                                                                                                                                                |
+| `window.api.mirror.startTo({targetDeviceId, projectId, worktreeId, ...})` | Copies one of this device's worktrees to a peer and keeps the two mirrored (files both ways, git state followed). The `sync.sendWorktree` payload plus `ignoreMode` (`everything`, `gitignored`, `custom`, `bring`) and `ignores` (engine patterns, `/path` anchors to the root). `bring` is gitignored with exceptions: the gitignore rules, a marker pattern, then a `!/path`, `!/path/**` pair per ignored path that crosses anyway, its glob syntax escaped (`bringIgnores` in `shared/mirrorIgnores.ts`). `runSetup: false` skips the setup script at the copy's create (the dialogs default it off when nothing is left out, and on once the rule leaves something behind). A mirror always runs on the device holding the original, labelled `copySide: "remote"`, so `mirror.stop` removes the peer's copy and keeps the original. The local page's "Mirror to" calls it here. A peer's page ("Mirror here") runs `window.api.mirror.startFrom({sourceDeviceId, sourceProjectId, sourceWorktreeId, sourceIdentity, runSetup?, ignoreMode, ignores, cloneInto?})` here instead (what the peer's `startTo` takes, in the pull's terms, plus the rule and the identity the landing is held to): it invites the mirror (`host/mirror/invites.ts`), asks the peer's `mirror:startTo` with this device as `targetDeviceId`, and relays the peer's progress. The peer must accept commands (it is asked). This device need not, since it asked: the invitation admits exactly the calls the contracts tag `invitable` (the peer's landing of that original into that repo and clone place, then the copy's stream, git state, commit fetch and push, and delete), and goes with the copy. Landed invitations persist in `file-sync/mirror-invites.json`, checked against the listed worktrees at boot. Returns the copy and the `session`. A session an older build started from the copy's device (no `copySide` label) is ended on the first launch, its worktree kept and its thread saying to start it again from the original's page. |
+| A device with no checkout of the repo                               | Every move takes `cloneInto: {parentDir, name}`, a place on the landing device: `sync.pullWorktree` for this device, `sync.sendWorktree` and `mirror.startTo` for the peer (this device, when a peer runs `mirror.startTo` towards it). With no project of the source's identity there, the source's default branch crosses as a bundle on the move's own link (no remote needed, the grant that gates the move is the gate), is checked out at `parentDir/name` (the parent is made when missing), given the source's remote as `origin` when it has one, registered the way `projects.clone` registers (`sm projects add`, config seed included), and the copy lands in it as usual. A copy that would land on the clone's own default branch is refused before anything is made. Reported as the `clone` step (with bytes) and as `cloned` (the new project) on the result. A project that matches wins over `cloneInto`: nothing is cloned. Without `cloneInto` the move refuses as before. The dialogs offer it ("Mirror here", "Transplant here" on a peer's worktree when this device holds no checkout, "Mirror to…", "Transplant to…" onto a peer that holds none), defaulting the folder to the source's own layout with its home swapped for the destination's. The CLI's `send` and `mirror --to` take such a device too, cloning into the same default (or `--clone-into <dir>`, a folder on it). `bring` and `mirror --from` still need a device that holds the repo. |
+| Mirroring a primary checkout                                        | The start takes a primary, from either page. Its copy is an ordinary worktree on `mirror/<branch>` in a `mirror-<name>` folder (the landing device's own primary holds `<branch>` and is usually called `<name>`), and the git follower reads the pair as one branch: a commit on the source's `main` lands on the copy's `mirror/main` and back. The session carries a `mirrorBranch: "1"` label, which is all the follower needs: the rule holds for every branch the primary moves to. Both primaries stay untouched, and stop removes the copy as usual. The CLI's `mirror --from` and `mirror --to` take a primary the same way. `bring` and `send` refuse one. |
+| `window.api.mirror.list()`                                          | This device's mirror sessions (`status`, `git.status`, conflicts, `ignoreMode`, `ignores`, `createdAt`) and the streams it serves for peers (`peerWorktreeId` names the peer's copy).                                                                                                                |
+| `window.api.mirror.stop(session)` / `pause` / `resume`              | Controls a session this device runs. Stop also removes the copy, on the peer (a forced delete, and the original keeps its own), so the copy's page moves on. A copy the peer no longer lists (deleted from a terminal, or while this device was away) ends the session without the synced check, and with nothing to remove. A copy deleted in the app ends its session here on its own, through the peer's `worktrees:removal` announcement. Served to peers on this device's command grant: the far end's page drives the session through the device running it (`hub.invokePeer` to it, in the console), so either side controls the mirror.                              |
+| `window.api.mirror.setIgnores({session, ignoreMode, ignores})`      | Changes what a running mirror leaves out. Re-opens the session and returns the new id. Served to peers like the controls above.                                                                                                                                                                         |
+| `window.api.mirror.history({localWorktreeId})`                      | The mirror's thread of events, kept by the device that runs it and keyed by its local worktree, the original.                                                                                                                                                                                                      |
+
+
+## Two argument conventions
+
+- `window.api.<module>.<call>` uses the renderer's signature, defined
+  per call in `shared/ipc/client.ts`. Some calls take positional
+  arguments, e.g. `portForward.stop(forwardId)` and
+  `ports.list(projectId, worktreeId)`.
+- `hub.invokePeer` and the check scripts use the raw contract payload
+  from `shared/ipc/modules/<module>.ts`.
+
+A rejection with a zod issue list means the payload shape matches the
+wrong convention.
+
+
+## From a terminal
+
+The same verbs are on the CLI, which asks the running app for them
+(`main/core/control/server.ts`). Point `smd` at the profile whose app
+should act, from a checkout of the repo:
+
+```sh
+export SHIGOMORI_DATA_DIR=~/.smd-profiles/<tag>-a/data
+smd devices
+smd worktrees send [<name>] [--to <device>] [--clone-into <dir>]  # sync.sendWorktree
+smd worktrees list --remote [--from <device>]
+smd worktrees bring <worktree> [--from <device>]   # sync.pullWorktree
+smd worktrees mirror [<name>] [--to <device>]      # mirror.startTo
+smd worktrees mirror <worktree> --from <device>    # mirror.startTo, run on that device
+smd worktrees mirrors                              # the mirrors this device is part of, either side
+smd worktrees unmirror [<name>] [-f]               # mirror.stop, through the peer for a mirror it runs
+```
+
+With the app not running (or another profile's data dir) every verb
+fails with `app-not-running`. `pnpm test control` covers the verbs
+without an app.
+
+
+## DOM hooks
+
+Use the DOM only where a person would click. The sidebar's Devices
+button has `aria-label="Devices"`. Clerk's modal is plain DOM in the
+page, with `.cl-*` classes.
