@@ -75,7 +75,7 @@ the bridge's answers, the other device's window, and the disk.
   `pkill -9 -f "profiles/<tag>-b"`), then `end` its session and open
   it again with the same `new` (without `--fresh`): it boots as the
   same device. Presence, reconnects and offline catch-up show there.
-- **The tunnel path.** On one machine the LAN wins; launch a device
+- **The tunnel path.** On one machine the LAN wins. Launch a device
   with `SHIGOMORI_DIAL_KINDS=tunnel` in its `start` to take the
   tunnel instead (`dev-app.md`, "Rules").
 - **A record of it.** Open each window's session with `"video": true`

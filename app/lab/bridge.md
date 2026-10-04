@@ -2,7 +2,7 @@
 
 What a `js` step can ask a device window, and the same verbs from a
 terminal. The preload exposes the real IPC bridge as `window.api` in
-the page; a `js` step awaits what a call returns.
+the page, and a `js` step awaits what a call returns.
 
 ## Useful bridge calls
 

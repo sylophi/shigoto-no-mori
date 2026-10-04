@@ -42,8 +42,9 @@ renders here proves nothing about the host behind it. Electron itself
 (native menus, deep links, the keychain, windows) is absent too. For
 those, use device windows (`../devices.md`).
 
-Open one with weblab's `new`, the worktree's port as the address
-(`grep FAKE_HOST_ .env.ports`; 4752 and 4753 below stand for them):
+Open one with weblab's `new`, the worktree's port as the address.
+`grep FAKE_HOST_ .env.ports` prints both ports. Below, 4752 and 4753
+stand for them:
 
 ```json
 { "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/devices" }
@@ -123,7 +124,7 @@ Runtime controls on `window.fakeHost`, for a `js` step:
 `setPeer(deviceId, "connected" | "online" | "offline")`,
 `setSocket(phase)`, `navigate(to)` (desktop, no reload),
 `setMirrorConflicts(roots)` (holds those paths still on every mirror
-started in this session, for the conflict chip; start one first, since
+started in this session, for the conflict chip. Start one first, since
 the fixtures seed none), `worktree(deviceId, "add" | "remove", name,
 { projectId?, changedCount? })` (a worktree made or removed behind the
 app's back, the way `sm` or another device would, for the villagers
