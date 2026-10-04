@@ -224,6 +224,9 @@ const NOT_CLICKABLE = JSON.stringify(
 // exactly this, for the scenarios that drive the real dialogs.
 const byText = (text: string) =>
   `[...document.querySelectorAll("*")].findLast((el) => el.textContent.trim() === ${JSON.stringify(text)})`;
+// The same, within the sidebar.
+const inSidebar = (text: string) =>
+  `[...document.querySelectorAll("aside *")].findLast((el) => el.textContent.trim() === ${JSON.stringify(text)})`;
 
 const hubStatus = (w: AppWindow) =>
   w.evaluate<{
@@ -252,15 +255,24 @@ const waitSignedIn = (w: AppWindow, who: string) =>
     60_000,
   );
 
-// The teardown's revoke from one window: every device whose name
-// carries the other profile's suffix (so a re-enrolled or never-read
-// peer is still found), then the window's own sign-out.
-async function revokeFrom(w: AppWindow, otherSuffix: string): Promise<void> {
-  await w.evaluate(
+// Every device of the smoke's profiles but these: what earlier runs
+// left on the account (a run that was kept, or killed before its
+// teardown). The e2e profiles are the smoke's alone, and a device the
+// CLI names by its name must be the only one of that name.
+const revokeOtherSmokeDevices = (w: AppWindow, keepIds: string[]) =>
+  w.evaluate(
     `window.api.account.listDevices().then((ds) => Promise.all(ds
-      .filter((d) => d.name.endsWith(${JSON.stringify(otherSuffix)}) && d.deviceId !== window.api.deviceId)
+      .filter((d) => ${JSON.stringify([fixture.a.name, fixture.b.name].map(devProfileNameSuffix))}.some((s) => d.name.endsWith(s)) && !${JSON.stringify(keepIds)}.includes(d.deviceId))
       .map((d) => window.api.account.revokeDevice(d.deviceId))))`,
   );
+
+// The teardown's revoke from one window: every device of either smoke
+// profile but its own (so a re-enrolled or never-read peer is still
+// found), then the window's own sign-out.
+async function revokeFrom(w: AppWindow): Promise<void> {
+  await revokeOtherSmokeDevices(w, [
+    await w.evaluate<string>("window.api.deviceId"),
+  ]);
   await w.evaluate("window.api.account.signOut()");
 }
 
@@ -427,6 +439,7 @@ export default async function remoteSmoke({
     ]);
     await Promise.all([waitConnected(a, idB, "a"), waitConnected(b, idA, "b")]);
     log(`connected: a=${idA} b=${idB}`);
+    await revokeOtherSmokeDevices(a, [idA, idB]);
     await shoot("connected");
     // A mirror runs on the device holding the original. One of b's
     // worktrees mirrored onto a (what "Mirror here" on a does) is a
@@ -2068,14 +2081,34 @@ export default async function remoteSmoke({
         30_000,
       );
     const clickText = (text: string) => click(text, byText(text));
-    // A sidebar row can sit below the fold, and the list is
-    // virtualized, so a row out of view is not in the DOM at all. Each
-    // try that finds nothing pages the sidebar down, wrapping to the
-    // top at the end, until the row is there to click.
+    // The sidebar lists one project's worktrees at a time, so a row is
+    // in the DOM only once its project is open: from the project list,
+    // its row opens it, and from another project, the Projects button
+    // leads back to the list first. Within the project a row can sit
+    // below the fold, and the list is virtualized, so a row out of view
+    // is not in the DOM at all: each try that finds nothing pages the
+    // sidebar down, wrapping to the top at the end. Each poll takes one
+    // of those steps, until the row is there to click.
     const SIDEBAR_SCROLLER = `document.querySelector('[data-slot="sidebar-scroller"]')`;
-    const seekRow = (text: string) =>
-      `(() => { const el = ${byText(text)}; if (el) return el; const v = ${SIDEBAR_SCROLLER}; if (v) v.scrollTop = v.scrollTop + v.clientHeight >= v.scrollHeight ? 0 : v.scrollTop + v.clientHeight * 0.8; return null; })()`;
-    const clickRow = (what: string, text: string) => click(what, seekRow(text));
+    const seekRow = (text: string, project = "shared") =>
+      `(() => {
+        if (document.querySelector('aside [aria-label="Sort projects"]')) {
+          ${inSidebar(project)}?.click();
+          return null;
+        }
+        const open = document.querySelector('aside [aria-label^="Quick-create worktree in "]')?.getAttribute("aria-label")?.replace(/^Quick-create worktree in /, "").split(" on ")[0];
+        if (open !== ${JSON.stringify(project)}) {
+          [...document.querySelectorAll("aside button")].find((b) => b.textContent.trim() === "Projects" && !b.hasAttribute("aria-label"))?.click();
+          return null;
+        }
+        const el = ${inSidebar(text)};
+        if (el) return el;
+        const v = ${SIDEBAR_SCROLLER};
+        if (v) v.scrollTop = v.scrollTop + v.clientHeight >= v.scrollHeight ? 0 : v.scrollTop + v.clientHeight * 0.8;
+        return null;
+      })()`;
+    const clickRow = (what: string, text: string, project?: string) =>
+      click(what, seekRow(text, project));
     const waitSwitch = (checked: boolean, why: string) =>
       a.waitFor(
         `the setup switch to read ${checked ? "on" : "off"} (${why})`,
@@ -2182,8 +2215,9 @@ export default async function remoteSmoke({
           !before.some((p) => p.name === "lone"),
           "a already holds lone",
         );
-        // b's lone is the one row of that name in a's sidebar.
-        await clickRow("the sidebar row of b's lone primary", "lone");
+        // b's lone primary is the one row in the lone project that
+        // names it.
+        await clickRow("the sidebar row of b's lone primary", "lone", "lone");
         await click("the Mirror here button", byText("Mirror here"));
         await a.waitFor(
           "the review to offer the clone",
@@ -2951,26 +2985,24 @@ export default async function remoteSmoke({
     if (keep) {
       log("keep: leaving both devices enrolled and running");
     } else {
-      // Revoke what is still enrolled. From a: every device of b's
-      // profile (b may have re-enrolled, or never been read), then a's
-      // own sign-out, which sticks because a booted fresh in this run
+      // Revoke what is still enrolled. From a: every device of the
+      // smoke's profiles but a (b may have re-enrolled, or never been
+      // read), then a's own sign-out, which sticks because a booted fresh in this run
       // (see the revoke scenario for why b's would not). Without a, b
       // signs itself out as the best that is left. Best effort: a dead
       // window has nothing to revoke. Then b ends, which stops its
       // window and clears its profile. a's go when a's session ends.
-      await revokeFrom(a, devProfileNameSuffix(fixture.b.name)).catch(
-        async (error: unknown) => {
-          log(`cleanup: a could not revoke: ${errorMessageOf(error)}`);
-          const b = windows.find((w) => w !== a);
-          await b
-            ?.evaluate("window.api.account.signOut()")
-            .catch((fallbackError: unknown) => {
-              log(
-                `cleanup: b could not sign out: ${errorMessageOf(fallbackError)}`,
-              );
-            });
-        },
-      );
+      await revokeFrom(a).catch(async (error: unknown) => {
+        log(`cleanup: a could not revoke: ${errorMessageOf(error)}`);
+        const b = windows.find((w) => w !== a);
+        await b
+          ?.evaluate("window.api.account.signOut()")
+          .catch((fallbackError: unknown) => {
+            log(
+              `cleanup: b could not sign out: ${errorMessageOf(fallbackError)}`,
+            );
+          });
+      });
       await bSession?.end().catch((error: unknown) => {
         log(`cleanup: b did not end: ${errorMessageOf(error)}`);
       });

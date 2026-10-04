@@ -608,7 +608,7 @@ usual `dir`.
   comma-separated parts, for a quick pass over one area. The boot and
   the teardown always run. A scenario that builds on an earlier one's
   result fails when that one was filtered out, so name both. Without
-  it, every scenario runs, which takes several minutes: `run` replies
+  it, every scenario runs, which takes a minute or two: `run` replies
   with what it has after `wait` (45 seconds unless given), and `run`
   on `a` with no steps collects the rest.
 - `params.keep` (`true`) skips the teardown, leaving both devices
@@ -626,7 +626,9 @@ What a run does:
    by repo identity), clones the dev sign-in into both, and starts a
    as the primary.
 2. The scenarios start b as the peer (`boot.mts b`, on a free port),
-   wait until each holds a direct session to the other, then turn both
+   wait until each holds a direct session to the other, revoke any
+   other `[e2e-a]` or `[e2e-b]` device an earlier run left on the
+   account (the CLI scenario names devices by name), then turn both
    command-access switches on: a mirror runs on the device holding the
    original, so one of b's worktrees mirrored onto a is b's session,
    asked for over b's switch and landing the copy over a's. The
