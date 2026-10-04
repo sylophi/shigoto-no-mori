@@ -3,7 +3,7 @@
   "portNames": ["renderer", "web", "fakeHost", "fakeHostWeb"],
   "envFiles": {
     "app/.env.ports": {
-      "PORT": "${renderer}",
+      "RENDERER_PORT": "${renderer}",
       "WEB_PORT": "${web}",
       "FAKE_HOST_PORT": "${fakeHost}",
       "FAKE_HOST_WEB_PORT": "${fakeHostWeb}"

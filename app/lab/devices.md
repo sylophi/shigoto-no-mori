@@ -44,20 +44,16 @@ clicks by role and name, the way the UI reads) and through the bridge
 the UI when the UI is what changed. Check outcomes where they land:
 the bridge's answers, the other device's window, and the disk.
 
-When you are done, revoke what you enrolled before ending the
-sessions. Ending a window does not unenroll it. See "Cleaning up".
-
 ## What you can exercise
 
 - **Two devices, or more.** Each `new` with its own profile and port
   is another device on the account: a third window is `<tag>-c`. The
   web client is one more, through the tunnel only (`dev-app.md`,
   "Other tools").
-- **A repo both hold.** A worktree moves only between devices that
-  hold the same repo, matched by root commit, so clone one repo into
-  each profile rather than creating it twice (`dev-app.md`, "Filling
-  a data dir with test repos"). With no checkout on the landing
-  device, the moves clone it first, which is worth checking too.
+- **A repo both hold.** Moves need the same repo on both devices
+  (`dev-app.md`, "Filling a data dir with test repos"). With no
+  checkout on the landing device, a move clones it first, which is
+  worth checking too.
 - **Moves, mirrors and their dialogs.** Start them from the UI (a
   worktree page's footer: Transplant, Mirror) or through
   `window.api.sync` and `window.api.mirror`, then watch both windows
@@ -82,10 +78,9 @@ sessions. Ending a window does not unenroll it. See "Cleaning up".
 - **The tunnel path.** On one machine the LAN wins; launch a device
   with `SHIGOMORI_DIAL_KINDS=tunnel` in its `start` to take the
   tunnel instead (`dev-app.md`, "Rules").
-- **A record of it.** Each window's session can be opened with
-  `"video": true`. Open both before the flow starts so the two videos
-  line up. `screen` shots also capture native menus, given Screen
-  Recording permission for whatever runs weblab.
+- **A record of it.** Open each window's session with `"video": true`
+  before the flow starts, so the videos line up. `screen` shots also
+  catch native menus, given Screen Recording permission.
 
 ## Cleaning up
 
@@ -140,9 +135,8 @@ in `dev-app.md`, "When a device is removed".
   Then relaunch the profile. Otherwise sign in from the profile's
   window.
 - **A device from an old profile still shows on the Devices page.**
-  `--fresh` and ending a window do not revoke, and a self sign-out
-  re-enrolls a relaunched window. Revoke it from another device. See
-  "Cleaning up".
+  Nothing local revokes it. Revoke it from another device ("Cleaning
+  up").
 - **`smd` in a new terminal acts on the plain dev data dir.** To
   target a profile from the shell, set its data dir first:
   `SHIGOMORI_DATA_DIR=~/.smd-profiles/<name>/data smd ...`.

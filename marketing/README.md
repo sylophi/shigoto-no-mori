@@ -40,14 +40,14 @@ is its own file. That keeps the page inside the strict CSP in
 
 ## Where the pieces come from
 
-- Screenshots in `src/assets/` are the real app, posed in the fake
-  host (the app's `lab/fake-host/README.md`). Desktop views were taken at 1280x800,
-  the phone view at 390x844, and the sidebar row close-up at 4x. They
-  were then cropped to twice their largest displayed width. Astro makes
-  the smaller sizes phones get. The lab runs in a browser, so macOS
-  traffic lights were drawn into the page before each window capture,
-  where the real window puts them. The launch row is a crop of the
-  app's `assets/readme-app.png`.
+- Screenshots in `src/assets/` are the real app, posed in the fake host
+  (the app's `lab/fake-host/README.md`). Desktop views were taken at
+  1280x800, the phone view at 390x844, and the sidebar row close-up at
+  4x. They were then cropped to twice their largest displayed width.
+  Astro makes the smaller sizes phones get. The fake host runs in a
+  browser, so macOS traffic lights were drawn into the page before each
+  window capture, where the real window puts them. The launch row is a
+  crop of the app's `assets/readme-app.png`.
 - `public/img/og.jpg` is the link preview card: the hero rendered at
   1200x630.
 - Colors, the flat sticker shadows, and the five wallpapers (`leaf`,

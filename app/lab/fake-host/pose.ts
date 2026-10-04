@@ -1,5 +1,5 @@
-// URL posing for one-shot headless screenshots, shared by both fake host
-// entries (main.tsx and web-main.tsx pose identically):
+// URL posing, shared by both fake host entries (main.tsx and
+// web-main.tsx pose identically):
 //   ?theme=light|dark        (default light)
 //   ?doubutsu=0|1            (default 1, matching the product default)
 //   ?light=<id>, ?dark=<id>  the doubutsu palette of each appearance

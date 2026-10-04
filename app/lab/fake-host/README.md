@@ -53,13 +53,8 @@ Open one with weblab's `new`, the worktree's port as the address
 { "name": "phone", "address": 4753, "start": "pnpm fake-host:web", "path": "/devices?theme=light", "viewport": "390x844@3" }
 ```
 
-Then pose and capture with `run`: `goto` a new pose, `look` to read
-the page with refs to click, `shot` to screenshot it (the image comes
-back in the reply), `expect` to wait for what should be on screen
-before a shot. A session opened with `"video": true` records until it
-ends, with a drawn cursor that glides to each click; set `FFMPEG` for
-an mp4 beside the webm. The sync verbs are posed, so a recording shows
-the UI of a flow, not a transfer.
+Then pose and capture with `run` (`../weblab.md` lists what it can
+do):
 
 ```json
 { "session": "ui", "steps": [

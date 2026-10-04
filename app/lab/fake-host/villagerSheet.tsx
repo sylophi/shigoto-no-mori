@@ -1,6 +1,6 @@
 // Contact sheet for VillagerIcon (renderer/components/shared/
 // VillagerIcon.tsx), a standalone fake host page over the fixture bridge:
-// http://localhost:<fake host port>/villager-icons.html
+// http://localhost:<FAKE_HOST_PORT>/villager-icons.html
 //   default       the doubutsu overlay (one panel, in ?theme)
 //   ?doubutsu=0   v1 light and dark side by side, since v1's dark
 //                 tokens also apply under a nested .dark

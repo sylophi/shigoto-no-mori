@@ -8,9 +8,6 @@
 // it, so all of them read through this module.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-// Node's own dotenv parser rather than shared/account's parseDotenv:
-// importing a .ts module makes plain `node` runs of the vite configs
-// warn about the typeless package.json.
 import { parseEnv } from "node:util";
 import { appRoot } from "./appRoot.mts";
 
@@ -22,7 +19,7 @@ const FALLBACK_PORTS = {
   FAKE_HOST_WEB_PORT: 5192,
 };
 
-type PortKey = "PORT" | keyof typeof FALLBACK_PORTS;
+type PortKey = "RENDERER_PORT" | keyof typeof FALLBACK_PORTS;
 
 // A real env var of the same name wins over the provisioned one.
 // Undefined when neither is set (port-pool not installed, or never run
@@ -39,7 +36,24 @@ function provisionedPort(key: PortKey): string | undefined {
 
 // Without one vite picks its own port.
 export function rendererDevServerPort(): string | undefined {
-  return provisionedPort("PORT");
+  return provisionedPort("RENDERER_PORT");
+}
+
+// The renderer's dev server, where this worktree's port puts it.
+export function rendererDevServerUrl(): string | undefined {
+  const port = rendererDevServerPort();
+  return port === undefined ? undefined : `http://localhost:${port}`;
+}
+
+// Whether that server answers, which is whether a primary dev app
+// (`pnpm start`) is running in this worktree.
+export function rendererDevServerAnswers(): Promise<boolean> {
+  const url = rendererDevServerUrl();
+  if (url === undefined) return Promise.resolve(false);
+  return fetch(url, { method: "HEAD", signal: AbortSignal.timeout(2000) }).then(
+    () => true,
+    () => false,
+  );
 }
 
 export function fixedDevServerPort(key: keyof typeof FALLBACK_PORTS): number {

@@ -30,7 +30,7 @@ const [loadProfiles] = Object.values(
 
 const villagers = Object.keys(villagerManifest.villagers).length;
 
-// Whether this checkout holds a fake host download.
+// Whether this checkout holds the downloaded villager data.
 export const fakeHasVillagerData = meta !== undefined;
 
 const ABSENT: VillagerDataStatus = { kind: "absent", villagers };

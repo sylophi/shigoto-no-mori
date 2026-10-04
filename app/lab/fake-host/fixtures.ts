@@ -24,7 +24,7 @@ const now = Date.now();
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-// Fake host-only project icons: a rounded tile with the repo's initial, so
+// Stand-in project icons: a rounded tile with the repo's initial, so
 // the surfaces that draw project icons (sidebar headers, the device
 // chips on /devices) show one without a real repo behind them. Keyed by
 // name, so the same repo wears the same icon on every device. t3code is
@@ -131,8 +131,8 @@ export type DeviceForest = {
   projects: Project[];
   worktrees: Record<string, Worktree[]>;
   // Whether this device accepts commands from the account's other
-  // devices (its HubStatus.peerAcceptsCommands entry), so the local fake host
-  // client may mutate it.
+  // devices (its HubStatus.peerAcceptsCommands entry), so this page
+  // may mutate it.
   grantsCaller: boolean;
 };
 

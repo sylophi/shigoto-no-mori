@@ -3,6 +3,7 @@
 //   pnpm test                  list them
 //   pnpm test socket-host      run test/socket-host.mts
 //   pnpm test mirror account   run several, in order, stopping at a failure
+//   pnpm test bench/wire       a path under test/ works too
 //   pnpm test socket-host --update   flags pass through to the proof
 //
 // Each proof is a standalone script that exits non-zero when it fails.
@@ -21,8 +22,7 @@ const SELF = "run.mts";
 
 const SUFFIX = ".mts";
 
-// The proofs, which sit at the top of test/. Testing by hand, on the
-// real UI, is the lab's (lab/README.md).
+// The proofs, which sit at the top of test/.
 function available() {
   return readdirSync(testDir)
     .filter((file) => file !== SELF && file.endsWith(SUFFIX))

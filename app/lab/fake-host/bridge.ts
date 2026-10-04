@@ -4,7 +4,7 @@
 // sidebar tree and every remote view all derive from these answers
 // exactly as they would from a live device hub. Channels no fixture
 // handler covers fall back to schema-derived stubs (fabricated arms
-// allowed: this is a design fake host, not a product surface).
+// allowed: this is a design tool, not a product surface).
 //
 // window.fakeHost carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
@@ -734,10 +734,11 @@ const FAKE_TREE: Record<
 
 // ---- mirror fixtures ----
 //
-// One fake host-wide mirror world, since a session on Studio Mac and the
-// stream Thinkpad serves for it are two views of the same fact. Each
-// forest's emitter is remembered so mirror:changed reaches every page,
-// a peer's riding the client wire's peer push (installFakeHostBridge).
+// One mirror world for the whole fake host, since a session on Studio
+// Mac and the stream Thinkpad serves for it are two views of the same
+// fact. Each forest's emitter is remembered so mirror:changed reaches
+// every page, a peer's riding the client wire's peer push
+// (installFakeHostBridge).
 const fakeMirrors: {
   sessions: MirrorSession[];
   serving: (MirrorServing & { deviceId: string })[];
@@ -1021,7 +1022,7 @@ const FAKE_DETECTED = [
   { kind: "detected", id: "finder", label: "Finder", available: true },
 ] as const;
 
-// ---- fake host-mutable account/presence state ----
+// ---- account and presence state the fake host can change ----
 
 // Whether Studio Mac accepts commands from the account's other devices
 // (the devices page switch on this device's row).

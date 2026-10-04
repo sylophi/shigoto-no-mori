@@ -84,7 +84,7 @@ done
 1. Builds the dev CLI (`dist-cli/smd`).
 2. Fetches the pinned `cloudflared` binary.
 3. Allocates this worktree's dev server ports with port-pool (into
-   `.env.ports`): the renderer's `PORT`, plus `WEB_PORT`,
+   `.env.ports`): the renderer's `RENDERER_PORT`, plus `WEB_PORT`,
    `FAKE_HOST_PORT` and `FAKE_HOST_WEB_PORT` for `pnpm web:dev`,
    `pnpm fake-host` and `pnpm fake-host:web`, which run the same step. A
    checkout allocated before the pool gained or renamed a port is
@@ -103,7 +103,7 @@ done
 | `SHIGOMORI_PROFILE`                | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
 | `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
 | `SHIGOMORI_DIAL_KINDS`             | Candidate kinds this device dials, e.g. `tunnel`. Dev builds only. See Rules. |
-| `PORT`                             | Renderer port, from `.env.ports`. A real env var overrides it. To `pnpm device`, the debugging port instead (what weblab's `start` passes); it never reaches the app. |
+| `RENDERER_PORT`                    | Renderer port, from `.env.ports`. A real env var overrides it.                |
 | `WEB_PORT`                         | Web client port (`pnpm web:dev`). Same source and override rule.              |
 | `FAKE_HOST_PORT`, `FAKE_HOST_WEB_PORT` | Fake host ports (`pnpm fake-host`, `pnpm fake-host:web`). Same source and override rule. |
 | `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`; a real env var overrides it.      |
@@ -174,7 +174,6 @@ cloning exists.
 
 ## Rules
 
-- **The peer needs the primary running.** It has no build of its own.
 - **A data folder move restarts the app through the launcher.** The
   app touches a marker and quits, and `pnpm dev` starts forge again
   (vite included) instead of leaving a detached Electron on a dead
