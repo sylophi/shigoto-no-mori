@@ -1,6 +1,6 @@
 package main
 
-// Terrier integration (github.com/sylophi/terrier): an external
+// Terrier integration (github.com/dittofleet/terrier): an external
 // registry of repo paths, merged into the project list when the global
 // `terrier` toggle is on. Terrier's stable surface is `terrier ls
 // --json` plus the rule that a minor version bump is the compatibility

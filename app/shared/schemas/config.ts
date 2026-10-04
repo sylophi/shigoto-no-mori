@@ -249,7 +249,7 @@ export const GlobalConfigSchema = z.object({
   // `port-pool provision` after setup at create and
   // `port-pool release` before teardown at delete.
   portPool: z.boolean().optional(),
-  // When true, repos registered in terrier (github.com/sylophi/terrier)
+  // When true, repos registered in terrier (github.com/dittofleet/terrier)
   // are listed as projects alongside the registry's own. Terrier-sourced
   // projects can't be removed here, only `terrier rm` unregisters them. A
   // path registered in both is an ordinary removable project, and
