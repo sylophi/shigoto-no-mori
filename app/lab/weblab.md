@@ -10,8 +10,8 @@ reference. What it gives you here:
   to act on, or just its text. Each reply also says where the page is
   and what it logged (console errors, failed requests) since the last.
 - **Acting like a person.** `click`, `fill`, `press`, `hover`, `drag`,
-  `select`, `upload`, by role and name, label, text or ref, so a step
-  reads the way the UI does.
+  `select`, `upload`, by role and name, label, text, or a ref from a
+  `look`.
 - **Asking the app.** A `js` step runs in the page and awaits what it
   returns: a bridge call, a store's state, a layout measurement.
 - **Waiting on outcomes.** `expect` retries until text shows, an
@@ -26,13 +26,12 @@ reference. What it gives you here:
 - **Conditions.** `viewport` and `colorScheme` switch without a
   reload. `cdp` steps throttle or cut the network, slow the CPU,
   emulate vision deficiencies. `playwright` steps control the clock,
-  go offline, and reach anything else Playwright does.
+  go offline, and do whatever else Playwright can.
 - **Diagnosis.** A failed step comes with a screenshot of the moment
   and the console since. The session stays open at that page to
   inspect. `trace: "on-failure"` keeps a full Playwright trace.
-- **Code when steps run out.** A `playwright` step, or a code file
-  (`run` with `file`) for loops, helpers and Node: walking every pose
-  and shooting each, say.
+- **Code.** A `playwright` step, or a code file (`run` with `file`)
+  when steps are not enough, such as a loop over every pose.
 
 ## In this repo
 

@@ -19,11 +19,11 @@ the port, attaches, and stops the window when the session ends.
 `pnpm device <profile> [--fresh] [--clone-login]`
 (`scripts/dev-device.mts`) runs a dev window as a dev profile
 (`dev-app.md`) with its debugging port on `PORT` (or
-`SHIGOMORI_DEBUG_PORT`). The
-first window of a worktree is the primary, a full `pnpm dev`: the
-build, the renderer's vite server, deep links. A window started while
-that server answers is a peer on the primary's build, so open the
-primary first, and end the peers before it, or everything at once.
+`SHIGOMORI_DEBUG_PORT`). The first window of a worktree is the
+primary, a full `pnpm dev`: the build, the renderer's vite server,
+deep links. A window started while that server answers is a peer on
+the primary's build, so open the primary first, and end the peers
+before it, or everything at once.
 
 Each window's Devices page should list the other device as online,
 then connected. The device names end in `[<tag>-a]` and `[<tag>-b]`.
@@ -87,7 +87,6 @@ sessions. Ending a window does not unenroll it. See "Cleaning up".
   line up. `screen` shots also capture native menus, given Screen
   Recording permission for whatever runs weblab.
 
-
 ## Cleaning up
 
 Every profile enrolls a device on the dev hub. Ending a window,
@@ -117,24 +116,8 @@ live devices. Then `end`, and delete the local halves, or launch with
 for p in <tag>-a <tag>-b; do rm -rf ~/.smd-profiles/$p "$HOME/Library/Application Support/Shigoto no Mori (dev)/profiles/$p"; done
 ```
 
-A device removed from the account while it runs signs itself out: a
-packaged or plain dev app ends its Clerk session too and lands on the
-signed-out Devices page, while a profile that holds a cloned sign-in
-(`--clone-login` leaves a marker beside the token store) only drops
-the account layer, since its Clerk session is the plain dev app's and
-ending it would sign every window out. Such a profile re-enrolls if
-relaunched. Either way the sign-out tears the remote setup down with
-it: the hub socket and the tunnel stop, every direct session closes,
-port forwards end, every mirror ends (its copy stays as an ordinary
-worktree, and the thread says why), the shared settings copy is
-dropped (the peers hand it back on the next sign-in), the login item
-is cleared (packaged builds only: a dev run never installs one), and
-the window shows no peers (no device tabs, no device filter) until
-the next sign-in. The devices that stay end their
-mirrors with the removed one the next time they read the registry. A
-relaunch after `--fresh` is a new device.
-
-
+What a removed device does to itself and to the devices that stay is
+in `dev-app.md`, "When a device is removed".
 
 ## Troubleshooting
 

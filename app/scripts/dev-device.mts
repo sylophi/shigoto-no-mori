@@ -5,7 +5,8 @@
 //
 // The window runs as the dev profile <profile> (scripts/lib/devProfile.mts)
 // with Chromium's debugging port open on $PORT, the port weblab hands
-// the command it starts, or on SHIGOMORI_DEBUG_PORT when that is set.
+// the command it starts (weblab attaches there, so it wins), else on
+// SHIGOMORI_DEBUG_PORT.
 // The first window of a worktree is the primary (`pnpm start`: the
 // build, the renderer's vite server, deep links). A window launched
 // while that vite server answers is a peer on the primary's build
@@ -32,7 +33,7 @@ function die(message: string): never {
 const [name, ...flags] = process.argv.slice(2);
 if (name === undefined || name.startsWith("--")) die(USAGE);
 
-const debugPort = process.env.SHIGOMORI_DEBUG_PORT || process.env.PORT;
+const debugPort = process.env.PORT || process.env.SHIGOMORI_DEBUG_PORT;
 delete process.env.PORT;
 if (debugPort) process.env.SHIGOMORI_DEBUG_PORT = debugPort;
 

@@ -11,33 +11,13 @@ one part to keep as written is "Sharing the machine".
 Commands and paths are relative to `app/`. The repo root's
 `package.json` forwards the scripts named here.
 
-| Page | What it covers |
+| Page | Reach for it to |
 | --- | --- |
-| [`fake-host/README.md`](fake-host/README.md) | The real UI over a fake backend: any screen in any state, in a browser, with no hub, account or second machine |
-| [`devices.md`](devices.md) | The real app as several devices on this machine: launching them, what to exercise, cleaning up |
-| [`bridge.md`](bridge.md) | What a device window can be asked through `window.api`, and the same verbs from the CLI |
-| [`dev-app.md`](dev-app.md) | The dev app itself: builds, data folders, environment, dev profiles and their rules |
-| [`weblab.md`](weblab.md) | What weblab gives you, and how it starts, shares and stops things in this repo |
-
-## What you can test
-
-- **How a screen looks in a given state.** A peer offline, a failing
-  pull request, a crowded forest, an update waiting, a villager's
-  birthday: the fake host poses each from the URL. Light and dark,
-  doubutsu, the phone layout, side by side if you like.
-- **How a flow plays out in the UI.** The fake host's sync verbs
-  change its fake world, so a transplant or a mirror shows its steps
-  and its outcome, posed. Good for dialogs, progress and empty states.
-- **That the real thing works.** Device windows are real dev apps,
-  each its own device on the dev hub. Moves, mirrors, refusals, the
-  CLI's cross-device verbs, presence and reconnects happen for real
-  between them.
-- **What a person would see, and what the app knows.** Every window
-  can be read as a person reads it (a `look`) and asked directly
-  through its bridge (`window.api` on a device, `window.fakeHost` on
-  the fake host).
-- **A record of it.** Screenshots come back in weblab's replies, and a
-  session can be filmed, the fake host and real windows alike.
+| [`fake-host/README.md`](fake-host/README.md) | See a screen in any state (a peer offline, a failing PR, the phone layout) or watch a flow play out, in a browser, with no hub, account or second machine |
+| [`devices.md`](devices.md) | Check the real thing: dev apps as devices on this machine, moving and mirroring worktrees between them for real |
+| [`bridge.md`](bridge.md) | Ask a device window what it knows (`window.api`), or run the same verbs from the CLI |
+| [`dev-app.md`](dev-app.md) | Look up how the dev app is built, where it keeps its state, and how dev profiles work |
+| [`weblab.md`](weblab.md) | Know what weblab can do (read, click, ask, capture, film) and how it starts and stops things here |
 
 ## Sharing the machine
 

@@ -220,6 +220,25 @@ cloning exists.
 
 
 
+## When a device is removed
+
+A device removed from the account while it runs signs itself out: a
+packaged or plain dev app ends its Clerk session too and lands on the
+signed-out Devices page, while a profile that holds a cloned sign-in
+(`--clone-login` leaves a marker beside the token store) only drops
+the account layer, since its Clerk session is the plain dev app's and
+ending it would sign every window out. Such a profile re-enrolls if
+relaunched. Either way the sign-out tears the remote setup down with
+it: the hub socket and the tunnel stop, every direct session closes,
+port forwards end, every mirror ends (its copy stays as an ordinary
+worktree, and the thread says why), the shared settings copy is
+dropped (the peers hand it back on the next sign-in), the login item
+is cleared (packaged builds only: a dev run never installs one), and
+the window shows no peers (no device tabs, no device filter) until
+the next sign-in. The devices that stay end their mirrors with the
+removed one the next time they read the registry. A relaunch after
+`--fresh` is a new device.
+
 ## Other tools
 
 - **Web client** (`pnpm web:dev`, port `WEB_PORT`). A third device that
