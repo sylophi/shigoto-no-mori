@@ -15,9 +15,9 @@
 // weblab stops it when the last session on it ends.
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { signalPidTree } from "../host/lib/scripts/process.ts";
 import { errorMessageOf } from "../shared/errors.ts";
 import { appRoot } from "./lib/appRoot.mts";
-import { superviseChild } from "./lib/devBundle.mts";
 import { parsePositionalDevProfile } from "./lib/devProfile.mts";
 import { rendererDevServerAnswers } from "./lib/portsEnvFile.mts";
 
@@ -54,11 +54,25 @@ if (asPeer) {
   // Same process: dev-peer reads these arguments and supervises Electron.
   await import("./dev-peer.mts");
 } else {
+  // `pnpm start` is a shell chain, which passes no signal on to the
+  // step that is running, so a stop goes to the whole tree under pnpm.
   // Windows cannot exec pnpm's .cmd shim without a shell.
   const child = spawn("pnpm", ["start", "--profile", ...argv], {
     cwd: appRoot,
     stdio: "inherit",
     shell: process.platform === "win32",
   });
-  superviseChild(child, "the primary");
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      if (child.pid !== undefined) void signalPidTree(child.pid, signal);
+    });
+  }
+  child.on("error", (error) => {
+    console.error(`[device] failed to launch the primary: ${error}`);
+    process.exit(1);
+  });
+  child.on("exit", (code, signal) => {
+    const stopped = signal === "SIGINT" || signal === "SIGTERM";
+    process.exit(stopped ? 0 : (code ?? 1));
+  });
 }
