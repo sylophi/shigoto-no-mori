@@ -64,8 +64,11 @@ the bridge's answers, the other device's window, and the disk.
   device's page for the copy stops saying it is mirrored), and a
   delete the CLI refuses (dirty tree, no force) leaves the mirror
   running.
-- **Command access.** `window.api.account.setAcceptsCommands(false)`
-  on one device, to see the other's asks refused and what the UI says.
+- **Command access.** A device that just enrolled accepts no commands,
+  so moves onto it are refused (the dialogs show it read-only) until
+  its switch is on: Allow control on its Devices page, or
+  `window.api.account.setAcceptsCommands(true)`. Turn it off on one
+  device to see the other's asks refused and what the UI says.
 - **The CLI between them.** `smd` pointed at a profile's data dir runs
   the cross-device verbs against its running app (`bridge.md`, "From
   a terminal").

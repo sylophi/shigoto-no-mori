@@ -55,7 +55,8 @@ stand for them:
 ```
 
 Then pose and capture with `run` (`../weblab.md` lists what it can
-do):
+do). The app scrolls inside its own panes, so a `fullPage` shot shows
+no more of a long page: make the viewport taller instead.
 
 ```json
 { "session": "ui", "steps": [
@@ -80,7 +81,7 @@ Poses ride the URL:
 - `?updates=sm,tp,mini`: the devices holding a staged update, by the
   same keys (default `tp`). Every device runs 2.0.3 and the update is
   2.1.0, so the others count as behind it (the update toast, Update
-  all).
+  all). `?updates=` with no keys poses none, and no toast.
 - `?downloading=sm,tp,mini`: the devices downloading the update.
 - `?crowd=<n>`: up to 20 more projects on Studio Mac, most holding
   their primary checkout alone, for the forest at the size where
