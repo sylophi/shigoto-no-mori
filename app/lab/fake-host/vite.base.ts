@@ -1,21 +1,21 @@
-// Everything the two UI lab flavors share (vite.config.ts for the
+// Everything the two fake host flavors share (vite.config.ts for the
 // desktop renderer tree, vite.web.config.ts for the web shell),
 // parameterized by the two things that actually differ. Its own module
 // rather than a named export beside a default one, which vite's config
 // bundler warns about.
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
-import { reactCompiler } from "../vite.reactCompiler";
+import { reactCompiler } from "../../vite.reactCompiler";
 import tailwindcss from "@tailwindcss/vite";
 import type { UserConfig } from "vite";
-import { fixedDevServerPort } from "../scripts/lib/portsEnvFile.mts";
+import { fixedDevServerPort } from "../../scripts/lib/portsEnvFile.mts";
 
-const appRoot = resolve(__dirname, "..");
+const appRoot = resolve(__dirname, "..", "..");
 
-export function labBaseConfig(opts: {
+export function fakeHostBaseConfig(opts: {
   // Its port's key in .env.ports, so each worktree gets its own.
-  portKey: "LAB_PORT" | "LAB_WEB_PORT";
-  // The HTML entry vite pre-bundles deps from: the desktop lab's
+  portKey: "FAKE_HOST_PORT" | "FAKE_HOST_WEB_PORT";
+  // The HTML entry vite pre-bundles deps from: the desktop fake host's
   // index.html, the web shell's web.html.
   entry: string;
 }): UserConfig {
@@ -39,7 +39,7 @@ export function labBaseConfig(opts: {
     optimizeDeps: { entries: [opts.entry] },
     define: {
       __APP_VERSION__: JSON.stringify("2.0.3"),
-      __APP_COMMIT__: JSON.stringify("lab"),
+      __APP_COMMIT__: JSON.stringify("fake-host"),
     },
     plugins: [tailwindcss(), react(), reactCompiler()],
   };

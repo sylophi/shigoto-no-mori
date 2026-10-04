@@ -1,19 +1,20 @@
-// A second dev app on this machine, as its own device:
-//
-//   pnpm dev:peer <name> [--fresh] [--clone-login]
-//
-// Runs the dev build the primary `pnpm start` made (its main bundle
+// A second dev app on this machine, as its own device: what
+// `pnpm device <name> [--fresh] [--clone-login]` (dev-device.mts) runs
+// once a primary is up. Runs the dev build the primary `pnpm start` made (its main bundle
 // in .vite/build, which forge points at the primary's vite server) as
 // the dev profile <name> (scripts/lib/devProfile.mts). It has no
 // build of its own, so it needs the primary running, and it keeps the
 // main-process code it booted with across a primary restart (which
 // forge does only on `rs` typed in its terminal, never on its own).
-// MANUAL-TESTING.md covers the workflow around it.
+// lab/devices.md covers the workflow around it.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessageOf } from "../shared/errors.ts";
-import { rendererDevServerPort } from "./lib/portsEnvFile.mts";
+import {
+  rendererDevServerAnswers,
+  rendererDevServerUrl,
+} from "./lib/portsEnvFile.mts";
 import { appRoot } from "./lib/appRoot.mts";
 import {
   devBundleExecutable,
@@ -23,11 +24,8 @@ import {
 import {
   applyDevProfileFlags,
   devProfileEnv,
-  devProfilePaths,
-  parseDevProfileArgs,
+  parsePositionalDevProfile,
 } from "./lib/devProfile.mts";
-
-const USAGE = "usage: pnpm dev:peer <name> [--fresh] [--clone-login]";
 
 function die(message: string): never {
   console.error(`[dev-peer] ${message}`);
@@ -39,16 +37,8 @@ function die(message: string): never {
 // reach the app either.
 delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
 
-const [name, ...flags] = process.argv.slice(2);
-if (name === undefined || name.startsWith("--")) die(USAGE);
-
 try {
-  const args = parseDevProfileArgs(flags);
-  if (args.profile !== null) die(`the name is positional here\n${USAGE}`);
-  if (args.rest.length > 0) {
-    die(`unknown arguments ${args.rest.join(" ")}\n${USAGE}`);
-  }
-  const profile = devProfilePaths(name);
+  const { profile, args } = parsePositionalDevProfile(process.argv.slice(2));
 
   // The build must be the dev one forge made for the running vite
   // server: forge bakes that server's URL into it, so the bundle is
@@ -61,18 +51,15 @@ try {
         "(`pnpm start`): the peer runs from its build and its vite server.",
     );
   }
-  const port = rendererDevServerPort();
-  if (port !== undefined) {
-    const devServerUrl = `http://localhost:${port}`;
+  const devServerUrl = rendererDevServerUrl();
+  if (devServerUrl !== undefined) {
     if (!readFileSync(build, "utf8").includes(devServerUrl)) {
       die(
         `.vite/build/index.js was not built for the dev server at ${devServerUrl}` +
           " (a packaging run or a port change since). Restart `pnpm start`.",
       );
     }
-    try {
-      await fetch(devServerUrl, { signal: AbortSignal.timeout(2000) });
-    } catch {
+    if (!(await rendererDevServerAnswers())) {
       die(
         `the renderer dev server at ${devServerUrl} does not answer. Is the ` +
           "primary dev app (`pnpm start`) running?",

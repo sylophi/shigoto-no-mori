@@ -106,7 +106,7 @@ export function isHaltedStatus(status: string): boolean {
 }
 
 // The rule in one phrase, the same on every surface that names it:
-// the session's history line, the live card's chip, the lab's posed
+// the session's history line, the live card's chip, the fake host's posed
 // thread. `count` is the paths the rule names, which a rule still
 // being picked knows outright. A session's patterns go through
 // summarizeIgnores, which counts them.

@@ -1,10 +1,10 @@
 // Contact sheet for VillagerIcon (renderer/components/shared/
-// VillagerIcon.tsx), a standalone lab page over the fixture bridge:
-// http://localhost:<lab port>/villager-icons.html
+// VillagerIcon.tsx), a standalone fake host page over the fixture bridge:
+// http://localhost:<FAKE_HOST_PORT>/villager-icons.html
 //   default       the doubutsu overlay (one panel, in ?theme)
 //   ?doubutsu=0   v1 light and dark side by side, since v1's dark
 //                 tokens also apply under a nested .dark
-// The faces come from lab/villager-data (lab/villagerData.ts), a
+// The faces come from lab/fake-host/villager-data (villagerData.ts), a
 // download that never enters the repo. Without it the sheet says so,
 // and every face renders nothing.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import { createRoot } from "react-dom/client";
 import { VillagerIcon } from "@/components/shared/VillagerIcon";
 import { cn } from "@/lib/utils";
 import { villagerManifest } from "@shared/villagers/manifest";
-import { labHasVillagerData } from "./villagerData";
+import { fakeHasVillagerData } from "./villagerData";
 
 const doubutsu = document.documentElement.classList.contains("doubutsu");
 const posedDark = document.documentElement.classList.contains("dark");
@@ -94,13 +94,13 @@ function Panel({ dark }: { dark: boolean }) {
 }
 
 const root = document.getElementById("root");
-if (root === null) throw new Error("[lab] the sheet has no #root");
+if (root === null) throw new Error("[fake-host] the sheet has no #root");
 createRoot(root).render(
   <QueryClientProvider client={new QueryClient()}>
     <main className="flex flex-col gap-4 bg-muted p-4">
-      {!labHasVillagerData && (
+      {!fakeHasVillagerData && (
         <p className="text-sm text-muted-foreground">
-          No villager data in lab/villager-data, so no faces. Run{" "}
+          No villager data in lab/fake-host/villager-data, so no faces. Run{" "}
           <span className="font-mono">pnpm villagers:fetch</span> to download
           it.
         </p>

@@ -1,5 +1,5 @@
 // The React Compiler pass, one definition for every build that mounts
-// the renderer tree (the desktop renderer, the web client, the UI lab).
+// the renderer tree (the desktop renderer, the web client, the fake host).
 // @vitejs/plugin-react v6 dropped its inline babel option (it switched
 // to Oxc for Fast Refresh), so the compiler ships via
 // @rolldown/plugin-babel using the canonical preset exported by the

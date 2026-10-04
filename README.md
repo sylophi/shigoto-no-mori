@@ -26,8 +26,9 @@ either place. The repo-wide checks (`lefthook.yml`,
 
 Each folder documents itself: [`app/README.md`](app/README.md) is the
 app's layout, [`app/DESIGN.md`](app/DESIGN.md) its visual rules,
-[`app/MANUAL-TESTING.md`](app/MANUAL-TESTING.md) how to run and drive
-it by hand, and [`hub/README.md`](hub/README.md) the device hub.
+[`app/lab/README.md`](app/lab/README.md) how to test it by hand on the
+real UI, [`app/test/README.md`](app/test/README.md) its programmatic
+checks, and [`hub/README.md`](hub/README.md) the device hub.
 
 ## Agent skills
 

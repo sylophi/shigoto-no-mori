@@ -1,4 +1,4 @@
-// Test stand-ins for the update endpoints (MANUAL-TESTING.md), moved
+// Test stand-ins for the update endpoints (lab/dev-app.md), moved
 // out of our environment at startup. Everything the app spawns
 // inherits process.env, and `sm run` passes it on to package scripts,
 // so an override left there would reach every script tree. Only the

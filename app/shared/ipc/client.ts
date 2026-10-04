@@ -91,7 +91,7 @@ export const allContractModules = [
 ] as const satisfies readonly ContractModule[];
 
 // A table answering any channel of any module above, typed by the
-// contracts: the lab's fixture handlers.
+// contracts: the fake host's fixture handlers.
 export type AllChannelHandlers = Partial<
   ChannelHandlers<(typeof allContractModules)[number]>
 >;
