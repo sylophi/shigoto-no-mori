@@ -16,7 +16,7 @@ const PORT_POOL = {
 };
 
 const TERRIER = {
-  href: "https://github.com/sylophi/terrier",
+  href: "https://github.com/dittofleet/terrier",
   errorTitle: "Couldn't open terrier",
 };
 
