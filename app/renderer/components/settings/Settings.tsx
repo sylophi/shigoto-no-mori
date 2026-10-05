@@ -1,10 +1,8 @@
 import { PageHeader } from "@/components/shared/PageHeader";
-import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
-import { useGoBack } from "@/hooks/ui/useGoBack";
 import { SettingsForm } from "./SettingsForm";
-import { SettingsSidebarNav } from "./SettingsSidebarNav";
+import { SettingsTakeover } from "./SettingsSidebarNav";
 import { SettingsSkeleton } from "./SettingsSkeleton";
 
 // The page picks its sections from the app sidebar: while this route is
@@ -12,14 +10,9 @@ import { SettingsSkeleton } from "./SettingsSkeleton";
 // (SidebarTakeover, desktop and web alike), from the first frame, the
 // skeleton's included.
 export function Settings() {
-  // Switching sections pushes no history, so one step back always
-  // leaves the page.
-  const back = useGoBack();
   return (
     <>
-      <SidebarTakeover back={{ label: "Back", onClick: back }}>
-        <SettingsSidebarNav />
-      </SidebarTakeover>
+      <SettingsTakeover />
       <SettingsBody />
     </>
   );

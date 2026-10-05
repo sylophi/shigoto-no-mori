@@ -12,8 +12,7 @@ interface SidebarFooterProps {
 // What both views share: the layout toggle, and the app-level actions.
 // Anything that only answers a question the project tree asks lives in
 // SidebarToolbar, above the tree. A hostless client has no local tree
-// to arrange or tidy, so its bar carries the toggle and the page-nav
-// cluster.
+// to arrange, so its bar carries the toggle and the page-nav cluster.
 export function SidebarFooter({
   arrangeMode,
   onToggleArrange,

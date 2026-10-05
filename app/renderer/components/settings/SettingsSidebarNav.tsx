@@ -1,4 +1,8 @@
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { Trees } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
+import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { StatusDot } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -18,16 +22,36 @@ import {
 } from "./settingsNav";
 import { UpdateAllButton } from "./UpdateAllButton";
 
+// The list in the sidebar for both pages it heads, Settings and Tidy.
+// Switching sections pushes no history, so one step back always leaves.
+export function SettingsTakeover() {
+  const back = useGoBack();
+  return (
+    <SidebarTakeover back={{ label: "Back", onClick: back }}>
+      <SettingsSidebarNav />
+    </SidebarTakeover>
+  );
+}
+
 // The Settings page's navigation, drawn in the app sidebar in place of
 // the project tree while /settings is open (SidebarTakeover, which also
-// draws the Back row above it). Two labelled groups:
+// draws the Back row above it). Three labelled groups:
 // "Visual" holds what this window shows and nothing else ever sees;
-// "Devices" holds one row per machine on the account, this one first,
-// each with the status dot the rest of the app draws for it. The split
-// is the page's whole point, so the list shows it rather than a panel
-// explaining it. The sections themselves come from settingsSections,
-// which the phone layout's chip row draws too.
-export function SettingsSidebarNav() {
+// "Projects" holds what spans this machine's projects. "Devices" holds
+// one row per machine on the account, this one first, each with the
+// status dot the rest of the app draws for it. The split is the page's
+// whole point, so the list shows it rather than a panel explaining it.
+// The visual and device sections come from settingsSections, which the
+// phone layout's chip row draws too.
+//
+// Projects leads to the Tidy page, which is a page of its own (its
+// device tabs, its removals) rather than a form, so it keeps its route
+// and draws this same list in the sidebar. Stepping between the two
+// replaces the entry rather than pushing one, so one step back still
+// leaves Settings, whichever of them it lands on.
+function SettingsSidebarNav() {
+  const navigate = useNavigate();
+  const onTidy = useLocation({ select: (l) => l.pathname === TIDY_PATH });
   const devices = useHostDevices();
   const { activeTab } = useActiveSettingsTab(devices);
   const local = useLocalDevice();
@@ -39,13 +63,28 @@ export function SettingsSidebarNav() {
     <NavRow
       key={section.id}
       section={section}
-      active={activeTab === section.id}
+      active={!onTidy && activeTab === section.id}
+      controls={settingsPanelId(section.id)}
+      onSelect={() => {
+        selectSettingsTab(section.id);
+        if (onTidy) void navigate({ to: "/settings", replace: true });
+      }}
     />
   );
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
       <NavGroup label="Visual">{sections.visual.map(row)}</NavGroup>
+
+      {hasLocalHost && (
+        <NavGroup label="Projects">
+          <NavRow
+            section={TIDY_SECTION}
+            active={onTidy}
+            onSelect={() => void navigate({ to: TIDY_PATH, replace: true })}
+          />
+        </NavGroup>
+      )}
 
       <NavGroup
         label={solo ? "Device" : "Devices"}
@@ -112,22 +151,35 @@ function NavGroup({
   );
 }
 
+const TIDY_PATH = "/tidy";
+
+const TIDY_SECTION: SettingsSection = {
+  id: "tidy",
+  label: "Tidy the forest",
+  icon: Trees,
+};
+
 // One row, with the sidebar rows' selection fill, so the list reads as
 // the sidebar's rather than a foreign widget dropped in.
 function NavRow({
   section,
   active,
+  controls,
+  onSelect,
 }: {
   section: SettingsSection;
   active: boolean;
+  // The settings panel the row shows. Tidy's row leads to a page.
+  controls?: string;
+  onSelect: () => void;
 }) {
   return (
     <SimpleTooltip tip={section.tip}>
       <button
         type="button"
         aria-current={active ? "true" : undefined}
-        aria-controls={settingsPanelId(section.id)}
-        onClick={() => selectSettingsTab(section.id)}
+        aria-controls={controls}
+        onClick={onSelect}
         className={cn(
           "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/60",
           active

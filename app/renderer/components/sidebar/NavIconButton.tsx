@@ -8,8 +8,9 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 
-// One shape for the sidebar's route buttons (tidy, devices, settings):
-// tooltip, icon, active highlight derived from the current location.
+// One shape for the sidebar's route buttons (projects, devices,
+// settings): tooltip, icon, active highlight derived from the current
+// location.
 // The match is exact: /devices/$deviceId/... is a device's WORKTREE
 // (this machine's or a peer's), which is meant to read as ordinary work
 // rather than as a device page, so it must not light this button.
