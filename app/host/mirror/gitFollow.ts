@@ -39,18 +39,35 @@
 // divergence, the apply) works on one name per side. The transfers
 // still name each side's own branch.
 //
+// A side in the middle of a git operation (a rebase, a merge, a
+// cherry-pick, a revert, a bisect) refuses to be read or written
+// (gitState.ts GIT_OPERATION_IN_PROGRESS), and the session reads
+// blocked until it finishes, naming the side. Mirroring the half-way
+// state would carry a detached HEAD or a conflicted index to the other
+// side, and the finished operation would then collide with it there.
+//
+// Git follows the files, never leads them. A change that moves the tip
+// or the branch waits while the file-sync engine is mid-cycle: landing
+// a checkout's HEAD and index before its files would show the other
+// side a reverse diff, which a commit there would record as a revert.
+// The engine's next idle snapshot sets the follow going again.
+//
 // Signals: the local git-directory watcher (a project ping), a local
 // index watcher per session, the peer's git:projectChanged and
 // mirror:gitChanged pushes, every daemon snapshot whose session set
-// changed, and a slow periodic sweep as the backstop. Reconciles are
-// coalesced per session: one in flight, one queued.
+// changed (or that finds a waiting session's files caught up), and a
+// slow periodic sweep as the backstop. Reconciles are coalesced per
+// session: one in flight, one queued.
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import {
   GitStateSchema,
+  isHaltedStatus,
+  MIRROR_LABEL_REPLACES,
   type MirrorGitStatus,
   MirrorApplyGitStateResultSchema,
   mirrorOnMirrorBranch,
+  type MirrorStatus,
 } from "@shared/ipc/modules/mirror";
 import { mirrorBranchFor, originalBranchOf } from "@shared/git/branches";
 import { SyncHasCommitsResultSchema } from "@shared/ipc/modules/sync";
@@ -68,14 +85,18 @@ import {
   type GitState,
   type GitStateCore,
   indexRefFor,
+  operationInRefusal,
   readGitState,
   watchIndexFile,
 } from "./gitState";
 
-// The slice of a daemon session the follower reads.
+// The slice of a daemon session the follower reads. `status` is the
+// file-sync engine's own (watching is idle, everything else is a cycle
+// under way, a connection being made or a halt).
 export type FollowableSession = {
   session: string;
   paused: boolean;
+  status: MirrorStatus;
   deviceId: string;
   projectId: string;
   worktreeId: string;
@@ -125,8 +146,13 @@ type FollowRecord = {
   session: FollowableSession;
   status: MirrorGitStatus;
   agreed: GitStateCore | null;
-  running: boolean;
+  // The reconcile loop in flight (it runs the queued follow-up too
+  // before settling), or null when idle.
+  running: Promise<void> | null;
   pending: boolean;
+  // A follow that moves the tip or the branch was held back for the
+  // files to settle. The next idle snapshot re-triggers it.
+  waitingForFiles: boolean;
   stopIndexWatch: (() => void) | null;
 };
 
@@ -134,6 +160,48 @@ type FollowRecord = {
 // sweep is slow, and each tick costs a local read plus one peer round
 // trip per session.
 const DEFAULT_SWEEP_MS = 60_000;
+
+// How often a session whose peer read keeps failing is reported to
+// onPeerUnreachable: the owner's probe is a round trip of its own, and
+// a peer that is merely away fails every signal.
+const PEER_UNREACHABLE_EVERY_MS = 60_000;
+
+// How long reconcileNow waits on a reconcile before answering with the
+// status as it stands. A stalled peer can hold a round for as long as
+// its transport's timeout, and the caller is a user waiting on a stop.
+const RECONCILE_NOW_LIMIT_MS = 10_000;
+
+// The apply's refusal when the side being written moved since it was
+// read. Never shown: the follower looks again at once.
+const CHANGED_LOCALLY = "changed-locally";
+
+type Side = "here" | "there";
+
+function whereIs(side: Side): string {
+  return side === "here" ? "here" : "on the other device";
+}
+
+function operationDetail(operation: string, side: Side): string {
+  return `a ${operation} is in progress ${whereIs(side)}. Git follows again once it finishes`;
+}
+
+// An apply's refusal as the runner's status shows it. A refusal made by
+// the peer's apply speaks from the peer ("on this device"), so its
+// devices trade places here. The bare tokens become sentences.
+function describeRefusal(reason: string, side: Side): string {
+  const operation = operationInRefusal(reason);
+  if (operation !== null) return operationDetail(operation, side);
+  if (reason === "missing-objects") {
+    return side === "here"
+      ? "this device is missing commits the other device's state needs"
+      : "the other device is missing commits this device's state needs";
+  }
+  if (side === "here") return reason;
+  if (reason === "refused") return "the other device refused the change";
+  return reason.replace(/this device|the other device/g, (match) =>
+    match === "this device" ? "the other device" : "this device",
+  );
+}
 
 function sameHead(a: GitHead, b: GitHead): boolean {
   return a.kind === "branch" && b.kind === "branch"
@@ -180,6 +248,37 @@ function refsToCarry(
   return { wantRefs, sweep };
 }
 
+// Neither tip moved (or both sides already share one): the indexes
+// decide, and only both having changed is a divergence.
+function decideIndex(
+  agreed: GitStateCore,
+  local: GitState,
+  peer: GitState,
+): "pull" | "push" | "diverged" {
+  const localIndexMoved = local.indexTree !== agreed.indexTree;
+  const peerIndexMoved = peer.indexTree !== agreed.indexTree;
+  if (localIndexMoved && peerIndexMoved) return "diverged";
+  if (peerIndexMoved) return "pull";
+  return "push";
+}
+
+// The haves for a pull whose tip is not here (see pull).
+async function pullHaves(
+  projectPath: string,
+  localTip: string,
+  agreedTip: string | null,
+): Promise<string[]> {
+  const [agreedHere, branchTips] = await Promise.all([
+    agreedTip === null || agreedTip === localTip
+      ? false
+      : hasCommit(projectPath, agreedTip),
+    localBranchTips(projectPath),
+  ]);
+  const first =
+    agreedHere && agreedTip !== null ? [localTip, agreedTip] : [localTip];
+  return [...new Set([...first, ...branchTips])].slice(0, 256);
+}
+
 export function createGitFollower(deps: {
   sessions: () => FollowableSession[];
   peerSyncApiFor: (deviceId: string) => PeerSyncApi;
@@ -191,8 +290,14 @@ export function createGitFollower(deps: {
   onChange?: () => void;
   sweepMs?: number;
   log?: (message: string) => void;
+  // A session's peer read failed (not the local one, and not over an
+  // operation in progress there): the peer may be away, or the copy may
+  // be gone from it, which the owner can find out and act on. At most
+  // once a minute per session.
+  onPeerUnreachable?: (session: FollowableSession) => void;
 }) {
   const records = new Map<string, FollowRecord>();
+  const peerUnreachableAt = new Map<string, number>();
   const log = deps.log ?? ((message: string) => console.warn(message));
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
   // The agreed states by session id, loaded on the first start (the
@@ -241,13 +346,14 @@ export function createGitFollower(deps: {
     persist();
   }
 
-  function trigger(record: FollowRecord): void {
-    if (record.running) {
+  // Starts a reconcile, or queues one behind the reconcile in flight.
+  // Resolves once the loop settles, the queued follow-up included.
+  function trigger(record: FollowRecord): Promise<void> {
+    if (record.running !== null) {
       record.pending = true;
-      return;
+      return record.running;
     }
-    record.running = true;
-    void (async () => {
+    const loop = (async () => {
       try {
         do {
           record.pending = false;
@@ -258,21 +364,64 @@ export function createGitFollower(deps: {
           records.get(record.session.session) === record
         );
       } finally {
-        record.running = false;
+        record.running = null;
       }
     })();
+    record.running = loop;
+    return loop;
+  }
+
+  function peerUnreachable(session: FollowableSession): void {
+    if (deps.onPeerUnreachable === undefined) return;
+    const now = Date.now();
+    const last = peerUnreachableAt.get(session.session);
+    if (last !== undefined && now - last < PEER_UNREACHABLE_EVERY_MS) return;
+    peerUnreachableAt.set(session.session, now);
+    try {
+      deps.onPeerUnreachable(session);
+    } catch (error) {
+      log(
+        `[mirror] git follow ${session.session}: peer probe failed: ${errorMessageOf(error)}`,
+      );
+    }
+  }
+
+  // Whether the files are idle enough for a follow that moves the tip
+  // or the branch. If not, the record waits for the snapshot that says
+  // they are (syncSessions). The engine's status is read fresh, since
+  // the record's copy is only as new as the last session-set change.
+  // A halted session will not catch up by itself, so it reads blocked
+  // rather than following forever. A paused one never gets here.
+  function filesSettled(record: FollowRecord): boolean {
+    const id = record.session.session;
+    const status =
+      deps.sessions().find((s) => s.session === id)?.status ??
+      record.session.status;
+    if (status === "watching") return true;
+    record.waitingForFiles = true;
+    setStatus(
+      record,
+      isHaltedStatus(status)
+        ? {
+            status: "blocked",
+            detail: "file sync has halted. Git follows again once it runs",
+          }
+        : { status: "following", detail: "waiting for files to catch up" },
+    );
+    return false;
   }
 
   function triggerWhere(
     matches: (session: FollowableSession) => boolean,
   ): void {
     for (const record of records.values()) {
-      if (matches(record.session)) trigger(record);
+      if (matches(record.session)) void trigger(record);
     }
   }
 
   async function reconcile(record: FollowRecord): Promise<void> {
     const { session } = record;
+    record.waitingForFiles = false;
     if (session.paused) {
       setStatus(record, { status: "off", detail: "paused" });
       return;
@@ -293,15 +442,41 @@ export function createGitFollower(deps: {
     try {
       // Independent reads, so the local git work hides under the peer
       // round trip. The apply's compare-and-set covers either side
-      // moving in between.
-      const [local, peerRaw] = await Promise.all([
+      // moving in between. Settled apart, since which side failed is
+      // what decides the report.
+      const [localRead, peerRead] = await Promise.allSettled([
         readGitState(project.path, localWorktree.path, localWorktree.id),
         peerMirror.gitState({
           projectId: session.projectId,
           worktreeId: session.worktreeId,
         }),
       ]);
-      const peerAsIs = GitStateSchema.parse(peerRaw);
+      const peerOperation =
+        peerRead.status === "rejected"
+          ? operationInRefusal(errorMessageOf(peerRead.reason))
+          : null;
+      if (peerRead.status === "rejected" && peerOperation === null) {
+        peerUnreachable(session);
+      }
+      if (localRead.status === "rejected") {
+        const operation = operationInRefusal(errorMessageOf(localRead.reason));
+        if (operation === null) throw localRead.reason;
+        setStatus(record, {
+          status: "blocked",
+          detail: operationDetail(operation, "here"),
+        });
+        return;
+      }
+      if (peerRead.status === "rejected") {
+        if (peerOperation === null) throw peerRead.reason;
+        setStatus(record, {
+          status: "blocked",
+          detail: operationDetail(peerOperation, "there"),
+        });
+        return;
+      }
+      const local = localRead.value;
+      const peerAsIs = GitStateSchema.parse(peerRead.value);
       // Each side's head in the other's names: the peer's is what
       // agreement, divergence and the apply are judged on, this side's
       // is what a push carries. A copy that left the mirror/ rule has
@@ -327,6 +502,13 @@ export function createGitFollower(deps: {
         });
         return;
       }
+      // Moving the tip or the branch rewrites what `git status` compares
+      // the files against, so it waits for the files to land first. An
+      // index-only change does not: the engine already carried whatever
+      // was staged.
+      const movesTip =
+        local.tip !== peer.tip || !sameHead(local.head, peer.head);
+      if (movesTip && !filesSettled(record)) return;
       setStatus(record, {
         status: "following",
         detail:
@@ -345,6 +527,7 @@ export function createGitFollower(deps: {
               local,
               peer,
               peerAsIs.head,
+              record.agreed?.tip ?? null,
             )
           : await push(
               project,
@@ -360,7 +543,7 @@ export function createGitFollower(deps: {
         setStatus(record, { status: "synced", detail: "" });
         return;
       }
-      if (outcome.reason === "changed-locally") {
+      if (outcome.reason === CHANGED_LOCALLY) {
         // The side being written moved between our read and the
         // apply. Look again right away.
         record.pending = true;
@@ -381,6 +564,17 @@ export function createGitFollower(deps: {
     peer: GitState,
   ): Promise<"pull" | "push" | "diverged"> {
     const agreed = record.agreed;
+    // Already on one tip and branch: only the indexes can differ. This
+    // is also how a half-landed apply heals (the ref moved, then
+    // read-tree failed on a held index lock): judged by tips, that side
+    // would read as moved too, and the session as diverged.
+    if (
+      agreed !== null &&
+      local.tip === peer.tip &&
+      sameHead(local.head, peer.head)
+    ) {
+      return decideIndex(agreed, local, peer);
+    }
     if (agreed === null) {
       // Equal tips that still differ (the index): the original here is
       // the reference, never the copy a dirty apply just rebuilt, whose
@@ -405,11 +599,7 @@ export function createGitFollower(deps: {
     if (localTipMoved && peerTipMoved) return "diverged";
     if (peerTipMoved) return "pull";
     if (localTipMoved) return "push";
-    const localIndexMoved = local.indexTree !== agreed.indexTree;
-    const peerIndexMoved = peer.indexTree !== agreed.indexTree;
-    if (localIndexMoved && peerIndexMoved) return "diverged";
-    if (peerIndexMoved) return "pull";
-    return "push";
+    return decideIndex(agreed, local, peer);
   }
 
   function describeDivergence(local: GitState, peer: GitState): string {
@@ -424,7 +614,8 @@ export function createGitFollower(deps: {
 
   // Carry the peer's state here. `peer` is in this side's names and is
   // what lands. `peerHead` is the peer's own, which the bundle is asked
-  // for.
+  // for. `agreedTip` is the tip both sides last shared, the best have
+  // after this side's own.
   async function pull(
     project: Project,
     localWorktree: { id: string; path: string },
@@ -433,6 +624,7 @@ export function createGitFollower(deps: {
     local: GitState,
     peer: GitState,
     peerHead: GitHead,
+    agreedTip: string | null,
   ): Promise<Outcome> {
     const [tipIsLocal, indexCommitIsLocal] = await Promise.all([
       hasCommit(project.path, peer.tip),
@@ -450,22 +642,29 @@ export function createGitFollower(deps: {
     const { wantRefs, sweep } = carry;
     if (wantRefs.length > 0) {
       // With the tip already here only the index carrier travels and
-      // the tip is the perfect have. Otherwise every local branch tip
-      // thins the bundle and none can cover a tip we lack.
+      // the tip is the perfect have. Otherwise this side's tip and the
+      // agreed one come first, since the peer's new tip most likely
+      // grew from one of them, and the branch tips (alphabetical, and
+      // cut at the contract's 256) fill the rest. The agreed tip goes
+      // in only while it is still here: a have this side lacks would
+      // thin away objects the bundle has to carry.
       const haves = tipIsLocal
         ? [peer.tip]
-        : await localBranchTips(project.path);
+        : await pullHaves(project.path, local.tip, agreedTip);
       await withPeerSource(
         peerSync,
         { projectId: session.projectId, worktreeId: session.worktreeId },
         (source) => source.fetch({ refs: wantRefs, haves, into: project }),
       );
     }
-    return applyGitState(project, localWorktree, {
+    const result = await applyGitState(project, localWorktree, {
       expect: { tip: local.tip, indexTree: local.indexTree },
       state: core(peer),
       sweep,
     });
+    return result.applied || result.reason === CHANGED_LOCALLY
+      ? result
+      : { applied: false, reason: describeRefusal(result.reason, "here") };
   }
 
   // Carry this side's state to the peer. The bundle names this side's
@@ -525,9 +724,11 @@ export function createGitFollower(deps: {
         sweep,
       }),
     );
-    return result.applied
-      ? { applied: true }
-      : { applied: false, reason: result.reason ?? "refused" };
+    if (result.applied) return { applied: true };
+    const reason = result.reason ?? "refused";
+    return reason === CHANGED_LOCALLY
+      ? { applied: false, reason }
+      : { applied: false, reason: describeRefusal(reason, "there") };
   }
 
   // Bring the followed set in line with the daemon's sessions: a new
@@ -536,7 +737,10 @@ export function createGitFollower(deps: {
   // the daemon reports no sessions while it restarts, and the same
   // sessions come back a moment later. Only forget() below, on an
   // explicit terminate, drops the agreement. True when a session
-  // came, went or flipped its pause.
+  // came, went or flipped its pause. A session that replaced another (a
+  // re-open, MIRROR_LABEL_REPLACES) and has no agreement of its own
+  // starts from the replaced one's. A record waiting for its files is
+  // triggered here the moment the engine reports them idle.
   function syncSessions(): boolean {
     loadStored();
     const current = new Map(deps.sessions().map((s) => [s.session, s]));
@@ -545,6 +749,7 @@ export function createGitFollower(deps: {
       if (!current.has(id)) {
         record.stopIndexWatch?.();
         records.delete(id);
+        peerUnreachableAt.delete(id);
         changed = true;
       }
     }
@@ -553,19 +758,24 @@ export function createGitFollower(deps: {
       if (existing !== undefined) {
         if (existing.session.paused !== session.paused) changed = true;
         existing.session = session;
+        if (existing.waitingForFiles && session.status === "watching") {
+          existing.waitingForFiles = false;
+          void trigger(existing);
+        }
         continue;
       }
       changed = true;
       const record: FollowRecord = {
         session,
         status: { status: "off", detail: "" },
-        agreed: stored[id] ?? null,
-        running: false,
+        agreed: stored[id] ?? inheritAgreement(id, session),
+        running: null,
         pending: false,
+        waitingForFiles: false,
         stopIndexWatch: null,
       };
       records.set(id, record);
-      void watchIndexFile(session.localRoot, () => trigger(record)).then(
+      void watchIndexFile(session.localRoot, () => void trigger(record)).then(
         (stop) => {
           if (records.get(id) === record) record.stopIndexWatch = stop;
           else stop();
@@ -577,9 +787,21 @@ export function createGitFollower(deps: {
     return changed;
   }
 
+  function inheritAgreement(
+    id: string,
+    session: FollowableSession,
+  ): GitStateCore | null {
+    const replaced = session.labels[MIRROR_LABEL_REPLACES];
+    const inherited = replaced === undefined ? undefined : stored[replaced];
+    if (inherited === undefined) return null;
+    stored[id] = inherited;
+    persist();
+    return inherited;
+  }
+
   function reconcileAll(): void {
     syncSessions();
-    for (const record of records.values()) trigger(record);
+    for (const record of records.values()) void trigger(record);
   }
 
   return {
@@ -605,7 +827,7 @@ export function createGitFollower(deps: {
     // flipping its pause is worth a re-look.
     sessionsChanged(): void {
       if (syncSessions()) {
-        for (const record of records.values()) trigger(record);
+        for (const record of records.values()) void trigger(record);
       }
     },
     // The session was terminated on purpose: its agreement goes too.
@@ -618,17 +840,39 @@ export function createGitFollower(deps: {
     },
     // The session was re-opened under a new id on the same pair (an
     // ignore change): the agreement follows it, on disk and on the
-    // live record if the daemon's snapshot already made one.
+    // live record if the daemon's snapshot already made one. An
+    // agreement the new id already holds (inherited through its
+    // replaces label, or reached since) is newer and stays.
     rename(from: string, to: string): void {
       loadStored();
       const agreed = stored[from];
       if (agreed === undefined) return;
       delete stored[from];
-      stored[to] = agreed;
+      stored[to] ??= agreed;
       persist();
       const record = records.get(to);
       if (record !== undefined && record.agreed === null)
-        record.agreed = agreed;
+        record.agreed = stored[to];
+    },
+    // A reconcile of one session right away, for a caller about to act
+    // on its verdict (a stop's safety check): queued behind one in
+    // flight, and answered once both have run. Bounded, so a stalled
+    // peer answers with the status as it stands. Undefined when the
+    // session is not followed.
+    async reconcileNow(session: string): Promise<MirrorGitStatus | undefined> {
+      syncSessions();
+      const record = records.get(session);
+      if (record === undefined) return undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        trigger(record),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, RECONCILE_NOW_LIMIT_MS);
+          timer.unref?.();
+        }),
+      ]);
+      clearTimeout(timer);
+      return records.get(session)?.status;
     },
     onLocalProjectChanged(projectId: string): void {
       syncSessions();

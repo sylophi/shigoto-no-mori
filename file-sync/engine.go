@@ -68,6 +68,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -98,9 +99,16 @@ const (
 
 // Mutagen's VCS ignore covers a .git DIRECTORY. A linked worktree's
 // .git is a FILE (one line naming the gitdir), so it needs its own
-// root-anchored pattern, or the pointer would land on the peer and aim
-// its worktree at a path that does not exist there.
-const mirrorGitPointerIgnore = "/.git"
+// pattern, or the pointer would land on the peer and aim its worktree
+// at a path that does not exist there. Unanchored, so it matches at
+// any depth: a submodule's .git is a pointer file too, and its
+// relative gitdir names a layout only this machine has.
+const mirrorGitPointerIgnore = ".git"
+
+// The root-anchored pattern sessions made before the unanchored one
+// carry. Still left out of the ignores a session reports, since it was
+// never the user's choice either.
+const mirrorLegacyGitPointerIgnore = "/.git"
 
 // How long the gateway may take to open the peer-side stream before
 // the connect attempt is abandoned and left to Mutagen's retry loop.
@@ -226,6 +234,10 @@ func (h mirrorGatewayHandler) Connect(
 	return remote.NewEndpoint(logger, conn, u.Path, session, version, configuration, alpha)
 }
 
+func isGitPointerIgnore(pattern string) bool {
+	return pattern == mirrorGitPointerIgnore || pattern == mirrorLegacyGitPointerIgnore
+}
+
 func readLineUnbuffered(r io.Reader) (string, error) {
 	var line []byte
 	buf := make([]byte, 1)
@@ -278,6 +290,15 @@ type mirrorRequest struct {
 	// here. A sent worktree's one-shot file transfer. Pull wins when
 	// both are set.
 	Push bool `json:"push,omitempty"`
+	// A replica: local alpha, one way, and the remote made an exact
+	// copy of the local side (Mutagen's one-way-replica): what the
+	// remote holds that the local side does not is removed, and a path
+	// both hold differently takes the local version. A mirror start's
+	// first pass, so the session opened after it begins on two
+	// identical trees instead of a conflict for every file the copy's
+	// create made on its own (carry-over, the setup script). Pull and
+	// push win over it.
+	Replica bool `json:"replica,omitempty"`
 	// terminate, pause, resume
 	Session string `json:"session,omitempty"`
 }
@@ -502,7 +523,7 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	// placed first.
 	ignores := make([]string, 0, 1+len(req.Ignores))
 	for _, pattern := range req.Ignores {
-		if pattern == "" || pattern == mirrorGitPointerIgnore {
+		if pattern == "" || isGitPointerIgnore(pattern) {
 			continue
 		}
 		ignores = append(ignores, pattern)
@@ -515,6 +536,8 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 		mode = core.SynchronizationMode_SynchronizationModeOneWaySafe
 	} else if req.Push {
 		mode = core.SynchronizationMode_SynchronizationModeOneWaySafe
+	} else if req.Replica {
+		mode = core.SynchronizationMode_SynchronizationModeOneWayReplica
 	}
 	configuration := &synchronization.Configuration{
 		SynchronizationMode: mode,
@@ -627,6 +650,13 @@ func streamMirrorState(ctx context.Context, manager *synchronization.Manager, em
 		for _, state := range states {
 			doc.Sessions = append(doc.Sessions, mirrorSessionStateOf(state))
 		}
+		// Mutagen lists its sessions off a map, in no fixed order. Sorted,
+		// the byte-identical check below holds with more than one
+		// session, and a reader picking the first match gets the same one
+		// every time.
+		slices.SortFunc(doc.Sessions, func(a, b mirrorSessionState) int {
+			return cmp.Compare(a.Session, b.Session)
+		})
 		encoded, err := json.Marshal(doc)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "file-sync: json encode: %v\n", err)
@@ -650,7 +680,7 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 	ignores := []string{}
 	if session.Configuration != nil {
 		for _, pattern := range session.Configuration.Ignores {
-			if pattern != mirrorGitPointerIgnore {
+			if !isGitPointerIgnore(pattern) {
 				ignores = append(ignores, pattern)
 			}
 		}

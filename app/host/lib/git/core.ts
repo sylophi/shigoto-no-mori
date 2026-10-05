@@ -16,11 +16,17 @@ const execFileP = promisify(execFile);
 // window, and an unknown subcommand marks it too, the safe direction
 // (a spurious mark costs one dropped ping for a second, a missed mark
 // costs one redundant sweep). The list forms below are the ones the
-// app actually runs.
+// app actually runs. write-tree and commit-tree write objects (and
+// write-tree a cache tree into the index it reads) but move nothing
+// the git-directory watcher listens to, and every caller that keeps
+// what they make follows up with an update-ref, which marks. The
+// mirror's index snapshot runs write-tree on every index change, so a
+// mark there would swallow the commit that changed it.
 const READ_ONLY_SUBCOMMANDS = new Set([
   "blame",
   "cat-file",
   "check-ignore",
+  "commit-tree",
   "count-objects",
   "describe",
   "diff",
@@ -39,6 +45,7 @@ const READ_ONLY_SUBCOMMANDS = new Set([
   "show",
   "show-ref",
   "status",
+  "write-tree",
 ]);
 
 function mutatesRepo(args: string[]): boolean {

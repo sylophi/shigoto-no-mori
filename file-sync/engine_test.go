@@ -223,6 +223,11 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	// A linked worktree's .git is a FILE naming a machine-specific
 	// gitdir. It must never cross.
 	writeFileT(t, filepath.Join(local, ".git"), "gitdir: /Users/someone/repo/.git/worktrees/x\n")
+	// A submodule's .git is a pointer file too, its gitdir relative to a
+	// layout only this machine has. Nor does it cross, while the
+	// submodule's own files do.
+	writeFileT(t, filepath.Join(local, "vendor", "sub", ".git"), "gitdir: ../../../repo/.git/worktrees/x/modules/sub\n")
+	writeFileT(t, filepath.Join(local, "vendor", "sub", "lib.go"), "package sub\n")
 	writeFileT(t, filepath.Join(remote, "notes.md"), "from the peer\n")
 	// Under the create's own ignores: a build folder and a log stay put.
 	writeFileT(t, filepath.Join(local, "dist", "bundle.js"), "built\n")
@@ -288,10 +293,14 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 			fileEquals(filepath.Join(remote, "cache", "run.log"), "kept\n") &&
 			fileEquals(filepath.Join(remote, "data[1].json"), "picked\n") &&
 			fileEquals(filepath.Join(remote, "lone[x.json"), "picked too\n") &&
+			fileEquals(filepath.Join(remote, "vendor", "sub", "lib.go"), "package sub\n") &&
 			fileEquals(filepath.Join(local, "notes.md"), "from the peer\n")
 	})
 	if !fileAbsent(filepath.Join(remote, ".git")) {
 		t.Fatal(".git crossed to the peer")
+	}
+	if !fileAbsent(filepath.Join(remote, "vendor", "sub", ".git")) {
+		t.Fatal("a submodule's .git pointer crossed to the peer")
 	}
 	if !fileAbsent(filepath.Join(remote, "dist")) || !fileAbsent(filepath.Join(remote, "debug.log")) || !fileAbsent(filepath.Join(remote, "data1.json")) {
 		t.Fatal("an ignored path crossed to the peer")
@@ -421,6 +430,49 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 // vanish on the next daemon start (the load-time check), and the app
 // reads identity out of the labels, so the create refuses instead of
 // folding the value.
+// A mirror start's first pass: the remote becomes an exact copy of the
+// local side. A path both hold differently takes the local version
+// instead of standing as a conflict, what only the remote holds goes,
+// and an ignored path on the remote is left alone.
+func TestMirrorReplicaMakesTheRemoteAnExactCopy(t *testing.T) {
+	gateway, _ := startTestGateway(t)
+	dataDir := filepath.Join(t.TempDir(), "mirror-data")
+	local := t.TempDir()
+	remote := t.TempDir()
+	writeFileT(t, filepath.Join(local, "src", "a.txt"), "original\n")
+	writeFileT(t, filepath.Join(local, ".env"), "FROM=original\n")
+	writeFileT(t, filepath.Join(remote, "src", "a.txt"), "made by the create\n")
+	writeFileT(t, filepath.Join(remote, ".env"), "FROM=carry-over\n")
+	writeFileT(t, filepath.Join(remote, "stray.txt"), "only on the copy\n")
+	writeFileT(t, filepath.Join(remote, "node_modules", "dep.js"), "left out\n")
+	d := startTestDaemon(t, gateway, dataDir)
+	created := d.call(mirrorRequest{
+		ID: "1", Op: "create",
+		LocalRoot:  local,
+		DeviceID:   "peer-1",
+		WorktreeID: "0123456789ab",
+		RemoteRoot: remote,
+		Ignores:    []string{"node_modules/"},
+		Replica:    true,
+	})
+	if created["ok"] != true {
+		t.Fatalf("create failed: %v", created["error"])
+	}
+	waitForT(t, 30*time.Second, "the remote to match the local side", func() bool {
+		return fileEquals(filepath.Join(remote, "src", "a.txt"), "original\n") &&
+			fileEquals(filepath.Join(remote, ".env"), "FROM=original\n") &&
+			fileAbsent(filepath.Join(remote, "stray.txt"))
+	})
+	if !fileEquals(filepath.Join(remote, "node_modules", "dep.js"), "left out\n") {
+		t.Fatal("the replica touched an ignored path on the remote")
+	}
+	if !fileEquals(filepath.Join(local, "src", "a.txt"), "original\n") || !fileAbsent(filepath.Join(local, "stray.txt")) {
+		t.Fatal("the replica wrote to the local side")
+	}
+	d.requests.Close()
+	<-d.done
+}
+
 func TestMirrorCreateRefusesInvalidLabel(t *testing.T) {
 	gateway, _ := startTestGateway(t)
 	daemon := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "data"))

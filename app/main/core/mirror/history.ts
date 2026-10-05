@@ -135,6 +135,20 @@ export function createMirrorHistory(deps: {
     queueFlush();
   }
 
+  // The worktree moved, and its id (path derived) with it: the thread
+  // follows, ahead of anything the new id already had.
+  function move(from: string, to: string): void {
+    const store = all();
+    const thread = store[from];
+    if (thread === undefined || from === to) return;
+    delete store[from];
+    store[to] = [...(store[to] ?? []), ...thread].slice(
+      0,
+      MIRROR_HISTORY_LIMIT,
+    );
+    queueFlush();
+  }
+
   // Reads every session against what was last seen of it and notes
   // the transitions. A session seen for the first time sets its
   // baseline silently: its start was noted by the handler that made
@@ -215,6 +229,7 @@ export function createMirrorHistory(deps: {
   return {
     note,
     forget,
+    move,
     observe,
     eventsFor: (localWorktreeId: string): MirrorEvent[] =>
       all()[localWorktreeId] ?? [],

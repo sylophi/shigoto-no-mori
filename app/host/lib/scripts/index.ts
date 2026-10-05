@@ -252,34 +252,39 @@ export function assertWorktreeMutable(
 // is still checked out here. The engine is two-way safe, so the gap
 // between the root vanishing and the stop propagates nothing. Callers
 // supply the busy message because the operations differ (removed vs
-// moved).
+// moved). `mirrorsAfter` is what becomes of the mirrors once the
+// mutation answered: by default they stop, a delete passes one that
+// stops them only when the worktree actually went (a failed cleanup
+// keeps it, and its mirror with it), and a move one that carries them
+// to the new path.
 export function withDeleteInflight<T>(
   worktreeId: string,
   busyMessage: string,
   run: () => Promise<T>,
+  mirrorsAfter: (result: T) => Promise<unknown> = () =>
+    stopMirrorsForWorktree(worktreeId),
 ): Promise<T> {
-  return withDeletesInflight([worktreeId], busyMessage, run, () => [
-    worktreeId,
-  ]);
+  return withDeletesInflight([worktreeId], busyMessage, run, mirrorsAfter);
 }
 
 // The protocol over several worktrees removed by one mutation (a stack
 // cleanup): every id is refused-if-busy and marked up front, the
-// scripts of all of them are reaped before, and the mirrors of the
-// ones `removedOf` names after. A mutation that removes only some of
-// them (a cleanup script failed partway) stops only those mirrors.
+// scripts of all of them are reaped before, and `mirrorsAfter` deals
+// with the mirrors of the ones the mutation took. A mutation that
+// removes only some of them (a cleanup script failed partway) stops
+// only those mirrors.
 export async function withDeletesInflight<T>(
   worktreeIds: readonly string[],
   busyMessage: string,
   run: () => Promise<T>,
-  removedOf: (result: T) => readonly string[],
+  mirrorsAfter: (result: T) => Promise<unknown>,
 ): Promise<T> {
   for (const id of worktreeIds) assertWorktreeMutable(id, busyMessage);
   worktreeIds.forEach(markDeleteInflight);
   try {
     await Promise.all(worktreeIds.map(killScriptsForWorktree));
     const result = await run();
-    await Promise.all(removedOf(result).map(stopMirrorsForWorktree));
+    await mirrorsAfter(result);
     return result;
   } finally {
     worktreeIds.forEach(clearDeleteInflight);

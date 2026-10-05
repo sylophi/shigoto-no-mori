@@ -18,9 +18,17 @@
 // Reads are made cheap because the follower reads on every signal and
 // on a sweep: one rev-parse answers HEAD, the tip, the tip's tree and
 // the git dir together. The index tree is recomputed only when the
-// index file's size or mtime moved, from a scratch copy so write-tree
-// never touches the real index (it would echo through every index
-// watcher, this module's included).
+// index file's identity (size, mtime, ctime, inode) moved, from a
+// scratch copy so write-tree never touches the real index (it would
+// echo through every index watcher, this module's included).
+//
+// A worktree in the middle of a git operation (a rebase, a merge, a
+// cherry-pick, a revert, a bisect) has no state worth mirroring: HEAD
+// is detached or the index holds conflicts for a moment the user is
+// still working through, and carrying that to the other side would
+// leave it somewhere the finished operation never goes. Both the read
+// and the apply refuse while one is under way, in words the follower
+// recognizes (GIT_OPERATION_IN_PROGRESS).
 //
 // Applying a state is deliberately narrow and guarded: refs move by
 // compare-and-set against the state the caller last saw, branch
@@ -29,6 +37,7 @@
 // an index refresh is what makes the staged view match without
 // rewriting a single file.
 import { copyFile, mkdtemp, stat } from "node:fs/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 import { watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -78,13 +87,67 @@ const CAPTURE_IDENT: NodeJS.ProcessEnv = {
   GIT_COMMITTER_EMAIL: "shigomori@localhost",
 };
 
-// HEAD, the tip, the tip's tree and the git dir in one spawn. An unborn
-// HEAD fails the rev-parse, which is the one state this module refuses.
+// The leading words of every refusal over an operation in progress,
+// followed by ": " and the operation's name. Text rather than a code
+// because the read's refusal reaches the other device as an error, and
+// an error crosses the wire flattened to its message.
+export const GIT_OPERATION_IN_PROGRESS = "A git operation is in progress";
+
+export function operationRefusal(operation: string): string {
+  return `${GIT_OPERATION_IN_PROGRESS}: ${operation}`;
+}
+
+// The operation a refusal names, or null when the text is some other
+// failure. Matches anywhere in the text, since a relayed error may
+// carry a prefix of its own.
+export function operationInRefusal(text: string): string | null {
+  const at = text.indexOf(`${GIT_OPERATION_IN_PROGRESS}: `);
+  if (at === -1) return null;
+  const rest = text.slice(at + GIT_OPERATION_IN_PROGRESS.length + 2);
+  return rest.split("\n")[0]?.trim() || "git operation";
+}
+
+// The files git leaves in a worktree's own git dir while an operation
+// waits on the user, in the order they are named when several are
+// there (a cherry-pick sequence has both CHERRY_PICK_HEAD and the
+// sequencer directory, and the first says more). rebase-apply is also
+// `git am`'s, which marks itself with an `applying` file inside.
+const OPERATION_MARKERS: { path: string; operation: string }[] = [
+  { path: "rebase-merge", operation: "rebase" },
+  { path: join("rebase-apply", "applying"), operation: "git am" },
+  { path: "rebase-apply", operation: "rebase" },
+  { path: "MERGE_HEAD", operation: "merge" },
+  { path: "CHERRY_PICK_HEAD", operation: "cherry-pick" },
+  { path: "REVERT_HEAD", operation: "revert" },
+  { path: "sequencer", operation: "cherry-pick or revert" },
+  { path: "BISECT_LOG", operation: "bisect" },
+];
+
+// The operation under way in the worktree whose git dir this is, or
+// null. A handful of stats, run together, so the steady state costs
+// about as much as one.
+async function operationInProgress(gitDir: string): Promise<string | null> {
+  const present = await Promise.all(
+    OPERATION_MARKERS.map(({ path }) =>
+      stat(join(gitDir, path)).then(
+        () => true,
+        () => false,
+      ),
+    ),
+  );
+  const index = present.indexOf(true);
+  return index === -1 ? null : (OPERATION_MARKERS[index]?.operation ?? null);
+}
+
+// HEAD, the tip, the tip's tree and the git dir in one spawn, and the
+// operation under way if any. An unborn HEAD fails the rev-parse, which
+// is the one state this module refuses outright.
 type HeadFacts = {
   head: GitHead;
   tip: string;
   headTree: string;
   gitDir: string;
+  operation: string | null;
 };
 
 async function readHeadFacts(worktreePath: string): Promise<HeadFacts> {
@@ -113,7 +176,13 @@ async function readHeadFacts(worktreePath: string): Promise<HeadFacts> {
   const head: GitHead = ref.startsWith("refs/heads/")
     ? { kind: "branch", branch: ref.slice("refs/heads/".length) }
     : { kind: "detached" };
-  return { head, tip, headTree, gitDir };
+  return {
+    head,
+    tip,
+    headTree,
+    gitDir,
+    operation: await operationInProgress(gitDir),
+  };
 }
 
 async function gitDirOfWorktree(worktreePath: string): Promise<string> {
@@ -122,9 +191,28 @@ async function gitDirOfWorktree(worktreePath: string): Promise<string> {
 }
 
 // The last index tree computed per worktree, keyed on the index file's
-// identity (size and mtime): the steady state of a mirrored worktree
-// is "unchanged since last look", and that costs one stat.
-type IndexSnapshot = { size: number; mtimeMs: number; tree: string };
+// identity: the steady state of a mirrored worktree is "unchanged since
+// last look", and that costs one stat. Size and mtime alone can miss a
+// rewrite within the filesystem's timestamp granularity that happens
+// to keep the size (a stage swapped for another of the same length).
+// git writes the index by renaming a fresh file over it, so the inode
+// changes on every write, and ctime catches an in-place touch.
+type IndexIdentity = {
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  ino: number;
+};
+type IndexSnapshot = IndexIdentity & { tree: string };
+
+function sameIdentity(a: IndexIdentity, b: IndexIdentity): boolean {
+  return (
+    a.size === b.size &&
+    a.mtimeMs === b.mtimeMs &&
+    a.ctimeMs === b.ctimeMs &&
+    a.ino === b.ino
+  );
+}
 const indexSnapshots = new Map<string, IndexSnapshot>();
 
 // One private 0700 directory for every scratch index, minted lazily and
@@ -201,10 +289,15 @@ async function computeIndexTree(
   headTree: string,
 ): Promise<string> {
   const indexPath = join(gitDir, "index");
-  let identity: { size: number; mtimeMs: number };
+  let identity: IndexIdentity;
   try {
     const info = await stat(indexPath);
-    identity = { size: info.size, mtimeMs: info.mtimeMs };
+    identity = {
+      size: info.size,
+      mtimeMs: info.mtimeMs,
+      ctimeMs: info.ctimeMs,
+      ino: info.ino,
+    };
   } catch {
     // No index yet (a worktree git has not touched since creation):
     // the index would commit HEAD's tree.
@@ -212,11 +305,7 @@ async function computeIndexTree(
     return headTree;
   }
   const cached = indexSnapshots.get(worktreePath);
-  if (
-    cached !== undefined &&
-    cached.size === identity.size &&
-    cached.mtimeMs === identity.mtimeMs
-  ) {
+  if (cached !== undefined && sameIdentity(cached, identity)) {
     return cached.tree;
   }
   const copy = await copyIndexToScratch(worktreePath, indexPath);
@@ -237,10 +326,16 @@ async function computeIndexTree(
 
 // The three facts, read-only: nothing is written. HEAD's tree rides
 // along for readGitState, which compares the index tree against it.
-async function peekGitState(
-  worktreePath: string,
-): Promise<GitStateCore & { headTree: string }> {
+// An operation in progress answers with its name alone: its index may
+// hold conflicts write-tree cannot snapshot, and neither caller wants
+// the facts of a state it is about to refuse.
+type Peek =
+  | { operation: string }
+  | (GitStateCore & { headTree: string; operation: null });
+
+async function peekGitState(worktreePath: string): Promise<Peek> {
   const facts = await readHeadFacts(worktreePath);
+  if (facts.operation !== null) return { operation: facts.operation };
   const indexTree = await indexTreeOf(
     worktreePath,
     facts.gitDir,
@@ -251,6 +346,7 @@ async function peekGitState(
     tip: facts.tip,
     indexTree,
     headTree: facts.headTree,
+    operation: null,
   };
 }
 
@@ -261,13 +357,21 @@ async function peekGitState(
 const carrierClean = new Set<string>();
 
 // The full state, with the carrier commit for a staged index minted
-// (or an obsolete one removed) so the transfer can name it.
+// (or an obsolete one removed) so the transfer can name it. Throws
+// operationRefusal(...) while an operation is in progress, so the
+// follower reading here and the peer this read is served to both hear
+// the same words.
 export async function readGitState(
   projectPath: string,
   worktreePath: string,
   worktreeId: string,
 ): Promise<GitState> {
-  const { headTree, ...core } = await peekGitState(worktreePath);
+  const peek = await peekGitState(worktreePath);
+  if (peek.operation !== null) {
+    throw new Error(operationRefusal(peek.operation));
+  }
+  const { headTree } = peek;
+  const core = { head: peek.head, tip: peek.tip, indexTree: peek.indexTree };
   const ref = indexRefFor(worktreeId);
   if (core.indexTree === headTree) {
     if (!carrierClean.has(worktreeId)) {
@@ -348,6 +452,9 @@ async function applyGitStateUnswept(
   input: ApplyGitStateInput,
 ): Promise<ApplyGitStateResult> {
   const current = await peekGitState(worktree.path);
+  if (current.operation !== null) {
+    return { applied: false, reason: operationRefusal(current.operation) };
+  }
   if (
     current.tip !== input.expect.tip ||
     current.indexTree !== input.expect.indexTree
@@ -423,9 +530,42 @@ async function applyGitStateUnswept(
   // refresh re-stats every entry against the (already mirrored) files
   // so unchanged ones do not read as modified. refresh exits non-zero
   // when files differ from the index, which is the ordinary dirty case.
-  await run(worktree.path, ["read-tree", state.indexTree]);
+  await readTreeRetrying(worktree.path, state.indexTree);
   await runLenient(worktree.path, ["update-index", "-q", "--refresh"]);
   return { applied: true };
+}
+
+// The pauses between read-tree attempts while another git process
+// holds the index lock. Any `git status` takes the lock for a moment
+// to refresh, so a busy worktree (an editor's git integration, a
+// prompt) holds it often but briefly. By the time read-tree runs the
+// ref has moved already, so giving up here leaves the state half
+// applied: the follower heals that on its next look (it compares the
+// index alone when both sides already share a tip), but a short wait
+// usually saves the round.
+const INDEX_LOCK_BACKOFF_MS = [50, 100, 200, 400, 800];
+
+async function readTreeRetrying(
+  worktreePath: string,
+  tree: string,
+): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- each attempt waits on the last
+      await run(worktreePath, ["read-tree", tree]);
+      return;
+    } catch (error) {
+      const pause = INDEX_LOCK_BACKOFF_MS[attempt];
+      if (
+        pause === undefined ||
+        !errorMessageOf(error).includes("index.lock")
+      ) {
+        throw error;
+      }
+      // oxlint-disable-next-line no-await-in-loop -- the backoff is the point
+      await sleep(pause);
+    }
+  }
 }
 
 // Fires when the worktree's index file is rewritten (a stage, an

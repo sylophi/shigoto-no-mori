@@ -294,9 +294,11 @@ function fakeMirrorEngine() {
       raw.paused = false;
     },
     gitStatus: () => ({ status: state.git, detail: "" }),
+    refreshGit: async () => ({ status: state.git, detail: "" }),
     history: () => [],
     noteEvent: () => {},
     forgetHistory: () => {},
+    moveHistory: () => {},
   };
   return { state, impl };
 }
@@ -401,6 +403,7 @@ async function main() {
       startTo: asA(mirrorHandlers.startTo),
       startFrom: asA(mirrorHandlers.startFrom),
       stop: asA(mirrorHandlers.stop),
+      release: asA(mirrorHandlers.release),
       pause: asA(mirrorHandlers.pause),
       resume: asA(mirrorHandlers.resume),
       setIgnores: asA(mirrorHandlers.setIgnores),

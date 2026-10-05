@@ -63,6 +63,7 @@ import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
 import {
   currentMirrorList,
+  endMirrorIfCopyGone,
   mirrorHandlers,
   setMirrorGitChangedListener,
   setMirrorImpl,
@@ -72,6 +73,7 @@ import {
   endLegacyMirrors,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
+  settleMirrorBookkeeping,
   isOrphanedTransfer,
   mirrorSessions,
 } from "@host/mirror/registry";
@@ -289,6 +291,9 @@ const mirrorDaemon = createMirrorDaemon({
     // (registry.ts isLegacyMirror), ended once, the worktree kept.
     void endLegacyMirrors();
     endMirrorsOfNoAccount();
+    // The stops that waited for the daemon, originals gone behind the
+    // app's back, sessions a re-open replaced (registry.ts).
+    void settleMirrorBookkeeping();
   },
 });
 // The engine persists its sessions, so they come back on every spawn:
@@ -361,6 +366,9 @@ const gitFollower = createGitFollower({
     broadcastMirrorChanged();
     observeMirrorHistory();
   },
+  // A copy the follower cannot read may be gone behind this device's
+  // back: a copy no longer listed ends its session.
+  onPeerUnreachable: (session) => void endMirrorIfCopyGone(session),
 });
 
 // "This project's git state moved on this machine": the project-scoped
@@ -607,10 +615,12 @@ export function registerIpcHandlers(): void {
     pause: (session) => mirrorDaemon.pause(session),
     resume: (session) => mirrorDaemon.resume(session),
     gitStatus: (session) => gitFollower.statusOf(session),
+    refreshGit: (session) => gitFollower.reconcileNow(session),
     history: (localWorktreeId) => mirrorHistory.eventsFor(localWorktreeId),
     noteEvent: (localWorktreeId, kind, detail) =>
       mirrorHistory.note(localWorktreeId, kind, detail),
     forgetHistory: (localWorktreeId) => mirrorHistory.forget(localWorktreeId),
+    moveHistory: (from, to) => mirrorHistory.move(from, to),
   });
   setMirrorServingListener(broadcastMirrorChanged);
   // A delete's removal, to every window and peer (remote:true by

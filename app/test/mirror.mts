@@ -33,6 +33,13 @@
 //     nothing, and resolving on B brings the session back to synced,
 //   - a checkout on A to a branch another worktree on B holds is
 //     refused with the path, and checking back restores sync,
+//   - a merge in progress on A, or a rebase on B, reports blocked with
+//     the operation and side named and moves nothing, and finishing it
+//     resumes the follow,
+//   - a half-landed apply (B's ref already at A's tip, its index not)
+//     heals to synced rather than reading as diverged,
+//   - a commit waits while the engine reports the files mid-cycle (or
+//     halted), staging does not, and the idle snapshot releases it,
 //   - B's primary checkout (the original, on the device running the
 //     session) mirrored to a mirror/main worktree on A carries commits
 //     both ways, and A's own main never moves.
@@ -62,9 +69,12 @@ import { forwardContract } from "@shared/ipc/modules/forward";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_MIRROR_BRANCH,
+  MIRROR_LABEL_REPLACES,
   MIRROR_LABEL_TRANSFER,
+  isMirrorStopUnconfirmed,
   mirrorContract,
   type MirrorGitStatus,
+  type MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
@@ -78,6 +88,7 @@ import {
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
+import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import {
   COPY_GONE_DETAIL,
   endLegacyMirrors,
@@ -88,6 +99,9 @@ import {
   type MirrorImpl,
   mirrorSessions,
   type MirrorSessionRaw,
+  ORIGINAL_GONE_DETAIL,
+  settleMirrorBookkeeping,
+  stopMirrorsForWorktree,
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
@@ -171,6 +185,11 @@ const serveChildren = new Set<ChildProcess>();
 
 const { ok, done, fail } = makeProof("mirror proof");
 
+// mirror:stop called the way a caller on this device would, its
+// context unread by the handler.
+const stop = async (input: Parameters<typeof mirrorHandlers.stop>[0]) =>
+  mirrorHandlers.stop(input, {} as Parameters<typeof mirrorHandlers.stop>[1]);
+
 async function main() {
   console.log("mirror proof\n");
 
@@ -250,6 +269,9 @@ async function main() {
   // B's half: the real gateway over the real peer client, the real
   // daemon on the freshly built binary.
   let changes = 0;
+  // Every daemon snapshot reaches the git follower while it runs, as
+  // main/ipc/handlers.ts wires it.
+  let onSnapshot: (() => void) | null = null;
   const gateway = createMirrorGateway({
     peerApiFor: () => mirrorOverWire,
     peerChannelsFor: () => peerA.channels,
@@ -268,6 +290,7 @@ async function main() {
     dataDir: () => fileSyncDataDir,
     onChange: () => {
       changes++;
+      onSnapshot?.();
     },
     log: () => {},
   });
@@ -479,8 +502,16 @@ async function main() {
     );
 
     // ---- The git follower, against the same wire ----
+    // The engine status the follower sees, overridable so a mid-cycle
+    // or halted engine can be posed on demand (G9).
+    let filesStatus: MirrorSession["status"] | null = null;
     const follower = createGitFollower({
-      sessions: () => daemon.sessions(),
+      sessions: () => {
+        const sessions = daemon.sessions();
+        if (filesStatus === null) return sessions;
+        const status = filesStatus;
+        return sessions.map((s) => Object.assign({}, s, { status }));
+      },
       // The sync surface and the session's byte channels, which the
       // follower's source links ride.
       peerSyncApiFor: () => ({
@@ -492,6 +523,7 @@ async function main() {
       log: (message) => console.log(message),
     });
     track(() => follower.stop());
+    onSnapshot = () => follower.sessionsChanged();
     const gitStatus = () => follower.statusOf(session);
     const waitGit = (status: MirrorGitStatus["status"], what: string) =>
       waitFor(() => gitStatus()?.status === status, what, 30_000);
@@ -644,7 +676,132 @@ async function main() {
     );
     ok("git: checking back on A restores sync, with the device hub still flat");
 
-    // (G7) A primary checkout's mirror: B's repo-b itself, the
+    // (G7) A git operation in progress on either side blocks the
+    // follow, naming the side, and nothing moves until it finishes.
+    // A merge stopped before its commit on A (a no-ff merge of a commit
+    // with the same tree, so no file changes):
+    const sideTip = await gitOut(
+      worktreeA,
+      "commit-tree",
+      "HEAD^{tree}",
+      "-p",
+      "HEAD",
+      "-m",
+      "side",
+    );
+    await git(worktreeA, ["update-ref", "refs/heads/side-op", sideTip]);
+    const tipBeforeOps = await gitOut(rootB, "rev-parse", "HEAD");
+    await git(worktreeA, ["merge", "-q", "--no-ff", "--no-commit", "side-op"]);
+    follower.onPeerProjectChanged("A", projectIdA);
+    await waitGit("blocked", "the follower to report A's merge");
+    assert.match(
+      gitStatus()?.detail ?? "",
+      /a merge is in progress on the other device/,
+    );
+    assert.equal(await gitOut(rootB, "rev-parse", "HEAD"), tipBeforeOps);
+    await git(worktreeA, ["commit", "-qm", "merge side-op"]);
+    const mergeTip = await gitOut(worktreeA, "rev-parse", "HEAD");
+    follower.onPeerProjectChanged("A", projectIdA);
+    await waitFor(
+      async () => (await gitOut(rootB, "rev-parse", "HEAD")) === mergeTip,
+      "B to follow A's finished merge",
+      30_000,
+    );
+    await waitGit("synced", "synced after A's merge finished");
+    // A rebase stopped on B (an exec that fails leaves it mid-way, on a
+    // detached HEAD), which must not reach A as a detached HEAD:
+    await assert.rejects(() =>
+      git(rootB, ["rebase", "--exec", "false", "HEAD~1"]),
+    );
+    follower.onLocalProjectChanged(projectIdB);
+    await waitGit("blocked", "the follower to report B's rebase");
+    assert.match(gitStatus()?.detail ?? "", /a rebase is in progress here/);
+    assert.equal(
+      await gitOut(worktreeA, "symbolic-ref", "HEAD"),
+      "refs/heads/feature",
+    );
+    await git(rootB, ["rebase", "--abort"]);
+    follower.onLocalProjectChanged(projectIdB);
+    await waitGit("synced", "synced after B's rebase was aborted");
+    ok(
+      "git: a merge on A or a rebase on B reports blocked with the side named, moves nothing, and finishing it resumes the follow",
+    );
+
+    // (G8) A half-landed apply heals: B's branch already at A's new
+    // tip (as if read-tree failed on a held index lock after the ref
+    // moved), its index still the old tree. Both tips moved since the
+    // agreement, yet the two share one now, so only the indexes count.
+    writeFileSync(join(worktreeA, "half.txt"), "half\n");
+    await waitFor(
+      () => fileEquals(join(rootB, "half.txt"), "half\n"),
+      "half.txt to mirror",
+      30_000,
+    );
+    await git(worktreeA, ["add", "half.txt"]);
+    await git(worktreeA, ["commit", "-qm", "half-applied on B"]);
+    const halfTip = await gitOut(worktreeA, "rev-parse", "HEAD");
+    await git(repoB, ["fetch", "-q", repoA, "feature"]);
+    await git(rootB, ["update-ref", "refs/heads/feature", halfTip]);
+    assert.notEqual(await gitOut(rootB, "diff", "--cached", "--name-only"), "");
+    follower.onLocalProjectChanged(projectIdB);
+    await waitFor(
+      async () =>
+        (await gitOut(rootB, "diff", "--cached", "--name-only")) === "",
+      "B's index to heal to A's",
+      30_000,
+    );
+    await waitGit("synced", "synced after the half-landed apply healed");
+    assert.ok(await clean(rootB), "B is not clean after the heal");
+    ok("git: a half-landed apply heals to synced instead of reading diverged");
+
+    // (G9) Git follows the files: a commit waits while the engine is
+    // mid-cycle, staging does not, a halted engine reads blocked, and
+    // the idle snapshot releases the wait.
+    writeFileSync(join(worktreeA, "wait.txt"), "wait\n");
+    await waitFor(
+      () => fileEquals(join(rootB, "wait.txt"), "wait\n"),
+      "wait.txt to mirror",
+      30_000,
+    );
+    const tipBeforeWait = await gitOut(rootB, "rev-parse", "HEAD");
+    filesStatus = "staging-remote";
+    await git(worktreeA, ["add", "wait.txt"]);
+    follower.onPeerWorktreeChanged("A", projectIdA, worktreeIdA);
+    await waitFor(
+      async () =>
+        (await gitOut(rootB, "diff", "--cached", "--name-only")) === "wait.txt",
+      "staging to cross while the files are mid-cycle",
+      30_000,
+    );
+    await git(worktreeA, ["commit", "-qm", "wait for files"]);
+    const waitTip = await gitOut(worktreeA, "rev-parse", "HEAD");
+    follower.onPeerProjectChanged("A", projectIdA);
+    await waitFor(
+      () => gitStatus()?.detail === "waiting for files to catch up",
+      "the commit to wait for the files",
+      30_000,
+    );
+    assert.equal(gitStatus()?.status, "following");
+    assert.equal(await gitOut(rootB, "rev-parse", "HEAD"), tipBeforeWait);
+    filesStatus = "halted-on-root-deletion";
+    follower.onPeerProjectChanged("A", projectIdA);
+    await waitGit("blocked", "a halted engine to read blocked");
+    assert.match(gitStatus()?.detail ?? "", /file sync has halted/);
+    assert.equal(await gitOut(rootB, "rev-parse", "HEAD"), tipBeforeWait);
+    filesStatus = null;
+    // The engine's idle snapshot, as the daemon would send it.
+    follower.sessionsChanged();
+    await waitFor(
+      async () => (await gitOut(rootB, "rev-parse", "HEAD")) === waitTip,
+      "B to follow once the files are idle",
+      30_000,
+    );
+    await waitGit("synced", "synced after the files caught up");
+    ok(
+      "git: a commit waits for the files (staging does not), a halted engine reads blocked, and the idle snapshot releases it",
+    );
+
+    // (G10) A primary checkout's mirror: B's repo-b itself, the
     // original on the device running the session, mirrored to A as a
     // worktree on mirror/main (the session's mirrorBranch label),
     // beside A's own primary on main. The follower reads the two names
@@ -763,6 +920,7 @@ async function main() {
     ok(
       "git: a primary mirrored to a mirror/main worktree carries commits both ways with the copy's own main untouched, and a stray branch on the copy is reported rather than followed",
     );
+    onSnapshot = null;
     follower.stop();
 
     // (6) Terminate: the session is gone, A's stream dropped, the serve
@@ -798,9 +956,11 @@ async function main() {
       ...daemon,
       recreate: () => Promise.reject(new Error("not in this check")),
       gitStatus: () => undefined,
+      refreshGit: async () => undefined,
       history: () => [],
       noteEvent: () => {},
       forgetHistory: () => {},
+      moveHistory: () => {},
     });
     mkdirSync(join(worktreeA, "skip"), { recursive: true });
     writeFileSync(join(worktreeA, "skip", "me.txt"), "stays\n");
@@ -894,10 +1054,12 @@ async function main() {
         },
         recreate: () => Promise.reject(new Error("not in this check")),
         gitStatus: () => undefined,
+        refreshGit: async () => undefined,
         history: () => [],
         noteEvent: (worktreeId, kind, detail) =>
           noted.push([worktreeId, kind, detail]),
         forgetHistory: () => {},
+        moveHistory: () => {},
       });
       await endMirrorsWithPeers((deviceId) => deviceId !== "A", "A left");
       assert.deepEqual([...live.keys()], ["s-with-c", "t-with-a"]);
@@ -956,10 +1118,12 @@ async function main() {
         },
         recreate: () => Promise.reject(new Error("not in this check")),
         gitStatus: () => undefined,
+        refreshGit: async () => undefined,
         history: () => [],
         noteEvent: (worktreeId, kind, detail) =>
           noted.push([worktreeId, kind, detail]),
         forgetHistory: () => {},
+        moveHistory: () => {},
       };
       setMirrorImpl(impl);
       assert.deepEqual(
@@ -1025,10 +1189,12 @@ async function main() {
         },
         recreate: () => Promise.reject(new Error("not in this check")),
         gitStatus: () => undefined,
+        refreshGit: async () => undefined,
         history: () => [],
         noteEvent: (worktreeId, kind, detail) =>
           noted.push([worktreeId, kind, detail]),
         forgetHistory: () => {},
+        moveHistory: () => {},
       });
       const copy = { projectId: "p", worktreeId: "wt-copy" };
       await endMirrorsOnPeerRemoval("A", { ...copy, state: "removing" });
@@ -1044,6 +1210,180 @@ async function main() {
     }
     ok(
       "a peer's removed worktree ends only the mirrors into that copy, nothing deleted",
+    );
+
+    // (6b) The stop's safety and its keep-the-copy, the original gone
+    // behind the app's back, a re-open's leftover, and a stop that
+    // came while the daemon was down. Against a recording daemon and
+    // a recording peer: what is pinned is which session ends, what the
+    // peer is asked, and what the thread says.
+    {
+      const settled: Partial<MirrorSessionRaw> = {
+        status: "watching",
+        successfulCycles: 3,
+        local: { ...idleEndpoint, connected: true, scanned: true },
+        remote: { ...idleEndpoint, connected: true, scanned: true },
+      };
+      const liveRoot = join(sandbox, "original-here");
+      mkdirSync(liveRoot, { recursive: true });
+      const goneRoot = join(sandbox, "original-gone");
+      const sessionOf = (id: string, fields: Partial<MirrorSessionRaw> = {}) =>
+        fakeSession({
+          session: id,
+          deviceId: "A",
+          projectId: "p",
+          worktreeId: `wt-${id}`,
+          localRoot: liveRoot,
+          labels: {
+            [MIRROR_LABEL_LOCAL_WORKTREE]: `orig-${id}`,
+            [MIRROR_LABEL_COPY_SIDE]: "remote",
+          },
+          ...settled,
+          ...fields,
+        });
+      const live = new Map<string, MirrorSessionRaw>();
+      const put = (raw: MirrorSessionRaw) => live.set(raw.session, raw);
+      const noted: Parameters<MirrorImpl["noteEvent"]>[] = [];
+      const deleted: string[] = [];
+      const released: string[] = [];
+      let status: ReturnType<MirrorImpl["status"]> = "running";
+      let verdict: MirrorGitStatus = { status: "synced", detail: "" };
+      setMirrorImpl({
+        ...daemon,
+        status: () => status,
+        sessions: () => (status === "running" ? [...live.values()] : []),
+        terminate: async (id) => {
+          live.delete(id);
+        },
+        recreate: () => Promise.reject(new Error("not in this check")),
+        gitStatus: () => verdict,
+        refreshGit: async () => verdict,
+        history: () => [],
+        noteEvent: (worktreeId, kind, detail) =>
+          noted.push([worktreeId, kind, detail]),
+        forgetHistory: () => {},
+        moveHistory: () => {},
+      });
+      // The peer's list never answers, which the copy-gone probe reads
+      // as no answer (the copy may well be there), so no refusal is
+      // waved through as a copy already gone.
+      setPeerSyncApiImpl({
+        syncApiFor: () => {
+          throw new Error("not in this check");
+        },
+        worktreesApiFor: () => ({
+          list: () => Promise.reject(new Error("not in this check")),
+          delete: async ({ worktreeId }) => {
+            deleted.push(worktreeId);
+            return { ok: true as const };
+          },
+          setShelved: () => Promise.reject(new Error("not in this check")),
+        }),
+        mirrorApiFor: () => ({
+          gitState: () => Promise.reject(new Error("not in this check")),
+          applyGitState: () => Promise.reject(new Error("not in this check")),
+          startTo: () => Promise.reject(new Error("not in this check")),
+          release: async ({ worktreeId }) => {
+            released.push(worktreeId);
+          },
+        }),
+        thisDeviceId: () => "B",
+      });
+
+      // Git in step but a file held still as a conflict: the copy may
+      // hold the only version of it, so the unforced stop refuses,
+      // naming why, and nothing is removed.
+      put(
+        sessionOf("conflicted", {
+          conflicts: [
+            { root: "notes.md", localChanges: [], remoteChanges: [] },
+          ],
+        }),
+      );
+      await assert.rejects(
+        stop({ session: "conflicted" }),
+        (error: unknown) => {
+          assert.ok(isMirrorStopUnconfirmed(error));
+          assert.match(errorMessageOf(error), /changed on both sides/);
+          return true;
+        },
+      );
+      assert.ok(live.has("conflicted"));
+      assert.deepEqual(deleted, []);
+      // Keeping the copy is always safe: the session ends, the copy is
+      // not asked to go, its device is told it is a plain worktree now.
+      await stop({ session: "conflicted", keepCopy: true });
+      assert.ok(!live.has("conflicted"));
+      assert.deepEqual(deleted, []);
+      await waitFor(() => released.includes("wt-conflicted"), "the release");
+      assert.equal(noted.at(-1)?.[1], "stopped");
+
+      // Files settled but git not: the fresh verdict is what decides.
+      put(sessionOf("ahead"));
+      verdict = { status: "following", detail: "to the other device" };
+      await assert.rejects(stop({ session: "ahead" }), isMirrorStopUnconfirmed);
+      verdict = { status: "synced", detail: "" };
+      await stop({ session: "ahead" });
+      assert.deepEqual(deleted, ["wt-ahead"]);
+
+      // The original removed outside the app: the copy is the only one
+      // left, so even a forced stop keeps it.
+      put(sessionOf("orphan", { localRoot: goneRoot }));
+      await stop({ session: "orphan", force: true });
+      assert.ok(!live.has("orphan"));
+      assert.deepEqual(deleted, ["wt-ahead"]);
+      assert.deepEqual(noted.at(-1), [
+        "orig-orphan",
+        "stopped",
+        ORIGINAL_GONE_DETAIL,
+      ]);
+
+      // The same, found by the bookkeeping on a halted session, and a
+      // session a re-open replaced but which outlived it.
+      put(
+        sessionOf("halted", {
+          localRoot: goneRoot,
+          status: "halted-on-root-deletion",
+        }),
+      );
+      put(sessionOf("old"));
+      put(
+        sessionOf("new", {
+          labels: {
+            [MIRROR_LABEL_LOCAL_WORKTREE]: "orig-old",
+            [MIRROR_LABEL_COPY_SIDE]: "remote",
+            [MIRROR_LABEL_REPLACES]: "old",
+          },
+        }),
+      );
+      await settleMirrorBookkeeping();
+      assert.deepEqual([...live.keys()].toSorted(), ["new"]);
+      assert.deepEqual(deleted, ["wt-ahead"]);
+
+      // A delete while the daemon restarts lists nothing to stop: the
+      // stop waits for the daemon and ends the session once it runs.
+      status = "starting";
+      await stopMirrorsForWorktree("orig-old");
+      assert.ok(live.has("new"));
+      status = "running";
+      await settleMirrorBookkeeping();
+      assert.ok(!live.has("new"));
+      assert.deepEqual(deleted, ["wt-ahead"]);
+
+      // What the mirror leaves out changes only on a pair in step.
+      put(sessionOf("paused", { paused: true }));
+      await assert.rejects(
+        async () =>
+          mirrorHandlers.setIgnores(
+            { session: "paused", ignoreMode: "gitignored", ignores: [] },
+            {} as Parameters<typeof mirrorHandlers.setIgnores>[1],
+          ),
+        /in step/,
+      );
+      live.clear();
+    }
+    ok(
+      "stop: a conflict or git not in step refuses removing the copy, keeping it always works, an original gone never takes its copy, and leftovers and delayed stops are swept",
     );
 
     // (7) Stopping the daemon ends it cleanly.

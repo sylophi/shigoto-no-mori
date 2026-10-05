@@ -87,6 +87,12 @@ export const MIRROR_LABEL_COPY_SIDE = "copySide";
 // branch in its own primary. The git follower reads the two names as
 // one branch. The label says so.
 export const MIRROR_LABEL_MIRROR_BRANCH = "mirrorBranch";
+// The session a re-open (an ignore change) replaced, on the session
+// that replaced it: the git follower carries the old one's agreement
+// across, and the host ends the old one on sight should it outlive the
+// re-open (a quit or a failed terminate between the two). Mutagen's
+// ids fit the label alphabet.
+export const MIRROR_LABEL_REPLACES = "replaces";
 export function mirrorOnMirrorBranch(session: {
   labels: Record<string, string>;
 }): boolean {
@@ -394,24 +400,101 @@ const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,
 });
 
-// Stopping removes the copy (on the peer), so it is refused unless the git follower says
-// "synced", the one state where the other side is known to hold the
-// copy's commits. A paused session, an unreachable peer or
-// one too young to have reconciled all report something else. `force`
-// is the user overriding that after being told.
+// Stopping removes the copy (on the peer), so it is refused unless
+// the copy is known to hold nothing the original lacks: the git
+// follower says "synced" (the other side holds the copy's commits and
+// staging) and the files are settled (mirrorFilesSettled). A paused
+// session, an unreachable peer, a conflict held still or one too young
+// to have reconciled all fail that. `force` is the user overriding it
+// after being told. `keepCopy` ends the mirror and leaves the copy as
+// an ordinary worktree of its device, which is always safe and so
+// never refused.
 const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
   force: z.boolean().optional(),
+  keepCopy: z.boolean().optional(),
 });
 
-// Shared by the host that enforces it and the dialog that warns.
+// The git half of the stop's safety, shared by the host that enforces
+// it and the dialog that warns.
 export function mirrorStopIsSafe(
   status: MirrorGitStatus["status"] | undefined,
 ): boolean {
   return status === "synced";
 }
 
+// The file half: the engine idle on a pair it has brought in step at
+// least once, both sides connected and nothing held still. Anything
+// else may leave an edit on the copy that never reached the original.
+export function mirrorFilesSettled(
+  session: Pick<
+    MirrorSession,
+    | "paused"
+    | "status"
+    | "successfulCycles"
+    | "conflicts"
+    | "excludedConflicts"
+    | "local"
+    | "remote"
+  >,
+): boolean {
+  return (
+    !session.paused &&
+    session.status === "watching" &&
+    session.successfulCycles > 0 &&
+    session.local.connected &&
+    session.remote.connected &&
+    session.local.staging === undefined &&
+    session.remote.staging === undefined &&
+    session.conflicts.length === 0 &&
+    session.excludedConflicts === 0
+  );
+}
+
+// Both halves: why a stop that removes the copy is not known to be
+// safe, in words that finish "Not confirmed in step: …", or undefined
+// when it is. The host's refusal and the dialog's warning say the same
+// thing.
+export function mirrorStopBlocker(
+  session: Parameters<typeof mirrorFilesSettled>[0] & {
+    git?: MirrorGitStatus;
+  },
+): string | undefined {
+  if (session.paused) return "the mirror is paused";
+  if (isHaltedStatus(session.status)) return "the mirror is halted";
+  if (!session.local.connected || !session.remote.connected) {
+    return "the other device isn't connected";
+  }
+  const conflicts = session.conflicts.length + session.excludedConflicts;
+  if (conflicts > 0) {
+    return conflicts === 1
+      ? "a file changed on both sides"
+      : `${conflicts} files changed on both sides`;
+  }
+  if (!mirrorFilesSettled(session)) return "files are still syncing";
+  switch (session.git?.status) {
+    case "synced":
+      return undefined;
+    case "diverged":
+      return "both sides have new commits";
+    case "blocked":
+    case "error":
+      return "git can't follow right now";
+    case "following":
+      return "git changes are still crossing";
+    case "off":
+    case undefined:
+      return "git hasn't been checked yet";
+  }
+}
+
+export function mirrorCopyIsDisposable(
+  session: Parameters<typeof mirrorStopBlocker>[0],
+): boolean {
+  return mirrorStopBlocker(session) === undefined;
+}
+
 // The refusal's leading text, which the renderer matches to offer
-// discard-and-stop. Text rather than a code because Electron's IPC
+// discard-and-stop (and keep-the-copy). Text rather than a code because Electron's IPC
 // flattens an error to its message (see COMMAND_REFUSED_MESSAGE).
 export const MIRROR_STOP_UNCONFIRMED =
   "The copy is not confirmed in step with the other device";
@@ -518,6 +601,16 @@ export const mirrorContract = defineContract("host", {
   stop: invoke("mirror:stop", MirrorStopPayloadSchema, z.void(), {
     remote: true,
     gated: true,
+  }),
+  // A copy here is no longer mirrored (its runner ended the session and
+  // kept it): the invitation this device left for that peer goes, so
+  // the peer's calls on the worktree need the grant again. Invitable,
+  // since an invited mirror's runner is exactly who says so.
+  release: invoke("mirror:release", MirrorWorktreePayloadSchema, z.void(), {
+    remote: true,
+    gated: true,
+    movesHostState: false,
+    invitable: "copy",
   }),
   pause: invoke("mirror:pause", MirrorSessionPayloadSchema, z.void(), {
     remote: true,
