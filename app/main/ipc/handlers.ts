@@ -63,6 +63,7 @@ import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
 import {
   currentMirrorList,
+  endMirrorIfCopyGone,
   mirrorHandlers,
   setMirrorGitAppliedListener,
   setMirrorGitChangedListener,
@@ -71,7 +72,6 @@ import {
 } from "@host/ipc/modules/mirror";
 import {
   endLegacyMirrors,
-  endMirrorsIntoGoneCopy,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
   settleMirrorBookkeeping,
@@ -369,13 +369,10 @@ const gitFollower = createGitFollower({
     observeMirrorHistory();
   },
   // The peer says the session's copy is gone, behind this device's
-  // back: its session ends (the original keeps its own).
-  onCopyGone: (session) =>
-    void endMirrorsIntoGoneCopy(
-      session.deviceId,
-      session.projectId,
-      session.worktreeId,
-    ),
+  // back: confirmed against the peer's own list (an answer while its
+  // registry loads, or mid-move, is no removal), the session ends and
+  // the original keeps its own.
+  onCopyGone: (session) => void endMirrorIfCopyGone(session),
   // A pull it applied here is a ref move the git watcher skips as the
   // app's own: announced like one, so the pages showing it refetch.
   onLocalApplied: (projectId) => announceProjectChanged(projectId),

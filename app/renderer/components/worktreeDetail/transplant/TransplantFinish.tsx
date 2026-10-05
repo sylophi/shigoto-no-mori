@@ -43,7 +43,8 @@ type SourceChoice = "keep" | "shelve" | "teardown";
 // preselected when the work landed whole: the worktree moved, and a
 // copy left behind is what the move was meant not to leave. With the
 // changes stranded on the source, tear down is off and keep is the
-// default instead.
+// default instead. With ignored files the files step could not bring,
+// keep is the default too, and tear down stays on offer.
 // The teardown card also counts the ignored files that die with the
 // source (the review step listed them): they never travelled, and
 // nothing in the teardown itself refuses over them, so this is the
@@ -140,8 +141,11 @@ export function TransplantFinish({
   // source, so tearing it down is off the table (the handler refuses
   // it too. This is the reason, spelled out).
   const stranded = result.captured && !result.dirtyApplied;
+  // Ignored files the files step meant to bring and could not are only
+  // on the source too: tear down stays on offer, but is not the default.
+  const filesFailed = result.files !== undefined && !filesCrossed;
   const [choice, setChoiceState] = useState<SourceChoice>(
-    stranded ? "keep" : "teardown",
+    stranded || filesFailed ? "keep" : "teardown",
   );
   const choose = (next: SourceChoice) => {
     // Neither an armed confirm nor a stale failure carries over from

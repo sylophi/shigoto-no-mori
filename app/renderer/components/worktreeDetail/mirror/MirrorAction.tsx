@@ -62,6 +62,9 @@ function MirrorLinkAction({
   // re-opens the session under a new one, and the dialog stays. A stop
   // ends with the link leaving the page and the dialog with it.
   const [open, setOpen] = useState(false);
+  // A runner that went away takes the dialog with it, and it stays
+  // closed when the runner is back.
+  if (open && link.runnerApi === undefined) setOpen(false);
   const mirror = useMirrorView(link, session);
   const { view, names } = mirror;
   // A stop that removed the copy this page is on (the session's remote

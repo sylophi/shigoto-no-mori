@@ -29,7 +29,6 @@
 // and the session labelled so the git follower reads the two branch
 // names as one. Both primaries keep what they had.
 import type { z } from "zod";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   MIRROR_LABEL_COPY_SIDE,
@@ -87,6 +86,7 @@ import {
   engineOrNull,
   findSession,
   ORIGINAL_GONE_DETAIL,
+  rootExists,
   ignoreModeOf,
   localWorktreeIdOf,
   MIRROR_LABEL_IGNORE_MODE,
@@ -264,7 +264,7 @@ function mirrorListOf(daemon: ReturnType<typeof engine>): MirrorListResult {
         annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
       )
     : [...lastListed];
-  if (running) lastListed = sessions;
+  if (running) lastListed = [...sessions];
   const live = new Set(sessions.map((session) => session.session));
   for (const [id, session] of stopping) {
     if (!live.has(id)) sessions.push(session);
@@ -357,7 +357,7 @@ function copyIsGone(
 // A copy the peer no longer lists (deleted while this device missed
 // the announcement, or moved) ends its session: the stop's way out when
 // the copy cannot be confirmed in step. True when it ended them.
-async function endMirrorIfCopyGone(session: {
+export async function endMirrorIfCopyGone(session: {
   deviceId: string;
   projectId: string;
   worktreeId: string;
@@ -553,7 +553,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     if (raw === undefined) {
       throw new Error("That mirror is no longer running.");
     }
-    if (!existsSync(raw.localRoot)) {
+    if (!(await rootExists(raw.localRoot))) {
       await endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL);
       return { removedCopy: false };
     }

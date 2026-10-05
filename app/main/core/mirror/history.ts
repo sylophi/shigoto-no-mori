@@ -142,7 +142,7 @@ export function createMirrorHistory(deps: {
     const thread = store[from];
     if (thread === undefined || from === to) return;
     delete store[from];
-    store[to] = [...(store[to] ?? []), ...thread].slice(
+    store[to] = [...thread, ...(store[to] ?? [])].slice(
       0,
       MIRROR_HISTORY_LIMIT,
     );

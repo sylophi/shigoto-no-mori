@@ -426,10 +426,6 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	}
 }
 
-// A label value outside Mutagen's alphabet would make the session
-// vanish on the next daemon start (the load-time check), and the app
-// reads identity out of the labels, so the create refuses instead of
-// folding the value.
 // A mirror start's first pass: the remote becomes an exact copy of the
 // local side. A path both hold differently takes the local version
 // instead of standing as a conflict, what only the remote holds goes,
@@ -473,6 +469,10 @@ func TestMirrorReplicaMakesTheRemoteAnExactCopy(t *testing.T) {
 	<-d.done
 }
 
+// A label value outside Mutagen's alphabet would make the session
+// vanish on the next daemon start (the load-time check), and the app
+// reads identity out of the labels, so the create refuses instead of
+// folding the value.
 func TestMirrorCreateRefusesInvalidLabel(t *testing.T) {
 	gateway, _ := startTestGateway(t)
 	daemon := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "data"))

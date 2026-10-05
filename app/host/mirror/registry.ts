@@ -381,10 +381,13 @@ export function holdRootChecks(worktreeIds: readonly string[]): () => void {
   };
 }
 
-const rootExists = (path: string) =>
+// Whether a session's root is still there. Only "no such file" says it
+// is gone: a volume not mounted yet, or a folder macOS has not granted
+// this app, fails the look too, and must not end a mirror.
+export const rootExists = (path: string) =>
   access(path).then(
     () => true,
-    () => false,
+    (error: NodeJS.ErrnoException) => error.code !== "ENOENT",
   );
 
 export async function settleMirrorBookkeeping(): Promise<void> {
