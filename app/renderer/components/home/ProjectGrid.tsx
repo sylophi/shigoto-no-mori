@@ -130,9 +130,13 @@ function Grid({
           className="grid grid-cols-subgrid content-start gap-y-2"
         >
           {section.label !== null && (
-            <SectionHeading className="col-span-full">
-              {section.label}
-            </SectionHeading>
+            // On one line however few columns the owner spans, so its
+            // tiles stay level with the tiles beside them.
+            <SimpleTooltip whenTruncated tip={section.label}>
+              <SectionHeading className="col-span-full truncate">
+                {section.label}
+              </SectionHeading>
+            </SimpleTooltip>
           )}
           <div className="col-span-full grid grid-cols-subgrid gap-y-3">
             {section.rows.map((row) => {
@@ -168,9 +172,9 @@ function useColumnCount(ref: RefObject<HTMLElement | null>): number {
     const measure = () => {
       const gap = parseFloat(getComputedStyle(el).columnGap);
       const tile = (gap / GAP_STEPS) * TILE_MIN_STEPS;
-      setColumns(
-        Math.max(1, Math.floor((el.clientWidth + gap) / (tile + gap))),
-      );
+      const fit = Math.floor((el.clientWidth + gap) / (tile + gap));
+      // At least one, whatever the gap reads as.
+      setColumns(Number.isFinite(fit) ? Math.max(1, fit) : 1);
     };
     measure();
     const observer = new ResizeObserver(measure);
