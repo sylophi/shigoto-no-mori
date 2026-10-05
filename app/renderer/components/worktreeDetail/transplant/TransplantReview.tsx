@@ -13,7 +13,6 @@ import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { changeEntries } from "@/lib/patchFiles";
-import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { cn } from "@/lib/utils";
 import { useCarryOverRows } from "../flow/createPlan";
@@ -32,11 +31,11 @@ export function TransplantReview(props: PullReviewProps) {
   return (
     <PullReviewStep
       {...props}
-      heading="Destination"
-      sourceNote="where it is now"
+      sourceHeading="Source"
+      destinationHeading="Destination"
       idleNote={`Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`}
       startLabel="Start transplant"
-      beforeLeaveOut={
+      underSource={
         <section className="space-y-2">
           <SectionHeading>
             Uncommitted changes
@@ -53,14 +52,12 @@ export function TransplantReview(props: PullReviewProps) {
           )}
         </section>
       }
-      afterLeaveOut={
+      underDestination={
         target?.project && (
-          <DestinationScope>
-            <CarryOverList
-              localProject={target.project}
-              thisDeviceLabel={thisDeviceLabel}
-            />
-          </DestinationScope>
+          <CarryOverList
+            localProject={target.project}
+            thisDeviceLabel={thisDeviceLabel}
+          />
         )
       }
     />
@@ -125,7 +122,7 @@ function ChangedFiles({
 }
 
 // The landing project's carry-over (../flow/createPlan.ts), as the
-// review's card. Under DestinationScope by the caller.
+// review's card under the destination's, so under its scope.
 function CarryOverList({
   localProject,
   thisDeviceLabel,

@@ -16,23 +16,13 @@
 // waits on). Made once per flow (useLandingTarget) and handed down.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FolderInput, GitBranch } from "lucide-react";
 import type { SyncCloneInto } from "@shared/ipc/modules/sync";
 import type { Project } from "@shared/schemas";
-import { Button } from "@/components/ui/button";
-import { PathSpan } from "@/components/ui/path-span";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
-import {
-  DestinationScope,
-  useDestinationScope,
-  useHostScope,
-} from "@/hooks/remote/useHostScope";
+import { useDestinationScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
 import { ensureTrailingSep, tildify } from "@shared/projectPaths";
-import { CARD } from "./FlowChrome";
 
 export type CloneDestination = {
   // The project on the peer, for the name and the words.
@@ -129,60 +119,3 @@ export function useLandingTarget({
 // The review's clone section, in place of the folder and setup cards
 // a landing project would get: the repo, where its checkout lands,
 // and the way to change that. The picker browses the destination.
-export function CloneDestinationSection({
-  clone,
-  thisDeviceLabel,
-}: {
-  clone: CloneDestination;
-  thisDeviceLabel: string;
-}) {
-  const [picking, setPicking] = useState(false);
-  return (
-    <section className="space-y-2">
-      <SectionHeading>Clone on {thisDeviceLabel}</SectionHeading>
-      <div className={`${CARD} flex flex-col gap-2 text-xs`}>
-        <div className="flex items-center gap-2">
-          <GitBranch className="size-3.5 shrink-0 text-muted-foreground/80" />
-          <span className="min-w-0 flex-1 truncate font-mono">
-            {clone.projectName}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <FolderInput className="size-3.5 shrink-0 text-muted-foreground/80" />
-          <PathSpan
-            path={clone.dest}
-            home={null}
-            className="min-w-0 flex-1 truncate font-mono"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            onClick={() => setPicking(true)}
-          >
-            Change folder
-          </Button>
-        </div>
-        <p className="text-muted-foreground">
-          {thisDeviceLabel} has no checkout of this repo yet. It is cloned from
-          the other device first, added as a project, and the copy lands beside
-          it.
-        </p>
-      </div>
-      {picking && (
-        <DestinationScope>
-          <FolderPickerModal
-            initialPath={clone.cloneInto.parentDir}
-            title="Clone into"
-            hint={`${clone.projectName} becomes a new folder inside the one you pick.`}
-            onPick={(chosen) => {
-              clone.setParent(chosen);
-              setPicking(false);
-            }}
-            onClose={() => setPicking(false)}
-          />
-        </DestinationScope>
-      )}
-    </section>
-  );
-}
