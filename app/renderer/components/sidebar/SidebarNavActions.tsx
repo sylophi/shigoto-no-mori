@@ -1,15 +1,17 @@
-// The footer's page-nav cluster (Tidy, Devices, Settings). Tidy's page
-// has no other way in, and the footer is the one bar both sidebar views
-// show. The page spans this machine's projects, so a hostless client has
-// none to tidy. Devices is always reachable: unconfigured or signed out, the
+// The footer's page-nav cluster (Projects, Devices, Settings). Projects
+// is the home page's grid (home/ProjectGrid.tsx), where a fresh window
+// opens, and the footer is the one bar both sidebar views show. A
+// hostless client's home is the Devices page, so it has no Projects
+// button. Devices is always reachable: unconfigured or signed out, the
 // page itself explains the state (AccountSection) instead of the button
-// hiding. Settings wears a dot while any device's section there holds an
-// update this window could install: the local machine's, or a peer's
-// (the only kind a hostless client can have).
+// hiding. Tidying is a section of Settings (SettingsSidebarNav).
+// Settings wears a dot while any device's section there holds an update
+// this window could install: the local machine's, or a peer's (the only
+// kind a hostless client can have).
 import {
+  LayoutGrid,
   MonitorSmartphone,
   Settings as SettingsIcon,
-  Trees,
 } from "lucide-react";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { hasLocalHost } from "@/lib/localHost";
@@ -20,12 +22,8 @@ export function SidebarNavActions() {
   return (
     <>
       {hasLocalHost && (
-        <NavIconButton
-          to="/tidy"
-          tip="Tidy the forest: sizes, staleness, what has landed"
-          label="Tidy the forest"
-        >
-          <Trees className="size-3.5" />
+        <NavIconButton to="/" tip="Projects" label="Projects">
+          <LayoutGrid className="size-3.5" />
         </NavIconButton>
       )}
       <NavIconButton to="/devices" tip="Devices" label="Devices">

@@ -25,7 +25,9 @@ export function PageHeader({
   tabs,
   watermark,
 }: {
-  eyebrow: React.ReactNode;
+  // The line over the title. A page whose title says it all (the home
+  // page's Projects) goes without.
+  eyebrow?: React.ReactNode;
   title: React.ReactNode;
   // Marks at the title row's right edge (a device chip, a terrier paw).
   trailing?: React.ReactNode;
@@ -54,9 +56,11 @@ export function PageHeader({
       )}
       <div className="relative z-[1] flex items-center gap-3">
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-xs text-muted-foreground">
-            {eyebrow}
-          </span>
+          {eyebrow !== undefined && (
+            <span className="truncate text-xs text-muted-foreground">
+              {eyebrow}
+            </span>
+          )}
           <h1 className="truncate text-lg font-medium tracking-tight">
             {title}
           </h1>

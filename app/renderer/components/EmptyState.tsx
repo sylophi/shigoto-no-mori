@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjects } from "@/hooks/projects/useProjects";
+import { ProjectGrid } from "./home/ProjectGrid";
 
-// "/" and a fresh window land here, waiting for a pick. No worktree
-// opens on its own, since the sidebar would follow it into its project
-// (openProject.ts) and skip the list of projects.
+// "/" and a fresh window land here: the projects as a grid, waiting for
+// a pick. No worktree opens on its own, since the sidebar would follow
+// it into its project (openProject.ts) and skip the list of projects.
 export function EmptyState() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { openAddProject } = useOverlays();
@@ -15,7 +16,7 @@ export function EmptyState() {
   if (projects.length === 0) {
     return <FirstRun onAdd={() => openAddProject()} />;
   }
-  return <BetweenWorktrees />;
+  return <ProjectGrid />;
 }
 
 function FirstRun({ onAdd }: { onAdd: () => void }) {
@@ -60,24 +61,6 @@ function FirstRun({ onAdd }: { onAdd: () => void }) {
             from anywhere
           </span>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function BetweenWorktrees() {
-  return (
-    <div className="flex h-full items-center justify-center p-8">
-      <div className="max-w-sm space-y-3 text-center">
-        <p className="text-sm text-muted-foreground">Nothing selected.</p>
-        <p className="text-xs text-muted-foreground/70">
-          Pick from the sidebar, or press{" "}
-          <KbdGroup className="mx-0.5 inline-flex">
-            <Kbd>⌘</Kbd>
-            <Kbd>K</Kbd>
-          </KbdGroup>{" "}
-          to search every worktree.
-        </p>
       </div>
     </div>
   );
