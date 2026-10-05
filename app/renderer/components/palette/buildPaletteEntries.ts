@@ -201,6 +201,18 @@ export interface PaletteProject {
   deviceCount: number;
 }
 
+// Where a project opens, here and on its home page tile
+// (home/gridModel.ts): of its worktrees in the list's order, the first
+// that isn't shelved, merged or hidden, one on a device that can be
+// reached before one on a device that can't, else the first. Undefined
+// for a project with none.
+export function projectLead(
+  trees: readonly PaletteEntry[],
+): PaletteEntry | undefined {
+  const open = trees.filter((t) => !t.sunk && !t.hidden);
+  return open.find((t) => t.device?.reachable !== false) ?? open[0] ?? trees[0];
+}
+
 // The few projects the query names by name, best first. Every project
 // on every device, the ones with no worktrees too, since the sidebar's
 // list of projects is the other way to them. Not one whose folder is
@@ -256,7 +268,7 @@ export function rankPaletteProjects(
       key: `project:${key}`,
       project,
       device,
-      lead: trees.find((t) => !t.sunk && !t.hidden) ?? trees[0],
+      lead: projectLead(trees),
       localProject: device ? undefined : project,
       worktreeCount: trees.length,
       deviceCount: devices.size,

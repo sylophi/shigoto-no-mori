@@ -18,6 +18,7 @@
 // the machines that don't hold the repo yet (AddToDeviceSubmenu). A
 // member with no session gets no actions, the same as a missing local
 // project.
+import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
@@ -98,6 +99,30 @@ export function useGroupMembers(
       isThisDevice: false,
     })),
   ];
+}
+
+// Whose icon a peer-only project shows: the repo's own, read from the
+// first live member (projects:icon sits on the ungated read surface, so
+// a read-only peer serves it). When every member is asleep the row
+// keeps reading the member that last served it, because that is the
+// key the cached icon lives under. A group that never had a live member
+// reads its first. Undefined for a local project, which reads its own.
+export function useIconMember(
+  group: readonly GroupMember[],
+  local: boolean,
+): GroupMember | undefined {
+  const live = local
+    ? undefined
+    : group.find((member) => member.api !== undefined);
+  // Kept by device id: the members are rebuilt every render.
+  const [lastLiveId, setLastLiveId] = useState(live?.deviceId);
+  if (live !== undefined && live.deviceId !== lastLiveId) {
+    setLastLiveId(live.deviceId);
+  }
+  if (local) return undefined;
+  return (
+    live ?? group.find((member) => member.deviceId === lastLiveId) ?? group[0]
+  );
 }
 
 interface ProjectGroupActionsProps {

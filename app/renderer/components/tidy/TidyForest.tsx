@@ -5,6 +5,7 @@ import type { RowStatus } from "@/components/ui/row-status";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { SettingsTakeover } from "@/components/settings/SettingsSidebarNav";
 import {
   DeviceTabBar,
   DeviceTabPanel,
@@ -77,8 +78,11 @@ export function TidyForest() {
   };
   return (
     <div data-doubutsu-page="tidy" className="flex h-full flex-col">
+      {/* A section of Settings, though a page of its own: its list
+          stays in the sidebar here too. */}
+      <SettingsTakeover />
       <PageHeader
-        eyebrow="Shigoto no Mori"
+        eyebrow="Settings"
         title="Tidy the forest"
         watermark="掃除"
         tabs={

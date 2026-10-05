@@ -1,17 +1,15 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
-import { useRelocatingProject } from "@/hooks/projects/useProjects";
-import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { DeviceBadgeCluster, type SidebarDeviceBadge } from "./DeviceBadge";
-import { LocateProjectPicker, locateStartFolder } from "./LocateProjectPicker";
+import { useLocateProject } from "./LocateProjectPicker";
 import {
   ProjectGroupActions,
   useGroupMembers,
-  type GroupMember,
+  useIconMember,
 } from "./ProjectGroupActions";
 import { ProjectHeader } from "./ProjectHeader";
 import type { RemoteProjectMember } from "./sidebarRow";
@@ -83,27 +81,11 @@ export function ProjectRow({
   // This machine first, then every peer holding the same repo.
   const group = useGroupMembers(members, local ? project : undefined);
   const iconMember = useIconMember(group, local);
-  // A missing checkout can be pointed at where its repo went, over the
-  // session of the device holding it. Terrier's are terrier's to move.
-  const holder = group[0];
-  // One relocation at a time: the row reads as missing until it lands.
-  const relocating = useRelocatingProject(
-    holder?.deviceId ?? "",
-    holder?.project.id ?? "",
+  const { relocating, onLocate, picker } = useLocateProject(
+    group,
+    project,
+    missing,
   );
-  const locateApi =
-    missing && project.source !== "terrier" && !relocating
-      ? holder?.api
-      : undefined;
-  // Open, from where the picker starts once that is found.
-  const [locating, setLocating] = useState<{ from: string | undefined }>();
-  const onLocate =
-    holder !== undefined && locateApi !== undefined
-      ? () =>
-          void locateStartFolder(locateApi, holder.project.path).then((from) =>
-            setLocating({ from }),
-          )
-      : undefined;
   // The header stands for the repo on every device, and terrier lists
   // it per device, so any checkout of it being terrier's marks it.
   // Only the open project wears the paw, so only it looks.
@@ -201,39 +183,7 @@ export function ProjectRow({
           />
         )}
       </div>
-      {locating !== undefined && holder !== undefined && locateApi && (
-        <MaybeHostScope deviceId={holder.deviceId} api={locateApi}>
-          <LocateProjectPicker
-            project={holder.project}
-            from={locating.from}
-            onClose={() => setLocating(undefined)}
-          />
-        </MaybeHostScope>
-      )}
+      {picker}
     </div>
-  );
-}
-
-// Whose icon a peer-only project shows: the repo's own, read from the
-// first live member (projects:icon sits on the ungated read surface, so
-// a read-only peer serves it). When every member is asleep the row
-// keeps reading the member that last served it, because that is the
-// key the cached icon lives under. A group that never had a live member
-// reads its first. Undefined for a local project, which reads its own.
-function useIconMember(
-  group: readonly GroupMember[],
-  local: boolean,
-): GroupMember | undefined {
-  const live = local
-    ? undefined
-    : group.find((member) => member.api !== undefined);
-  // Kept by device id: the members are rebuilt every render.
-  const [lastLiveId, setLastLiveId] = useState(live?.deviceId);
-  if (live !== undefined && live.deviceId !== lastLiveId) {
-    setLastLiveId(live.deviceId);
-  }
-  if (local) return undefined;
-  return (
-    live ?? group.find((member) => member.deviceId === lastLiveId) ?? group[0]
   );
 }

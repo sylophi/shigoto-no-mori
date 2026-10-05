@@ -15,34 +15,21 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
-import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
-import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
-import {
-  useGroupProjectsByOwner,
-  useProjectSort,
-} from "@/hooks/projects/useProjectSort";
+import { useReorderProjects } from "@/hooks/projects/useProjects";
 import {
   useSidebarView,
   useSidebarViewHotkey,
   useSidebarViewSettled,
 } from "@/hooks/projects/useSidebarView";
-import { useMirrorLinks } from "@/hooks/remote/useMirrors";
-import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
-import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
-import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import {
   buildSidebarRows,
   type GroupIdSet,
   projectGroupKey,
-  projectGroupOrder,
   remoteGroupKeyOf,
 } from "./buildSidebarRows";
-import { useDeviceBadges } from "./DeviceBadge";
-import { useDeviceFilter } from "./deviceFilter";
+import { useForestSources } from "./forestSources";
 import { DeviceFilterBar } from "./DeviceFilterBar";
 import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
@@ -61,7 +48,6 @@ import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
 import { AddProjectButton } from "./AddProjectButton";
-import { sortProjects } from "@/lib/sortProjects";
 import { useWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
 import { SidebarList } from "./SidebarList";
 import { RowContent } from "./RowContent";
@@ -154,11 +140,28 @@ function Forest({
   // its own lists them whatever the account says.
   const { data: status } = useAccountStatus();
   const signedIn = hasLocalHost || status?.signedIn === true;
-  const { data: projects = [], isLoading } = useProjects();
-  const sortMode = useProjectSort();
-  const groupByOwner = useGroupProjectsByOwner();
   const preferredView = useSidebarView();
   const inbox = (pinnedView ?? preferredView) === "inbox";
+  // The inbox's extra facts are asked for only while it shows. The
+  // New worktree menu keeps offering every machine whatever the filter
+  // narrows: creating is not browsing.
+  const {
+    projects,
+    orderedProjects,
+    loading,
+    sortMode,
+    groupByOwner,
+    worktreeQueries,
+    remoteItems,
+    order,
+    local,
+    shownRemote,
+    mirrors,
+    deviceBadges,
+    hiddenPrefixes,
+    filter,
+    activeFilter,
+  } = useForestSources({ arrangeMode, inboxFacts: inbox });
   const viewSettled = useSidebarViewSettled() || pinnedView !== undefined;
   const reorderProjects = useReorderProjects();
   // The open project and the shelf reveals are kept by group key
@@ -186,7 +189,6 @@ function Forest({
     shelved: byGroupKey(shelfOpenKeys.shelved),
     hidden: byGroupKey(shelfOpenKeys.hidden),
   };
-  const hiddenPrefixes = useHiddenWorktreePrefixes();
   // Inbox shelves, same transient-by-design reasoning as the per-group
   // reveal above: both start folded on every launch.
   const [openShelves, setOpenShelves] = useState<Set<InboxShelf>>(
@@ -234,25 +236,6 @@ function Forest({
   // SidebarList's, kept here so a takeover's unmount doesn't reset it.
   const foldsOpenedForRef = useRef<string | null>(null);
 
-  // The inbox's and the queries' order (the tree re-sorts its groups
-  // with projectGroupOrder). Drag-reorder still operates on the stored order
-  // (`projects`), which is safe because dragging is gated to arrange mode and
-  // arrange mode is only reachable via the manual sort, where the orders match.
-  const orderedProjects = sortProjects(projects, sortMode);
-
-  // Subscribed here rather than inside the row builders so the two views
-  // share one set of observers. Toggling the view then costs nothing: the
-  // builders are plain functions over these results, and the queries
-  // (which re-probe git for every project on mount) never unmount.
-  const worktreeQueries = useAllProjectWorktrees(orderedProjects);
-  const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
-  // Peers' forests, merged into both views beside the local rows. The
-  // inbox's extra facts are asked for only while it shows.
-  const { items: remoteItems, loading: remoteLoading } = useRemoteForests({
-    refetchOnMount: true,
-    inboxFacts: inbox,
-  });
-  const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
   // The tree shows the list of projects or one project on its own, and
   // goes into the project of the page on screen (openProject.ts).
   const { openKey, onScreenKey } = useOpenProject(projects, remoteItems);
@@ -265,42 +248,6 @@ function Forest({
     setAskedLevel(groupKey);
     setOpenProject(groupKey);
   };
-  // This device's mirrored pairs, so a pair reads as one row.
-  const mirrors = useMirrorLinks();
-  // Off the registry, not the rows: a local row mirrored with a peer
-  // the filter hides keeps naming it.
-  const deviceBadges = useDeviceBadges();
-  // The device filter narrows what the builders are handed rather than
-  // what they do: one machine's rows only, the local ones or one
-  // peer's. The queries above stay subscribed either way, so a pick
-  // costs no refetch. Arranging is about this machine's project order
-  // and ignores the filter (the bar hides with the rest of the chrome).
-  // Creating is not browsing: the New worktree menu keeps offering
-  // every machine.
-  const filter = useDeviceFilter();
-  const activeFilter = arrangeMode ? null : filter.selected;
-  const showLocal =
-    activeFilter === null || activeFilter.deviceId === localDeviceId;
-  // Hidden means empty, for every local input at once: the query
-  // arrays too, since the builders count loading and failed listings
-  // off them.
-  const local = showLocal
-    ? {
-        projects: orderedProjects,
-        worktreeQueries,
-        pullRequestQueries,
-        configQueries,
-      }
-    : {
-        projects: [],
-        worktreeQueries: [],
-        pullRequestQueries: [],
-        configQueries: [],
-      };
-  const shownRemote =
-    activeFilter === null
-      ? remoteItems
-      : remoteItems.filter((item) => item.deviceId === activeFilter.deviceId);
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
         ...local,
@@ -314,13 +261,7 @@ function Forest({
         ...local,
         openKey,
         worktreeSort,
-        // Over every device's projects, not the filtered ones, so a
-        // pick narrows the tree without reordering it.
-        order: projectGroupOrder({
-          projects: orderedProjects,
-          remote: remoteItems,
-          sortMode,
-        }),
+        order,
         openShelves: groupShelvesOpen,
         hiddenPrefixes,
         arrangeMode,
@@ -330,7 +271,6 @@ function Forest({
         deviceBadges,
       });
   const { rows, pinned, level } = view;
-  const listingsLoading = isLoading || remoteLoading;
   // A pinned view has its tab bar, and a worktree's page replaces it.
   useLeaveInboxForPage({
     inbox: inbox && pinnedView === undefined,
@@ -383,7 +323,7 @@ function Forest({
     : null;
 
   const emptyMessage = emptyForestMessage({
-    loading: listingsLoading,
+    loading,
     narrowedTo: activeFilter?.label,
     empty: rows.length === 0 && pinned === undefined,
     noProjects: projects.length === 0,
@@ -444,7 +384,7 @@ function Forest({
         scrollerRef={scrollerRef}
         // Not while the forest is still listing: the level it settles on
         // is then where it starts, not a move from the list.
-        level={listingsLoading ? undefined : level}
+        level={loading ? undefined : level}
         asked={askedLevel === level}
         handlers={handlers}
       />
