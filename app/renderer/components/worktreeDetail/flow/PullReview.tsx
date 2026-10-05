@@ -28,7 +28,6 @@ import {
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusDot } from "@/components/ui/status-dot";
 import { Switch } from "@/components/ui/switch";
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useBranches } from "@/hooks/git/useBranches";
@@ -37,16 +36,11 @@ import {
   useDestinationScope,
   useHostScope,
 } from "@/hooks/remote/useHostScope";
-import {
-  useDeviceIcon,
-  useRemoteDevice,
-} from "@/hooks/remote/useRemoteDevices";
+import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { pluralize } from "@/lib/pluralize";
-import { localDeviceId } from "@/lib/queryKeys";
-import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 import type { LandingTarget } from "./cloneDestination";
 import { useCreatePlan } from "./createPlan";
@@ -296,8 +290,6 @@ export function SourceCard({
   sourceDeviceLabel: string;
 }) {
   const { deviceId } = useHostScope();
-  const device = useRemoteDevice(deviceId);
-  const status = device ? deviceStatusView(device.status) : null;
   // The card sits in the source device's scope, so this is the PEER's
   // home, and a transplant already holds the grant that read needs.
   // Refused or not yet answered, the path shows as it is.
@@ -314,16 +306,6 @@ export function SourceCard({
           className="size-4 text-muted-foreground"
         />
         <span className="font-medium">{sourceDeviceLabel}</span>
-        {status && (
-          <StatusDot
-            tone={status.tone}
-            label={
-              <span className="text-xs text-muted-foreground">
-                {status.label.toLowerCase()}
-              </span>
-            }
-          />
-        )}
         <span className="ml-auto truncate text-xs text-muted-foreground">
           {project.name}
         </span>
@@ -361,9 +343,8 @@ export function SourceCard({
 }
 
 // The destination's card, the source card's twin: the landing device
-// in the header band (the pick of it, for a flow to a peer) with its state
-// and the project there, and the worktree the copy becomes in the
-// body. With no checkout of the repo there the body is the clone that
+// and the project there in the header band (the pick of it, for a
+// flow to a peer), and the worktree it becomes in the body. With no checkout of the repo there the body is the clone that
 // makes one, its folder changeable.
 function DestinationCard({
   worktree,
@@ -381,16 +362,7 @@ function DestinationCard({
   pull: PullChoiceState;
 }) {
   const { deviceId } = useDestinationScope();
-  const device = useRemoteDevice(deviceId);
   const icon = useDeviceIcon(deviceId);
-  const status =
-    target === null
-      ? null
-      : deviceId === localDeviceId
-        ? THIS_DEVICE_VIEW
-        : device
-          ? deviceStatusView(device.status)
-          : null;
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm">
@@ -403,16 +375,6 @@ function DestinationCard({
           />
         ) : (
           <span className="font-medium">{deviceLabel}</span>
-        )}
-        {status && (
-          <StatusDot
-            tone={status.tone}
-            label={
-              <span className="text-xs text-muted-foreground">
-                {status.label.toLowerCase()}
-              </span>
-            }
-          />
         )}
         <span className="ml-auto truncate text-xs text-muted-foreground">
           {target?.project?.name ??

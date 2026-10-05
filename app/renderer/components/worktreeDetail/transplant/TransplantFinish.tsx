@@ -3,8 +3,8 @@
 // copy still on the source device. Keep leaves it, shelve hides it
 // (the peer's ordinary setShelved, files kept), tear down runs the
 // same guarded teardown the one-shot orchestrator did
-// (sync:teardownSource). Shelve is preselected: the work is here now,
-// the source copy is only a fallback, and shelving throws nothing away.
+// (sync:teardownSource). Tear down is preselected: the work is here
+// now, and a transplant is a move, not a copy.
 // A transplant to a peer ends on the same step with the two machines
 // swapped: the copy landed there and the source is this device's own
 // worktree, so its words say "there" and its teardown is the local one
@@ -21,7 +21,6 @@ import { errorMessageOf } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
-import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { InlineError } from "@/components/ui/inline-error";
 import { keptSourceReason } from "@/hooks/remote/useMoveWorktree";
@@ -40,11 +39,11 @@ import { type Landing, LANDS_HERE } from "../flow/pullSteps";
 
 type SourceChoice = "keep" | "shelve" | "teardown";
 
-// The three fates of the source copy, in card order. Shelve is
-// preselected when the work landed whole: the source copy is then only
-// a fallback, and shelving throws nothing away. With the changes
-// stranded on the source, keep is the default instead: hiding the only
-// copy of that work is not what "recommended" should mean.
+// The three fates of the source copy, in card order. Tear down is
+// preselected when the work landed whole: the worktree moved, and a
+// copy left behind is what the move was meant not to leave. With the
+// changes stranded on the source, tear down is off and keep is the
+// default instead.
 // The teardown card also counts the ignored files that die with the
 // source (the review step listed them): they never travelled, and
 // nothing in the teardown itself refuses over them, so this is the
@@ -142,7 +141,7 @@ export function TransplantFinish({
   // it too. This is the reason, spelled out).
   const stranded = result.captured && !result.dirtyApplied;
   const [choice, setChoiceState] = useState<SourceChoice>(
-    stranded ? "keep" : "shelve",
+    stranded ? "keep" : "teardown",
   );
   const choose = (next: SourceChoice) => {
     // Neither an armed confirm nor a stale failure carries over from
@@ -294,17 +293,11 @@ export function TransplantFinish({
                     onSelect={() => choose(entry.key)}
                     disabled={off}
                     title={entry.title}
-                    badge={
-                      entry.key === "shelve" && !stranded
-                        ? "recommended"
-                        : undefined
-                    }
                     body={
                       off
                         ? "Off while the changes only exist there."
                         : entry.body(sourceDeviceLabel, staying)
                     }
-                    tone={entry.key === "teardown" && !off ? "rose" : undefined}
                   />
                 );
               })}
@@ -366,19 +359,13 @@ function ChoiceCard({
   disabled = false,
   onSelect,
   title,
-  badge,
   body,
-  tone,
 }: {
   selected: boolean;
   disabled?: boolean;
   onSelect: () => void;
   title: string;
-  badge?: string;
   body: string;
-  // The destructive option carries its own warning colour on its
-  // title, selected or not.
-  tone?: "rose";
 }) {
   return (
     <button
@@ -408,19 +395,7 @@ function ChoiceCard({
         >
           {selected && <Check className="size-2.5" />}
         </span>
-        <span
-          className={cn(
-            "text-sm font-medium",
-            tone === "rose" && "text-rose-600 dark:text-rose-400",
-          )}
-        >
-          {title}
-        </span>
-        {badge && (
-          <span className="ml-auto">
-            <RowTag>{badge}</RowTag>
-          </span>
-        )}
+        <span className="text-sm font-medium">{title}</span>
       </span>
       <span className={cn(!selected && "text-muted-foreground")}>{body}</span>
     </button>
