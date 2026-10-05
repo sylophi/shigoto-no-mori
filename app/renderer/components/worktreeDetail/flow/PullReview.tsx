@@ -6,7 +6,16 @@
 // `localProject` and `thisDeviceLabel` name the landing side, whichever
 // machine that is.
 import { pullWorktreeName } from "@shared/git/branches";
-import { ArrowDown, ArrowRight, ArrowUp, ChevronDown } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeftRight,
+  ArrowRight,
+  ArrowUp,
+  ChevronDown,
+  FilePen,
+  GitPullRequest,
+  type LucideIcon,
+} from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import type { Project, Worktree } from "@shared/schemas";
 import {
@@ -17,7 +26,6 @@ import { pullLandingBranch } from "@shared/git/branches";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +48,6 @@ import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { LandingTarget } from "./cloneDestination";
 import { useCreatePlan } from "./createPlan";
@@ -184,13 +191,15 @@ export type PullReviewProps = {
   onStart: () => void;
 };
 
-// Step 1 of either flow, two columns of matching cards: the source
-// (where the worktree is now, with what stays out under it) and the
-// destination (where it lands, with the setup switch as its last row),
-// each a section heading over a header band and a body, and the footer
-// band under them. The source half reads the device the page is scoped
-// to, the destination half and the footer re-pin to the landing device
-// (DestinationScope). A flow's own sections go under either card.
+// Step 1 of either flow, in two parts. The pair first, on a band of
+// its own: the source card and the destination card side by side,
+// joined by what the flow does between them (a move, or a mirror kept
+// in step both ways), both the same height, so the two ends read as
+// one thing. Then the options, on the page below the band: what stays
+// out and a flow's own sections (`details`: the transplant's changes
+// and carry-over), in a grid of their own. The source half reads the
+// device the page is scoped to, the destination half and the footer
+// re-pin to the landing device (DestinationScope).
 export function PullReviewStep({
   worktree,
   project,
@@ -202,30 +211,31 @@ export function PullReviewStep({
   pull,
   onCancel,
   onStart,
+  link,
   sourceHeading,
   destinationHeading,
   idleNote,
   startLabel,
-  underSource,
-  underDestination,
+  details,
 }: PullReviewProps & {
+  // What joins the two ends: a move one way, or a mirror both ways.
+  link: "move" | "mirror";
   // The two cards' headings, in the flow's words.
   sourceHeading: string;
   destinationHeading: string;
   // The footer's reassurance, "" for none, and its start button.
   idleNote: string;
   startLabel: string;
-  // A flow's own sections: under the source card, ahead of what stays
-  // out, and under the destination card (read under its scope).
-  underSource?: ReactNode;
-  underDestination?: ReactNode;
+  // A flow's own sections, beside what stays out under the pair.
+  details?: ReactNode;
 }) {
+  const Link = link === "mirror" ? ArrowLeftRight : ArrowRight;
   return (
     <>
       <FlowBody>
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="flex min-w-0 flex-col gap-5">
-            <section className="space-y-2">
+        <div className="flex flex-col gap-6">
+          <div className="grid items-stretch gap-3 rounded-xl bg-muted/50 p-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+            <section className="flex min-w-0 flex-col gap-2">
               <SectionHeading>{sourceHeading}</SectionHeading>
               <SourceCard
                 worktree={worktree}
@@ -233,20 +243,18 @@ export function PullReviewStep({
                 sourceDeviceLabel={sourceDeviceLabel}
               />
             </section>
-            {underSource}
-            <PullLeaveOut
-              pull={pull}
-              worktree={{
-                projectId: project.id,
-                id: worktree.id,
-                path: worktree.path,
-              }}
-            />
-          </div>
-
-          <DestinationScope>
-            <div className="flex min-w-0 flex-col gap-5">
-              <section className="space-y-2">
+            <div className="flex items-center justify-center md:pt-6">
+              <span className="flex size-8 items-center justify-center rounded-full bg-card text-muted-foreground">
+                <Link
+                  aria-label={
+                    link === "mirror" ? "kept in step both ways" : "moves to"
+                  }
+                  className="size-4 rotate-90 md:rotate-0"
+                />
+              </span>
+            </div>
+            <DestinationScope>
+              <section className="flex min-w-0 flex-col gap-2">
                 <SectionHeading>{destinationHeading}</SectionHeading>
                 <DestinationCard
                   worktree={worktree}
@@ -257,9 +265,27 @@ export function PullReviewStep({
                   pull={pull}
                 />
               </section>
-              {underDestination}
-            </div>
-          </DestinationScope>
+            </DestinationScope>
+          </div>
+
+          <div
+            className={cn(
+              "grid gap-6",
+              details !== undefined && "md:grid-cols-2",
+            )}
+          >
+            <PullLeaveOut
+              pull={pull}
+              worktree={{
+                projectId: project.id,
+                id: worktree.id,
+                path: worktree.path,
+              }}
+            />
+            {details !== undefined && (
+              <div className="flex min-w-0 flex-col gap-6">{details}</div>
+            )}
+          </div>
         </div>
       </FlowBody>
 
@@ -280,6 +306,77 @@ export function PullReviewStep({
   );
 }
 
+// The shape both ends of the pair share: a header band naming the
+// device (and the project there), a body that grows so the two cards
+// stand the same height, and an optional last row.
+function EndCard({
+  head,
+  aside,
+  children,
+  foot,
+}: {
+  head: ReactNode;
+  aside?: ReactNode;
+  children: ReactNode;
+  foot?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm">
+        {head}
+        <span className="ml-auto truncate text-xs text-muted-foreground">
+          {aside}
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 px-3 py-3">{children}</div>
+      {foot}
+    </div>
+  );
+}
+
+// The branch as the card's title, the folder beside it.
+function BranchLine({
+  branch,
+  folder,
+  className,
+}: {
+  branch: string;
+  folder: string | undefined;
+  className?: string;
+}) {
+  return (
+    <p
+      className={cn(
+        "flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono",
+        className,
+      )}
+    >
+      <span className="text-sm font-semibold">{branch}</span>
+      {folder !== undefined && (
+        <span className="text-xs text-muted-foreground">{folder}</span>
+      )}
+    </p>
+  );
+}
+
+// One fact on the source's meta line: an icon and a few words.
+function Fact({
+  icon: Icon,
+  children,
+  className,
+}: {
+  icon: LucideIcon;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span className={cn("inline-flex items-center gap-1", className)}>
+      <Icon aria-hidden className="size-3.5" />
+      {children}
+    </span>
+  );
+}
+
 export function SourceCard({
   worktree,
   project,
@@ -294,51 +391,60 @@ export function SourceCard({
   // home, and a transplant already holds the grant that read needs.
   // Refused or not yet answered, the path shows as it is.
   const { data: runtime } = useRuntimeInfo();
-  const { data: pr, isPending: prPending } = useWorktreePullRequest(
-    project.id,
-    worktree.branch,
-  );
+  const { data: pr } = useWorktreePullRequest(project.id, worktree.branch);
+  // Only what there is: a branch in step with its upstream, a clean
+  // tree and no PR say nothing, so they show nothing.
+  const facts = [
+    worktree.ahead > 0 && (
+      <Fact key="ahead" icon={ArrowUp}>
+        {worktree.ahead} ahead
+      </Fact>
+    ),
+    worktree.behind > 0 && (
+      <Fact key="behind" icon={ArrowDown}>
+        {worktree.behind} behind
+      </Fact>
+    ),
+    worktree.changedCount > 0 && (
+      <Fact
+        key="dirty"
+        icon={FilePen}
+        className="text-amber-700 dark:text-amber-300"
+      >
+        {worktree.changedCount} uncommitted
+      </Fact>
+    ),
+    pr && (
+      <Fact key="pr" icon={GitPullRequest}>
+        #{pr.number}
+      </Fact>
+    ),
+  ].filter(Boolean);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm">
-        <DeviceGlyph
-          icon={useDeviceIcon(deviceId)}
-          className="size-4 text-muted-foreground"
-        />
-        <span className="font-medium">{sourceDeviceLabel}</span>
-        <span className="ml-auto truncate text-xs text-muted-foreground">
-          {project.name}
-        </span>
-      </div>
-      <div className="space-y-2 px-3 py-2.5">
-        <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono">
-          <span className="text-sm font-semibold">{worktree.branch}</span>
-          <span className="text-xs text-muted-foreground">{worktree.name}</span>
+    <EndCard
+      head={
+        <>
+          <DeviceGlyph
+            icon={useDeviceIcon(deviceId)}
+            className="size-4 text-muted-foreground"
+          />
+          <span className="font-medium">{sourceDeviceLabel}</span>
+        </>
+      }
+      aside={project.name}
+    >
+      <BranchLine branch={worktree.branch} folder={worktree.name} />
+      <PathSpan
+        path={worktree.path}
+        home={runtime?.homedir ?? null}
+        className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+      />
+      {facts.length > 0 && (
+        <p className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1.5 text-xs text-muted-foreground tabular-nums">
+          {facts}
         </p>
-        <PathSpan
-          path={worktree.path}
-          home={runtime?.homedir ?? null}
-          className="min-w-0 truncate font-mono text-xs text-muted-foreground"
-        />
-        <div className="flex flex-wrap gap-1.5">
-          <Chip
-            className="font-mono tabular-nums"
-            aria-label={`${worktree.ahead} ahead, ${worktree.behind} behind`}
-          >
-            <ArrowUp aria-hidden className="size-3" />
-            {worktree.ahead}
-            <ArrowDown aria-hidden className="ml-0.5 size-3" />
-            {worktree.behind}
-          </Chip>
-          <Chip>
-            {worktree.changedCount > 0
-              ? pluralize(worktree.changedCount, "uncommitted file")
-              : "clean tree"}
-          </Chip>
-          {!prPending && <Chip>{pr ? `PR #${pr.number}` : "no PR yet"}</Chip>}
-        </div>
-      </div>
-    </div>
+      )}
+    </EndCard>
   );
 }
 
@@ -364,46 +470,46 @@ function DestinationCard({
   const { deviceId } = useDestinationScope();
   const icon = useDeviceIcon(deviceId);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm">
-        <DeviceGlyph icon={icon} className="size-4 text-muted-foreground" />
-        {toPeer ? (
-          <DevicePick
-            toPeer={toPeer}
-            name={deviceLabel}
-            picked={target !== null}
+    <EndCard
+      head={
+        <>
+          <DeviceGlyph icon={icon} className="size-4 text-muted-foreground" />
+          {toPeer ? (
+            <DevicePick
+              toPeer={toPeer}
+              name={deviceLabel}
+              picked={target !== null}
+            />
+          ) : (
+            <span className="font-medium">{deviceLabel}</span>
+          )}
+        </>
+      }
+      aside={target?.project?.name ?? (target?.clone ? "new checkout" : null)}
+      foot={
+        target?.project && (
+          <SetupRow
+            localProject={target.project}
+            checked={pull.runSetup}
+            onChange={pull.setRunSetup}
           />
-        ) : (
-          <span className="font-medium">{deviceLabel}</span>
-        )}
-        <span className="ml-auto truncate text-xs text-muted-foreground">
-          {target?.project?.name ??
-            (target?.clone ? "new checkout" : undefined)}
-        </span>
-      </div>
-      <div className="space-y-2 px-3 py-2.5">
-        {target === null ? (
-          <p className="text-xs text-muted-foreground">
-            Pick the device it goes to.
-          </p>
-        ) : target.project ? (
-          <LandingLines
-            worktree={worktree}
-            project={target.project}
-            landing={landing}
-          />
-        ) : (
-          <CloneLines clone={target.clone} worktree={worktree} />
-        )}
-      </div>
-      {target?.project && (
-        <SetupRow
-          localProject={target.project}
-          checked={pull.runSetup}
-          onChange={pull.setRunSetup}
+        )
+      }
+    >
+      {target === null ? (
+        <p className="text-xs text-muted-foreground">
+          Pick the device it goes to.
+        </p>
+      ) : target.project ? (
+        <LandingLines
+          worktree={worktree}
+          project={target.project}
+          landing={landing}
         />
+      ) : (
+        <CloneLines clone={target.clone} worktree={worktree} />
       )}
-    </div>
+    </EndCard>
   );
 }
 
@@ -465,17 +571,11 @@ function LandingLines({
   const folder = pullWorktreeName(worktree);
   return (
     <>
-      <p
-        className={cn(
-          "flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono",
-          refusal !== null && "text-amber-700 dark:text-amber-300",
-        )}
-      >
-        <span className="text-sm font-semibold">{landingBranch}</span>
-        <span className="text-xs text-muted-foreground">
-          {folder ?? "new folder"}
-        </span>
-      </p>
+      <BranchLine
+        branch={landingBranch}
+        folder={folder ?? "new folder"}
+        className={cn(refusal !== null && "text-amber-700 dark:text-amber-300")}
+      />
       {base === null ? (
         <Skeleton className="h-3.5 w-2/3" />
       ) : (
@@ -499,7 +599,7 @@ function CloneLines({
   const [picking, setPicking] = useState(false);
   return (
     <>
-      <p className="font-mono text-sm font-semibold">{worktree.branch}</p>
+      <BranchLine branch={worktree.branch} folder={undefined} />
       <div className="flex items-center gap-2">
         <PathSpan
           path={clone.dest}

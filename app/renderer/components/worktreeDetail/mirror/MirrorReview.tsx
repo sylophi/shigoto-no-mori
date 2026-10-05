@@ -6,6 +6,7 @@ export function MirrorReview(props: PullReviewProps) {
   return (
     <PullReviewStep
       {...props}
+      link="mirror"
       sourceHeading="Original"
       destinationHeading="Copy"
       idleNote=""
