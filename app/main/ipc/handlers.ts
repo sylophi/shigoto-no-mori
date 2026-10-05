@@ -63,7 +63,9 @@ import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
 import {
   currentMirrorList,
+  endMirrorIfCopyGone,
   mirrorHandlers,
+  setMirrorGitAppliedListener,
   setMirrorGitChangedListener,
   setMirrorImpl,
   setMirrorServingListener,
@@ -72,6 +74,8 @@ import {
   endLegacyMirrors,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
+  settleMirrorBookkeeping,
+  whileRecreating,
   isOrphanedTransfer,
   mirrorSessions,
 } from "@host/mirror/registry";
@@ -289,6 +293,9 @@ const mirrorDaemon = createMirrorDaemon({
     // (registry.ts isLegacyMirror), ended once, the worktree kept.
     void endLegacyMirrors();
     endMirrorsOfNoAccount();
+    // The stops that waited for the daemon, originals gone behind the
+    // app's back, sessions a re-open replaced (registry.ts).
+    void settleMirrorBookkeeping();
   },
 });
 // The engine persists its sessions, so they come back on every spawn:
@@ -361,6 +368,14 @@ const gitFollower = createGitFollower({
     broadcastMirrorChanged();
     observeMirrorHistory();
   },
+  // The peer says the session's copy is gone, behind this device's
+  // back: confirmed against the peer's own list (an answer while its
+  // registry loads, or mid-move, is no removal), the session ends and
+  // the original keeps its own.
+  onCopyGone: (session) => void endMirrorIfCopyGone(session),
+  // A pull it applied here is a ref move the git watcher skips as the
+  // app's own: announced like one, so the pages showing it refetch.
+  onLocalApplied: (projectId) => announceProjectChanged(projectId),
 });
 
 // "This project's git state moved on this machine": the project-scoped
@@ -579,19 +594,29 @@ export function registerIpcHandlers(): void {
     // the mirror as it was instead of gone with no way to re-open it.
     // The agreement moves to the new id, so the follower picks up
     // where it was instead of starting from the no-agreement fallback.
-    recreate: async (session, input) => {
-      await mirrorDaemon.pause(session);
-      let next: string;
-      try {
-        next = await mirrorDaemon.create(input);
-      } catch (error) {
-        await mirrorDaemon.resume(session).catch(() => {});
-        throw error;
-      }
-      await mirrorDaemon.terminate(session);
-      gitFollower.rename(session, next);
-      return next;
-    },
+    // Held as recreating throughout, so the leftover sweep
+    // (registry.ts settleMirrorBookkeeping) does not end the old
+    // session under it. An old session already gone by the terminate
+    // was ended all the same.
+    recreate: (session, input) =>
+      whileRecreating(session, async () => {
+        await mirrorDaemon.pause(session);
+        let next: string;
+        try {
+          next = await mirrorDaemon.create(input);
+        } catch (error) {
+          await mirrorDaemon.resume(session).catch(() => {});
+          throw error;
+        }
+        await mirrorDaemon.terminate(session).catch((error: unknown) => {
+          const stillThere = mirrorDaemon
+            .sessions()
+            .some((raw) => raw.session === session);
+          if (stillThere) throw error;
+        });
+        gitFollower.rename(session, next);
+        return next;
+      }),
     terminate: async (session) => {
       try {
         await mirrorDaemon.terminate(session);
@@ -607,10 +632,12 @@ export function registerIpcHandlers(): void {
     pause: (session) => mirrorDaemon.pause(session),
     resume: (session) => mirrorDaemon.resume(session),
     gitStatus: (session) => gitFollower.statusOf(session),
+    refreshGit: (session) => gitFollower.reconcileNow(session),
     history: (localWorktreeId) => mirrorHistory.eventsFor(localWorktreeId),
     noteEvent: (localWorktreeId, kind, detail) =>
       mirrorHistory.note(localWorktreeId, kind, detail),
     forgetHistory: (localWorktreeId) => mirrorHistory.forget(localWorktreeId),
+    moveHistory: (from, to) => mirrorHistory.move(from, to),
   });
   setMirrorServingListener(broadcastMirrorChanged);
   // A delete's removal, to every window and peer (remote:true by
@@ -625,6 +652,9 @@ export function registerIpcHandlers(): void {
   setMirrorGitChangedListener((change) =>
     broadcastAll(mirrorContract, "gitChanged", change),
   );
+  // A peer's follower landed its side here (a push into a copy): the
+  // pages showing the project refetch, as for the follower's own pulls.
+  setMirrorGitAppliedListener(announceProjectChanged);
   // The follower's peer-side signals: a peer's git state moved (its
   // git-directory watcher) or a served worktree's index did. And a
   // peer's worktree gone, which ends the mirrors into it running here.

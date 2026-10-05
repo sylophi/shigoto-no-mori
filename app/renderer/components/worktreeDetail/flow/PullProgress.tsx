@@ -126,7 +126,7 @@ function ProgressView({
   extraRows = NO_EXTRA_ROWS,
   filesDetail,
   sourcePart = "source, untouched",
-  runningNote = `Keep this window open. Nothing on ${sourceDeviceLabel} changes until you decide at the finish step.`,
+  runningNote = `Nothing on ${sourceDeviceLabel} changes until you decide at the finish step.`,
   failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
   cancelledNote,
   progressLabel = "Transplant progress",

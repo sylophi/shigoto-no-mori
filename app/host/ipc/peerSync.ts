@@ -35,10 +35,11 @@ export type PeerSyncApi = Pick<
 // The reach into a peer's mirror surface: the git follower's (read the
 // git state of a served worktree and apply one there) and the mirror
 // start asked from the copy's side (the peer's startTo, with this
-// device as the target, mirror:startFrom).
+// device as the target, mirror:startFrom), and the word that a copy
+// there is no longer mirrored (mirror:release).
 export type PeerMirrorApi = Pick<
   Client<typeof mirrorContract>,
-  "gitState" | "applyGitState" | "startTo"
+  "gitState" | "applyGitState" | "startTo" | "release"
 >;
 
 // The transplant orchestration's teardown reach (the peer's ordinary

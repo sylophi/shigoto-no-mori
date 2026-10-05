@@ -20,6 +20,9 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  isMirrorCopyStayed,
+  isMirrorStopUnconfirmed,
+  type MirrorDaemonStatus,
   mirrorEngineBlocker,
   type MirrorEvent,
   type MirrorListResult,
@@ -34,7 +37,10 @@ import {
   useMoveMutation,
 } from "@/hooks/remote/useMoveWorktree";
 import { quietVillagerMoves } from "@/lib/villagers/moves";
-import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
+import {
+  useHostDevices,
+  useRemoteDeviceApi,
+} from "@/hooks/remote/useRemoteDevices";
 import { hasLocalHost } from "@/lib/localHost";
 import {
   invalidateHostDevice,
@@ -43,7 +49,7 @@ import {
   queryKeysFor,
 } from "@/lib/queryKeys";
 import { forgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-import { notifyError } from "@/lib/toast";
+import { notifyError, toast } from "@/lib/toast";
 
 const EMPTY: MirrorListResult = {
   daemon: "stopped",
@@ -113,10 +119,13 @@ export function writeMirrorList(
 ): void {
   const queryKey = queryKeysFor(deviceId).mirrors();
   if (list === undefined) {
-    void queryClient.invalidateQueries({ queryKey });
+    void queryClient.invalidateQueries({ queryKey, exact: true });
     return;
   }
-  void queryClient.cancelQueries({ queryKey });
+  // Exact: the history thread's key sits under the list's, and a
+  // cancel by prefix would cancel its read in flight too, leaving the
+  // panel on its skeleton.
+  void queryClient.cancelQueries({ queryKey, exact: true });
   queryClient.setQueryData(queryKey, list);
 }
 
@@ -224,20 +233,27 @@ export function useWorktreeMirror(worktree: Worktree): {
 }
 
 // Every other host's mirror picture, projected by `select`: this
-// machine's (when the scope is a peer's) and the peers with a session
-// up. The scoped device's own list is useMirrors. Each list is kept
-// live by its device's broadcast at boot, so this only reads. A peer
-// with no session up (asleep, or still dialing) is listed with no
-// data even when its last list is still cached: a session it stopped
-// meanwhile would otherwise show for as long as it stays away. The
-// projections come combined with their ids. react-query shares an
-// unchanged select result structurally, and the combined array too,
-// so both keep their references through cycles that change nothing
-// they show.
+// machine's (when the scope is a peer's) and every peer that hosts
+// projects. The scoped device's own list is useMirrors. Each list is
+// kept live by its device's broadcast at boot, so this only reads. A
+// peer with no session up (asleep, or still dialing) keeps its last
+// list, marked unreachable: the mirror it runs is still there as far
+// as anyone here can know, and dropping it would make its copy here
+// read as unmirrored exactly while its runner is away (the pair
+// unfolded, the start buttons back, no way to see the mirror). The
+// session's own state is the runner's last word, which the surfaces
+// say is stale. The projections come combined with their ids.
+// react-query shares an unchanged select result structurally, and the
+// combined array too, so both keep their references through cycles
+// that change nothing they show.
 function useOtherHostMirrors<T>(
   exceptDeviceId: string,
   select: (list: MirrorListResult, deviceId: string) => T,
-): { deviceId: string; api: HostApi | undefined; data: T | undefined }[] {
+): {
+  deviceId: string;
+  api: HostApi | undefined;
+  data: T | undefined;
+}[] {
   const devices = useHostDevices();
   const candidates = [
     ...(hasLocalHost ? [{ deviceId: localDeviceId, api: window.api }] : []),
@@ -263,10 +279,7 @@ function useOtherHostMirrors<T>(
       candidates.map(({ deviceId, api }, index) => ({
         deviceId,
         api,
-        data:
-          api === undefined
-            ? undefined
-            : (results[index]?.data as T | undefined),
+        data: results[index]?.data as T | undefined,
       })),
   });
 }
@@ -280,10 +293,13 @@ function useOtherHostMirrors<T>(
 export type WorktreeMirrorLink = {
   runnerDeviceId: string;
   // Undefined while the runner is a peer with no session up: nothing
-  // to drive the session through.
+  // to drive the session through, and the session is its last word.
   runnerApi: HostApi | undefined;
   otherDeviceId: string;
   session: MirrorSession | undefined;
+  // The runner's engine, as its list last said (a restarting engine
+  // lists its last sessions).
+  engine: MirrorDaemonStatus;
 };
 
 // The mirrors a worktree is part of, seen from its page on whichever
@@ -300,28 +316,37 @@ export function useWorktreeMirrorLinks(
   worktree: Worktree,
 ): WorktreeMirrorLink[] {
   const scope = useHostScope();
+  const { daemon } = useMirrors();
   const { session: own, serving } = useWorktreeMirror(worktree);
-  const others = useOtherHostMirrors(scope.deviceId, (list) =>
-    list.sessions.find(
-      (s) => s.deviceId === scope.deviceId && s.worktreeId === worktree.id,
-    ),
+  // A peer's page read off its cache while it is away: its own session
+  // is its last word too.
+  const scopeApi = useRemoteDeviceApi(
+    scope.remote ? scope.deviceId : undefined,
   );
+  const others = useOtherHostMirrors(scope.deviceId, (list) => {
+    const session = list.sessions.find(
+      (s) => s.deviceId === scope.deviceId && s.worktreeId === worktree.id,
+    );
+    return session === undefined ? undefined : { session, engine: list.daemon };
+  });
   const links: WorktreeMirrorLink[] = [];
   if (own !== undefined) {
     links.push({
       runnerDeviceId: scope.deviceId,
-      runnerApi: scope.api,
+      runnerApi: scope.remote && scopeApi === undefined ? undefined : scope.api,
       otherDeviceId: own.deviceId,
       session: own,
+      engine: daemon,
     });
   }
-  for (const { deviceId, api, data: session } of others) {
-    if (session !== undefined) {
+  for (const { deviceId, api, data } of others) {
+    if (data !== undefined) {
       links.push({
         runnerDeviceId: deviceId,
         runnerApi: api,
         otherDeviceId: deviceId,
-        session,
+        session: data.session,
+        engine: data.engine,
       });
     }
   }
@@ -334,6 +359,7 @@ export function useWorktreeMirrorLinks(
       runnerApi: undefined,
       otherDeviceId: stream.peerDeviceId,
       session: undefined,
+      engine: "running",
     });
   }
   return links;
@@ -380,11 +406,14 @@ export function useStartMirror(move: Move) {
 // The mirror's thread of events (mirror:history), read through the
 // scope like the list and refreshed by the same broadcast: the key
 // sits under the mirrors prefix the list's invalidation sweeps.
+// The broadcast carries the list alone, so the thread is re-read on a
+// slow beat while it is on screen.
 export function useMirrorHistory(localWorktreeId: string) {
   const { api, keys } = useHostScope();
   return useQuery<MirrorEvent[]>({
     queryKey: keys.mirrorHistory(localWorktreeId),
     queryFn: async () => (await api.mirror.history({ localWorktreeId })).events,
+    refetchInterval: 5_000,
     meta: { silentError: true },
   });
 }
@@ -414,6 +443,10 @@ export function useMirrorControls() {
   // session's remote side, which may be this machine. A copy here the
   // renderer forgets the way a delete does. A copy elsewhere is that
   // device's view to refresh.
+  // The outcome is said here and not by the dialog, which may be gone
+  // by then: the session leaves the list (and the dialog with it) as
+  // the copy goes. A refusal for want of confirmation is the dialog's
+  // to show, in place, beside what it would take.
   const stop = useMutation({
     mutationFn: ({
       session,
@@ -421,13 +454,35 @@ export function useMirrorControls() {
     }: {
       session: MirrorSession;
       force?: boolean;
+      // The copy's device by name, for the words.
+      copyName: string;
     }) => {
       // Its copy going is the mirror stopping, not its villager leaving.
       quietVillagerMoves([session.worktreeId]);
       return api.mirror.stop(session.session, force);
     },
-    onSuccess: (_data, { session }) => {
-      if (session.deviceId === localDeviceId) {
+    onSuccess: (result, { copyName }) => {
+      toast.success(
+        result?.removedCopy === false
+          ? `Mirror stopped. The original is gone, so the copy on ${copyName} stays.`
+          : `Mirror stopped. The copy on ${copyName} is removed.`,
+      );
+    },
+    onError: (error, { copyName }) => {
+      if (isMirrorStopUnconfirmed(error)) return;
+      if (isMirrorCopyStayed(error)) {
+        notifyError(
+          `Mirror stopped, but the copy on ${copyName} couldn't be removed. Delete it from its page.`,
+        );
+        return;
+      }
+      notifyError("Couldn't stop mirroring", error);
+    },
+    onSettled: (result, error, { session }) => {
+      // A copy that stayed was still the mirror stopping.
+      if (error !== null && !isMirrorCopyStayed(error)) return;
+      const removed = error === null && result?.removedCopy !== false;
+      if (removed && session.deviceId === localDeviceId) {
         forgetDeletedWorktree(
           queryClient,
           localDeviceId,
@@ -438,7 +493,6 @@ export function useMirrorControls() {
         invalidateHostDevice(queryClient, session.deviceId);
       }
     },
-    onError: (err) => notifyError("Couldn't stop mirroring", err),
     meta: { silentError: true },
   });
   const pause = useMutation({

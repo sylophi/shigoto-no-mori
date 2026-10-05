@@ -163,27 +163,27 @@ export function stepHeadline(
   const here = landing.on;
   switch (frame?.step ?? "capture") {
     case "clone":
-      return `cloning the repository from ${sourceDeviceLabel}`;
+      return `Cloning the repository from ${sourceDeviceLabel}`;
     case "capture":
-      return `capturing the uncommitted work on ${sourceDeviceLabel}`;
+      return `Capturing the uncommitted work on ${sourceDeviceLabel}`;
     case "transfer":
-      return "sending the branch and changes over the device link";
+      return "Sending the branch and changes over the device link";
     case "create":
       switch (frame?.createPhase) {
         case "carryOver":
-          return "carrying files over into the new worktree";
+          return "Carrying files over into the new worktree";
         case "setup":
-          return `running the setup script ${here}`;
+          return `Running the setup script ${here}`;
         case "portPoolProvision":
-          return "provisioning ports for the new worktree";
+          return "Provisioning ports for the new worktree";
         default:
-          return `creating the worktree ${here}`;
+          return `Creating the worktree ${here}`;
       }
     case "apply":
-      return `re-applying your changes ${here}`;
+      return `Re-applying your changes ${here}`;
     case "files":
       return landing.onPeer
-        ? `sending the ignored files over ${landing.to}`
-        : `bringing the ignored files over from ${sourceDeviceLabel}`;
+        ? `Sending the ignored files over ${landing.to}`
+        : `Bringing the ignored files over from ${sourceDeviceLabel}`;
   }
 }

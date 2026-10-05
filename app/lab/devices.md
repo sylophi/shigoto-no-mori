@@ -81,8 +81,9 @@ the bridge's answers, the other device's window, and the disk.
 - **The tunnel path.** On one machine the LAN wins. Launch a device
   with `SHIGOMORI_DIAL_KINDS=tunnel` in its `start` to take the
   tunnel instead (`dev-app.md`, "Rules").
-- **A record of it.** Open each window's session with `"video": true`
-  before the flow starts, so the videos line up. `screen` shots also
+- **A record of it.** Run `{ "video": "start" }` on each window's
+  session before the flow starts, so the videos line up, and
+  `{ "video": "stop" }` after (it answers with the file). `screen` shots also
   catch native menus, given Screen Recording permission.
 
 ## Cleaning up

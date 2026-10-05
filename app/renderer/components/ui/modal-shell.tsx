@@ -45,6 +45,15 @@ export function ModalShell({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || openShells.at(-1) !== id) return;
       if (!closeOnEscapeRef.current) return;
+      // A menu or a list open over the shell (a dropdown inside it)
+      // takes its own Escape first: captured here, the key would close
+      // the dialog under it instead.
+      if (
+        e.target instanceof Element &&
+        e.target.closest('[role="menu"], [role="listbox"]') !== null
+      ) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       onEscapeRef.current();

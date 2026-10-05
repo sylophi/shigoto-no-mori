@@ -68,7 +68,9 @@ export async function transferFilesOnce(
     name: string;
     ignores: string[];
     // Which way the files flow. Absent, a pull: the peer's come here.
-    direction?: "pull" | "push";
+    // A replica pushes and makes the peer's side an exact copy (a
+    // mirror start's first pass, host/ipc/modules/mirror.ts).
+    direction?: "pull" | "push" | "replica";
   },
   onProgress: (bytes: number, totalBytes: number) => void,
   // The move's cancel: the session is ended where it stands, and the
@@ -94,7 +96,11 @@ export async function transferFilesOnce(
         [MIRROR_LABEL_TRANSFER]: token,
       },
       ignores: input.ignores,
-      ...(input.direction === "push" ? { push: true } : { pull: true }),
+      ...(input.direction === "push"
+        ? { push: true }
+        : input.direction === "replica"
+          ? { replica: true }
+          : { pull: true }),
     });
     // A create the cancel outran still makes its session: ended once
     // it is there (main's sweep is the backstop, by the token).

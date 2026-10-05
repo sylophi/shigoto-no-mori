@@ -50,6 +50,10 @@ import {
 } from "@shared/pullRequestStack";
 import { unknownWorktreeError } from "@shared/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
+import {
+  moveMirrorsOfWorktree,
+  stopMirrorsForWorktree,
+} from "@host/mirror/registry";
 import { scriptEventNotifier } from "../scriptRun";
 import {
   adoptViaCli,
@@ -133,6 +137,9 @@ export const worktreesHandlers: Handlers<
       worktreeId,
       "This worktree is already being removed or moved.",
       () => moveViaCli(project, worktreeId, destinationPath),
+      // The id is path derived, so the moved worktree is a new one to
+      // the engine: its mirror re-opens on the new path.
+      (moved) => moveMirrorsOfWorktree(worktreeId, moved),
     );
   },
 
@@ -181,6 +188,8 @@ export const worktreesHandlers: Handlers<
             { worktreeId, force, skipCleanup },
             notifierFor(ctx),
           ),
+        (outcome) =>
+          outcome.ok ? stopMirrorsForWorktree(worktreeId) : Promise.resolve(),
       );
       removed = result.ok;
       return result;
@@ -237,7 +246,7 @@ export const worktreesHandlers: Handlers<
             { worktreeId: cleanup.target.id, force, skipCleanup },
             notifierFor(ctx),
           ),
-        (outcome) => outcome.removed,
+        (outcome) => Promise.all(outcome.removed.map(stopMirrorsForWorktree)),
       );
       removed = result.removed;
       await Promise.all(

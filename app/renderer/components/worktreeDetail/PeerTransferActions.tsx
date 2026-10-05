@@ -81,17 +81,19 @@ function TransferButtons({
         <FooterActionButton
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
-          label="Mirror to…"
+          label="Mirror"
           tip="Keep a live copy of this worktree on another device"
           disabledReason={mirrorBlocker}
           onClick={() => setOpen("mirror")}
         />
       )}
-      {canOpen && !worktree.isPrimary && (
+      {/* Not while mirrored: moving one half of a live pair away is
+          what the mirror's own stop is for. */}
+      {canOpen && !worktree.isPrimary && !mirrored && (
         <FooterActionButton
           rank={LABEL_RANK.transplant}
           icon={<Shovel />}
-          label="Transplant to…"
+          label="Transplant"
           tip="Move this worktree to another device"
           onClick={() => setOpen("transplant")}
         />

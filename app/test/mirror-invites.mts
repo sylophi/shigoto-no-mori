@@ -72,6 +72,7 @@ const COPY_CALLS = [
   STREAM,
   "mirror:gitState",
   "mirror:applyGitState",
+  "mirror:release",
   "sync:openSource",
   "worktrees:delete",
 ];
@@ -106,6 +107,7 @@ async function main() {
       "mirror:applyGitState": "copy",
       "mirror:gitState": "copy",
       "mirror:openStream": "copy",
+      "mirror:release": "copy",
       "sync:hasCommits": "project",
       "sync:openSource": "copy",
       "sync:receiveBundle": "project",

@@ -44,20 +44,44 @@ export function RemoteTransferActions({
   project: Project;
 }) {
   const { granted } = useCommandAccess();
+  // Which dialog is open, held here so an open one outlives the
+  // buttons: the grant reads undefined for a moment when the direct
+  // link blips, and a run in progress must keep its progress, its
+  // cancel and its report rather than vanish mid-run (the local
+  // footer's PeerTransferActions holds its dialog the same way).
+  const [open, setOpen] = useState<OpenDialog>(null);
   const transferable =
     granted && !worktree.detached && isRealBranch(worktree.branch);
   return (
-    transferable && <TransferActions worktree={worktree} project={project} />
+    (transferable || open !== null) && (
+      <TransferActions
+        worktree={worktree}
+        project={project}
+        buttons={transferable}
+        open={open}
+        setOpen={setOpen}
+      />
+    )
   );
 }
+
+type OpenDialog = "mirror" | "transplant" | null;
+type DialogState = {
+  // Whether the buttons show: a dialog held open past the grant shows
+  // alone.
+  buttons: boolean;
+  open: OpenDialog;
+  setOpen: (open: OpenDialog) => void;
+};
 
 function TransferActions({
   worktree,
   project,
+  ...dialogState
 }: {
   worktree: Worktree;
   project: Project;
-}) {
+} & DialogState) {
   const localProject = useLocalProjectForIdentity(project.identity);
   // A project git couldn't identify can never match a local one, so no
   // transfer here will ever work. Say so: two controls disappearing
@@ -73,6 +97,7 @@ function TransferActions({
       project={project}
       sourceIdentity={project.identity}
       localProject={localProject}
+      {...dialogState}
     />
   );
 }
@@ -101,16 +126,15 @@ function TransferButtons({
   project,
   sourceIdentity,
   localProject,
+  buttons,
+  open,
+  setOpen,
 }: {
   worktree: Worktree;
   project: Project;
   sourceIdentity: string;
   localProject: Project | undefined;
-}) {
-  // Two flags, not one: either dialog stays mounted while the other
-  // button is reachable behind it.
-  const [mirrorOpen, setMirrorOpen] = useState(false);
-  const [transplantOpen, setTransplantOpen] = useState(false);
+} & DialogState) {
   const { deviceId } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
@@ -131,38 +155,36 @@ function TransferButtons({
           driven by the mirror dialog. It only exists in the app: the copy lands on this
           machine, which a browser is not. A
           mirror withdraws the button, not an OPEN dialog: the mirror it
-          starts is what withdraws it, and the dialog's last steps (the
-          report, "Open here") must stay up. */}
-      {canForwardPorts && !mirrored && (
+          starts is what withdraws it, and the dialog's last step (the
+          report) must stay up. */}
+      {buttons && canForwardPorts && !mirrored && (
         <FooterActionButton
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
-          label="Mirror here"
-          tip="Keep a live copy of this worktree here"
+          label="Mirror"
+          tip="Keep a live copy of this worktree on this device"
           disabledReason={blocker}
-          onClick={() => setMirrorOpen(true)}
+          onClick={() => setOpen("mirror")}
         />
       )}
-      {mirrorOpen && (
-        <MirrorDialog {...dialog} onClose={() => setMirrorOpen(false)} />
+      {open === "mirror" && (
+        <MirrorDialog {...dialog} onClose={() => setOpen(null)} />
       )}
       {/* Transplant is destructive on the remote side, so it opens the
           review dialog instead of firing on a double-click: the dialog
           is the confirmation. */}
-      {!worktree.isPrimary && (
+      {/* Not while mirrored, like the local footer's. */}
+      {buttons && !worktree.isPrimary && !mirrored && (
         <FooterActionButton
           rank={LABEL_RANK.transplant}
           icon={<Shovel />}
-          label="Transplant here"
-          tip="Move this worktree here"
-          onClick={() => setTransplantOpen(true)}
+          label="Transplant"
+          tip="Move this worktree to this device"
+          onClick={() => setOpen("transplant")}
         />
       )}
-      {transplantOpen && (
-        <TransplantDialog
-          {...dialog}
-          onClose={() => setTransplantOpen(false)}
-        />
+      {open === "transplant" && (
+        <TransplantDialog {...dialog} onClose={() => setOpen(null)} />
       )}
     </>
   );

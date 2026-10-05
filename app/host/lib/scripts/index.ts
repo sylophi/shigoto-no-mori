@@ -13,7 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { errorMessageOf, worktreeSettingUpError } from "@shared/errors";
-import { stopMirrorsForWorktree } from "@host/mirror/registry";
+import { holdRootChecks } from "@host/mirror/registry";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
@@ -252,36 +252,43 @@ export function assertWorktreeMutable(
 // is still checked out here. The engine is two-way safe, so the gap
 // between the root vanishing and the stop propagates nothing. Callers
 // supply the busy message because the operations differ (removed vs
-// moved).
+// moved). `mirrorsAfter` is what becomes of the mirrors once the
+// mutation answered: a delete stops them only when the worktree
+// actually went (a failed cleanup keeps it, and its mirror with it),
+// and a move carries them to the new path.
 export function withDeleteInflight<T>(
   worktreeId: string,
   busyMessage: string,
   run: () => Promise<T>,
+  mirrorsAfter: (result: T) => Promise<unknown>,
 ): Promise<T> {
-  return withDeletesInflight([worktreeId], busyMessage, run, () => [
-    worktreeId,
-  ]);
+  return withDeletesInflight([worktreeId], busyMessage, run, mirrorsAfter);
 }
 
 // The protocol over several worktrees removed by one mutation (a stack
 // cleanup): every id is refused-if-busy and marked up front, the
-// scripts of all of them are reaped before, and the mirrors of the
-// ones `removedOf` names after. A mutation that removes only some of
-// them (a cleanup script failed partway) stops only those mirrors.
+// scripts of all of them are reaped before, and `mirrorsAfter` deals
+// with the mirrors of the ones the mutation took. A mutation that
+// removes only some of them (a cleanup script failed partway) stops
+// only those mirrors.
 export async function withDeletesInflight<T>(
   worktreeIds: readonly string[],
   busyMessage: string,
   run: () => Promise<T>,
-  removedOf: (result: T) => readonly string[],
+  mirrorsAfter: (result: T) => Promise<unknown>,
 ): Promise<T> {
   for (const id of worktreeIds) assertWorktreeMutable(id, busyMessage);
   worktreeIds.forEach(markDeleteInflight);
+  // The roots vanish under the mutation: the mirror bookkeeping leaves
+  // them to `mirrorsAfter` rather than read a move as a removal.
+  const releaseRoots = holdRootChecks(worktreeIds);
   try {
     await Promise.all(worktreeIds.map(killScriptsForWorktree));
     const result = await run();
-    await Promise.all(removedOf(result).map(stopMirrorsForWorktree));
+    await mirrorsAfter(result);
     return result;
   } finally {
+    releaseRoots();
     worktreeIds.forEach(clearDeleteInflight);
   }
 }

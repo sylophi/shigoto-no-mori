@@ -560,7 +560,7 @@ function hostHandlersFor(
     // stream it serves. Both refresh off mirror:changed. Copies, since
     // the posed cycle mutates the session in place.
     "mirror:list": () => ({
-      daemon: fakeMirrors.sessions.length > 0 ? "running" : "stopped",
+      daemon: posedMirrorEngine(),
       sessions: fakeMirrors.sessions
         .filter((session) => fakeRunners.get(session) === forest.deviceId)
         .map((session) => structuredClone(session)),
@@ -587,6 +587,7 @@ function hostHandlersFor(
           ),
       );
       const copyForest = entry && forests[entry.deviceId];
+      if (entry) noteMirrorEvent(entry.localWorktreeId, "stopped", "");
       if (entry && copyForest) {
         // The stop takes the copy on the runner's peer with it, as
         // the host's forced delete does.
@@ -801,6 +802,20 @@ function noteMirrorEvent(
   const thread = fakeMirrors.history[localWorktreeId] ?? [];
   thread.unshift({ at: Date.now(), kind, detail });
   fakeMirrors.history[localWorktreeId] = thread.slice(0, MIRROR_HISTORY_LIMIT);
+}
+
+// ?mirrorEngine=running|starting|stopped|unavailable: every device's
+// mirror engine, for the start buttons' disabled reasons. Running by
+// default, so the start flows can be walked.
+const MIRROR_ENGINE_STATES = [
+  "running",
+  "starting",
+  "stopped",
+  "unavailable",
+] as const;
+function posedMirrorEngine(): (typeof MIRROR_ENGINE_STATES)[number] {
+  const posed = new URLSearchParams(location.search).get("mirrorEngine");
+  return MIRROR_ENGINE_STATES.find((state) => state === posed) ?? "running";
 }
 
 function findFakeSession(session: string): MirrorSession | undefined {

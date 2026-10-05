@@ -89,6 +89,9 @@ Poses ride the URL:
   list them all and the Thinkpad hold most of them too, so nearly
   every project is terrier's and on a second device (the open
   project's header shows the paw and its devices).
+- `?mirrorEngine=running|starting|stopped|unavailable`: every
+  device's mirror engine (default `running`), for the reason the
+  Mirror buttons give when it can't take a start.
 - `?missing=1`: a project on Studio Mac (`tanuki-notes`) whose repo
   was moved by hand, so the sidebar lists it as missing. The repo is
   under `~/dev` now, for Locate… to find.
