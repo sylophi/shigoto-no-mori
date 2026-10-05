@@ -835,8 +835,14 @@ func splitRemoteRef(ref string, remotes []string) (string, string) {
 
 // --- worktree mutation ---
 
-func gitWorktreeAdd(projectPath, worktreePath, branch, base string) error {
-	args := []string{"worktree", "add", "-b", branch, "--", worktreePath}
+// noCheckout leaves the files and index to the caller (a clone
+// checkout).
+func gitWorktreeAdd(projectPath, worktreePath, branch, base string, noCheckout bool) error {
+	args := []string{"worktree", "add", "-b", branch}
+	if noCheckout {
+		args = append(args, "--no-checkout")
+	}
+	args = append(args, "--", worktreePath)
 	if base != "" {
 		args = append(args, base)
 	}
@@ -872,9 +878,12 @@ func resolveCheckoutRef(repoPath, ref string, remotes []string) (target, track s
 
 // Adds a worktree on an existing branch. `--` keeps the ref from being
 // parsed as flags.
-func gitWorktreeCheckout(projectPath, worktreePath, ref string, remotes []string) error {
+func gitWorktreeCheckout(projectPath, worktreePath, ref string, remotes []string, noCheckout bool) error {
 	target, track := resolveCheckoutRef(projectPath, ref, remotes)
 	args := []string{"worktree", "add"}
+	if noCheckout {
+		args = append(args, "--no-checkout")
+	}
 	if track != "" {
 		args = append(args, "--track", "-b", track)
 	}

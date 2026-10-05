@@ -36,7 +36,9 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		// no-setup: skip the project's setup script (carry-over and port
 		// provision still run). The app passes it when a mirror or
 		// transplant was told not to set the copy up.
-		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}},
+		// no-clone: have git write every tracked file instead of cloning
+		// them from an existing checkout (cloneCheckout).
+		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}, "no-clone": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -58,7 +60,8 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		}
 	}
 
-	worktree, err := createWorktree(proj, name, parsed.strings["branch"], parsed.strings["base"], parsed.bools["checkout"])
+	worktree, err := createWorktree(proj, name, parsed.strings["branch"], parsed.strings["base"],
+		parsed.bools["checkout"], !parsed.bools["no-clone"])
 	if err != nil {
 		return exitCodeOf(err), err
 	}

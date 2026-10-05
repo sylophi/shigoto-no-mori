@@ -72,6 +72,7 @@ interface CreateWorktreeFromPullRequestInput {
   projectId: string;
   worktreeName?: string;
   number: number;
+  cloneFiles?: boolean;
 }
 
 // Two calls behind one mutation: land the PR head on a local branch,
@@ -88,7 +89,7 @@ export function useCreateWorktreeFromPullRequest() {
     Error,
     CreateWorktreeFromPullRequestInput
   >({
-    mutationFn: async ({ projectId, worktreeName, number }) => {
+    mutationFn: async ({ projectId, worktreeName, number, cloneFiles }) => {
       const { branch } = await api.githubCli.resolvePullRequestCheckout({
         projectId,
         number,
@@ -98,6 +99,7 @@ export function useCreateWorktreeFromPullRequest() {
         worktreeName,
         base: branch,
         checkout: true,
+        cloneFiles,
       });
     },
     onSuccess: (result, vars) => {

@@ -23,9 +23,10 @@ func checkEnvironment(report *doctorReport) {
 	checkShellHook(report)
 }
 
-// rev-parse --path-format=absolute (context.go's one-spawn locator)
-// landed in git 2.31, which makes it the real floor.
-const minGitMajor, minGitMinor = 2, 31
+// check-attr --source (a clone checkout reads the new commit's
+// attributes with it) landed in git 2.40, which makes it the real
+// floor.
+const minGitMajor, minGitMinor = 2, 40
 
 func checkGit(report *doctorReport) {
 	stdout, err := runGit("", "--version")
@@ -38,7 +39,7 @@ func checkGit(report *doctorReport) {
 	major, minor, ok := parseGitVersion(raw)
 	if ok && belowGitFloor(major, minor) {
 		report.warn(groupEnv, "git", "git",
-			raw+" is older than 2.31, which sm's repo detection needs",
+			raw+" is older than 2.40, which sm's worktree creation needs",
 			"Upgrade git (`brew upgrade git`).")
 		return
 	}
