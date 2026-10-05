@@ -8,8 +8,10 @@
 // Where the list's row only goes into the project, a tile goes into its
 // work: it opens the worktree visited last (the ⌘K palette's recency),
 // and the sidebar follows the page into the project. Its line under the
-// name says where that is and how much is going on there.
+// name is the repo's GitHub About, and the one below says how much is
+// going on there.
 import {
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -20,9 +22,9 @@ import { AlertTriangle, GitPullRequest } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { BranchLabel } from "@/components/ui/branch-label";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useRepoDescription } from "@/hooks/projects/useRepoDescription";
 import { useNow } from "@/hooks/ui/useNow";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -197,8 +199,13 @@ function ProjectTile({
   const [hovered, setHovered] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const group = useGroupMembers(members, local ? project : undefined);
+  // The member the icon and the About are read from.
   const iconMember = useIconMember(group, local);
+  const sourceId = iconMember?.project.id ?? project.id;
+  const sourceDevice = iconMember?.deviceId;
   const missing = project.pathExists === false;
+  const description = useRepoDescription(sourceId, sourceDevice, !missing);
+  const descriptionId = useId();
   // A missing project's tile locates it, as its sidebar row does.
   const { relocating, onLocate, picker } = useLocateProject(
     group,
@@ -208,7 +215,7 @@ function ProjectTile({
   const lead = work?.lead;
   // This machine's listing is still loading (or failed): the list row
   // has no count then either. Not a project with nothing in it, so the
-  // tile neither names a place nor offers to make one until it knows.
+  // tile neither opens a worktree nor offers to make one until it knows.
   const unlisted = !missing && lead === undefined && branches === undefined;
   const worktrees =
     branches !== undefined && branches > 0
@@ -244,6 +251,7 @@ function ProjectTile({
               ? `${project.name}, open ${lead.worktree.branch}`
               : `${project.name}, new worktree`
         }
+        aria-describedby={!missing && description ? descriptionId : undefined}
         className="flex w-full flex-col gap-2.5 rounded-lg p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
       >
         <span className="flex min-w-0 items-center gap-2.5">
@@ -251,15 +259,16 @@ function ProjectTile({
             <AlertTriangle className="size-8 shrink-0 p-1.5 text-destructive/70" />
           ) : (
             <ProjectIcon
-              projectId={iconMember?.project.id ?? project.id}
+              projectId={sourceId}
               name={project.name}
-              deviceId={iconMember?.deviceId}
+              deviceId={sourceDevice}
               className="size-8"
             />
           )}
-          {/* Clear of the `+` and `…` that come up over the corner. */}
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5 pr-12">
-            <span className="flex min-w-0 items-center gap-1.5">
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            {/* Clear of the `+` and `…` that come up over the corner,
+                which sit above the line under it. */}
+            <span className="flex min-w-0 items-center gap-1.5 pr-12">
               <SimpleTooltip whenTruncated tip={project.name}>
                 <span
                   className={cn(
@@ -272,30 +281,21 @@ function ProjectTile({
               </SimpleTooltip>
               <DeviceBadgeCluster devices={devices} />
             </span>
-            {/* Where the tile lands, named as the sidebar's row names it. */}
-            <span
-              className={cn(
-                "min-w-0 truncate text-2xs text-muted-foreground",
-                lead && !missing && "font-mono",
-              )}
-            >
-              {missing ? (
-                relocating ? (
-                  "Locating…"
-                ) : (
-                  "Missing on disk"
-                )
-              ) : unlisted ? (
-                "…"
-              ) : lead ? (
-                <BranchLabel
-                  branch={lead.worktree.branch}
-                  detached={lead.worktree.detached}
-                />
-              ) : (
-                "No worktrees yet"
-              )}
-            </span>
+            {/* Two lines tall even when shorter or empty, so a repo
+                with a short About (or none) lines its stats up with
+                the tiles beside it, in other owners' sections too. */}
+            <SimpleTooltip whenTruncated tip={missing ? null : description}>
+              <span
+                id={descriptionId}
+                className="line-clamp-2 min-h-[2lh] min-w-0 text-2xs text-muted-foreground"
+              >
+                {missing
+                  ? relocating
+                    ? "Locating…"
+                    : "Missing on disk"
+                  : description}
+              </span>
+            </SimpleTooltip>
           </span>
         </span>
         <span className="flex h-4 items-center gap-2 text-3xs text-muted-foreground tabular-nums">

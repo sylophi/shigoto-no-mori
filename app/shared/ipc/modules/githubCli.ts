@@ -58,6 +58,15 @@ export const githubCliContract = defineContract("host", {
     RepoMergeConfigSchema.nullable(),
     { remote: true, gated: false },
   ),
+  // The repo's About text, for the home grid's tiles. Null when it has
+  // none, isn't on GitHub, or the integration is off. A failed read
+  // rejects.
+  repoDescription: invoke(
+    "githubCli:repoDescription",
+    ProjectScopedPayloadSchema,
+    z.string().nullable(),
+    { remote: true, gated: false },
+  ),
   mergePullRequest: invoke(
     "githubCli:mergePullRequest",
     MergePullRequestPayloadSchema,

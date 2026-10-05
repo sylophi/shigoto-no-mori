@@ -74,6 +74,7 @@ import {
   fakePoolPorts,
   fakeRemoteUrls,
   projectIconFor,
+  repoDescriptionFor,
   worktree as worktreeFixture,
 } from "./fixtures";
 import { villagerHandlersFor } from "./villagerData";
@@ -545,6 +546,10 @@ function hostHandlersFor(
     "githubCli:worktreePullRequest": ({ branch }) =>
       fakePullRequestDetail(branch),
     "githubCli:repoMergeConfig": () => FAKE_REPO_MERGE_CONFIG,
+    "githubCli:repoDescription": ({ projectId }) =>
+      repoDescriptionFor(
+        forest.projects.find((project) => project.id === projectId)?.name ?? "",
+      ),
     // The merge button's outcome, and the PR reading as armed or
     // merged after it, so the flow can be walked in the fake host.
     "githubCli:mergePullRequest": ({ method }) => fakeMergePullRequest(method),

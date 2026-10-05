@@ -17,6 +17,7 @@ import {
 import { mergeViaCli } from "../cliDelegate";
 import { getGithubCliReadiness } from "@host/lib/githubCli/readiness";
 import { getRepoMergeConfig } from "@host/lib/githubCli/repoConfig";
+import { getRepoDescription } from "@host/lib/githubCli/repoDescription";
 import { findProjectOrThrow } from "@host/lib/projects";
 
 export const githubCliHandlers: Handlers<typeof githubCliContract> = {
@@ -47,6 +48,11 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   repoMergeConfig: async ({ projectId }) => {
     const project = await findProjectOrThrow(projectId);
     return getRepoMergeConfig(project.path);
+  },
+
+  repoDescription: async ({ projectId }) => {
+    const project = await findProjectOrThrow(projectId);
+    return getRepoDescription(project.path);
   },
 
   mergePullRequest: async ({ projectId, number, method, stack }) => {

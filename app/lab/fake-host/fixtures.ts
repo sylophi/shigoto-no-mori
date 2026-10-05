@@ -42,6 +42,21 @@ export function projectIconFor(name: string): ProjectIcon | null {
   return { mime: "image/svg+xml", base64: btoa(svg) };
 }
 
+// Stand-in GitHub About text, keyed by name like the icons. port-pool's
+// runs past the tile's two lines, and dotfiles is left out to pose a
+// tile whose repo has none.
+const REPO_DESCRIPTION: Record<string, string> = {
+  "shigoto-no-mori":
+    "A desktop app for managing many git worktrees in parallel.",
+  "port-pool":
+    "Hands out free ports to each worktree's dev servers, so several checkouts of one app can run side by side without fighting over 3000, and keeps the leases in a pool shared by every tool on the machine.",
+  t3code: "A minimal web GUI for coding agents.",
+};
+
+export function repoDescriptionFor(name: string): string | null {
+  return REPO_DESCRIPTION[name] ?? null;
+}
+
 export const accountDevices: DeviceInfo[] = [
   {
     deviceId: LOCAL_DEVICE_ID,

@@ -178,6 +178,8 @@ function buildQueryKeys(deviceId: string) {
     githubCliReadiness: () => host("githubCli", "readiness"),
     repoMergeConfig: (projectId: string) =>
       host("githubCli", "repoMergeConfig", projectId),
+    repoDescription: (projectId: string) =>
+      host("githubCli", "repoDescription", projectId),
     pullRequestDiff: (projectId: string, number: number | undefined) =>
       host("githubCli", "pullRequestDiff", projectId, number),
     // PR queries share a project-scoped prefix so invalidating

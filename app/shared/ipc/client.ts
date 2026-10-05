@@ -208,6 +208,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       resolvePullRequestCheckout: githubCliClient.resolvePullRequestCheckout,
       repoMergeConfig: (projectId: string) =>
         githubCliClient.repoMergeConfig({ projectId }),
+      repoDescription: (projectId: string) =>
+        githubCliClient.repoDescription({ projectId }),
       mergePullRequest: githubCliClient.mergePullRequest,
       pullRequestDiff: githubCliClient.pullRequestDiff,
       setPullRequestDraft: githubCliClient.setPullRequestDraft,
