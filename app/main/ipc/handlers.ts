@@ -369,6 +369,9 @@ const gitFollower = createGitFollower({
   // A copy the follower cannot read may be gone behind this device's
   // back: a copy no longer listed ends its session.
   onPeerUnreachable: (session) => void endMirrorIfCopyGone(session),
+  // A pull it applied here is a ref move the git watcher skips as the
+  // app's own: announced like one, so the pages showing it refetch.
+  onLocalApplied: (projectId) => announceProjectChanged(projectId),
 });
 
 // "This project's git state moved on this machine": the project-scoped

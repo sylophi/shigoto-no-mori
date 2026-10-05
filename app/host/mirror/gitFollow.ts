@@ -295,6 +295,11 @@ export function createGitFollower(deps: {
   // be gone from it, which the owner can find out and act on. At most
   // once a minute per session.
   onPeerUnreachable?: (session: FollowableSession) => void;
+  // A pull landed here: refs, HEAD and the index moved in the local
+  // project by the app's own git, which the git-directory watcher
+  // skips as the app's own writes, so nothing else would tell this
+  // device's pages (and its viewers) that the worktree moved.
+  onLocalApplied?: (localProjectId: string) => void;
 }) {
   const records = new Map<string, FollowRecord>();
   const peerUnreachableAt = new Map<string, number>();
@@ -541,6 +546,7 @@ export function createGitFollower(deps: {
       if (outcome.applied) {
         setAgreed(record, direction === "pull" ? core(peer) : core(local));
         setStatus(record, { status: "synced", detail: "" });
+        if (direction === "pull") deps.onLocalApplied?.(localProjectId);
         return;
       }
       if (outcome.reason === CHANGED_LOCALLY) {

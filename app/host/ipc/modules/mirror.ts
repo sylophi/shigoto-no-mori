@@ -30,6 +30,7 @@
 // names as one. Both primaries keep what they had.
 import type { z } from "zod";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_MIRROR_BRANCH,
@@ -55,6 +56,7 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf } from "@shared/errors";
 import { spawnFileSync } from "@host/fileSync/spawn";
+import { dataDir } from "@host/lib/util/paths";
 import {
   peerMirrorApiFor,
   peerSyncApiFor,
@@ -682,7 +684,13 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       projectId,
       worktreeId,
     });
-    const child = spawnFileSync(["serve"]);
+    // Its own data directory under this host's: unset, the engine's
+    // caches and staging land in ~/.mutagen, shared with any real
+    // Mutagen install and with every other build and profile here.
+    const child = spawnFileSync(["serve"], {
+      ...process.env,
+      MUTAGEN_DATA_DIRECTORY: join(dataDir(), "file-sync", "serve"),
+    });
     if (child === null) {
       throw new Error(
         "mirroring is unavailable on this device (no file-sync engine)",
