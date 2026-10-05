@@ -86,7 +86,7 @@ export const HubStatusSchema = z.object({
   // read it here instead of asking the peer. The peer's dispatch gate
   // is still what enforces it.
   peerAcceptsCommands: z.record(z.string(), z.boolean()),
-  // The tunnel endpoint state, for the devices page. Optional because
+  // The tunnel endpoint state, for the account page. Optional because
   // only a serving side with a host half sets it (the web bridge runs
   // no cloudflared). Not a skew concern: hub:status is
   // client-scoped, main answering its own renderer, so both ends are

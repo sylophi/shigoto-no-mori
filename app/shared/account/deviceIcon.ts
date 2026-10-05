@@ -1,7 +1,7 @@
 // What a device on the account looks like: the one closed catalog of
 // device icons every surface draws a device with. An icon is the
 // device's own answer (detected at enroll, or picked by its owner on
-// the Devices page) and the hub stores it beside the name, so
+// the account page) and the hub stores it beside the name, so
 // every device draws every other one the same way. Shared by the hub
 // protocol, both enroll paths (desktop and web), the fake host and every
 // renderer surface, so the set cannot drift between them. Pure, like

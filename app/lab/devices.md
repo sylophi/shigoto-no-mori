@@ -25,7 +25,7 @@ deep links. A window started while that server answers is a peer on
 the primary's build, so open the primary first, and end the peers
 before it, or everything at once.
 
-Each window's Devices page should list the other device as online,
+Each window's account page should list the other device as online,
 then connected. The device names end in `[<tag>-a]` and `[<tag>-b]`.
 Then drive them:
 
@@ -66,7 +66,7 @@ the bridge's answers, the other device's window, and the disk.
   running.
 - **Command access.** A device that just enrolled accepts no commands,
   so moves onto it are refused (the dialogs show it read-only) until
-  its switch is on: Allow control on its Devices page, or
+  its switch is on: Allow control on its account page, or
   `window.api.account.setAcceptsCommands(true)`. Turn it off on one
   device to see the other's asks refused and what the UI says.
 - **The CLI between them.** `smd` pointed at a profile's data dir runs
@@ -138,7 +138,7 @@ in `dev-app.md`, "When a device is removed".
   GitHub in its window. It signs in again without leaving the account.
   Then relaunch the profile. Otherwise sign in from the profile's
   window.
-- **A device from an old profile still shows on the Devices page.**
+- **A device from an old profile still shows on the account page.**
   Nothing local revokes it. Revoke it from another device ("Cleaning
   up").
 - **`smd` in a new terminal acts on the plain dev data dir.** To

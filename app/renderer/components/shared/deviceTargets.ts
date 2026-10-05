@@ -24,7 +24,7 @@ export type DeviceBlock = "offline" | "no-project" | "no-grant";
 
 // Honest and specific, and none of them offer a fix here: reconnecting
 // is the device hub's job, and granting happens on the other machine's
-// Devices page. `no-project` is only ever shown for a device that
+// account page. `no-project` is only ever shown for a device that
 // registers the repo and has lost its folder (the lists these lines
 // appear in are of devices holding a project), so it says that. A
 // device with no copy at all is the project menu's Add to device.

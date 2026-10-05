@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 // A device's state as a tinted pill, drawn beside the device's name in
 // the Settings header. The tint comes from the same tone families the
-// Devices page uses for its dots and avatars, so a machine's state
+// account page uses for its dots and avatars, so a machine's state
 // reads the same in both places.
 export function DeviceStatusPill({
   tone,

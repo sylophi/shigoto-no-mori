@@ -271,7 +271,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const signOutOnce = singleFlight<void>();
 
   // Removing a device from the account, served over the
-  // account:revokeDevice client channel (what the devices page calls).
+  // account:revokeDevice client channel (what the account page calls).
   async function revokeDeviceOnAccount(targetDeviceId: string): Promise<void> {
     const record = store.read();
     if (record === null) {

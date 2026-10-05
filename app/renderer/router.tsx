@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ForestPage } from "@/components/ForestPage";
 import { NotFoundPage } from "@/components/NotFoundPage";
 import { Settings } from "@/components/settings/Settings";
+import { SettingsPages } from "@/components/settings/SettingsSidebarNav";
 import { DevicesPage } from "@/components/remote/DevicesPage";
 import { withDeviceScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
@@ -45,7 +46,7 @@ const indexRoute = createRoute({
   beforeLoad: () => {
     if (!hasLocalHost) {
       throw redirect({
-        to: isPhoneLayout() ? "/forest/$view" : "/devices",
+        to: isPhoneLayout() ? "/forest/$view" : "/account",
         params: { view: "inbox" },
         replace: true,
       });
@@ -66,8 +67,16 @@ const forestRoute = createRoute({
   component: ForestPage,
 });
 
-const settingsRoute = createRoute({
+// Settings and the pages its list leads to share that list (see
+// SettingsPages).
+const settingsPagesRoute = createRoute({
   getParentRoute: () => rootRoute,
+  id: "settings-pages",
+  component: SettingsPages,
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => settingsPagesRoute,
   path: "/settings",
   component: Settings,
 });
@@ -76,9 +85,9 @@ const settingsRoute = createRoute({
 // page, the tidy page) does not download it at boot.
 
 // App-wide, like settings: the tidy page spans every project rather than
-// scoping to one, so it hangs off the root instead of a device's.
+// scoping to one, so it sits beside settings instead of under a device.
 const tidyRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => settingsPagesRoute,
   path: "/tidy",
   component: lazyRouteComponent(
     () => import("@/components/tidy/TidyForest"),
@@ -88,11 +97,28 @@ const tidyRoute = createRoute({
 
 // App-wide like settings: the account and its device registry span
 // machines rather than describing this one, so they get their own page
-// off the root.
-const devicesIndexRoute = createRoute({
+// beside it, sharing its list. A hostless client's account page is its
+// home rather than a section of Settings, so there it hangs off the
+// root and the sidebar keeps the peers' forest.
+const accountRoute = createRoute({
+  getParentRoute: () => (hasLocalHost ? settingsPagesRoute : rootRoute),
+  path: "/account",
+  component: DevicesPage,
+});
+
+// The account page's old path, still in links and bookmarks from
+// before it moved (a hostless client's home was here).
+const devicesRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/devices",
-  component: DevicesPage,
+  beforeLoad: ({ location }) => {
+    throw redirect({
+      to: "/account",
+      search: location.search,
+      hash: location.hash,
+      replace: true,
+    });
+  },
 });
 
 // The console brings xterm along (a few hundred KB), which a session
@@ -251,9 +277,14 @@ const projectRoutes = [
 const routeTree = rootRoute.addChildren([
   indexRoute,
   forestRoute,
-  settingsRoute,
-  tidyRoute,
-  devicesIndexRoute,
+  // Where accountRoute hangs, as its getParentRoute says.
+  ...(hasLocalHost
+    ? [settingsPagesRoute.addChildren([settingsRoute, tidyRoute, accountRoute])]
+    : [
+        settingsPagesRoute.addChildren([settingsRoute, tidyRoute]),
+        accountRoute,
+      ]),
+  devicesRedirectRoute,
   worktreeRoute,
   worktreeDiffRoute,
   pullRequestDiffRoute,

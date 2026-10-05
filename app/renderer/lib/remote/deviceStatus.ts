@@ -1,6 +1,6 @@
 // Presentation mapping for a remote device's status. One place turns
 // the phase into a tone and a label so the settings
-// chip, the sidebar badge and the devices page read the same. Tones stay
+// chip, the sidebar badge and the account page read the same. Tones stay
 // within the four raw families the theme remaps (emerald, rose, amber,
 // sky) plus slate for off, per the doubutsu contract.
 import type { StatusTone } from "@/components/ui/status-dot";

@@ -10,7 +10,7 @@
 // reviewed diff to this file and the fetch refuses anything else.
 // Darwin only: the makers build for macOS alone, and a platform with
 // no pinned asset ships no connector (the runner reports "no-binary"
-// and the Devices page says so).
+// and the account page says so).
 //
 // .mts with no imports, loadable by plain `node scripts/*.mts` and by
 // main through the @shared alias. Never import this from the renderer.

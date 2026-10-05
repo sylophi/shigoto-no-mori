@@ -1725,7 +1725,7 @@ async function main() {
           error instanceof RemoteConnectError &&
           // The exhaustion message names the candidate and, through
           // the ws socket main injects, the errno itself, which is
-          // what makes a failed dial diagnosable on the Devices page.
+          // what makes a failed dial diagnosable on the account page.
           /lan ws:\/\/.*ECONNREFUSED/.test(error.message),
       );
       assert.deepEqual(bridge.directPeerVersions(), {});

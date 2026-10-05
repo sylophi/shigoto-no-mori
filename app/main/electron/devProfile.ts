@@ -28,7 +28,7 @@ function current(): string | null {
 // Null for a packaged build and for the plain dev instance. Throws on
 // a malformed name, and on a profile without SHIGOMORI_DATA_DIR: that
 // would enroll a second device over the same forest, so it is refused
-// at boot rather than discovered on the Devices page. A refused
+// at boot rather than discovered on the account page. A refused
 // profile leaves the readers seeing no profile at all.
 export function initDevProfile(): string | null {
   if (app.isPackaged) return null;
