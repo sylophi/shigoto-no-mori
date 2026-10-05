@@ -739,6 +739,31 @@ export async function projectsRemoveViaCli(projectId: string): Promise<void> {
   finalOkDoc(result, "sm projects remove failed", { projectId });
 }
 
+// Repoints the registry entry at the moved repo and reconnects its
+// worktrees (`git worktree repair`), answering the project at its new
+// path. `--` keeps a flag-shaped path from reading as an option.
+export async function projectsRelocateViaCli(
+  projectId: string,
+  path: string,
+): Promise<Project> {
+  const result = await runner().runCli([
+    "projects",
+    "relocate",
+    "--project-id",
+    projectId,
+    "--",
+    path,
+  ]);
+  const final = finalOkDoc(result, "sm projects relocate failed", {
+    projectId,
+  });
+  const project = ProjectSchema.parse(final["project"]);
+  // Like a registration, the identity cached for the path may be
+  // another repo's that once sat there.
+  forgetRepoIdentity(project.path);
+  return project;
+}
+
 // ---- Worktree marks and moves ----
 
 // The auto-pull mark (`sm worktrees autopull`), answered with the

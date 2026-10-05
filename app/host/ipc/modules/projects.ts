@@ -15,6 +15,7 @@ import {
   primaryRefOf,
   refreshProjects,
   registerProject,
+  relocateProject,
 } from "@host/lib/projects";
 import {
   listCarryOverCandidates,
@@ -104,6 +105,10 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       clearProjectDeleteInflight(id);
     }
   },
+
+  // Terrier-sourced projects are refused by the CLI, which says to
+  // update terrier instead.
+  relocate: ({ id, path }) => relocateProject(id, expandHome(path)),
 
   // Over the whole list, terrier-only projects included: the CLI stores
   // the order apart from the registry entries, so any project can hold
