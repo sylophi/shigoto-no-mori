@@ -61,7 +61,7 @@ export function TidyConfirm({
                 </span>
               </div>
               <span className="shrink-0 pt-0.5 text-xs text-muted-foreground tabular-nums">
-                {entry.disk ? formatBytes(entry.disk.bytes) : "—"}
+                {entry.disk ? formatBytes(entry.disk.reclaimableBytes) : "—"}
               </span>
             </li>
           ))}
