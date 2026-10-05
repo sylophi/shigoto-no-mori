@@ -21,7 +21,6 @@ import { errorMessageOf } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
-import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { InlineError } from "@/components/ui/inline-error";
 import { keptSourceReason } from "@/hooks/remote/useMoveWorktree";
@@ -34,7 +33,7 @@ import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToa
 import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
+import { ChoiceCard } from "../flow/ChoiceCard";
 import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type Landing, LANDS_HERE } from "../flow/pullSteps";
 
@@ -358,71 +357,5 @@ export function TransplantFinish({
         </Button>
       </FlowFooter>
     </>
-  );
-}
-
-function ChoiceCard({
-  selected,
-  disabled = false,
-  onSelect,
-  title,
-  badge,
-  body,
-  tone,
-}: {
-  selected: boolean;
-  disabled?: boolean;
-  onSelect: () => void;
-  title: string;
-  badge?: string;
-  body: string;
-  // The destructive option carries its own warning colour on its
-  // title, selected or not.
-  tone?: "rose";
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      data-slot="choice-card"
-      aria-checked={selected}
-      disabled={disabled}
-      onClick={onSelect}
-      className={cn(
-        "flex flex-col gap-1.5 rounded-lg border p-3 text-left text-xs transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        selected
-          ? "border-primary/40 bg-accent text-accent-foreground"
-          : "border-border bg-card hover:bg-muted/50",
-        disabled && "cursor-not-allowed opacity-50 hover:bg-card",
-      )}
-    >
-      <span className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            "flex size-4 shrink-0 items-center justify-center rounded-full",
-            selected
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted-foreground/20",
-          )}
-        >
-          {selected && <Check className="size-2.5" />}
-        </span>
-        <span
-          className={cn(
-            "text-sm font-medium",
-            tone === "rose" && "text-rose-600 dark:text-rose-400",
-          )}
-        >
-          {title}
-        </span>
-        {badge && (
-          <span className="ml-auto">
-            <RowTag>{badge}</RowTag>
-          </span>
-        )}
-      </span>
-      <span className={cn(!selected && "text-muted-foreground")}>{body}</span>
-    </button>
   );
 }

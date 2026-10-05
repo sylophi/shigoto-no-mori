@@ -1005,6 +1005,42 @@ async function main() {
       "one-shot transfer: the admitted file crosses, the rule holds, nothing flows back, the session ends itself",
     );
 
+    // (6b') A mirror start's first pass (mirror:startTo): the copy (A)
+    // made an exact copy of the original (B) before the two-way session
+    // opens. A path both hold differently (what a carry-over or a setup
+    // script wrote on the copy) takes the original's version instead of
+    // standing as a conflict, what only the copy holds goes, and a path
+    // under the rule is left alone on the copy.
+    writeFileSync(join(rootB, "clash.txt"), "the original's\n");
+    writeFileSync(join(worktreeA, "clash.txt"), "the copy's create\n");
+    writeFileSync(join(worktreeA, "stray.txt"), "only on the copy\n");
+    const replica = await transferFilesOnce(
+      {
+        localRoot: rootB,
+        localWorktreeId: worktreeIdB,
+        sourceDeviceId: "A",
+        sourceProjectId: projectIdA,
+        sourceWorktreeId: worktreeIdA,
+        remoteRoot: worktreeA,
+        name: "feature",
+        ignores: ["/skip"],
+        direction: "replica",
+      },
+      () => {},
+    );
+    assert.deepEqual(replica, { crossed: true, conflicts: 0 });
+    assert.equal(read(join(worktreeA, "clash.txt")), "the original's\n");
+    assert.equal(read(join(rootB, "clash.txt")), "the original's\n");
+    assert.equal(existsSync(join(worktreeA, "stray.txt")), false);
+    assert.equal(read(join(worktreeA, "skip", "me.txt")), "stays\n");
+    await waitFor(
+      () => daemon.sessions().length === 0,
+      "the replica session to be gone",
+    );
+    ok(
+      "replica pass: the copy takes the original's version of a clash, loses what only it held, keeps what the rule leaves out",
+    );
+
     // (6c) A device leaving the account ends the mirrors it had with
     // it, copies kept (host/mirror/registry.ts endMirrorsWithPeers):
     // this device signing out ends every mirror, a peer removed from
@@ -1212,7 +1248,7 @@ async function main() {
       "a peer's removed worktree ends only the mirrors into that copy, nothing deleted",
     );
 
-    // (6b) The stop's safety and its keep-the-copy, the original gone
+    // (6e) The stop's safety and its keep-the-copy, the original gone
     // behind the app's back, a re-open's leftover, and a stop that
     // came while the daemon was down. Against a recording daemon and
     // a recording peer: what is pinned is which session ends, what the

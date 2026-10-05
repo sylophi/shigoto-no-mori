@@ -1,13 +1,15 @@
 // The footer's mirror button on a worktree that is part of a mirror,
 // on either side of it: the original a session runs on (on the device
-// holding it), and the copy at the far end, served to that device. One button per mirror, opening the dialog with the running
-// mirror's status, history and controls. The dialog mounts under the
-// RUNNER's scope, so its reads and controls go to the device running
-// the session whichever page this is: the local page, a peer's page
-// viewed from here, or the far end's own page. Nothing rendered on a
-// worktree that is not mirrored, and nothing for a mirror whose
-// session is not in hand or whose runner has no session up: nothing
-// to drive it through.
+// holding it), and the copy at the far end, served to that device. One
+// button per mirror, its icon in the mirror's status tone, opening the
+// dialog with the running mirror's status, history and controls. The
+// dialog mounts under the RUNNER's scope, so its reads and controls go
+// to the device running the session whichever page this is: the local
+// page, a peer's page viewed from here, or the far end's own page.
+// Nothing rendered on a worktree that is not mirrored, or for a mirror
+// whose session is not in hand. A runner with no session up leaves the
+// button disabled, saying so: nothing to drive the mirror through, but
+// the worktree is still mirrored.
 import { type ReactNode, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
@@ -22,23 +24,24 @@ import {
   useWorktreeMirrorLinks,
   type WorktreeMirrorLink,
 } from "@/hooks/remote/useMirrors";
-import { useDeviceName } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { localDeviceId } from "@/lib/queryKeys";
 import { FooterActionButton } from "../FooterActionButton";
 import { LABEL_RANK } from "../footerFit";
+import { TONE_TEXT } from "@/components/ui/status-dot";
+import { cn } from "@/lib/utils";
 import { MirrorManageDialog } from "./MirrorManageDialog";
+import { useMirrorView } from "./useMirrorView";
 
 export function MirrorAction({ worktree }: { worktree: Worktree }) {
   const links = useWorktreeMirrorLinks(worktree);
   return links.map((link) =>
-    link.session === undefined || link.runnerApi === undefined ? null : (
+    link.session === undefined ? null : (
       <MirrorLinkAction
         key={link.runnerDeviceId}
         worktree={worktree}
         link={link}
         session={link.session}
-        runnerApi={link.runnerApi}
       />
     ),
   );
@@ -48,40 +51,53 @@ function MirrorLinkAction({
   worktree,
   link,
   session,
-  runnerApi,
 }: {
   worktree: Worktree;
   link: WorktreeMirrorLink;
   session: MirrorSession;
-  runnerApi: HostApi;
 }) {
   const { deviceId: pageDeviceId } = useHostScope();
   const nav = useWorktreeNav();
-  // Open for one session: a stop ends with the session leaving the
-  // list and the dialog with it, and a later mirror on the same
-  // worktree starts closed.
-  const [openFor, setOpenFor] = useState<string | null>(null);
-  const other = useDeviceName(link.otherDeviceId);
+  // Open for this link, whatever its session id: an ignore change
+  // re-opens the session under a new one, and the dialog stays. A stop
+  // ends with the link leaving the page and the dialog with it.
+  const [open, setOpen] = useState(false);
+  const mirror = useMirrorView(link, session);
+  const { view, names } = mirror;
   // A stop that removed the copy this page is on (the session's remote
   // side) leaves it the way a delete does. The original's page stays.
   const pageIsCopy =
     session.deviceId === pageDeviceId && session.worktreeId === worktree.id;
+  const runnerApi = link.runnerApi;
   return (
     <>
       <FooterActionButton
         rank={LABEL_RANK.mirror}
-        icon={<RefreshCw />}
-        label={`Mirror with ${other}`}
-        onClick={() => setOpenFor(session.session)}
+        icon={
+          <RefreshCw
+            className={cn(
+              TONE_TEXT[view.tone],
+              view.spinning && "animate-spin",
+            )}
+          />
+        }
+        label={`Mirror with ${names.other}`}
+        tip={view.detail === "" ? view.label : `${view.label}: ${view.detail}`}
+        disabledReason={
+          runnerApi === undefined
+            ? `${names.runner} runs this mirror and is offline. Its controls come back with it.`
+            : undefined
+        }
+        onClick={() => setOpen(true)}
       />
-      {openFor === session.session && (
+      {open && runnerApi !== undefined && (
         <RunnerScope deviceId={link.runnerDeviceId} api={runnerApi}>
           <MirrorManageDialog
             session={session}
-            otherDeviceId={link.otherDeviceId}
-            onClose={() => setOpenFor(null)}
-            onStopped={() => {
-              if (pageIsCopy) nav.toFallback(true);
+            {...mirror}
+            onClose={() => setOpen(false)}
+            onStopped={(removedCopy) => {
+              if (pageIsCopy && removedCopy) nav.toFallback(true);
             }}
           />
         </RunnerScope>

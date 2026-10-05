@@ -42,7 +42,7 @@ const STEPS = ["Review", "Mirror", "Live"] as const;
 const TITLES: Record<FlowStage, string> = {
   review: "Mirror worktree",
   running: "Mirroring",
-  failed: "Mirror stopped",
+  failed: "Mirror didn't start",
   cancelled: "Mirror cancelled",
   done: "Mirror live",
 };
@@ -186,14 +186,14 @@ function MirrorFlow({
       progressExtras={{
         extraRows: [
           {
-            title: "Open the mirror",
+            title: "Match the files and open the mirror",
             detail: summary ?? "both ways",
           },
         ],
         sourcePart: "source, keeps its copy",
         progressLabel: "Mirror progress",
         runningNote: "Keep this window open.",
-        failedNote: `If the worktree already landed ${landing.on}, open it from the sidebar rather than retrying.`,
+        failedNote: `Whatever landed ${landing.on} was removed again, so trying again starts clean.`,
         cancelledNote: `No mirror runs, and nothing landed ${landing.on}. ${sourceDeviceLabel} keeps its copy.`,
       }}
       onClose={onClose}

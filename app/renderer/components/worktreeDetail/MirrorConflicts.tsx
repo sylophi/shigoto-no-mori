@@ -43,9 +43,11 @@ function conflictLabel(root: string): string {
 
 function ConflictRow({
   conflict,
+  sides,
   reveal,
 }: {
   conflict: MirrorConflict;
+  sides: ConflictSides;
   reveal: ((root: string) => void) | null;
 }) {
   const body = (
@@ -54,14 +56,13 @@ function ConflictRow({
         {conflictLabel(conflict.root)}
       </span>
       <span className="text-muted-foreground">
-        this device: {summarize(conflict.localChanges)}, other device:{" "}
+        {sides.original}: {summarize(conflict.localChanges)}, {sides.copy}:{" "}
         {summarize(conflict.remoteChanges)}
       </span>
     </span>
   );
-  // Revealing is this machine's Finder, so it is offered only while
-  // the session's own device is the one being viewed. Elsewhere the
-  // row is text.
+  // Revealing is this machine's Finder, so it is offered only on a
+  // machine holding one side. Elsewhere the row is text.
   if (reveal === null) {
     return <div className="px-2 py-1 text-xs">{body}</div>;
   }
@@ -78,24 +79,35 @@ function ConflictRow({
 
 // The conflict chip itself: the same shape as the read-only status
 // chips in MirrorPill, as a button, because there is a list behind it.
+// Each side of the session by its device's name: the original's (the
+// session's local side, the runner) and the copy's.
+type ConflictSides = { original: string; copy: string };
+
 export function MirrorConflictsChip({
   session,
   tone,
   label,
-  canReveal,
+  sides,
+  revealUnder,
 }: {
   session: MirrorSession;
   tone: StatusTone;
   label: string;
-  canReveal: boolean;
+  sides: ConflictSides;
+  // The root the paths reveal under in this machine's Finder: the
+  // original's on the device running the session, the copy's on the
+  // copy's device. Absent on any other machine, where the rows are
+  // text.
+  revealUnder?: string;
 }) {
-  const reveal = canReveal
-    ? (root: string) => {
-        const path =
-          root === "" ? session.localRoot : `${session.localRoot}/${root}`;
-        revealInFolder(path, "Couldn't reveal the path");
-      }
-    : null;
+  const reveal =
+    revealUnder === undefined
+      ? null
+      : (root: string) => {
+          const path = root === "" ? revealUnder : `${revealUnder}/${root}`;
+          revealInFolder(path, "Couldn't reveal the path");
+        };
+  const canReveal = reveal !== null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -120,6 +132,7 @@ export function MirrorConflictsChip({
             <ConflictRow
               key={conflict.root}
               conflict={conflict}
+              sides={sides}
               reveal={reveal}
             />
           ))}

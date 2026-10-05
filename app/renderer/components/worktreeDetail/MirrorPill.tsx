@@ -13,18 +13,18 @@
 // reconnects, rose for a halt or an error, slate for paused.
 import { RefreshCw } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
+import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import { Chip } from "@/components/ui/chip-button";
 import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
-import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
+import { useMirrorView } from "@/components/worktreeDetail/mirror/useMirrorView";
 import {
   useWorktreeMirrorLinks,
   type WorktreeMirrorLink,
 } from "@/hooks/remote/useMirrors";
-import { useDeviceName } from "@/hooks/remote/useRemoteDevices";
-import { localDeviceId } from "@/lib/queryKeys";
+import { useDeviceProperName } from "@/hooks/remote/useRemoteDevices";
 import { cn } from "@/lib/utils";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
@@ -69,7 +69,7 @@ export function MirrorPill({ worktree }: { worktree: Worktree }) {
 }
 
 function SessionLine({ link }: { link: WorktreeMirrorLink }) {
-  const other = useDeviceName(link.otherDeviceId);
+  const other = useDeviceProperName(link.otherDeviceId);
   const { session } = link;
   if (session === undefined) {
     return (
@@ -78,13 +78,23 @@ function SessionLine({ link }: { link: WorktreeMirrorLink }) {
           tone="emerald"
           icon={RefreshCw}
           label="Mirrored"
-          tip="A peer keeps a live copy of this worktree"
+          tip={`${other} keeps a live copy of this worktree`}
         />
-        <span className="text-muted-foreground">to {other}</span>
+        <span className="text-muted-foreground">with {other}</span>
       </>
     );
   }
-  const view = describeMirror(session);
+  return <SessionChip link={link} session={session} />;
+}
+
+function SessionChip({
+  link,
+  session,
+}: {
+  link: WorktreeMirrorLink;
+  session: MirrorSession;
+}) {
+  const { view, names, sides, revealUnder } = useMirrorView(link, session);
   return (
     <>
       {view.showConflicts ? (
@@ -92,9 +102,8 @@ function SessionLine({ link }: { link: WorktreeMirrorLink }) {
           session={session}
           tone={view.tone}
           label={view.label}
-          // Revealing is this machine's Finder, under the runner's
-          // copy.
-          canReveal={link.runnerDeviceId === localDeviceId}
+          sides={sides}
+          revealUnder={revealUnder}
         />
       ) : (
         <StatusChip
@@ -105,7 +114,7 @@ function SessionLine({ link }: { link: WorktreeMirrorLink }) {
           spinning={view.spinning}
         />
       )}
-      <span className="text-muted-foreground">with {other}</span>
+      <span className="text-muted-foreground">with {names.other}</span>
     </>
   );
 }

@@ -1,18 +1,22 @@
 // A running mirror, from the footer button on either of its
-// worktrees: its state in four figures, anything that needs acting on,
-// what it leaves out (editable in place), the thread of what
-// happened, and the controls. The same frame as the start dialog, one
-// step long. Mounted under the scope of the device RUNNING the session
-// (mirror/MirrorAction.tsx), so every read and control here goes to
-// that device: the page it opened from may be that device's own, a
-// peer's viewed from here, or the far end's. The controls need that
-// device's command grant, like any mutation on a peer. Without it the
-// dialog is read-only and says whose switch it is.
+// worktrees: its state in three figures, anything that needs acting
+// on, what it leaves out (editable in place), the thread of what
+// happened, and the controls. Stop is a step of its own in the same
+// frame: what becomes of the copy is a choice (remove it, or keep it
+// as a worktree of its own), with what removing it would lose said
+// before it is made. Mounted under the scope of the device RUNNING the
+// session (mirror/MirrorAction.tsx), so every read and control here
+// goes to that device: the page it opened from may be that device's
+// own, a peer's viewed from here, or the far end's. The controls need
+// that device's command grant, like any mutation on a peer. Without it
+// the dialog is read-only and says whose switch it is.
 import { useState } from "react";
 import {
   AlertCircle,
+  ArrowLeft,
   Check,
   GitBranch,
+  Loader2,
   Pause,
   Play,
   RefreshCw,
@@ -26,10 +30,14 @@ import type {
   MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import {
+  isHaltedStatus,
   isMirrorStopUnconfirmed,
-  mirrorStopIsSafe,
+  mirrorFilesSettled,
+  mirrorStopBlocker,
 } from "@shared/ipc/modules/mirror";
+import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -44,21 +52,15 @@ import {
 import { InlineError } from "@/components/ui/inline-error";
 import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   useMirrorControls,
   useMirrorHistory,
   useSetMirrorIgnores,
 } from "@/hooks/remote/useMirrors";
-import { useDeviceName } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
-import {
-  CONFIRM_DESTRUCTIVE_MS,
-  useConfirmTwice,
-} from "@/hooks/ui/useConfirmTwice";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { ChoiceCard } from "../flow/ChoiceCard";
 import {
   CARD,
   CARD_NOTE,
@@ -76,27 +78,35 @@ import {
 import { browseWorktree, LeaveOutPicker } from "../flow/LeaveOutPicker";
 import { describeMirror, gitVerdict } from "./mirrorStatus";
 
+type MirrorNames = {
+  // The device running the session, which holds the original.
+  runner: string;
+  // The device holding the copy.
+  copy: string;
+  // The mirror's other party as the page it opened from sees it.
+  other: string;
+};
+
 export function MirrorManageDialog({
   session,
-  otherDeviceId,
+  view,
+  names,
+  sides,
+  revealUnder,
   onClose,
   onStopped,
 }: {
   session: MirrorSession;
-  // The mirror's other party as the page it opened from sees it.
-  otherDeviceId: string;
+  view: ReturnType<typeof describeMirror>;
+  names: MirrorNames;
+  sides: { original: string; copy: string };
+  revealUnder: string | undefined;
   onClose: () => void;
-  // After a stop removed the copy: the opener knows whether the page
-  // it sits on was that copy.
-  onStopped: () => void;
+  // After a stop: whether the copy went with it. The opener knows
+  // whether the page it sits on was that copy.
+  onStopped: (removedCopy: boolean) => void;
 }) {
-  // The scope is the runner's. `remote` says whether that is another
-  // machine, which is what the reveal (this machine's Finder) gates
-  // on. The controls gate on its grant.
-  const { remote, deviceId: runnerDeviceId } = useHostScope();
   const { canCommand: canControl } = useCommandAccess();
-  const runner = useDeviceName(runnerDeviceId);
-  const other = useDeviceName(otherDeviceId);
   // The worktree the session runs on, on the runner: the original. Its
   // .gitignore files are the tracked ones both copies hold, so the
   // ignore rule reads off it, and the history thread is keyed by it.
@@ -105,35 +115,27 @@ export function MirrorManageDialog({
     id: session.localWorktreeId,
     path: session.localRoot,
   };
-  const view = describeMirror(session);
   const controls = useMirrorControls();
-  const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
-  // This snapshot drives the WARNING only. The host re-reads the live
-  // status and decides, so a refusal it sends escalates to the discard
-  // wording here instead of dead-ending on a raw error.
-  const [refused, setRefused] = useState(false);
-  const discarding = !mirrorStopIsSafe(session.git?.status) || refused;
-  // Where the copy a stop removes is (the runner's peer) and who keeps
-  // the original (the runner). Either may be this machine.
-  const copyDeviceId = session.deviceId;
-  const keeperDeviceId = runnerDeviceId;
-  const copyName = useDeviceName(copyDeviceId);
-  const keeper = useDeviceName(keeperDeviceId);
-  const copyWhere = copyDeviceId === localDeviceId ? "here" : `on ${copyName}`;
+  const setIgnores = useSetMirrorIgnores();
+  const [stepping, setStepping] = useState<"manage" | "stop">("manage");
   // A session the runner lists as stopping is past its controls: the
   // engine has ended it and the copy is on its way out.
   const busy =
     session.stopping === true ||
     controls.pause.isPending ||
     controls.resume.isPending ||
-    controls.stop.isPending;
+    controls.stop.isPending ||
+    setIgnores.isPending;
+  // A halted session takes a resume too: the engine starts its loop
+  // again, which is the way out of a halt whose cause was put right.
+  const resumable = session.paused || isHaltedStatus(session.status);
   return (
     <ModalShell onClose={onClose} popoverClassName="max-w-3xl">
       <FlowHeader
         tint={TONE_PILL[view.tone]}
         icon={RefreshCw}
         spin={view.spinning}
-        title={`Mirror with ${other}`}
+        title={`Mirror with ${names.other}`}
         onClose={onClose}
       >
         <p className="flex min-w-0 items-center gap-1.5">
@@ -145,108 +147,232 @@ export function MirrorManageDialog({
               </span>
             }
           />
-          {view.detail !== "" && view.tone !== "rose" && (
-            <span className="min-w-0 truncate">({view.detail})</span>
-          )}
+          {/* Trouble is spelled out in the body (Notice), so the header
+              carries only the quiet lifecycle line. */}
+          {view.detail !== "" &&
+            view.tone !== "rose" &&
+            view.tone !== "amber" && (
+              <span className="min-w-0 truncate">({view.detail})</span>
+            )}
         </p>
       </FlowHeader>
 
-      <FlowBody>
-        <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="flex min-w-0 flex-col gap-5">
-            <Stats
-              session={session}
-              filesLabel={
-                runnerDeviceId === localDeviceId
-                  ? "Files here"
-                  : `Files on ${runner}`
-              }
-            />
-            <Notice session={session} view={view} canReveal={!remote} />
-            <Ignores
-              session={session}
-              worktree={worktree}
-              canControl={canControl}
-            />
-          </div>
-          <section className="space-y-2">
-            <SectionHeading>History</SectionHeading>
-            <HistoryList localWorktreeId={worktree.id} />
-          </section>
-        </div>
-      </FlowBody>
+      {stepping === "stop" ? (
+        <StopStep
+          session={session}
+          names={names}
+          onBack={() => setStepping("manage")}
+          onStopped={(removedCopy) => {
+            onClose();
+            onStopped(removedCopy);
+          }}
+        />
+      ) : (
+        <>
+          <FlowBody>
+            <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <div className="flex min-w-0 flex-col gap-5">
+                <Stats
+                  session={session}
+                  filesLabel={
+                    session.localRoot === revealUnder &&
+                    revealUnder !== undefined
+                      ? "Files here"
+                      : `Files on ${names.runner}`
+                  }
+                />
+                <Notice
+                  session={session}
+                  view={view}
+                  sides={sides}
+                  revealUnder={revealUnder}
+                />
+                <Ignores
+                  session={session}
+                  worktree={worktree}
+                  canControl={canControl}
+                  setIgnores={setIgnores}
+                />
+              </div>
+              <section className="space-y-2">
+                <SectionHeading>History</SectionHeading>
+                <HistoryList localWorktreeId={worktree.id} />
+              </section>
+            </div>
+          </FlowBody>
 
-      <FlowFooter
-        note={
-          !canControl
-            ? peerReadOnlyNote(runner)
-            : discarding
-              ? `Not confirmed in step with ${other}. Stopping removes the copy ${copyWhere}, and anything it holds that ${keeper} has not received goes with it.`
-              : `Stopping removes the copy ${copyWhere}. ${keeperDeviceId === localDeviceId ? "This device" : keeper} keeps its own.`
-        }
-      >
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          Close
-        </Button>
-        {canControl && (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                (session.paused ? controls.resume : controls.pause).mutate(
-                  session.session,
-                )
-              }
-            >
-              {session.paused ? <Play /> : <Pause />}
-              {session.paused ? "Resume" : "Pause"}
+          <FlowFooter
+            note={
+              !canControl
+                ? peerReadOnlyNote(names.runner)
+                : session.stopping === true
+                  ? `Removing the copy on ${names.copy}…`
+                  : undefined
+            }
+          >
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              Close
             </Button>
-            <Button
-              size="sm"
-              variant={armed ? "destructive" : "outline"}
-              aria-pressed={armed}
-              disabled={busy}
-              onClick={() =>
-                trigger(() =>
-                  controls.stop.mutate(
-                    // The second press is the override, after the
-                    // warning has named what goes.
-                    { session, force: discarding },
-                    {
-                      onSuccess: () => {
-                        onClose();
-                        onStopped();
-                      },
-                      // The host knew something this page did not.
-                      onError: (error) => {
-                        if (isMirrorStopUnconfirmed(error)) setRefused(true);
-                      },
-                    },
-                  ),
-                )
-              }
-            >
-              <Square />
-              {armed
-                ? discarding
-                  ? "Discard and stop?"
-                  : "Confirm stop?"
-                : "Stop"}
-            </Button>
-          </>
-        )}
-      </FlowFooter>
+            {canControl && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    (resumable ? controls.resume : controls.pause).mutate(
+                      session.session,
+                    )
+                  }
+                >
+                  {resumable ? <Play /> : <Pause />}
+                  {resumable ? "Resume" : "Pause"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline-destructive"
+                  disabled={busy}
+                  onClick={() => setStepping("stop")}
+                >
+                  <Square />
+                  Stop mirroring…
+                </Button>
+              </>
+            )}
+          </FlowFooter>
+        </>
+      )}
     </ModalShell>
   );
 }
 
-// Four figures, one glance: how long, how many cycles, how much the
+type StopChoice = "remove" | "keep";
+
+// The stop, as a choice of what becomes of the copy. Removing it is
+// offered plainly when the copy holds nothing the original lacks
+// (mirrorStopBlocker), and as a discard, saying why, when that is not
+// known: the choice then starts on keeping it. A refusal from the
+// runner (it looked again and found the copy not in step) lands here,
+// in place, and turns the remove into the discard. The verdict is read
+// off the session at the click, the same render the words came from.
+function StopStep({
+  session,
+  names,
+  onBack,
+  onStopped,
+}: {
+  session: MirrorSession;
+  names: MirrorNames;
+  onBack: () => void;
+  onStopped: (removedCopy: boolean) => void;
+}) {
+  const controls = useMirrorControls();
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const live = mirrorStopBlocker(session);
+  const blocker = refusal ?? live;
+  const [choice, setChoice] = useState<StopChoice>(
+    live === undefined ? "remove" : "keep",
+  );
+  const pending = controls.stop.isPending || session.stopping === true;
+  const discarding = choice === "remove" && blocker !== undefined;
+  const stop = () => {
+    const keepCopy = choice === "keep";
+    controls.stop.mutate(
+      {
+        session,
+        keepCopy,
+        force: discarding,
+        copyName: names.copy,
+      },
+      {
+        onSuccess: () => onStopped(!keepCopy),
+        onError: (error) => {
+          if (isMirrorStopUnconfirmed(error)) {
+            setRefusal(refusalReason(errorMessageOf(error)));
+          }
+        },
+      },
+    );
+  };
+  return (
+    <>
+      <FlowBody>
+        <div className="space-y-4">
+          <p className="text-sm">
+            Changes stop crossing between {names.runner} and {names.copy}.{" "}
+            {names.runner} keeps the original either way.
+          </p>
+          <div
+            role="radiogroup"
+            aria-label="What happens to the copy"
+            className="grid gap-2 sm:grid-cols-2"
+          >
+            <ChoiceCard
+              selected={choice === "remove"}
+              disabled={pending}
+              onSelect={() => setChoice("remove")}
+              title={`Remove the copy on ${names.copy}`}
+              tone={blocker === undefined ? undefined : "rose"}
+              body={
+                blocker === undefined
+                  ? `It holds nothing ${names.runner} doesn't have, so nothing is lost.`
+                  : `Not confirmed in step: ${blocker}. Anything only the copy holds is lost with it.`
+              }
+            />
+            <ChoiceCard
+              selected={choice === "keep"}
+              disabled={pending}
+              onSelect={() => setChoice("keep")}
+              title={`Keep the copy on ${names.copy}`}
+              badge={blocker === undefined ? undefined : "Safe"}
+              body="It stays a worktree of its own, on the same branch, and the two go their own ways from here."
+            />
+          </div>
+          {refusal !== null && (
+            <ErrorBanner>
+              {names.runner} looked again and the copy isn&rsquo;t confirmed in
+              step: {refusal}. Keep the copy, or remove it anyway.
+            </ErrorBanner>
+          )}
+        </div>
+      </FlowBody>
+      <FlowFooter>
+        <Button variant="ghost" size="sm" disabled={pending} onClick={onBack}>
+          <ArrowLeft />
+          Back
+        </Button>
+        <Button
+          size="sm"
+          variant={discarding ? "destructive" : "default"}
+          disabled={pending}
+          onClick={stop}
+        >
+          {pending && <Loader2 className="animate-spin" />}
+          {pending
+            ? "Stopping…"
+            : choice === "keep"
+              ? "Stop, keep the copy"
+              : discarding
+                ? "Remove the copy anyway"
+                : "Stop, remove the copy"}
+        </Button>
+      </FlowFooter>
+    </>
+  );
+}
+
+// The runner's reason out of its refusal ("<marker>: <reason>, so the
+// copy may hold…"), or the whole message when it is not that shape.
+function refusalReason(message: string): string {
+  const match = /: ([^,]+), so the copy/.exec(message);
+  return match?.[1] ?? message;
+}
+
+// Three figures, one glance: how long it has run, how much the
 // runner's copy holds, and whether git agrees. A paused session
-// reports no cycles, no files and git off, because the engine tears
-// its scan down while paused. Shown raw that reads as a mirror that
-// lost everything, so the three figures say "paused" until it resumes.
+// reports no files and git off, because the engine tears its scan
+// down while paused. Shown raw that reads as a mirror that lost
+// everything, so the figures say "paused" until it resumes.
 function Stats({
   session,
   filesLabel,
@@ -257,16 +383,13 @@ function Stats({
 }) {
   const git = gitVerdict(session.git);
   return (
-    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <dl className="grid grid-cols-3 gap-2">
       <Stat label="Started">
         {session.createdAt > 0 ? (
           <RelativeDate date={new Date(session.createdAt).toISOString()} />
         ) : (
           "just now"
         )}
-      </Stat>
-      <Stat label="Cycles" paused={session.paused}>
-        {session.successfulCycles.toLocaleString()}
       </Stat>
       <Stat label={filesLabel} paused={session.paused}>
         {session.local.files.toLocaleString()}
@@ -298,7 +421,7 @@ function Stat({
   return (
     <SimpleTooltip tip={tip}>
       <div className="min-w-0 rounded-lg bg-muted/40 px-3 py-2 leading-tight">
-        <dt className="text-3xs tracking-wide text-muted-foreground uppercase">
+        <dt className="truncate text-3xs tracking-wide text-muted-foreground uppercase">
           {label}
         </dt>
         <dd className="mt-0.5 truncate text-sm font-medium tabular-nums">
@@ -314,17 +437,19 @@ function Stat({
 }
 
 // The thing to act on, when there is one: a halt, an error, a git
-// verdict, or the conflicts held still. Nothing when the mirror is
-// fine. A conflict reveals in this machine's Finder, so only while the
-// runner (whose copy the paths are under) is this machine.
+// verdict, a lost link, or the conflicts held still. Nothing when the
+// mirror is fine. A conflict reveals in this machine's Finder, under
+// whichever side this machine holds.
 function Notice({
   session,
   view,
-  canReveal,
+  sides,
+  revealUnder,
 }: {
   session: MirrorSession;
   view: ReturnType<typeof describeMirror>;
-  canReveal: boolean;
+  sides: { original: string; copy: string };
+  revealUnder: string | undefined;
 }) {
   if (view.showConflicts) {
     return (
@@ -333,7 +458,8 @@ function Notice({
           session={session}
           tone={view.tone}
           label={view.label}
-          canReveal={canReveal}
+          sides={sides}
+          revealUnder={revealUnder}
         />
         <span className="text-xs text-muted-foreground">
           held still until one side matches the other
@@ -360,15 +486,19 @@ function Notice({
 // row appears, since the engine cannot re-configure a live session
 // (the host re-opens it). Read off the local copy: its .gitignore
 // files are the tracked ones both copies hold, and the picker browses
-// the folders that crossed.
+// the folders that crossed. Only on a pair in step: the re-opened
+// session starts with no shared history, so the host refuses it
+// otherwise, and the picker says so up front.
 function Ignores({
   session,
   worktree,
   canControl,
+  setIgnores,
 }: {
   session: MirrorSession;
   worktree: { projectId: string; id: string; path: string };
   canControl: boolean;
+  setIgnores: ReturnType<typeof useSetMirrorIgnores>;
 }) {
   const current = selectionOf(session);
   const [draft, setDraft] = useState<IgnoreSelection | null>(null);
@@ -377,7 +507,7 @@ function Ignores({
   const ignored = useWorktreeIgnoredPaths(worktree.projectId, worktree.id, {
     enabled: selection.base === "gitignored",
   });
-  const setIgnores = useSetMirrorIgnores();
+  const settled = mirrorFilesSettled(session);
   // A session whose patterns do not read back as its rule (another
   // client's) still takes an Apply, which rewrites it as drawn.
   const dirty =
@@ -400,12 +530,13 @@ function Ignores({
       disabled={!canControl || setIgnores.isPending}
     >
       {dirty && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             onClick={apply}
-            disabled={setIgnores.isPending || waiting}
+            disabled={setIgnores.isPending || waiting || !settled}
           >
+            {setIgnores.isPending && <Loader2 className="animate-spin" />}
             {setIgnores.isPending ? "Re-opening…" : "Apply"}
           </Button>
           <Button
@@ -417,7 +548,9 @@ function Ignores({
             Revert
           </Button>
           <span className="text-xs text-muted-foreground">
-            Re-opens the mirror.
+            {settled
+              ? "Re-opens the mirror."
+              : "Can change once the mirror is running and in step."}
           </span>
         </div>
       )}
@@ -441,7 +574,7 @@ const EVENT_LOOK: Record<
   recovered: { icon: Check, tone: "emerald", label: "Recovered" },
   conflict: { icon: AlertCircle, tone: "amber", label: "Conflict" },
   "git-diverged": { icon: GitBranch, tone: "amber", label: "Git diverged" },
-  "git-blocked": { icon: GitBranch, tone: "rose", label: "Git blocked" },
+  "git-blocked": { icon: GitBranch, tone: "amber", label: "Git waiting" },
   "git-error": { icon: GitBranch, tone: "rose", label: "Git error" },
   "git-synced": { icon: GitBranch, tone: "emerald", label: "Git in step" },
 };
