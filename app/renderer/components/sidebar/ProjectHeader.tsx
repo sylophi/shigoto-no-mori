@@ -27,6 +27,11 @@ interface ProjectHeaderProps {
   // Picked off the list.
   onToggle?: () => void;
   missing?: boolean;
+  // A relocation of the missing project is under way.
+  relocating?: boolean;
+  // Picking a missing project locates it, when it can be (not terrier's,
+  // and its device takes commands from here).
+  onLocate?: () => void;
   listeners?: DraggableSyntheticListeners;
   onContextMenu?: (event: React.MouseEvent) => void;
   arrangeMode?: boolean;
@@ -50,6 +55,8 @@ export function ProjectHeader({
   current,
   onToggle,
   missing,
+  relocating,
+  onLocate,
   listeners,
   onContextMenu,
   arrangeMode,
@@ -72,6 +79,15 @@ export function ProjectHeader({
       {project.name}
     </span>
   );
+  const missingBody = (
+    <>
+      {lead}
+      {name}
+      <span className="shrink-0 text-3xs font-medium tracking-normal text-muted-foreground/60 normal-case">
+        {relocating ? "locating…" : "missing"}
+      </span>
+    </>
+  );
   const trigger = arrangeMode ? (
     <div
       {...listeners}
@@ -89,16 +105,26 @@ export function ProjectHeader({
       {name}
     </div>
   ) : missing ? (
-    <div
-      onContextMenu={onContextMenu}
-      className={cn(baseClass, "text-muted-foreground/60")}
-    >
-      {lead}
-      {name}
-      <span className="shrink-0 text-3xs font-medium tracking-normal text-muted-foreground/60 normal-case">
-        missing
-      </span>
-    </div>
+    onLocate === undefined ? (
+      <div
+        onContextMenu={onContextMenu}
+        className={cn(baseClass, "text-muted-foreground/60")}
+      >
+        {missingBody}
+      </div>
+    ) : (
+      <button
+        type="button"
+        onClick={onLocate}
+        onContextMenu={onContextMenu}
+        className={cn(
+          baseClass,
+          "text-muted-foreground/60 transition-colors hover:text-muted-foreground",
+        )}
+      >
+        {missingBody}
+      </button>
+    )
   ) : expanded ? (
     <div
       onContextMenu={onContextMenu}

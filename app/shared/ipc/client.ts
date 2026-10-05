@@ -285,6 +285,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       add: (path: string) => projectsClient.add({ path }),
       clone: projectsClient.clone,
       remove: (id: string) => projectsClient.remove({ id }),
+      relocate: (id: string, path: string) =>
+        projectsClient.relocate({ id, path }),
       reorder: (input: {
         draggedId: string;
         targetId: string;

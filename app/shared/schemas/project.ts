@@ -120,6 +120,12 @@ export const RemoveProjectPayloadSchema = z.object({
   id: z.string().min(1),
 });
 
+// Points a project at where its repo lives now (`sm projects relocate`).
+export const RelocateProjectPayloadSchema = z.object({
+  id: z.string().min(1),
+  path: z.string().min(1),
+});
+
 export const ReorderProjectsPayloadSchema = z.object({
   draggedId: z.string().min(1),
   targetId: z.string().min(1),

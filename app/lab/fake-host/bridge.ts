@@ -297,6 +297,41 @@ function hostHandlersFor(
         )?.[0] ?? `remote:${normalizeRemoteUrl(url)}`;
       return registerProject(disk, forest, `${parent}/${folder}`, identity);
     },
+    // Points the project at a repo on the fake disk, the primary row
+    // with it, so a missing project (?missing=1) comes back.
+    "projects:relocate": ({ id, path }) => {
+      const resolved = resolveOnDisk(disk, path);
+      if (!isRepoOnDisk(disk, resolved)) {
+        throw new Error(`${resolved} is not a git repository`);
+      }
+      const taken = forest.projects.find((entry) => entry.path === resolved);
+      if (taken !== undefined) {
+        throw new Error(`${resolved} is already registered as ${taken.name}`);
+      }
+      const at = forest.projects.findIndex((entry) => entry.id === id);
+      const before = forest.projects[at];
+      if (before === undefined) throw new Error(`Unknown project: ${id}`);
+      // New objects, not edits: the query cache holds the old ones, and
+      // an edit in place would read to it as nothing changed.
+      const project = {
+        ...before,
+        name: resolved.slice(resolved.lastIndexOf("/") + 1),
+        path: resolved,
+        pathExists: true,
+      };
+      forest.projects[at] = project;
+      const worktrees = forest.worktrees[id] ?? [];
+      const primary = worktrees.findIndex((worktree) => worktree.isPrimary);
+      const primaryRow = worktrees[primary];
+      if (primaryRow !== undefined) {
+        worktrees[primary] = {
+          ...primaryRow,
+          name: project.name,
+          path: resolved,
+        };
+      }
+      return project;
+    },
     "projects:cloneUrl": ({ projectId }) => {
       const identity = forest.projects.find(
         (project) => project.id === projectId,
@@ -1181,6 +1216,40 @@ function initCrowd(): void {
   });
 }
 
+// ?missing=1: a project on Studio Mac whose repo was moved by hand, so
+// the sidebar lists it as missing. The repo sits under ~/dev now, for
+// Locate… to find.
+function initMissing(): void {
+  const local = forests[LOCAL_DEVICE_ID];
+  const disk = fakeDisks[LOCAL_DEVICE_ID];
+  const pose = new URLSearchParams(location.search);
+  if (pose.get("missing") !== "1" || local === undefined || !disk) return;
+  disk.dirs["/Users/rin/dev"]?.push({ name: "tanuki-notes", isGitRepo: true });
+  // Listed, so the folder picker can open it.
+  disk.dirs["/Users/rin/dev/tanuki-notes"] = [];
+  const path = "/Users/rin/projects/tanuki-notes";
+  local.projects.push({
+    id: "p_missing",
+    name: "tanuki-notes",
+    path,
+    pathExists: false,
+    identity: null,
+    remote: null,
+    lastUsed: Date.now() - 9 * 86_400_000,
+    recentCount: 0,
+  });
+  local.worktrees["p_missing"] = [
+    worktreeFixture({
+      id: "wt_missing",
+      projectId: "p_missing",
+      name: "tanuki-notes",
+      branch: "main",
+      path,
+      isPrimary: true,
+    }),
+  ];
+}
+
 // A pose's comma-separated device keys, into their ids.
 function posedDevices(keys: string, into: Set<string>): void {
   for (const key of keys.split(",")) {
@@ -1219,6 +1288,7 @@ export function installFakeHostBridge(
     new URLSearchParams(location.search).get("villageLife") === "1";
   initPresence();
   initCrowd();
+  initMissing();
   // Remote hosts: one fixture wire per device, reached only through
   // hub:invokePeer exactly like the real hub bridge, and broadcasting
   // the way it delivers a peer's: as a peer push on the client wire.

@@ -11,7 +11,11 @@
 import { unknownProjectError } from "@shared/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import type { Project, ProjectRow } from "@shared/schemas";
-import { listProjectsViaCli, projectsAddViaCli } from "@host/ipc/cliDelegate";
+import {
+  listProjectsViaCli,
+  projectsAddViaCli,
+  projectsRelocateViaCli,
+} from "@host/ipc/cliDelegate";
 import {
   findWorktreeIdentityOrThrow,
   listWorktreeIdentities,
@@ -70,6 +74,17 @@ function toProject(row: ProjectRow): Project {
     path: row.path,
     ...(row.source === undefined ? {} : { source: row.source }),
   };
+}
+
+// Points a project at its moved repo (`sm projects relocate`), then
+// re-reads the list for the same reason as registerProject.
+export async function relocateProject(
+  id: string,
+  path: string,
+): Promise<Project> {
+  const project = await projectsRelocateViaCli(id, path);
+  await refreshProjects();
+  return project;
 }
 
 // The last-read list, for the sync callers. Empty until the first

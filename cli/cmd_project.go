@@ -1,6 +1,6 @@
 package main
 
-// sm projects <list|add|remove|config>: manage registered projects
+// sm projects <list|add|remove|relocate|config>: manage registered projects
 // without the app. `add` ports the app's projects:add handler
 // (host/ipc/modules/projects.ts): git-repo check, duplicate-path
 // check, uuid + basename identity, locked registry append, then a
@@ -34,12 +34,14 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 		return cmdProjectAdd(ctx, args[1:])
 	case "remove":
 		return cmdProjectRemove(ctx, args[1:])
+	case "relocate":
+		return cmdProjectRelocate(ctx, args[1:])
 	case "config":
 		return cmdConfig(ctx, args[1:])
 	case "reorder":
 		return cmdProjectReorder(ctx, args[1:])
 	default:
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s projects <list|add|remove|reorder|config|icon> [args]", args[0], binaryName)
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s projects <list|add|remove|relocate|reorder|config|icon> [args]", args[0], binaryName)
 	}
 }
 
@@ -270,7 +272,15 @@ func keepUnlisted(order, stored []string) []string {
 
 // Best-effort, like the rest of `projects remove`'s cleanup.
 func dropFromProjectOrder(path string) {
-	_ = updateRegistryKey(projectOrderKey, func(raw json.RawMessage) (any, error) {
+	editProjectOrder(path, func(order []string, i int) []string {
+		return slices.Delete(order, i, i+1)
+	})
+}
+
+// Edits the stored manual order where it holds path, and writes nothing
+// when it doesn't. Best-effort: the order only places projects.
+func editProjectOrder(path string, edit func(order []string, i int) []string) {
+	err := updateRegistryKey(projectOrderKey, func(raw json.RawMessage) (any, error) {
 		var order []string
 		if err := decodeKey(registryPath(), projectOrderKey, raw, &order); err != nil {
 			return nil, err
@@ -279,8 +289,11 @@ func dropFromProjectOrder(path string) {
 		if i < 0 {
 			return nil, nil
 		}
-		return slices.Delete(order, i, i+1), nil
+		return edit(order, i), nil
 	})
+	if err != nil {
+		vlog("[project] order: %v", err)
+	}
 }
 
 // The stored manual order over the merged list: the projects it names

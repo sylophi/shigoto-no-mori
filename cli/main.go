@@ -132,6 +132,11 @@ var projectItems = []helpItem{
 		"Worktrees stay on disk. Prompts for confirmation (--yes skips). " +
 			"When two projects share a name, remove by path (which also " +
 			"reaches an entry whose repo has since moved away)."},
+	{"projects relocate [<name-or-path>] <new-path>", "Point a project at its moved repo",
+		"For a repo moved or renamed by hand: refused while the old path is still there. The project keeps its config and state, " +
+			"and its worktrees are reconnected to the repo (`git worktree repair`), including any that moved with it. " +
+			"After a rename, managed worktrees move to the folder named after the new one. " +
+			"--json prints {ok, project}, project being a `projects list` row."},
 	{"projects reorder --ids <id1,id2,...>", "Reorder projects",
 		"App plumbing for the sidebar's drag-to-reorder: the listed ids move to the front in that order, the rest keep their order after them. Terrier-only projects reorder like any other. Stale ids are ignored, and an unchanged order writes nothing. --json prints {ok}."},
 	{"projects config [<command>] [args]",

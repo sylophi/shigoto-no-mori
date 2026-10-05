@@ -1,5 +1,6 @@
 import {
   queryOptions,
+  useIsMutating,
   useMutation,
   useQuery,
   useQueryClient,
@@ -7,7 +8,11 @@ import {
 import { useRouter } from "@tanstack/react-router";
 import type { CloneProjectPayload, Project } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
-import { hostKeyDeviceId, queryKeysFor } from "@/lib/queryKeys";
+import {
+  hostKeyDeviceId,
+  queryKeysFor,
+  worktreeQueriesOn,
+} from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   resolveForestScope,
@@ -112,6 +117,38 @@ export function useRemoveProject() {
     meta: { errorTitle: "Couldn't remove project" },
   });
 }
+
+// Points a project at where its repo lives now, after it was moved or
+// renamed by hand. The id stays, so the project's own queries refetch
+// against the new path along with the list.
+export function useRelocateProject(id: string) {
+  const queryClient = useQueryClient();
+  const { api, deviceId, keys } = useHostScope();
+  return useMutation<Project, Error, string>({
+    mutationKey: relocateProjectKey(deviceId, id),
+    mutationFn: (path) => api.projects.relocate(id, path),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.projects() }),
+        // Any host key naming the id: the one predicate that sweeps a
+        // worktree's queries sweeps a project's just as well.
+        queryClient.invalidateQueries({
+          predicate: worktreeQueriesOn(deviceId, id),
+        }),
+      ]),
+    meta: { errorTitle: "Couldn't locate the project" },
+  });
+}
+
+// Whether a relocation of the project is running on that device. The
+// picker that started it has closed by then, and the project reads as
+// missing until the list refetches.
+export function useRelocatingProject(deviceId: string, id: string): boolean {
+  return useIsMutating({ mutationKey: relocateProjectKey(deviceId, id) }) > 0;
+}
+
+const relocateProjectKey = (deviceId: string, id: string) =>
+  ["relocateProject", deviceId, id] as const;
 
 export function useReorderProjects() {
   const queryClient = useQueryClient();

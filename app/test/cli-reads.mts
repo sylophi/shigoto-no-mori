@@ -28,6 +28,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -444,6 +445,39 @@ async function main() {
         ctx,
       );
       assert.ok(doubutsuNames.names.includes(picked), `picked ${picked}`);
+    },
+  );
+
+  await check(
+    "projects: relocate points a project moved by hand at its new path and keeps its id",
+    async (track) => {
+      const gamma = makeRepo("gamma");
+      const added = await projectsHandlers.add({ path: gamma }, ctx);
+      track(() => projectsHandlers.remove({ id: added.id }, ctx));
+      const moved = join(sandbox, "gamma-moved");
+      renameSync(gamma, moved);
+      const missing = (await projectsHandlers.list(undefined, ctx)).find(
+        (p) => p.id === added.id,
+      );
+      assert.equal(missing?.pathExists, false);
+      const relocated = await projectsHandlers.relocate(
+        { id: added.id, path: moved },
+        ctx,
+      );
+      assert.equal(relocated.id, added.id);
+      assert.equal(relocated.path, moved);
+      assert.equal(relocated.name, "gamma-moved");
+      const row = (await projectsHandlers.list(undefined, ctx)).find(
+        (p) => p.id === added.id,
+      );
+      assert.equal(row?.path, moved);
+      assert.equal(row.pathExists, true);
+      assert.equal((await findProjectOrThrow(added.id)).path, moved);
+      await assert.rejects(
+        async () =>
+          projectsHandlers.relocate({ id: added.id, path: sandbox }, ctx),
+        /not a git repository/,
+      );
     },
   );
 
