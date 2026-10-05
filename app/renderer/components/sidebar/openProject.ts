@@ -54,11 +54,7 @@ export function useOpenProject(
   onScreenKey: string | undefined;
 } {
   const { key, followed } = useExternalStore(store);
-  // One selected value per param, so stepping through a worktree's
-  // commits or consoles re-renders nobody here.
-  const deviceId = useParams({ strict: false, select: (p) => p.deviceId });
-  const projectId = useParams({ strict: false, select: (p) => p.projectId });
-  const worktreeId = useParams({ strict: false, select: (p) => p.worktreeId });
+  const { deviceId, projectId, worktreeId } = usePageOnScreen();
   const page =
     deviceId === undefined || projectId === undefined
       ? null
@@ -75,6 +71,20 @@ export function useOpenProject(
     }
   });
   return { openKey: following ? onScreenKey : key, onScreenKey };
+}
+
+// The device, project and worktree the page on screen belongs to, as
+// the route names them. One selected value per param, so stepping
+// through a worktree's commits or consoles re-renders nobody.
+export function usePageOnScreen(): {
+  deviceId: string | undefined;
+  projectId: string | undefined;
+  worktreeId: string | undefined;
+} {
+  const deviceId = useParams({ strict: false, select: (p) => p.deviceId });
+  const projectId = useParams({ strict: false, select: (p) => p.projectId });
+  const worktreeId = useParams({ strict: false, select: (p) => p.worktreeId });
+  return { deviceId, projectId, worktreeId };
 }
 
 function groupKeyOnScreen(

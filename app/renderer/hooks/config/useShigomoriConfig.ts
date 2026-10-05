@@ -8,6 +8,14 @@ import {
 } from "@/hooks/worktrees/useWorktrees";
 import { queryKeysFor } from "@/lib/queryKeys";
 
+// A project's primary opt-in off its config query's data: undefined
+// while the config is unread, and false for a project with no config.
+export function showPrimaryInInbox(
+  config: ShigomoriConfig | null | undefined,
+): boolean | undefined {
+  return config === undefined ? undefined : config?.showPrimaryInInbox === true;
+}
+
 // Scope rule as worktreesQueryOptions: a peer's config caches under its
 // own device id, and a device with no session never fetches.
 export function shigomoriConfigQueryOptions(
