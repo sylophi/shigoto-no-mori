@@ -9,7 +9,7 @@ export const navContract = defineContract("client", {
   // renderer takes it below, so a link that lands before the renderer
   // listens (one that launched the app) is not lost.
   deepLink: broadcast("nav:deepLink", z.void()),
-  // The pending deep link's path (`/projects/<id>/worktrees/<id>`,
+  // The pending deep link's path (`/devices/<id>/projects/<id>/...`,
   // the part after `<scheme>://open`), or null. Taking clears it.
   takeDeepLink: invoke("nav:takeDeepLink", z.void(), z.string().nullable()),
 });
