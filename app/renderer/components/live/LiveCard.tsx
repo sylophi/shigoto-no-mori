@@ -444,13 +444,22 @@ export function LiveLine({
     </>
   );
   return (
-    <li className="flex min-h-10 items-center gap-1 rounded-md bg-muted/60 pr-1.5 text-sm">
+    // The whole line takes the hover, its buttons included, so a line
+    // that opens reads as one row rather than a row beside its buttons.
+    <li
+      data-slot={onOpen ? "live-line" : undefined}
+      className={cn(
+        "group/line flex min-h-10 items-center gap-1 rounded-md bg-muted/60 pr-1.5 text-sm transition-colors",
+        onOpen && "hover:bg-accent/70",
+      )}
+    >
       {onOpen ? (
         <button
           type="button"
+          data-slot="live-line-open"
           aria-label={openLabel}
           onClick={onOpen}
-          className="group/line flex min-h-10 min-w-0 flex-1 items-center gap-2.5 rounded-md pl-3 text-left transition-colors outline-none hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-h-10 min-w-0 flex-1 items-center gap-2.5 rounded-md pl-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {body}
           <ChevronRight
