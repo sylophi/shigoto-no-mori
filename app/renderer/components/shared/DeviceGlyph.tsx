@@ -3,7 +3,7 @@
 // that glyph on a tinted tile in the device's connection tone
 // (DeviceMark). Every surface that stands for a machine (the sidebar's
 // badges, the filter pills, the device tabs and chips, the settings
-// list, the Devices page, the pull flow's two ends) draws through
+// list, the account page, the pull flow's two ends) draws through
 // these, so a machine looks the same everywhere and a picked icon
 // lands everywhere at once. The icon comes from the device's own
 // answer (shared/account/deviceIcon.ts), never from guessing at the
@@ -163,7 +163,7 @@ export function DeviceLead({
 // The glyph on a tile washed in the device's connection tone, drawn
 // through the shared TONE_PILL table so a mark and a dot can never
 // disagree about a machine. Two sizes: the row badge the sidebar wears
-// and the avatar that anchors a row on the Devices page.
+// and the avatar that anchors a row on the account page.
 export function DeviceMark({
   icon,
   tone,

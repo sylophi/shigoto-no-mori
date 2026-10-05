@@ -121,7 +121,7 @@ export const accountContract = defineContract("client", {
   // Fan-out after the command-access switch flips (or the account
   // under it changes), carrying the switch. Kept separate from
   // `changed` so the toggle does not thrash the account status and
-  // device queries: the Devices page refreshes only the switch's query
+  // device queries: the account page refreshes only the switch's query
   // on this. The one client-scoped broadcast tagged remote, because the
   // switch is this host's answer to its peers: the direct listener
   // pushes it to every connected peer too, whose bridge records it as

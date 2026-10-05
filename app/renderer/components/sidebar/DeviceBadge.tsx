@@ -2,7 +2,7 @@
 // contributing device on project headers, and the single-mark form on
 // remote worktree rows. The mark is the device's glyph on a tile in
 // its connection tone (shared/DeviceGlyph.tsx DeviceMark), the same
-// tile its row wears on the devices page, so a badge and a dot can
+// tile its row wears on the account page, so a badge and a dot can
 // never disagree about a machine, and the name rides the tooltip.
 import { RefreshCw } from "lucide-react";
 import type { DeviceIcon } from "@shared/account/deviceIcon";

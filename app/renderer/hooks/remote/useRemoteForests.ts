@@ -71,7 +71,7 @@ export interface RemoteForestItem {
   // hiding work that still exists on that machine.
   reachable: boolean;
   // The device's connection tone, so a badge for it reads the same as
-  // its chip on the devices page.
+  // its chip on the account page.
   tone: StatusTone;
   project: Project;
   worktrees: Worktree[];

@@ -3,7 +3,7 @@
 // calls window.api directly: the listener belongs to THIS machine, only
 // its target is the named device. The list caches under one client key
 // for all devices, and these hooks filter to the one asked for, so both
-// the devices page's per-peer section and the worktree detail's port
+// the account page's per-peer section and the worktree detail's port
 // rows render off the same query and the same error wording.
 //
 // The device is a plain argument, not a read off the surrounding host
@@ -36,7 +36,7 @@ export const canForwardPorts = hasLocalHost;
 // renderer/hooks/account/useAccount.ts).
 //
 // Subscribed ONCE at boot (renderer/boot.tsx), not per consumer: the
-// devices page mounts a forward surface per peer, and a subscription
+// account page mounts a forward surface per peer, and a subscription
 // each would turn one engine signal into N invalidations of the same
 // key. Those do not collapse, since invalidateQueries cancels and
 // restarts an in-flight refetch by default. The engine already

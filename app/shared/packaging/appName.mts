@@ -84,7 +84,7 @@ export function devProfileUserData(
 
 // What a profile adds to the app name (menu bar label, safeStorage
 // item) and to the default device name, so two profiles enrolled from
-// one machine are telling apart on the Devices page. One spelling for
+// one machine are telling apart on the account page. One spelling for
 // both consumers (main/electron/devProfile.ts).
 export function devProfileNameSuffix(profile: string): string {
   return ` [${profile}]`;

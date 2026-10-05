@@ -1,4 +1,4 @@
-// A device's icon, picked in place: the mark on its Devices page row
+// A device's icon, picked in place: the mark on its account page row
 // is the trigger, and the menu lays out every icon the catalog has
 // (shared/account/deviceIcon.ts) as one grid of tiles: the device
 // shapes as the first row, with what the device detected about itself

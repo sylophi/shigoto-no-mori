@@ -14,6 +14,7 @@ import { useAccountStatus } from "@/hooks/account/useAccount";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
+import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
@@ -102,15 +103,18 @@ function UnreachableBanner({ device }: { device: RemoteDevice | undefined }) {
   );
 }
 
+// The account page lists every device with its state. A hostless
+// client calls it Devices: there it is the home page, not a section of
+// Settings.
 function OpenDevicesButton() {
   const navigate = useNavigate();
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void navigate({ to: "/devices" })}
+      onClick={() => void navigate({ to: "/account" })}
     >
-      Open Devices
+      {hasLocalHost ? "Open account page" : "Open Devices"}
     </Button>
   );
 }

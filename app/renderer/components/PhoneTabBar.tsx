@@ -1,14 +1,13 @@
 // The phone layout's primary navigation: the sidebar's two views and
 // the two places its footer cluster reaches on a wide viewport, as
 // thumb-sized tabs along the bottom edge. A tab lights on its page
-// exactly (the rule NavIconButton follows: a worktree under
-// /devices/$deviceId is ordinary work, not a device page), and for
-// everything else the forest tab the layout preference names lights,
-// since every other page is reached from one of them (the forest page
-// keeps that preference in step with its route). v1 draws a card band
-// with an accent pill on the current tab. The data-slot hooks let
-// doubutsu restyle the bar as a cream tray with a leaf-green sticker
-// on the current tab (doubutsu.css).
+// exactly (the rule NavIconButton follows), and for everything else
+// the forest tab the layout preference names lights, since every other
+// page is reached from one of them (the forest page keeps that
+// preference in step with its route). v1 draws a card band with an
+// accent pill on the current tab. The data-slot hooks let doubutsu
+// restyle the bar as a cream tray with a leaf-green sticker on the
+// current tab (doubutsu.css).
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   Inbox,
@@ -29,7 +28,7 @@ type Tab = {
   pathname: string;
   to:
     | { to: "/forest/$view"; params: { view: SidebarView } }
-    | { to: "/devices" | "/settings" };
+    | { to: "/account" | "/settings" };
 };
 
 const forestTab = (
@@ -49,8 +48,8 @@ const TABS: readonly [Tab, ...Tab[]] = [
   {
     label: "Devices",
     icon: MonitorSmartphone,
-    pathname: "/devices",
-    to: { to: "/devices" },
+    pathname: "/account",
+    to: { to: "/account" },
   },
   {
     label: "Settings",

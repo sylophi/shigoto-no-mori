@@ -6,7 +6,7 @@ import { installFakeHostBridge } from "./bridge";
 import { applyPose } from "./pose";
 
 // The shared theme pose (pose.ts). This entry also answers
-// ?peers (bridge.ts) and ?to=/devices, the memory-router route
+// ?peers (bridge.ts) and ?to=/account, the memory-router route
 // applied after mount.
 applyPose();
 

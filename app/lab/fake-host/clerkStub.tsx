@@ -28,7 +28,7 @@ export function useAuth() {
   };
 }
 
-// The profile the Devices page names the account by. Only the fields
+// The profile the account page names the account by. Only the fields
 // useAccountIdentity reads.
 export function useUser() {
   return {

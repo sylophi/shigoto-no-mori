@@ -149,7 +149,7 @@ export function apiFor(deviceId: string): RemoteDeviceApi {
 }
 
 // Re-reads the shared list whether or not an observer is mounted (an
-// invalidation alone would refetch only under the devices page). The
+// invalidation alone would refetch only under the account page). The
 // landing reconciles through the cache subscription. A failure is
 // swallowed there and the store keeps the last good list.
 function refetchDeviceList(): void {
@@ -447,7 +447,7 @@ export function startRemoteDeviceSync(
   });
   // Every list change reconciles from here, this module's own refetches
   // included, alongside everyone else's landing in the shared cache (a
-  // window focus, the devices page mounting, an invalidation from
+  // window focus, the account page mounting, an invalidation from
   // anywhere). Rebuilding off the cache is the only way a peer's rename
   // or its removal from the account reaches this store at all: the hub
   // pushes neither, so nothing on the wire will ever say so.

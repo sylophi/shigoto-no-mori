@@ -141,7 +141,7 @@ export function useAccountSignOut() {
 // command-access write it does not invalidate itself: main broadcasts
 // account:changed after the revoke, and the watcher above turns it
 // into the invalidation. Self-revoke is not
-// offered by the devices page -- this device signs out instead, so the
+// offered by the account page -- this device signs out instead, so the
 // Clerk session ends first and ClerkAccountSync cannot re-enroll it
 // back onto the account.
 export function useRevokeDevice() {

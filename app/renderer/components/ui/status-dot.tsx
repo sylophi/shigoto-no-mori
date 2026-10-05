@@ -16,7 +16,7 @@ const TONE_BG: Record<StatusTone, string> = {
 };
 
 // The same tones as plain text, for a status word set inline in a
-// metadata line (the status word opening a row on the devices page),
+// metadata line (the status word opening a row on the account page),
 // where a pill would be one box too many. Kept beside TONE_BG so a new
 // tone can only be added in one place.
 export const TONE_TEXT: Record<StatusTone, string> = {
@@ -29,7 +29,7 @@ export const TONE_TEXT: Record<StatusTone, string> = {
 
 // The same tones as a tinted pill: the text above over a background
 // wash, for the badges that carry a status rather than dotting it (the
-// sidebar's device badges, the devices page's device mark). Composed
+// sidebar's device badges, the account page's device mark). Composed
 // from TONE_TEXT so the two can never disagree.
 export const TONE_PILL: Record<StatusTone, string> = {
   emerald: `bg-emerald-500/10 ${TONE_TEXT.emerald}`,

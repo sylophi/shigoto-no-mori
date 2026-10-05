@@ -90,7 +90,7 @@ export function useWorktrees(projectId: string | null) {
 // Projecting to the fields consumers read routes it through
 // replaceEqualDeep, which keeps identity when nothing changed.
 // Freshness overrides for a consumer that tolerates stale counts (the
-// devices page's chips) and must not re-list every project on mount or
+// account page's chips) and must not re-list every project on mount or
 // focus. Empty for everyone else, who keep the query's own defaults.
 export type WorktreeFanOutRefetch = {
   staleTime?: number;

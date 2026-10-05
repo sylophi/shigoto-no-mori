@@ -426,7 +426,7 @@ export function createWorker(deps: HubDeps): HubWorker {
         const evict = stalestFirst.find((id) => !online.has(id));
         if (evict === undefined) {
           return jsonError(409, {
-            error: `this account already has ${MAX_ACCOUNT_DEVICES} devices online, remove one from the Devices page first`,
+            error: `this account already has ${MAX_ACCOUNT_DEVICES} devices online, remove one from the account page first`,
           });
         }
         try {

@@ -26,7 +26,7 @@ const DAY = 24 * HOUR;
 
 // Stand-in project icons: a rounded tile with the repo's initial, so
 // the surfaces that draw project icons (sidebar headers, the device
-// chips on /devices) show one without a real repo behind them. Keyed by
+// chips on /account) show one without a real repo behind them. Keyed by
 // name, so the same repo wears the same icon on every device. t3code is
 // left out on purpose to pose the generated tile beside the others.
 const ICON_HUE: Record<string, number> = {

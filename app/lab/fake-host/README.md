@@ -47,11 +47,11 @@ Open one with weblab's `new`, the worktree's port as the address.
 stand for them:
 
 ```json
-{ "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/devices" }
+{ "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/account" }
 ```
 
 ```json
-{ "name": "phone", "address": 4753, "start": "pnpm fake-host:web", "path": "/devices?theme=light", "viewport": "390x844@3" }
+{ "name": "phone", "address": 4753, "start": "pnpm fake-host:web", "path": "/account?theme=light", "viewport": "390x844@3" }
 ```
 
 Then pose and capture with `run` (`../weblab.md` lists what it can
@@ -114,8 +114,8 @@ Poses ride the URL:
   `required-partial`, `requested`, `commented`. Absent, it has none
   and no review rule, so the reviews chip stays away. Pairs with
   `?checks=` (`?checks=pending&reviews=required`).
-- Desktop: `?to=/devices` navigates the memory router after mount. Web:
-  the path itself is the route (`/devices/...`).
+- Desktop: `?to=/account` navigates the memory router after mount. Web:
+  the path itself is the route (`/account`, `/devices/...`).
 - `?villageLife=1`: Village life on in this window's settings (the
   desktop's: the web shell has none). Off by default, as a fresh
   install has it.

@@ -2,7 +2,7 @@
 // when there are two words, else the first two letters. Enough to tell
 // an account's handful of machines apart, with the full name on hover.
 // One rule for every mark that stands in for a device (the sidebar's
-// badges, the devices page's avatar), so two surfaces can never
+// badges, the account page's avatar), so two surfaces can never
 // abbreviate the same machine differently. Only letters and digits
 // count, so "Mac (work)" reads MW rather than "M(".
 export function deviceAbbrev(label: string): string {

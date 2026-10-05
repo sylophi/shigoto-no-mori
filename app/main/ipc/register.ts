@@ -174,7 +174,7 @@ const tunnelRunner = createCloudflaredRunner({
   // launch. A getter because userData is an app-ready fact.
   pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
   // Tunnel state rides the same status snapshot the device hub and
-  // direct transitions feed, so the devices page updates live.
+  // direct transitions feed, so the account page updates live.
   onChange: () => directPlane.notifyStatusChanged(),
 });
 

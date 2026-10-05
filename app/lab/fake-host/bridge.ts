@@ -1075,7 +1075,7 @@ const FAKE_DETECTED = [
 // ---- account and presence state the fake host can change ----
 
 // Whether Studio Mac accepts commands from the account's other devices
-// (the devices page switch on this device's row).
+// (the account page switch on this device's row).
 let acceptsCommands = true;
 // Devices revoked in this fake host session: the fixture registry is static,
 // so the revoke handler records the id here and the list filters it.

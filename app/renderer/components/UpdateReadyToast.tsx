@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useState } from "react";
-import { useLocation } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
 import { ChangelogDialog } from "@/components/settings/ChangelogDialog";
+import { useOnSettingsPages } from "@/components/settings/SettingsSidebarNav";
 import { Button } from "@/components/ui/button";
 import { useOutdatedDevices, useUpdateAll } from "@/hooks/system/useUpdater";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
@@ -36,9 +36,7 @@ export function UpdateReadyToast() {
   const { mutate: updateAll, isPending: updating } = useUpdateAll(outdated);
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const onSettings = useLocation({
-    select: (location) => location.pathname === "/settings",
-  });
+  const onSettings = useOnSettingsPages();
 
   const deviceIds = Object.keys(outdated);
   const behind = deviceIds.length > 0;

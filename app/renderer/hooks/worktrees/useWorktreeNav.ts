@@ -136,7 +136,7 @@ export function useWorktreeNav() {
     // Where "leave this worktree's pages" lands. The root for every
     // device: a peer's worktree has no place of its own to fall back
     // to, and the root is the merged tree's home either way (the web
-    // shell's root dispatches to /devices).
+    // shell's root dispatches to /account).
     toFallback(replace = false) {
       void navigate({ to: "/", replace });
     },
