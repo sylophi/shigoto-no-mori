@@ -461,8 +461,12 @@ export function useMirrorControls() {
       quietVillagerMoves([session.worktreeId]);
       return api.mirror.stop(session.session, force);
     },
-    onSuccess: (_data, { copyName }) => {
-      toast.success(`Mirror stopped. The copy on ${copyName} is removed.`);
+    onSuccess: (result, { copyName }) => {
+      toast.success(
+        result?.removedCopy === false
+          ? `Mirror stopped. The original is gone, so the copy on ${copyName} stays.`
+          : `Mirror stopped. The copy on ${copyName} is removed.`,
+      );
     },
     onError: (error, { copyName }) => {
       if (isMirrorStopUnconfirmed(error)) return;
@@ -474,10 +478,11 @@ export function useMirrorControls() {
       }
       notifyError("Couldn't stop mirroring", error);
     },
-    onSettled: (_data, error, { session }) => {
+    onSettled: (result, error, { session }) => {
       // A copy that stayed was still the mirror stopping.
       if (error !== null && !isMirrorCopyStayed(error)) return;
-      if (error === null && session.deviceId === localDeviceId) {
+      const removed = error === null && result?.removedCopy !== false;
+      if (removed && session.deviceId === localDeviceId) {
         forgetDeletedWorktree(
           queryClient,
           localDeviceId,

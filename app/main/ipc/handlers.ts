@@ -63,17 +63,19 @@ import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
 import {
   currentMirrorList,
-  endMirrorIfCopyGone,
   mirrorHandlers,
+  setMirrorGitAppliedListener,
   setMirrorGitChangedListener,
   setMirrorImpl,
   setMirrorServingListener,
 } from "@host/ipc/modules/mirror";
 import {
   endLegacyMirrors,
+  endMirrorsIntoGoneCopy,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
   settleMirrorBookkeeping,
+  whileRecreating,
   isOrphanedTransfer,
   mirrorSessions,
 } from "@host/mirror/registry";
@@ -366,9 +368,14 @@ const gitFollower = createGitFollower({
     broadcastMirrorChanged();
     observeMirrorHistory();
   },
-  // A copy the follower cannot read may be gone behind this device's
-  // back: a copy no longer listed ends its session.
-  onPeerUnreachable: (session) => void endMirrorIfCopyGone(session),
+  // The peer says the session's copy is gone, behind this device's
+  // back: its session ends (the original keeps its own).
+  onCopyGone: (session) =>
+    void endMirrorsIntoGoneCopy(
+      session.deviceId,
+      session.projectId,
+      session.worktreeId,
+    ),
   // A pull it applied here is a ref move the git watcher skips as the
   // app's own: announced like one, so the pages showing it refetch.
   onLocalApplied: (projectId) => announceProjectChanged(projectId),
@@ -590,19 +597,29 @@ export function registerIpcHandlers(): void {
     // the mirror as it was instead of gone with no way to re-open it.
     // The agreement moves to the new id, so the follower picks up
     // where it was instead of starting from the no-agreement fallback.
-    recreate: async (session, input) => {
-      await mirrorDaemon.pause(session);
-      let next: string;
-      try {
-        next = await mirrorDaemon.create(input);
-      } catch (error) {
-        await mirrorDaemon.resume(session).catch(() => {});
-        throw error;
-      }
-      await mirrorDaemon.terminate(session);
-      gitFollower.rename(session, next);
-      return next;
-    },
+    // Held as recreating throughout, so the leftover sweep
+    // (registry.ts settleMirrorBookkeeping) does not end the old
+    // session under it. An old session already gone by the terminate
+    // was ended all the same.
+    recreate: (session, input) =>
+      whileRecreating(session, async () => {
+        await mirrorDaemon.pause(session);
+        let next: string;
+        try {
+          next = await mirrorDaemon.create(input);
+        } catch (error) {
+          await mirrorDaemon.resume(session).catch(() => {});
+          throw error;
+        }
+        await mirrorDaemon.terminate(session).catch((error: unknown) => {
+          const stillThere = mirrorDaemon
+            .sessions()
+            .some((raw) => raw.session === session);
+          if (stillThere) throw error;
+        });
+        gitFollower.rename(session, next);
+        return next;
+      }),
     terminate: async (session) => {
       try {
         await mirrorDaemon.terminate(session);
@@ -638,6 +655,9 @@ export function registerIpcHandlers(): void {
   setMirrorGitChangedListener((change) =>
     broadcastAll(mirrorContract, "gitChanged", change),
   );
+  // A peer's follower landed its side here (a push into a copy): the
+  // pages showing the project refetch, as for the follower's own pulls.
+  setMirrorGitAppliedListener(announceProjectChanged);
   // The follower's peer-side signals: a peer's git state moved (its
   // git-directory watcher) or a served worktree's index did. And a
   // peer's worktree gone, which ends the mirrors into it running here.

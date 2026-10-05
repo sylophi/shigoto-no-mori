@@ -411,15 +411,7 @@ const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
   force: z.boolean().optional(),
 });
 
-// The git half of the stop's safety, shared by the host that enforces
-// it and the dialog that warns.
-export function mirrorStopIsSafe(
-  status: MirrorGitStatus["status"] | undefined,
-): boolean {
-  return status === "synced";
-}
-
-// The file half: the engine idle on a pair it has brought in step at
+// The file half of the stop's safety (mirrorStopBlocker has both): the engine idle on a pair it has brought in step at
 // least once, both sides connected and nothing held still. Anything
 // else may leave an edit on the copy that never reached the original.
 export function mirrorFilesSettled(
@@ -484,11 +476,14 @@ export function mirrorStopBlocker(
   }
 }
 
-export function mirrorCopyIsDisposable(
-  session: Parameters<typeof mirrorStopBlocker>[0],
-): boolean {
-  return mirrorStopBlocker(session) === undefined;
-}
+// What a stop did with the copy: removed it, or left it a worktree of
+// its own because the original was gone (the copy is then the only one
+// there is). A runner that predates the answer sends nothing, which
+// reads as removed, all it ever did.
+const MirrorStopResultSchema = z
+  .strictObject({ removedCopy: z.boolean() })
+  .optional();
+export type MirrorStopResult = z.infer<typeof MirrorStopResultSchema>;
 
 // The refusal's leading text, which the renderer matches to offer
 // discard-and-stop. Text rather than a code because Electron's IPC
@@ -499,6 +494,23 @@ export const MIRROR_STOP_UNCONFIRMED =
 export function isMirrorStopUnconfirmed(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(MIRROR_STOP_UNCONFIRMED);
+}
+
+// The refusal as the host words it, and its reason (mirrorStopBlocker's
+// words) back out of it, one pair so the two cannot drift.
+const STOP_REFUSAL_TAIL =
+  ", so the copy may hold work that exists nowhere else. Let the mirror catch up first, or remove the copy anyway.";
+
+export function mirrorStopRefusal(blocker: string): string {
+  return `${MIRROR_STOP_UNCONFIRMED}: ${blocker}${STOP_REFUSAL_TAIL}`;
+}
+
+export function mirrorStopRefusalReason(error: unknown): string | undefined {
+  const message = error instanceof Error ? error.message : String(error);
+  const start = message.indexOf(`${MIRROR_STOP_UNCONFIRMED}: `);
+  const end = message.indexOf(STOP_REFUSAL_TAIL);
+  if (start === -1 || end === -1) return undefined;
+  return message.slice(start + MIRROR_STOP_UNCONFIRMED.length + 2, end);
 }
 
 // mirror:stop's other failure, thrown once the session is already
@@ -595,7 +607,7 @@ export const mirrorContract = defineContract("host", {
   // useWorktreeMirrorLinks). Stop moves a worktree (the copy goes),
   // and every one of them moves the list, so all keep the host-state
   // ping.
-  stop: invoke("mirror:stop", MirrorStopPayloadSchema, z.void(), {
+  stop: invoke("mirror:stop", MirrorStopPayloadSchema, MirrorStopResultSchema, {
     remote: true,
     gated: true,
   }),

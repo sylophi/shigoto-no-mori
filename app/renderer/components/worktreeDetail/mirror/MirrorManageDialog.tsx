@@ -31,11 +31,10 @@ import type {
 } from "@shared/ipc/modules/mirror";
 import {
   isHaltedStatus,
-  isMirrorStopUnconfirmed,
+  mirrorStopRefusalReason,
   mirrorFilesSettled,
   mirrorStopBlocker,
 } from "@shared/ipc/modules/mirror";
-import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
@@ -63,6 +62,7 @@ import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths"
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
+import { getBrowseLeafSegment, normalizeForSubmit } from "@shared/projectPaths";
 import {
   CARD,
   CARD_NOTE,
@@ -78,7 +78,7 @@ import {
   selectionOf,
 } from "../flow/ignoreChoice";
 import { browseWorktree, LeaveOutPicker } from "../flow/LeaveOutPicker";
-import { describeMirror, gitVerdict } from "./mirrorStatus";
+import { gitVerdict, type MirrorLook } from "./mirrorStatus";
 
 type MirrorNames = {
   // The device running the session, which holds the original.
@@ -93,20 +93,18 @@ export function MirrorManageDialog({
   session,
   view,
   names,
-  sides,
   revealUnder,
   onClose,
   onStopped,
 }: {
   session: MirrorSession;
-  view: ReturnType<typeof describeMirror>;
+  view: MirrorLook;
   names: MirrorNames;
-  sides: { original: string; copy: string };
   revealUnder: string | undefined;
   onClose: () => void;
-  // After a stop, which removed the copy. The opener knows whether the
-  // page it sits on was that copy.
-  onStopped: () => void;
+  // After a stop, and whether it removed the copy (it keeps it when the
+  // original is gone). The opener knows whether its page was that copy.
+  onStopped: (removedCopy: boolean) => void;
 }) {
   const { canCommand: canControl } = useCommandAccess();
   // The worktree the session runs on, on the runner: the original. Its
@@ -119,9 +117,9 @@ export function MirrorManageDialog({
   };
   const controls = useMirrorControls();
   const setIgnores = useSetMirrorIgnores();
-  const stop = useStopConfirm(session, names, () => {
+  const stop = useStopConfirm(controls, session, names, (removedCopy) => {
     onClose();
-    onStopped();
+    onStopped(removedCopy);
   });
   // A session the runner lists as stopping is past its controls: the
   // engine has ended it and the copy is on its way out.
@@ -165,111 +163,109 @@ export function MirrorManageDialog({
         </p>
       </FlowHeader>
 
-      <>
-        <FlowBody>
-          <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <div className="flex min-w-0 flex-col gap-5">
-              <div className="space-y-2">
-                <PairStrip session={session} names={names} />
-                <Facts session={session} />
-              </div>
-              <Notice
-                session={session}
-                view={view}
-                sides={sides}
-                revealUnder={revealUnder}
-              />
-              <Ignores
-                session={session}
-                worktree={worktree}
-                canControl={canControl}
-                setIgnores={setIgnores}
-              />
+      <FlowBody>
+        <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="flex min-w-0 flex-col gap-5">
+            <div className="space-y-2">
+              <PairStrip session={session} names={names} />
+              <Facts session={session} />
             </div>
-            <section className="space-y-2">
-              <SectionHeading>History</SectionHeading>
-              <HistoryList localWorktreeId={worktree.id} />
-            </section>
+            <Notice
+              session={session}
+              view={view}
+              names={names}
+              revealUnder={revealUnder}
+            />
+            <Ignores
+              session={session}
+              worktree={worktree}
+              canControl={canControl}
+              setIgnores={setIgnores}
+            />
           </div>
-        </FlowBody>
+          <section className="space-y-2">
+            <SectionHeading>History</SectionHeading>
+            <HistoryList localWorktreeId={worktree.id} />
+          </section>
+        </div>
+      </FlowBody>
 
-        {stop.confirming ? (
-          <FlowFooter
-            note={
-              <span
-                className={cn(
-                  stop.blocker !== undefined &&
-                    "text-amber-700 dark:text-amber-300",
-                )}
+      {stop.confirming ? (
+        <FlowFooter
+          note={
+            <span
+              className={cn(
+                stop.blocker !== undefined &&
+                  "text-amber-700 dark:text-amber-300",
+              )}
+            >
+              {stop.note}
+            </span>
+          }
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={stop.pending}
+            onClick={stop.cancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            variant={stop.blocker === undefined ? "default" : "destructive"}
+            disabled={stop.pending}
+            onClick={stop.confirm}
+          >
+            {stop.pending && <Loader2 className="animate-spin" />}
+            {stop.pending
+              ? "Stopping…"
+              : stop.blocker === undefined
+                ? "Stop and remove the copy"
+                : "Remove the copy anyway"}
+          </Button>
+        </FlowFooter>
+      ) : (
+        <FlowFooter
+          note={
+            !canControl
+              ? peerReadOnlyNote(names.runner)
+              : session.stopping === true
+                ? `Removing the copy on ${names.copy}…`
+                : undefined
+          }
+        >
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Close
+          </Button>
+          {canControl && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  (resumable ? controls.resume : controls.pause).mutate(
+                    session.session,
+                  )
+                }
               >
-                {stop.note}
-              </span>
-            }
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={stop.pending}
-              onClick={stop.cancel}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              variant={stop.blocker === undefined ? "default" : "destructive"}
-              disabled={stop.pending}
-              onClick={stop.confirm}
-            >
-              {stop.pending && <Loader2 className="animate-spin" />}
-              {stop.pending
-                ? "Stopping…"
-                : stop.blocker === undefined
-                  ? "Stop and remove the copy"
-                  : "Remove the copy anyway"}
-            </Button>
-          </FlowFooter>
-        ) : (
-          <FlowFooter
-            note={
-              !canControl
-                ? peerReadOnlyNote(names.runner)
-                : session.stopping === true
-                  ? `Removing the copy on ${names.copy}…`
-                  : undefined
-            }
-          >
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              Close
-            </Button>
-            {canControl && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    (resumable ? controls.resume : controls.pause).mutate(
-                      session.session,
-                    )
-                  }
-                >
-                  {resumable ? <Play /> : <Pause />}
-                  {resumable ? "Resume" : "Pause"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline-destructive"
-                  disabled={busy}
-                  onClick={stop.ask}
-                >
-                  <Square />
-                  Stop mirroring
-                </Button>
-              </>
-            )}
-          </FlowFooter>
-        )}
-      </>
+                {resumable ? <Play /> : <Pause />}
+                {resumable ? "Resume" : "Pause"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline-destructive"
+                disabled={busy}
+                onClick={stop.ask}
+              >
+                <Square />
+                Stop mirroring
+              </Button>
+            </>
+          )}
+        </FlowFooter>
+      )}
     </ModalShell>
   );
 }
@@ -284,11 +280,11 @@ export function MirrorManageDialog({
 // copy not in step) stands in for the session's verdict until the
 // session moves on from where it was refused.
 function useStopConfirm(
+  controls: ReturnType<typeof useMirrorControls>,
   session: MirrorSession,
   names: MirrorNames,
-  onStopped: () => void,
+  onStopped: (removedCopy: boolean) => void,
 ) {
-  const controls = useMirrorControls();
   const [confirming, setConfirming] = useState(false);
   const [refusal, setRefusal] = useState<{
     reason: string;
@@ -313,25 +309,14 @@ function useStopConfirm(
       controls.stop.mutate(
         { session, force: blocker !== undefined, copyName: names.copy },
         {
-          onSuccess: onStopped,
+          onSuccess: (result) => onStopped(result?.removedCopy !== false),
           onError: (error) => {
-            if (isMirrorStopUnconfirmed(error)) {
-              setRefusal({
-                reason: refusalReason(errorMessageOf(error)),
-                at: moment,
-              });
-            }
+            const reason = mirrorStopRefusalReason(error);
+            if (reason !== undefined) setRefusal({ reason, at: moment });
           },
         },
       ),
   };
-}
-
-// The runner's reason out of its refusal ("<marker>: <reason>, so the
-// copy may hold…"), or the whole message when it is not that shape.
-function refusalReason(message: string): string {
-  const match = /: ([^,]+), so the copy/.exec(message);
-  return match?.[1] ?? message;
 }
 
 // The two worktrees the mirror pairs, side by side: the original on
@@ -402,20 +387,10 @@ function PairEnd({
           shortened to fit they read as noise. The tooltip has it whole. */}
       <SimpleTooltip tip={path}>
         <span className="max-w-full min-w-0 truncate font-mono text-2xs text-muted-foreground">
-          {folderOf(path)}
+          {getBrowseLeafSegment(normalizeForSubmit(path))}
         </span>
       </SimpleTooltip>
     </div>
-  );
-}
-
-// The last segment of a path, either separator.
-function folderOf(path: string): string {
-  return (
-    path
-      .replace(/[\\/]+$/, "")
-      .split(/[\\/]/)
-      .pop() || path
   );
 }
 
@@ -468,12 +443,12 @@ function Facts({ session }: { session: MirrorSession }) {
 function Notice({
   session,
   view,
-  sides,
+  names,
   revealUnder,
 }: {
   session: MirrorSession;
-  view: ReturnType<typeof describeMirror>;
-  sides: { original: string; copy: string };
+  view: MirrorLook;
+  names: MirrorNames;
   revealUnder: string | undefined;
 }) {
   if (view.showConflicts) {
@@ -483,7 +458,7 @@ function Notice({
           session={session}
           tone={view.tone}
           label={view.label}
-          sides={sides}
+          names={names}
           revealUnder={revealUnder}
         />
         <span className="text-xs text-muted-foreground">

@@ -5,7 +5,6 @@
 // unless the flow is a transplant to a peer (DestinationScope), so
 // `localProject` and `thisDeviceLabel` name the landing side, whichever
 // machine that is.
-import { pullWorktreeName } from "@shared/git/branches";
 import {
   ArrowDown,
   ArrowLeftRight,
@@ -22,7 +21,7 @@ import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
-import { pullLandingBranch } from "@shared/git/branches";
+import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { Button } from "@/components/ui/button";
@@ -58,10 +57,9 @@ import { isReadyTarget, type PeerTarget } from "./peerTargets";
 import { type Landing, LANDS_HERE } from "./pullSteps";
 
 // The destination's pick, for a flow to a peer: the devices that could
-// take the worktree and the way to choose which one does. The picked
-// one is the destination the rest of the column describes. Until one
-// is picked there is no landing project, so the column is the rows
-// alone and the footer holds Start.
+// take the worktree and the way to choose which one does (the
+// destination card's header). Until one is picked there is no landing
+// project, so the card asks for the pick and Start waits.
 export type DestinationPick = {
   targets: PeerTarget[];
   pickedId: string | null;
@@ -78,15 +76,13 @@ export type DestinationPick = {
 // worktree) is the host's alone. With no landing project yet (a flow
 // to a peer before its pick) nothing is read and nothing refuses. The
 // branch asked about is the one the copy lands on (pullLandingBranch).
-export function useLocalCollision(
+function useLocalCollision(
   localProject: Project | undefined,
   worktree: Worktree,
   landing: Landing = LANDS_HERE,
 ): {
   // The branch the copy lands on.
   landingBranch: string;
-  held: boolean;
-  holder: Worktree | undefined;
   // The refusal the footer shows and Start waits on, or null.
   refusal: string | null;
 } {
@@ -114,7 +110,7 @@ export function useLocalCollision(
         : taken
           ? pullFolderCollision(name, `${localProject.name}/${name}`, where)
           : null;
-  return { landingBranch, held, holder, refusal };
+  return { landingBranch, refusal };
 }
 
 // The review step's footer band, the transplant's and the mirror's:
@@ -505,9 +501,7 @@ function DestinationCard({
       }
     >
       {target === null ? (
-        <p className="text-xs text-muted-foreground">
-          Pick the device it goes to.
-        </p>
+        <p className="text-xs text-muted-foreground">No device picked yet.</p>
       ) : target.project ? (
         <LandingLines
           worktree={worktree}

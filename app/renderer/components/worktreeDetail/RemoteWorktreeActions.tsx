@@ -155,8 +155,8 @@ function TransferButtons({
           driven by the mirror dialog. It only exists in the app: the copy lands on this
           machine, which a browser is not. A
           mirror withdraws the button, not an OPEN dialog: the mirror it
-          starts is what withdraws it, and the dialog's last steps (the
-          report, "Open here") must stay up. */}
+          starts is what withdraws it, and the dialog's last step (the
+          report) must stay up. */}
       {buttons && canForwardPorts && !mirrored && (
         <FooterActionButton
           rank={LABEL_RANK.mirrorTo}

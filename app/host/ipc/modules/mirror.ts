@@ -36,9 +36,9 @@ import {
   MIRROR_LABEL_MIRROR_BRANCH,
   MIRROR_LABEL_REPLACES,
   MIRROR_COPY_STAYED,
-  MIRROR_STOP_UNCONFIRMED,
   mirrorFilesSettled,
   mirrorStopBlocker,
+  mirrorStopRefusal,
   type MirrorGitStatus,
   type MirrorListResult,
   type MirrorServing,
@@ -128,6 +128,16 @@ let onServingChange: (() => void) | null = null;
 let onServingGitChange:
   | ((change: { projectId: string; worktreeId: string }) => void)
   | null = null;
+// A peer's follower landed its side's git state on a worktree here: a
+// ref move by the app's own git, which the git-directory watcher skips
+// as the app's own, so main announces it like an outside one.
+let onGitApplied: ((projectId: string) => void) | null = null;
+
+export function setMirrorGitAppliedListener(
+  listener: ((projectId: string) => void) | null,
+): void {
+  onGitApplied = listener;
+}
 
 // main installs the two broadcast hooks at boot. Before that (and in
 // checks that never mount them) changes are simply unannounced.
@@ -344,25 +354,21 @@ function copyIsGone(
   return Promise.race([listed, stalled]);
 }
 
-// The git follower could not read the copy (host/mirror/gitFollow.ts
-// onPeerUnreachable): a copy deleted, moved or re-created at the same
-// path while this device was away never announced itself here, and
-// its session would keep dialing whatever answers at that id. A copy
-// the peer no longer lists ends its session (the original keeps its
-// own). A peer that is simply away answers nothing, which leaves the
-// session to its reconnects.
-export async function endMirrorIfCopyGone(session: {
+// A copy the peer no longer lists (deleted while this device missed
+// the announcement, or moved) ends its session: the stop's way out when
+// the copy cannot be confirmed in step. True when it ended them.
+async function endMirrorIfCopyGone(session: {
   deviceId: string;
   projectId: string;
   worktreeId: string;
-}): Promise<void> {
-  if (await copyIsGone(session)) {
-    await endMirrorsIntoGoneCopy(
-      session.deviceId,
-      session.projectId,
-      session.worktreeId,
-    );
-  }
+}): Promise<boolean> {
+  if (!(await copyIsGone(session))) return false;
+  await endMirrorsIntoGoneCopy(
+    session.deviceId,
+    session.projectId,
+    session.worktreeId,
+  );
+  return true;
 }
 
 export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
@@ -549,7 +555,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     }
     if (!existsSync(raw.localRoot)) {
       await endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL);
-      return;
+      return { removedCopy: false };
     }
     // The copy goes with the stop, so it must hold nothing the original
     // lacks: git in step, looked at again now rather than read off the
@@ -565,17 +571,8 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
         // A copy the peer no longer lists (deleted while this device
         // missed the announcement, or moved) holds nothing to protect
         // and nothing to remove, so the session just ends.
-        if (await copyIsGone(raw)) {
-          await endMirrorsIntoGoneCopy(
-            raw.deviceId,
-            raw.projectId,
-            raw.worktreeId,
-          );
-          return;
-        }
-        throw new Error(
-          `${MIRROR_STOP_UNCONFIRMED}: ${blocker}, so the copy may hold work that exists nowhere else. Let the mirror catch up first, or remove the copy anyway.`,
-        );
+        if (await endMirrorIfCopyGone(raw)) return { removedCopy: true };
+        throw new Error(mirrorStopRefusal(blocker));
       }
     }
     stopping.set(session, {
@@ -588,6 +585,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       stopping.delete(session);
       onServingChange?.();
     }
+    return { removedCopy: true };
   },
   pause: ({ session }) => pauseOrResume(session, "pause", "paused"),
   resume: ({ session }) => pauseOrResume(session, "resume", "resumed"),
@@ -755,8 +753,8 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       { id: worktreeId, path: identity.path },
       { expect, state, sweep },
     );
-    return result.applied
-      ? { applied: true }
-      : { applied: false, reason: result.reason };
+    if (!result.applied) return { applied: false, reason: result.reason };
+    onGitApplied?.(project.id);
+    return { applied: true };
   },
 };

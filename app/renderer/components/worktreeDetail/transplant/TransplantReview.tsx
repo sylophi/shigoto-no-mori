@@ -38,27 +38,29 @@ export function TransplantReview(props: PullReviewProps) {
       idleNote={`Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`}
       startLabel="Start transplant"
       details={
-        <>
-          {dirty && (
-            <section className="space-y-2">
-              <SectionHeading>
-                Uncommitted changes
-                <span className="ml-1.5 font-normal tracking-normal normal-case">
-                  (re-applied on arrival)
-                </span>
-              </SectionHeading>
-              <ChangedFiles worktree={worktree} project={project} />
-            </section>
-          )}
-          {target?.project && (
-            <DestinationScope>
-              <CarryOverList
-                localProject={target.project}
-                thisDeviceLabel={thisDeviceLabel}
-              />
-            </DestinationScope>
-          )}
-        </>
+        (dirty || target?.project) && (
+          <>
+            {dirty && (
+              <section className="space-y-2">
+                <SectionHeading>
+                  Uncommitted changes
+                  <span className="ml-1.5 font-normal tracking-normal normal-case">
+                    (re-applied on arrival)
+                  </span>
+                </SectionHeading>
+                <ChangedFiles worktree={worktree} project={project} />
+              </section>
+            )}
+            {target?.project && (
+              <DestinationScope>
+                <CarryOverList
+                  localProject={target.project}
+                  thisDeviceLabel={thisDeviceLabel}
+                />
+              </DestinationScope>
+            )}
+          </>
+        )
       }
     />
   );

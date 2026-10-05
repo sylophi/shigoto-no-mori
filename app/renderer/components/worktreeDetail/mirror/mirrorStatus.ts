@@ -57,7 +57,7 @@ const STATUS_DETAIL: Partial<Record<MirrorStatus, string>> = {
   saving: "saving state",
 };
 
-type MirrorLook = {
+export type MirrorLook = {
   tone: StatusTone;
   label: string;
   detail: string;
@@ -89,7 +89,7 @@ const HALT_DETAIL: Record<string, string> = {
 // peer runner with no session up leaves only its last list, cached),
 // and its engine's state (a restarting engine lists its last sessions,
 // host/ipc/modules/mirror.ts mirrorListOf).
-export type MirrorContext = {
+type MirrorContext = {
   runnerAway?: string;
   engine?: MirrorDaemonStatus;
 };

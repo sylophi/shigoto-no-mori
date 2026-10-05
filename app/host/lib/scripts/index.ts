@@ -13,7 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { errorMessageOf, worktreeSettingUpError } from "@shared/errors";
-import { stopMirrorsForWorktree } from "@host/mirror/registry";
+import { holdRootChecks } from "@host/mirror/registry";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
@@ -253,16 +253,14 @@ export function assertWorktreeMutable(
 // between the root vanishing and the stop propagates nothing. Callers
 // supply the busy message because the operations differ (removed vs
 // moved). `mirrorsAfter` is what becomes of the mirrors once the
-// mutation answered: by default they stop, a delete passes one that
-// stops them only when the worktree actually went (a failed cleanup
-// keeps it, and its mirror with it), and a move one that carries them
-// to the new path.
+// mutation answered: a delete stops them only when the worktree
+// actually went (a failed cleanup keeps it, and its mirror with it),
+// and a move carries them to the new path.
 export function withDeleteInflight<T>(
   worktreeId: string,
   busyMessage: string,
   run: () => Promise<T>,
-  mirrorsAfter: (result: T) => Promise<unknown> = () =>
-    stopMirrorsForWorktree(worktreeId),
+  mirrorsAfter: (result: T) => Promise<unknown>,
 ): Promise<T> {
   return withDeletesInflight([worktreeId], busyMessage, run, mirrorsAfter);
 }
@@ -281,12 +279,16 @@ export async function withDeletesInflight<T>(
 ): Promise<T> {
   for (const id of worktreeIds) assertWorktreeMutable(id, busyMessage);
   worktreeIds.forEach(markDeleteInflight);
+  // The roots vanish under the mutation: the mirror bookkeeping leaves
+  // them to `mirrorsAfter` rather than read a move as a removal.
+  const releaseRoots = holdRootChecks(worktreeIds);
   try {
     await Promise.all(worktreeIds.map(killScriptsForWorktree));
     const result = await run();
     await mirrorsAfter(result);
     return result;
   } finally {
+    releaseRoots();
     worktreeIds.forEach(clearDeleteInflight);
   }
 }

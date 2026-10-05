@@ -246,10 +246,8 @@ function MirrorFlow({
         </>
       }
     >
-      {/* Step 1: the source, what stays out, and the two devices that
-          will hold the branch. The source half reads the device the
-          page is scoped to. The device half re-pins to the landing
-          device (DestinationScope), like the transplant's. */}
+      {/* Step 1: the shared review (flow/PullReview.tsx), the original
+          beside the copy. */}
       {stage === "review" && (
         <MirrorReview
           worktree={worktree}

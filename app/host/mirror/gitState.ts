@@ -36,7 +36,7 @@
 // working tree is never touched (the engine owns it). read-tree plus
 // an index refresh is what makes the staged view match without
 // rewriting a single file.
-import { copyFile, mkdtemp, stat } from "node:fs/promises";
+import { copyFile, mkdtemp, readdir, stat } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { watch } from "node:fs";
 import { tmpdir } from "node:os";
@@ -124,19 +124,21 @@ const OPERATION_MARKERS: { path: string; operation: string }[] = [
 ];
 
 // The operation under way in the worktree whose git dir this is, or
-// null. A handful of stats, run together, so the steady state costs
-// about as much as one.
+// null. One listing of the git dir answers all of them, bar the one
+// marker inside rebase-apply, looked at only when that is there.
 async function operationInProgress(gitDir: string): Promise<string | null> {
-  const present = await Promise.all(
-    OPERATION_MARKERS.map(({ path }) =>
-      stat(join(gitDir, path)).then(
-        () => true,
-        () => false,
+  const names = new Set(await readdir(gitDir).catch((): string[] => []));
+  if (names.has("rebase-apply")) {
+    names.add(
+      await stat(join(gitDir, "rebase-apply", "applying")).then(
+        () => join("rebase-apply", "applying"),
+        () => "",
       ),
-    ),
+    );
+  }
+  return (
+    OPERATION_MARKERS.find(({ path }) => names.has(path))?.operation ?? null
   );
-  const index = present.indexOf(true);
-  return index === -1 ? null : (OPERATION_MARKERS[index]?.operation ?? null);
 }
 
 // HEAD, the tip, the tip's tree and the git dir in one spawn, and the

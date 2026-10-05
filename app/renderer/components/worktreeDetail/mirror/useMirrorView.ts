@@ -29,7 +29,6 @@ export function useMirrorView(
   return {
     view,
     names: { runner, copy, other },
-    sides: { original: runner, copy },
     revealUnder,
   };
 }

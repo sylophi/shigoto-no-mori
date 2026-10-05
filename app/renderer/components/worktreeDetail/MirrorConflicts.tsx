@@ -43,11 +43,11 @@ function conflictLabel(root: string): string {
 
 function ConflictRow({
   conflict,
-  sides,
+  names,
   reveal,
 }: {
   conflict: MirrorConflict;
-  sides: ConflictSides;
+  names: ConflictNames;
   reveal: ((root: string) => void) | null;
 }) {
   const body = (
@@ -56,7 +56,7 @@ function ConflictRow({
         {conflictLabel(conflict.root)}
       </span>
       <span className="text-muted-foreground">
-        {sides.original}: {summarize(conflict.localChanges)}, {sides.copy}:{" "}
+        {names.runner}: {summarize(conflict.localChanges)}, {names.copy}:{" "}
         {summarize(conflict.remoteChanges)}
       </span>
     </span>
@@ -77,23 +77,23 @@ function ConflictRow({
   );
 }
 
+// Each side of the session by its device's name: the runner's (the
+// session's local side, the original) and the copy's.
+type ConflictNames = { runner: string; copy: string };
+
 // The conflict chip itself: the same shape as the read-only status
 // chips in MirrorPill, as a button, because there is a list behind it.
-// Each side of the session by its device's name: the original's (the
-// session's local side, the runner) and the copy's.
-type ConflictSides = { original: string; copy: string };
-
 export function MirrorConflictsChip({
   session,
   tone,
   label,
-  sides,
+  names,
   revealUnder,
 }: {
   session: MirrorSession;
   tone: StatusTone;
   label: string;
-  sides: ConflictSides;
+  names: ConflictNames;
   // The root the paths reveal under in this machine's Finder: the
   // original's on the device running the session, the copy's on the
   // copy's device. Absent on any other machine, where the rows are
@@ -132,7 +132,7 @@ export function MirrorConflictsChip({
             <ConflictRow
               key={conflict.root}
               conflict={conflict}
-              sides={sides}
+              names={names}
               reveal={reveal}
             />
           ))}

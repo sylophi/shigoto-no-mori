@@ -115,7 +115,3 @@ export function useLandingTarget({
   if (cloning) return { clone };
   return localProject === undefined ? null : { project: localProject };
 }
-
-// The review's clone section, in place of the folder and setup cards
-// a landing project would get: the repo, where its checkout lands,
-// and the way to change that. The picker browses the destination.

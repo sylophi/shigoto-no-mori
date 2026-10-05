@@ -83,11 +83,7 @@ function MirrorLinkAction({
         }
         label="Mirroring"
         tip={`${view.label} with ${names.other}${view.detail === "" ? "" : `: ${view.detail}`}`}
-        disabledReason={
-          runnerApi === undefined
-            ? `${names.runner} runs this mirror and is offline. Its controls come back with it.`
-            : undefined
-        }
+        disabledReason={runnerApi === undefined ? view.detail : undefined}
         onClick={() => setOpen(true)}
       />
       {open && runnerApi !== undefined && (
@@ -96,8 +92,8 @@ function MirrorLinkAction({
             session={session}
             {...mirror}
             onClose={() => setOpen(false)}
-            onStopped={() => {
-              if (pageIsCopy) nav.toFallback(true);
+            onStopped={(removedCopy) => {
+              if (pageIsCopy && removedCopy) nav.toFallback(true);
             }}
           />
         </RunnerScope>

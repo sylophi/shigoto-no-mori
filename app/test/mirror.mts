@@ -99,9 +99,11 @@ import {
   type MirrorImpl,
   mirrorSessions,
   type MirrorSessionRaw,
+  holdRootChecks,
   ORIGINAL_GONE_DETAIL,
   settleMirrorBookkeeping,
   stopMirrorsForWorktree,
+  whileRecreating,
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
@@ -1284,11 +1286,13 @@ async function main() {
       const released: string[] = [];
       let status: ReturnType<MirrorImpl["status"]> = "running";
       let verdict: MirrorGitStatus = { status: "synced", detail: "" };
+      let failTerminate = false;
       setMirrorImpl({
         ...daemon,
         status: () => status,
         sessions: () => (status === "running" ? [...live.values()] : []),
         terminate: async (id) => {
+          if (failTerminate) throw new Error("the engine is busy");
           live.delete(id);
         },
         recreate: () => Promise.reject(new Error("not in this check")),
@@ -1363,7 +1367,9 @@ async function main() {
       // left, so even a forced stop keeps it, and its device is told it
       // is a plain worktree now.
       put(sessionOf("orphan", { localRoot: goneRoot }));
-      await stop({ session: "orphan", force: true });
+      assert.deepEqual(await stop({ session: "orphan", force: true }), {
+        removedCopy: false,
+      });
       assert.ok(!live.has("orphan"));
       assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
       await waitFor(() => released.includes("wt-orphan"), "the release");
@@ -1391,6 +1397,16 @@ async function main() {
           },
         }),
       );
+      // A re-open still running, and a root an in-app move holds, are
+      // left to their owners; a terminate that fails is tried again.
+      failTerminate = true;
+      const release = holdRootChecks(["orig-halted"]);
+      await whileRecreating("old", () => settleMirrorBookkeeping());
+      assert.deepEqual([...live.keys()].toSorted(), ["halted", "new", "old"]);
+      release();
+      await settleMirrorBookkeeping();
+      assert.deepEqual([...live.keys()].toSorted(), ["halted", "new", "old"]);
+      failTerminate = false;
       await settleMirrorBookkeeping();
       assert.deepEqual([...live.keys()].toSorted(), ["new"]);
       assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
@@ -1418,7 +1434,7 @@ async function main() {
       live.clear();
     }
     ok(
-      "stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy, and leftovers and delayed stops are swept",
+      "stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy and says so, and leftovers and delayed stops are swept, sparing a running re-open and a held root and retrying a failed end",
     );
 
     // (7) Stopping the daemon ends it cleanly.

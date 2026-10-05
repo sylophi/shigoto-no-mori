@@ -6,7 +6,7 @@
 // can stop a worktree's mirrors without importing that module (which
 // reaches sync, which reaches worktrees).
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { access } from "node:fs/promises";
 import {
   isHaltedStatus,
   isTransferSession,
@@ -345,6 +345,48 @@ export const ORIGINAL_GONE_DETAIL =
 const checkedRoots = new Set<string>();
 const endingSessions = new Set<string>();
 
+// Sessions a re-open is replacing right now (MirrorImpl.recreate): the
+// re-open ends the old one itself once the new one is up, so the
+// leftover sweep below must not race it to the terminate.
+const recreating = new Set<string>();
+
+export async function whileRecreating<T>(
+  session: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  recreating.add(session);
+  try {
+    return await run();
+  } finally {
+    recreating.delete(session);
+  }
+}
+
+// Worktrees an in-app delete or move is working on (host/lib/scripts
+// withDeletesInflight): their root vanishing is that mutation, whose
+// own follow-up stops or moves their mirrors, not a removal behind the
+// app's back. Counted, since a stack cleanup holds several at once.
+const holdingRoots = new Map<string, number>();
+
+export function holdRootChecks(worktreeIds: readonly string[]): () => void {
+  for (const id of worktreeIds) {
+    holdingRoots.set(id, (holdingRoots.get(id) ?? 0) + 1);
+  }
+  return () => {
+    for (const id of worktreeIds) {
+      const left = (holdingRoots.get(id) ?? 1) - 1;
+      if (left > 0) holdingRoots.set(id, left);
+      else holdingRoots.delete(id);
+    }
+  };
+}
+
+const rootExists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+
 export async function settleMirrorBookkeeping(): Promise<void> {
   const daemon = engineOrNull();
   if (daemon === null || daemon.status() !== "running") return;
@@ -353,6 +395,10 @@ export async function settleMirrorBookkeeping(): Promise<void> {
   await Promise.all(ids.map((id) => endSessionsOnWorktree(daemon, id)));
 
   const sessions = mirrorSessions(daemon);
+  const live = new Set(sessions.map((raw) => raw.session));
+  for (const key of checkedRoots) {
+    if (!live.has(key.slice(0, key.lastIndexOf(":")))) checkedRoots.delete(key);
+  }
   const replaced = new Set(
     sessions
       .map((raw) => raw.labels[MIRROR_LABEL_REPLACES])
@@ -362,19 +408,24 @@ export async function settleMirrorBookkeeping(): Promise<void> {
     sessions.map(async (raw) => {
       if (endingSessions.has(raw.session)) return;
       if (replaced.has(raw.session)) {
-        await endOnce(raw.session, () => daemon.terminate(raw.session));
+        if (!recreating.has(raw.session)) {
+          await endOnce(raw.session, () => daemon.terminate(raw.session));
+        }
         return;
       }
+      if (holdingRoots.has(localWorktreeIdOf(raw))) return;
       // Looked at on first sight (a boot after the root went) and on
       // every halt, never on the busy states a live mirror cycles
-      // through.
+      // through. A failed end forgets the look, so a later snapshot
+      // tries again.
       const key = `${raw.session}:${isHaltedStatus(raw.status) ? "halted" : "seen"}`;
       if (checkedRoots.has(key)) return;
       checkedRoots.add(key);
-      if (existsSync(raw.localRoot)) return;
-      await endOnce(raw.session, () =>
+      if (await rootExists(raw.localRoot)) return;
+      const ended = await endOnce(raw.session, () =>
         endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL),
       );
+      if (!ended) checkedRoots.delete(key);
     }),
   );
 }
@@ -382,12 +433,14 @@ export async function settleMirrorBookkeeping(): Promise<void> {
 async function endOnce(
   session: string,
   end: () => Promise<unknown>,
-): Promise<void> {
+): Promise<boolean> {
   endingSessions.add(session);
   try {
     await end();
+    return true;
   } catch (error) {
     console.warn(`[mirror] could not end a session: ${errorMessageOf(error)}`);
+    return false;
   } finally {
     endingSessions.delete(session);
   }

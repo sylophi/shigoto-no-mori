@@ -94,7 +94,7 @@ function SessionChip({
   link: WorktreeMirrorLink;
   session: MirrorSession;
 }) {
-  const { view, names, sides, revealUnder } = useMirrorView(link, session);
+  const { view, names, revealUnder } = useMirrorView(link, session);
   return (
     <>
       {view.showConflicts ? (
@@ -102,7 +102,7 @@ function SessionChip({
           session={session}
           tone={view.tone}
           label={view.label}
-          sides={sides}
+          names={names}
           revealUnder={revealUnder}
         />
       ) : (

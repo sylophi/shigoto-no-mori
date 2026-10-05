@@ -59,7 +59,7 @@
 // slow periodic sweep as the backstop. Reconciles are coalesced per
 // session: one in flight, one queued.
 import type { Project } from "@shared/schemas";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf, isEntityGoneError } from "@shared/errors";
 import {
   GitStateSchema,
   isHaltedStatus,
@@ -161,10 +161,9 @@ type FollowRecord = {
 // trip per session.
 const DEFAULT_SWEEP_MS = 60_000;
 
-// How often a session whose peer read keeps failing is reported to
-// onPeerUnreachable: the owner's probe is a round trip of its own, and
-// a peer that is merely away fails every signal.
-const PEER_UNREACHABLE_EVERY_MS = 60_000;
+// How often a session whose copy reads as gone is reported to
+// onCopyGone: every signal fails the same way until the owner acts.
+const COPY_GONE_EVERY_MS = 60_000;
 
 // How long reconcileNow waits on a reconcile before answering with the
 // status as it stands. A stalled peer can hold a round for as long as
@@ -290,11 +289,12 @@ export function createGitFollower(deps: {
   onChange?: () => void;
   sweepMs?: number;
   log?: (message: string) => void;
-  // A session's peer read failed (not the local one, and not over an
-  // operation in progress there): the peer may be away, or the copy may
-  // be gone from it, which the owner can find out and act on. At most
-  // once a minute per session.
-  onPeerUnreachable?: (session: FollowableSession) => void;
+  // The peer answered that the session's copy is not a worktree it
+  // lists (deleted, moved, or re-created where its id points elsewhere,
+  // none of which announced itself here). A peer that is merely away
+  // answers nothing and is no such report. At most once a minute per
+  // session.
+  onCopyGone?: (session: FollowableSession) => void;
   // A pull landed here: refs, HEAD and the index moved in the local
   // project by the app's own git, which the git-directory watcher
   // skips as the app's own writes, so nothing else would tell this
@@ -302,7 +302,7 @@ export function createGitFollower(deps: {
   onLocalApplied?: (localProjectId: string) => void;
 }) {
   const records = new Map<string, FollowRecord>();
-  const peerUnreachableAt = new Map<string, number>();
+  const copyGoneAt = new Map<string, number>();
   const log = deps.log ?? ((message: string) => console.warn(message));
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
   // The agreed states by session id, loaded on the first start (the
@@ -376,19 +376,29 @@ export function createGitFollower(deps: {
     return loop;
   }
 
-  function peerUnreachable(session: FollowableSession): void {
-    if (deps.onPeerUnreachable === undefined) return;
+  function copyGone(session: FollowableSession): void {
+    if (deps.onCopyGone === undefined) return;
     const now = Date.now();
-    const last = peerUnreachableAt.get(session.session);
-    if (last !== undefined && now - last < PEER_UNREACHABLE_EVERY_MS) return;
-    peerUnreachableAt.set(session.session, now);
+    const last = copyGoneAt.get(session.session);
+    if (last !== undefined && now - last < COPY_GONE_EVERY_MS) return;
+    copyGoneAt.set(session.session, now);
     try {
-      deps.onPeerUnreachable(session);
+      deps.onCopyGone(session);
     } catch (error) {
       log(
-        `[mirror] git follow ${session.session}: peer probe failed: ${errorMessageOf(error)}`,
+        `[mirror] git follow ${session.session}: ending a gone copy failed: ${errorMessageOf(error)}`,
       );
     }
+  }
+
+  // The engine's status for the session as it stands, fresher than the
+  // record's copy (only as new as the last session-set change).
+  function engineStatus(record: FollowRecord): FollowableSession["status"] {
+    const id = record.session.session;
+    return (
+      deps.sessions().find((s) => s.session === id)?.status ??
+      record.session.status
+    );
   }
 
   // Whether the files are idle enough for a follow that moves the tip
@@ -398,10 +408,7 @@ export function createGitFollower(deps: {
   // A halted session will not catch up by itself, so it reads blocked
   // rather than following forever. A paused one never gets here.
   function filesSettled(record: FollowRecord): boolean {
-    const id = record.session.session;
-    const status =
-      deps.sessions().find((s) => s.session === id)?.status ??
-      record.session.status;
+    const status = engineStatus(record);
     if (status === "watching") return true;
     record.waitingForFiles = true;
     setStatus(
@@ -426,11 +433,16 @@ export function createGitFollower(deps: {
 
   async function reconcile(record: FollowRecord): Promise<void> {
     const { session } = record;
-    record.waitingForFiles = false;
     if (session.paused) {
+      record.waitingForFiles = false;
       setStatus(record, { status: "off", detail: "paused" });
       return;
     }
+    // Still waiting on the files: the reads would only end at the same
+    // wait (filesSettled restates it, a halt included), and the idle
+    // snapshot triggers this again (syncSessions).
+    if (record.waitingForFiles && !filesSettled(record)) return;
+    record.waitingForFiles = false;
     const localProjectId = session.labels[LABEL_LOCAL_PROJECT] ?? "";
     const localWorktreeId = session.labels[LABEL_LOCAL_WORKTREE] ?? "";
     let project: Project;
@@ -460,8 +472,11 @@ export function createGitFollower(deps: {
         peerRead.status === "rejected"
           ? operationInRefusal(errorMessageOf(peerRead.reason))
           : null;
-      if (peerRead.status === "rejected" && peerOperation === null) {
-        peerUnreachable(session);
+      if (
+        peerRead.status === "rejected" &&
+        isEntityGoneError(peerRead.reason)
+      ) {
+        copyGone(session);
       }
       if (localRead.status === "rejected") {
         const operation = operationInRefusal(errorMessageOf(localRead.reason));
@@ -755,7 +770,7 @@ export function createGitFollower(deps: {
       if (!current.has(id)) {
         record.stopIndexWatch?.();
         records.delete(id);
-        peerUnreachableAt.delete(id);
+        copyGoneAt.delete(id);
         changed = true;
       }
     }
