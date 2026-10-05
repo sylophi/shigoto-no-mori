@@ -14,7 +14,6 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   Cable,
   Loader2,
-  Plug,
   RefreshCw,
   RotateCw,
   Settings2,
@@ -55,22 +54,23 @@ import {
 import { LiveLine } from "./LiveCard";
 
 // How long something has been up, coarse like the app's relative
-// times: "just now", "12m", "3h 5m", "2d".
+// times.
+// "up 12m", "up 3h 5m", "up 2d", or "just started".
 function uptime(since: number, now: number): string {
   const minutes = Math.floor(Math.max(0, now - since) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1) return "just started";
+  if (minutes < 60) return `up ${minutes}m`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
-    return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+    return minutes % 60 ? `up ${hours}h ${minutes % 60}m` : `up ${hours}h`;
   }
-  return `${Math.floor(hours / 24)}d`;
+  return `up ${Math.floor(hours / 24)}d`;
 }
 
 function Uptime({ since }: { since: number }) {
   const now = useNow();
   return (
-    <SimpleTooltip tip={`Since ${new Date(since).toLocaleString()}`}>
+    <SimpleTooltip tip={`Started ${new Date(since).toLocaleString()}`}>
       <span className="tabular shrink-0">{uptime(since, now)}</span>
     </SimpleTooltip>
   );
@@ -196,7 +196,7 @@ export function ScriptLine({
                 {stopping ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Square className="size-3 fill-current" />
+                  <Square className="size-3 fill-current text-destructive/80" />
                 )}
               </IconButton>
             </SimpleTooltip>
@@ -326,23 +326,36 @@ export function ForwardLine({
         }
         meta={
           <>
-            <span className="shrink-0 font-mono">→ {forward.remotePort}</span>
+            {/* Where it comes from, when the card does not already
+                say: another port than the local one, or no worktree. */}
+            {(showDevice || forward.remotePort !== forward.localPort) && (
+              <span className="shrink-0">
+                from <span className="font-mono">{forward.remotePort}</span>
+              </span>
+            )}
             {showDevice && (
               <>
                 <span className="shrink-0">on</span>
                 <DeviceName deviceId={forward.deviceId} />
               </>
             )}
-            {forward.connCount > 0 && (
-              <SimpleTooltip
-                tip={pluralize(forward.connCount, "open connection")}
+            {/* The Ports dialog's own words for a forward in use. */}
+            <SimpleTooltip
+              tip={
+                forward.connCount > 0
+                  ? pluralize(forward.connCount, "open connection")
+                  : "Nothing connected right now"
+              }
+            >
+              <span
+                className={cn(
+                  "tabular shrink-0",
+                  forward.connCount > 0 && TONE_TEXT.emerald,
+                )}
               >
-                <span className="tabular inline-flex shrink-0 items-center gap-0.5">
-                  <Plug aria-hidden className="size-3" />
-                  {forward.connCount}
-                </span>
-              </SimpleTooltip>
-            )}
+                {forward.connCount > 0 ? `${forward.connCount} open` : "idle"}
+              </span>
+            </SimpleTooltip>
           </>
         }
         actions={

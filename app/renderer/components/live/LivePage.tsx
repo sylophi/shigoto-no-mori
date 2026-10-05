@@ -22,6 +22,7 @@ import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { scriptKey, scriptRunsFor } from "@/store/scriptRuns";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
 import { pluralize } from "@/lib/pluralize";
+import { notifyError, toast } from "@/lib/toast";
 import { DeviceHeading, LiveCard } from "./LiveCard";
 import { buildLive, countLive, type LiveDevice } from "./liveModel";
 
@@ -46,18 +47,29 @@ export function LivePage() {
   // than one.
   const multiDevice = hosts.length > 1;
   const summary = summarize(devices);
+  // Until every reachable device has answered, an empty page would
+  // claim a quiet it does not know.
+  const loading = hosts.some((host) => host.loading);
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        eyebrow={summary === "" ? "Nothing running" : `${summary} running`}
+        eyebrow={
+          summary !== ""
+            ? `${summary} running`
+            : loading
+              ? "Asking your devices…"
+              : "Nothing running"
+        }
         title="Live"
         watermark="稼働"
         trailing={<StopAllScripts hosts={hosts} />}
       />
       <div className={PAGE_BODY}>
         {devices.length === 0 ? (
-          <Quiet />
+          loading ? null : (
+            <Quiet />
+          )
         ) : (
           <div className="flex flex-col gap-8">
             {devices.map((device) => (
@@ -112,6 +124,16 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
             : api.scripts.cancel(run.runId);
         }),
       ),
+    // The rows go as each script ends, so the outcome is said once,
+    // here, rather than left to the page emptying.
+    onSuccess: (results) => {
+      const failed = results.filter((r) => r.status === "rejected").length;
+      const stopped = results.length - failed;
+      if (stopped > 0) toast.success(`Stopped ${pluralize(stopped, "script")}`);
+      if (failed > 0) {
+        notifyError(`Couldn't stop ${pluralize(failed, "script")}`);
+      }
+    },
   });
   if (runs.length === 0 && !stopAll.isPending) return null;
   return (
@@ -130,7 +152,7 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
       {stopAll.isPending
         ? "Stopping…"
         : armed
-          ? "Click again to stop them all"
+          ? "Click again to confirm"
           : `Stop ${runs.length === 1 ? "the script" : `all ${runs.length} scripts`}`}
     </Button>
   );

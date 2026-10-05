@@ -36,7 +36,11 @@ function useLiveHosts(): LiveHost[] {
   ];
 }
 
-export type HostScripts = LiveHost & { runs: RunningScript[] };
+export type HostScripts = LiveHost & {
+  runs: RunningScript[];
+  // The first read is still on its way.
+  loading: boolean;
+};
 
 // One device's running scripts, the read every surface that lists or
 // adopts them shares (the Live page, a worktree's script buttons and
@@ -70,6 +74,7 @@ export function useRunningScripts(): HostScripts[] {
         deviceId,
         api,
         runs: api === undefined ? NO_RUNS : (results[index]?.data ?? NO_RUNS),
+        loading: api !== undefined && results[index]?.isPending === true,
       })),
   });
 }

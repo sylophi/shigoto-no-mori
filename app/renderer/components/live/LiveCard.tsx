@@ -20,6 +20,7 @@ import type { Worktree } from "@shared/schemas";
 import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { BranchLabel } from "@/components/ui/branch-label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ChipButton } from "@/components/ui/chip-button";
 import { ExternalLink } from "@/components/ui/external-link";
 import { TONE_TEXT } from "@/components/ui/status-dot";
@@ -99,7 +100,7 @@ function CardBody({
   reachable: boolean;
 }) {
   const { forwards, stop } = useAllPortForwards();
-  const worktree = useCardWorktree(card);
+  const { worktree, listed } = useCardWorktree(card);
   // The worktree's page offers the console and the dialogs too, so a
   // card that cannot reach its device still leads there.
   return (
@@ -109,6 +110,7 @@ function CardBody({
           deviceId={card.deviceId}
           {...card.worktree}
           worktree={worktree}
+          listed={listed}
         />
       ) : (
         <PortsHeader />
@@ -163,13 +165,19 @@ function CardBody({
 }
 
 // The card's worktree off the same cached list the sidebar keeps.
-function useCardWorktree(card: LiveCardModel): Worktree | undefined {
+// `listed` is whether the list is in, so a worktree not found in it
+// reads as removed only once there is a list to have missed it.
+function useCardWorktree(card: LiveCardModel): {
+  worktree: Worktree | undefined;
+  listed: boolean;
+} {
   const scope = useDeviceApi(card.deviceId);
-  return useQuery({
+  const query = useQuery({
     ...worktreesQueryOptions(card.worktree?.projectId ?? null, scope),
     select: (worktrees) =>
       worktrees.find((entry) => entry.id === card.worktree?.worktreeId),
-  }).data;
+  });
+  return { worktree: query.data, listed: query.isSuccess };
 }
 
 // The worktree a card is for: its project's icon, its branch and its
@@ -181,11 +189,13 @@ function WorktreeHeader({
   projectId,
   worktreeId,
   worktree,
+  listed,
 }: {
   deviceId: string;
   projectId: string;
   worktreeId: string;
   worktree: Worktree | undefined;
+  listed: boolean;
 }) {
   const scope = useDeviceApi(deviceId);
   const project = useQuery({
@@ -193,31 +203,46 @@ function WorktreeHeader({
     select: (projects) => projects.find((entry) => entry.id === projectId),
     meta: { silentError: true },
   }).data;
+  // Held as placeholders until the lists are in, rather than read as
+  // a worktree that is gone.
+  const pending = worktree === undefined && !listed;
   const title = (
     <>
-      <ProjectIcon
-        projectId={projectId}
-        name={project?.name ?? "?"}
-        deviceId={deviceId}
-        className="size-8"
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate font-mono text-sm font-medium">
-          {worktree ? (
-            <BranchLabel
-              branch={worktree.branch}
-              detached={worktree.detached}
-              suffixClassName="text-xs"
-            />
-          ) : (
-            <span className="font-sans text-muted-foreground italic">
-              Removed worktree
+      {project ? (
+        <ProjectIcon
+          projectId={projectId}
+          name={project.name}
+          deviceId={deviceId}
+          className="size-8"
+        />
+      ) : (
+        <Skeleton className="size-8 shrink-0 rounded-md" />
+      )}
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        {worktree ? (
+          <SimpleTooltip whenTruncated tip={worktree.branch}>
+            <span className="truncate font-mono text-sm font-medium">
+              <BranchLabel
+                branch={worktree.branch}
+                detached={worktree.detached}
+                suffixClassName="text-xs"
+              />
             </span>
-          )}
-        </span>
-        <span className="truncate text-2xs text-muted-foreground">
-          {[worktree?.name, project?.name].filter(Boolean).join(" · ")}
-        </span>
+          </SimpleTooltip>
+        ) : pending ? (
+          <Skeleton className="h-4 w-36" />
+        ) : (
+          <span className="truncate text-sm text-muted-foreground italic">
+            Removed worktree
+          </span>
+        )}
+        {pending ? (
+          <Skeleton className="h-3 w-24" />
+        ) : (
+          <span className="truncate text-2xs text-muted-foreground">
+            {[worktree?.name, project?.name].filter(Boolean).join(" · ")}
+          </span>
+        )}
       </span>
     </>
   );
@@ -228,7 +253,7 @@ function WorktreeHeader({
           to={WORKTREE_ROUTE_PATHS.detail}
           params={{ deviceId, projectId, worktreeId }}
           aria-label={`Open ${worktree.branch}`}
-          className="group/open -m-1 flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1 transition-colors hover:bg-accent/60"
+          className="group/open -m-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-md p-1.5 transition-colors outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring"
         >
           {title}
           <ChevronRight
@@ -237,7 +262,7 @@ function WorktreeHeader({
           />
         </Link>
       ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">{title}</div>
+        <div className="flex min-w-0 flex-1 items-center gap-3">{title}</div>
       )}
     </header>
   );
@@ -270,26 +295,29 @@ function PortsStrip({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
       {answering.map((port) =>
         !remote ? (
-          <LocalhostLink key={port.port} port={port.port} />
+          <LocalhostLink key={port.port} port={port.port} label={port.label} />
         ) : canForwardPorts ? (
           <PeerPort
             key={port.port}
             deviceId={deviceId}
             port={port.port}
+            label={port.label}
             worktree={worktree}
           />
         ) : (
           // A browser cannot bind a port, so a peer's server is only
           // news here.
-          <span key={port.port} className="font-mono">
-            :{port.port}
+          <span key={port.port} className="inline-flex items-center gap-1">
+            <PortDot />
+            <span className="font-mono">{port.port}</span>
+            {port.label}
           </span>
         ),
       )}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="ml-auto rounded-sm transition-colors hover:text-foreground"
+        className="ml-auto rounded-sm transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
         All ports
       </button>
@@ -300,17 +328,18 @@ function PortsStrip({
   );
 }
 
-function LocalhostLink({ port }: { port: number }) {
+function LocalhostLink({ port, label }: { port: number; label?: string }) {
   return (
     <SimpleTooltip tip={`Open localhost:${port}`}>
       <span className="inline-flex">
         <ExternalLink
           href={`http://localhost:${port}`}
           errorTitle="Couldn't open the port"
-          className="inline-flex items-center gap-1 font-mono no-underline hover:text-foreground"
+          className="inline-flex items-center gap-1 rounded-sm font-mono no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           <PortDot />
           localhost:{port}
+          {label && <span className="font-sans">{label}</span>}
           <ExternalLinkIcon aria-hidden className="size-3" />
         </ExternalLink>
       </span>
@@ -323,10 +352,12 @@ function LocalhostLink({ port }: { port: number }) {
 function PeerPort({
   deviceId,
   port,
+  label,
   worktree,
 }: {
   deviceId: string;
   port: number;
+  label?: string;
   worktree: Worktree;
 }) {
   const control = usePortForwardControl(deviceId, port, {
@@ -346,6 +377,7 @@ function PeerPort({
           <Plus aria-hidden className="size-3" />
         )}
         Forward <span className="font-mono">{port}</span>
+        {label && <span className="text-muted-foreground">{label}</span>}
       </ChipButton>
     </SimpleTooltip>
   );
@@ -418,7 +450,7 @@ export function LiveLine({
           type="button"
           aria-label={openLabel}
           onClick={onOpen}
-          className="group/line flex min-h-10 min-w-0 flex-1 items-center gap-2.5 rounded-md pl-3 text-left transition-colors hover:bg-accent/70"
+          className="group/line flex min-h-10 min-w-0 flex-1 items-center gap-2.5 rounded-md pl-3 text-left transition-colors outline-none hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-ring"
         >
           {body}
           <ChevronRight
