@@ -1128,6 +1128,10 @@ func readProjectConfig(projectID string) *projectConfig {
 func forgetWorktree(projectID, worktreeID string) {
 	dropWorktreeMarks(worktreeID)
 	deleteWorktreeData(projectID, worktreeID)
+	// What clone checkouts proved about its files (cloneverified.go).
+	if err := os.Remove(cloneVerifiedPathForID(worktreeID)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		vlog("[state] delete clone record: %v", err)
+	}
 }
 
 func deleteWorktreeData(projectID, worktreeID string) {

@@ -79,7 +79,7 @@ func seedStack(t *testing.T) (proj project, upstream string) {
 	}
 	base := "main"
 	for _, layer := range []string{"layer-a", "layer-b", "layer-c"} {
-		w, err := createWorktree(proj, layer, layer, base, false)
+		w, err := createWorktree(proj, layer, layer, base, false, true)
 		if err != nil {
 			t.Fatal(err)
 		}

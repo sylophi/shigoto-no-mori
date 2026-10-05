@@ -102,11 +102,11 @@ export const worktreesHandlers: Handlers<
   // Lifecycle mutations route through the bundled CLI so the app and a
   // terminal run the same engine.
   create: async (
-    { projectId, worktreeName, branchName, base, checkout },
+    { projectId, worktreeName, branchName, base, checkout, cloneFiles },
     ctx,
   ) => {
     const project = await findProjectOrThrow(projectId);
-    const input = { worktreeName, branchName, base, checkout };
+    const input = { worktreeName, branchName, base, checkout, cloneFiles };
     return createViaCli(project, input, notifierFor(ctx));
   },
 

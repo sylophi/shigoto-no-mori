@@ -3,6 +3,7 @@ import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
+import { ToggleRow } from "@/components/shared/ToggleRow";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { VillagerMovingIn } from "./VillagerMovingIn";
@@ -185,6 +186,7 @@ function NewWorktreeForm({
     null,
   );
   const [prFolderFrom, setPrFolderFrom] = useState<"pr" | "branch">("branch");
+  const [cloneFiles, setCloneFiles] = useState(true);
   const candidates = usePullRequestCandidates(project.id, prMode);
   const verdict = candidates.data;
   useEffect(() => {
@@ -270,7 +272,11 @@ function NewWorktreeForm({
   };
 
   const handleCreate = () => {
-    const target = { projectId: project.id, worktreeName: folderName };
+    const target = {
+      projectId: project.id,
+      worktreeName: folderName,
+      cloneFiles,
+    };
     if (prMode) {
       if (!selectedPr) return;
       createFromPr.mutate(
@@ -500,6 +506,14 @@ function NewWorktreeForm({
           {!folderTaken && <VillagerMovingIn folderName={folderName} />}
         </p>
       </div>
+
+      <ToggleRow
+        checked={cloneFiles}
+        onCheckedChange={setCloneFiles}
+        label="Clone files from an existing checkout"
+        description="Copies tracked files in from the primary checkout, or the one on the source branch, as clones that share disk space with the originals. Much faster on large repos."
+        disabled={busy}
+      />
 
       {errorMessage && (
         <ErrorBanner

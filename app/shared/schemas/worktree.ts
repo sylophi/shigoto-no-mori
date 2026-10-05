@@ -262,6 +262,10 @@ export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
   // branch). Requires `base` to be set and not already checked out
   // elsewhere. Ignores `branchName`.
   checkout: z.boolean().optional(),
+  // false: git writes every tracked file. Otherwise they're cloned
+  // (copy-on-write) from an existing checkout wherever it has them
+  // unchanged (`sm create --no-clone`).
+  cloneFiles: z.boolean().optional(),
 });
 
 const CarryOverFailureSchema = z.object({

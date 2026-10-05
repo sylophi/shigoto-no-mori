@@ -121,7 +121,7 @@ func TestCreateLifecycleCarriesOverFromSiblingWorktree(t *testing.T) {
 
 	// The sibling on branch feat: the manual entry's only copy, plus a
 	// .worktreeinclude the primary doesn't have.
-	otter, err := createWorktree(proj, "otter", "feat", "main", false)
+	otter, err := createWorktree(proj, "otter", "feat", "main", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestCreateLifecycleCarriesOverFromSiblingWorktree(t *testing.T) {
 		{"newt", "feat"},
 		{"koala", "main"},
 	} {
-		wt, err := createWorktree(proj, tc.name, tc.name, tc.base, false)
+		wt, err := createWorktree(proj, tc.name, tc.name, tc.base, false, true)
 		if err != nil {
 			t.Fatal(err)
 		}

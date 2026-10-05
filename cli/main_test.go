@@ -16,7 +16,20 @@ func TestMain(m *testing.M) {
 			os.Unsetenv(key)
 		}
 	}
-	os.Exit(m.Run())
+	// A data dir of the run's own, so a test that writes state without
+	// sandboxDataDir (a clone checkout's verified-files cache) never
+	// reaches the real one.
+	dir, err := os.MkdirTemp("", "sm-test-data")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("SHIGOMORI_DATA_DIR", dir)
+	if err := initDataDir(); err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // Runs git in a fixture dir, failing the test on a non-zero exit.

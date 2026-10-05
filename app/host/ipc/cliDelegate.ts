@@ -304,6 +304,8 @@ export function createViaCli(
     branchName?: string;
     base?: string;
     checkout?: boolean;
+    // false has git write every tracked file instead of cloning them.
+    cloneFiles?: boolean;
     // Leave the project's setup script out (carry-over and port
     // provision still run): a mirror or transplant told not to set
     // the copy up.
@@ -317,6 +319,7 @@ export function createViaCli(
   if (input.base) args.push("--base", input.base);
   if (input.checkout) args.push("--checkout");
   if (input.skipSetup) args.push("--no-setup");
+  if (input.cloneFiles === false) args.push("--no-clone");
   // End-of-options terminator before the caller-influenced worktree name
   // so a flag-shaped name can never be read as an option. Pushed last,
   // after every flag, because `--` makes the parser treat the rest as

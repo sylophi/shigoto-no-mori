@@ -95,7 +95,7 @@ func TestCreateHonorsDoubutsuNames(t *testing.T) {
 
 	// The sandbox registered a project without the fresh-install seed,
 	// like an install from before it: unset reads as off.
-	wt, err := createWorktree(proj, "", "", "", false)
+	wt, err := createWorktree(proj, "", "", "", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestCreateHonorsDoubutsuNames(t *testing.T) {
 	}
 
 	setGlobalBool(t, "doubutsuNames", false)
-	wt, err = createWorktree(proj, "", "", "", false)
+	wt, err = createWorktree(proj, "", "", "", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestCreateHonorsDoubutsuNames(t *testing.T) {
 	}
 
 	setGlobalBool(t, "doubutsuNames", true)
-	wt, err = createWorktree(proj, "", "", "", false)
+	wt, err = createWorktree(proj, "", "", "", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestCreateSkipsNamesHeldByBranches(t *testing.T) {
 		t.Fatalf("update-ref: %v: %s", err, out)
 	}
 
-	wt, err := createWorktree(proj, "", "", "", false)
+	wt, err := createWorktree(proj, "", "", "", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}

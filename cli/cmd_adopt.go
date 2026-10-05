@@ -68,7 +68,7 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 		vlog("[state] drop shelved: %v", err)
 	}
 
-	worktree, err := createWorktree(proj, worktreeName, "", branchOrSha, true)
+	worktree, err := createWorktree(proj, worktreeName, "", branchOrSha, true, true)
 	if err != nil {
 		return 1, err
 	}

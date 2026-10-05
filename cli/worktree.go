@@ -258,7 +258,9 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 // the identity so the returned branch is what git settled on.
 // checkout=true reuses the existing branch `base` (no -b) for the adopt
 // path; otherwise a new branch is created (branchName, or the dirname).
-func createWorktree(proj project, requestedName, branchName, base string, checkout bool) (worktreeJSON, error) {
+// cloneFiles clones the tracked files from an existing checkout where
+// it can (cloneCheckout) instead of having git write them all.
+func createWorktree(proj project, requestedName, branchName, base string, checkout, cloneFiles bool) (worktreeJSON, error) {
 	existing, err := listWorktreeIdentities(proj)
 	if err != nil {
 		return worktreeJSON{}, err
@@ -298,19 +300,40 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
 		return worktreeJSON{}, err
 	}
+	if checkout && base == "" {
+		return worktreeJSON{}, errf("Checkout mode requires a base ref")
+	}
+	var cloneSource *worktreeIdentity
+	if cloneFiles {
+		cloneSource = pickCloneSource(proj, existing, worktreePath, base, remotes)
+	}
+	noCheckout := cloneSource != nil
+	branch := ""
 	if checkout {
-		if base == "" {
-			return worktreeJSON{}, errf("Checkout mode requires a base ref")
-		}
 		// Reuse the existing branch (git refuses if it's already checked
 		// out in another worktree), materializing a local tracking branch
 		// when the base is a remote ref.
-		if err := gitWorktreeCheckout(proj.Path, worktreePath, base, remotes); err != nil {
+		if err := gitWorktreeCheckout(proj.Path, worktreePath, base, remotes, noCheckout); err != nil {
 			return worktreeJSON{}, err
 		}
 	} else {
-		branch := cmp.Or(strings.TrimSpace(branchName), name)
-		if err := gitWorktreeAdd(proj.Path, worktreePath, branch, base); err != nil {
+		branch = cmp.Or(strings.TrimSpace(branchName), name)
+		if err := gitWorktreeAdd(proj.Path, worktreePath, branch, base, noCheckout); err != nil {
+			return worktreeJSON{}, err
+		}
+	}
+	if noCheckout {
+		if err := finishCloneCheckout(*cloneSource, worktreePath); err != nil {
+			// Nothing checked out: undo the add (and the branch it made),
+			// as git does when its own checkout fails. A failed hook
+			// leaves the worktree, as git leaves it.
+			var unfinished checkoutUnfinished
+			if errors.As(err, &unfinished) {
+				_, _ = runGit(proj.Path, "worktree", "remove", "--force", worktreePath)
+				if branch != "" {
+					_, _ = runGit(proj.Path, "branch", "-D", branch)
+				}
+			}
 			return worktreeJSON{}, err
 		}
 	}
