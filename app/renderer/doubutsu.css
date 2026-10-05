@@ -58,7 +58,7 @@
  *        villager-letter-paper, villager-photo
  *                                villagers/VillagerDialogue.tsx,
  *                                villagers/VillagerLetter.tsx
- *      visitor-guest-book, visitor-sticker
+ *      visitor-guest-book, visitor-sticker, visitor-sticker-button
  *                                visitors/GuestBook.tsx,
  *                                visitors/VisitorSticker.tsx
  *
@@ -1049,7 +1049,11 @@
 
    :hover is gated on (hover: hover), as index.css gates the `hover:`
    variant: a tap on a touch screen leaves :hover stuck on whatever it
-   landed on, so there only the press stripes, under the finger. */
+   landed on, so there only the press stripes, under the finger.
+
+   The stripes take over the control's own animation while they show,
+   and handing it back plays it again: an entrance animation goes on a
+   wrapper, not the control (the Visitors album's slots). */
 @keyframes ac-stripe-slide {
   from {
     background-position: 0 0;
@@ -1121,6 +1125,22 @@
 .doubutsu [data-slot="sidebar-project-pick"]:is(:hover, :active) {
   background-image: none;
   animation: none;
+}
+
+/* A Visitors album sticker answers a pointer itself: it straightens
+   and lifts on hover, and flips when pressed. Its stripes would only
+   show mid-flip, as a striped card behind the turning one. */
+.doubutsu [data-slot="visitor-sticker-button"] {
+  &:active {
+    background-image: none;
+    animation: none;
+  }
+  @media (hover: hover) {
+    &:hover {
+      background-image: none;
+      animation: none;
+    }
+  }
 }
 
 /* The tile a project without a logo wears is a leaf here (its own
