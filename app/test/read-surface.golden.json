@@ -4,6 +4,7 @@
   "githubCli:pullRequestCandidates",
   "githubCli:pullRequestDiff",
   "githubCli:readiness",
+  "githubCli:repoDescription",
   "githubCli:repoMergeConfig",
   "githubCli:worktreePullRequest",
   "globalConfig:read",

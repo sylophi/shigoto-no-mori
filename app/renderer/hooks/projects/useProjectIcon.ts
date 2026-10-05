@@ -1,8 +1,8 @@
 import { queryOptions, skipToken, useQuery } from "@tanstack/react-query";
 import type { ProjectIcon } from "@shared/schemas";
-import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
-import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
+import type { HostScope } from "@/hooks/remote/useHostScope";
+import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
+import { queryKeysFor } from "@/lib/queryKeys";
 
 // The icon belongs to (device, project), not to a project alone, so the
 // query takes the same scope pair projectsQueryOptions does: the key
@@ -31,32 +31,14 @@ export function projectIconQueryOptions(
 // undefined while that isn't known yet: the first fetch is out, the
 // device can't be asked (a peer not connected, with nothing cached),
 // or the fetch failed. Unknown is not icon-less, so a repo with a logo
-// never shows the generated tile on its way there.
-// With no deviceId it rides the surrounding host scope (a device-scoped
-// page, or the local default). With one it names another machine, and
-// the api comes from the remote device store through a selector, so
-// the surfaces that mention a project from another device outside its
-// scope (the merged sidebar's remote headers, the device chips on
-// /account) neither mount a HostScopeProvider for a single read nor
-// re-render on every roster transition.
+// never shows the generated tile on its way there. A deviceId names
+// another machine than the surrounding scope's (useDeviceApi).
 export function useProjectIcon(
   projectId: string,
   deviceId?: string,
 ): string | null | undefined {
-  const scope = useHostScope();
-  const targetId = deviceId ?? scope.deviceId;
-  // The store never lists this machine, so naming it explicitly from
-  // inside a peer's scope must resolve to window.api, not to nothing.
-  const known = targetId === scope.deviceId || targetId === localDeviceId;
-  const peerApi = useRemoteDeviceApi(known ? undefined : targetId);
-  const api =
-    targetId === scope.deviceId
-      ? scope.api
-      : targetId === localDeviceId
-        ? window.api
-        : peerApi;
   const { data } = useQuery(
-    projectIconQueryOptions(projectId, { deviceId: targetId, api }),
+    projectIconQueryOptions(projectId, useDeviceApi(deviceId)),
   );
   return data ? `data:${data.mime};base64,${data.base64}` : data;
 }
