@@ -27,6 +27,7 @@ import { useOpenProject } from "@/components/sidebar/openProject";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useDeepLinks } from "@/hooks/ui/useDeepLinks";
+import { useEscapeGoesBack } from "@/hooks/ui/useEscapeGoesBack";
 import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
@@ -47,6 +48,7 @@ export function AppShell() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   usePaletteVariantHotkey(!pathname.startsWith("/settings"));
+  useEscapeGoesBack();
   // The forest tab a stacked page returns to on a phone.
   const forestTab = forestTabFor(useSidebarView());
   const sidebar = useResizableWidth({
