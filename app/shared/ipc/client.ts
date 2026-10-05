@@ -355,11 +355,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       startTo: mirrorClient.startTo,
       startFrom: mirrorClient.startFrom,
       // `force` discards a copy the peer is not confirmed to hold.
-      // `keepCopy` ends the mirror and leaves the copy as a worktree.
-      stop: (
-        session: string,
-        opts: { force?: boolean; keepCopy?: boolean } = {},
-      ) => mirrorClient.stop({ session, ...opts }),
+      stop: (session: string, force?: boolean) =>
+        mirrorClient.stop({ session, force }),
       pause: (session: string) => mirrorClient.pause({ session }),
       resume: (session: string) => mirrorClient.resume({ session }),
       setIgnores: mirrorClient.setIgnores,

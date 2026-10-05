@@ -1346,13 +1346,10 @@ async function main() {
       );
       assert.ok(live.has("conflicted"));
       assert.deepEqual(deleted, []);
-      // Keeping the copy is always safe: the session ends, the copy is
-      // not asked to go, its device is told it is a plain worktree now.
-      await stop({ session: "conflicted", keepCopy: true });
+      // Removing it anyway is the user's call, made after being told.
+      await stop({ session: "conflicted", force: true });
       assert.ok(!live.has("conflicted"));
-      assert.deepEqual(deleted, []);
-      await waitFor(() => released.includes("wt-conflicted"), "the release");
-      assert.equal(noted.at(-1)?.[1], "stopped");
+      assert.deepEqual(deleted, ["wt-conflicted"]);
 
       // Files settled but git not: the fresh verdict is what decides.
       put(sessionOf("ahead"));
@@ -1360,14 +1357,16 @@ async function main() {
       await assert.rejects(stop({ session: "ahead" }), isMirrorStopUnconfirmed);
       verdict = { status: "synced", detail: "" };
       await stop({ session: "ahead" });
-      assert.deepEqual(deleted, ["wt-ahead"]);
+      assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
 
       // The original removed outside the app: the copy is the only one
-      // left, so even a forced stop keeps it.
+      // left, so even a forced stop keeps it, and its device is told it
+      // is a plain worktree now.
       put(sessionOf("orphan", { localRoot: goneRoot }));
       await stop({ session: "orphan", force: true });
       assert.ok(!live.has("orphan"));
-      assert.deepEqual(deleted, ["wt-ahead"]);
+      assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
+      await waitFor(() => released.includes("wt-orphan"), "the release");
       assert.deepEqual(noted.at(-1), [
         "orig-orphan",
         "stopped",
@@ -1394,7 +1393,7 @@ async function main() {
       );
       await settleMirrorBookkeeping();
       assert.deepEqual([...live.keys()].toSorted(), ["new"]);
-      assert.deepEqual(deleted, ["wt-ahead"]);
+      assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
 
       // A delete while the daemon restarts lists nothing to stop: the
       // stop waits for the daemon and ends the session once it runs.
@@ -1404,7 +1403,7 @@ async function main() {
       status = "running";
       await settleMirrorBookkeeping();
       assert.ok(!live.has("new"));
-      assert.deepEqual(deleted, ["wt-ahead"]);
+      assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
 
       // What the mirror leaves out changes only on a pair in step.
       put(sessionOf("paused", { paused: true }));
@@ -1419,7 +1418,7 @@ async function main() {
       live.clear();
     }
     ok(
-      "stop: a conflict or git not in step refuses removing the copy, keeping it always works, an original gone never takes its copy, and leftovers and delayed stops are swept",
+      "stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy, and leftovers and delayed stops are swept",
     );
 
     // (7) Stopping the daemon ends it cleanly.

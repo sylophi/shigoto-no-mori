@@ -444,31 +444,25 @@ export function useMirrorControls() {
   // renderer forgets the way a delete does. A copy elsewhere is that
   // device's view to refresh.
   // The outcome is said here and not by the dialog, which may be gone
-  // by then: a kept copy's session leaves the list (and the dialog with
-  // it) before the answer lands. A refusal for want of confirmation is
-  // the dialog's to show, in place, beside the choice it offers.
+  // by then: the session leaves the list (and the dialog with it) as
+  // the copy goes. A refusal for want of confirmation is the dialog's
+  // to show, in place, beside what it would take.
   const stop = useMutation({
     mutationFn: ({
       session,
       force,
-      keepCopy,
     }: {
       session: MirrorSession;
       force?: boolean;
-      keepCopy?: boolean;
       // The copy's device by name, for the words.
       copyName: string;
     }) => {
       // Its copy going is the mirror stopping, not its villager leaving.
-      if (keepCopy !== true) quietVillagerMoves([session.worktreeId]);
-      return api.mirror.stop(session.session, { force, keepCopy });
+      quietVillagerMoves([session.worktreeId]);
+      return api.mirror.stop(session.session, force);
     },
-    onSuccess: (_data, { keepCopy, copyName }) => {
-      toast.success(
-        keepCopy === true
-          ? `Mirror stopped. The copy stays on ${copyName} as its own worktree.`
-          : `Mirror stopped. The copy on ${copyName} is removed.`,
-      );
+    onSuccess: (_data, { copyName }) => {
+      toast.success(`Mirror stopped. The copy on ${copyName} is removed.`);
     },
     onError: (error, { copyName }) => {
       if (isMirrorStopUnconfirmed(error)) return;
@@ -480,11 +474,10 @@ export function useMirrorControls() {
       }
       notifyError("Couldn't stop mirroring", error);
     },
-    onSettled: (_data, error, { session, keepCopy }) => {
+    onSettled: (_data, error, { session }) => {
       // A copy that stayed was still the mirror stopping.
       if (error !== null && !isMirrorCopyStayed(error)) return;
-      const removed = error === null && keepCopy !== true;
-      if (removed && session.deviceId === localDeviceId) {
+      if (error === null && session.deviceId === localDeviceId) {
         forgetDeletedWorktree(
           queryClient,
           localDeviceId,

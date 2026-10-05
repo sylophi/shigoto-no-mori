@@ -406,12 +406,9 @@ const MirrorSessionPayloadSchema = z.strictObject({
 // staging) and the files are settled (mirrorFilesSettled). A paused
 // session, an unreachable peer, a conflict held still or one too young
 // to have reconciled all fail that. `force` is the user overriding it
-// after being told. `keepCopy` ends the mirror and leaves the copy as
-// an ordinary worktree of its device, which is always safe and so
-// never refused.
+// after being told.
 const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
   force: z.boolean().optional(),
-  keepCopy: z.boolean().optional(),
 });
 
 // The git half of the stop's safety, shared by the host that enforces
@@ -494,7 +491,7 @@ export function mirrorCopyIsDisposable(
 }
 
 // The refusal's leading text, which the renderer matches to offer
-// discard-and-stop (and keep-the-copy). Text rather than a code because Electron's IPC
+// discard-and-stop. Text rather than a code because Electron's IPC
 // flattens an error to its message (see COMMAND_REFUSED_MESSAGE).
 export const MIRROR_STOP_UNCONFIRMED =
   "The copy is not confirmed in step with the other device";

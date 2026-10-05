@@ -573,7 +573,7 @@ function hostHandlersFor(
     }),
     // The controls of a session this forest runs (the manage dialog
     // re-scopes to the runner).
-    "mirror:stop": ({ session, keepCopy }) => {
+    "mirror:stop": ({ session }) => {
       const entry = findFakeSession(session);
       fakeMirrors.sessions = fakeMirrors.sessions.filter(
         (s) => s.session !== session,
@@ -587,16 +587,8 @@ function hostHandlersFor(
           ),
       );
       const copyForest = entry && forests[entry.deviceId];
-      if (entry) {
-        noteMirrorEvent(
-          entry.localWorktreeId,
-          "stopped",
-          keepCopy === true
-            ? "The copy on the other device stays as a worktree"
-            : "",
-        );
-      }
-      if (entry && copyForest && keepCopy !== true) {
+      if (entry) noteMirrorEvent(entry.localWorktreeId, "stopped", "");
+      if (entry && copyForest) {
         // The stop takes the copy on the runner's peer with it, as
         // the host's forced delete does.
         copyForest.worktrees[entry.projectId] = (

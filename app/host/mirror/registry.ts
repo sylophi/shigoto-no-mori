@@ -311,7 +311,7 @@ export function releaseCopy(raw: MirrorSessionRaw): void {
 }
 
 // Ends a mirror and leaves its copy where it is, an ordinary worktree
-// of its device: the stop's "keep the copy", and the end of a mirror
+// of its device: the end of a mirror
 // whose original is gone (the copy is then the only one left). The
 // original's thread says why.
 export async function endMirrorKeepingCopy(

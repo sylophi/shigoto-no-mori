@@ -96,8 +96,8 @@ function MirrorLinkAction({
             session={session}
             {...mirror}
             onClose={() => setOpen(false)}
-            onStopped={(removedCopy) => {
-              if (pageIsCopy && removedCopy) nav.toFallback(true);
+            onStopped={() => {
+              if (pageIsCopy) nav.toFallback(true);
             }}
           />
         </RunnerScope>

@@ -538,11 +538,10 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // session already gone: the worktree page then offers the ordinary
   // delete.
   //
-  // `keepCopy` ends the session alone and leaves the copy where it is,
-  // a worktree of its own on its device, which is always safe. So is a
-  // stop whose original is gone (removed outside the app): the copy is
-  // then the only one there is, and it is never removed.
-  stop: async ({ session, force, keepCopy }) => {
+  // A stop whose original is gone (removed outside the app) ends the
+  // session alone: the copy is then the only one there is, and it is
+  // never removed, forced or not.
+  stop: async ({ session, force }) => {
     const daemon = engine();
     const raw = findSession(daemon, session);
     if (raw === undefined) {
@@ -550,14 +549,6 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     }
     if (!existsSync(raw.localRoot)) {
       await endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL);
-      return;
-    }
-    if (keepCopy === true) {
-      await endMirrorKeepingCopy(
-        daemon,
-        raw,
-        "The copy on the other device stays as a worktree",
-      );
       return;
     }
     // The copy goes with the stop, so it must hold nothing the original
@@ -583,7 +574,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
           return;
         }
         throw new Error(
-          `${MIRROR_STOP_UNCONFIRMED}: ${blocker}, so the copy may hold work that exists nowhere else. Keep the copy, wait for the mirror to catch up, or remove it anyway.`,
+          `${MIRROR_STOP_UNCONFIRMED}: ${blocker}, so the copy may hold work that exists nowhere else. Let the mirror catch up first, or remove the copy anyway.`,
         );
       }
     }
