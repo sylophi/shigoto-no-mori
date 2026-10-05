@@ -46,6 +46,7 @@ import { useDeviceFilter } from "./deviceFilter";
 import { DeviceFilterBar } from "./DeviceFilterBar";
 import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
+import { useLeaveInboxForPage } from "./inbox/useLeaveInboxForPage";
 import { setOpenProject, useOpenProject } from "./openProject";
 import { ProjectDragPreview } from "./ProjectDragPreview";
 import {
@@ -329,6 +330,14 @@ function Forest({
         deviceBadges,
       });
   const { rows, pinned, level } = view;
+  const listingsLoading = isLoading || remoteLoading;
+  // A pinned view has its tab bar, and a worktree's page replaces it.
+  useLeaveInboxForPage({
+    inbox: inbox && pinnedView === undefined,
+    settled: viewSettled,
+    shownDevice: activeFilter?.deviceId ?? null,
+    leftOut: view.leftOut,
+  });
   const inProject = typeof level === "string";
   // Failed listings, local or remote, surface here whether or not the
   // filter shows their rows -- without it a peer's project would
@@ -374,7 +383,7 @@ function Forest({
     : null;
 
   const emptyMessage = emptyForestMessage({
-    loading: isLoading || remoteLoading,
+    loading: listingsLoading,
     narrowedTo: activeFilter?.label,
     empty: rows.length === 0 && pinned === undefined,
     noProjects: projects.length === 0,
@@ -435,7 +444,7 @@ function Forest({
         scrollerRef={scrollerRef}
         // Not while the forest is still listing: the level it settles on
         // is then where it starts, not a move from the list.
-        level={isLoading || remoteLoading ? undefined : level}
+        level={listingsLoading ? undefined : level}
         asked={askedLevel === level}
         handlers={handlers}
       />

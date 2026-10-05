@@ -173,6 +173,10 @@ export interface SidebarViewModel {
     worktreeId: string,
     deviceId?: string,
   ) => string | null;
+  // Whether the view leaves a listed worktree out by design, so it will
+  // have no row for it however long it is given (the inbox, which
+  // keeps primaries out). Absent for a view that lists every worktree.
+  leftOut?: (worktreeId: string, deviceId?: string) => boolean;
 }
 
 export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
