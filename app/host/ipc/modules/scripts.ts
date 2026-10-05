@@ -7,6 +7,7 @@ import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "@host/lib/projects";
 import {
+  attachScript,
   cancelScript,
   listRunningScripts,
   resizeScript,
@@ -91,4 +92,7 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
     orphanReport: async () => takeOrphanSweepReport(),
 
     list: async () => ({ runs: listRunningScripts() }),
+
+    attach: async ({ runId }, handlerCtx) =>
+      attachScript(runId, scriptEventNotifier(handlerCtx), handlerCtx.signal),
   };

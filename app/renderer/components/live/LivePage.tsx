@@ -6,17 +6,23 @@
 // stopped) without walking the forest. Each worktree with something
 // live is a card (liveModel.ts), filed under its device. Every list is
 // kept live by its own broadcast (hooks/live/useLiveActivity.ts).
-import { Radio } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Loader2, Radio, Square } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
+  type HostScripts,
   useLiveMirrors,
   useRunningScripts,
 } from "@/hooks/live/useLiveActivity";
+import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
+import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { scriptKey, scriptRunsFor } from "@/store/scriptRuns";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
 import { pluralize } from "@/lib/pluralize";
 import { DeviceHeading, LiveCard } from "./LiveCard";
-import { ForwardLine, MirrorLine, ScriptLine } from "./LiveItems";
 import { buildLive, countLive, type LiveDevice } from "./liveModel";
 
 // "2 scripts, 1 port forward and 1 mirror", leaving out what is none.
@@ -34,7 +40,7 @@ function summarize(devices: readonly LiveDevice[]): string {
 export function LivePage() {
   const hosts = useRunningScripts();
   const mirrors = useLiveMirrors();
-  const { forwards, stop } = useAllPortForwards();
+  const { forwards } = useAllPortForwards();
   const devices = buildLive({ scripts: hosts, mirrors, forwards });
   // Which device a card is on only says something once there is more
   // than one.
@@ -47,6 +53,7 @@ export function LivePage() {
         eyebrow={summary === "" ? "Nothing running" : `${summary} running`}
         title="Live"
         watermark="稼働"
+        trailing={<StopAllScripts hosts={hosts} />}
       />
       <div className={PAGE_BODY}>
         {devices.length === 0 ? (
@@ -65,40 +72,9 @@ export function LivePage() {
                     summary={summarize([device])}
                   />
                 )}
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(--spacing(72),1fr))] items-start gap-3">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(--spacing(80),1fr))] items-start gap-3">
                   {device.cards.map((card) => (
-                    <LiveCard key={card.key} card={card}>
-                      {card.items.map((item) =>
-                        item.kind === "script" ? (
-                          <ScriptLine
-                            key={item.run.runId}
-                            deviceId={card.deviceId}
-                            api={item.api}
-                            run={item.run}
-                          />
-                        ) : item.kind === "mirror" ? (
-                          <MirrorLine
-                            key={
-                              item.mirror.kind === "session"
-                                ? item.mirror.session.session
-                                : item.mirror.stream.channelId
-                            }
-                            mirror={item.mirror}
-                          />
-                        ) : (
-                          <ForwardLine
-                            key={item.forward.forwardId}
-                            forward={item.forward}
-                            showDevice={card.worktree === null}
-                            stopping={
-                              stop.isPending &&
-                              stop.variables === item.forward.forwardId
-                            }
-                            onStop={() => stop.mutate(item.forward.forwardId)}
-                          />
-                        ),
-                      )}
-                    </LiveCard>
+                    <LiveCard key={card.key} card={card} />
                   ))}
                 </div>
               </section>
@@ -107,6 +83,56 @@ export function LivePage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Every running script this window may stop, on every device, in one
+// go: the end of a day's work, or a machine bogged down by dev servers
+// left behind. Armed by a first click, like the app's other removals.
+function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
+  const registry = useRemoteDevices();
+  const { armed, trigger } = useConfirmTwice();
+  const runs = hosts.flatMap(({ deviceId, api, runs: hostRuns }) =>
+    api !== undefined &&
+    commandAccessOf(
+      deviceId,
+      registry.find((device) => device.deviceId === deviceId),
+    ).canCommand
+      ? hostRuns.map((run) => ({ deviceId, api, run }))
+      : [],
+  );
+  const stopAll = useMutation({
+    mutationFn: () =>
+      Promise.allSettled(
+        runs.map(({ deviceId, api, run }) => {
+          const store = scriptRunsFor(deviceId);
+          const key = scriptKey(run.projectId, run.worktreeId, run.slot);
+          return store.snapshot(key).runId === run.runId
+            ? store.cancel(key)
+            : api.scripts.cancel(run.runId);
+        }),
+      ),
+  });
+  if (runs.length === 0 && !stopAll.isPending) return null;
+  return (
+    <Button
+      size="sm"
+      variant="outline-destructive"
+      aria-pressed={armed}
+      disabled={stopAll.isPending}
+      onClick={() => trigger(() => stopAll.mutate())}
+    >
+      {stopAll.isPending ? (
+        <Loader2 className="animate-spin" />
+      ) : (
+        <Square className="size-3 fill-current" />
+      )}
+      {stopAll.isPending
+        ? "Stopping…"
+        : armed
+          ? "Click again to stop them all"
+          : `Stop ${runs.length === 1 ? "the script" : `all ${runs.length} scripts`}`}
+    </Button>
   );
 }
 

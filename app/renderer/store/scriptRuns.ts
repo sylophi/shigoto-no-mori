@@ -15,7 +15,11 @@
 // Snapshots are immutable: every transition replaces the record with
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
-import type { RemovedWorktreeScripts, ScriptEvent } from "@shared/schemas";
+import type {
+  RemovedWorktreeScripts,
+  RunningScript,
+  ScriptEvent,
+} from "@shared/schemas";
 import { localDeviceId } from "@/lib/queryKeys";
 import { apiFor, onAccountLeft } from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
@@ -125,7 +129,12 @@ interface StartInput {
 
 type ScriptsApi = Pick<
   RendererApi["scripts"],
-  "cancel" | "write" | "resize" | "onEvent" | "onStoppedForRemovedWorktree"
+  | "attach"
+  | "cancel"
+  | "write"
+  | "resize"
+  | "onEvent"
+  | "onStoppedForRemovedWorktree"
 >;
 
 export class ScriptRunsStore {
@@ -147,6 +156,9 @@ export class ScriptRunsStore {
   // When each worktree's page was last left. A failure since then is
   // news (getActivityKind); one from before it has been seen.
   private seenAt = new Map<string, number>();
+  // Runs an attach is in flight for, so a slot asked again while the
+  // first answer is on its way does not attach twice.
+  private attaching = new Set<string>();
   private unsubscribers: Array<() => void> = [];
   private api: ScriptsApi;
   // Whether a removed-worktree notice is worth a toast even for a
@@ -209,6 +221,43 @@ export class ScriptRunsStore {
     // Drain any events the child produced before we knew the runId. Order
     // is preserved (push/iterate FIFO) so xterm replay stays coherent.
     this.bindRunIdAndDrain(input.key, runId);
+  }
+
+  // Takes up a run the host lists that this store does not hold (one
+  // another window or device started, or this window before a reload):
+  // its output so far, then its events as they come, so its console,
+  // status and Stop work as for a run started here. Events the host
+  // sends before the answer lands wait in the pre-bind buffer and are
+  // drained after the backlog, so nothing is missed or doubled.
+  async attach(run: RunningScript): Promise<void> {
+    const key = scriptKey(run.projectId, run.worktreeId, run.slot);
+    const held = this.states.get(key);
+    if (held?.runId === run.runId || this.attaching.has(run.runId)) return;
+    if (held?.status === "starting") return;
+    this.attaching.add(run.runId);
+    try {
+      const joined = await this.api.attach(run.runId);
+      // Gone in the meantime, or the slot taken by a run started here.
+      if (joined === null) return;
+      const now = this.states.get(key);
+      if (now?.status === "starting" || now?.status === "running") return;
+      this.begin(key, run.worktreeId, run.slot, {
+        runId: run.runId,
+        status: "running",
+        interactive: run.interactive,
+      });
+      this.setStateWithActivity(key, (s) => ({
+        ...s,
+        startedAt: run.startedAt,
+      }));
+      if (joined.output !== "") this.appendChunk(key, joined.output);
+      this.bindRunIdAndDrain(key, run.runId);
+    } catch {
+      // Refused (no command access there) or the device away: the run
+      // stays the host's alone, and the next ask tries again.
+    } finally {
+      this.attaching.delete(run.runId);
+    }
   }
 
   async cancel(key: ScriptKey): Promise<void> {

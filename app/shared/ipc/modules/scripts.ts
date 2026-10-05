@@ -51,6 +51,17 @@ export const scriptsContract = defineContract("host", {
   // every wire, so a list on screen re-reads. Payload-free like
   // portForward:changed: the list read is cheap.
   changed: broadcast("scripts:changed", z.void(), { remote: true }),
+  // Joins a run this window did not start (another window's or
+  // device's, or its own from before a reload): its output so far, and
+  // every event from then on over `event`, as if it had started it.
+  // Null for a run no longer running. Gated like the console's input:
+  // a run's output is as private as its terminal.
+  attach: invoke(
+    "scripts:attach",
+    z.object({ runId: z.string() }),
+    z.object({ output: z.string() }).nullable(),
+    { remote: true, gated: true, movesHostState: false },
+  ),
   event: broadcast("scripts:event", ScriptEventSchema, { remote: true }),
   // The worktree these scripts ran in was removed outside the app, so
   // the app reaped them (see host/lib/scripts/removedWorktrees.ts). The

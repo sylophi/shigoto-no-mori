@@ -53,6 +53,56 @@ const DEFAULT_ROWS = 40;
 // frame.
 const OUTPUT_FLUSH_MS = 16;
 const OUTPUT_FLUSH_BYTES = 64 * 1024;
+// Output kept per run for a window that attaches after it started (the
+// console opened from another window or device, or after a reload), so
+// it opens on the run's recent output rather than a blank terminal.
+// The renderer keeps up to a megabyte of what it has seen; this only
+// has to set the scene.
+const BACKLOG_BYTES = 256 * 1024;
+
+// One run's event stream: the window that started it, and any that
+// attached since (scripts:attach), each fed every event from then on.
+// Output is kept as a backlog for the next to attach.
+interface RunStream {
+  emit: NotifyScriptEvent;
+  attach: (watcher: NotifyScriptEvent, signal: AbortSignal) => string;
+}
+
+function createRunStream(starter: NotifyScriptEvent): RunStream {
+  const chunks: string[] = [];
+  let bytes = 0;
+  const watchers = new Set<NotifyScriptEvent>();
+  const keep = (data: string) => {
+    chunks.push(data);
+    bytes += data.length;
+    while (bytes > BACKLOG_BYTES && chunks.length > 1) {
+      bytes -= chunks.shift()?.length ?? 0;
+    }
+  };
+  return {
+    emit: (event) => {
+      if (event.kind === "data") keep(event.data);
+      // Worded the way the renderer prints an error into the console.
+      if (event.kind === "error") keep(`\r\n\x1b[31m${event.data}\x1b[0m\r\n`);
+      starter(event);
+      for (const watcher of watchers) {
+        try {
+          watcher(event);
+        } catch {}
+      }
+      if (event.kind === "exit") watchers.clear();
+    },
+    attach: (watcher, signal) => {
+      if (!signal.aborted) {
+        watchers.add(watcher);
+        signal.addEventListener("abort", () => watchers.delete(watcher), {
+          once: true,
+        });
+      }
+      return chunks.join("");
+    },
+  };
+}
 
 interface ScriptWorktree {
   id: string;
@@ -84,6 +134,7 @@ interface Killable {
   cancelling: boolean;
   done: Promise<void>;
   notify: NotifyScriptEvent;
+  stream: RunStream;
   signal: (signal: NodeJS.Signals) => Promise<void>;
   // Sends whatever output is pooled for the next frame (see
   // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
@@ -153,6 +204,7 @@ export function cliScriptStream(notify: NotifyScriptEvent): {
         const done = new Promise<void>((resolve) => {
           settle = resolve;
         });
+        const stream = createRunStream(notify);
         cliScripts.set(event.runId, {
           runId: event.runId,
           pid,
@@ -163,7 +215,8 @@ export function cliScriptStream(notify: NotifyScriptEvent): {
           exited: false,
           cancelling: false,
           done,
-          notify,
+          notify: stream.emit,
+          stream,
           signal: (signal) => signalPidTree(pid, signal),
           flushOutput: () => {},
           settle,
@@ -174,12 +227,18 @@ export function cliScriptStream(notify: NotifyScriptEvent): {
         });
         own.add(event.runId);
         runningScriptsChanged();
-      } else if (event.kind === "exit") {
-        const run = drop(event.runId);
-        if (run?.cancelling) event = { ...event, code: null };
-        if (run) runningScriptsChanged();
+        notify(event);
+        return;
       }
-      notify(event);
+      // A booked run's events go through its stream, so a window that
+      // attached to it hears them too.
+      const run = cliScripts.get(event.runId);
+      if (event.kind === "exit" && run) {
+        drop(event.runId);
+        if (run.cancelling) event = { ...event, code: null };
+        runningScriptsChanged();
+      }
+      (run?.stream.emit ?? notify)(event);
     },
     end: () => {
       if (own.size === 0) return;
@@ -409,6 +468,20 @@ export function listRunningScripts(): RunningScript[] {
   return runs.toSorted((a, b) => a.startedAt - b.startedAt);
 }
 
+// Joins a running script's stream from a window that did not start it:
+// every event from now on goes to `notify` too, until the run ends or
+// the caller's connection goes (`signal`). Answers the output so far,
+// or null for a run that is not running here.
+export function attachScript(
+  runId: string,
+  notify: NotifyScriptEvent,
+  signal: AbortSignal,
+): { output: string } | null {
+  const run = runningScripts.get(runId) ?? cliScripts.get(runId);
+  if (!run || run.exited) return null;
+  return { output: run.stream.attach(notify, signal) };
+}
+
 // The worktrees with a live app-started script, by id: what the
 // auto-pull paths treat as busy.
 export function runningScriptWorktreeIds(): Set<string> {
@@ -552,6 +625,7 @@ export function startScript(args: RunArgs): string {
   // terminal), so the renderer's xterm sees exactly what a real
   // terminal would, and concatenating reads before sending changes
   // nothing it renders.
+  const stream = createRunStream(args.notify);
   let pendingOutput = "";
   let flushTimer: NodeJS.Timeout | null = null;
   const flushOutput = () => {
@@ -562,7 +636,7 @@ export function startScript(args: RunArgs): string {
     if (!pendingOutput) return;
     const data = pendingOutput;
     pendingOutput = "";
-    args.notify({ runId, kind: "data", data });
+    stream.emit({ runId, kind: "data", data });
   };
 
   let resolveDone: () => void;
@@ -585,7 +659,8 @@ export function startScript(args: RunArgs): string {
     exited: false,
     cancelling: false,
     done,
-    notify: args.notify,
+    notify: stream.emit,
+    stream,
     signal: (signal) => signalTree(pty.pid, signal),
     flushOutput,
   };
@@ -614,7 +689,7 @@ export function startScript(args: RunArgs): string {
     const code = error.code ?? "";
     if (code.includes("EAGAIN") || code.includes("EIO")) return;
     flushOutput();
-    args.notify({ runId, kind: "error", data: errorMessageOf(error) });
+    stream.emit({ runId, kind: "error", data: errorMessageOf(error) });
   });
 
   // node-pty reports exit only after the terminal stream has drained
@@ -632,7 +707,7 @@ export function startScript(args: RunArgs): string {
     const wasSignal = signal !== undefined && signal !== 0;
     const reported = record.cancelling || wasSignal ? null : exitCode;
     flushOutput();
-    args.notify({ runId, kind: "exit", code: reported });
+    stream.emit({ runId, kind: "exit", code: reported });
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);

@@ -38,6 +38,23 @@ function useLiveHosts(): LiveHost[] {
 
 export type HostScripts = LiveHost & { runs: RunningScript[] };
 
+// One device's running scripts, the read every surface that lists or
+// adopts them shares (the Live page, a worktree's script buttons and
+// console), refreshed by the device's scripts:changed.
+export function runningScriptsQueryOptions(
+  deviceId: string,
+  api: HostApi | undefined,
+) {
+  return queryOptions({
+    queryKey: queryKeysFor(deviceId).runningScripts(),
+    queryFn:
+      api === undefined
+        ? skipToken
+        : async () => (await api.scripts.list()).runs,
+    meta: { silentError: true },
+  });
+}
+
 // Every host's running scripts. A peer out of reach lists none: its
 // last list could name a dev server that has since stopped, and
 // nothing here could stop it anyway. A peer whose app predates the
@@ -46,14 +63,7 @@ export function useRunningScripts(): HostScripts[] {
   const hosts = useLiveHosts();
   return useQueries({
     queries: hosts.map(({ deviceId, api }) =>
-      queryOptions({
-        queryKey: queryKeysFor(deviceId).runningScripts(),
-        queryFn:
-          api === undefined
-            ? skipToken
-            : async () => (await api.scripts.list()).runs,
-        meta: { silentError: true },
-      }),
+      runningScriptsQueryOptions(deviceId, api),
     ),
     combine: (results) =>
       hosts.map(({ deviceId, api }, index) => ({

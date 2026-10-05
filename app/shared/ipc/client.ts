@@ -336,6 +336,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       orphanReport: scriptsClient.orphanReport,
       list: scriptsClient.list,
       onChanged: scriptsClient.changed,
+      attach: (runId: string) => scriptsClient.attach({ runId }),
       onEvent: scriptsClient.event,
       onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,
     },

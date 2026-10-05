@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { runningScriptsQueryOptions } from "@/hooks/live/useLiveActivity";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
@@ -47,12 +50,27 @@ export function useScriptRunner(
   worktree: Worktree,
   slot: ScriptSlot,
 ): ScriptRunner {
-  const { api } = useHostScope();
+  const { api, deviceId } = useHostScope();
   const store = useScriptRuns();
   const { canCommand: canRun } = useCommandAccess();
   const key = scriptKey(worktree.projectId, worktree.id, slot);
   const state = useScriptRunState(key);
   const busy = state.status === "starting" || state.status === "running";
+
+  // A run of this slot the host has that this window does not hold
+  // (started by another window or device, or before a reload) is
+  // taken up, so the button reads running and the console shows it.
+  const listed = useQuery({
+    ...runningScriptsQueryOptions(deviceId, api),
+    select: (runs) =>
+      runs.find(
+        (run) => scriptKey(run.projectId, run.worktreeId, run.slot) === key,
+      ),
+  }).data;
+  const adopt = listed !== undefined && listed.runId !== state.runId;
+  useEffect(() => {
+    if (adopt && canRun) void store.attach(listed);
+  }, [adopt, canRun, listed, store]);
 
   const start = () => {
     if (!canRun) return;
