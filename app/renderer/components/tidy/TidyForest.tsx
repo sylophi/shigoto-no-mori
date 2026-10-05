@@ -234,7 +234,7 @@ function TidyBody() {
               short of its longest word at the full one. */}
           <div className="grid grid-cols-3 gap-3 phone:gap-2">
             <TidyStat
-              label="On disk"
+              label="Reclaimable"
               value={`${disk.partial ? "~" : ""}${formatBytes(disk.measuredBytes)}`}
               detail={measuredLabel}
             />

@@ -64,8 +64,9 @@ export interface DiskUsageTotals {
   // mid-measure. Distinct from "not measured yet", which is what an
   // absent entry means, so the row can stop waiting on it.
   failed: Set<string>;
-  // Bytes summed over the worktrees that have finished measuring, so the
-  // total can be shown climbing rather than withheld until the end.
+  // Reclaimable bytes summed over the worktrees that have finished
+  // measuring, so the total can be shown climbing rather than withheld
+  // until the end.
   measuredBytes: number;
   measuredCount: number;
   totalCount: number;
@@ -118,7 +119,7 @@ export function useWorktreeDiskUsage(
         }
         if (!result.data) return;
         byId.set(result.data.worktreeId, result.data);
-        measuredBytes += result.data.bytes;
+        measuredBytes += result.data.reclaimableBytes;
         if (result.data.partial) partial = true;
       });
       return {

@@ -43,6 +43,8 @@ import {
   StoredShigomoriConfigSchema,
   type Worktree,
   type WorktreeCarryOverComplete,
+  type WorktreeDiskUsage,
+  WorktreeDiskUsageSchema,
   type WorktreeIdentity,
   WorktreeIdentitySchema,
   type WorktreeLifecyclePhase,
@@ -987,6 +989,20 @@ export async function shigomoriReadViaCli(
   if (doc === null) return null;
   return z.object({ config: StoredShigomoriConfigSchema.nullable() }).parse(doc)
     .config;
+}
+
+// One directory's disk footprint and what removing it would free,
+// stepping over the `exclude` directories (nested worktrees, measured as
+// rows of their own). Unreadable entries come back as `partial`.
+export async function diskUsageViaCli(
+  path: string,
+  exclude: string[],
+): Promise<Omit<WorktreeDiskUsage, "worktreeId">> {
+  const doc = await readDoc(
+    ["disk-usage", path, ...exclude.flatMap((dir) => ["--exclude", dir])],
+    "sm disk-usage failed",
+  );
+  return WorktreeDiskUsageSchema.omit({ worktreeId: true }).parse(doc);
 }
 
 // The project's launcher row: installed tools, the GitHub entry and

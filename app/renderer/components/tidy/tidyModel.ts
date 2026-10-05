@@ -85,8 +85,9 @@ export function buildTidyEntries(
 
 // A worktree whose size hasn't landed sorts as 0 and an unknown age
 // sorts as "newest", so unmeasured rows sink to the bottom rather than
-// jumping to the top of a destructive list.
-const bytes = (entry: TidyEntry) => entry.disk?.bytes ?? 0;
+// jumping to the top of a destructive list. Sizes are
+// `reclaimableBytes`, what removal would free, never the footprint.
+const bytes = (entry: TidyEntry) => entry.disk?.reclaimableBytes ?? 0;
 const age = (entry: TidyEntry) => entry.ageAt ?? Number.MAX_SAFE_INTEGER;
 const rank = (entry: TidyEntry) => VERDICT_RANK[entry.verdict.kind];
 

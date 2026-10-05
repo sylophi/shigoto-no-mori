@@ -6,6 +6,7 @@
 // all-git and fast enough to block the list render; `measureWorktreeDisk`
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
+import { diskUsageViaCli } from "@host/ipc/cliDelegate";
 import { unknownWorktreeError } from "@shared/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
@@ -24,7 +25,6 @@ import {
   listWorktreeIdentities,
   type WorktreeIdentity,
 } from "../git/worktrees";
-import { measureDirectory } from "../util/dirSize";
 import { createLimiter } from "@shared/util/limit";
 import { ttlMapCache } from "../util/ttlCache";
 
@@ -334,9 +334,9 @@ export async function findWorktreeForDisk(
   return found;
 }
 
-// Three walks at a time. Each one already runs its own pool of
-// directory readers, so a wider window mostly makes the first size land
-// later. Any narrower and a fleet of forty crawls.
+// Three walks at a time. Each one is an `sm disk-usage` child running
+// its own pool of directory readers, so a wider window mostly makes the
+// first size land later. Any narrower and a fleet of forty crawls.
 const diskWalks = createLimiter(3);
 
 // Disk measurements are cached because a full walk of a big checkout
@@ -354,7 +354,7 @@ const diskWalks = createLimiter(3);
 const diskCache = ttlMapCache(60_000, (key: string) => {
   // split always answers at least one part, so the default never applies.
   const [root = key, ...excluded] = key.split("\u0000");
-  return measureDirectory(root, new Set(excluded));
+  return diskUsageViaCli(root, excluded);
 });
 
 export async function measureWorktreeDisk(
@@ -372,8 +372,8 @@ export async function measureWorktreeDisk(
       (path) => path !== worktreePath && isSameOrInside(path, worktreePath),
     )
     .toSorted();
-  const { bytes, lastActivityAt, partial } = await diskWalks(() =>
+  const usage = await diskWalks(() =>
     diskCache.get([worktreePath, ...nested].join("\u0000")),
   );
-  return { worktreeId: worktree.id, bytes, lastActivityAt, partial };
+  return { worktreeId: worktree.id, ...usage };
 }

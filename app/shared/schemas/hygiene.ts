@@ -62,6 +62,13 @@ export const WorktreeDiskUsageSchema = z.object({
   // Bytes occupied on disk (block-based, matching `du`), not the sum of
   // apparent file sizes.
   bytes: z.number().int().nonnegative(),
+  // What removing the worktree would free: `bytes` less whatever it
+  // shares with copies elsewhere, the pnpm store's clones and hard links
+  // and carry-over's clones of the primary checkout. Usually a small
+  // fraction of `bytes` for a JS checkout. Equal to it where the platform
+  // can't tell clones apart. Blocks two worktrees share only with each
+  // other count in neither, so removing both can free more than the sum.
+  reclaimableBytes: z.number().int().nonnegative(),
   // Epoch ms of the newest file modification found while walking, with
   // dependency and build directories skipped so an install doesn't make
   // an abandoned worktree look freshly worked on. Null when the walk
