@@ -184,10 +184,11 @@ function MirrorFlow({
       steps={STEPS}
       stepsLabel="Mirror steps"
       progressExtras={{
+        compact: true,
         extraRows: [
           {
-            title: "Match the files and open the mirror",
-            detail: summary ?? "both ways",
+            title: "Match the files and go live",
+            detail: summary ?? "nothing left out",
           },
         ],
         sourcePart: "source, keeps its copy",
@@ -258,9 +259,9 @@ function MirrorFlow({
           pull={pull}
           onCancel={onClose}
           onStart={start}
-          heading="On both"
+          heading={toPeer === undefined ? "The copy" : "Copy goes to"}
           sourceNote="keeps its copy"
-          sourceKeeps
+          sourceRow={false}
           idleNote={`Stop any time. Stopping removes the copy ${landing.on}.`}
           startLabel="Start mirroring"
         />

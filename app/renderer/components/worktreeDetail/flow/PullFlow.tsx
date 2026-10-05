@@ -162,6 +162,7 @@ export type PullFlowState = ReturnType<typeof usePullFlow>;
 type ProgressExtras = Pick<
   PullProgressProps,
   | "extraRows"
+  | "compact"
   | "filesDetail"
   | "sourcePart"
   | "runningNote"

@@ -15,11 +15,14 @@ export function SetupToggle({
   thisDeviceLabel,
   checked,
   onChange,
+  hint,
 }: {
   localProject: Project;
   thisDeviceLabel: string;
   checked: boolean;
   onChange: (next: boolean) => void;
+  // A word on whether it is worth running, under the card.
+  hint?: string;
 }) {
   // The whole plan, not just the script: the running view lists its
   // steps from the same reads, and having them settled here means the
@@ -47,6 +50,9 @@ export function SetupToggle({
           aria-label="Run the setup script"
         />
       </div>
+      {hint !== undefined && configured && (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      )}
     </section>
   );
 }

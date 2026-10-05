@@ -14,6 +14,8 @@ import { useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowLeftRight,
+  FileWarning,
   Check,
   GitBranch,
   Loader2,
@@ -38,6 +40,7 @@ import {
 import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,6 +54,8 @@ import {
 import { InlineError } from "@/components/ui/inline-error";
 import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
 import {
   useMirrorControls,
   useMirrorHistory,
@@ -150,7 +155,10 @@ export function MirrorManageDialog({
           {view.detail !== "" &&
             view.tone !== "rose" &&
             view.tone !== "amber" && (
-              <span className="min-w-0 truncate">({view.detail})</span>
+              <span className="min-w-0 truncate">
+                <span aria-hidden>· </span>
+                {view.detail}
+              </span>
             )}
         </p>
       </FlowHeader>
@@ -172,6 +180,7 @@ export function MirrorManageDialog({
           <FlowBody>
             <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <div className="flex min-w-0 flex-col gap-5">
+                <PairStrip session={session} names={names} />
                 <Stats
                   session={session}
                   filesLabel={
@@ -398,6 +407,7 @@ function StopAdvice({
         <MirrorConflictsChip
           session={session}
           tone="amber"
+          icon={FileWarning}
           label={conflicts === 1 ? "See the file" : "See the files"}
           sides={sides}
           revealUnder={revealUnder}
@@ -428,6 +438,91 @@ function StopAdvice({
 function refusalReason(message: string): string {
   const match = /: ([^,]+), so the copy/.exec(message);
   return match?.[1] ?? message;
+}
+
+// The two worktrees the mirror pairs, side by side: the original on
+// the device running the session, the copy on its peer. A stop removes
+// the copy, so which is which is the first thing on the page.
+function PairStrip({
+  session,
+  names,
+}: {
+  session: MirrorSession;
+  names: MirrorNames;
+}) {
+  const { deviceId: runnerDeviceId } = useHostScope();
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-lg bg-muted/40 px-3 py-2.5">
+      <PairEnd
+        deviceId={runnerDeviceId}
+        name={names.runner}
+        side="original"
+        path={session.localRoot}
+      />
+      <ArrowLeftRight
+        aria-label="kept in step both ways"
+        className="size-4 text-muted-foreground"
+      />
+      <PairEnd
+        deviceId={session.deviceId}
+        name={names.copy}
+        side="copy"
+        path={session.remoteRoot}
+        align="end"
+      />
+    </div>
+  );
+}
+
+function PairEnd({
+  deviceId,
+  name,
+  side,
+  path,
+  align = "start",
+}: {
+  deviceId: string;
+  name: string;
+  side: "original" | "copy";
+  path: string;
+  align?: "start" | "end";
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 flex-col gap-0.5 leading-tight",
+        align === "end" && "items-end text-right",
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+        <DeviceGlyph
+          icon={useDeviceIcon(deviceId)}
+          className="size-3.5 shrink-0 text-muted-foreground"
+        />
+        <span className="truncate">{name}</span>
+        <span className="shrink-0 text-xs font-normal text-muted-foreground">
+          {side}
+        </span>
+      </span>
+      {/* The folder alone: the two paths sit on two machines, and
+          shortened to fit they read as noise. The tooltip has it whole. */}
+      <SimpleTooltip tip={path}>
+        <span className="max-w-full min-w-0 truncate font-mono text-2xs text-muted-foreground">
+          {folderOf(path)}
+        </span>
+      </SimpleTooltip>
+    </div>
+  );
+}
+
+// The last segment of a path, either separator.
+function folderOf(path: string): string {
+  return (
+    path
+      .replace(/[\\/]+$/, "")
+      .split(/[\\/]/)
+      .pop() || path
+  );
 }
 
 // Three figures, one glance: how long it has run, how much the

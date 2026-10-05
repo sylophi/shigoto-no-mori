@@ -5,7 +5,7 @@
 // out of reach of a keyboard or a touch screen, so they sit in a menu
 // the chip opens instead, with what each side did to them and the one
 // sentence that clears them.
-import { FolderOpen, RefreshCw } from "lucide-react";
+import { FolderOpen, type LucideIcon, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import { ChipButton } from "@/components/ui/chip-button";
 import {
@@ -87,12 +87,16 @@ export function MirrorConflictsChip({
   session,
   tone,
   label,
+  icon: Icon = RefreshCw,
   sides,
   revealUnder,
 }: {
   session: MirrorSession;
   tone: StatusTone;
   label: string;
+  // The mirror's own mark by default, as a status chip; a call to act
+  // on the files brings its own.
+  icon?: LucideIcon;
   sides: ConflictSides;
   // The root the paths reveal under in this machine's Finder: the
   // original's on the device running the session, the copy's on the
@@ -116,7 +120,7 @@ export function MirrorConflictsChip({
             className={cn("tabular shrink-0", TONE_TEXT[tone])}
             aria-label={`${label}: list the conflicting paths`}
           >
-            <RefreshCw aria-hidden className="size-3.5" />
+            <Icon aria-hidden className="size-3.5" />
             {label}
           </ChipButton>
         }

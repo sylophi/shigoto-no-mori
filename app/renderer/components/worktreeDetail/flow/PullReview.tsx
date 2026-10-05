@@ -301,14 +301,17 @@ function PeerTargetRow({
 // mirror's: the two devices (the one landing the branch, the source
 // beneath it), the folder it lands in, and the setup switch. Read under
 // the destination's scope, since every fact in it is that machine's.
-// The mirror ticks the source row, because there the source keeps its
-// copy. A flow to a peer swaps the two rows' tags (there the source is
-// this device) and lists every device that could take the worktree,
-// the picked one as the destination and the rest as rows to pick.
+// The mirror leaves the source row out (`sourceRow`): there the source
+// keeps its copy, which the source card already says, and the column
+// is only where the copy goes. A flow to a peer swaps the two rows'
+// tags (there the source is this device) and lists every device that
+// could take the worktree, the picked one as the destination and the
+// rest as rows to pick.
 export function ReviewDevicesColumn({
   heading,
   sourceNote,
   sourceKeeps = false,
+  sourceRow = true,
   toPeer,
   worktree,
   projectName,
@@ -320,6 +323,7 @@ export function ReviewDevicesColumn({
   heading: string;
   sourceNote: string;
   sourceKeeps?: boolean;
+  sourceRow?: boolean;
   toPeer?: DestinationPick;
   worktree: Worktree;
   // The source's project, for the rows of devices that would clone it.
@@ -368,30 +372,32 @@ export function ReviewDevicesColumn({
             {/* Among rows to pick from, the source is not one: it sits
                 apart, unfilled, and without the mark a pick would
                 fill (unless the mark says it keeps its copy). */}
-            <DeviceRow
-              className={cn(
-                "text-muted-foreground",
-                toPeer ? "mt-3" : "bg-muted/40",
-              )}
-              mark={
-                (!toPeer || sourceKeeps) && (
-                  <span
-                    aria-hidden
-                    className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20"
-                  >
-                    {sourceKeeps && <Check className="size-2.5" />}
+            {sourceRow && (
+              <DeviceRow
+                className={cn(
+                  "text-muted-foreground",
+                  toPeer ? "mt-3" : "bg-muted/40",
+                )}
+                mark={
+                  (!toPeer || sourceKeeps) && (
+                    <span
+                      aria-hidden
+                      className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20"
+                    >
+                      {sourceKeeps && <Check className="size-2.5" />}
+                    </span>
+                  )
+                }
+                icon={sourceIcon}
+                title={sourceDeviceLabel}
+                note={sourceNote}
+                trailing={
+                  <span className="text-xs">
+                    {toPeer ? "this device" : "source"}
                   </span>
-                )
-              }
-              icon={sourceIcon}
-              title={sourceDeviceLabel}
-              note={sourceNote}
-              trailing={
-                <span className="text-xs">
-                  {toPeer ? "this device" : "source"}
-                </span>
-              }
-            />
+                }
+              />
+            )}
           </ul>
         </section>
 
@@ -408,6 +414,12 @@ export function ReviewDevicesColumn({
               thisDeviceLabel={thisDeviceLabel}
               checked={pull.runSetup}
               onChange={pull.setRunSetup}
+              hint={
+                pull.selection.base === "everything" &&
+                pull.selection.leftOut.size === 0
+                  ? `Nothing is left out, so dependencies and build output come over from ${sourceDeviceLabel} too.`
+                  : undefined
+              }
             />
           </>
         )}
@@ -515,15 +527,18 @@ export function PullReviewStep({
   heading,
   sourceNote,
   sourceKeeps,
+  sourceRow,
   idleNote,
   startLabel,
   beforeLeaveOut,
   afterLeaveOut,
 }: PullReviewProps & {
-  // The devices column's heading and the source row's note (and tick).
+  // The devices column's heading and the source row's note (and tick),
+  // or no source row at all.
   heading: string;
   sourceNote: string;
   sourceKeeps?: boolean;
+  sourceRow?: boolean;
   // The footer's reassurance and its start button.
   idleNote: string;
   startLabel: string;
@@ -562,6 +577,7 @@ export function PullReviewStep({
             heading={heading}
             sourceNote={sourceNote}
             sourceKeeps={sourceKeeps}
+            sourceRow={sourceRow}
             toPeer={toPeer}
             worktree={worktree}
             projectName={project.name}
