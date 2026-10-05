@@ -9,6 +9,7 @@ import type {
   Project,
   ProjectIcon,
   Release,
+  RunningScript,
   Worktree,
 } from "@shared/schemas";
 
@@ -616,6 +617,49 @@ export const fakeCustomPorts: Record<string, CustomPort[]> = {
 };
 
 export const fakeListeningPorts = new Set([5731, 5173, 6006, 8787, 5182]);
+
+// The scripts each device runs right now, as scripts:list answers (the
+// Live page). The dev servers behind the listening ports above, and a
+// setup still going on Thinkpad. Stopping one drops it here.
+const minutesAgo = (minutes: number) => Date.now() - minutes * 60_000;
+export const fakeRunningScripts: Record<string, RunningScript[]> = {
+  [LOCAL_DEVICE_ID]: [
+    {
+      runId: "run-sm-badger-dev",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_badger",
+      slot: { kind: "package", name: "dev" },
+      startedAt: minutesAgo(52),
+      interactive: true,
+    },
+    {
+      runId: "run-sm-hum-storybook",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_hum",
+      slot: { kind: "package", name: "fake-host" },
+      startedAt: minutesAgo(7),
+      interactive: true,
+    },
+  ],
+  [THINKPAD_ID]: [
+    {
+      runId: "run-tp-gecko-dev",
+      projectId: "tp_sm",
+      worktreeId: "a1b2c3d4e5f6",
+      slot: { kind: "package", name: "dev" },
+      startedAt: minutesAgo(180),
+      interactive: true,
+    },
+    {
+      runId: "run-tp-panda-setup",
+      projectId: "tp_sm",
+      worktreeId: "c0ffee123456",
+      slot: { kind: "setup" },
+      startedAt: minutesAgo(1),
+      interactive: false,
+    },
+  ],
+};
 
 // ---- releases ----
 

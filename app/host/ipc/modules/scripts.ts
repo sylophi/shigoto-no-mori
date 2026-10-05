@@ -1,9 +1,14 @@
-import type { ScriptName, ShigomoriConfig } from "@shared/schemas";
+import type {
+  ScriptName,
+  ScriptRunSlot,
+  ShigomoriConfig,
+} from "@shared/schemas";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "@host/lib/projects";
 import {
   cancelScript,
+  listRunningScripts,
   resizeScript,
   startScript,
   writeToScript,
@@ -31,6 +36,19 @@ function resolveScriptCommand(
   }
 }
 
+// The slot each ScriptName takes on its worktree.
+function slotOf(script: ScriptName): ScriptRunSlot {
+  switch (script) {
+    case "setup":
+    case "teardown":
+      return { kind: script };
+    case "port-pool-provision":
+      return { kind: "portPool", phase: "provision" };
+    case "port-pool-release":
+      return { kind: "portPool", phase: "release" };
+  }
+}
+
 export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
   {
     run: async ({ projectId, worktreeId, script }, handlerCtx) => {
@@ -49,6 +67,7 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
       const runId = startScript({
         command,
         scriptName: script,
+        slot: slotOf(script),
         worktree: ctx.worktree,
         project,
         scriptEnv: {
@@ -70,4 +89,6 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
     resize: async ({ runId, cols, rows }) => resizeScript(runId, cols, rows),
 
     orphanReport: async () => takeOrphanSweepReport(),
+
+    list: async () => ({ runs: listRunningScripts() }),
   };

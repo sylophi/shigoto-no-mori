@@ -92,6 +92,9 @@ Poses ride the URL:
 - `?mirrorEngine=running|starting|stopped|unavailable`: every
   device's mirror engine (default `running`), for the reason the
   Mirror buttons give when it can't take a start.
+- `?mirrored=1`: a mirror running from boot (Studio Mac's
+  `brave-badger` with a copy on Thinkpad), for the surfaces that list
+  mirrors (the Live page, the sidebar's fold).
 - `?missing=1`: a project on Studio Mac (`tanuki-notes`) whose repo
   was moved by hand, so the sidebar lists it as missing. The repo is
   under `~/dev` now, for Locate… to find.

@@ -284,6 +284,17 @@ function useOtherHostMirrors<T>(
   });
 }
 
+// Every host's mirror picture, this machine's included, for the Live
+// page and the sidebar's Live mark: the same reads as the others above
+// (the broadcasts keep each one live), with no device left out.
+export function useEveryHostMirrors(): {
+  deviceId: string;
+  api: HostApi | undefined;
+  data: MirrorListResult | undefined;
+}[] {
+  return useOtherHostMirrors("", (list) => list);
+}
+
 // A mirror the worktree is part of, seen from its page: the device
 // that RUNS it (where the controls go), the other party as this page
 // sees it, and the session document, which is the runner's. The

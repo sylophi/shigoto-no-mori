@@ -117,6 +117,17 @@ export const ResizeScriptPayloadSchema = z.object({
   rows: z.number().int().positive(),
 });
 
+// The slots a lifecycle script the CLI runs on the app's behalf can
+// take.
+const LifecycleSlotSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("setup") }),
+  z.object({ kind: z.literal("teardown") }),
+  z.object({
+    kind: z.literal("portPool"),
+    phase: z.enum(["provision", "release"]),
+  }),
+]);
+
 // "data" is the run's terminal output (stdout and stderr share the
 // PTY, so xterm renders them in true interleave order). "error" covers
 // spawn failures. "exit" is the final code (null if the process died
@@ -140,17 +151,39 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
     projectId: z.string(),
     worktreeId: z.string(),
     pid: z.number().int().positive().optional(),
-    slot: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("setup") }),
-      z.object({ kind: z.literal("teardown") }),
-      z.object({
-        kind: z.literal("portPool"),
-        phase: z.enum(["provision", "release"]),
-      }),
-    ]),
+    slot: LifecycleSlotSchema,
   }),
 ]);
 export type ScriptEvent = z.infer<typeof ScriptEventSchema>;
+
+// The slot a run occupies on its worktree, in the renderer's terms
+// (store/scriptSlot.ts): a lifecycle script, or a package.json script
+// by name.
+const ScriptRunSlotSchema = z.discriminatedUnion("kind", [
+  ...LifecycleSlotSchema.options,
+  z.object({ kind: z.literal("package"), name: z.string() }),
+]);
+export type ScriptRunSlot = z.infer<typeof ScriptRunSlotSchema>;
+
+// One script running on the host right now, whoever started it: the
+// app's own runs and the lifecycle scripts the CLI runs for it. What a
+// window that never saw the run start (a reload, another device) needs
+// to show it and bind its events. `interactive` is whether it owns a
+// PTY here that keystrokes can reach.
+const RunningScriptSchema = z.object({
+  runId: z.string(),
+  projectId: z.string(),
+  worktreeId: z.string(),
+  slot: ScriptRunSlotSchema,
+  startedAt: z.number().int().nonnegative(),
+  interactive: z.boolean(),
+});
+export type RunningScript = z.infer<typeof RunningScriptSchema>;
+
+export const RunningScriptsSchema = z.object({
+  runs: z.array(RunningScriptSchema),
+});
+export type RunningScripts = z.infer<typeof RunningScriptsSchema>;
 
 // Scripts the app had running in a worktree that disappeared from disk
 // while the app was watching (an `sm rm` in a terminal). The app kills

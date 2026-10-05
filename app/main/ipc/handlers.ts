@@ -85,6 +85,7 @@ import {
   setMirrorInviteStore,
 } from "@host/mirror/invites";
 import { findProjectAndWorktreeOrThrow } from "@host/lib/projects";
+import { onRunningScriptsChanged } from "@host/lib/scripts";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
@@ -699,6 +700,11 @@ export function registerIpcHandlers(): void {
   registerContract(worktreesContract, worktreesHandlers);
   registerContract(hygieneContract, hygieneHandlers);
   registerContract(scriptsContract, scriptsHandlers);
+  // A burst (a lifecycle starting setup and port-pool together, a
+  // project's scripts stopped at once) goes out as one ping.
+  onRunningScriptsChanged(
+    coalesce(() => broadcastAll(scriptsContract, "changed", undefined), 150),
+  );
   registerContract(sharedSettingsContract, sharedSettingsHandlers);
   registerContract(cliContract, cliHandlers);
   // The CLI's cross-device verbs, on the control wire alone

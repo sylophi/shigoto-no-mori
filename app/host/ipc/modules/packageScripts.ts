@@ -86,6 +86,7 @@ export const packageScriptsHandlers: Handlers<
     const runId = startScript({
       command,
       scriptName,
+      slot: { kind: "package", name: scriptName },
       worktree,
       project,
       notify: scriptEventNotifier(handlerCtx),

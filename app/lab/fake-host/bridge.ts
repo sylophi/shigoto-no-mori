@@ -73,6 +73,7 @@ import {
   fakeListeningPorts,
   fakePoolPorts,
   fakeRemoteUrls,
+  fakeRunningScripts,
   projectIconFor,
   repoDescriptionFor,
   worktree as worktreeFixture,
@@ -573,6 +574,20 @@ function hostHandlersFor(
         .filter((stream) => stream.deviceId === forest.deviceId)
         .map(({ deviceId: _device, ...stream }) => stream),
     }),
+    // The posed running scripts. A stop ends the run at once and says
+    // so the way the host does, so the Live page's row goes.
+    "scripts:list": () => ({
+      runs: [...(fakeRunningScripts[forest.deviceId] ?? [])],
+    }),
+    "scripts:cancel": ({ runId }) => {
+      const runs = fakeRunningScripts[forest.deviceId] ?? [];
+      const cancelled = runs.some((run) => run.runId === runId);
+      fakeRunningScripts[forest.deviceId] = runs.filter(
+        (run) => run.runId !== runId,
+      );
+      if (cancelled) emit("scripts:changed", undefined);
+      return { cancelled };
+    },
     "mirror:history": ({ localWorktreeId }) => ({
       events: [...(fakeMirrors.history[localWorktreeId] ?? [])],
     }),
@@ -1615,4 +1630,16 @@ export function installFakeHostBridge(
     emitClient: client.emit,
     emitHost: localHost.emit,
   };
+
+  // ?mirrored=1: a mirror running from boot, Studio Mac's brave-badger
+  // kept in step with a copy on Thinkpad, through the posed start.
+  if (new URLSearchParams(location.search).get("mirrored") === "1") {
+    void fakeMirrorStartTo(localForest, {
+      targetDeviceId: THINKPAD_ID,
+      projectId: "p_sm",
+      worktreeId: "wt_sm_badger",
+      ignoreMode: "gitignored",
+      ignores: [],
+    });
+  }
 }

@@ -14,7 +14,12 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { errorMessageOf, worktreeSettingUpError } from "@shared/errors";
 import { holdRootChecks } from "@host/mirror/registry";
-import type { Project, ScriptEvent } from "@shared/schemas";
+import type {
+  Project,
+  RunningScript,
+  ScriptEvent,
+  ScriptRunSlot,
+} from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
 import {
@@ -59,6 +64,7 @@ interface ScriptWorktree {
 interface RunArgs {
   command: string;
   scriptName: string;
+  slot: ScriptRunSlot;
   worktree: ScriptWorktree;
   project: Pick<Project, "id" | "path" | "name">;
   // The branch values of the SHIGOMORI_* env contract, for a command
@@ -89,6 +95,7 @@ interface RunRecord extends Killable {
   pty: ScriptPty;
   projectId: string;
   worktreeId: string;
+  slot: ScriptRunSlot;
   // Kept alongside the id so a worktree that has vanished from disk can
   // still be named in the reap notice and probed by path. Neither is
   // recoverable from the path-derived id after the fact.
@@ -110,6 +117,10 @@ const runningScripts = new Map<string, RunRecord>();
 // "exit". Not persisted: they die with the CLI at quit (killAllCli).
 interface CliScriptRun extends Killable {
   settle: () => void;
+  projectId: string;
+  worktreeId: string;
+  slot: ScriptRunSlot;
+  startedAt: number;
 }
 
 const cliScripts = new Map<string, CliScriptRun>();
@@ -156,18 +167,35 @@ export function cliScriptStream(notify: NotifyScriptEvent): {
           signal: (signal) => signalPidTree(pid, signal),
           flushOutput: () => {},
           settle,
+          projectId: event.projectId,
+          worktreeId: event.worktreeId,
+          slot: event.slot,
+          startedAt: Date.now(),
         });
         own.add(event.runId);
+        runningScriptsChanged();
       } else if (event.kind === "exit") {
         const run = drop(event.runId);
         if (run?.cancelling) event = { ...event, code: null };
+        if (run) runningScriptsChanged();
       }
       notify(event);
     },
     end: () => {
+      if (own.size === 0) return;
       for (const runId of own) drop(runId);
+      runningScriptsChanged();
     },
   };
+}
+
+// Told whenever a script starts or ends, whoever ran it, so the
+// binding can tell every window and peer (scripts:changed). One
+// listener: the binding is the only one that asks.
+let runningScriptsChanged: () => void = () => {};
+
+export function onRunningScriptsChanged(listener: () => void): void {
+  runningScriptsChanged = listener;
 }
 
 // Mirror the live map to disk on every spawn and every settle, so a
@@ -352,6 +380,35 @@ export function getRunningScriptWorktrees(): RunningScriptWorktree[] {
   return Array.from(byWorktree.values());
 }
 
+// Every script running here now, the app's own and the CLI's
+// lifecycle runs alike, oldest first (scripts:list).
+export function listRunningScripts(): RunningScript[] {
+  const runs: RunningScript[] = [];
+  for (const record of runningScripts.values()) {
+    if (record.exited) continue;
+    runs.push({
+      runId: record.runId,
+      projectId: record.projectId,
+      worktreeId: record.worktreeId,
+      slot: record.slot,
+      startedAt: record.startedAt,
+      interactive: true,
+    });
+  }
+  for (const run of cliScripts.values()) {
+    if (run.exited) continue;
+    runs.push({
+      runId: run.runId,
+      projectId: run.projectId,
+      worktreeId: run.worktreeId,
+      slot: run.slot,
+      startedAt: run.startedAt,
+      interactive: false,
+    });
+  }
+  return runs.toSorted((a, b) => a.startedAt - b.startedAt);
+}
+
 // The worktrees with a live app-started script, by id: what the
 // auto-pull paths treat as busy.
 export function runningScriptWorktreeIds(): Set<string> {
@@ -519,6 +576,7 @@ export function startScript(args: RunArgs): string {
     pty,
     projectId: args.project.id,
     worktreeId: args.worktree.id,
+    slot: args.slot,
     worktreeName: args.worktree.name,
     worktreePath: args.worktree.path,
     scriptName: args.scriptName,
@@ -533,6 +591,7 @@ export function startScript(args: RunArgs): string {
   };
   runningScripts.set(runId, record);
   persistSnapshot();
+  runningScriptsChanged();
 
   pty.onData((data) => {
     pendingOutput += data;
@@ -578,6 +637,7 @@ export function startScript(args: RunArgs): string {
     resolveDone();
     runningScripts.delete(runId);
     persistSnapshot();
+    runningScriptsChanged();
   });
 
   return runId;

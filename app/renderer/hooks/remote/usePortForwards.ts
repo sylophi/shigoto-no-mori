@@ -122,6 +122,22 @@ export function usePortForwards(deviceId: string) {
   };
 }
 
+// How many forwards this machine holds, for the sidebar's Live mark.
+export function usePortForwardCount(): number {
+  return usePortForwardList((list) => list.forwards.length).data ?? 0;
+}
+
+// Every forward this machine holds, whichever device it reaches, with
+// the stop: the Live page's list.
+export function useAllPortForwards() {
+  const { data } = usePortForwardList();
+  const stop = useMutation({
+    mutationFn: (forwardId: string) => window.api.portForward.stop(forwardId),
+    meta: { errorTitle: "Couldn't stop forwarding" },
+  });
+  return { forwards: data?.forwards ?? [], stop };
+}
+
 // What the marks on a peer's worktree (the sidebar row, the Ports
 // button) say while this machine forwards its ports, matched on the
 // worktree each forward was switched on from (the note on the

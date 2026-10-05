@@ -12,12 +12,14 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   Inbox,
   MonitorSmartphone,
+  Radio,
   Settings as SettingsIcon,
   TreeDeciduous,
   type LucideIcon,
 } from "lucide-react";
 import type { SidebarView } from "@shared/schemas";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
+import { useLiveCount } from "@/hooks/live/useLiveActivity";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +30,7 @@ type Tab = {
   pathname: string;
   to:
     | { to: "/forest/$view"; params: { view: SidebarView } }
-    | { to: "/account" | "/settings" };
+    | { to: "/live" | "/account" | "/settings" };
 };
 
 const forestTab = (
@@ -45,6 +47,12 @@ const forestTab = (
 const TABS: readonly [Tab, ...Tab[]] = [
   forestTab("inbox", "Inbox", Inbox),
   forestTab("projects", "Projects", TreeDeciduous),
+  {
+    label: "Live",
+    icon: Radio,
+    pathname: "/live",
+    to: { to: "/live" },
+  },
   {
     label: "Devices",
     icon: MonitorSmartphone,
@@ -79,6 +87,7 @@ export function PhoneTabBar() {
   // The Settings tab is the phone's Settings icon, so it wears the
   // sidebar's update dot (SidebarNavActions).
   const updateReady = Object.keys(useStagedUpdates()).length > 0;
+  const live = useLiveCount() > 0;
   const active =
     TABS.find((tab) => tab.pathname === pathname)?.pathname ??
     forestTabFor(view).pathname;
@@ -118,6 +127,12 @@ export function PhoneTabBar() {
                 <span
                   aria-hidden
                   className="pointer-events-none absolute top-1 right-4.5 size-1.5 rounded-full bg-sky-500"
+                />
+              )}
+              {tabPath === "/live" && live && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute top-1 right-4.5 size-1.5 rounded-full bg-emerald-500"
                 />
               )}
             </span>

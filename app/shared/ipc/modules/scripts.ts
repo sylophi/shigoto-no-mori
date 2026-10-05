@@ -6,6 +6,7 @@ import {
   RemovedWorktreeScriptsSchema,
   ResizeScriptPayloadSchema,
   RunScriptPayloadSchema,
+  RunningScriptsSchema,
   ScriptEventSchema,
   WriteScriptPayloadSchema,
 } from "@shared/schemas";
@@ -39,6 +40,17 @@ export const scriptsContract = defineContract("host", {
     gated: true,
     movesHostState: false,
   }),
+  // Every script running on the host now, for a window that did not
+  // see them start (the Live page, a console opened after a reload).
+  // A read, so it rides no grant, like mirror:list.
+  list: invoke("scripts:list", z.void(), RunningScriptsSchema, {
+    remote: true,
+    gated: false,
+  }),
+  // The set of running scripts changed (one started or ended), on
+  // every wire, so a list on screen re-reads. Payload-free like
+  // portForward:changed: the list read is cheap.
+  changed: broadcast("scripts:changed", z.void(), { remote: true }),
   event: broadcast("scripts:event", ScriptEventSchema, { remote: true }),
   // The worktree these scripts ran in was removed outside the app, so
   // the app reaped them (see host/lib/scripts/removedWorktrees.ts). The
