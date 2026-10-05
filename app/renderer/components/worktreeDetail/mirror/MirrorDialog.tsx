@@ -14,7 +14,7 @@
 // own (shared/git/branches.ts), which the words below say when the
 // two names differ.
 import type { ReactNode } from "react";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shared/git/branches";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Project, Worktree } from "@shared/schemas";
@@ -168,7 +168,7 @@ function MirrorFlow({
     toPeer,
     onClose,
   });
-  const { stage, progress, start, open, pull, target } = flow;
+  const { stage, progress, start, pull, target } = flow;
   const summary = selectionSummary(pull.selection);
   const landingBranch = pullLandingBranch(worktree);
   const renamed = landingBranch !== worktree.branch;
@@ -276,10 +276,8 @@ function MirrorFlow({
             branch={landingBranch}
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
-            landing={landing}
             dirtyApplied={!mirror.data.captured || mirror.data.dirtyApplied}
             onClose={onClose}
-            onOpen={open}
           />
         </RunnerScope>
       )}
@@ -308,10 +306,8 @@ function MirrorLive({
   branch,
   sourceDeviceLabel,
   thisDeviceLabel,
-  landing,
   dirtyApplied,
   onClose,
-  onOpen,
 }: {
   session: string;
   landed: Worktree;
@@ -319,10 +315,8 @@ function MirrorLive({
   sourceDeviceLabel: string;
   // The device holding the copy, and the words for that.
   thisDeviceLabel: string;
-  landing: Landing;
   dirtyApplied: boolean;
   onClose: () => void;
-  onOpen: () => void;
 }) {
   const { sessions } = useMirrors();
   const live: MirrorSession | undefined = sessions.find(
@@ -355,13 +349,12 @@ function MirrorLive({
           </div>
         </section>
       </FlowBody>
+      {/* One way out: the page this opened on is already one half of
+          the pair, wearing the mirror, so a button to the other half
+          only reads as a different outcome. */}
       <FlowFooter>
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          Close
-        </Button>
-        <Button size="sm" onClick={onOpen}>
-          Open {landing.here}
-          <ArrowRight />
+        <Button size="sm" onClick={onClose}>
+          Done
         </Button>
       </FlowFooter>
     </>
