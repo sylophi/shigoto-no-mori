@@ -23,6 +23,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -107,6 +108,8 @@ interface ProjectGroupActionsProps {
   isHovered: boolean;
   // The `…` trigger, so the header's right-click can pop the same menu.
   triggerRef: React.RefObject<HTMLButtonElement | null>;
+  // Set while the header's project is missing and can be located.
+  onLocate?: () => void;
 }
 
 export function ProjectGroupActions({
@@ -115,6 +118,7 @@ export function ProjectGroupActions({
   members,
   isHovered,
   triggerRef,
+  onLocate,
 }: ProjectGroupActionsProps) {
   const designatedId = useQuickCreateDeviceId(identity);
   const live = members.filter(
@@ -179,6 +183,12 @@ export function ProjectGroupActions({
                 subject="project"
               />
             </MaybeHostScope>
+          )}
+          {onLocate !== undefined && (
+            <>
+              <DropdownMenuItem onClick={onLocate}>Locate…</DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
           )}
           <AddToDeviceSubmenu
             name={name}

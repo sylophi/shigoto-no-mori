@@ -4,7 +4,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
+import { useRelocatingProject } from "@/hooks/projects/useProjects";
+import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { DeviceBadgeCluster, type SidebarDeviceBadge } from "./DeviceBadge";
+import { LocateProjectPicker, locateStartFolder } from "./LocateProjectPicker";
 import {
   ProjectGroupActions,
   useGroupMembers,
@@ -80,6 +83,27 @@ export function ProjectRow({
   // This machine first, then every peer holding the same repo.
   const group = useGroupMembers(members, local ? project : undefined);
   const iconMember = useIconMember(group, local);
+  // A missing checkout can be pointed at where its repo went, over the
+  // session of the device holding it. Terrier's are terrier's to move.
+  const holder = group[0];
+  // One relocation at a time: the row reads as missing until it lands.
+  const relocating = useRelocatingProject(
+    holder?.deviceId ?? "",
+    holder?.project.id ?? "",
+  );
+  const locateApi =
+    missing && project.source !== "terrier" && !relocating
+      ? holder?.api
+      : undefined;
+  // Open, from where the picker starts once that is found.
+  const [locating, setLocating] = useState<{ from: string | undefined }>();
+  const onLocate =
+    holder !== undefined && locateApi !== undefined
+      ? () =>
+          void locateStartFolder(locateApi, holder.project.path).then((from) =>
+            setLocating({ from }),
+          )
+      : undefined;
   // The header stands for the repo on every device, and terrier lists
   // it per device, so any checkout of it being terrier's marks it.
   // Only the open project wears the paw, so only it looks.
@@ -134,6 +158,8 @@ export function ProjectRow({
           badges={<DeviceBadgeCluster devices={devices} />}
           terrier={terrierInGroup}
           missing={missing}
+          relocating={relocating}
+          onLocate={arrangeMode ? undefined : onLocate}
           expanded={expanded}
           current={current}
           onToggle={onToggle}
@@ -171,9 +197,19 @@ export function ProjectRow({
             // its actions at rest.
             isHovered={isHovered || expanded}
             triggerRef={triggerRef}
+            onLocate={onLocate}
           />
         )}
       </div>
+      {locating !== undefined && holder !== undefined && locateApi && (
+        <MaybeHostScope deviceId={holder.deviceId} api={locateApi}>
+          <LocateProjectPicker
+            project={holder.project}
+            from={locating.from}
+            onClose={() => setLocating(undefined)}
+          />
+        </MaybeHostScope>
+      )}
     </div>
   );
 }

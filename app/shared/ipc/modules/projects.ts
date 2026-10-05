@@ -7,6 +7,7 @@ import {
   ProjectIconSchema,
   ProjectSchema,
   ProjectScopedPayloadSchema,
+  RelocateProjectPayloadSchema,
   RemoveProjectPayloadSchema,
   ReorderProjectsPayloadSchema,
   CarryOverCandidateSchema,
@@ -35,6 +36,14 @@ export const projectsContract = defineContract("host", {
     remote: true,
     gated: true,
   }),
+  // For a project whose repo was moved or renamed by hand. Answers the
+  // project at its new path.
+  relocate: invoke(
+    "projects:relocate",
+    RelocateProjectPayloadSchema,
+    ProjectSchema,
+    { remote: true, gated: true },
+  ),
   reorder: invoke("projects:reorder", ReorderProjectsPayloadSchema, z.void(), {
     remote: true,
     gated: true,

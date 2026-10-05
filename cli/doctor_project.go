@@ -79,8 +79,9 @@ func checkProjectRepo(report *doctorReport, proj project) bool {
 	if os.IsNotExist(err) {
 		report.repairable(groupProjects, "project-path", proj.Name, statusFail,
 			collapseHome(proj.Path)+" is gone, so every command for this project fails",
-			"Restore the directory, or unregister it (`"+binaryName+
-				" projects remove "+proj.Name+"`).",
+			"If it moved, point the project at it (`"+binaryName+" projects relocate "+
+				proj.Name+" <new-path>`). Otherwise restore the directory, or unregister it (`"+
+				binaryName+" projects remove "+proj.Name+"`).",
 			&repair{
 				prompt: "Unregister " + proj.Name + " (" + collapseHome(proj.Path) +
 					" is gone)? Its config under projects/ goes too.",
