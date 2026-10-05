@@ -14,6 +14,8 @@
 //     marks and relocate (marks and notes carried to the new id) all
 //     answer with the CLI's rows, and an unknown worktree is the
 //     entity-gone error.
+//   - hygiene:diskUsage measures through `sm disk-usage`, and a file
+//     hard-linked in from outside counts on disk but not as reclaimable.
 //   - projects:reorder, :defaultBranch and :pickWorktreeName, the
 //     config reads, the launcher row and catalog, a launch through
 //     `sm open` that counts the use, and the package scripts read.
@@ -23,8 +25,10 @@
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test cli-reads.
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -77,6 +81,7 @@ const { packageScriptsHandlers } =
   await import("@host/ipc/modules/packageScripts");
 const { globalConfigHandlers } = await import("@host/ipc/modules/globalConfig");
 const { shigomoriHandlers } = await import("@host/ipc/modules/shigomori");
+const { hygieneHandlers } = await import("@host/ipc/modules/hygiene");
 const { cliHandlers, setCliImpl } = await import("@host/ipc/modules/cli");
 const { invalidateGlobalConfigCache } = await import("@host/lib/config/global");
 const { invalidateProjectConfigCache } =
@@ -136,6 +141,37 @@ async function main() {
       );
       for (const identity of identities) {
         assert.equal(identity.id, worktreeIdFromPath(identity.path));
+      }
+    },
+  );
+
+  await check(
+    "disk usage: a file linked in from outside counts on disk, not as reclaimable",
+    async () => {
+      // pnpm's hard-link import, in miniature: the store keeps the
+      // blocks after the worktree is gone.
+      const size = 64 * 1024;
+      const store = join(sandbox, "store.bin");
+      const linked = join(linkedPath, "linked.bin");
+      writeFileSync(store, randomBytes(size));
+      linkSync(store, linked);
+      try {
+        const worktreeId = worktreeIdFromPath(linkedPath);
+        const usage = await hygieneHandlers.diskUsage(
+          { projectId, worktreeId },
+          ctx,
+        );
+        assert.equal(usage.worktreeId, worktreeId);
+        assert.equal(usage.partial, false);
+        assert.ok(
+          usage.bytes - usage.reclaimableBytes >= size,
+          `${usage.bytes} on disk, ${usage.reclaimableBytes} reclaimable`,
+        );
+        assert.ok(usage.reclaimableBytes > 0, "the checkout's own files");
+        assert.equal(typeof usage.lastActivityAt, "number");
+      } finally {
+        rmSync(linked);
+        rmSync(store);
       }
     },
   );

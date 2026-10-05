@@ -469,6 +469,8 @@ var commands = []command{
 	// App plumbing for device sync (bundle create/unpack); hidden from
 	// the help catalog on purpose, like the config `write --data` verbs.
 	{name: "bundle", run: cmdBundle},
+	// App plumbing for the tidy page's sizes (diskusage.go), hidden too.
+	{name: "disk-usage", noContext: true, run: cmdDiskUsage},
 	{name: "autopull", aliases: []string{"auto-pull"}, worktree: true, run: cmdAutoPull},
 	{name: "move", aliases: []string{"mv"}, worktree: true, run: cmdMove},
 	{name: "launchers", aliases: []string{"launcher"}, run: cmdLaunchers},

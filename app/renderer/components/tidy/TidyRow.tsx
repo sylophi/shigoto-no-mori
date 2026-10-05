@@ -9,6 +9,7 @@ import { useNow } from "@/hooks/ui/useNow";
 import { formatBytes } from "@/lib/formatBytes";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
+import type { WorktreeDiskUsage } from "@shared/schemas";
 import type { TidyEntry } from "./tidyModel";
 import { TidyEntryTitle } from "./TidyEntryTitle";
 
@@ -125,10 +126,7 @@ export function TidyRow({
 
       <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
         {disk ? (
-          <span className="text-sm tabular-nums">
-            {disk.partial ? "~" : ""}
-            {formatBytes(disk.bytes)}
-          </span>
+          <DiskFigure disk={disk} />
         ) : diskFailed ? (
           <SimpleTooltip tip="Couldn't measure this worktree">
             <span className="text-sm text-muted-foreground">&mdash;</span>
@@ -146,5 +144,22 @@ export function TidyRow({
         />
       </div>
     </label>
+  );
+}
+
+// What removing the worktree frees, with the footprint on hover when it
+// is bigger.
+function DiskFigure({ disk }: { disk: WorktreeDiskUsage }) {
+  const figure = (
+    <span className="text-sm tabular-nums">
+      {disk.partial ? "~" : ""}
+      {formatBytes(disk.reclaimableBytes)}
+    </span>
+  );
+  if (disk.bytes <= disk.reclaimableBytes) return figure;
+  return (
+    <SimpleTooltip tip={`Apparent size ${formatBytes(disk.bytes)}`}>
+      {figure}
+    </SimpleTooltip>
   );
 }
