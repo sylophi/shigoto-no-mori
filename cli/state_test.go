@@ -600,7 +600,7 @@ func TestRegistryWritePreservesDeviceID(t *testing.T) {
 	if err := shelveViaRegistry(); err != nil {
 		t.Fatal(err)
 	}
-	if got := string(readFile(t, registryPath())["deviceId"]); got != id {
+	if got := string(readFile(t, registryPath())[deviceIDKey]); got != id {
 		t.Errorf("registry.json deviceId after CLI write = %s, want %s", got, id)
 	}
 }
