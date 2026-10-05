@@ -137,7 +137,7 @@ function AlbumSection({
               "flex flex-col items-center justify-center gap-1 rounded-2xl bg-muted/60 px-3 text-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
             )}
           >
-            <span className="text-2xl font-black tabular-nums">+{hidden}</span>
+            <span className="text-lg font-black tabular-nums">+{hidden}</span>
             <span className="text-xs font-medium">still to meet</span>
           </button>
         )}
@@ -155,9 +155,9 @@ function NobodyYet() {
   return (
     <DialogueFrame name="Isabelle" color={null} className="max-w-xl">
       {face !== null && (
-        <VillagerFace face={face} className="size-12 shrink-0" />
+        <VillagerFace face={face} className="size-10 shrink-0" />
       )}
-      <p className="min-w-0 flex-1 text-[15px] leading-snug font-medium">
+      <p className="min-w-0 flex-1 text-sm leading-snug font-medium">
         <TypedWords words={NOBODY_YET} />
       </p>
     </DialogueFrame>
@@ -167,7 +167,7 @@ function NobodyYet() {
 function AlbumSkeleton() {
   return (
     <div className="flex flex-col gap-8">
-      <Skeleton className="h-56 rounded-[22px]" />
+      <Skeleton className="h-52 rounded-[22px]" />
       <div className={ALBUM_GRID}>
         {Array.from({ length: 6 }, (_, i) => (
           <Skeleton key={i} className={cn(ALBUM_SLOT, "rounded-2xl")} />

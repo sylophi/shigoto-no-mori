@@ -37,9 +37,9 @@ import {
 
 // Every slot is one size, so the album lines up and a flip keeps its
 // place, in a grid of as many as fit.
-export const ALBUM_SLOT = "h-56";
+export const ALBUM_SLOT = "h-44";
 export const ALBUM_GRID =
-  "grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-4";
+  "grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3";
 
 // The first few pop in one after another. Past these they all come at
 // once: nobody waits on the five-hundredth.
@@ -58,20 +58,25 @@ export function VisitorSlot({
   // A face loads once its slot is scrolled near.
   const [ref, seen] = useSeen<HTMLDivElement>();
   const face = useVillagerFace(seen ? entry.slug : null);
-  const delay: CSSProperties = {
-    animationDelay: `${Math.min(index, STAGGERED) * 30}ms`,
-  };
+  // The pop is on the slot and not the sticker: doubutsu takes over a
+  // button's animation while it is hovered or pressed, and handing it
+  // back would play the pop again. The slot is what's hovered too,
+  // since it stays put while the sticker lifts out from under the
+  // pointer.
   return (
-    <div ref={ref} className={ALBUM_SLOT}>
+    <div
+      ref={ref}
+      style={{ animationDelay: `${Math.min(index, STAGGERED) * 30}ms` }}
+      className={`visitor-pop group/sticker ${ALBUM_SLOT}`}
+    >
       {entry.visits === null ? (
-        <EmptySlot entry={entry} face={face} style={delay} />
+        <EmptySlot entry={entry} face={face} />
       ) : (
         <Sticker
           entry={entry}
           visits={entry.visits}
           face={face}
           bestFriend={bestFriend}
-          style={delay}
         />
       )}
     </div>
@@ -83,13 +88,11 @@ function Sticker({
   visits,
   face,
   bestFriend,
-  style,
 }: {
   entry: AlbumEntry;
   visits: Visits;
   face: string | null;
   bestFriend: boolean;
-  style: CSSProperties;
 }) {
   const [flipped, setFlipped] = useState(false);
   // The back is drawn from the first flip on: most cards never turn.
@@ -102,15 +105,14 @@ function Sticker({
   return (
     <button
       type="button"
+      data-slot="visitor-sticker-button"
       aria-pressed={flipped}
       aria-label={`${profile.name}${bestFriend ? ", your best friend" : ""}, visited ${visitedTimes(visits.count)}`}
       onClick={flip}
-      style={
-        { ...style, "--tilt": `${stickerTilt(entry.slug)}deg` } as CSSProperties
-      }
+      style={{ "--tilt": `${stickerTilt(entry.slug)}deg` } as CSSProperties}
       className={cn(
-        "visitor-pop group/sticker relative block size-full rounded-2xl text-left [perspective:900px] transition-[rotate,translate] duration-300 ease-out [rotate:var(--tilt)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-        "hover:-translate-y-1 hover:[rotate:0deg]",
+        "relative block size-full rounded-2xl text-left [perspective:900px] transition-[rotate,translate] duration-300 ease-out [rotate:var(--tilt)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        "group-hover/sticker:-translate-y-1 group-hover/sticker:[rotate:0deg]",
         flipped && "[rotate:0deg]",
       )}
     >
@@ -159,7 +161,7 @@ function StickerFront({
     <span
       data-slot="visitor-sticker"
       style={villagerInk(color)}
-      className={cn(FACE_SIDE, "bg-card px-3 pt-6 pb-4 shadow-sm")}
+      className={cn(FACE_SIDE, "bg-card px-2.5 pt-5 pb-3 shadow-sm")}
     >
       {rarity === "legendary" && (
         <StationeryPrint paper={paper} className="opacity-20" />
@@ -171,41 +173,41 @@ function StickerFront({
         />
       )}
       {bestFriend ? (
-        <span className="absolute top-2.5 left-2.5 flex -rotate-6 items-center gap-1 rounded-md bg-rose-500 px-1.5 py-0.5 text-3xs font-bold text-white">
+        <span className="absolute top-2 left-2 flex -rotate-6 items-center gap-1 rounded-md bg-rose-500 px-1.5 py-0.5 text-3xs font-bold text-white">
           <Heart aria-hidden className="size-2.5 fill-current" />
           Best friend
         </span>
       ) : (
         isNewVisitor(visits, today.getTime()) && (
-          <span className="absolute top-2.5 left-2.5 -rotate-6 rounded-md bg-emerald-500 px-1.5 py-0.5 text-3xs font-bold text-white">
+          <span className="absolute top-2 left-2 -rotate-6 rounded-md bg-emerald-500 px-1.5 py-0.5 text-3xs font-bold text-white">
             New!
           </span>
         )
       )}
-      <span className="relative flex size-20 items-center justify-center">
+      <span className="relative flex size-14 items-center justify-center">
         {face !== null &&
           (rarity === "legendary" ? (
             <FaceStamp
               face={face}
               tint={paper.color}
-              className="size-20 rotate-3 bg-popover p-1.5 transition-transform duration-300 group-hover/sticker:rotate-0"
+              className="size-full rotate-3 bg-popover transition-transform duration-300 group-hover/sticker:rotate-0"
             />
           ) : (
             <VillagerFace
               face={face}
-              className="size-20 transition-transform duration-300 group-hover/sticker:scale-110 group-hover/sticker:-rotate-6"
+              className="size-full transition-transform duration-300 group-hover/sticker:scale-110 group-hover/sticker:-rotate-6"
             />
           ))}
       </span>
-      <span className="relative mt-3 flex h-6 max-w-full items-center">
+      <span className="relative mt-2 flex h-5 max-w-full items-center">
         {rarity === "rare" ? (
-          <Nameplate className="truncate px-2.5 text-sm">
+          <Nameplate className="truncate px-2 text-xs">
             {profile.name}
           </Nameplate>
         ) : (
           <span
             className={cn(
-              "truncate text-base font-bold",
+              "truncate text-sm font-bold",
               rarity === "legendary" && paper.ink,
             )}
           >
@@ -216,7 +218,7 @@ function StickerFront({
       <span className="relative mt-0.5 h-4 max-w-full truncate text-2xs text-muted-foreground">
         {about}
       </span>
-      <span className="relative mt-auto text-xs font-medium text-muted-foreground">
+      <span className="relative mt-auto text-2xs font-medium text-muted-foreground">
         Visited {visitedTimes(visits.count)}
       </span>
     </span>
@@ -242,8 +244,8 @@ function StickerBack({
   // Key, label, value.
   const rows: [string, string, string][] = [
     ["visits", "Visits", String(visits.count)],
-    ["first", "First came", visitDate(visits.first)],
-    ["last", "Last came", formatRelativeTime(visits.last, now)],
+    ["first", "First visit", visitDate(visits.first)],
+    ["last", "Last visit", formatRelativeTime(visits.last, now)],
   ];
   if (birthday !== null) rows.push(["birthday", "Birthday", birthday]);
   return (
@@ -251,12 +253,12 @@ function StickerBack({
       data-slot="visitor-sticker"
       className={cn(
         FACE_SIDE,
-        "items-stretch bg-popover px-3.5 pt-3 pb-3 shadow-sm [transform:rotateY(180deg)]",
+        "items-stretch bg-popover px-2.5 py-2.5 shadow-sm [transform:rotateY(180deg)]",
       )}
     >
       <span className="flex items-center gap-2">
-        {face !== null && <VillagerFace face={face} className="size-8" />}
-        <span className={cn("min-w-0 truncate text-sm font-bold", ink)}>
+        {face !== null && <VillagerFace face={face} className="size-6" />}
+        <span className={cn("min-w-0 truncate text-xs font-bold", ink)}>
           {profile.name}
         </span>
       </span>
@@ -269,7 +271,7 @@ function StickerBack({
         ))}
       </span>
       {catchphrase !== null && (
-        <span className="mt-auto truncate pt-1 text-center text-xs font-medium text-muted-foreground italic">
+        <span className="mt-auto truncate pt-1 text-center text-2xs font-medium text-muted-foreground italic">
           “{catchphrase}”
         </span>
       )}
@@ -282,30 +284,27 @@ function StickerBack({
 function EmptySlot({
   entry,
   face,
-  style,
 }: {
   entry: AlbumEntry;
   face: string | null;
-  style: CSSProperties;
 }) {
   const hint = entry.rarity === "common" ? entry.profile.species : undefined;
   return (
     <div
-      style={style}
       aria-label="Hasn't visited yet"
       role="img"
-      className="visitor-pop relative flex size-full flex-col items-center justify-center rounded-2xl bg-muted/60 px-3"
+      className="relative flex size-full flex-col items-center justify-center rounded-2xl bg-muted/60 px-3"
     >
-      <span className="flex size-20 items-center justify-center">
+      <span className="flex size-14 items-center justify-center">
         {face !== null && (
           <VillagerFace
             face={face}
             tint={false}
-            className="size-16 opacity-15 brightness-0 dark:opacity-25 dark:invert"
+            className="size-12 opacity-15 brightness-0 dark:opacity-25 dark:invert"
           />
         )}
       </span>
-      <span className="mt-3 text-base font-black tracking-widest text-muted-foreground/60">
+      <span className="mt-2 text-sm font-black tracking-widest text-muted-foreground/60">
         ???
       </span>
       {hint && (

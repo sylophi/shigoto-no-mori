@@ -34,12 +34,12 @@ export function isBirthdayOn(
 }
 
 const BIRTHDAY = new Intl.DateTimeFormat(undefined, {
-  month: "long",
+  month: "short",
   day: "numeric",
 });
 
-// A "MM-DD" birthday as people say it ("September 25"), or null without
-// one.
+// A "MM-DD" birthday the way the guest book writes a date ("Sep 25"),
+// or null without one.
 export function birthdayLabel(birthday: string | undefined): string | null {
   const [month, day] = birthday?.split("-").map(Number) ?? [];
   if (month === undefined || day === undefined) return null;
