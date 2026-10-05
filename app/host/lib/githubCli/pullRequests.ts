@@ -7,6 +7,9 @@ import {
   type PullRequestCheckBucket,
   type PullRequestDetail,
   PullRequestMergeStateSchema,
+  PullRequestReviewDecisionSchema,
+  PullRequestReviewerStateSchema,
+  type PullRequestReviews,
   PullRequestStateSchema,
   pullRequestsEqual,
   summarizeChecks,
@@ -247,7 +250,137 @@ export async function getWorktreePullRequest(
   branch: string,
 ): Promise<PullRequestDetail | null> {
   if (!(await ghReadyForRepo(cwd))) return null;
-  return runGhPrListDetail(cwd, branch);
+  const [detail, reviews] = await Promise.all([
+    runGhPrListDetail(cwd, branch),
+    fetchReviews(cwd, branch),
+  ]);
+  if (!detail) return null;
+  const match = reviews?.find((pr) => pr.number === detail.number);
+  return match ? { ...detail, reviews: toReviews(match) } : detail;
+}
+
+// The reviews come from GraphQL, beside the gh pr list call, for two
+// fields gh pr list doesn't offer: latestOpinionatedReviews, which keeps
+// an approval its reviewer later commented under (latestReviews has the
+// comment instead), and review states without each review's body. On
+// its own call so a failure (a team request needs read:org, which a
+// token can lack) costs only the reviews chip, not the PR.
+const REVIEWS_QUERY = `query($owner: String!, $repo: String!, $head: String!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequests(headRefName: $head, first: 5, orderBy: {field: CREATED_AT, direction: DESC}) {
+      nodes {
+        number
+        author { login }
+        reviewDecision
+        latestOpinionatedReviews(first: 100) { nodes { author { login } state } }
+        latestReviews(first: 100) { nodes { author { login } state } }
+        reviewRequests(first: 100) {
+          nodes {
+            requestedReviewer {
+              ... on User { login }
+              ... on Bot { login }
+              ... on Mannequin { login }
+              ... on Team { combinedSlug }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+const GqlReviewSchema = z.object({
+  author: z.object({ login: z.string() }).nullable(),
+  state: z.string(),
+});
+
+const GqlReviewsPullRequestSchema = z.object({
+  number: z.number().int().positive(),
+  author: z.object({ login: z.string() }).nullable(),
+  reviewDecision: PullRequestReviewDecisionSchema.nullable().catch(null),
+  latestOpinionatedReviews: z.object({ nodes: z.array(GqlReviewSchema) }),
+  latestReviews: z.object({ nodes: z.array(GqlReviewSchema) }),
+  reviewRequests: z.object({
+    nodes: z.array(
+      z.object({
+        requestedReviewer: z
+          .object({
+            login: z.string().optional(),
+            combinedSlug: z.string().optional(),
+          })
+          .nullable(),
+      }),
+    ),
+  }),
+});
+type GqlReviewsPullRequest = z.infer<typeof GqlReviewsPullRequestSchema>;
+
+const GqlReviewsResponseSchema = z.object({
+  data: z.object({
+    repository: z.object({
+      pullRequests: z.object({ nodes: z.array(GqlReviewsPullRequestSchema) }),
+    }),
+  }),
+});
+
+// The branch's newest PRs with their reviews, or null on any failure:
+// the PR shows without the reviews chip then.
+async function fetchReviews(
+  cwd: string,
+  branch: string,
+): Promise<GqlReviewsPullRequest[] | null> {
+  try {
+    const { stdout } = await execGh(
+      [
+        "api",
+        "graphql",
+        "-F",
+        "owner={owner}",
+        "-F",
+        "repo={repo}",
+        "-f",
+        `head=${branch}`,
+        "-f",
+        `query=${REVIEWS_QUERY}`,
+      ],
+      { cwd },
+    );
+    const parsed = GqlReviewsResponseSchema.safeParse(JSON.parse(stdout));
+    return parsed.success
+      ? parsed.data.data.repository.pullRequests.nodes
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const SUBMITTED_REVIEW_STATE = PullRequestReviewerStateSchema.exclude([
+  "REQUESTED",
+]);
+
+// Each reviewer's opinion (an approval or a request for changes),
+// else their comment, then whoever's asked and hasn't answered. The
+// author's own reviews (replies in a thread are reviews too) are left
+// out, and DISMISSED fails the state parse and drops.
+function toReviews(pr: GqlReviewsPullRequest): PullRequestReviews {
+  const author = pr.author?.login;
+  const reviewers: PullRequestReviews["reviewers"] = [];
+  const seen = new Set<string>();
+  for (const review of [
+    ...pr.latestOpinionatedReviews.nodes,
+    ...pr.latestReviews.nodes,
+  ]) {
+    const login = review.author?.login ?? "ghost";
+    const state = SUBMITTED_REVIEW_STATE.safeParse(review.state);
+    if (login === author || seen.has(login) || !state.success) continue;
+    seen.add(login);
+    reviewers.push({ login, state: state.data });
+  }
+  for (const { requestedReviewer } of pr.reviewRequests.nodes) {
+    const login = requestedReviewer?.login ?? requestedReviewer?.combinedSlug;
+    if (login) reviewers.push({ login, state: "REQUESTED" });
+  }
+  return { decision: pr.reviewDecision, reviewers };
 }
 
 // Server-side filtering + minimal fields keeps this cheap even on

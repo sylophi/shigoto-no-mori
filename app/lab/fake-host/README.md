@@ -108,6 +108,12 @@ Poses ride the URL:
   `single-passed`, `single-failing`, `passed`, `passed-some-skipped`,
   `all-skipped`, `auto-merge`, `pending`, `failing`, `failing-blocked`,
   `failing-and-pending`, `many`. Absent, it keeps two passing checks.
+- `?reviews=<variant>`: the reviews on the same PR, keys of
+  `FAKE_REVIEW_POSES`: `approved`, `approved-no-rule`,
+  `changes-requested`, `required`, `required-unrequested`,
+  `required-partial`, `requested`, `commented`. Absent, it has none
+  and no review rule, so the reviews chip stays away. Pairs with
+  `?checks=` (`?checks=pending&reviews=required`).
 - Desktop: `?to=/devices` navigates the memory router after mount. Web:
   the path itself is the route (`/devices/...`).
 - `?villageLife=1`: Village life on in this window's settings (the

@@ -1,14 +1,15 @@
 // The fake host's GitHub fixtures: the repo's pull requests by head branch
 // (three of them a stack across two devices), the detail with its CI
-// rollup posed by ?checks=, the merged stack posed by ?stack=merged,
-// and one diff for the diff pages. Pure data plus readers of
-// location.search, served by bridge.ts.
+// rollup posed by ?checks= and its reviews by ?reviews=, the merged
+// stack posed by ?stack=merged, and one diff for the diff pages. Pure
+// data plus readers of location.search, served by bridge.ts.
 import {
   type MergeMethod,
   type MergePullRequestResult,
   type PullRequestCheck,
   type PullRequestCheckBucket,
   type PullRequestMergeState,
+  type PullRequestReviews,
   type RepoMergeConfig,
   summarizeChecks,
 } from "@shared/schemas";
@@ -88,7 +89,7 @@ export function fakePullRequests(projectId: string) {
 export function fakePullRequestDetail(branch: string) {
   const slim = fakePosedPullRequests()[branch];
   if (!slim) return null;
-  if (slim === FAKE_PR_SLIM) return fakePosedChecksDetail();
+  if (slim === FAKE_PR_SLIM) return fakePosedDetail();
   return { ...FAKE_PR_DETAIL, ...slim, ...fakeChecks([]) };
 }
 
@@ -233,9 +234,61 @@ const FAKE_CHECK_POSES: Record<
   },
 };
 
-function fakePosedChecksDetail() {
-  const variant = new URLSearchParams(location.search).get("checks");
+// ?reviews=<variant> poses #148's reviews. Unknown or absent keeps
+// none, on a branch with no review rule, so the chip stays away.
+const FAKE_REVIEW_POSES: Record<string, PullRequestReviews> = {
+  approved: {
+    decision: "APPROVED",
+    reviewers: [
+      { login: "tanuki", state: "APPROVED" },
+      { login: "copilot-pull-request-reviewer", state: "COMMENTED" },
+    ],
+  },
+  "approved-no-rule": {
+    decision: null,
+    reviewers: [
+      { login: "tanuki", state: "APPROVED" },
+      { login: "isabelle", state: "APPROVED" },
+    ],
+  },
+  "changes-requested": {
+    decision: "CHANGES_REQUESTED",
+    reviewers: [
+      { login: "tanuki", state: "APPROVED" },
+      { login: "blathers", state: "CHANGES_REQUESTED" },
+    ],
+  },
+  required: {
+    decision: "REVIEW_REQUIRED",
+    reviewers: [
+      { login: "tanuki", state: "REQUESTED" },
+      { login: "sylophi/maintainers", state: "REQUESTED" },
+    ],
+  },
+  "required-unrequested": { decision: "REVIEW_REQUIRED", reviewers: [] },
+  "required-partial": {
+    decision: "REVIEW_REQUIRED",
+    reviewers: [
+      { login: "tanuki", state: "APPROVED" },
+      { login: "isabelle", state: "REQUESTED" },
+    ],
+  },
+  requested: {
+    decision: null,
+    reviewers: [{ login: "tanuki", state: "REQUESTED" }],
+  },
+  commented: {
+    decision: null,
+    reviewers: [{ login: "copilot-pull-request-reviewer", state: "COMMENTED" }],
+  },
+};
+
+function fakePosedDetail() {
+  const params = new URLSearchParams(location.search);
+  const variant = params.get("checks");
   const pose = variant ? FAKE_CHECK_POSES[variant] : undefined;
+  const reviewVariant = params.get("reviews");
+  const reviews = reviewVariant ? FAKE_REVIEW_POSES[reviewVariant] : undefined;
   const posed = pose
     ? {
         ...FAKE_PR_DETAIL,
@@ -246,6 +299,14 @@ function fakePosedChecksDetail() {
     : FAKE_PR_DETAIL;
   return {
     ...posed,
+    // A review the branch is waiting on blocks the merge, as on GitHub.
+    ...(reviews && {
+      reviews,
+      ...((reviews.decision === "REVIEW_REQUIRED" ||
+        reviews.decision === "CHANGES_REQUESTED") && {
+        mergeState: "BLOCKED" as const,
+      }),
+    }),
     state: fakeMerged ? ("MERGED" as const) : posed.state,
     autoMerge: fakeAutoMerge ? fakeAutoMerge.method : posed.autoMerge,
   };
@@ -272,7 +333,7 @@ let fakeMerged = false;
 export function fakeMergePullRequest(
   method: MergeMethod,
 ): MergePullRequestResult {
-  if (armsAutoMerge(FAKE_REPO_MERGE_CONFIG, fakePosedChecksDetail(), false)) {
+  if (armsAutoMerge(FAKE_REPO_MERGE_CONFIG, fakePosedDetail(), false)) {
     fakeAutoMerge = { method };
     return { outcome: "auto-merge" };
   }

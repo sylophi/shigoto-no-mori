@@ -112,6 +112,41 @@ export function summarizeChecks(
   return summary;
 }
 
+// GraphQL's PullRequest.reviewDecision: the verdict of the base
+// branch's required-review rule. null when the branch has no such rule,
+// so approvals still count but nothing waits on them.
+export const PullRequestReviewDecisionSchema = z.enum([
+  "APPROVED",
+  "CHANGES_REQUESTED",
+  "REVIEW_REQUIRED",
+]);
+export type PullRequestReviewDecision = z.infer<
+  typeof PullRequestReviewDecisionSchema
+>;
+
+// Where one reviewer stands: their latest submitted review, or
+// REQUESTED while they've been asked and haven't given one. Dismissed
+// and unsubmitted (PENDING) reviews are left out on the host: neither
+// says anything about the PR.
+export const PullRequestReviewerStateSchema = z.enum([
+  "APPROVED",
+  "CHANGES_REQUESTED",
+  "COMMENTED",
+  "REQUESTED",
+]);
+export type PullRequestReviewerState = z.infer<
+  typeof PullRequestReviewerStateSchema
+>;
+
+export const PullRequestReviewsSchema = z.object({
+  decision: PullRequestReviewDecisionSchema.nullable(),
+  // A user's login, or org/team for a request to a team.
+  reviewers: z.array(
+    z.object({ login: z.string(), state: PullRequestReviewerStateSchema }),
+  ),
+});
+export type PullRequestReviews = z.infer<typeof PullRequestReviewsSchema>;
+
 export const MergeMethodSchema = z.enum(["merge", "squash", "rebase"]);
 export type MergeMethod = z.infer<typeof MergeMethodSchema>;
 
@@ -133,6 +168,8 @@ export const PullRequestDetailSchema = PullRequestSchema.extend({
   changedFiles: z.number().int().nonnegative(),
   checks: PullRequestChecksSummarySchema,
   checkList: z.array(PullRequestCheckSchema),
+  // Absent from a host on an older build.
+  reviews: PullRequestReviewsSchema.optional(),
 });
 export type PullRequestDetail = z.infer<typeof PullRequestDetailSchema>;
 
