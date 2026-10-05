@@ -717,10 +717,10 @@ func TestParseGitVersion(t *testing.T) {
 				tc.raw, major, minor, ok, tc.major, tc.minor, tc.ok)
 		}
 	}
-	if !belowGitFloor(2, 30) {
-		t.Fatal("2.30 must sort below the minimum")
+	if !belowGitFloor(2, 39) {
+		t.Fatal("2.39 must sort below the minimum")
 	}
-	if belowGitFloor(2, 31) {
+	if belowGitFloor(2, 40) {
 		t.Fatal("the minimum must not sort below itself")
 	}
 	if belowGitFloor(3, 0) {

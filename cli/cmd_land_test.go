@@ -148,7 +148,7 @@ func TestLandArmsAutoMergeAndKeepsTheWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := createWorktree(proj, "fox", "fox", "main", false)
+	w, err := createWorktree(proj, "fox", "fox", "main", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func TestLandReadsBackAnAutoMergeThatMergedAtOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := createWorktree(proj, "fox", "fox", "main", false)
+	w, err := createWorktree(proj, "fox", "fox", "main", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestCatchUpBasePullsTheBaseBranchCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v2, err := createWorktree(proj, "v2", "", "origin/v2", true)
+	v2, err := createWorktree(proj, "v2", "", "origin/v2", true, true)
 	if err != nil {
 		t.Fatal(err)
 	}

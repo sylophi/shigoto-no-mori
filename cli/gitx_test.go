@@ -64,7 +64,7 @@ func TestGitWorktreeCheckoutAttachesHead(t *testing.T) {
 	}
 	for i, tc := range cases {
 		wt := filepath.Join(parent, fmt.Sprintf("wt%d", i))
-		if err := gitWorktreeCheckout(repo, wt, tc.ref, tc.remotes); err != nil {
+		if err := gitWorktreeCheckout(repo, wt, tc.ref, tc.remotes, false); err != nil {
 			t.Fatalf("%s: %v", tc.ref, err)
 		}
 		branch, err := runGit(wt, "symbolic-ref", "--short", "HEAD")
