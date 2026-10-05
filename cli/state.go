@@ -432,6 +432,10 @@ const shelfSnapshotsKey = "shelfSnapshots"
 // autopull` flip them, and the listing keeps the shelf snapshots.
 var worktreeMarkKeys = []string{shelvedKey, autoPullKey, shelfSnapshotsKey}
 
+// The id the app mints for its data dir (host/lib/config/deviceId.ts).
+// The CLI only reads it, for `sm link`.
+const deviceIDKey = "deviceId"
+
 // deviceId (app-written, host/lib/config/deviceId.ts) is deliberately
 // absent: this list drives only the state.json→registry.json split,
 // which deviceId postdates. So are sharedSettings
