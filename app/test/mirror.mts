@@ -1398,7 +1398,7 @@ async function main() {
         }),
       );
       // A re-open still running, and a root an in-app move holds, are
-      // left to their owners; a terminate that fails is tried again.
+      // left to their owners. A terminate that fails is tried again.
       failTerminate = true;
       const release = holdRootChecks(["orig-halted"]);
       await whileRecreating("old", () => settleMirrorBookkeeping());
