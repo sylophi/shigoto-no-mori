@@ -81,8 +81,8 @@ function MirrorLinkAction({
             )}
           />
         }
-        label={`Mirror with ${names.other}`}
-        tip={view.detail === "" ? view.label : `${view.label}: ${view.detail}`}
+        label="Mirroring"
+        tip={`${view.label} with ${names.other}${view.detail === "" ? "" : `: ${view.detail}`}`}
         disabledReason={
           runnerApi === undefined
             ? `${names.runner} runs this mirror and is offline. Its controls come back with it.`

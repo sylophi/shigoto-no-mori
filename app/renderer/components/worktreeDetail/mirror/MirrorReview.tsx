@@ -2,11 +2,11 @@
 // the copy, each a header band naming its device and a body naming the
 // worktree there, so the pair reads at a glance the way the manage
 // dialog shows it once it runs. Under the original, what stays out
-// (the one real choice); under the copy, whether its create runs the
-// setup script. A mirror to a peer picks the peer in the copy card's
-// header. The original's card is the transplant's source card. The
+// (the one real choice); in the copy's card, whether its create runs
+// the setup script. A mirror to a peer picks the peer in the copy
+// card's header. The original's card is the transplant's source card. The
 // copy's half re-pins to the landing device (DestinationScope).
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { pullWorktreeName } from "@shared/git/branches";
 import type { Project, Worktree } from "@shared/schemas";
@@ -24,6 +24,7 @@ import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
+import { Switch } from "@/components/ui/switch";
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import {
   DestinationScope,
@@ -48,7 +49,7 @@ import {
   useLocalCollision,
 } from "../flow/PullReview";
 import type { Landing } from "../flow/pullSteps";
-import { SetupToggle } from "../flow/SetupToggle";
+import { useCreatePlan } from "../flow/createPlan";
 
 export function MirrorReview({
   worktree,
@@ -109,16 +110,9 @@ export function MirrorReview({
                   deviceLabel={thisDeviceLabel}
                   landing={landing}
                   toPeer={toPeer}
+                  pull={pull}
                 />
               </section>
-              {target?.project && (
-                <SetupToggle
-                  localProject={target.project}
-                  thisDeviceLabel={thisDeviceLabel}
-                  checked={pull.runSetup}
-                  onChange={pull.setRunSetup}
-                />
-              )}
             </div>
           </DestinationScope>
         </div>
@@ -152,12 +146,14 @@ function CopyCard({
   deviceLabel,
   landing,
   toPeer,
+  pull,
 }: {
   worktree: Worktree;
   target: LandingTarget | null;
   deviceLabel: string;
   landing: Landing;
   toPeer: DestinationPick | undefined;
+  pull: PullChoiceState;
 }) {
   const { deviceId } = useDestinationScope();
   const device = useRemoteDevice(deviceId);
@@ -213,6 +209,48 @@ function CopyCard({
           <CloneLines clone={target.clone} worktree={worktree} />
         )}
       </div>
+      {target?.project && (
+        <SetupRow
+          localProject={target.project}
+          checked={pull.runSetup}
+          onChange={pull.setRunSetup}
+        />
+      )}
+    </div>
+  );
+}
+
+// The copy card's last row: whether its create runs the project's
+// setup script there. A project without one has no row.
+function SetupRow({
+  localProject,
+  checked,
+  onChange,
+}: {
+  localProject: Project;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const command = useCreatePlan(localProject).setupCommand;
+  const id = useId();
+  if (command === "") return null;
+  return (
+    <div className="flex items-center gap-3 border-t border-border px-3 py-2.5">
+      <label
+        htmlFor={id}
+        className="min-w-0 flex-1 cursor-pointer leading-tight"
+      >
+        <span className="block text-xs font-medium">Run the setup script</span>
+        <span className="block truncate font-mono text-xs text-muted-foreground">
+          {command}
+        </span>
+      </label>
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onChange}
+        aria-label="Run the setup script"
+      />
     </div>
   );
 }

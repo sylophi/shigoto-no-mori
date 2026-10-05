@@ -1,7 +1,7 @@
 // The worktree footer's leading verbs share one shape: a ghost text
 // button that opens a dialog or a page. Files leads on every worktree,
-// then Ports, Mirror here and Transplant here on a peer's worktree,
-// Ports and the running mirror on this device's own. Each gives up its
+// then Ports, Mirror and Transplant (or, mirrored, the running mirror's
+// Mirroring in their place). Each gives up its
 // label on a narrow footer at its own rank (footerFit.tsx).
 import type { ReactNode } from "react";
 import { FooterVerb } from "./footerFit";

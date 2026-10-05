@@ -161,8 +161,8 @@ function TransferButtons({
         <FooterActionButton
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
-          label="Mirror here"
-          tip="Keep a live copy of this worktree here"
+          label="Mirror"
+          tip="Keep a live copy of this worktree on this device"
           disabledReason={blocker}
           onClick={() => setOpen("mirror")}
         />
@@ -173,12 +173,13 @@ function TransferButtons({
       {/* Transplant is destructive on the remote side, so it opens the
           review dialog instead of firing on a double-click: the dialog
           is the confirmation. */}
-      {buttons && !worktree.isPrimary && (
+      {/* Not while mirrored, like the local footer's. */}
+      {buttons && !worktree.isPrimary && !mirrored && (
         <FooterActionButton
           rank={LABEL_RANK.transplant}
           icon={<Shovel />}
-          label="Transplant here"
-          tip="Move this worktree here"
+          label="Transplant"
+          tip="Move this worktree to this device"
           onClick={() => setOpen("transplant")}
         />
       )}
