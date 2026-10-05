@@ -63,6 +63,7 @@ import {
 } from "@/hooks/remote/useMirrors";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import {
   CARD,
@@ -180,16 +181,10 @@ export function MirrorManageDialog({
           <FlowBody>
             <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <div className="flex min-w-0 flex-col gap-5">
-                <PairStrip session={session} names={names} />
-                <Stats
-                  session={session}
-                  filesLabel={
-                    session.localRoot === revealUnder &&
-                    revealUnder !== undefined
-                      ? "Files here"
-                      : `Files on ${names.runner}`
-                  }
-                />
+                <div className="space-y-2">
+                  <PairStrip session={session} names={names} />
+                  <Facts session={session} />
+                </div>
                 <Notice
                   session={session}
                   view={view}
@@ -311,9 +306,8 @@ function StopStep({
       <FlowBody>
         {blocker === undefined ? (
           <p className="text-sm">
-            Stopping removes the copy on {names.copy}. It holds nothing{" "}
-            {names.runner} doesn&rsquo;t have, and {names.runner} keeps the
-            original.
+            This removes the copy on {names.copy}. It&rsquo;s in step, so
+            nothing is lost, and {names.runner} keeps the original.
           </p>
         ) : (
           <div className="space-y-3">
@@ -332,9 +326,8 @@ function StopStep({
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              This clears by itself once the mirror catches up. Removing the
-              copy on {names.copy} now discards anything only it holds.{" "}
-              {names.runner} keeps the original either way.
+              Removing the copy on {names.copy} now loses anything only it
+              holds.
             </p>
           </div>
         )}
@@ -525,71 +518,45 @@ function folderOf(path: string): string {
   );
 }
 
-// Three figures, one glance: how long it has run, how much the
-// runner's copy holds, and whether git agrees. A paused session
-// reports no files and git off, because the engine tears its scan
-// down while paused. Shown raw that reads as a mirror that lost
-// everything, so the figures say "paused" until it resumes.
-function Stats({
-  session,
-  filesLabel,
-}: {
-  session: MirrorSession;
-  // Names the runner's endpoint, whose file count this is.
-  filesLabel: string;
-}) {
+// The mirror's figures in one quiet line under the pair: how long it
+// has run, how much the original holds, whether git agrees (its detail
+// on hover). A paused session reports no files and git off, because
+// the engine tears its scan down while paused, so the line says
+// "paused" instead of figures that read as a mirror that lost
+// everything.
+function Facts({ session }: { session: MirrorSession }) {
   const git = gitVerdict(session.git);
   return (
-    <dl className="grid grid-cols-3 gap-2">
-      <Stat label="Started">
+    <p className="flex flex-wrap items-center gap-x-1.5 px-1 text-xs text-muted-foreground">
+      <span>
+        Started{" "}
         {session.createdAt > 0 ? (
           <RelativeDate date={new Date(session.createdAt).toISOString()} />
         ) : (
           "just now"
         )}
-      </Stat>
-      <Stat label={filesLabel} paused={session.paused}>
-        {session.local.files.toLocaleString()}
-      </Stat>
-      <Stat label="Git" tip={session.git?.detail} paused={session.paused}>
-        <StatusDot
-          tone={git.tone}
-          label={<span className={TONE_TEXT[git.tone]}>{git.label}</span>}
-        />
-      </Stat>
-    </dl>
-  );
-}
-
-// `paused` swaps the figure for the word: the engine tears its scan
-// down while paused and reports zeros, which would read as a mirror
-// that lost everything.
-function Stat({
-  label,
-  tip,
-  paused = false,
-  children,
-}: {
-  label: string;
-  tip?: string;
-  paused?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <SimpleTooltip tip={tip}>
-      <div className="min-w-0 rounded-lg bg-muted/40 px-3 py-2 leading-tight">
-        <dt className="truncate text-3xs tracking-wide text-muted-foreground uppercase">
-          {label}
-        </dt>
-        <dd className="mt-0.5 truncate text-sm font-medium tabular-nums">
-          {paused ? (
-            <span className="text-muted-foreground">paused</span>
-          ) : (
-            children
-          )}
-        </dd>
-      </div>
-    </SimpleTooltip>
+      </span>
+      <span aria-hidden>·</span>
+      {session.paused ? (
+        <span>paused</span>
+      ) : (
+        <>
+          <span className="tabular-nums">
+            {pluralize(session.local.files, "file")}
+          </span>
+          <span aria-hidden>·</span>
+          <SimpleTooltip tip={session.git?.detail || undefined}>
+            <span>
+              <StatusDot
+                tone={git.tone}
+                className="text-xs"
+                label={`Git ${git.label.toLowerCase()}`}
+              />
+            </span>
+          </SimpleTooltip>
+        </>
+      )}
+    </p>
   );
 }
 

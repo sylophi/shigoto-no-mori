@@ -19,6 +19,7 @@ import { pullLandingBranch } from "@shared/git/branches";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Project, Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Chip } from "@/components/ui/chip-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
@@ -30,7 +31,7 @@ import {
 import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
-import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
+import { CARD, FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
 import { type DestinationPick, PullReviewStep } from "../flow/PullReview";
 import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
@@ -184,18 +185,19 @@ function MirrorFlow({
       steps={STEPS}
       stepsLabel="Mirror steps"
       progressExtras={{
-        compact: true,
         extraRows: [
           {
-            title: "Match the files and go live",
-            detail: summary ?? "nothing left out",
+            title: "Match the files and open the mirror",
+            detail: summary ?? "both ways",
           },
         ],
-        sourcePart: "source, keeps its copy",
+        // The header carries the outcome. The footer is left to its
+        // buttons, bar the one thing the header does not say.
+        sourcePart: "source",
         progressLabel: "Mirror progress",
-        runningNote: "Keep this window open.",
-        failedNote: `Whatever landed ${landing.on} was removed again, so trying again starts clean.`,
-        cancelledNote: `No mirror runs, and nothing landed ${landing.on}. ${sourceDeviceLabel} keeps its copy.`,
+        runningNote: "",
+        failedNote: "Nothing was left behind, so trying again starts clean.",
+        cancelledNote: "",
       }}
       onClose={onClose}
       headline={
@@ -262,7 +264,7 @@ function MirrorFlow({
           heading={toPeer === undefined ? "The copy" : "Copy goes to"}
           sourceNote="keeps its copy"
           sourceRow={false}
-          idleNote={`Stop any time. Stopping removes the copy ${landing.on}.`}
+          idleNote=""
           startLabel="Start mirroring"
         />
       )}
@@ -332,44 +334,28 @@ function MirrorLive({
     <>
       <FlowBody>
         <section className="space-y-2">
-          <SectionHeading>On {thisDeviceLabel}</SectionHeading>
-          <div className="flex flex-wrap items-center gap-3 rounded-lg bg-emerald-500/10 p-3">
-            <span
-              aria-hidden
-              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-background"
-            >
-              <RefreshCw className="size-4" />
-            </span>
-            <div className="min-w-0 flex-1 basis-64 space-y-1.5">
-              <p className="truncate font-mono text-sm font-semibold">
-                {branch}
-              </p>
-              <LandedPath path={landed.path} />
-              <div className="flex flex-wrap gap-1.5">
-                <Chip>
-                  <StatusDot
-                    tone={view?.tone ?? "sky"}
-                    label={view?.label ?? "opening"}
-                  />
+          <SectionHeading>Copy on {thisDeviceLabel}</SectionHeading>
+          <div className={cn(CARD, "space-y-1.5")}>
+            <p className="truncate font-mono text-sm font-semibold">{branch}</p>
+            <LandedPath path={landed.path} />
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              <Chip>
+                <StatusDot
+                  tone={view?.tone ?? "sky"}
+                  label={view?.label ?? "Opening"}
+                />
+              </Chip>
+              {summary !== null && <Chip>{summary}</Chip>}
+              {!dirtyApplied && (
+                <Chip className="text-amber-700 dark:text-amber-300">
+                  Uncommitted changes stayed on {sourceDeviceLabel}
                 </Chip>
-                {summary !== null && <Chip>{summary}</Chip>}
-                {!dirtyApplied && (
-                  <Chip className="text-amber-700 dark:text-amber-300">
-                    changes stayed on {sourceDeviceLabel}
-                  </Chip>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </section>
       </FlowBody>
-      <FlowFooter
-        note={
-          landing.onPeer
-            ? "Pause, stop, or change what stays out from the Mirror button on this worktree's page."
-            : "Pause, stop, or change what stays out from the Mirror button on its page."
-        }
-      >
+      <FlowFooter>
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>

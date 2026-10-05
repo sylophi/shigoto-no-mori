@@ -85,15 +85,6 @@ export type PullProgressProps = {
   // once the apply frame has landed. The mutation settling ends the
   // view, so a row here never reads as done.
   extraRows?: ExtraRow[];
-  // The mirror's list: the copy is a means there, not the outcome, so
-  // the pull reads as what it does for the person (the branch and its
-  // changes across, the worktree made) rather than as the create's
-  // plumbing. The capture and the transfer are one row, the create
-  // covers its carry-over, ports and re-apply (each still runs under
-  // it, the row running throughout), and setup shows only when it
-  // runs. A step absent from the list keeps the row before it running
-  // (pullSteps.ts stepStates), so nothing reads as stuck.
-  compact?: boolean;
   // The transplant's files step (the ignored files the leave-out rule
   // admits), as its row's caption. Absent on a mirror: its own session
   // carries the files.
@@ -133,7 +124,6 @@ function ProgressView({
   onClose,
   onRetry,
   extraRows = NO_EXTRA_ROWS,
-  compact = false,
   filesDetail,
   sourcePart = "source, untouched",
   runningNote = `Keep this window open. Nothing on ${sourceDeviceLabel} changes until you decide at the finish step.`,
@@ -192,117 +182,80 @@ function ProgressView({
         row.skipped || (at > stepPosition(phase) && !phasesSeen.has(phase)),
     });
 
-  const createDetail = (
-    <>
-      <span className="font-mono">{landingBranch}</span>
-      {folder !== undefined && (
-        <>
-          {" in "}
-          <span className="font-mono">{folder}</span>
-        </>
-      )}
-    </>
-  );
   // Only what this run will do, or pointedly will not: carry-over and
   // ports are listed when the project has them, setup whenever it has
   // a script (skipped with the switch off), the re-apply always.
-  const rows: Row[] = compact
-    ? [
-        ...rowIf(target.clone !== undefined, {
-          title: `Clone ${projectName} to ${thisDeviceLabel}`,
-          detail: cloneCaption ?? (
-            <span className="font-mono">{target.clone?.dest}</span>
-          ),
-          position: stepPosition("clone"),
-        }),
-        {
-          title: dirty
-            ? `Send the branch and its changes to ${thisDeviceLabel}`
-            : `Send the branch to ${thisDeviceLabel}`,
-          detail:
-            transferCaption ??
-            (dirty
-              ? pluralize(worktree.changedCount, "uncommitted file")
-              : "clean tree"),
-          position: stepPosition("capture"),
-        },
-        {
-          title: `Create the worktree on ${thisDeviceLabel}`,
-          detail: createDetail,
-          position: stepPosition("create"),
-        },
-        ...(runSetup
-          ? phaseRow("setup", plan.setupCommand !== "", {
-              title: "Run the setup script",
-              detail: <span className="font-mono">{plan.setupCommand}</span>,
-            })
-          : []),
-        ...extraRows.map((row, index) => ({
-          ...row,
-          position: AFTER_PULL_POSITION + index,
-        })),
-      ]
-    : [
-        ...rowIf(target.clone !== undefined, {
-          title: `Clone ${projectName} to ${thisDeviceLabel}`,
-          detail: cloneCaption ?? (
-            <span className="font-mono">{target.clone?.dest}</span>
-          ),
-          position: stepPosition("clone"),
-        }),
-        {
-          title: `Capture on ${sourceDeviceLabel}`,
-          detail: dirty
-            ? pluralize(worktree.changedCount, "uncommitted file")
-            : "clean tree, nothing to capture",
-          position: stepPosition("capture"),
-        },
-        {
-          title: "Transfer over the device link",
-          detail:
-            transferCaption ??
-            (dirty ? "the branch and your changes" : "the branch"),
-          position: stepPosition("transfer"),
-        },
-        {
-          title: `Create the worktree on ${thisDeviceLabel}`,
-          detail: createDetail,
-          position: stepPosition("create"),
-        },
-        ...phaseRow("carryOver", plan.carryOverCount > 0, {
-          title: "Carry files over",
-          detail:
-            plan.carryOverCount > 0
-              ? `${pluralize(plan.carryOverCount, "path")} from ${projectName}`
-              : `from ${projectName}`,
-        }),
-        ...phaseRow("setup", plan.setupCommand !== "", {
-          title: "Run the setup script",
-          detail: <span className="font-mono">{plan.setupCommand}</span>,
-          skipped: !runSetup,
-        }),
-        ...phaseRow("portPoolProvision", plan.provisionsPorts, {
-          title: "Provision ports",
-          detail: "port-pool",
-        }),
-        {
-          title: "Re-apply your changes",
-          detail: dirty ? "unstaged and staged, as they were" : "clean tree",
-          position: stepPosition("apply"),
-          skipped: !dirty,
-        },
-        ...rowIf(filesDetail !== undefined, {
-          title: landing.onPeer
-            ? "Send the ignored files over"
-            : "Bring the ignored files over",
-          detail: filesCaption ?? filesDetail,
-          position: stepPosition("files"),
-        }),
-        ...extraRows.map((row, index) => ({
-          ...row,
-          position: AFTER_PULL_POSITION + index,
-        })),
-      ];
+  const rows: Row[] = [
+    ...rowIf(target.clone !== undefined, {
+      title: `Clone ${projectName} to ${thisDeviceLabel}`,
+      detail: cloneCaption ?? (
+        <span className="font-mono">{target.clone?.dest}</span>
+      ),
+      position: stepPosition("clone"),
+    }),
+    {
+      title: `Capture on ${sourceDeviceLabel}`,
+      detail: dirty
+        ? pluralize(worktree.changedCount, "uncommitted file")
+        : "clean tree, nothing to capture",
+      position: stepPosition("capture"),
+    },
+    {
+      title: "Transfer over the device link",
+      detail:
+        transferCaption ??
+        (dirty ? "the branch and your changes" : "the branch"),
+      position: stepPosition("transfer"),
+    },
+    {
+      title: `Create the worktree on ${thisDeviceLabel}`,
+      detail: (
+        <>
+          <span className="font-mono">{landingBranch}</span>
+          {folder !== undefined && (
+            <>
+              {" in "}
+              <span className="font-mono">{folder}</span>
+            </>
+          )}
+        </>
+      ),
+      position: stepPosition("create"),
+    },
+    ...phaseRow("carryOver", plan.carryOverCount > 0, {
+      title: "Carry files over",
+      detail:
+        plan.carryOverCount > 0
+          ? `${pluralize(plan.carryOverCount, "path")} from ${projectName}`
+          : `from ${projectName}`,
+    }),
+    ...phaseRow("setup", plan.setupCommand !== "", {
+      title: "Run the setup script",
+      detail: <span className="font-mono">{plan.setupCommand}</span>,
+      skipped: !runSetup,
+    }),
+    ...phaseRow("portPoolProvision", plan.provisionsPorts, {
+      title: "Provision ports",
+      detail: "port-pool",
+    }),
+    {
+      title: "Re-apply your changes",
+      detail: dirty ? "unstaged and staged, as they were" : "clean tree",
+      position: stepPosition("apply"),
+      skipped: !dirty,
+    },
+    ...rowIf(filesDetail !== undefined, {
+      title: landing.onPeer
+        ? "Send the ignored files over"
+        : "Bring the ignored files over",
+      detail: filesCaption ?? filesDetail,
+      position: stepPosition("files"),
+    }),
+    ...extraRows.map((row, index) => ({
+      ...row,
+      position: AFTER_PULL_POSITION + index,
+    })),
+  ];
   const steps = stepStates(rows, at);
 
   return (

@@ -414,12 +414,6 @@ export function ReviewDevicesColumn({
               thisDeviceLabel={thisDeviceLabel}
               checked={pull.runSetup}
               onChange={pull.setRunSetup}
-              hint={
-                pull.selection.base === "everything" &&
-                pull.selection.leftOut.size === 0
-                  ? `Nothing is left out, so dependencies and build output come over from ${sourceDeviceLabel} too.`
-                  : undefined
-              }
             />
           </>
         )}
