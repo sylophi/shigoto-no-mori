@@ -144,7 +144,7 @@ apart. The device detects its own shape at
 enrollment (`main/core/account/defaultDeviceIcon.ts` on a machine,
 `web/account/deviceIcon.ts` in a browser), and its owner can pick
 another. The hub keeps both the name and the icon, so either can be
-changed on the device's row of any device's Devices page, online or
+changed on the device's row of any device's account page, online or
 not, and every device draws every other one the same way. The device
 itself takes its own from the hub on each registry read
 (`syncHubDevice` in `shared/account/enroll.ts`).

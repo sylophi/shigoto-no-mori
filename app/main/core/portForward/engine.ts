@@ -121,7 +121,7 @@ export function createPortForwardEngine(deps: {
 
   // A start answered by a forward already held, whether found up front
   // or bound by a concurrent twin. A worktree's start claims it (from
-  // the devices page, or another worktree listing the same port), so
+  // the account page, or another worktree listing the same port), so
   // the worktree that last asked is the one marked as forwarding.
   function reuse(
     forward: Forward,

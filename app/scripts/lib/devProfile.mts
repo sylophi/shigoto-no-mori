@@ -209,7 +209,7 @@ export function wipeDevProfile(profile: DevProfile): void {
   if (holdsCredential(join(profile.userData, "account.json"))) {
     console.warn(
       `[dev-profile] ${profile.name} may still be enrolled on the device ` +
-        "hub. Revoke it from another device's Devices page if it lingers.",
+        "hub. Revoke it from another device's account page if it lingers.",
     );
   }
   for (const target of [profile.dir, profile.userData]) rmTree(target);
@@ -241,7 +241,7 @@ function devLoginSource(): string {
 // a new device of the same account, no browser round trip. Both
 // instances share one Clerk client afterwards, so a Clerk sign-out in
 // either window ends the session for both: end a cloned profile by
-// revoking its device (the account:signOut IPC, or the Devices page),
+// revoking its device (the account:signOut IPC, or the account page),
 // never with the window's Sign out button.
 export function cloneDevLogin(profile: DevProfile): void {
   const source = devLoginSource();

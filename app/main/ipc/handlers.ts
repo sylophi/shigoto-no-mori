@@ -334,7 +334,7 @@ function endAllMirrorsBounded(): Promise<unknown> {
 }
 
 // The command-access switch as it now stands, to this device's windows
-// (the Devices page toggle) and, the broadcast being tagged remote, to
+// (the account page toggle) and, the broadcast being tagged remote, to
 // every connected peer, whose bridge records it for its UI and CLI.
 function broadcastCommandAccessChanged(): void {
   broadcastAll(accountContract, "commandAccessChanged", acceptsPeerCommands());

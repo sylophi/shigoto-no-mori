@@ -71,6 +71,8 @@ without an app.
 
 ## DOM hooks
 
-Use the DOM only where a person would click. The sidebar's Devices
-button has `aria-label="Devices"`. Clerk's modal is plain DOM in the
-page, with `.cl-*` classes.
+Use the DOM only where a person would click. The account page (the
+device registry) is the Account row of Settings' sidebar list (the
+sidebar's Settings button has `aria-label="Settings"`), or just
+navigate to `/account`. Clerk's
+modal is plain DOM in the page, with `.cl-*` classes.

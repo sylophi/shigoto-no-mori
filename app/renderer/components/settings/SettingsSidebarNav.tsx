@@ -1,5 +1,10 @@
-import { useLocation, useNavigate } from "@tanstack/react-router";
-import { Trees } from "lucide-react";
+import {
+  Outlet,
+  useLocation,
+  useMatches,
+  useNavigate,
+} from "@tanstack/react-router";
+import { CircleUserRound, Trees } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { useGoBack } from "@/hooks/ui/useGoBack";
@@ -22,20 +27,36 @@ import {
 } from "./settingsNav";
 import { UpdateAllButton } from "./UpdateAllButton";
 
-// The list in the sidebar for both pages it heads, Settings and Tidy.
-// Switching sections pushes no history, so one step back always leaves.
-export function SettingsTakeover() {
+// Settings and the pages its list leads to (Tidy, and on a desktop the
+// account), as one layout route (router.tsx). The list is drawn in the
+// sidebar here, once for all of them, so stepping between them keeps it
+// in place rather than replaying its arrival. Switching sections pushes
+// no history, so one step back always leaves.
+export function SettingsPages() {
   const back = useGoBack();
   return (
-    <SidebarTakeover back={{ label: "Back", onClick: back }}>
-      <SettingsSidebarNav />
-    </SidebarTakeover>
+    <>
+      <SidebarTakeover back={{ label: "Back", onClick: back }}>
+        <SettingsSidebarNav />
+      </SidebarTakeover>
+      <Outlet />
+    </>
   );
 }
 
+// Whether Settings or a page beside it is open: any route under
+// SettingsPages. A hostless client's account page is not one.
+export function useOnSettingsPages(): boolean {
+  return useMatches({
+    select: (matches) => matches.some((m) => m.routeId === "/settings-pages"),
+  });
+}
+
 // The Settings page's navigation, drawn in the app sidebar in place of
-// the project tree while /settings is open (SidebarTakeover, which also
-// draws the Back row above it). Three labelled groups:
+// the project tree while Settings or one of its pages is open
+// (SidebarTakeover, which also draws the Back row above it). On a
+// desktop the account leads, on a row of its own, then three labelled
+// groups:
 // "Visual" holds what this window shows and nothing else ever sees;
 // "Projects" holds what spans this machine's projects. "Devices" holds
 // one row per machine on the account, this one first, each with the
@@ -44,14 +65,18 @@ export function SettingsTakeover() {
 // The visual and device sections come from settingsSections, which the
 // phone layout's chip row draws too.
 //
-// Projects leads to the Tidy page, which is a page of its own (its
-// device tabs, its removals) rather than a form, so it keeps its route
-// and draws this same list in the sidebar. Stepping between the two
-// replaces the entry rather than pushing one, so one step back still
-// leaves Settings, whichever of them it lands on.
+// The account and Tidy are pages of their own (the account's sign-in
+// and device registry, Tidy's device tabs and removals) rather than
+// forms, so they keep their routes and share this list
+// (SettingsPages). Stepping between them and Settings replaces the
+// entry rather than pushing one, so one step back still leaves
+// Settings, whichever of them it lands on. A hostless client offers
+// neither: its account page is its home, and it has no forest of its
+// own to tidy.
 function SettingsSidebarNav() {
   const navigate = useNavigate();
-  const onTidy = useLocation({ select: (l) => l.pathname === TIDY_PATH });
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const onPage = pathname !== SETTINGS_PATH;
   const devices = useHostDevices();
   const { activeTab } = useActiveSettingsTab(devices);
   const local = useLocalDevice();
@@ -63,27 +88,33 @@ function SettingsSidebarNav() {
     <NavRow
       key={section.id}
       section={section}
-      active={!onTidy && activeTab === section.id}
+      active={!onPage && activeTab === section.id}
       controls={settingsPanelId(section.id)}
       onSelect={() => {
         selectSettingsTab(section.id);
-        if (onTidy) void navigate({ to: "/settings", replace: true });
+        if (onPage) void navigate({ to: SETTINGS_PATH, replace: true });
       }}
+    />
+  );
+  // A row leading to one of the pages beside Settings.
+  const pageRow = (section: SettingsSection, to: PagePath) => (
+    <NavRow
+      section={section}
+      active={pathname === to}
+      onSelect={() => void navigate({ to, replace: true })}
     />
   );
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
+      {hasLocalHost && (
+        <div className="pt-3">{pageRow(ACCOUNT_SECTION, "/account")}</div>
+      )}
+
       <NavGroup label="Visual">{sections.visual.map(row)}</NavGroup>
 
       {hasLocalHost && (
-        <NavGroup label="Projects">
-          <NavRow
-            section={TIDY_SECTION}
-            active={onTidy}
-            onSelect={() => void navigate({ to: TIDY_PATH, replace: true })}
-          />
-        </NavGroup>
+        <NavGroup label="Projects">{pageRow(TIDY_SECTION, "/tidy")}</NavGroup>
       )}
 
       <NavGroup
@@ -151,12 +182,19 @@ function NavGroup({
   );
 }
 
-const TIDY_PATH = "/tidy";
+const SETTINGS_PATH = "/settings";
+type PagePath = "/tidy" | "/account";
 
 const TIDY_SECTION: SettingsSection = {
   id: "tidy",
   label: "Tidy the forest",
   icon: Trees,
+};
+
+const ACCOUNT_SECTION: SettingsSection = {
+  id: "account",
+  label: "Account",
+  icon: CircleUserRound,
 };
 
 // One row, with the sidebar rows' selection fill, so the list reads as
@@ -169,7 +207,8 @@ function NavRow({
 }: {
   section: SettingsSection;
   active: boolean;
-  // The settings panel the row shows. Tidy's row leads to a page.
+  // The settings panel the row shows. Tidy's and the account's rows
+  // lead to pages.
   controls?: string;
   onSelect: () => void;
 }) {

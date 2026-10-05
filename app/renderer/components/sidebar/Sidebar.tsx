@@ -341,7 +341,7 @@ function Forest({
     return (
       <SidebarEmptyState message="Sign in to reach this account's devices.">
         <Link
-          to="/devices"
+          to="/account"
           className="text-primary underline-offset-2 hover:underline"
         >
           Open Devices

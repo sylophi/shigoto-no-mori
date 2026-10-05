@@ -230,7 +230,8 @@ async function standingOf(
 const BLOCK_REASON: Record<NonNullable<ControlDevice["block"]>, string> = {
   offline: "not connected",
   "no-project": "has no checkout of this repo",
-  "no-grant": "doesn't accept commands (turn it on from its Devices page)",
+  "no-grant":
+    "doesn't accept commands (turn it on from its account page, in Settings)",
 };
 
 function matchDevices(peers: DeviceInfo[], query: string): DeviceInfo[] {

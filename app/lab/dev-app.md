@@ -187,11 +187,11 @@ cloning exists.
   one Clerk client with the plain dev app, so signing out ends the
   session for both. End a cloned profile by revoking its device
   instead: run `window.api.account.signOut()` in a `js` step, or use the
-  Devices page of another device. Then run with `--fresh` or delete
+  account page of another device. Then run with `--fresh` or delete
   the folders.
 - **`--fresh` is local only.** A device the profile enrolled stays on
   the hub, with its tunnel, until revoked. Leftovers show on the
-  Devices page of any device on the account and can be revoked there.
+  account page of any device on the account and can be revoked there.
   See `devices.md`, "Cleaning up". A sign-out that could not reach
   the hub (offline, hub down) parks its revoke in the signed-out
   envelope and delivers it on the next launch or the next sign-in, so
@@ -223,7 +223,7 @@ cloning exists.
 
 A device removed from the account while it runs signs itself out: a
 packaged or plain dev app ends its Clerk session too and lands on the
-signed-out Devices page, while a profile that holds a cloned sign-in
+signed-out account page, while a profile that holds a cloned sign-in
 (`--clone-login` leaves a marker beside the token store) only drops
 the account layer, since its Clerk session is the plain dev app's and
 ending it would sign every window out. Such a profile re-enrolls if
