@@ -29,11 +29,15 @@
 // and the session labelled so the git follower reads the two branch
 // names as one. Both primaries keep what they had.
 import type { z } from "zod";
+import { join } from "node:path";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_MIRROR_BRANCH,
+  MIRROR_LABEL_REPLACES,
   MIRROR_COPY_STAYED,
-  MIRROR_STOP_UNCONFIRMED,
+  mirrorFilesSettled,
+  mirrorStopBlocker,
+  mirrorStopRefusal,
   type MirrorGitStatus,
   type MirrorListResult,
   type MirrorServing,
@@ -43,7 +47,6 @@ import {
   type MirrorStartToPayloadSchema,
   MirrorStartToResultSchema,
   mirrorContract,
-  mirrorStopIsSafe,
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
 import { SyncPullProgressSchema, syncContract } from "@shared/ipc/modules/sync";
@@ -52,6 +55,7 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf } from "@shared/errors";
 import { spawnFileSync } from "@host/fileSync/spawn";
+import { dataDir } from "@host/lib/util/paths";
 import {
   peerMirrorApiFor,
   peerSyncApiFor,
@@ -59,7 +63,12 @@ import {
   peerWorktreesApiFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
-import { inviteMirror } from "@host/mirror/invites";
+import {
+  forgetMirrorInvitesOf,
+  inviteMirror,
+  listMirrorInvites,
+} from "@host/mirror/invites";
+import { transferFilesOnce } from "@host/mirror/oneShot";
 import { onAbort } from "@host/lib/util/abort";
 import {
   findProjectAndWorktreeOrThrow,
@@ -71,10 +80,13 @@ import {
   watchIndexFile,
 } from "@host/mirror/gitState";
 import {
+  endMirrorKeepingCopy,
   endMirrorsIntoGoneCopy,
   engine,
   engineOrNull,
   findSession,
+  ORIGINAL_GONE_DETAIL,
+  rootExists,
   ignoreModeOf,
   localWorktreeIdOf,
   MIRROR_LABEL_IGNORE_MODE,
@@ -116,6 +128,16 @@ let onServingChange: (() => void) | null = null;
 let onServingGitChange:
   | ((change: { projectId: string; worktreeId: string }) => void)
   | null = null;
+// A peer's follower landed its side's git state on a worktree here: a
+// ref move by the app's own git, which the git-directory watcher skips
+// as the app's own, so main announces it like an outside one.
+let onGitApplied: ((projectId: string) => void) | null = null;
+
+export function setMirrorGitAppliedListener(
+  listener: ((projectId: string) => void) | null,
+): void {
+  onGitApplied = listener;
+}
 
 // main installs the two broadcast hooks at boot. Before that (and in
 // checks that never mount them) changes are simply unannounced.
@@ -163,15 +185,58 @@ function annotateMirrorSession(
   });
 }
 
+// A resume against a peer that is away answers with the connect's
+// error after the engine has already un-paused the session and started
+// its loop, which keeps retrying: that is a resume, not a failure, and
+// the page shows it reconnecting. A halted session resumes the same
+// way, its loop started again.
 async function pauseOrResume(
   session: string,
   verb: "pause" | "resume",
   noted: "paused" | "resumed",
 ): Promise<void> {
   const daemon = engine();
-  await daemon[verb](session);
+  try {
+    await daemon[verb](session);
+  } catch (error) {
+    const after = findSession(daemon, session);
+    if (verb !== "resume" || after === undefined || after.paused) throw error;
+  }
   daemon.noteEvent(localWorktreeIdOf(findSession(daemon, session)), noted, "");
 }
+
+// One mirror per worktree, held here and not only by the buttons: a
+// worktree that already runs a session is mirrored, and one a peer
+// mirrors into (it serves the stream, or holds the invitation of a
+// mirror it asked for) is a copy, which a second mirror would chain
+// off. Either start would only fail later on the branch, or worse,
+// land.
+function refuseMirroredWorktree(
+  daemon: ReturnType<typeof engine>,
+  worktreeId: string,
+): void {
+  if (
+    mirrorSessions(daemon).some((raw) => localWorktreeIdOf(raw) === worktreeId)
+  ) {
+    throw new Error(
+      "This worktree is already mirrored. Open its Mirror button to manage that one.",
+    );
+  }
+  const isCopy =
+    listMirrorServing().some((stream) => stream.worktreeId === worktreeId) ||
+    listMirrorInvites().some(
+      (invite) => invite.copy?.worktreeId === worktreeId,
+    );
+  if (isCopy) {
+    throw new Error(
+      "This worktree is a mirror's copy. Mirror the original instead.",
+    );
+  }
+}
+
+// Ignore changes in flight, by session: two at once (both devices'
+// pages) would each open a session on the pair.
+const reopening = new Set<string>();
 
 // The sessions a stop has ended whose copy is still being removed,
 // as last listed. The engine drops a session at terminate, and the
@@ -181,12 +246,25 @@ async function pauseOrResume(
 // until it vanishes.
 const stopping = new Map<string, MirrorSession>();
 
+// The sessions as last listed by a running daemon. A daemon that is
+// restarting (a crash, the restart ladder) reports none, and the same
+// sessions come back with it: listed as nothing meanwhile, every pair
+// would unfold, every pill and Mirror button vanish, an open dialog
+// close and the start buttons come back, for as long as the restart
+// takes. So the last list stands until the daemon runs again, under
+// the daemon status that says why nothing moves.
+let lastListed: MirrorSession[] = [];
+
 // A device's mirror picture: what mirror:list answers and what
 // mirror:changed carries. The same for every caller.
 function mirrorListOf(daemon: ReturnType<typeof engine>): MirrorListResult {
-  const sessions = mirrorSessions(daemon).map((raw) =>
-    annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
-  );
+  const running = daemon.status() === "running";
+  const sessions = running
+    ? mirrorSessions(daemon).map((raw) =>
+        annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
+      )
+    : [...lastListed];
+  if (running) lastListed = [...sessions];
   const live = new Set(sessions.map((session) => session.session));
   for (const [id, session] of stopping) {
     if (!live.has(id)) sessions.push(session);
@@ -259,7 +337,9 @@ async function stopAndRemoveCopy(
 // lists the session's copy. A peer that fails or stalls is no answer.
 // A folder deleted by hand still lists until git prunes it.
 const COPY_PROBE_MS = 5_000;
-function copyIsGone(raw: MirrorSessionRaw): Promise<boolean> {
+function copyIsGone(
+  raw: Pick<MirrorSessionRaw, "deviceId" | "projectId" | "worktreeId">,
+): Promise<boolean> {
   const listed = peerWorktreeOrUndefined(
     raw.deviceId,
     raw.projectId,
@@ -272,6 +352,23 @@ function copyIsGone(raw: MirrorSessionRaw): Promise<boolean> {
     setTimeout(resolve, COPY_PROBE_MS, false).unref?.();
   });
   return Promise.race([listed, stalled]);
+}
+
+// A copy the peer no longer lists (deleted while this device missed
+// the announcement, or moved) ends its session: the stop's way out when
+// the copy cannot be confirmed in step. True when it ended them.
+export async function endMirrorIfCopyGone(session: {
+  deviceId: string;
+  projectId: string;
+  worktreeId: string;
+}): Promise<boolean> {
+  if (!(await copyIsGone(session))) return false;
+  await endMirrorsIntoGoneCopy(
+    session.deviceId,
+    session.projectId,
+    session.worktreeId,
+  );
+  return true;
 }
 
 export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
@@ -291,6 +388,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // ended if the open outran the cancel.
   startTo: async (input: z.infer<typeof MirrorStartToPayloadSchema>, ctx) => {
     const daemon = requireRunningEngine();
+    refuseMirroredWorktree(daemon, input.worktreeId);
     const { ignoreMode, ignores, ...sendInput } = input;
     return runMove(ctx, input.worktreeId, async (signal) => {
       const { source, result: sent } = await sendWorktree(sendInput, ctx, {
@@ -303,6 +401,35 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       let session: string;
       try {
         throwIfCancelled(signal);
+        // The copy's create ran its carry-over (and the setup script,
+        // when asked), which wrote files of the peer's own into it.
+        // Opened on that, the two-way session would hold every such
+        // path the rule does not leave out as a conflict from its first
+        // cycle (or carry a file only the copy has back here). So the
+        // copy is made an exact copy of the original first, the rule's
+        // paths left alone, and the session opens on two identical
+        // trees.
+        const replica = await transferFilesOnce(
+          {
+            localRoot: source.path,
+            localWorktreeId: source.id,
+            sourceDeviceId: input.targetDeviceId,
+            sourceProjectId: copy.projectId,
+            sourceWorktreeId: copy.id,
+            remoteRoot: copy.path,
+            name: source.branch,
+            ignores,
+            direction: "replica",
+          },
+          () => {},
+          signal,
+        );
+        throwIfCancelled(signal);
+        if (!replica.crossed) {
+          throw new Error(
+            `The files could not be brought in step: ${replica.error ?? "unknown error"}`,
+          );
+        }
         // A session the open made after the cancel is ended again.
         session = await abortable(
           signal,
@@ -416,32 +543,37 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // by design. A copy the delete cannot remove is reported with the
   // session already gone: the worktree page then offers the ordinary
   // delete.
+  //
+  // A stop whose original is gone (removed outside the app) ends the
+  // session alone: the copy is then the only one there is, and it is
+  // never removed, forced or not.
   stop: async ({ session, force }) => {
     const daemon = engine();
     const raw = findSession(daemon, session);
     if (raw === undefined) {
       throw new Error("That mirror is no longer running.");
     }
-    // The copy goes with the stop. Refusing on "diverged" alone read
-    // as safe exactly when it cannot know: a paused session reports
-    // "off" and an unreachable peer "error", since divergence is
-    // computed against a live peer. So anything but "synced" refuses.
-    const git = daemon.gitStatus(session)?.status;
-    if (force !== true && !mirrorStopIsSafe(git)) {
-      // A copy the peer no longer lists (deleted while this device
-      // missed the announcement, or moved) holds nothing to protect
-      // and nothing to remove, so the session just ends.
-      if (await copyIsGone(raw)) {
-        await endMirrorsIntoGoneCopy(
-          raw.deviceId,
-          raw.projectId,
-          raw.worktreeId,
-        );
-        return;
+    if (!(await rootExists(raw.localRoot))) {
+      await endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL);
+      return { removedCopy: false };
+    }
+    // The copy goes with the stop, so it must hold nothing the original
+    // lacks: git in step, looked at again now rather than read off the
+    // last verdict (a commit on the copy a moment ago is exactly what
+    // must not be lost), and the files settled, since git says nothing
+    // about an edit the engine has not carried yet or holds still as a
+    // conflict.
+    if (force !== true) {
+      const git = await daemon.refreshGit(session);
+      const live = findSession(daemon, session) ?? raw;
+      const blocker = mirrorStopBlocker({ ...live, git });
+      if (blocker !== undefined) {
+        // A copy the peer no longer lists (deleted while this device
+        // missed the announcement, or moved) holds nothing to protect
+        // and nothing to remove, so the session just ends.
+        if (await endMirrorIfCopyGone(raw)) return { removedCopy: true };
+        throw new Error(mirrorStopRefusal(blocker));
       }
-      throw new Error(
-        `${MIRROR_STOP_UNCONFIRMED} (${git ?? "starting"}), so it may hold commits that exist nowhere else. Resume or reconnect the mirror to let it catch up, or stop it anyway to discard them.`,
-      );
     }
     stopping.set(session, {
       ...annotateMirrorSession(raw, daemon.gitStatus(session)),
@@ -453,6 +585,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       stopping.delete(session);
       onServingChange?.();
     }
+    return { removedCopy: true };
   },
   pause: ({ session }) => pauseOrResume(session, "pause", "paused"),
   resume: ({ session }) => pauseOrResume(session, "resume", "resumed"),
@@ -463,30 +596,59 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // follower's agreement across), the labels carried over. The pair's
   // files are already in agreement, so the new session's first cycle
   // has little to do.
+  //
+  // Only on a settled pair: the new session starts with no shared
+  // history, so a path only one side holds crosses to the other. On a
+  // pair in step that is nothing. On a paused, halted or conflicted
+  // one it would bring back what was deleted on one side meanwhile,
+  // and a paused session would come back running.
   setIgnores: async ({ session, ignoreMode, ignores }) => {
     const daemon = engine();
     const raw = findSession(daemon, session);
     if (raw === undefined) {
       throw new Error("That mirror is no longer running.");
     }
-    const localWorktreeId = localWorktreeIdOf(raw);
-    const next = await daemon.recreate(session, {
-      localRoot: raw.localRoot,
-      deviceId: raw.deviceId,
-      projectId: raw.projectId,
-      worktreeId: raw.worktreeId,
-      remoteRoot: raw.remoteRoot,
-      name: raw.name,
-      localWorktreeId,
-      labels: { ...raw.labels, [MIRROR_LABEL_IGNORE_MODE]: ignoreMode },
-      ignores,
-    });
-    daemon.noteEvent(
-      localWorktreeId,
-      "ignores-changed",
-      summarizeIgnores(ignoreMode, ignores),
-    );
-    return { session: next };
+    if (!mirrorFilesSettled(raw)) {
+      throw new Error(
+        "What the mirror leaves out can change once it is running and in step. Resume it, or wait for it to catch up.",
+      );
+    }
+    if (reopening.has(session)) {
+      throw new Error("What the mirror leaves out is already changing.");
+    }
+    reopening.add(session);
+    try {
+      const localWorktreeId = localWorktreeIdOf(raw);
+      const next = await daemon.recreate(session, {
+        localRoot: raw.localRoot,
+        deviceId: raw.deviceId,
+        projectId: raw.projectId,
+        worktreeId: raw.worktreeId,
+        remoteRoot: raw.remoteRoot,
+        name: raw.name,
+        localWorktreeId,
+        labels: {
+          ...raw.labels,
+          [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+          [MIRROR_LABEL_REPLACES]: session,
+        },
+        ignores,
+      });
+      daemon.noteEvent(
+        localWorktreeId,
+        "ignores-changed",
+        summarizeIgnores(ignoreMode, ignores),
+      );
+      return { session: next };
+    } finally {
+      reopening.delete(session);
+    }
+  },
+
+  // The runner ended its mirror into a copy here and kept the copy:
+  // the invitation goes, the worktree stays.
+  release: ({ worktreeId }) => {
+    forgetMirrorInvitesOf(worktreeId);
   },
 
   history: ({ localWorktreeId }) => ({
@@ -511,7 +673,13 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       projectId,
       worktreeId,
     });
-    const child = spawnFileSync(["serve"]);
+    // Its own data directory under this host's: unset, the engine's
+    // caches and staging land in ~/.mutagen, shared with any real
+    // Mutagen install and with every other build and profile here.
+    const child = spawnFileSync(["serve"], {
+      ...process.env,
+      MUTAGEN_DATA_DIRECTORY: join(dataDir(), "file-sync", "serve"),
+    });
     if (child === null) {
       throw new Error(
         "mirroring is unavailable on this device (no file-sync engine)",
@@ -585,8 +753,8 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       { id: worktreeId, path: identity.path },
       { expect, state, sweep },
     );
-    return result.applied
-      ? { applied: true }
-      : { applied: false, reason: result.reason };
+    if (!result.applied) return { applied: false, reason: result.reason };
+    onGitApplied?.(project.id);
+    return { applied: true };
   },
 };

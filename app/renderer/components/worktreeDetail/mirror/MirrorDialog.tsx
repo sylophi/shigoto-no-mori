@@ -14,11 +14,12 @@
 // own (shared/git/branches.ts), which the words below say when the
 // two names differ.
 import type { ReactNode } from "react";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shared/git/branches";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Project, Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Chip } from "@/components/ui/chip-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
@@ -30,19 +31,20 @@ import {
 import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
-import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
+import { CARD, FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
-import { type DestinationPick, PullReviewStep } from "../flow/PullReview";
+import type { DestinationPick } from "../flow/PullReview";
 import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
 import { selectionSummary, sessionSummary } from "../flow/ignoreChoice";
 import { describeMirror } from "./mirrorStatus";
+import { MirrorReview } from "./MirrorReview";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;
 
 const TITLES: Record<FlowStage, string> = {
   review: "Mirror worktree",
   running: "Mirroring",
-  failed: "Mirror stopped",
+  failed: "Mirror didn't start",
   cancelled: "Mirror cancelled",
   done: "Mirror live",
 };
@@ -167,7 +169,7 @@ function MirrorFlow({
     toPeer,
     onClose,
   });
-  const { stage, progress, start, open, pull, target } = flow;
+  const { stage, progress, start, pull, target } = flow;
   const summary = selectionSummary(pull.selection);
   const landingBranch = pullLandingBranch(worktree);
   const renamed = landingBranch !== worktree.branch;
@@ -186,15 +188,17 @@ function MirrorFlow({
       progressExtras={{
         extraRows: [
           {
-            title: "Open the mirror",
+            title: "Match the files and open the mirror",
             detail: summary ?? "both ways",
           },
         ],
-        sourcePart: "source, keeps its copy",
+        // The header carries the outcome. The footer is left to its
+        // buttons, bar the one thing the header does not say.
+        sourcePart: "source",
         progressLabel: "Mirror progress",
-        runningNote: "Keep this window open.",
-        failedNote: `If the worktree already landed ${landing.on}, open it from the sidebar rather than retrying.`,
-        cancelledNote: `No mirror runs, and nothing landed ${landing.on}. ${sourceDeviceLabel} keeps its copy.`,
+        runningNote: "",
+        failedNote: "Nothing was left behind, so trying again starts clean.",
+        cancelledNote: "",
       }}
       onClose={onClose}
       headline={
@@ -242,12 +246,10 @@ function MirrorFlow({
         </>
       }
     >
-      {/* Step 1: the source, what stays out, and the two devices that
-          will hold the branch. The source half reads the device the
-          page is scoped to. The device half re-pins to the landing
-          device (DestinationScope), like the transplant's. */}
+      {/* Step 1: the shared review (flow/PullReview.tsx), the original
+          beside the copy. */}
       {stage === "review" && (
-        <PullReviewStep
+        <MirrorReview
           worktree={worktree}
           project={project}
           target={target}
@@ -258,11 +260,6 @@ function MirrorFlow({
           pull={pull}
           onCancel={onClose}
           onStart={start}
-          heading="On both"
-          sourceNote="keeps its copy"
-          sourceKeeps
-          idleNote={`Stop any time. Stopping removes the copy ${landing.on}.`}
-          startLabel="Start mirroring"
         />
       )}
       {stage === "done" && mirror.data && (
@@ -273,10 +270,8 @@ function MirrorFlow({
             branch={landingBranch}
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
-            landing={landing}
             dirtyApplied={!mirror.data.captured || mirror.data.dirtyApplied}
             onClose={onClose}
-            onOpen={open}
           />
         </RunnerScope>
       )}
@@ -305,10 +300,8 @@ function MirrorLive({
   branch,
   sourceDeviceLabel,
   thisDeviceLabel,
-  landing,
   dirtyApplied,
   onClose,
-  onOpen,
 }: {
   session: string;
   landed: Worktree;
@@ -316,10 +309,8 @@ function MirrorLive({
   sourceDeviceLabel: string;
   // The device holding the copy, and the words for that.
   thisDeviceLabel: string;
-  landing: Landing;
   dirtyApplied: boolean;
   onClose: () => void;
-  onOpen: () => void;
 }) {
   const { sessions } = useMirrors();
   const live: MirrorSession | undefined = sessions.find(
@@ -331,50 +322,33 @@ function MirrorLive({
     <>
       <FlowBody>
         <section className="space-y-2">
-          <SectionHeading>On {thisDeviceLabel}</SectionHeading>
-          <div className="flex flex-wrap items-center gap-3 rounded-lg bg-emerald-500/10 p-3">
-            <span
-              aria-hidden
-              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-background"
-            >
-              <RefreshCw className="size-4" />
-            </span>
-            <div className="min-w-0 flex-1 basis-64 space-y-1.5">
-              <p className="truncate font-mono text-sm font-semibold">
-                {branch}
-              </p>
-              <LandedPath path={landed.path} />
-              <div className="flex flex-wrap gap-1.5">
-                <Chip>
-                  <StatusDot
-                    tone={view?.tone ?? "sky"}
-                    label={view?.label ?? "opening"}
-                  />
+          <SectionHeading>Copy on {thisDeviceLabel}</SectionHeading>
+          <div className={cn(CARD, "space-y-1.5")}>
+            <p className="truncate font-mono text-sm font-semibold">{branch}</p>
+            <LandedPath path={landed.path} />
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              <Chip>
+                <StatusDot
+                  tone={view?.tone ?? "sky"}
+                  label={view?.label ?? "Opening"}
+                />
+              </Chip>
+              {summary !== null && <Chip>{summary}</Chip>}
+              {!dirtyApplied && (
+                <Chip className="text-amber-700 dark:text-amber-300">
+                  Uncommitted changes stayed on {sourceDeviceLabel}
                 </Chip>
-                {summary !== null && <Chip>{summary}</Chip>}
-                {!dirtyApplied && (
-                  <Chip className="text-amber-700 dark:text-amber-300">
-                    changes stayed on {sourceDeviceLabel}
-                  </Chip>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </section>
       </FlowBody>
-      <FlowFooter
-        note={
-          landing.onPeer
-            ? "Pause, stop, or change what stays out from the Mirror button on this worktree's page."
-            : "Pause, stop, or change what stays out from the Mirror button on its page."
-        }
-      >
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          Close
-        </Button>
-        <Button size="sm" onClick={onOpen}>
-          Open {landing.here}
-          <ArrowRight />
+      {/* One way out: the page this opened on is already one half of
+          the pair, wearing the mirror, so a button to the other half
+          only reads as a different outcome. */}
+      <FlowFooter>
+        <Button size="sm" onClick={onClose}>
+          Done
         </Button>
       </FlowFooter>
     </>

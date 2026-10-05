@@ -9,7 +9,10 @@ import {
   MACHINE_FALLBACK_ICON,
   type DeviceIcon,
 } from "@shared/account/deviceIcon";
-import { useLocalDeviceIcon } from "@/hooks/account/useAccount";
+import {
+  useLocalDeviceIcon,
+  useLocalDeviceName,
+} from "@/hooks/account/useAccount";
 import { localDeviceId } from "@/lib/queryKeys";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import {
@@ -97,4 +100,13 @@ export function useDeviceName(deviceId: string): string {
   const label = useRemoteDevice(deviceId)?.label;
   if (deviceId === localDeviceId) return "this device";
   return label ?? "another device";
+}
+
+// The same with this machine by its own name, for a title or a label
+// that names a device outright ("Mirror with Studio Mac"), where "this
+// device" would read as the party across.
+export function useDeviceProperName(deviceId: string): string {
+  const name = useDeviceName(deviceId);
+  const localName = useLocalDeviceName();
+  return deviceId === localDeviceId ? localName : name;
 }
