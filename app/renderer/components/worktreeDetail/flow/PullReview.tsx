@@ -234,38 +234,34 @@ export function PullReviewStep({
     <>
       <FlowBody>
         <div className="flex flex-col gap-6">
-          <div className="grid items-stretch gap-3 rounded-xl bg-muted/50 p-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-            <section className="flex min-w-0 flex-col gap-2">
-              <SectionHeading>{sourceHeading}</SectionHeading>
-              <SourceCard
-                worktree={worktree}
-                project={project}
-                sourceDeviceLabel={sourceDeviceLabel}
-              />
-            </section>
-            <div className="flex items-center justify-center md:pt-6">
-              <span className="flex size-8 items-center justify-center rounded-full bg-card text-muted-foreground">
-                <Link
-                  aria-label={
-                    link === "mirror" ? "kept in step both ways" : "moves to"
-                  }
-                  className="size-4 rotate-90 md:rotate-0"
-                />
-              </span>
-            </div>
+          <div className="relative grid overflow-hidden rounded-xl border border-border bg-card md:grid-cols-2">
+            <SourceCard
+              heading={sourceHeading}
+              worktree={worktree}
+              project={project}
+              sourceDeviceLabel={sourceDeviceLabel}
+            />
             <DestinationScope>
-              <section className="flex min-w-0 flex-col gap-2">
-                <SectionHeading>{destinationHeading}</SectionHeading>
-                <DestinationCard
-                  worktree={worktree}
-                  target={target}
-                  deviceLabel={thisDeviceLabel}
-                  landing={landing ?? LANDS_HERE}
-                  toPeer={toPeer}
-                  pull={pull}
-                />
-              </section>
+              <DestinationCard
+                heading={destinationHeading}
+                worktree={worktree}
+                target={target}
+                deviceLabel={thisDeviceLabel}
+                landing={landing ?? LANDS_HERE}
+                toPeer={toPeer}
+                pull={pull}
+              />
             </DestinationScope>
+            {/* On the seam between the halves: what the flow does from
+                one to the other. */}
+            <span className="pointer-events-none absolute top-1/2 left-1/2 hidden size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground md:flex">
+              <Link
+                aria-label={
+                  link === "mirror" ? "kept in step both ways" : "moves to"
+                }
+                className="size-4"
+              />
+            </span>
           </div>
 
           <div
@@ -306,31 +302,37 @@ export function PullReviewStep({
   );
 }
 
-// The shape both ends of the pair share: a header band naming the
-// device (and the project there), a body that grows so the two cards
-// stand the same height, and an optional last row.
+// One half of the pair's card: the flow's word for this end, the
+// device (and the project there), then the worktree, the body growing
+// so a last row sits at the bottom of either half alike. The second
+// half takes the seam (a rule beside it, or above it once stacked).
 function EndCard({
+  heading,
   head,
   aside,
   children,
   foot,
 }: {
+  heading: string;
   head: ReactNode;
   aside?: ReactNode;
   children: ReactNode;
   foot?: ReactNode;
 }) {
   return (
-    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm">
-        {head}
-        <span className="ml-auto truncate text-xs text-muted-foreground">
-          {aside}
-        </span>
+    <section className="flex min-w-0 flex-col border-border not-first:border-t md:not-first:border-t-0 md:not-first:border-l">
+      <div className="flex flex-1 flex-col gap-1.5 px-5 py-4">
+        <SectionHeading>{heading}</SectionHeading>
+        <div className="flex items-center gap-2 pt-1 pb-1.5 text-sm">
+          {head}
+          <span className="ml-auto truncate text-xs text-muted-foreground">
+            {aside}
+          </span>
+        </div>
+        {children}
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 px-3 py-3">{children}</div>
       {foot}
-    </div>
+    </section>
   );
 }
 
@@ -377,11 +379,13 @@ function Fact({
   );
 }
 
-export function SourceCard({
+function SourceCard({
+  heading,
   worktree,
   project,
   sourceDeviceLabel,
 }: {
+  heading: string;
   worktree: Worktree;
   project: Project;
   sourceDeviceLabel: string;
@@ -422,6 +426,7 @@ export function SourceCard({
   ].filter(Boolean);
   return (
     <EndCard
+      heading={heading}
       head={
         <>
           <DeviceGlyph
@@ -453,6 +458,7 @@ export function SourceCard({
 // flow to a peer), and the worktree it becomes in the body. With no checkout of the repo there the body is the clone that
 // makes one, its folder changeable.
 function DestinationCard({
+  heading,
   worktree,
   target,
   deviceLabel,
@@ -460,6 +466,7 @@ function DestinationCard({
   toPeer,
   pull,
 }: {
+  heading: string;
   worktree: Worktree;
   target: LandingTarget | null;
   deviceLabel: string;
@@ -471,6 +478,7 @@ function DestinationCard({
   const icon = useDeviceIcon(deviceId);
   return (
     <EndCard
+      heading={heading}
       head={
         <>
           <DeviceGlyph icon={icon} className="size-4 text-muted-foreground" />
@@ -528,7 +536,7 @@ function SetupRow({
   const id = useId();
   if (command === "") return null;
   return (
-    <div className="flex items-center gap-3 border-t border-border px-3 py-2.5">
+    <div className="flex items-center gap-3 border-t border-border px-5 py-3">
       <label
         htmlFor={id}
         className="min-w-0 flex-1 cursor-pointer leading-tight"
