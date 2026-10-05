@@ -20,6 +20,7 @@ import type {
 } from "@shared/schemas";
 import { ChecksPopover } from "./ChecksPopover";
 import { MergeStateIcon } from "./MergeStateIcon";
+import { ReviewsPopover } from "./ReviewsPopover";
 import { TONE_TEXT } from "./pullRequestShared";
 import { STACK_REACH_OPTIONS, useMergeBox } from "./useMergeBox";
 
@@ -61,8 +62,8 @@ export function MergeBox({
     runDisableAutoMerge,
   } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod, stack });
 
-  // The merge verdict (or why there's no merge button) with the checks
-  // chip beside it, whichever way the box renders.
+  // The merge verdict (or why there's no merge button) with the reviews
+  // and checks chips beside it, whichever way the box renders.
   const statusLine = (
     <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-2">
       {primary && activeMethod ? (
@@ -76,6 +77,7 @@ export function MergeBox({
           No merge methods are enabled for this repo.
         </p>
       )}
+      <ReviewsPopover pr={pr} />
       <ChecksPopover pr={pr} />
     </div>
   );
