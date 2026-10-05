@@ -450,7 +450,10 @@ export function LiveLine({
       data-slot={onOpen ? "live-line" : undefined}
       className={cn(
         "group/line flex min-h-10 items-center gap-1 rounded-md bg-muted/60 pr-1.5 text-sm transition-colors",
-        onOpen && "hover:bg-accent/70",
+        // v1's muted and accent are one token, so the hover lifts the
+        // fill the way the outline button does in the dark. Doubutsu
+        // gives the line its own hover (live-line in doubutsu.css).
+        onOpen && "hover:bg-accent dark:hover:bg-input/50",
       )}
     >
       {onOpen ? (

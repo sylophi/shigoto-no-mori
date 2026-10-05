@@ -1138,6 +1138,13 @@
   background-image: none;
   animation: none;
 }
+/* Under the stripes, the line takes the accent fill in either
+   appearance, where v1's dark hover would wash it out. */
+@media (hover: hover) {
+  .doubutsu [data-slot="live-line"]:hover {
+    background-color: var(--accent);
+  }
+}
 
 /* A Visitors album sticker answers a pointer itself: it straightens
    and lifts on hover, and flips when pressed. Its stripes would only
