@@ -4,39 +4,20 @@ package main
 // <scheme>://open/devices/<id>/projects/<id>/worktrees/<id>
 // (app/main/electron/deepLink.ts handles it). The device is this data
 // dir's, so a link printed on another machine (over ssh, by an agent
-// working there) opens that machine's worktree and not a same-id
-// lookup on the device it's clicked on.
+// working there) opens that machine's worktree wherever it's clicked.
 
-import (
-	"net/url"
-	"regexp"
-)
+import "net/url"
 
-// The app's own check (host/lib/config/deviceId.ts): registry.json is
-// hand-editable, and an id it would replace names no device.
-var deviceIDRe = regexp.MustCompile(
-	`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-
-// The id the app minted for this data dir, or "" when it hasn't run
-// here yet. Then the link names no device and opens on whichever one
-// it's clicked on, which is where it was printed if that's the only
-// place the app runs.
-func localDeviceID() string {
+// The id the app mints for this data dir on its first run.
+func localDeviceID() (string, error) {
 	var id string
-	if decodeKey(registryPath(), deviceIDKey, readRegistryHints()[deviceIDKey], &id) != nil ||
-		!deviceIDRe.MatchString(id) {
-		return ""
+	if err := decodeKey(registryPath(), deviceIDKey, readRegistryHints()[deviceIDKey], &id); err != nil {
+		return "", err
 	}
-	return id
-}
-
-func worktreeDeepLink(target located) string {
-	link := deepLinkOrigin
-	if id := localDeviceID(); id != "" {
-		link += "/devices/" + url.PathEscape(id)
+	if id == "" {
+		return "", errf("This machine has no device id yet. Open the app here once, then retry.")
 	}
-	return link + "/projects/" + url.PathEscape(target.proj.ID) +
-		"/worktrees/" + url.PathEscape(target.worktree.ID)
+	return id, nil
 }
 
 func cmdLink(ctx cliContext, args []string) (int, error) {
@@ -44,7 +25,13 @@ func cmdLink(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	link := worktreeDeepLink(target)
+	deviceID, err := localDeviceID()
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	link := deepLinkOrigin + "/devices/" + url.PathEscape(deviceID) +
+		"/projects/" + url.PathEscape(target.proj.ID) +
+		"/worktrees/" + url.PathEscape(target.worktree.ID)
 	emitOrOut(map[string]any{
 		"ok":       true,
 		"url":      link,

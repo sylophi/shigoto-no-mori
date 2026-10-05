@@ -1,6 +1,5 @@
 // Inbound deep links: `<scheme>://open/<route>` opens a device's page,
-// e.g. shigomori://open/devices/<id>/projects/<id>/worktrees/<id>, or
-// this device's with the /devices/<id> prefix left off.
+// e.g. shigomori://open/devices/<id>/projects/<id>/worktrees/<id>.
 // The OS hands a link to main (open-url on macOS, the argv of a launch
 // elsewhere), possibly before the window exists or while its renderer
 // is still booting. So main only holds the latest link and nudges the
