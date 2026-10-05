@@ -9,7 +9,13 @@
 // work: it opens the worktree visited last (the ⌘K palette's recency),
 // and the sidebar follows the page into the project. Its line under the
 // name says where that is and how much is going on there.
-import { useRef, useState, type KeyboardEvent } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { AlertTriangle, GitPullRequest } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PAGE_BODY } from "@/components/shared/PageShell";
@@ -82,6 +88,7 @@ function Grid({
   work: ReadonlyMap<string, GroupWork>;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
+  const columns = useColumnCount(gridRef);
   const { toPageOn } = useWorktreeNav();
   const { openCreateForm } = useQuickCreateWorktree();
   // The worktree the tile names, or with none anywhere yet, the place
@@ -106,19 +113,28 @@ function Grid({
     <div
       ref={gridRef}
       onKeyDown={(event) => moveFocus(event, gridRef.current)}
-      // The owners flow on together, so a run of owners with a project
-      // or two each shares a line rather than leaving most of one empty.
-      className="flex flex-wrap gap-x-8 gap-y-6"
+      // As many columns as fit, stretched to fill the line, and every
+      // section on them, so the tiles line up from one owner to the
+      // next. The owners flow on together, so a run of owners with a
+      // project or two each shares a line rather than leaving most of
+      // one empty.
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      className="grid gap-x-3 gap-y-6"
     >
       {sections.map((section) => (
         <section
           key={section.key}
-          className="flex max-w-full min-w-0 flex-col gap-2"
+          style={{
+            gridColumn: `span ${Math.min(section.rows.length, columns)}`,
+          }}
+          className="grid grid-cols-subgrid content-start gap-y-2"
         >
           {section.label !== null && (
-            <SectionHeading>{section.label}</SectionHeading>
+            <SectionHeading className="col-span-full">
+              {section.label}
+            </SectionHeading>
           )}
-          <div className="flex flex-wrap gap-3">
+          <div className="col-span-full grid grid-cols-subgrid gap-y-3">
             {section.rows.map((row) => {
               const tileWork = work.get(row.groupKey);
               return (
@@ -135,6 +151,33 @@ function Grid({
       ))}
     </div>
   );
+}
+
+// The narrowest a tile gets, in spacing steps (w-60), so it grows with
+// the phone layout's scale as the rest of the page does.
+const TILE_MIN_STEPS = 60;
+// The grid's gap-x-3, which is how the hook reads a step in pixels.
+const GAP_STEPS = 3;
+
+// How many tiles fit across the grid, re-read as the pane resizes.
+function useColumnCount(ref: RefObject<HTMLElement | null>): number {
+  const [columns, setColumns] = useState(1);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const gap = parseFloat(getComputedStyle(el).columnGap);
+      const tile = (gap / GAP_STEPS) * TILE_MIN_STEPS;
+      setColumns(
+        Math.max(1, Math.floor((el.clientWidth + gap) / (tile + gap))),
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return columns;
 }
 
 function ProjectTile({
@@ -180,7 +223,7 @@ function ProjectTile({
         triggerRef.current.click();
       }}
       className={cn(
-        "relative w-60 rounded-lg border border-border bg-card transition-colors",
+        "relative rounded-lg border border-border bg-card transition-colors",
         (!missing || onLocate !== undefined) &&
           "hover:bg-accent/60 has-[[aria-expanded=true]]:bg-accent/60",
       )}
