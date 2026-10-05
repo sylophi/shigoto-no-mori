@@ -76,7 +76,7 @@ export type DestinationPick = {
 // worktree) is the host's alone. With no landing project yet (a flow
 // to a peer before its pick) nothing is read and nothing refuses. The
 // branch asked about is the one the copy lands on (pullLandingBranch).
-function useLocalCollision(
+export function useLocalCollision(
   localProject: Project | undefined,
   worktree: Worktree,
   landing: Landing = LANDS_HERE,
@@ -301,17 +301,14 @@ function PeerTargetRow({
 // mirror's: the two devices (the one landing the branch, the source
 // beneath it), the folder it lands in, and the setup switch. Read under
 // the destination's scope, since every fact in it is that machine's.
-// The mirror leaves the source row out (`sourceRow`): there the source
-// keeps its copy, which the source card already says, and the column
-// is only where the copy goes. A flow to a peer swaps the two rows'
-// tags (there the source is this device) and lists every device that
-// could take the worktree, the picked one as the destination and the
-// rest as rows to pick.
+// The mirror ticks the source row, because there the source keeps its
+// copy. A flow to a peer swaps the two rows' tags (there the source is
+// this device) and lists every device that could take the worktree,
+// the picked one as the destination and the rest as rows to pick.
 export function ReviewDevicesColumn({
   heading,
   sourceNote,
   sourceKeeps = false,
-  sourceRow = true,
   toPeer,
   worktree,
   projectName,
@@ -323,7 +320,6 @@ export function ReviewDevicesColumn({
   heading: string;
   sourceNote: string;
   sourceKeeps?: boolean;
-  sourceRow?: boolean;
   toPeer?: DestinationPick;
   worktree: Worktree;
   // The source's project, for the rows of devices that would clone it.
@@ -372,32 +368,30 @@ export function ReviewDevicesColumn({
             {/* Among rows to pick from, the source is not one: it sits
                 apart, unfilled, and without the mark a pick would
                 fill (unless the mark says it keeps its copy). */}
-            {sourceRow && (
-              <DeviceRow
-                className={cn(
-                  "text-muted-foreground",
-                  toPeer ? "mt-3" : "bg-muted/40",
-                )}
-                mark={
-                  (!toPeer || sourceKeeps) && (
-                    <span
-                      aria-hidden
-                      className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20"
-                    >
-                      {sourceKeeps && <Check className="size-2.5" />}
-                    </span>
-                  )
-                }
-                icon={sourceIcon}
-                title={sourceDeviceLabel}
-                note={sourceNote}
-                trailing={
-                  <span className="text-xs">
-                    {toPeer ? "this device" : "source"}
+            <DeviceRow
+              className={cn(
+                "text-muted-foreground",
+                toPeer ? "mt-3" : "bg-muted/40",
+              )}
+              mark={
+                (!toPeer || sourceKeeps) && (
+                  <span
+                    aria-hidden
+                    className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20"
+                  >
+                    {sourceKeeps && <Check className="size-2.5" />}
                   </span>
-                }
-              />
-            )}
+                )
+              }
+              icon={sourceIcon}
+              title={sourceDeviceLabel}
+              note={sourceNote}
+              trailing={
+                <span className="text-xs">
+                  {toPeer ? "this device" : "source"}
+                </span>
+              }
+            />
           </ul>
         </section>
 
@@ -521,18 +515,15 @@ export function PullReviewStep({
   heading,
   sourceNote,
   sourceKeeps,
-  sourceRow,
   idleNote,
   startLabel,
   beforeLeaveOut,
   afterLeaveOut,
 }: PullReviewProps & {
-  // The devices column's heading and the source row's note (and tick),
-  // or no source row at all.
+  // The devices column's heading and the source row's note (and tick).
   heading: string;
   sourceNote: string;
   sourceKeeps?: boolean;
-  sourceRow?: boolean;
   // The footer's reassurance and its start button.
   idleNote: string;
   startLabel: string;
@@ -571,7 +562,6 @@ export function PullReviewStep({
             heading={heading}
             sourceNote={sourceNote}
             sourceKeeps={sourceKeeps}
-            sourceRow={sourceRow}
             toPeer={toPeer}
             worktree={worktree}
             projectName={project.name}

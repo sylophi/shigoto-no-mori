@@ -33,10 +33,11 @@ import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { CARD, FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
-import { type DestinationPick, PullReviewStep } from "../flow/PullReview";
+import type { DestinationPick } from "../flow/PullReview";
 import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
 import { selectionSummary, sessionSummary } from "../flow/ignoreChoice";
 import { describeMirror } from "./mirrorStatus";
+import { MirrorReview } from "./MirrorReview";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;
 
@@ -250,7 +251,7 @@ function MirrorFlow({
           page is scoped to. The device half re-pins to the landing
           device (DestinationScope), like the transplant's. */}
       {stage === "review" && (
-        <PullReviewStep
+        <MirrorReview
           worktree={worktree}
           project={project}
           target={target}
@@ -261,11 +262,6 @@ function MirrorFlow({
           pull={pull}
           onCancel={onClose}
           onStart={start}
-          heading={toPeer === undefined ? "The copy" : "Copy goes to"}
-          sourceNote="keeps its copy"
-          sourceRow={false}
-          idleNote=""
-          startLabel="Start mirroring"
         />
       )}
       {stage === "done" && mirror.data && (
