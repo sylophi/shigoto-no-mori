@@ -17,6 +17,8 @@ import {
   type PullRequestChecksSummary,
   type PullRequestDetail,
   type PullRequestMergeState,
+  type PullRequestReviewerState,
+  type PullRequestReviews,
   type PullRequestSourceUnavailable,
   type RepoMergeConfig,
   type Worktree,
@@ -252,6 +254,70 @@ export function describeChecks(
     label: `${pluralize(summary.passed, "check")} passed`,
     tone: "emerald",
   };
+}
+
+export interface ReviewsDescriptor {
+  label: string;
+  tone: PullRequestTone;
+}
+
+// Returns null when nobody has reviewed or been asked to and the base
+// branch requires no review: callers skip the reviews control then.
+// A request for changes leads unless GitHub already calls the PR
+// approved (a reviewer without write access can't block it). Then
+// GitHub's decision when the branch has a review rule, and without
+// one the reviews themselves.
+export function describeReviews({
+  decision,
+  reviewers,
+}: PullRequestReviews): ReviewsDescriptor | null {
+  const approvals = reviewers.filter((r) => r.state === "APPROVED").length;
+  if (
+    decision === "CHANGES_REQUESTED" ||
+    (decision !== "APPROVED" &&
+      reviewers.some((r) => r.state === "CHANGES_REQUESTED"))
+  ) {
+    return { label: "Changes requested", tone: "rose" };
+  }
+  // The rule may want more approvals or one from a code owner, and
+  // GitHub doesn't say which, so the count is only what's there so far.
+  if (decision === "REVIEW_REQUIRED") {
+    return {
+      label:
+        approvals > 0
+          ? `Review required, ${pluralize(approvals, "approval")}`
+          : "Review required",
+      tone: "amber",
+    };
+  }
+  if (approvals > 0) {
+    return { label: pluralize(approvals, "approval"), tone: "emerald" };
+  }
+  if (decision === "APPROVED") return { label: "Approved", tone: "emerald" };
+  if (reviewers.some((r) => r.state === "REQUESTED")) {
+    return { label: "Review requested", tone: "slate" };
+  }
+  if (reviewers.length > 0) return { label: "No approvals yet", tone: "slate" };
+  return null;
+}
+
+// The reviewers, worst news first: a request for changes, approvals,
+// comments, then whoever hasn't answered yet.
+const REVIEWER_STATE_ORDER: readonly PullRequestReviewerState[] = [
+  "CHANGES_REQUESTED",
+  "APPROVED",
+  "COMMENTED",
+  "REQUESTED",
+];
+
+export function sortReviewersWorstFirst(
+  reviewers: PullRequestReviews["reviewers"],
+): PullRequestReviews["reviewers"] {
+  return reviewers.toSorted(
+    (a, b) =>
+      REVIEWER_STATE_ORDER.indexOf(a.state) -
+      REVIEWER_STATE_ORDER.indexOf(b.state),
+  );
 }
 
 // Worst first, so a failing run leads.
