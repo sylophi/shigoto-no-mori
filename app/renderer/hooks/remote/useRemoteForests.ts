@@ -29,7 +29,10 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { useQueries } from "@tanstack/react-query";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
-import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
+import {
+  shigomoriConfigQueryOptions,
+  showPrimaryInInbox,
+} from "@/hooks/config/useShigomoriConfig";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
@@ -77,8 +80,9 @@ export interface RemoteForestItem {
   pullRequests: Record<string, PullRequest>;
   // That project's inbox opt-in for its primary checkout
   // (ShigomoriConfigSchema.showPrimaryInInbox), read off the peer so a
-  // project shows its root the same way in every sidebar.
-  showPrimaryInInbox: boolean;
+  // project shows its root the same way in every sidebar. Undefined
+  // until the config is read, which is only while the inbox shows.
+  showPrimaryInInbox: boolean | undefined;
   // A failed worktree listing, folded into the sidebar's coalesced
   // fan-out toast beside the local failures.
   worktreesError: boolean;
@@ -203,8 +207,7 @@ export function useRemoteForests(
         project,
         worktrees: worktreeQueries[index]?.data ?? [],
         pullRequests: pullRequestQueries[index]?.data ?? {},
-        showPrimaryInInbox:
-          configQueries[index]?.data?.showPrimaryInInbox === true,
+        showPrimaryInInbox: showPrimaryInInbox(configQueries[index]?.data),
         worktreesError: worktreeQueries[index]?.error != null,
       };
     }),

@@ -1,5 +1,8 @@
 import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
-import type { ProjectShigomoriConfigQueries } from "@/hooks/config/useShigomoriConfig";
+import {
+  showPrimaryInInbox,
+  type ProjectShigomoriConfigQueries,
+} from "@/hooks/config/useShigomoriConfig";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
@@ -136,6 +139,9 @@ export function buildInboxRows({
   // Filed for every shelved worktree, open shelf or not. It's the
   // folded case that revealKey needs an answer for. Keyed like the rows.
   const shelfOf = new Map<string, InboxShelf>();
+  // The primaries left out because their project keeps them out, by row
+  // key. Not one whose config is still unread: that one may yet show.
+  const leftOut = new Set<string>();
   // Where each of this machine's entries filed, for the peers' rows to
   // fold into.
   const localBucket = new Map<string, InboxShelf | "live">();
@@ -143,12 +149,18 @@ export function buildInboxRows({
     project: Project,
     trees: Worktree[],
     prs: Record<string, PullRequest> | undefined,
-    showPrimary: boolean,
+    // Undefined while the project's config is unread.
+    showPrimary: boolean | undefined,
     device: SidebarDeviceBadge | undefined,
   ) => {
     const trunk = trunkOf(trees);
     for (const worktree of trees) {
-      if (worktree.isPrimary && !showPrimary) continue;
+      if (worktree.isPrimary && showPrimary !== true) {
+        if (showPrimary === false) {
+          leftOut.add(worktreeRowKey(device?.deviceId, worktree.id));
+        }
+        continue;
+      }
       const pr = prs?.[worktree.branch];
       const bucket = bucketFor(worktree, pr, hiddenPrefixes);
       const entry: Entry = {
@@ -176,7 +188,7 @@ export function buildInboxRows({
       project,
       (worktreeQueries[i]?.data ?? []) as Worktree[],
       pullRequestQueries[i]?.data,
-      configQueries[i]?.data?.showPrimaryInInbox === true,
+      showPrimaryInInbox(configQueries[i]?.data),
       undefined,
     );
   });
@@ -240,6 +252,8 @@ export function buildInboxRows({
       total === 0 && loadingCount === 0 && failedCount === 0
         ? "No worktrees yet."
         : null,
+    leftOut: (worktreeId, deviceId) =>
+      leftOut.has(worktreeRowKey(deviceId, worktreeId)),
     revealKey: (_projectId, worktreeId, deviceId) => {
       // A peer's worktree folded into its local mirror: reveal that.
       const peerKey = worktreeRowKey(deviceId, worktreeId);
