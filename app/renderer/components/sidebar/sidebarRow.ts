@@ -57,6 +57,8 @@ export type SidebarRow =
       key: string;
       worktree: Worktree;
       mirror?: SidebarDeviceBadge;
+      // The peer's copy the row stands for too, whose page selects it.
+      mirrorWorktreeId?: string;
       // Its PR off the project's map, which the builder already holds
       // (as the inbox row's, see below).
       pr: PullRequest | undefined;
@@ -86,8 +88,9 @@ export type SidebarRow =
       stack: StackPosition | null;
       device: SidebarDeviceBadge | undefined;
       // The peer a local row is mirrored with, when it is (the tree's
-      // worktree row wears the same).
+      // worktree row wears the same), and its copy there.
       mirror?: SidebarDeviceBadge;
+      mirrorWorktreeId?: string;
       // The shelf the row was filed on, null for live work.
       shelf: InboxShelf | null;
     }

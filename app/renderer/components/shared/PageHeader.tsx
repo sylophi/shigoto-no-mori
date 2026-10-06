@@ -18,6 +18,16 @@ import { cn } from "@/lib/utils";
 export const PAGE_HEADER_PADDING =
   "px-6 pt-7 pb-4 phone:px-4 phone:pt-4 phone:pb-3";
 
+// A header led by a device tab bar, this one's or one of its own
+// shape: its top padding (on the desktop, 10px centers the 26px pills
+// on the traffic lights' y=23, main/index.ts; a browser has no
+// lights), and the bar's wrapper, which cancels the inset so the bar
+// (which carries it as padding) scrolls out under the header's edge.
+export const PAGE_HEADER_TABS_PADDING = hasLocalHost
+  ? "pt-2.5"
+  : "pt-4 phone:pt-3";
+export const PAGE_HEADER_TABS_ROW = "-mx-6 phone:-mx-4";
+
 export function PageHeader({
   eyebrow,
   title,
@@ -43,16 +53,15 @@ export function PageHeader({
       className={cn(
         "relative flex flex-col overflow-hidden border-b border-border",
         PAGE_HEADER_PADDING,
-        // On the desktop, 10px centers the 26px pills on the traffic
-        // lights' y=23 (main/index.ts). A browser has no lights.
-        tabs && (hasLocalHost ? "pt-2.5" : "pt-4 phone:pt-3"),
+        tabs && PAGE_HEADER_TABS_PADDING,
       )}
     >
-      {/* Cancels the inset so the bar (which carries it as padding)
-          scrolls out under the header's edge. Above the watermark, like
-          the title: a long row's last tabs would run under the glyph. */}
+      {/* Above the watermark, like the title: a long row's last tabs
+          would run under the glyph. */}
       {tabs && (
-        <div className="relative z-[1] -mx-6 mb-3 phone:-mx-4">{tabs}</div>
+        <div className={cn("relative z-[1] mb-3", PAGE_HEADER_TABS_ROW)}>
+          {tabs}
+        </div>
       )}
       <div className="relative z-[1] flex items-center gap-3">
         <div className="flex min-w-0 flex-1 flex-col">

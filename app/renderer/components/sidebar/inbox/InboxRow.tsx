@@ -38,6 +38,7 @@ interface InboxRowProps {
   // The peer this worktree lives on, or undefined for this machine's own.
   device: SidebarDeviceBadge | undefined;
   mirror?: SidebarDeviceBadge;
+  mirrorWorktreeId?: string;
   shelf: InboxShelf | null;
 }
 
@@ -66,9 +67,13 @@ export function InboxRow({
   stack,
   device,
   mirror,
+  mirrorWorktreeId,
   shelf,
 }: InboxRowProps) {
-  const state = useWorktreeRowState(worktree, device?.deviceId);
+  const state = useWorktreeRowState(worktree, device?.deviceId, {
+    deviceId: mirror?.deviceId,
+    worktreeId: mirrorWorktreeId,
+  });
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   const peerApi = useRemoteDeviceApi(device?.deviceId);
 

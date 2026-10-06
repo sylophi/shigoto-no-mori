@@ -73,20 +73,20 @@ interface BuildSidebarRowsArgs {
 }
 
 // The pairs as the builders look them up: the local worktree each
-// peer row (device, worktree) folds into, and the peer device of each
-// local worktree in a pair.
+// peer row (device, worktree) folds into, and the pair each local
+// worktree is in.
 export function mirrorPairsOf(mirrors: readonly MirrorLink[]): {
   peerRowsFolded: Map<string, string>;
-  peerOfLocal: Map<string, string>;
+  peerOfLocal: Map<string, MirrorLink>;
 } {
   const peerRowsFolded = new Map<string, string>();
-  const peerOfLocal = new Map<string, string>();
+  const peerOfLocal = new Map<string, MirrorLink>();
   for (const link of mirrors) {
     peerRowsFolded.set(
       remoteWorktreeKey(link.peerDeviceId, link.peerWorktreeId),
       link.localWorktreeId,
     );
-    peerOfLocal.set(link.localWorktreeId, link.peerDeviceId);
+    peerOfLocal.set(link.localWorktreeId, link);
   }
   return { peerRowsFolded, peerOfLocal };
 }
@@ -95,11 +95,11 @@ export function mirrorPairsOf(mirrors: readonly MirrorLink[]): {
 // peer's own when the registry knows it (its label and tone), else
 // unnamed. Shared by both builders so a pair reads the same in each.
 export function mirrorBadgeLookup(
-  peerOfLocal: ReadonlyMap<string, string>,
+  peerOfLocal: ReadonlyMap<string, MirrorLink>,
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>,
 ): (worktree: Worktree) => SidebarDeviceBadge | undefined {
   return (worktree) => {
-    const peer = peerOfLocal.get(worktree.id);
+    const peer = peerOfLocal.get(worktree.id)?.peerDeviceId;
     if (peer === undefined) return undefined;
     return (
       deviceBadges.get(peer) ?? {
@@ -199,6 +199,7 @@ export function buildSidebarRows({
       key: worktreeRowKey(undefined, worktree.id),
       worktree,
       mirror: mirrorBadgeFor(worktree),
+      mirrorWorktreeId: peerOfLocal.get(worktree.id)?.peerWorktreeId,
       pr: pullRequests?.[worktree.branch],
       stack: null,
       shelf,

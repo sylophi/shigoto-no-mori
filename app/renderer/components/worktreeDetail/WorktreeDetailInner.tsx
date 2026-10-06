@@ -1,5 +1,9 @@
 import { DeviceChip } from "@/components/shared/DeviceChip";
-import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
+import {
+  PAGE_HEADER_PADDING,
+  PAGE_HEADER_TABS_PADDING,
+  PAGE_HEADER_TABS_ROW,
+} from "@/components/shared/PageHeader";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
@@ -38,6 +42,7 @@ import { LaunchSection } from "./LaunchSection";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
 import { MirrorAction } from "./mirror/MirrorAction";
+import { MirrorCopyTabs, useMirrorCopies } from "./mirror/MirrorCopyTabs";
 import { PeerTransferActions } from "./PeerTransferActions";
 import { FilesButton } from "./FilesButton";
 import { PortsButton } from "./ports/PortsButton";
@@ -91,6 +96,7 @@ export function WorktreeDetailInner({
   const { canCommand: granted } = useCommandAccess();
   const { data: runtime } = useRuntimeInfo();
   const resident = useResident(worktree);
+  const mirrorCopies = useMirrorCopies(worktree);
   const {
     deleteMutation,
     needsForce,
@@ -217,10 +223,16 @@ export function WorktreeDetailInner({
           "flex flex-col gap-2 border-b border-border",
           PAGE_HEADER_PADDING,
           "pb-5 phone:pb-4",
+          mirrorCopies && PAGE_HEADER_TABS_PADDING,
           party && PARTY_HOST,
         )}
       >
         {party && <BirthdayParty villager={party} />}
+        {mirrorCopies && (
+          <div className={cn("mb-1", PAGE_HEADER_TABS_ROW)}>
+            <MirrorCopyTabs copies={mirrorCopies} />
+          </div>
+        )}
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <SimpleTooltip tip={`Configure ${project.name}`}>
             <button
@@ -247,7 +259,8 @@ export function WorktreeDetailInner({
               it, so a peer's header is as tall as a local one. */}
           <span className="flex h-4 shrink-0 items-center gap-1.5 phone:ml-auto">
             <WorktreeKindIcon worktree={worktree} />
-            <DeviceChip />
+            {/* With the copies' tabs, they name the device. */}
+            {!mirrorCopies && <DeviceChip />}
           </span>
         </div>
         <div className="flex min-w-0 items-start gap-3">

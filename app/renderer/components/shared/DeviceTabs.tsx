@@ -11,8 +11,8 @@
 // right arrows move the pick, as tabs do. A page with something that
 // belongs to the devices as a group (Configure's shared settings) leads
 // the row with one tab for it, ahead of the machines it spans.
-import { useState, type ReactNode } from "react";
-import { MonitorSmartphone } from "lucide-react";
+import { Fragment, useState, type ReactNode } from "react";
+import { ArrowRight, MonitorSmartphone } from "lucide-react";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
@@ -142,6 +142,20 @@ export function usePickedDevice<T extends DeviceTab>(
 // UUIDs), so it can share onSelect with them.
 export const ALL_DEVICES_TAB_ID = "all-devices";
 
+// What the bar draws of a device: a roster entry, plus what a page
+// may say about it beyond its name.
+export type DeviceBarTab = Pick<
+  DeviceRosterEntry,
+  "deviceId" | "label" | "icon" | "status"
+> & {
+  // A word after the name, said in the tooltip too (a mirror's
+  // "original" and "copy").
+  note?: string;
+  // An arrow ahead of the pill, from the tab before it (a mirror's
+  // original to its copy).
+  arrowBefore?: boolean;
+};
+
 export function DeviceTabBar({
   tabs,
   selectedId,
@@ -149,7 +163,7 @@ export function DeviceTabBar({
   allDevicesTab = false,
   className,
 }: {
-  tabs: readonly DeviceTab[];
+  tabs: readonly DeviceBarTab[];
   selectedId: string;
   onSelect: (deviceId: string) => void;
   // Leads the row with the tab for what every device shares, picked
@@ -168,16 +182,23 @@ export function DeviceTabBar({
             tip: undefined,
             lead: <MonitorSmartphone className="size-3.5 shrink-0" />,
             label: "All devices",
+            note: undefined,
+            arrowBefore: false,
           },
         ]
       : []),
     ...tabs.map((tab) => ({
       id: tab.deviceId,
-      tip: deviceTitle(tab.label, tab.status),
+      tip:
+        tab.note === undefined
+          ? deviceTitle(tab.label, tab.status)
+          : `${deviceTitle(tab.label, tab.status)}, the ${tab.note}`,
       // The device's connection dot, then its glyph: this device has
       // no connection to show and wears the glyph alone.
       lead: <DeviceLead icon={tab.icon} tone={tab.status?.tone} />,
       label: tab.label,
+      note: tab.note,
+      arrowBefore: tab.arrowBefore === true,
     })),
   ];
   const { listRef, onKeyDown } = useRovingPick({
@@ -196,37 +217,55 @@ export function DeviceTabBar({
       // row scrolls out under the header's edge (which cancels the
       // inset with a matching negative margin) instead of clipping.
       className={cn(
-        "flex [scrollbar-width:none] gap-1.5 overflow-x-auto px-6 phone:px-4",
+        "flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto px-6 phone:px-4",
         className,
       )}
     >
       {pills.map((pill) => {
         const selected = pill.id === selectedId;
         return (
-          <SimpleTooltip key={pill.id} tip={pill.tip}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              tabIndex={selected ? 0 : -1}
-              data-slot="device-chip"
-              onClick={() => onSelect(pill.id)}
-              onKeyDown={onKeyDown}
-              // A page header puts the row under the window's drag strip
-              // (AppShell): each pill carves its own click out of it.
-              style={dragRegion("no-drag")}
-              className={cn(
-                DEVICE_PILL_CLASS,
-                "transition-colors",
-                selected
-                  ? "border-transparent bg-accent text-accent-foreground"
-                  : "hover:text-foreground",
-              )}
-            >
-              {pill.lead}
-              <span className="max-w-40 truncate">{pill.label}</span>
-            </button>
-          </SimpleTooltip>
+          <Fragment key={pill.id}>
+            {pill.arrowBefore && (
+              <ArrowRight
+                aria-hidden
+                className="size-3.5 shrink-0 text-muted-foreground"
+              />
+            )}
+            <SimpleTooltip tip={pill.tip}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                data-slot="device-chip"
+                onClick={() => onSelect(pill.id)}
+                onKeyDown={onKeyDown}
+                // A page header puts the row under the window's drag strip
+                // (AppShell): each pill carves its own click out of it.
+                style={dragRegion("no-drag")}
+                className={cn(
+                  DEVICE_PILL_CLASS,
+                  "transition-colors",
+                  selected
+                    ? "border-transparent bg-accent text-accent-foreground"
+                    : "hover:text-foreground",
+                )}
+              >
+                {pill.lead}
+                <span className="max-w-40 truncate">{pill.label}</span>
+                {pill.note !== undefined && (
+                  <span
+                    className={cn(
+                      "text-2xs",
+                      selected ? "opacity-70" : "text-muted-foreground/70",
+                    )}
+                  >
+                    {pill.note}
+                  </span>
+                )}
+              </button>
+            </SimpleTooltip>
+          </Fragment>
         );
       })}
     </div>
