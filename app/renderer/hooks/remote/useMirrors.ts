@@ -290,12 +290,19 @@ function useOtherHostMirrors<T>(
 // session is absent while only the stream this device serves says a
 // peer mirrors the worktree (the runner's list not yet read, or an
 // older runner whose list a peer cannot read).
+// Where a side of a mirror is: its worktree, in its project.
+export type MirrorCopyAt = { projectId: string; worktreeId: string };
+
 export type WorktreeMirrorLink = {
   runnerDeviceId: string;
   // Undefined while the runner is a peer with no session up: nothing
   // to drive the session through, and the session is its last word.
   runnerApi: HostApi | undefined;
   otherDeviceId: string;
+  // The other device's copy of the worktree, where its page is. Off
+  // the session, so undefined while only a served stream says so (a
+  // stream names the peer's worktree but not its project).
+  otherCopy: MirrorCopyAt | undefined;
   session: MirrorSession | undefined;
   // The runner's engine, as its list last said (a restarting engine
   // lists its last sessions).
@@ -335,6 +342,7 @@ export function useWorktreeMirrorLinks(
       runnerDeviceId: scope.deviceId,
       runnerApi: scope.remote && scopeApi === undefined ? undefined : scope.api,
       otherDeviceId: own.deviceId,
+      otherCopy: { projectId: own.projectId, worktreeId: own.worktreeId },
       session: own,
       engine: daemon,
     });
@@ -345,6 +353,13 @@ export function useWorktreeMirrorLinks(
         runnerDeviceId: deviceId,
         runnerApi: api,
         otherDeviceId: deviceId,
+        otherCopy:
+          data.session.localWorktreeId === ""
+            ? undefined
+            : {
+                projectId: data.session.localProjectId,
+                worktreeId: data.session.localWorktreeId,
+              },
         session: data.session,
         engine: data.engine,
       });
@@ -358,6 +373,7 @@ export function useWorktreeMirrorLinks(
       runnerDeviceId: stream.peerDeviceId,
       runnerApi: undefined,
       otherDeviceId: stream.peerDeviceId,
+      otherCopy: undefined,
       session: undefined,
       engine: "running",
     });

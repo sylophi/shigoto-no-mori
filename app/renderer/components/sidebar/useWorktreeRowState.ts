@@ -5,6 +5,7 @@ import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import {
   fillRoutePath,
+  matchRoutePath,
   routeDeviceId,
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
@@ -21,10 +22,13 @@ export interface WorktreeRowState {
 // "where does a click go" have the same answers in the tree and the
 // inbox, and answering them twice is how the two silently drift.
 // `deviceId` names the peer a remote row belongs to. Absent, the row
-// is this machine's.
+// is this machine's. `mirror` names the peer's copy a local row stands
+// for too: its page (reached by the copies' tabs on the worktree page)
+// selects the row as well.
 export function useWorktreeRowState(
   worktree: Worktree,
   deviceId?: string,
+  mirror: { deviceId?: string; worktreeId?: string } = {},
 ): WorktreeRowState {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -40,10 +44,22 @@ export function useWorktreeRowState(
   // store, which React Compiler can't see, so isSelected stays cached at
   // false. location.pathname is already decoded, so no encoding here.
   const detailPath = fillRoutePath(route, params);
-  const isSelected = pathname === detailPath;
+  // The peer's copy sits in a project of its own id, so its page is
+  // matched on device and worktree alone, and only for a mirrored row.
+  const open =
+    mirror.deviceId !== undefined && mirror.worktreeId !== undefined
+      ? matchRoutePath(route, pathname)
+      : null;
+  const isSelected =
+    pathname === detailPath ||
+    (open !== null &&
+      open.deviceId === mirror.deviceId &&
+      open.worktreeId === mirror.worktreeId);
   // A failure is only news off the worktree's pages (its console, diff
   // and commits all sit under the detail path): on them it is on screen.
-  const onScreen = isSelected || pathname.startsWith(`${detailPath}/`);
+  // This device's pages alone: the peer copy's page shows its own runs.
+  const onScreen =
+    pathname === detailPath || pathname.startsWith(`${detailPath}/`);
   const activity = running === "failed" && onScreen ? null : running;
 
   return {

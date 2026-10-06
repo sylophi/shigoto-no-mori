@@ -15,6 +15,8 @@ interface WorktreeRowProps {
   // The peer this worktree is mirrored with, when it is: the row then
   // stands for both copies and wears the peer's badge.
   mirror?: SidebarDeviceBadge;
+  // The peer's copy, whose page selects this row too.
+  mirrorWorktreeId?: string;
   pr: PullRequest | undefined;
   // Both off the tree builder, which places the project's rows by
   // stack once (buildSidebarRows).
@@ -68,6 +70,7 @@ export function WorktreeRow({
   worktree,
   device,
   mirror,
+  mirrorWorktreeId,
   pr,
   stack,
   stackChild,
@@ -75,7 +78,10 @@ export function WorktreeRow({
 }: WorktreeRowProps) {
   // A peer's row takes the local row's own rule, scoped to the device:
   // the open remote worktree reads as selected like a local one.
-  const state = useWorktreeRowState(worktree, device?.deviceId);
+  const state = useWorktreeRowState(worktree, device?.deviceId, {
+    deviceId: mirror?.deviceId,
+    worktreeId: mirrorWorktreeId,
+  });
   return (
     <WorktreeEntry
       worktree={worktree}

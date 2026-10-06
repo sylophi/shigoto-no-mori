@@ -58,15 +58,23 @@ export function fillRoutePath(template: string, params: RouteParams): string {
   });
 }
 
+// Each template's pattern, built once: the sidebar matches on every
+// navigation, once per mirrored row.
+const routePatterns = new Map<string, RegExp>();
+
 // Matches a pathname against a route template, the `$param` segments
 // coming back keyed by name, so a caller never depends on their order.
 export function matchRoutePath(
   template: string,
   pathname: string,
 ): Record<string, string> | null {
-  const pattern = new RegExp(
-    `^${template.replace(/\$([A-Za-z]+)/g, "(?<$1>[^/]+)")}$`,
-  );
+  let pattern = routePatterns.get(template);
+  if (pattern === undefined) {
+    pattern = new RegExp(
+      `^${template.replace(/\$([A-Za-z]+)/g, "(?<$1>[^/]+)")}$`,
+    );
+    routePatterns.set(template, pattern);
+  }
   const groups = pathname.match(pattern)?.groups;
   return groups ? { ...groups } : null;
 }
