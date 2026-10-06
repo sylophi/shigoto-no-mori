@@ -589,7 +589,7 @@ function hostHandlersFor(
       );
       if (run === undefined) return null;
       fakeScriptTicker(forest.deviceId, runId, emit);
-      return { output: fakeScriptLog(run) };
+      return { output: fakeScriptLog(run), streaming: false };
     },
     // A package script started (its button, the Live page's restart):
     // listed as running, with a log of its own.

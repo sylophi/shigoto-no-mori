@@ -59,7 +59,11 @@ export const scriptsContract = defineContract("host", {
   attach: invoke(
     "scripts:attach",
     z.object({ runId: z.string() }),
-    z.object({ output: z.string() }).nullable(),
+    // `streaming`: this connection already heard the run (it started
+    // it, or another window on the same connection attached), so its
+    // events come once and what the caller buffered of them is in
+    // `output` already.
+    z.object({ output: z.string(), streaming: z.boolean() }).nullable(),
     { remote: true, gated: true, movesHostState: false },
   ),
   event: broadcast("scripts:event", ScriptEventSchema, { remote: true }),

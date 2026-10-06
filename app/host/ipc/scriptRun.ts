@@ -44,5 +44,7 @@ export async function prepareScriptRun(
 }
 
 export function scriptEventNotifier(ctx: HandlerContext): NotifyScriptEvent {
-  return ctx.notifier(scriptsContract, "event");
+  return Object.assign(ctx.notifier(scriptsContract, "event"), {
+    connection: ctx.signal,
+  });
 }

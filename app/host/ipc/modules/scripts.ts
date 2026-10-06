@@ -80,5 +80,5 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
     list: async () => ({ runs: listRunningScripts() }),
 
     attach: async ({ runId }, handlerCtx) =>
-      attachScript(runId, scriptEventNotifier(handlerCtx), handlerCtx.signal),
+      attachScript(runId, scriptEventNotifier(handlerCtx)),
   };

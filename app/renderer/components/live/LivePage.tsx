@@ -120,9 +120,12 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
       ),
     // The rows go as each script ends, so the outcome is said once,
     // here, rather than left to the page emptying.
+    // A stop the host refused, or could not be asked for, is not one.
     onSuccess: (results) => {
-      const failed = results.filter((r) => r.status === "rejected").length;
-      const stopped = results.length - failed;
+      const stopped = results.filter(
+        (r) => r.status === "fulfilled" && r.value,
+      ).length;
+      const failed = results.length - stopped;
       if (stopped > 0) toast.success(`Stopped ${pluralize(stopped, "script")}`);
       if (failed > 0) {
         notifyError(`Couldn't stop ${pluralize(failed, "script")}`);

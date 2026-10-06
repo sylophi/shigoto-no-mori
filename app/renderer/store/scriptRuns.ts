@@ -160,6 +160,9 @@ export class ScriptRunsStore {
   // Runs an attach is in flight for, so a slot asked again while the
   // first answer is on its way does not attach twice.
   private attaching = new Set<string>();
+  // Runs attached to and then let go (attach), whose events the host
+  // still sends until they exit.
+  private ignored = new Set<string>();
   private unsubscribers: Array<() => void> = [];
   private api: ScriptsApi;
   // Whether a removed-worktree notice is worth a toast even for a
@@ -230,18 +233,31 @@ export class ScriptRunsStore {
   // status and Stop work as for a run started here. Events the host
   // sends before the answer lands wait in the pre-bind buffer and are
   // drained after the backlog, so nothing is missed or doubled.
-  async attach(run: RunningScript): Promise<void> {
+  // Resolves false only when the host could not be asked (refused, or
+  // the device away), for the caller to ask again.
+  async attach(run: RunningScript): Promise<boolean> {
     const key = scriptKey(run.projectId, run.worktreeId, run.slot);
     const held = this.states.get(key);
-    if (held?.runId === run.runId || this.attaching.has(run.runId)) return;
-    if (held?.status === "starting") return;
+    if (held?.runId === run.runId || this.attaching.has(run.runId)) {
+      return true;
+    }
+    if (held?.status === "starting") return true;
     this.attaching.add(run.runId);
     try {
       const joined = await this.api.attach(run.runId);
-      // Gone in the meantime, or the slot taken by a run started here.
-      if (joined === null) return;
+      if (joined === null) return true;
+      // This connection heard the run already (another window on it
+      // attached, or this one started it before a reload), so what it
+      // buffered is in the backlog too.
+      if (joined.streaming) this.pendingByRunId.delete(run.runId);
       const now = this.states.get(key);
-      if (now?.status === "starting" || now?.status === "running") return;
+      if (now?.status === "starting" || now?.status === "running") {
+        // The slot was taken by a run started here meanwhile. The host
+        // keeps sending this one, which nothing here will show.
+        this.ignored.add(run.runId);
+        this.pendingByRunId.delete(run.runId);
+        return true;
+      }
       this.begin(key, run.worktreeId, run.slot, {
         runId: run.runId,
         status: "running",
@@ -253,9 +269,9 @@ export class ScriptRunsStore {
       }));
       if (joined.output !== "") this.appendChunk(key, joined.output);
       this.bindRunIdAndDrain(key, run.runId);
+      return true;
     } catch {
-      // Refused (no command access there) or the device away: the run
-      // stays the host's alone, and the next ask tries again.
+      return false;
     } finally {
       this.attaching.delete(run.runId);
     }
@@ -264,19 +280,20 @@ export class ScriptRunsStore {
   // Stops a run the host lists, whether this store holds it (its
   // console then reads "Stopping…" until the exit) or not (one another
   // window or device started, stopped by its id).
-  async stopRun(run: RunningScript): Promise<void> {
+  // Resolves whether the host stopped it.
+  async stopRun(run: RunningScript): Promise<boolean> {
     const key = scriptKey(run.projectId, run.worktreeId, run.slot);
-    if (this.states.get(key)?.runId === run.runId) {
-      await this.cancel(key);
-      return;
-    }
-    await this.api.cancel(run.runId);
+    if (this.states.get(key)?.runId === run.runId) return this.cancel(key);
+    return (await this.api.cancel(run.runId)).cancelled;
   }
 
-  async cancel(key: ScriptKey): Promise<void> {
+  // Resolves whether the host stopped the run.
+  async cancel(key: ScriptKey): Promise<boolean> {
     const state = this.states.get(key);
-    if (!state || !state.runId) return;
-    if (state.status !== "running" && state.status !== "starting") return;
+    if (!state || !state.runId) return false;
+    if (state.status !== "running" && state.status !== "starting") {
+      return false;
+    }
     this.setStateWithActivity(key, (s) =>
       s.cancelling ? s : { ...s, cancelling: true },
     );
@@ -296,6 +313,7 @@ export class ScriptRunsStore {
           : s,
       );
     }
+    return cancelled;
   }
 
   // Console keystrokes and viewport size for a live run. Both are
@@ -579,6 +597,10 @@ export class ScriptRunsStore {
     const key = this.runIdToKey.get(event.runId);
     if (key) {
       this.applyEvent(key, event);
+      return;
+    }
+    if (this.ignored.has(event.runId)) {
+      if (event.kind === "exit") this.ignored.delete(event.runId);
       return;
     }
     const bucket = this.pendingByRunId.get(event.runId) ?? [];

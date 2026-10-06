@@ -104,9 +104,11 @@ export function ScriptItem({
   // A package script starts again the way its button starts it. The
   // lifecycle scripts belong to a create or a removal, so they only
   // stop.
+  // Starts again only once the run is stopped: a start beside a run
+  // that would not stop is a second dev server on the same port.
   const restart = useMutation({
     mutationFn: async () => {
-      await stop();
+      if (!(await stop())) throw new Error("The running script didn't stop.");
       await start();
     },
     meta: { errorTitle: "Couldn't restart the script" },

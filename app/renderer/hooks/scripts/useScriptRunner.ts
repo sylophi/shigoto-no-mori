@@ -28,7 +28,8 @@ export interface ScriptRunner {
   canRun: boolean;
   disabledReason: string | undefined;
   start: () => Promise<void>;
-  stop: () => Promise<void>;
+  // Resolves whether the host stopped the run.
+  stop: () => Promise<boolean>;
   // Drops a finished run's log and state (a no-op while it runs).
   clear: () => void;
 }
@@ -60,14 +61,28 @@ export function useScriptRunner(
         (run) => scriptKey(run.projectId, run.worktreeId, run.slot) === key,
       ),
   }).data;
+  // A run this window holds wins: the list lags a start or a restart
+  // here by a broadcast and a read, and can still name the run before.
+  const heldBusy = held.status === "starting" || held.status === "running";
   const elsewhere =
-    listed !== undefined &&
-    listed.runId !== held.runId &&
-    held.status !== "starting"
+    listed !== undefined && listed.runId !== held.runId && !heldBusy
       ? listed
       : undefined;
+  // An attach the device could not take (its session dropping, say) is
+  // asked again while the console stays on the run.
   useEffect(() => {
-    if (follow && canRun && elsewhere) void store.attach(elsewhere);
+    if (!follow || !canRun || !elsewhere) return;
+    let timer: number | undefined;
+    let done = false;
+    const tryAttach = () =>
+      void store.attach(elsewhere).then((attached) => {
+        if (!attached && !done) timer = window.setTimeout(tryAttach, 2_000);
+      });
+    tryAttach();
+    return () => {
+      done = true;
+      window.clearTimeout(timer);
+    };
   }, [follow, canRun, elsewhere, store]);
 
   // A stop of a run held elsewhere has no record here to say so, so
@@ -116,10 +131,13 @@ export function useScriptRunner(
     if (!elsewhere) return store.cancel(key);
     setStoppingRunId(elsewhere.runId);
     try {
-      await store.stopRun(elsewhere);
+      const stopped = await store.stopRun(elsewhere);
+      if (!stopped) setStoppingRunId(null);
+      return stopped;
     } catch (error) {
       setStoppingRunId(null);
       notifyError("Couldn't stop the script", error);
+      return false;
     }
   };
 

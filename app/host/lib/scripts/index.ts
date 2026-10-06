@@ -35,7 +35,12 @@ import {
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
 // caller's window.
-export type NotifyScriptEvent = (payload: ScriptEvent) => void;
+export type NotifyScriptEvent = ((payload: ScriptEvent) => void) & {
+  // The connection it delivers to (its handler's signal, one per
+  // window generation or peer socket), so a run's stream can tell a
+  // connection that already hears it from a new one.
+  connection?: AbortSignal;
+};
 
 const DEFAULT_GRACE_MS = 3_000;
 // How long to wait for a child that survived SIGKILL (kernel-stuck I/O)
@@ -66,17 +71,27 @@ const BACKLOG_BYTES = 256 * 1024;
 // attached since (scripts:attach), each fed every event from then on.
 // Output is kept as a backlog for the next to attach.
 interface RunStream {
-  emit: NotifyScriptEvent;
-  attach: (watcher: NotifyScriptEvent, signal: AbortSignal) => string;
+  emit: (event: ScriptEvent) => void;
+  // The output so far, and whether the connection already heard the
+  // run before this attach (it started it, or attached before): its
+  // events are then not sent a second time, and the caller drops what
+  // it buffered of them, which the backlog repeats.
+  attach: (watcher: NotifyScriptEvent) => {
+    output: string;
+    streaming: boolean;
+  };
 }
 
 function createRunStream(starter: NotifyScriptEvent): RunStream {
   const chunks: string[] = [];
   let bytes = 0;
-  // Each attached window's notifier, and how to stop listening for its
-  // connection going, so a run that ends lets go of both (and with them
-  // this backlog), whatever the connections outlive it by.
-  const watchers = new Map<NotifyScriptEvent, () => void>();
+  // Each attached connection's notifier, and how to stop listening for
+  // the connection going, so a run that ends lets go of both (and with
+  // them this backlog), whatever the connections outlive it by.
+  const watchers = new Map<
+    AbortSignal,
+    { notify: NotifyScriptEvent; unlisten: () => void }
+  >();
   const keep = (data: string) => {
     chunks.push(data);
     bytes += data.length;
@@ -92,24 +107,36 @@ function createRunStream(starter: NotifyScriptEvent): RunStream {
       if (event.kind === "data") keep(event.data);
       if (event.kind === "error") keep(scriptErrorLine(event.data));
       starter(event);
-      for (const watcher of watchers.keys()) {
+      for (const { notify } of watchers.values()) {
         try {
-          watcher(event);
+          notify(event);
         } catch {}
       }
       if (event.kind === "exit") {
-        for (const unlisten of watchers.values()) unlisten();
+        for (const { unlisten } of watchers.values()) unlisten();
         watchers.clear();
         chunks.length = 0;
       }
     },
-    attach: (watcher, signal) => {
-      if (!signal.aborted) {
-        const drop = () => watchers.delete(watcher);
-        signal.addEventListener("abort", drop, { once: true });
-        watchers.set(watcher, () => signal.removeEventListener("abort", drop));
+    attach: (watcher) => {
+      const output = chunks.join("");
+      const signal = watcher.connection;
+      if (
+        signal === undefined ||
+        signal === starter.connection ||
+        watchers.has(signal)
+      ) {
+        return { output, streaming: signal !== undefined };
       }
-      return chunks.join("");
+      if (!signal.aborted) {
+        const drop = () => watchers.delete(signal);
+        signal.addEventListener("abort", drop, { once: true });
+        watchers.set(signal, {
+          notify: watcher,
+          unlisten: () => signal.removeEventListener("abort", drop),
+        });
+      }
+      return { output, streaming: false };
     },
   };
 }
@@ -247,7 +274,12 @@ export function cliScriptStream(notify: NotifyScriptEvent): {
     },
     end: () => {
       if (own.size === 0) return;
-      for (const runId of own) drop(runId);
+      for (const runId of own) {
+        const run = drop(runId);
+        // Its exit never came, so it is said here: the window that
+        // started it and any that attached would otherwise wait on it.
+        run?.stream.emit({ runId, kind: "exit", code: null });
+      }
       runningScriptsChanged();
     },
   };
@@ -480,11 +512,10 @@ export function listRunningScripts(): RunningScript[] {
 export function attachScript(
   runId: string,
   notify: NotifyScriptEvent,
-  signal: AbortSignal,
-): { output: string } | null {
+): { output: string; streaming: boolean } | null {
   const run = runningScripts.get(runId) ?? cliScripts.get(runId);
   if (!run || run.exited) return null;
-  return { output: run.stream.attach(notify, signal) };
+  return run.stream.attach(notify);
 }
 
 // The worktrees with a live app-started script, by id: what the

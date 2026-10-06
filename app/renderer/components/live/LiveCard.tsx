@@ -144,7 +144,8 @@ function CardBody({
             <ForwardItem
               key={item.forward.forwardId}
               forward={item.forward}
-              worktree={worktree}
+              // Its Ports dialog reads the peer, so only under its scope.
+              worktree={reachable ? worktree : undefined}
             />
           ),
         )}
@@ -342,19 +343,17 @@ function PortsStrip({
 
 function LocalhostLink({ port, label }: { port: number; label?: string }) {
   return (
-    <SimpleTooltip tip={`Open localhost:${port}`}>
-      <span className="inline-flex">
-        <ExternalLink
-          href={`http://localhost:${port}`}
-          errorTitle="Couldn't open the port"
-          className="inline-flex items-center gap-1 rounded-sm no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <StatusDot tone="emerald" />
-          <PortText port={`localhost:${port}`} label={label} />
-          <ExternalLinkIcon aria-hidden className="size-3" />
-        </ExternalLink>
-      </span>
-    </SimpleTooltip>
+    <span className="inline-flex">
+      <ExternalLink
+        href={`http://localhost:${port}`}
+        errorTitle="Couldn't open the port"
+        className="inline-flex items-center gap-1 rounded-sm no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <StatusDot tone="emerald" />
+        <PortText port={`localhost:${port}`} label={label} />
+        <ExternalLinkIcon aria-hidden className="size-3" />
+      </ExternalLink>
+    </span>
   );
 }
 

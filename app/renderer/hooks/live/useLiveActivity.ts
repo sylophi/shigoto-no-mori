@@ -45,6 +45,8 @@ export function runningScriptsQueryOptions(
     // Kept fresh by the device's scripts:changed and the sweep when its
     // session lands, so a focus or a new reader need not ask again.
     staleTime: Infinity,
+    // A peer whose app predates the list refuses it for good.
+    retry: false,
     meta: { silentError: true },
   });
 }
