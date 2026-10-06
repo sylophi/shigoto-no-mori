@@ -150,26 +150,32 @@ export function stackCleanupForWorktree<
 // `size` layers.
 export type StackPosition = { index: number; size: number };
 
-// A row's place under its stack's lowest row when the two sit
-// together: one of the layers built on it, drawn as a child in a tree,
-// the last one closing the branch.
-export type StackChild = "middle" | "last";
+// A row's stop on its stack's rail when the stack's rows sit together.
+export interface StackRail {
+  // The bottom stop, where the rail ends.
+  last: boolean;
+  // Whether the rail shows every layer of the stack. One that skips a
+  // layer (shelved, or on a device the filter hides) joins the layers
+  // on either side of the gap with nothing to mark it.
+  whole: boolean;
+}
 
 export interface StackPlacement<T> {
   item: T;
   position: StackPosition | null;
-  child?: StackChild;
+  rail?: StackRail;
 }
 
-// One repo's rows with every stack's members brought together, bottom
-// first (the sidebar draws a stack as a tree, each layer nested under
-// the one it is built on), at the place the first member held, each
-// carrying its position and, for the members above a group's lowest
-// row, its place as a child of it. Rows outside a stack keep their
-// order. Two rows on one branch (a peer's copy beside the local one)
-// stay adjacent in their own order. A stack with one row showing (its
-// other layers shelved, or on a device the filter hides) nests
-// nothing: a child with no parent row would hang in space.
+// One repo's rows with every stack's members brought together, top
+// layer first, the way the branches sit on each other (the sidebar
+// draws a stack as a rail through its layers, like the stack list on
+// the worktree page), at the place the first member held, each carrying
+// its position and its stop on the rail. Rows outside a stack keep
+// their order. Two rows on one branch (a peer's copy beside the local
+// one) stay adjacent in their own order. A stack with one layer showing
+// (its other layers shelved, or on a device the filter hides) gets no
+// rail, even with a peer's copy beside it: a rail through one layer
+// joins nothing.
 export function placeByStack<T>(
   items: readonly T[],
   branchOf: (item: T) => string,
@@ -191,21 +197,25 @@ export function placeByStack<T>(
       return;
     }
     const group: StackPlacement<T>[] = [];
-    stack.entries.forEach((entry, at) => {
+    // The layers with a row, counted apart from the rows: a peer's copy
+    // beside the local row is the same layer.
+    const layers = new Set<number>();
+    for (const [at, entry] of [...stack.entries.entries()].toReversed()) {
       items.forEach((member, memberIndex) => {
         if (placed.has(memberIndex) || branchOf(member) !== entry.branch)
           return;
         placed.add(memberIndex);
+        layers.add(at);
         group.push({
           item: member,
           position: { index: at, size: stack.entries.length },
         });
       });
-    });
-    if (group.length > 1) {
+    }
+    if (layers.size > 1) {
+      const whole = layers.size === stack.entries.length;
       group.forEach((placement, at) => {
-        if (at === 0) return;
-        placement.child = at === group.length - 1 ? "last" : "middle";
+        placement.rail = { last: at === group.length - 1, whole };
       });
     }
     out.push(...group);

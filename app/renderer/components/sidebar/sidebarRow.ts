@@ -1,4 +1,4 @@
-import type { StackChild, StackPosition } from "@shared/pullRequestStack";
+import type { StackPosition, StackRail } from "@shared/pullRequestStack";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
@@ -63,10 +63,10 @@ export type SidebarRow =
       // (as the inbox row's, see below).
       pr: PullRequest | undefined;
       // The PR's place in its stack, off the project's map, and its
-      // place under the stack's lowest row when the two sit together
+      // stop on the stack's rail when its rows sit together
       // (shared/pullRequestStack.ts).
       stack: StackPosition | null;
-      stackChild?: StackChild;
+      stackRail?: StackRail;
       // The fold the row was filed behind, null for the group's open
       // rows. The row fades by it (WorktreeEntry).
       shelf: GroupShelf | null;
@@ -113,7 +113,7 @@ export type SidebarRow =
       // row's off this machine's.
       pr: PullRequest | undefined;
       stack: StackPosition | null;
-      stackChild?: StackChild;
+      stackRail?: StackRail;
       shelf: GroupShelf | null;
       groupId: string;
     }
@@ -218,7 +218,7 @@ export function rowSizeHint(kind: SidebarRow["kind"], phone: boolean): number {
 // for the eye to break on.
 //
 // Worktree rows set their gap as --row-gap, which the tree's stack
-// connectors read to reach across it (WorktreeRow).
+// rail reads to reach across it to the next row's stop (WorktreeRow).
 //
 // Padding, not margin: the virtualizer sizes each row from offsetHeight,
 // which counts the one and ignores the other, so a margin would let the
