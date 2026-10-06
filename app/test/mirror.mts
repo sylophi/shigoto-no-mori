@@ -47,6 +47,8 @@
 // copy's device is hidden from the mirror surfaces and ended once,
 // its thread told why, with nothing deleted. And a peer's removed
 // worktree (worktrees:removal) ends only the sessions into that copy.
+// And the sweep of sessions brought back for a device on no account
+// asks about each session once.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
@@ -91,6 +93,7 @@ import { createGitFollower } from "@host/mirror/gitFollow";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import {
   COPY_GONE_DETAIL,
+  createNoAccountSweep,
   endLegacyMirrors,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
@@ -1438,6 +1441,65 @@ async function main() {
     }
     ok(
       "stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy and says so, and leftovers and delayed stops are swept, sparing a running re-open and a held root and retrying a failed end",
+    );
+
+    // (6f) The sweep of sessions the engine brings back for a device on
+    // no account asks about each session once, signed in or not. A
+    // credential that reads as signed out later (one bad read) ends
+    // nothing that was already asked about. A session first seen while
+    // signed out ends them all, a sign-out's reset asks again, and a
+    // check that throws is asked again on the next snapshot.
+    {
+      let sessions: MirrorSessionRaw[] = [];
+      let signedIn = true;
+      let checks = 0;
+      let ends = 0;
+      const sweep = createNoAccountSweep({
+        sessions: () => sessions,
+        signedIn: () => {
+          checks += 1;
+          return signedIn;
+        },
+        end: () => {
+          ends += 1;
+        },
+      });
+      const one = fakeSession({ session: "s-1", deviceId: "A", labels: {} });
+      const two = fakeSession({ session: "s-2", deviceId: "A", labels: {} });
+      sweep.run();
+      assert.equal(checks, 0, "nothing to ask about read the credential");
+      sessions = [one];
+      sweep.run();
+      sweep.run();
+      assert.equal(checks, 1, "a session was asked about twice");
+      signedIn = false;
+      sweep.run();
+      assert.equal(ends, 0, "a misread ended a session already asked about");
+      sessions = [one, two];
+      sweep.run();
+      assert.equal(ends, 1, "a session first seen signed out was kept");
+      sweep.reset();
+      sweep.run();
+      assert.equal(ends, 2, "a reset sweep did not ask again");
+      signedIn = true;
+      const throwing = checks;
+      const failing = createNoAccountSweep({
+        sessions: () => sessions,
+        signedIn: () => {
+          checks += 1;
+          if (checks === throwing + 1) throw new Error("no credential yet");
+          return signedIn;
+        },
+        end: () => {
+          ends += 1;
+        },
+      });
+      assert.throws(() => failing.run(), /no credential yet/);
+      failing.run();
+      assert.equal(checks, throwing + 2, "a check that threw was not retried");
+    }
+    ok(
+      "the no-account sweep asks about each session once, so a misread credential ends nothing already running",
     );
 
     // (7) Stopping the daemon ends it cleanly.

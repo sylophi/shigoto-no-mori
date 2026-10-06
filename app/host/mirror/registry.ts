@@ -509,6 +509,32 @@ export async function moveMirrorsOfWorktree(
   );
 }
 
+// The engine persists its sessions, so they come back on every spawn:
+// a boot that starts signed out, or a daemon that was down at the
+// sign-out, would otherwise resume mirroring with peers of an account
+// this device is not on. Each session is asked about once, signed in
+// or not, so one failed credential read (it reads as signed out) ends
+// nothing already running. A sign-out ends what was running itself and
+// resets the sweep, so a session reported after it is asked again.
+export function createNoAccountSweep(deps: {
+  sessions: () => readonly MirrorSessionRaw[];
+  signedIn: () => boolean;
+  end: () => void;
+}): { run: () => void; reset: () => void } {
+  const asked = new Set<string>();
+  return {
+    run: () => {
+      const fresh = deps.sessions().filter((raw) => !asked.has(raw.session));
+      if (fresh.length === 0) return;
+      // Asked before marking: a check that throws leaves them to ask again.
+      const signedIn = deps.signedIn();
+      for (const raw of fresh) asked.add(raw.session);
+      if (!signedIn) deps.end();
+    },
+    reset: () => asked.clear(),
+  };
+}
+
 // Ends every mirror with a peer `stillOnAccount` refuses (this device
 // signed out, or the peer was removed from the registry). The copy
 // stays as an ordinary worktree, unlike mirror:stop's delete: a
