@@ -21,6 +21,7 @@ import {
   worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
 import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadge";
+import { worktreeTitle } from "@/lib/worktreeTitle";
 
 // One worktree the palette can land on, wherever it lives.
 export interface PaletteEntry {
@@ -175,7 +176,7 @@ export function rankPaletteEntries(
 
 const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
   worktree.branch,
-  worktree.title ?? "",
+  worktreeTitle(worktree, pr) ?? "",
   worktree.name,
   `${project.name} ${worktree.branch}`,
   device?.label ?? "",

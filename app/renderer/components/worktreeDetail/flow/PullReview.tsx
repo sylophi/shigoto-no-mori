@@ -370,7 +370,11 @@ function BranchLine({
           className,
         )}
       >
-        <span className={quiet ? "text-xs" : "text-sm font-semibold"}>
+        <span
+          className={
+            quiet ? "text-xs text-foreground/80" : "text-sm font-semibold"
+          }
+        >
           {branch}
         </span>
         {folder !== undefined && (

@@ -19,6 +19,7 @@ export function DescriptionSection({ description }: { description: string }) {
       <div
         ref={ref}
         className={cn(
+          "max-w-3xl",
           !expanded && "max-h-28 overflow-hidden",
           !expanded &&
             truncated &&

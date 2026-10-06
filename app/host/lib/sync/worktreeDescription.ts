@@ -53,5 +53,15 @@ export async function followDescription(
     await writeWorktreeDescription(local.projectId, local.worktreeId, there);
     return "here";
   }
+  // Both described in the same millisecond, differently: this side
+  // wins (the original, for a mirror, which runs here). It is stamped
+  // a millisecond on, here and there, since a write only lands when it
+  // is newer than what the other side holds.
+  if (here.title !== there.title || here.description !== there.description) {
+    const winner = { ...here, describedAt: hereAt + 1 };
+    await writeWorktreeDescription(local.projectId, local.worktreeId, winner);
+    await api.worktreeDataDescribe({ ...peer, description: winner });
+    return "there";
+  }
   return null;
 }

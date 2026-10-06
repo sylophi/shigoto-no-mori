@@ -8,20 +8,23 @@ package main
 // so a move re-keys them and a removal drops them with the rest, and
 // `list` rows carry them for the sidebar and the worktree page.
 //
-// Once the branch has a pull request, the PR's title and body are the
-// worktree's, and describe refuses a change: it belongs on the PR (gh
-// pr edit). A lookup that can't be made (no gh, no remote, gh failing)
-// doesn't block the write, since the app can't find the PR then
-// either and shows the local text.
+// While the branch has an open pull request, the PR's title and body
+// are the worktree's, and describe refuses a change: it belongs on the
+// PR (gh pr edit). A merged or closed one (an old PR on a reused branch
+// name, too) no longer holds them. A lookup that can't be made (no gh,
+// no GitHub remote, gh failing) doesn't block the write, since the app
+// can't find the PR then either and shows the local text.
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -107,7 +110,7 @@ func cmdDescribe(ctx cliContext, args []string) (int, error) {
 		return exitCodeOf(err), err
 	}
 	if len(parsed.positionals) > 1 {
-		return 2, usageErrf("Usage: %s describe [<name>] [-t <title>] [-d <description> | --description-file <path|->]", binaryName)
+		return 2, usageErrf("Usage: %s worktrees describe [<name>] [-t|--title <title>] [-d|--description <text> | --description-file <path|->]", binaryName)
 	}
 	title, setTitle := parsed.strings["title"]
 	description, setDescription := parsed.strings["description"]
@@ -129,45 +132,29 @@ func cmdDescribe(ctx cliContext, args []string) (int, error) {
 		return 1, errf("External worktrees have no data file to hold a title. Adopt it first (%s adopt).", binaryName)
 	}
 	if !setTitle && !setDescription {
-		desc := readWorktreeDescription(proj.ID, id.ID)
-		pr := pullRequestOwningDescription(proj, id)
-		if jsonMode {
-			emit(map[string]any{"ok": true, "title": desc.Title, "description": desc.Description, "pullRequest": pr})
-			return 0, nil
-		}
-		if pr != nil {
-			note(dimErr(fmt.Sprintf("PR #%d gives this worktree its title and description: %s", pr.Number, pr.URL)))
-		}
-		if desc.Title == "" && desc.Description == "" {
-			out(id.Name + " has no title or description")
-			return 0, nil
-		}
-		out(cmp.Or(desc.Title, "(no title)"))
-		if desc.Description != "" {
-			out("")
-			out(desc.Description)
-		}
-		return 0, nil
+		return showDescription(proj, id)
 	}
 
 	if setTitle {
 		title = strings.TrimSpace(title)
-		if strings.ContainsAny(title, "\r\n") {
-			return 2, usageErrf("A title is one line.")
+		if strings.ContainsFunc(title, unicode.IsControl) {
+			return 2, usageErrf("A title is one line of text, without tabs or other control characters.")
 		}
 		if utf8.RuneCountInString(title) > maxTitleRunes {
 			return 2, usageErrf("A title is at most %d characters.", maxTitleRunes)
 		}
 	}
 	if setDescription {
-		description = strings.TrimSpace(description)
+		// Blank lines and trailing space go. A first line's indentation
+		// stays: in markdown it can be what makes a code block.
+		description = strings.TrimRightFunc(strings.TrimLeft(description, "\r\n"), unicode.IsSpace)
 		if utf8.RuneCountInString(description) > maxDescriptionRunes {
 			return 2, usageErrf("A description is at most %d characters.", maxDescriptionRunes)
 		}
 	}
 	// Last, after the flags are known good: it asks GitHub.
 	if pr := pullRequestOwningDescription(proj, id); pr != nil {
-		return 1, errf("%s has PR #%d, which gives it its title and description. Edit the PR instead: gh pr edit %d --title … --body …",
+		return 1, codedErrf("pull-request-open", "%s has open PR #%d, which gives it its title and description. Edit the PR instead: gh pr edit %d --title … --body …",
 			id.Name, pr.Number, pr.Number)
 	}
 	desc, err := updateWorktreeDescription(proj.ID, id.ID, func(desc worktreeDescription) worktreeDescription {
@@ -216,11 +203,57 @@ func readDescriptionFile(path string) (string, error) {
 	return string(raw), nil
 }
 
-// The PR that owns the worktree's title and description, nil when it
-// has none or none can be looked up (the app's worktreeTitle rule): the status card's bounded probe,
-// since describe runs in an agent's loop and must not hang on gh.
-func pullRequestOwningDescription(proj project, id worktreeIdentity) *prSummary {
-	if id.Detached || id.Branch == unknownBranch {
+// Prints the title and description the worktree goes by: its open
+// PR's when it has one, its own otherwise.
+func showDescription(proj project, id worktreeIdentity) (int, error) {
+	// Strict here, unlike the listing: asked for them, a broken file
+	// should say so rather than read as none.
+	var desc worktreeDescription
+	if _, err := readJSONDoc(worktreeDataPath(proj.ID, id.ID), func(raw []byte) error {
+		return json.Unmarshal(raw, &desc)
+	}); err != nil {
+		return 1, err
+	}
+	pr := pullRequestOwningDescription(proj, id)
+	if jsonMode {
+		// The worktree's own pair beside the PR that overrides it, so a
+		// consumer sees both.
+		emit(map[string]any{"ok": true, "title": desc.Title, "description": desc.Description, "pullRequest": pr})
+		return 0, nil
+	}
+	title, description := desc.Title, desc.Description
+	if pr != nil {
+		note(dimErr(fmt.Sprintf("From open PR #%d (%s):", pr.Number, pr.URL)))
+		title, description = pr.Title, strings.TrimSpace(pr.Body)
+	}
+	if title == "" && description == "" {
+		out(id.Name + " has no title or description")
+		return 0, nil
+	}
+	out(cmp.Or(title, "(no title)"))
+	if description != "" {
+		out("")
+		out(description)
+	}
+	return 0, nil
+}
+
+// A PR that holds the worktree's title and description: what the
+// lookup reads of it.
+type owningPullRequest struct {
+	Number            int    `json:"number"`
+	URL               string `json:"url"`
+	Title             string `json:"title"`
+	Body              string `json:"body"`
+	IsCrossRepository bool   `json:"isCrossRepository"`
+}
+
+// The open PR from this repository that owns the worktree's title and
+// description (the app's worktreeTitle rule), nil when there is none or
+// none can be looked up. Bounded like the status card's probe: describe runs in an
+// agent's loop and must not hang on gh.
+func pullRequestOwningDescription(proj project, id worktreeIdentity) *owningPullRequest {
+	if id.Detached || id.Branch == unknownBranch || !ghAvailable() {
 		return nil
 	}
 	// The primary branch is never a PR's own: one headed there comes
@@ -229,12 +262,31 @@ func pullRequestOwningDescription(proj project, id worktreeIdentity) *prSummary 
 	if len(remotes) == 0 || id.Branch == primaryBranchOf(primaryRef, remotes) {
 		return nil
 	}
-	probe := probePullRequest(proj.Path, id.Branch)
-	if probe.reason != "" {
-		note(dimErr("Couldn't check for a pull request (" + probe.reason + ")."))
-	}
-	if probe.card == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), prProbeTimeout)
+	defer cancel()
+	// A few, not one: the branch name is matched across every fork, and
+	// a fork's PR may be a stranger's branch of the same name, so only
+	// one from this repository counts.
+	stdout, err := runGhContext(ctx, proj.Path,
+		"pr", "list", "--state", "open", "--head", id.Branch, "--limit", "10", "--json", "number,url,title,body,isCrossRepository")
+	if err != nil {
+		reason := ghProbeReason(err.Error())
+		if ctx.Err() != nil {
+			reason = "gh timed out"
+		}
+		if reason != ghNoGitHubRemote {
+			note(dimErr("Couldn't check for a pull request (" + reason + ")."))
+		}
 		return nil
 	}
-	return &probe.card.prSummary
+	var found []owningPullRequest
+	if json.Unmarshal([]byte(stdout), &found) != nil {
+		return nil
+	}
+	for i := range found {
+		if !found[i].IsCrossRepository {
+			return &found[i]
+		}
+	}
+	return nil
 }

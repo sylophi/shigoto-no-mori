@@ -270,7 +270,7 @@ export function WorktreeDetailInner({
           <div className="min-w-0 flex-1">
             {title !== null && (
               <SimpleTooltip whenTruncated tip={title}>
-                <h1 className="line-clamp-2 text-2xl font-medium tracking-tight wrap-anywhere">
+                <h1 className="mb-0.5 line-clamp-2 text-2xl font-medium tracking-tight wrap-anywhere">
                   {title}
                 </h1>
               </SimpleTooltip>
@@ -293,11 +293,17 @@ export function WorktreeDetailInner({
         aria-disabled={locked}
       >
         <div className="flex flex-col gap-10 phone:gap-8">
-          {description !== null && (
-            <DescriptionSection key={worktree.id} description={description} />
-          )}
-
           <LaunchSection worktree={worktree} />
+
+          {/* Under the launchers, so a description that arrives with
+              the PR lookup doesn't move the buttons people reach for. */}
+          {description !== null && (
+            <DescriptionSection
+              // Folded again for another worktree or a new text.
+              key={`${worktree.id}:${description}`}
+              description={description}
+            />
+          )}
 
           <PullRequestSection worktree={worktree} />
 

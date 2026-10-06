@@ -14,6 +14,11 @@ export const PullRequestSchema = z.object({
   // read off the project-wide map: a PR whose base is another PR's
   // head is stacked on it (shared/pullRequestStack.ts).
   baseRefName: z.string(),
+  // Whether the PR comes from a fork. A branch name is matched across
+  // every fork, so one from a fork may be a stranger's branch of the
+  // same name (lib/worktreeTitle.ts). Absent from a host on an older
+  // build.
+  isCrossRepository: z.boolean().optional(),
 });
 export type PullRequest = z.infer<typeof PullRequestSchema>;
 

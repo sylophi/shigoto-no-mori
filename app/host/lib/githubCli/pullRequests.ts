@@ -25,6 +25,7 @@ const GhPrListItemSchema = z.object({
   isDraft: z.boolean(),
   headRefName: z.string(),
   baseRefName: z.string(),
+  isCrossRepository: z.boolean().default(false),
 });
 type GhPrListItem = z.infer<typeof GhPrListItemSchema>;
 
@@ -48,7 +49,7 @@ async function runGhPrList(cwd: string): Promise<GhPrListItem[] | null> {
         "--limit",
         String(PR_LIST_LIMIT),
         "--json",
-        "number,url,title,state,isDraft,headRefName,baseRefName",
+        "number,url,title,state,isDraft,headRefName,baseRefName,isCrossRepository",
       ],
       { cwd },
     );
@@ -68,6 +69,7 @@ function toPullRequest(item: GhPrListItem): PullRequest {
     state: item.state,
     isDraft: item.isDraft,
     baseRefName: item.baseRefName,
+    isCrossRepository: item.isCrossRepository,
   };
 }
 
@@ -160,6 +162,7 @@ const GhPrDetailSchema = z.object({
   url: z.url(),
   title: z.string(),
   body: z.string().default(""),
+  isCrossRepository: z.boolean().default(false),
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
   mergeStateStatus: PullRequestMergeStateSchema.catch("UNKNOWN"),
@@ -403,7 +406,7 @@ async function runGhPrListDetail(
       "--limit",
       "1",
       "--json",
-      "number,url,title,body,state,isDraft,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
+      "number,url,title,body,state,isDraft,isCrossRepository,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
     ],
     { cwd },
   );
@@ -426,6 +429,7 @@ async function runGhPrListDetail(
     url: first.url,
     title: first.title,
     body: first.body,
+    isCrossRepository: first.isCrossRepository,
     state: first.state,
     isDraft: first.isDraft,
     mergeState: first.mergeStateStatus,

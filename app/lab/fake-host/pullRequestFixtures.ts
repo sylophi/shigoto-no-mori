@@ -90,8 +90,30 @@ export function fakePullRequestDetail(branch: string) {
   const slim = fakePosedPullRequests()[branch];
   if (!slim) return null;
   if (slim === FAKE_PR_SLIM) return fakePosedDetail();
-  return { ...FAKE_PR_DETAIL, ...slim, ...fakeChecks([]) };
+  return {
+    ...FAKE_PR_DETAIL,
+    ...slim,
+    body: FAKE_STACK_BODIES[slim.number] ?? "",
+    ...fakeChecks([]),
+  };
 }
+
+// The stacked PRs' own descriptions, so each page shows its PR's.
+const FAKE_STACK_BODIES: Record<number, string> = {
+  150: "A lock file older than the running daemon is a leftover, so it is refused instead of waited on.",
+  151: "Reloads the project list when terrier's registry changes on disk.",
+  152: [
+    "Retries a busy pool lease a few times before reporting it taken.",
+    "",
+    "- [x] Retry with backoff",
+    "- [ ] Say which process holds the lease",
+    "",
+    "| Attempts | Wait |",
+    "| --- | --- |",
+    "| 1-3 | 100ms |",
+    "| 4-5 | 500ms |",
+  ].join("\n"),
+};
 
 const fakeCheck = (
   name: string,

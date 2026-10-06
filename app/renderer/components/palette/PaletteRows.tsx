@@ -98,6 +98,14 @@ function WorktreeRow({
       detail={
         <>
           <Highlight text={project.name} query={query} /> ·{" "}
+          {title !== null && !worktree.detached && (
+            <>
+              <span className="font-mono">
+                <Highlight text={worktree.branch} query={query} />
+              </span>{" "}
+              ·{" "}
+            </>
+          )}
           <Highlight text={worktree.name} query={query} />
           {activeAt > 0 && ` · ${formatRelativeTime(activeAt, now)}`}
           {status && ` · ${status}`}

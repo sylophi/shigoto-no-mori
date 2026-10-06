@@ -6,6 +6,7 @@ package main
 // own field. The seed repo has no remote, so no PR lookup runs.
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -54,5 +55,60 @@ func TestDescribeRefusesMultilineTitle(t *testing.T) {
 	ctx := resolveContext(proj.Path, []project{proj})
 	if code, _ := cmdDescribe(ctx, []string{"otter", "-t", "one\ntwo"}); code != 2 {
 		t.Fatalf("a two-line title exited %d", code)
+	}
+}
+
+// A move out of the layout makes the worktree external, which keeps no
+// title, and adopting it back carries the title along.
+func TestAdoptCarriesTheTitle(t *testing.T) {
+	proj := autoPullSandbox(t)
+	wt := createViaCmd(t, proj, "otter")
+	describeVia(t, proj, "otter", "-t", "Keep me")
+	moved, err := moveWorktree(proj, wt, filepath.Join(t.TempDir(), "outside"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !moved.IsExternal || moved.Title != "" {
+		t.Fatalf("an external worktree's row carries %q (external %v)", moved.Title, moved.IsExternal)
+	}
+	ctx := resolveContext(proj.Path, []project{proj})
+	if code, err := cmdAdopt(ctx, []string{moved.Path}); code != 0 || err != nil {
+		t.Fatalf("adopt: %d, %v", code, err)
+	}
+	identities, err := listWorktreeIdentities(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range identities {
+		if id.Branch == "otter" {
+			if id.IsExternal {
+				t.Fatalf("adopt left %s external", id.Path)
+			}
+			if got := readWorktreeDescription(proj.ID, id.ID).Title; got != "Keep me" {
+				t.Fatalf("the adopted worktree's title is %q", got)
+			}
+			return
+		}
+	}
+	t.Fatal("no worktree on otter after adopt")
+}
+
+func TestDescribeKeepsAFirstLineIndent(t *testing.T) {
+	proj := autoPullSandbox(t)
+	wt := createViaCmd(t, proj, "otter")
+	describeVia(t, proj, "otter", "-d", "\n    indented code\nnext\n\n")
+	if got := readWorktreeDescription(proj.ID, wt.ID).Description; got != "    indented code\nnext" {
+		t.Fatalf("description stored as %q", got)
+	}
+	ctx := resolveContext(proj.Path, []project{proj})
+	if code, _ := cmdDescribe(ctx, []string{"otter", "-t", "tab\there"}); code != 2 {
+		t.Fatalf("a title with a tab exited %d", code)
+	}
+}
+
+func TestGhProbeReasonNamesAMissingGitHubRemote(t *testing.T) {
+	stderr := "none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use `gh auth login`"
+	if got := ghProbeReason(stderr); got != ghNoGitHubRemote {
+		t.Fatalf("reason %q", got)
 	}
 }

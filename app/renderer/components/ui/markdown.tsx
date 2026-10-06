@@ -9,11 +9,22 @@ import { cn } from "@/lib/utils";
 // which page asked. On a purifier of the module's own, so no other
 // sanitize in the app picks the rule up.
 const purify = DOMPurify(window);
+// The one input a description has is a task list's checkbox (`- [x]`),
+// which shows its state and is never a control. Any other goes.
+purify.addHook("uponSanitizeElement", (node, data) => {
+  if (
+    data.tagName === "input" &&
+    (node as Element).getAttribute("type") !== "checkbox"
+  ) {
+    node.parentNode?.removeChild(node);
+  }
+});
 purify.addHook("afterSanitizeAttributes", (node) => {
   if (node.tagName === "IMG") {
     node.setAttribute("loading", "lazy");
     node.setAttribute("referrerpolicy", "no-referrer");
   }
+  if (node.tagName === "INPUT") node.setAttribute("disabled", "");
 });
 
 // Written in v1's vocabulary like any component: tokens only, so the
@@ -32,6 +43,8 @@ const PROSE = cn(
   "[&_img]:my-2 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-lg",
   "[&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground",
   "[&_hr]:my-4 [&_hr]:border-border",
+  "[&_li:has(>input)]:list-none [&_li>input]:mr-1.5 [&_li>input]:align-middle",
+  "[&_table]:my-2 [&_table]:block [&_table]:overflow-x-auto [&_:is(th,td)]:px-2 [&_:is(th,td)]:py-1 [&_:is(th,td):first-child]:pl-0 [&_th]:text-left [&_th]:font-semibold [&_th]:text-foreground",
 );
 
 // Sanitized HTML by source. The sources are release notes, which don't
@@ -46,7 +59,7 @@ function htmlOf(source: string): string {
   if (html === undefined) {
     html = purify.sanitize(
       marked.parse(source, { async: false, gfm: true, breaks: true }),
-      { FORBID_TAGS: ["style", "form", "input", "button"] },
+      { FORBID_TAGS: ["style", "form", "button"] },
     );
     rendered.set(source, html);
     if (rendered.size > RENDERED_CAP) {

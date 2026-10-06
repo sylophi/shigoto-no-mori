@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "./tooltip";
 
 export function BackButton({
   onClick,
@@ -27,7 +28,9 @@ export function BackButton({
       )}
     >
       <ArrowLeft aria-hidden className="size-3" />
-      <span className="min-w-0 truncate">{label}</span>
+      <SimpleTooltip whenTruncated tip={label}>
+        <span className="min-w-0 truncate">{label}</span>
+      </SimpleTooltip>
     </Button>
   );
 }

@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { worktreeTitle } from "@/lib/worktreeTitle";
 import { BranchLabel } from "@/components/ui/branch-label";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { VillagerFace } from "@/components/shared/VillagerSays";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
@@ -108,20 +109,22 @@ export function WorktreeEntry({
         {/* Weight is reserved for "this is the one you have open".
             Bolding every title spends the page's only emphasis on the
             thing every row has. */}
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-xs",
-            title === null && "font-mono",
-            isSelected && "font-medium",
-          )}
-        >
-          {title ?? (
-            <BranchLabel
-              branch={worktree.branch}
-              detached={worktree.detached}
-            />
-          )}
-        </span>
+        <SimpleTooltip whenTruncated tip={title ?? worktree.branch}>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-xs",
+              title === null && "font-mono",
+              isSelected && "font-medium",
+            )}
+          >
+            {title ?? (
+              <BranchLabel
+                branch={worktree.branch}
+                detached={worktree.detached}
+              />
+            )}
+          </span>
+        </SimpleTooltip>
         {mark && <ActivityIcon kind={mark} />}
         {!(inline && isDeleting) && (
           <>

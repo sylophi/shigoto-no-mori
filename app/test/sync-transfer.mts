@@ -731,8 +731,27 @@ async function main() {
           describedAt: 12,
         },
       );
+      // Described in the same millisecond, differently: this side
+      // (the original) wins, and both settle on it.
+      await writeWorktreeDescription(copy.projectId, copy.worktreeId, {
+        title: "Tie here",
+        describedAt: 20,
+      });
+      await writeWorktreeDescription(original.projectId, original.worktreeId, {
+        title: "Tie there",
+        describedAt: 20,
+      });
+      await followDescription("A", copy, original);
+      assert.deepEqual(
+        await readWorktreeData(original.projectId, original.worktreeId),
+        { title: "Tie here", describedAt: 21 },
+      );
+      assert.deepEqual(
+        await readWorktreeData(copy.projectId, copy.worktreeId),
+        { title: "Tie here", describedAt: 21 },
+      );
       ok(
-        "mirror: the title and description follow whichever side was described last",
+        "mirror: the title and description follow whichever side was described last, and a tie settles on this side",
       );
     }
 

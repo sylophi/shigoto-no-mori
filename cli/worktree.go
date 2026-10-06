@@ -173,7 +173,12 @@ func probeWorktree(proj project, id worktreeIdentity, ctx buildContext) (worktre
 	wg.Go(func() { rs = getRemoteSync(id.Path) })
 	wg.Go(func() { primary = getPrimaryRelation(id, ctx) })
 	wg.Go(func() { unpushed = getUnpushedCount(id.Path) })
-	desc := readWorktreeDescription(id.ProjectID, id.ID)
+	// External worktrees keep no data file (a move out of the layout
+	// leaves one behind until adopt carries it back).
+	var desc worktreeDescription
+	if hasWorktreeData(id) {
+		desc = readWorktreeDescription(id.ProjectID, id.ID)
+	}
 	wg.Wait()
 	probe.statusOK = statusErr == nil
 	return worktreeJSON{
