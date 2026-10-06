@@ -58,7 +58,10 @@ import {
 // imported before app "ready" (registerIpcHandlers runs at the top of
 // main/index.ts), and safeStorage.isEncryptionAvailable, app.getPath and
 // the dev userData suffix are only reliable once the app is ready, which
-// is guaranteed by the time any renderer call lands.
+// is guaranteed by the time any renderer call lands. A main-process
+// caller can come earlier, so store() refuses before ready: a store
+// built then would keep a cipher that reads every credential as signed
+// out and writes plaintext for the rest of the run.
 let cachedStore: AccountStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 let cipherWarned = false;
@@ -96,6 +99,9 @@ function buildCipher(): StoreCipher {
 }
 
 function store(): AccountStore {
+  if (!app.isReady()) {
+    throw new Error("[account] the credential store was opened before ready");
+  }
   return (cachedStore ??= createAccountStore({
     filePath: join(app.getPath("userData"), "account.json"),
     cipher: buildCipher(),

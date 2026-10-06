@@ -71,6 +71,7 @@ import {
   setMirrorServingListener,
 } from "@host/ipc/modules/mirror";
 import {
+  createNoAccountSweep,
   endLegacyMirrors,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
@@ -294,43 +295,34 @@ const mirrorDaemon = createMirrorDaemon({
     // A mirror an older build started from the copy's device
     // (registry.ts isLegacyMirror), ended once, the worktree kept.
     void endLegacyMirrors();
-    endMirrorsOfNoAccount();
+    noAccountSweep.run();
     // The stops that waited for the daemon, originals gone behind the
     // app's back, sessions a re-open replaced (registry.ts).
     void settleMirrorBookkeeping();
   },
 });
-// The engine persists its sessions, so they come back on every spawn:
-// a boot that starts signed out, or a daemon that was down at the
-// sign-out, would otherwise resume mirroring with peers of an account
-// this device is not on. Each session is asked once (the
-// reapOrphanedTransfers idiom). The account fan-out's own sweep
-// covers the daemon-was-up case.
 const LEFT_ACCOUNT_DETAIL =
   "This device left the account. The copy stays as a worktree.";
-const sweptSessions = new Set<string>();
-function endMirrorsOfNoAccount(): void {
-  if (mirrorDaemon.status() !== "running") return;
-  const unswept = mirrorDaemon
-    .sessions()
-    .filter((raw) => !sweptSessions.has(raw.session));
-  // The sign-in check opens the credential (a keychain read), so it
-  // runs only when there is something new to ask about.
-  if (unswept.length === 0 || accountSignedIn()) return;
-  for (const raw of unswept) sweptSessions.add(raw.session);
-  void endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
+function endAllMirrors(): Promise<void> {
+  return endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
     transfers: true,
   });
 }
+// The sessions the engine brings back for a device on no account
+// (registry.ts createNoAccountSweep). The account fan-out's own sweep
+// covers a sign-out with the daemon up, and resets this one.
+const noAccountSweep = createNoAccountSweep({
+  sessions: () => mirrorDaemon.sessions(),
+  signedIn: accountSignedIn,
+  end: () => void endAllMirrors(),
+});
 
 // The mirror sweep of a device leaving its account, bounded so a stuck
 // daemon request cannot hold the sign-out: the hub refresh that
 // follows closes the sessions the sweep's terminates ride.
 function endAllMirrorsBounded(): Promise<unknown> {
   return Promise.race([
-    endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
-      transfers: true,
-    }),
+    endAllMirrors(),
     new Promise((resolve) => setTimeout(resolve, 5_000).unref?.()),
   ]);
 }
@@ -462,6 +454,8 @@ export function registerIpcHandlers(): void {
         clearDirectTickets();
         stopPortForwardsTo(() => false);
         await teardownStep("the mirror sweep", endAllMirrorsBounded);
+        // After the sweep, so a snapshot during it does not sweep again.
+        noAccountSweep.reset();
         await teardownStep("dropping the peer-keyed client config", () =>
           writeClientConfig(withoutPeerState(readClientConfigSync())),
         );

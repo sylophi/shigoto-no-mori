@@ -211,10 +211,16 @@ registerIpcHandlers();
 // it starts with the app rather than with the first mirror the user
 // asks for. A gateway that fails to bind is retried inside. Nothing
 // here is fatal, the app works without mirroring. After the
-// environment rebuild: the daemon it spawns inherits process.env.
-void shellEnvReady.then(startMirrorEngine).catch((error: unknown) => {
-  console.warn("[mirror] engine failed to start:", errorMessageOf(error));
-});
+// environment rebuild: the daemon it spawns inherits process.env. And
+// after ready: the sessions it resumes are swept for a device on no
+// account, which reads the credential, and safeStorage cannot decrypt
+// it before ready (the read would say signed out and end them all).
+// A quit that came first has already stopped it.
+void Promise.all([shellEnvReady, app.whenReady()])
+  .then(() => (isShuttingDown() ? undefined : startMirrorEngine()))
+  .catch((error: unknown) => {
+    console.warn("[mirror] engine failed to start:", errorMessageOf(error));
+  });
 
 let mainWindow: BrowserWindow | null = null;
 // Set once the ready handler's own createWindow() call has run, so
