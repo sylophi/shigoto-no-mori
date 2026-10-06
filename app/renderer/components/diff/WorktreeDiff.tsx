@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -15,10 +16,17 @@ import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
+import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
-import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
+import {
+  changeKey,
+  deriveRemoteSyncState,
+  isUntracked,
+  type Worktree,
+} from "@shared/schemas";
 import { changedFilePaths, includedFiles } from "./changesControls";
+import { BranchBar } from "./BranchBar";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
@@ -65,7 +73,10 @@ function ChangesView({
 }) {
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
-  const { data: files } = useWorktreeChanges(projectId, worktreeId);
+  const { data: files, error: statusError } = useWorktreeChanges(
+    projectId,
+    worktreeId,
+  );
   // The pick is held as the row's key and resolved against the live
   // list, so a file that stops being changed (discarded, committed,
   // reverted in an editor) falls back to the first row instead of
@@ -166,8 +177,16 @@ function ChangesView({
   };
 
   // The sidebar's count stands in until the page's own status arrives.
+  // A failed first read is not a read still coming: it says so (the
+  // query's toast has the details) instead of spinning on.
+  const failed = files === undefined && statusError !== null;
+  const loading = files === undefined && !failed;
   const changedCount = files ? files.length : worktree.changedCount;
   const list = files ?? [];
+  // The message box only has a job with something to commit, or a
+  // commit to amend. A clean tree keeps the branch bar and the last
+  // commit, which is where the next move (push, amend, undo) lives.
+  const showComposer = (loading || list.length > 0 || amending) && !failed;
 
   return (
     <DiffView
@@ -177,13 +196,23 @@ function ChangesView({
       title="Uncommitted changes"
       subtitle={
         <>
-          {pluralize(changedCount, "file")} changed in{" "}
-          <span className="font-mono">{worktree.name}</span>
+          {changedCount > 0
+            ? `${pluralize(changedCount, "file")} changed`
+            : "No changes"}{" "}
+          in <span className="font-mono">{worktree.name}</span>
         </>
       }
-      emptyMessage="No uncommitted changes."
+      emptyMessage={
+        failed ? (
+          "Couldn't read the changes."
+        ) : (
+          <CleanTreeMessage worktree={worktree} />
+        )
+      }
       changes={{
         files: list,
+        loading,
+        failed,
         busy,
         selectedKey: picked ? changeKey(picked) : null,
         onSelect: setPickedKey,
@@ -192,7 +221,14 @@ function ChangesView({
         onDiscard,
       }}
       footer={
-        <>
+        <div
+          data-slot="changes-footer"
+          className={cn(
+            "flex flex-col border-t border-border",
+            !showComposer && "pb-1.5",
+          )}
+        >
+          <BranchBar worktree={worktree} />
           {lastCommit && rewrite.canAmend && (
             <LastCommitStrip
               commit={lastCommit}
@@ -206,22 +242,60 @@ function ChangesView({
               }}
             />
           )}
-          <CommitComposer
-            worktree={worktree}
-            files={list}
-            draft={draft}
-            onDraftChange={setDraft}
-            pending={commit.isPending}
-            error={commit.error}
-            amend={
-              amending && lastCommit
-                ? { hash: lastCommit.hash, onCancel: () => setAmending(false) }
-                : null
-            }
-            onCommit={onCommit}
-          />
-        </>
+          {showComposer && (
+            <CommitComposer
+              files={list}
+              draft={draft}
+              onDraftChange={setDraft}
+              pending={commit.isPending}
+              error={commit.error}
+              amend={
+                amending && lastCommit
+                  ? {
+                      hash: lastCommit.hash,
+                      onCancel: () => setAmending(false),
+                    }
+                  : null
+              }
+              onCommit={onCommit}
+            />
+          )}
+        </div>
       }
     />
   );
+}
+
+// What the pane says once everything is committed: that the tree is
+// clean, and what the branch still owes the remote, the next thing to
+// do, which the branch bar below has the button for.
+function CleanTreeMessage({ worktree }: { worktree: Worktree }) {
+  const next = owedToRemote(worktree);
+  return (
+    <span className="flex flex-col items-center gap-2">
+      <CircleCheck aria-hidden className="size-6 text-muted-foreground/60" />
+      <span className="text-foreground">No uncommitted changes</span>
+      {next && <span className="text-xs">{next}</span>}
+    </span>
+  );
+}
+
+function owedToRemote(worktree: Worktree): string | null {
+  const state = deriveRemoteSyncState(worktree);
+  switch (state.kind) {
+    case "synced":
+      return "Everything is committed and pushed.";
+    case "ahead":
+      return `${pluralize(state.ahead, "commit")} not pushed yet.`;
+    case "behind":
+      return `${pluralize(state.behind, "commit")} to pull.`;
+    case "pullAndPush":
+      return `${pluralize(state.ahead, "commit")} to push, ${pluralize(state.behind, "commit")} to pull.`;
+    case "diverged":
+      return "History has split from the remote. Pick which side wins below.";
+    case "publish":
+      return state.canPublish ? "This branch isn't on the remote yet." : null;
+    case "detached":
+      return null;
+  }
 }

@@ -341,7 +341,9 @@ export function DiffView({
         ref={scrollRef}
         className="min-h-0 min-w-0 flex-1 overflow-auto bg-background"
       >
-        {isLoading ? (
+        {/* Until the status list answers, an empty pane would read as
+            a clean tree. */}
+        {isLoading || changes?.loading ? (
           <CenteredMessage>
             <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
             Computing diff…
