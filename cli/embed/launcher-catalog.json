@@ -44,9 +44,15 @@
   {
     "id": "codex",
     "label": "ChatGPT",
-    "bundleNames": ["ChatGPT.app", "Codex.app"]
+    "bundleNames": ["ChatGPT.app", "Codex.app"],
+    "deepLink": "codex://threads/new?path={path}"
   },
-  { "id": "claude", "label": "Claude", "bundleNames": ["Claude.app"] },
+  {
+    "id": "claude",
+    "label": "Claude",
+    "bundleNames": ["Claude.app"],
+    "deepLink": "claude://code/new?folder={path}"
+  },
   {
     "id": "sublime",
     "label": "Sublime Text",

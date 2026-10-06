@@ -29,11 +29,14 @@ type launcherApp struct {
 	label       string
 	bundleNames []string
 	cli         string
+	deepLink    string
 }
 
 // The tool catalog is embedded from embed/launcher-catalog.json.
 // bundleNames resolve against appRoots; "__finder__" is the
-// always-available Finder sentinel.
+// always-available Finder sentinel. deepLink is for apps whose only
+// "open this folder" API is their URL scheme: launching opens it with
+// {path} replaced by the query-escaped worktree path.
 //
 //go:embed embed/launcher-catalog.json
 var launcherCatalogJSON []byte
@@ -44,13 +47,14 @@ var launcherCatalog = func() []launcherApp {
 		Label       string   `json:"label"`
 		BundleNames []string `json:"bundleNames"`
 		CLI         string   `json:"cli"`
+		DeepLink    string   `json:"deepLink"`
 	}
 	if err := json.Unmarshal(launcherCatalogJSON, &entries); err != nil {
 		panic("embedded launcher-catalog.json is invalid: " + err.Error())
 	}
 	catalog := make([]launcherApp, len(entries))
 	for i, e := range entries {
-		catalog[i] = launcherApp{id: e.ID, label: e.Label, bundleNames: e.BundleNames, cli: e.CLI}
+		catalog[i] = launcherApp{id: e.ID, label: e.Label, bundleNames: e.BundleNames, cli: e.CLI, deepLink: e.DeepLink}
 	}
 	return catalog
 }()
@@ -250,21 +254,13 @@ func launchCustomCommand(command, worktreePath string) error {
 	return cmd.Process.Release()
 }
 
-// Protocol deep links for apps whose only "open this folder" API is
-// their URL scheme.
-func deepLinkFor(appID, worktreePath string) string {
-	switch appID {
-	case "codex":
-		return "codex://threads/new?path=" + url.QueryEscape(worktreePath)
-	case "claude":
-		return "claude://code/new?folder=" + url.QueryEscape(worktreePath)
-	}
-	return ""
+func (a launcherApp) deepLinkTo(worktreePath string) string {
+	return strings.ReplaceAll(a.deepLink, "{path}", url.QueryEscape(worktreePath))
 }
 
 func launchDetectedApp(a launcherApp, worktreePath string) error {
-	if deepLink := deepLinkFor(a.id, worktreePath); deepLink != "" {
-		return exec.Command("open", deepLink).Run()
+	if a.deepLink != "" {
+		return exec.Command("open", a.deepLinkTo(worktreePath)).Run()
 	}
 	// CLI shim first so in-app window preferences are honored; bundle
 	// fallback via Launch Services.

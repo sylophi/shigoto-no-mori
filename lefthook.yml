@@ -220,6 +220,11 @@ pre-commit:
           - name: village-life
             glob: "{app/shared/villageLife.ts,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/village-life.mts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test village-life
+          # The launcher row finds an app's icon by file name, so every icon
+          # names an app in the CLI's catalog.
+          - name: launcher-icons
+            glob: "{app/renderer/app-icons/**,cli/embed/launcher-catalog.json,app/test/launcher-icons.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test launcher-icons
           # The villager manifest names a face for every doubutsu name, so the
           # pool and the manifest agree one to one.
           - name: villager-manifest
