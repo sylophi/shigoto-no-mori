@@ -1226,6 +1226,7 @@ const FAKE_DETECTED = [
   { kind: "detected", id: "vscode", label: "VS Code", available: true },
   { kind: "detected", id: "terminal", label: "Terminal", available: true },
   { kind: "detected", id: "finder", label: "Finder", available: true },
+  { kind: "detected", id: "codex", label: "ChatGPT", available: true },
 ] as const;
 
 // ---- account and presence state the fake host can change ----

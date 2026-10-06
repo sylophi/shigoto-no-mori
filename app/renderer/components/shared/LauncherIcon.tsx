@@ -1,9 +1,7 @@
-// Maps a launcher entry to the right brand asset. Apple- and vendor-provided
-// app icons (Cursor, Zed, VS Code, Ghostty, etc.) are extracted PNGs from
-// each app's bundle; the rest fall back to svgl SVGs.
+// Maps a launcher entry to its brand asset: an icon extracted from the
+// app's bundle (scripts/extract-app-icon.sh), else an svgl SVG.
 import type { ComponentType } from "react";
 import { Sparkles } from "lucide-react";
-import { FileManagerIcon } from "@/components/ui/file-manager";
 import { GithubMark } from "@/components/ui/svgs/github-mark";
 import { Intellijidea } from "@/components/ui/svgs/intellijidea";
 import { JetbrainsSolid } from "@/components/ui/svgs/jetbrains-solid";
@@ -12,22 +10,6 @@ import { Pycharm } from "@/components/ui/svgs/pycharm";
 import { Rider } from "@/components/ui/svgs/rider";
 import { Rubymine } from "@/components/ui/svgs/rubymine";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
-import antigravityIconUrl from "@/app-icons/antigravity.png";
-import chatgptIconUrl from "@/app-icons/chatgpt.png";
-import claudeIconUrl from "@/app-icons/claude.png";
-import cmuxIconUrl from "@/app-icons/cmux.png";
-import cursorIconUrl from "@/app-icons/cursor.png";
-import ghosttyIconUrl from "@/app-icons/ghostty.png";
-import githubDesktopIconUrl from "@/app-icons/github-desktop.png";
-import itermIconUrl from "@/app-icons/iterm.png";
-import sublimeIconUrl from "@/app-icons/sublime.png";
-import terminalIconUrl from "@/app-icons/terminal.png";
-import vscodeIconUrl from "@/app-icons/vscode.png";
-import vscodeInsidersIconUrl from "@/app-icons/vscode-insiders.png";
-import vscodiumIconUrl from "@/app-icons/vscodium.png";
-import windsurfIconUrl from "@/app-icons/windsurf.png";
-import xcodeIconUrl from "@/app-icons/xcode.png";
-import zedIconUrl from "@/app-icons/zed.png";
 import {
   parseLauncherId,
   WEB_GITHUB_ID,
@@ -39,29 +21,21 @@ interface LauncherIconProps {
   className?: string;
 }
 
-// Maps, not object literals, so an id like "constructor" can't reach
-// the prototype.
-const APP_ICON_URL = new Map<string, string>([
-  ["cursor", cursorIconUrl],
-  ["vscode", vscodeIconUrl],
-  ["vscode-insiders", vscodeInsidersIconUrl],
-  ["zed", zedIconUrl],
-  ["cmux", cmuxIconUrl],
-  ["ghostty", ghosttyIconUrl],
-  ["terminal", terminalIconUrl],
-  ["iterm", itermIconUrl],
-  ["github-desktop", githubDesktopIconUrl],
-  ["xcode", xcodeIconUrl],
-  ["antigravity", antigravityIconUrl],
-  ["codex", chatgptIconUrl],
-  ["claude", claudeIconUrl],
-  ["windsurf", windsurfIconUrl],
-  ["vscodium", vscodiumIconUrl],
-  ["sublime", sublimeIconUrl],
-]);
+// Every PNG in app-icons, keyed by file name, which is the app's id in
+// cli/embed/launcher-catalog.json (test/launcher-icons.mts holds them
+// to it). A Map, not an object literal, so an id like "constructor"
+// can't reach the prototype.
+const APP_ICON_URL = new Map(
+  Object.entries(
+    import.meta.glob<string>("../../app-icons/*.png", {
+      eager: true,
+      query: "?url",
+      import: "default",
+    }),
+  ).map(([path, url]) => [path.slice(path.lastIndexOf("/") + 1, -4), url]),
+);
 
 const SVG_ICON = new Map<string, ComponentType<{ className: string }>>([
-  ["finder", FileManagerIcon],
   ["intellij", Intellijidea],
   ["webstorm", Webstorm],
   ["phpstorm", Phpstorm],
