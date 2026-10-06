@@ -3,7 +3,8 @@
 // what stays out (the one choice a mirror has). Mirror is the move (a
 // send from the original's device) with its progress frames, plus the
 // session open on top. Live is
-// proof: the session's first verdict, and the way to the copy's page.
+// proof: the session's first verdict, and for a copy here the way to
+// its page.
 // The flow runs both ways: MirrorDialog copies a peer's worktree here,
 // MirrorToDialog copies one of this device's to a peer (under that
 // peer's DestinationProvider). Either way the session runs on the
@@ -169,10 +170,15 @@ function MirrorFlow({
     toPeer,
     onClose,
   });
-  const { stage, progress, start, pull, target } = flow;
+  const { stage, progress, start, open, pull, target } = flow;
   const summary = selectionSummary(pull.selection);
   const landingBranch = pullLandingBranch(worktree);
   const renamed = landingBranch !== worktree.branch;
+  // Leaving a live mirror here, by any way out, opens the copy: the
+  // peer's page this opened on folds into it in the sidebar, and what
+  // it launches runs on the peer. A mirror to a peer opened on this
+  // device's original, which stays.
+  const finish = stage === "done" && toPeer === undefined ? open : onClose;
 
   return (
     <PullFlowFrame
@@ -200,7 +206,7 @@ function MirrorFlow({
         failedNote: "Nothing was left behind, so trying again starts clean.",
         cancelledNote: "",
       }}
-      onClose={onClose}
+      onClose={finish}
       headline={
         <>
           {stage === "review" &&
@@ -271,7 +277,7 @@ function MirrorFlow({
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
             dirtyApplied={!mirror.data.captured || mirror.data.dirtyApplied}
-            onClose={onClose}
+            onDone={finish}
           />
         </RunnerScope>
       )}
@@ -301,7 +307,7 @@ function MirrorLive({
   sourceDeviceLabel,
   thisDeviceLabel,
   dirtyApplied,
-  onClose,
+  onDone,
 }: {
   session: string;
   landed: Worktree;
@@ -310,7 +316,7 @@ function MirrorLive({
   // The device holding the copy, and the words for that.
   thisDeviceLabel: string;
   dirtyApplied: boolean;
-  onClose: () => void;
+  onDone: () => void;
 }) {
   const { sessions } = useMirrors();
   const live: MirrorSession | undefined = sessions.find(
@@ -343,11 +349,9 @@ function MirrorLive({
           </div>
         </section>
       </FlowBody>
-      {/* One way out: the page this opened on is already one half of
-          the pair, wearing the mirror, so a button to the other half
-          only reads as a different outcome. */}
+      {/* One way out, to this device's half of the pair (finish). */}
       <FlowFooter>
-        <Button size="sm" onClick={onClose}>
+        <Button size="sm" onClick={onDone}>
           Done
         </Button>
       </FlowFooter>
