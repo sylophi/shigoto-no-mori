@@ -70,15 +70,15 @@ width (920x1100).
 Give the desktop shell the app window's own size, 920x720
 (`main/index.ts`), as above. weblab's default is 1440x900, which
 spreads a screen out wider than the app ever opens, so a shot without
-a viewport shows a page people don't see. Then check the edges the
-window allows (`../../DESIGN.md`, "Window size"): its minimum,
-720x600, and a full display, 1440x900 or larger. A `viewport` step
-switches size without a reload:
+a viewport shows a page people don't see. Then check the range a page
+has to hold up across (`../../DESIGN.md`, "Window size"): down to
+about 800x550, and up to a full display, 1440x900 or larger. A
+`viewport` step switches size without a reload:
 
 ```json
 { "session": "ui", "steps": [
   { "shot": "default" },
-  { "viewport": "720x600" }, { "shot": "smallest" },
+  { "viewport": "800x550" }, { "shot": "small" },
   { "viewport": "1728x1080" }, { "shot": "large" }
 ] }
 ```

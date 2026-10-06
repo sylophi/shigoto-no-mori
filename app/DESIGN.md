@@ -139,25 +139,27 @@ Rules that keep that working:
 The desktop window opens at 920×720 (`main/index.ts`), and most
 people leave it near that, so that is the size a screen is designed
 and judged at. With the sidebar at its 240px default, a page gets
-about 680px of width. The window can also shrink to 720×600 or fill
-a large display, and the desktop never switches to the phone layout,
-so every page has to hold at both ends.
+about 680px of width. People also make it smaller or fill a large
+display with it, and the desktop never switches to the phone layout,
+so a page has to hold up across that range.
 
 - **Design at 920×720.** What a page leads with (its title, the row
   of actions people reach for) fits there without wrapping or cutting
   off what matters. A layout that only reads well wider is wrong at
   the size people actually see.
-- **Smaller still works.** At 720×600 a page can be about 480px wide
-  (less with the sidebar dragged wider) and short. Text in a row
-  truncates instead of pushing its controls out, with the full text
-  in a `whenTruncated` tooltip. Rows of controls wrap rather than
-  overlap. Nothing scrolls sideways, and a page's own scroll pane
-  carries what doesn't fit vertically.
+- **Smaller still works, down to about 800×550.** There a page is
+  about 560px wide (less with the sidebar dragged wider) and short.
+  Text in a row truncates instead of pushing its controls out, with
+  the full text in a `whenTruncated` tooltip. Rows of controls wrap
+  rather than overlap. Nothing scrolls sideways, and a page's own
+  scroll pane carries what doesn't fit vertically. The window goes
+  down to 640×420, but nothing has to be designed for below about
+  800×550.
 - **Larger gets room, not size.** A wide window gives lists, panes and
   tables more width at the same density, never bigger type or
   controls. Running text keeps a reading measure (a description stops
   at `max-w-3xl`) instead of running the window's full width.
-- When changing UI, look at it at 920×720 first, then at 720×600 and
+- When changing UI, look at it at 920×720 first, then at 800×550 and
   at a full display. The fake host (`lab/fake-host/README.md`) poses
   any of them.
 
