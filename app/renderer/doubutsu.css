@@ -49,7 +49,6 @@
  *      popover-content           ui/popover.tsx
  *      sidebar-project-row       sidebar/ProjectRow.tsx
  *      sidebar-project-pick      sidebar/ProjectHeader.tsx
- *      live-line, live-line-open live/LiveCard.tsx
  *      project-tile              shared/ProjectIcon.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
@@ -1080,8 +1079,7 @@
       a[href],
       li[data-row-idx].cursor-pointer,
       [data-slot="diff-index-row"],
-      [data-slot="sidebar-project-row"],
-      [data-slot="live-line"]
+      [data-slot="sidebar-project-row"]
     ):not(:disabled, [aria-disabled="true"], [data-disabled]),
     label:has(input[type="radio"]:not(:disabled)),
     label:has(input[type="checkbox"]:not(:disabled))
@@ -1127,23 +1125,6 @@
 .doubutsu [data-slot="sidebar-project-pick"]:is(:hover, :active) {
   background-image: none;
   animation: none;
-}
-
-/* A line on the Live page opens its script's output or its mirror's
-   dialog, and is hovered as one pill with the restart and stop beside
-   it. The line is on the list above and its open button sits it out
-   (both are hooks in the CONTRACT), so the stripes cover the line, not
-   a band left of the buttons. Those keep their own stripes. */
-.doubutsu [data-slot="live-line-open"]:is(:hover, :active) {
-  background-image: none;
-  animation: none;
-}
-/* Under the stripes, the line takes the accent fill in either
-   appearance, where v1's dark hover would wash it out. */
-@media (hover: hover) {
-  .doubutsu [data-slot="live-line"]:hover {
-    background-color: var(--accent);
-  }
 }
 
 /* A Visitors album sticker answers a pointer itself: it straightens

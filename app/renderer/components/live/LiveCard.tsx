@@ -46,7 +46,7 @@ import { localDeviceId } from "@/lib/queryKeys";
 import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { cn } from "@/lib/utils";
-import { ForwardLine, MirrorLine, ScriptLine } from "./LiveItems";
+import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
 import type { LiveCard as LiveCardModel } from "./liveModel";
 
 // A device's heading over its cards: its mark in its connection tone,
@@ -115,17 +115,17 @@ function CardBody({
       ) : (
         <PortsHeader />
       )}
-      <ul className="flex flex-col gap-1.5">
+      <ul className="flex flex-col gap-2">
         {card.items.map((item) =>
           item.kind === "script" ? (
-            <ScriptLine
+            <ScriptItem
               key={item.run.runId}
               deviceId={card.deviceId}
               api={item.api}
               run={item.run}
             />
           ) : item.kind === "mirror" ? (
-            <MirrorLine
+            <MirrorItem
               key={
                 item.mirror.kind === "session"
                   ? item.mirror.session.session
@@ -134,7 +134,7 @@ function CardBody({
               mirror={item.mirror}
             />
           ) : (
-            <ForwardLine
+            <ForwardItem
               key={item.forward.forwardId}
               forward={item.forward}
               worktree={worktree}
@@ -410,73 +410,54 @@ function PortsHeader() {
   );
 }
 
-// One live thing inside a card: its mark, what it is, the fact beside
-// it, and its actions at the end. A line that leads somewhere (a
-// script's output, a mirror's dialog) is a control as a whole, with a
-// chevron saying so.
-export function LiveLine({
+// One live thing inside a card, as a block of two rows: what it is
+// and how it stands (its mark, its name, the status at the end), then
+// what can be done about it, as labelled buttons, with any further
+// detail at the end of that row.
+export function LiveItem({
   mark,
-  label,
-  meta,
+  title,
+  status,
   actions,
-  onOpen,
-  openLabel,
+  detail,
 }: {
   mark: React.ReactNode;
-  label: React.ReactNode;
-  meta?: React.ReactNode;
+  title: React.ReactNode;
+  status?: React.ReactNode;
   actions?: React.ReactNode;
-  onOpen?: () => void;
-  // The open control's accessible name.
-  openLabel?: string;
+  detail?: React.ReactNode;
 }) {
-  const body = (
-    <>
-      <span className="flex size-4 shrink-0 items-center justify-center">
-        {mark}
-      </span>
-      <span className="flex min-w-0 items-center gap-1.5">{label}</span>
-      {meta && (
-        <span className="flex min-w-0 shrink items-center gap-1.5 truncate text-xs text-muted-foreground">
-          {meta}
-        </span>
-      )}
-    </>
-  );
   return (
-    // The whole line takes the hover, its buttons included, so a line
-    // that opens reads as one row rather than a row beside its buttons.
-    <li
-      data-slot={onOpen ? "live-line" : undefined}
-      className={cn(
-        "group/line flex min-h-10 items-center gap-1 rounded-md bg-muted/60 pr-1.5 text-sm transition-colors",
-        // v1's muted and accent are one token, so the hover lifts the
-        // fill the way the outline button does in the dark. Doubutsu
-        // gives the line its own hover (live-line in doubutsu.css).
-        onOpen && "hover:bg-accent dark:hover:bg-input/50",
-      )}
-    >
-      {onOpen ? (
-        <button
-          type="button"
-          data-slot="live-line-open"
-          aria-label={openLabel}
-          onClick={onOpen}
-          className="flex min-h-10 min-w-0 flex-1 items-center gap-2.5 rounded-md pl-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {body}
-          <ChevronRight
-            aria-hidden
-            className="mr-1 ml-auto size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover/line:text-foreground"
-          />
-        </button>
-      ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-3">
-          {body}
+    <li className="flex flex-col gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-sm">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          {mark}
+        </span>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          {title}
+        </span>
+        {status && (
+          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+            {status}
+          </span>
+        )}
+      </div>
+      {(actions || detail) && (
+        // Under the title, so the buttons line up with the name above
+        // them rather than with the mark. A phone has no room for the
+        // indent: there the buttons share the row's width.
+        <div className="-ml-2 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 pl-6.5 phone:ml-0 phone:pl-0">
+          {actions && (
+            <span className="flex items-center gap-1 phone:grid phone:w-full phone:auto-cols-fr phone:grid-flow-col">
+              {actions}
+            </span>
+          )}
+          {detail && (
+            <span className="ml-auto flex min-w-0 items-center gap-1 truncate pl-2 text-xs text-muted-foreground phone:ml-0 phone:pl-0">
+              {detail}
+            </span>
+          )}
         </div>
-      )}
-      {actions && (
-        <span className="flex shrink-0 items-center gap-0.5">{actions}</span>
       )}
     </li>
   );
