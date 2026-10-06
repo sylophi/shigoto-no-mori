@@ -39,9 +39,9 @@ export function WorktreeDetail() {
     }
     if (seen.current === key && !worktreesPending && !worktreesError) {
       seen.current = null;
-      nav.toFallback(true);
+      nav.toFallback([worktreeId], true);
     }
-  }, [worktree, worktreesPending, worktreesError, key, nav]);
+  }, [worktree, worktreesPending, worktreesError, key, worktreeId, nav]);
 
   useEffect(() => {
     // Local-only page-open work, once per worktree page opened:

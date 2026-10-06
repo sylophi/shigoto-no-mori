@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { isWorktreeSettingUpError } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import { inboxShowing } from "@/components/sidebar/inbox/inboxOrder";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
 import { useWorktreeCreatePhase } from "@/store/worktreeLifecycle";
@@ -14,10 +15,11 @@ interface DeleteOpts {
 }
 
 // Delete `worktree` and, on success, route the user to a neighbouring
-// worktree (or home if it was the last one) so the page never lingers on
-// a removed entry. Owns the force/cleanup retry state that the deletion
-// affordances hang off of, since both the detail footer and the closed-PR
-// box drive the same deletion.
+// worktree (or home if it was the last one), or with the inbox showing
+// to its newest work, so the page never lingers on a removed entry.
+// Owns the force/cleanup retry state that the deletion affordances hang
+// off of, since both the detail footer and the closed-PR box drive the
+// same deletion.
 export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
   const nav = useWorktreeNav();
   const deleteMutation = useDeleteWorktree();
@@ -41,6 +43,12 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
   // takes its neighbours too, and the page must not land on one of
   // those.
   const navigateToSibling = (gone: readonly string[] = [worktree.id]) => {
+    // The inbox has an order of its own (newest work first) and leaves
+    // the primary out, so its landing is the fallback's.
+    if (inboxShowing()) {
+      nav.toFallback(gone, true);
+      return;
+    }
     // Prefer the sibling above so the user's eye stays in place. The
     // nav helper keeps this on whichever device the page is scoped to
     // (a remote delete lands on the remote sibling, or the root when it
@@ -55,7 +63,7 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
     if (next) {
       nav.toWorktree(worktree.projectId, next.id, true);
     } else {
-      nav.toFallback(true);
+      nav.toFallback(gone, true);
     }
   };
 
