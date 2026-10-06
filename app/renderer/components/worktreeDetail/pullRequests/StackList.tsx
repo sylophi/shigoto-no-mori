@@ -2,8 +2,8 @@
 // the branch it all lands on, the way the branches sit on each other.
 // Each row is the PR: its state, title and number. Which worktree
 // holds each layer, and where, is the sidebar's job, which draws the
-// stack as a tree. Merged rows stay: a stack whose bottom landed is
-// still that stack until the rest follows.
+// stack as a rail in the same order. Merged rows stay: a stack whose
+// bottom landed is still that stack until the rest follows.
 import { GitBranch } from "lucide-react";
 import { describePullRequest } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";

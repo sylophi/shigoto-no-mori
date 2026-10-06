@@ -1,9 +1,10 @@
-import type { CSSProperties } from "react";
+import { describePullRequest } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
+import { TONE_TEXT } from "@/components/worktreeDetail/pullRequests/pullRequestShared";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 import type { GroupShelf } from "./sidebarRow";
 import type { PullRequest, Worktree } from "@shared/schemas";
-import type { StackChild, StackPosition } from "@shared/pullRequestStack";
+import type { StackPosition, StackRail } from "@shared/pullRequestStack";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 import { WorktreeEntry } from "./WorktreeEntry";
 
@@ -21,41 +22,59 @@ interface WorktreeRowProps {
   // Both off the tree builder, which places the project's rows by
   // stack once (buildSidebarRows).
   stack: StackPosition | null;
-  stackChild?: StackChild;
+  stackRail?: StackRail;
   shelf: GroupShelf | null;
 }
 
-// A stack's rows draw as a file tree: the lowest layer is the parent
-// and every layer built on it a child one step in, hung on the same
-// connectors a file tree uses (a tee, the last child a corner). The
-// connector is filled strips rather than a bordered box: doubutsu
-// clears every border color, and a connector that vanishes with the
-// theme would leave the indent unexplained. Its upright reaches up
-// across the gap over the row (--row-gap, ROW_LAYOUT) to meet the one
-// above.
-const STACK_CHILD_INSET_PX = 12;
+// A stack's rows draw as a rail through its layers, top layer first,
+// the way a git graph draws a branch: every layer a stop on one line,
+// in its PR's color, so the stack reads as one chain rather than a
+// parent with children. The rows step in by the row gutter
+// (ROW_LAYOUT's px-2), which puts the rail on the left edge of every
+// other row's box, the stops clear of the window's edge. The rail is
+// filled strips rather than a border: doubutsu clears every border
+// color, and a rail that vanished with the theme would leave the stops
+// floating. Its text size is the title's, so `lh` is the title line's
+// height, and each stop sits on that line.
+const RAIL_STOP_Y = "top-[calc(--spacing(1.5)+0.5lh)]";
 
-function stackIndentStyle(
-  child: StackChild | undefined,
-): CSSProperties | undefined {
-  if (!child) return undefined;
-  return {
-    marginLeft: STACK_CHILD_INSET_PX,
-    width: `calc(100% - ${STACK_CHILD_INSET_PX}px)`,
-  };
-}
-
-function StackConnector({ child }: { child: StackChild | undefined }) {
-  if (!child) return null;
+function StackRailMark({
+  rail,
+  pr,
+}: {
+  rail: StackRail | undefined;
+  pr: PullRequest | undefined;
+}) {
+  if (!rail) return null;
+  const tone = pr ? describePullRequest(pr).tone : "slate";
   return (
-    <span aria-hidden className="absolute inset-y-0 -left-2 w-1.5">
+    <span aria-hidden className="absolute inset-y-0 -left-2 text-xs">
+      {/* Each stop but the last draws the rail down to the next, across
+          its row and the gap under it (--row-gap), since every stop
+          sits at the same height in its row. The pieces meet under a
+          stop: rows sit on fractional pixels, and pieces meeting in the
+          open would show a seam, or a darker line where they overlap.
+          A 1px mid-tone line, on whole pixels: off the grid it blurs or
+          snaps to another width. */}
+      {!rail.last && (
+        <span
+          className={cn(
+            "absolute left-0 h-[calc(100%+var(--row-gap,0px))] w-px bg-muted-foreground/45",
+            RAIL_STOP_Y,
+          )}
+        />
+      )}
+      {/* Centered on the line by margins of half its size, not a
+          translate: Chrome can snap a translated layer to a whole pixel
+          when it paints, which set the stop half a pixel off the line.
+          A stop's round edge is smoothed wherever it sits. */}
       <span
         className={cn(
-          "absolute top-[calc(var(--row-gap,0px)*-1)] left-0 w-px bg-muted-foreground/40",
-          child === "last" ? "h-[calc(50%+var(--row-gap,0px))]" : "bottom-0",
+          "absolute left-[0.5px] -mt-(--stop-r) -ml-(--stop-r) size-1.75 rounded-full bg-current [--stop-r:--spacing(0.875)]",
+          RAIL_STOP_Y,
+          TONE_TEXT[tone],
         )}
       />
-      <span className="absolute inset-x-0 top-1/2 h-px bg-muted-foreground/40" />
     </span>
   );
 }
@@ -73,7 +92,7 @@ export function WorktreeRow({
   mirrorWorktreeId,
   pr,
   stack,
-  stackChild,
+  stackRail,
   shelf,
 }: WorktreeRowProps) {
   // A peer's row takes the local row's own rule, scoped to the device:
@@ -91,9 +110,10 @@ export function WorktreeRow({
       mirror={mirror}
       state={state}
       shelf={shelf}
-      style={stackIndentStyle(stackChild)}
+      hideStackPosition={stackRail?.whole}
+      className={cn(stackRail && "ml-2 w-[calc(100%-var(--spacing)*2)]")}
     >
-      <StackConnector child={stackChild} />
+      <StackRailMark rail={stackRail} pr={pr} />
     </WorktreeEntry>
   );
 }
