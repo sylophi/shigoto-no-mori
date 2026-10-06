@@ -272,6 +272,10 @@ pre-commit:
           - name: project-fold
             glob: "{app/renderer/components/sidebar/buildSidebarRows.ts,app/renderer/components/sidebar/sidebarRow.ts,app/test/project-fold.mts,app/lab/fake-host/fixtures.ts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test project-fold
+          # A mirrored worktree's tabs name its sides, the original first.
+          - name: mirror-tabs
+            glob: "{app/renderer/components/worktreeDetail/mirror/mirrorSides.ts,app/renderer/components/shared/DeviceTabs.tsx,app/renderer/hooks/remote/useMirrors.ts,app/test/mirror-tabs.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test mirror-tabs
           # The ⌘K palette lists every device's worktrees once, visits first,
           # and opens on the one before the page on screen.
           - name: worktree-palette

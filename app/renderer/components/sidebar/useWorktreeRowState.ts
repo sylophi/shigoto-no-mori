@@ -57,7 +57,9 @@ export function useWorktreeRowState(
       open.worktreeId === mirror.worktreeId);
   // A failure is only news off the worktree's pages (its console, diff
   // and commits all sit under the detail path): on them it is on screen.
-  const onScreen = isSelected || pathname.startsWith(`${detailPath}/`);
+  // This device's pages alone: the peer copy's page shows its own runs.
+  const onScreen =
+    pathname === detailPath || pathname.startsWith(`${detailPath}/`);
   const activity = running === "failed" && onScreen ? null : running;
 
   return {

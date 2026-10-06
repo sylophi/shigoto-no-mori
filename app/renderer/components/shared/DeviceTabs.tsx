@@ -148,8 +148,7 @@ export type DeviceBarTab = Pick<
   DeviceRosterEntry,
   "deviceId" | "label" | "icon" | "status"
 > & {
-  // A word after the name, said in the tooltip too (a mirror's
-  // "original" and "copy").
+  // A word after the name (a mirror's "original" and "copy").
   note?: string;
   // An arrow ahead of the pill, from the tab before it (a mirror's
   // original to its copy).
@@ -189,10 +188,7 @@ export function DeviceTabBar({
       : []),
     ...tabs.map((tab) => ({
       id: tab.deviceId,
-      tip:
-        tab.note === undefined
-          ? deviceTitle(tab.label, tab.status)
-          : `${deviceTitle(tab.label, tab.status)}, the ${tab.note}`,
+      tip: deviceTitle(tab.label, tab.status),
       // The device's connection dot, then its glyph: this device has
       // no connection to show and wears the glyph alone.
       lead: <DeviceLead icon={tab.icon} tone={tab.status?.tone} />,
