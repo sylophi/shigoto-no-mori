@@ -47,7 +47,7 @@ Open one with weblab's `new`, the worktree's port as the address.
 stand for them:
 
 ```json
-{ "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/account" }
+{ "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/account", "viewport": "920x720" }
 ```
 
 ```json
@@ -63,6 +63,18 @@ no more of a long page: make the viewport taller instead.
   { "goto": "/?theme=light&checks=failing&to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum" },
   { "expect": "happy-hummingbird" },
   { "shot": "checks-failing" }
+] }
+```
+
+The desktop shell takes the app window's default size, 920x720, not
+weblab's 1440x900. Check about 800x550 and a full display too
+(`../../DESIGN.md`, "Window size"):
+
+```json
+{ "session": "ui", "steps": [
+  { "shot": "default" },
+  { "viewport": "800x550" }, { "shot": "small" },
+  { "viewport": "1728x1080" }, { "shot": "large" }
 ] }
 ```
 
