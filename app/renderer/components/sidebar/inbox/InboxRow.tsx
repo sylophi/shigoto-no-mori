@@ -50,8 +50,8 @@ interface InboxRowProps {
 // project and the time over it.
 //
 //   [icon] project                                  14m ago
-//   feat/the-branch                            ±3  ↑2  #142
-//   [kind] dirname
+//   feat/the-branch
+//   [kind] dirname                             ±3  ↑2  #142
 //
 // Right-click opens the project's menu, the same list the tree hangs
 // off a project header's `…`. The inbox has no project headers, so this
