@@ -1,29 +1,34 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  Check,
   ChevronsDownUp,
   ChevronsUpDown,
+  Copy,
   Ellipsis,
+  Minus,
   Search,
   Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { DiffStats } from "@/components/ui/diff-stats";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useShortPath } from "@/hooks/ui/useShortPath";
-import {
-  CONFIRM_QUICK_MS,
-  useConfirmTwiceKeyed,
-} from "@/hooks/ui/useConfirmTwice";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
-import type { ChangedFile } from "@shared/schemas";
+import { getBrowseLeafSegment } from "@shared/projectPaths";
+import { changeKey, type ChangedFile } from "@shared/schemas";
 import {
   changedFilePaths,
   includedFiles,
@@ -31,16 +36,25 @@ import {
 } from "./changesControls";
 import type { IndexEntry } from "@/lib/patchFiles";
 
+// Below this many files the changes list is short enough to scan, and
+// a filter field would only be one more row between the header and
+// the files. A read-only patch keeps its filter: that row also holds
+// the fold-all control.
+const FILTER_MIN_FILES = 8;
+
 // The file list for a diff: every file in scroll order with its
 // change marker and +/- counts. Order is never re-ranked, which is why
 // the filter is a plain substring match and not lib/fuzzyMatch. The
 // list is a map of the scroll area and has to keep its order.
 //
 // With `changes` it is also the changes list: a checkbox per row for
-// the file's index state, a discard control on hover, a select-all box
-// and a discard menu in the header, and the commit composer as its
-// footer. Bulk discards confirm in a strip that takes the footer's
-// place. Per-file discards arm on the row itself.
+// the file's index state, a select-all box and a discard menu in the
+// header, and the commit composer as its footer. A row's own actions
+// (tick, copy its path, discard it) are on its context menu, opened by
+// a right click or a long press, the way GitHub Desktop has them: a
+// discard button on every row would cost each one width it can't
+// spare. Discards, one file's or many, confirm in a strip that takes
+// the footer's place.
 //
 // Rows arrive built (patchFiles.ts). The caller decides whether they
 // come from the patch or from git status.
@@ -92,101 +106,154 @@ export function DiffFileIndex({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
 
-  const discardArm = useConfirmTwiceKeyed(CONFIRM_QUICK_MS);
-  // Which bulk discard is up for confirmation. The paths are worked out
+  // Which discard is up for confirmation. The paths are worked out
   // when it is confirmed, from the rows as they are then: the ticks stay
   // live while the strip is open, and a file ticked to keep it must not
   // go because the menu was opened a moment earlier.
-  const [pendingDiscard, setPendingDiscard] = useState<BulkDiscard | null>(
+  const [pendingDiscard, setPendingDiscard] = useState<PendingDiscard | null>(
     null,
   );
+  // The row whose context menu is up. One menu serves the whole list,
+  // anchored at the pointer: a menu per row would mount a menu's worth
+  // of state on every one of hundreds of rows to show one at a time.
+  // The key outlives `open` so the menu keeps its items while it closes.
+  const [menu, setMenu] = useState<{ key: string; open: boolean } | null>(null);
+  const menuEntry = menu && entries.find((entry) => entry.key === menu.key);
+  // A long press on a touch screen can end in a click on the row it
+  // opened over, which would select the file (on a phone, closing the
+  // sheet the menu is in). Read at click time, so a ref.
+  const menuOpenRef = useRef(false);
+  const selectRow = (key: string) => {
+    if (!menuOpenRef.current) onSelect(key);
+  };
+  const requestDiscard = (key: string) => setPendingDiscard({ key });
+
+  // Empty lists say so: a changes list in its header (or that it is
+  // still loading), a patch's in the list.
+  const emptyNote =
+    entries.length > 0 ? (
+      <p className="px-2 py-3 text-xs text-muted-foreground">
+        No files match that filter.
+      </p>
+    ) : changes ? null : (
+      <p className="px-2 py-3 text-xs text-muted-foreground">
+        No changed files.
+      </p>
+    );
 
   return (
     <div data-slot="diff-index" className={cn("flex flex-col", className)}>
-      <div
-        data-slot="search-row"
-        className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5"
-      >
-        {changes ? (
-          <SelectAllCheckbox changes={changes} />
-        ) : (
+      {(!changes || entries.length >= FILTER_MIN_FILES || query) && (
+        <div
+          data-slot="search-row"
+          className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5"
+        >
           <Search
             aria-hidden
             className="size-3.5 shrink-0 text-muted-foreground/60"
           />
-        )}
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && query) {
-              // Clear in place rather than letting Escape bubble out to
-              // whatever the route does with it.
-              e.stopPropagation();
-              setQuery("");
-            }
-          }}
-          placeholder="Filter files"
-          aria-label="Filter files"
-          spellCheck={false}
-          className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
-        />
-        {changes && (
-          <DiscardMenu
-            changes={changes}
-            onPick={(kind) => {
-              discardArm.reset();
-              setPendingDiscard(kind);
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && query) {
+                // Clear in place rather than letting Escape bubble out to
+                // whatever the route does with it.
+                e.stopPropagation();
+                setQuery("");
+              }
             }}
+            placeholder="Filter files"
+            aria-label="Filter files"
+            spellCheck={false}
+            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
+          />
+          {onToggleAll && (
+            <button
+              type="button"
+              onClick={onToggleAll}
+              aria-label={
+                allCollapsed ? "Expand all files" : "Collapse all files"
+              }
+              data-icon-button
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              {allCollapsed ? (
+                <ChevronsUpDown aria-hidden className="size-3.5" />
+              ) : (
+                <ChevronsDownUp aria-hidden className="size-3.5" />
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {changes && (
+        // The changes list's own header: the box that ticks every row,
+        // what the ticks add up to, and the bulk discards.
+        <div className="flex items-center gap-2 pt-2 pr-2 pb-1 pl-3">
+          {/* Nothing to tick or throw away on an empty list, so the
+              header is just its line. */}
+          {changes.files.length > 0 && <SelectAllCheckbox changes={changes} />}
+          <span className="tabular min-h-5 min-w-0 flex-1 truncate text-xs leading-5 text-muted-foreground">
+            {describeSelection(changes)}
+          </span>
+          {changes.files.length > 0 && (
+            <DiscardMenu changes={changes} onPick={setPendingDiscard} />
+          )}
+        </div>
+      )}
+
+      <ContextMenu
+        open={menu?.open ?? false}
+        onOpenChange={(open, details) => {
+          if (!open) {
+            menuOpenRef.current = false;
+            setMenu((current) => current && { ...current, open: false });
+            return;
+          }
+          // Only a row has a menu: a right click on the list's empty
+          // space finds no key and leaves it closed.
+          const target = details.event.target;
+          const key =
+            target instanceof Element
+              ? target.closest("[data-row-key]")?.getAttribute("data-row-key")
+              : null;
+          if (key) {
+            menuOpenRef.current = true;
+            setMenu({ key, open: true });
+          }
+        }}
+      >
+        <ContextMenuTrigger
+          render={
+            <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1" />
+          }
+        >
+          {matches.length === 0
+            ? emptyNote
+            : matches.map((entry) => (
+                <IndexRow
+                  key={entry.key}
+                  entry={entry}
+                  active={entry.key === activeKey}
+                  collapsed={collapsedKeys.has(entry.key)}
+                  menuOpen={menu?.open === true && menu.key === entry.key}
+                  onSelect={selectRow}
+                  busy={changes?.busy ?? false}
+                  onSetStaged={changes?.onSetStaged}
+                  onDiscard={changes && requestDiscard}
+                />
+              ))}
+        </ContextMenuTrigger>
+        {menuEntry && (
+          <FileMenu
+            entry={menuEntry}
+            changes={changes}
+            onDiscard={() => setPendingDiscard({ key: menuEntry.key })}
           />
         )}
-        {onToggleAll && (
-          <button
-            type="button"
-            onClick={onToggleAll}
-            aria-label={
-              allCollapsed ? "Expand all files" : "Collapse all files"
-            }
-            data-icon-button
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            {allCollapsed ? (
-              <ChevronsUpDown aria-hidden className="size-3.5" />
-            ) : (
-              <ChevronsDownUp aria-hidden className="size-3.5" />
-            )}
-          </button>
-        )}
-      </div>
-
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1">
-        {matches.length === 0 ? (
-          <p className="px-2 py-3 text-xs text-muted-foreground">
-            {entries.length === 0
-              ? "No changed files."
-              : "No files match that filter."}
-          </p>
-        ) : (
-          matches.map((entry) => (
-            <IndexRow
-              key={entry.key}
-              entry={entry}
-              active={entry.key === activeKey}
-              collapsed={collapsedKeys.has(entry.key)}
-              onSelect={onSelect}
-              busy={changes?.busy ?? false}
-              onSetStaged={changes?.onSetStaged}
-              discardArmed={discardArm.armedKey === entry.key}
-              onDiscard={() =>
-                discardArm.trigger(entry.key, () => {
-                  if (entry.row)
-                    changes?.onDiscard(changedFilePaths(entry.row));
-                })
-              }
-            />
-          ))
-        )}
-      </div>
+      </ContextMenu>
 
       {needle && matches.length > 0 && (
         <p className="border-t border-border px-2.5 py-1 text-2xs text-muted-foreground">
@@ -197,11 +264,12 @@ export function DiffFileIndex({
       {changes &&
         (pendingDiscard ? (
           <DiscardConfirmStrip
-            label={`Discard ${describeBulk(pendingDiscard, changes.files)}?`}
+            label={`Discard ${describeDiscard(pendingDiscard, changes.files)}?`}
             busy={changes.busy}
             onCancel={() => setPendingDiscard(null)}
             onConfirm={() => {
-              changes.onDiscard(bulkPaths(pendingDiscard, changes.files));
+              const paths = discardPaths(pendingDiscard, changes.files);
+              if (paths.length > 0) changes.onDiscard(paths);
               setPendingDiscard(null);
             }}
           />
@@ -234,31 +302,57 @@ function SelectAllCheckbox({ changes }: { changes: DiffChangesControls }) {
   );
 }
 
-// The two bulk discards. "Unticked" is the one the checkbox model
-// earns: tick what you're keeping, throw away the rest.
-type BulkDiscard = "unticked" | "all";
+// What the header says about the list: how many files, and how many
+// of them the next commit takes when that isn't all of them.
+function describeSelection(changes: DiffChangesControls): string {
+  if (changes.loading) return "Loading changes…";
+  if (changes.failed) return "Couldn't read the changes";
+  const total = changes.files.length;
+  if (total === 0) return "No changes";
+  const included = includedFiles(changes.files).length;
+  if (included === 0 || included === total) {
+    return pluralize(total, "changed file");
+  }
+  return `${included} of ${pluralize(total, "file")} included`;
+}
 
-function bulkFiles(
-  kind: BulkDiscard,
+// The two bulk discards, and one file's from its row (by row key).
+// "Unticked" is the one the checkbox model earns: tick what you're
+// keeping, throw away the rest.
+type PendingDiscard = "unticked" | "all" | { key: string };
+
+function discardFiles(
+  pending: PendingDiscard,
   files: readonly ChangedFile[],
 ): ChangedFile[] {
-  return kind === "all"
-    ? [...files]
-    : files.filter((file) => file.staged === "none");
+  if (pending === "all") return [...files];
+  if (pending === "unticked") {
+    return files.filter((file) => file.staged === "none");
+  }
+  // A file that stopped being changed while the strip was open (an
+  // editor reverted it) has nothing left to discard.
+  return files.filter((file) => changeKey(file) === pending.key);
 }
 
-function bulkPaths(kind: BulkDiscard, files: readonly ChangedFile[]): string[] {
-  return bulkFiles(kind, files).flatMap(changedFilePaths);
+function discardPaths(
+  pending: PendingDiscard,
+  files: readonly ChangedFile[],
+): string[] {
+  return discardFiles(pending, files).flatMap(changedFilePaths);
 }
 
-function describeBulk(
-  kind: BulkDiscard,
+function describeDiscard(
+  pending: PendingDiscard,
   files: readonly ChangedFile[],
 ): string {
-  const count = bulkFiles(kind, files).length;
-  return kind === "all"
-    ? `all ${pluralize(count, "file")}`
-    : `the ${pluralize(count, "unticked file")}`;
+  const picked = discardFiles(pending, files);
+  if (pending === "all") return `all ${pluralize(picked.length, "file")}`;
+  if (pending === "unticked") {
+    return `the ${pluralize(picked.length, "unticked file")}`;
+  }
+  // The whole path: two changed files can share a name.
+  const path = picked[0]?.path;
+  return path ? `changes to ${path}` : "changes";
 }
 
 // "Unticked" is disabled while nothing is ticked, since "the rest" would
@@ -268,10 +362,10 @@ function DiscardMenu({
   onPick,
 }: {
   changes: DiffChangesControls;
-  onPick: (kind: BulkDiscard) => void;
+  onPick: (pending: PendingDiscard) => void;
 }) {
   const total = changes.files.length;
-  const unticked = bulkFiles("unticked", changes.files).length;
+  const unticked = discardFiles("unticked", changes.files).length;
   const canDiscardUnticked = unticked > 0 && unticked < total && !changes.busy;
   return (
     <DropdownMenu>
@@ -346,51 +440,54 @@ function IndexRow({
   entry,
   active,
   collapsed,
+  menuOpen,
   onSelect,
   busy,
   onSetStaged,
-  discardArmed,
   onDiscard,
 }: {
   entry: IndexEntry;
   active: boolean;
   collapsed: boolean;
+  // Its context menu is up: the row stays lit while it is.
+  menuOpen: boolean;
   onSelect: (key: string) => void;
   busy: boolean;
   onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
-  discardArmed: boolean;
-  onDiscard: () => void;
+  onDiscard: ((key: string) => void) | undefined;
 }) {
-  // No home to tildify against: these are repo-relative paths, so the
-  // helper only does the middle-segment abbreviation ("r/c/diff/x.tsx")
-  // against the measured width of this row's path column.
-  const [pathRef, display] = useShortPath(entry.path, null);
-  const cut = display.lastIndexOf("/");
+  // The file's name leads and its folder trails, dimmed: in a narrow
+  // list the name is what tells two rows apart, so the folder is what
+  // gives way when the row runs out of room.
+  const name = getBrowseLeafSegment(entry.path);
+  const folder = entry.path.slice(0, -name.length - 1);
   const { mark, label, className } = entry.mark;
   const { row } = entry;
   const select = () => onSelect(entry.key);
-  const tip = entry.prevPath
-    ? `${label}: ${entry.prevPath} → ${entry.path}`
-    : `${label}: ${entry.path}`;
+  // The context menu is a gesture nothing on the row shows, so the
+  // row's hint names it.
+  const tip = `${label}: ${entry.prevPath ? `${entry.prevPath} → ` : ""}${entry.path}${row ? "\nRight-click to discard or copy the path" : ""}`;
 
   return (
-    // A row is three controls side by side (tick, jump, discard), so it
-    // can't be one button. The wrapper takes the click so the whole pill
-    // lands on the file, the tick and the discard stop it from bubbling,
-    // and the inner button is what the keyboard reaches. The wrapper
-    // also carries the active marker the scroll-into-view above looks
-    // for, and it is what doubutsu paints its hover treatment on (see
-    // diff-index-jump there).
+    // A row is two controls side by side (tick, jump), so it can't be
+    // one button. The wrapper takes the click so the whole pill lands on
+    // the file, the tick stops it from bubbling, and the inner button is
+    // what the keyboard reaches. The wrapper also carries the active
+    // marker the scroll-into-view above looks for, the key the list's
+    // context menu finds it by, and it is what doubutsu paints its hover
+    // treatment on (see diff-index-jump there).
     <div
       role="presentation"
       data-slot="diff-index-row"
+      data-row-key={entry.key}
       onClick={select}
       data-active={active || undefined}
       className={cn(
-        "group/row flex w-full items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
+        "flex w-full items-center gap-1.5 rounded-md px-2 transition-colors",
         active
           ? "bg-accent text-accent-foreground"
           : "hover:bg-accent/50 hover:text-foreground",
+        menuOpen && !active && "bg-accent/50",
         collapsed && "opacity-55",
       )}
     >
@@ -435,55 +532,110 @@ function IndexRow({
         >
           <span
             aria-hidden
-            className={cn("w-2 shrink-0 font-mono text-3xs", className)}
+            className={cn(
+              "w-2.5 shrink-0 text-center font-mono text-2xs font-semibold",
+              className,
+            )}
           >
             {mark}
           </span>
-          <span
-            ref={pathRef}
-            className="min-w-0 flex-1 truncate font-mono text-2xs"
-          >
-            {cut >= 0 && (
-              <span className="text-muted-foreground">
-                {display.slice(0, cut + 1)}
+          {/* One line tall, clipped, and allowed to wrap: a folder with
+              less than 3em left beside the name wraps onto a second
+              line nobody sees, rather than showing as a sliver. */}
+          <span className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 overflow-hidden text-xs">
+            <span className="max-w-full shrink-0 truncate">{name}</span>
+            {/* Cut from its start, so what stays is the folder nearest
+                the file ("…/sidebar"), the part that tells two files of
+                one name apart. rtl moves the ellipsis to the left, and
+                the bdi keeps the path itself reading left to right. */}
+            {folder && (
+              <span
+                dir="rtl"
+                className="min-w-[3em] flex-1 basis-0 truncate text-left text-2xs text-muted-foreground"
+              >
+                <bdi>{folder}</bdi>
               </span>
             )}
-            {display.slice(cut + 1)}
           </span>
-          {entry.stats && !discardArmed && (
+          {entry.stats && (
             <DiffStats
               additions={entry.stats.additions}
               deletions={entry.stats.deletions}
+              compact
             />
           )}
         </button>
       </SimpleTooltip>
-      {row && (
+      {/* A phone's list is the full width, and a long press is a gesture
+          nobody finds, so there the discard is also a button. */}
+      {row && onDiscard && (
         <Button
           variant="ghost-destructive"
-          size="xs"
+          size="icon-xs"
           onClick={(e) => {
             e.stopPropagation();
-            onDiscard();
+            onDiscard(entry.key);
           }}
           disabled={busy}
-          aria-pressed={discardArmed}
-          aria-label={
-            discardArmed
-              ? `Confirm discarding ${entry.path}`
-              : `Discard changes to ${entry.path}`
-          }
-          className={cn(
-            "h-5 shrink-0 transition-opacity",
-            discardArmed
-              ? "px-1.5 text-2xs opacity-100"
-              : "w-5 px-0 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 phone:opacity-100",
-          )}
+          aria-label={`Discard changes to ${entry.path}`}
+          className="hidden phone:inline-flex"
         >
           <Undo2 aria-hidden />
-          {discardArmed && "Discard?"}
         </Button>
       )}
     </div>
+  );
+}
+
+// The list's context menu, for the row it opened on: tick or untick it
+// and discard it on the changes page, copy its path anywhere.
+function FileMenu({
+  entry,
+  changes,
+  onDiscard,
+}: {
+  entry: IndexEntry;
+  changes: DiffChangesControls | undefined;
+  onDiscard: () => void;
+}) {
+  const { row } = entry;
+  const staged = row?.staged;
+  return (
+    <ContextMenuContent className="min-w-48">
+      {row && changes && (
+        <DropdownMenuItem
+          disabled={changes.busy}
+          onClick={() =>
+            changes.onSetStaged(changedFilePaths(row), staged !== "all")
+          }
+        >
+          {staged === "all" ? <Minus /> : <Check />}
+          {staged === "all"
+            ? "Leave out of the commit"
+            : staged === "partial"
+              ? "Include the whole file"
+              : "Include in the commit"}
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem
+        onClick={() => void navigator.clipboard.writeText(entry.path)}
+      >
+        <Copy />
+        Copy path
+      </DropdownMenuItem>
+      {row && changes && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={changes.busy}
+            onClick={onDiscard}
+          >
+            <Undo2 />
+            Discard changes…
+          </DropdownMenuItem>
+        </>
+      )}
+    </ContextMenuContent>
   );
 }

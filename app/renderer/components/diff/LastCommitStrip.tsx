@@ -26,42 +26,47 @@ export function LastCommitStrip({
   onAmend: () => void;
   onUndo: () => void;
 }) {
+  // Two rows, so the subject gets the sidebar's whole width: beside the
+  // buttons it would be cut to a word or two. The buttons are bare
+  // icons for the same reason, their tooltips saying what they do.
   return (
-    <div
-      data-slot="last-commit-strip"
-      className="flex items-center gap-2 border-t border-border px-3 py-2"
-    >
-      <div className="min-w-0 flex-1">
-        <p className="text-2xs text-muted-foreground">
+    <div data-slot="last-commit-strip" className="flex flex-col px-3 py-1">
+      <div className="flex min-h-6 items-center gap-1">
+        <p className="min-w-0 flex-1 truncate text-2xs text-muted-foreground">
           Last commit, <RelativeDate date={commit.date} />
         </p>
-        <SimpleTooltip whenTruncated tip={commit.subject}>
-          <p className="truncate text-xs">{commit.subject}</p>
-        </SimpleTooltip>
-      </div>
-      {!amending && (
-        <>
-          <SimpleTooltip tip="Fold the next commit into this one, editing its message">
-            <Button variant="ghost" size="xs" onClick={onAmend} disabled={busy}>
-              <PencilLine />
-              Amend
-            </Button>
-          </SimpleTooltip>
-          {canUndo && (
-            <SimpleTooltip tip="Undo this commit; its changes come back staged">
+        {!amending && (
+          <>
+            <SimpleTooltip tip="Amend: fold the next commit into this one, editing its message">
               <Button
                 variant="ghost"
-                size="xs"
-                onClick={onUndo}
+                size="icon-xs"
+                onClick={onAmend}
                 disabled={busy}
+                aria-label="Amend the last commit"
               >
-                <Undo2 />
-                Undo
+                <PencilLine />
               </Button>
             </SimpleTooltip>
-          )}
-        </>
-      )}
+            {canUndo && (
+              <SimpleTooltip tip="Undo this commit; its changes come back staged">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={onUndo}
+                  disabled={busy}
+                  aria-label="Undo the last commit"
+                >
+                  <Undo2 />
+                </Button>
+              </SimpleTooltip>
+            )}
+          </>
+        )}
+      </div>
+      <SimpleTooltip whenTruncated tip={commit.subject}>
+        <p className="truncate text-xs select-text">{commit.subject}</p>
+      </SimpleTooltip>
     </div>
   );
 }

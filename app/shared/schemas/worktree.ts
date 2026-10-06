@@ -163,7 +163,7 @@ export type WorktreeIdentity = z.infer<typeof WorktreeIdentitySchema>;
 // the backend just reports facts so it stays dumb. "publish" covers
 // both "no upstream / remote exists" and "no upstream / no remote",
 // distinguished by `canPublish` so the UI can disable the button.
-type RemoteSyncState =
+export type RemoteSyncState =
   | { kind: "detached" }
   | { kind: "synced" }
   | { kind: "publish"; canPublish: boolean }
@@ -201,6 +201,16 @@ export function deriveRemoteSyncState(
     };
   }
   return { kind: "diverged", ahead: worktree.ahead, behind: worktree.behind };
+}
+
+// Whether a sync move may run while the tree has uncommitted changes.
+// Pushing and publishing only send commits. Every way of taking the
+// remote's commits writes the tree (a pull can collide with the edits,
+// a rebase refuses to start beside them), so those wait for a clean one.
+export function syncRunsOnDirtyTree(
+  state: RemoteSyncState,
+): state is Extract<RemoteSyncState, { kind: "ahead" | "publish" }> {
+  return state.kind === "ahead" || state.kind === "publish";
 }
 
 // Whether the newest `count` commits exist on no remote, so they can

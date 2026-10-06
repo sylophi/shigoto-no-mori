@@ -56,6 +56,13 @@ const RENAMED: ChangeMark = {
   label: "Renamed",
   className: "text-sky-500",
 };
+// An unmerged path, git's own "U". Amber like the composer's line
+// about it, since nothing commits until it is resolved.
+const CONFLICTED: ChangeMark = {
+  mark: "U",
+  label: "Conflicted",
+  className: "text-amber-500",
+};
 const MODIFIED: ChangeMark = {
   mark: "M",
   label: "Modified",
@@ -121,7 +128,7 @@ export function changeEntries(files: readonly ChangedFile[]): IndexEntry[] {
       key: changeKey(row),
       path: row.path,
       prevPath: row.prevPath ?? null,
-      mark: STATUS_MARKS[row.kind],
+      mark: row.conflicted ? CONFLICTED : STATUS_MARKS[row.kind],
       stats: row.counts ?? null,
       row,
     }),

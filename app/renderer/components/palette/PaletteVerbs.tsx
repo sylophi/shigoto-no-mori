@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import {
   deriveRemoteSyncState,
+  syncRunsOnDirtyTree,
   type LauncherEntry,
   type Worktree,
 } from "@shared/schemas";
@@ -279,11 +280,13 @@ function LauncherVerbs({
 // The one git move the header's sync pill would offer, when it is a
 // safe one: push, pull, publish, or the pull-then-push of a branch
 // both sides moved. A split history's overwrites stay on the page,
-// behind their confirm, and a tree with uncommitted changes gets none,
-// as the header shows its changes there instead.
+// behind their confirm, and a tree with uncommitted changes keeps only
+// the moves that can run beside them (syncRunsOnDirtyTree).
 function safeSyncMove(worktree: Worktree) {
-  if (worktree.changedCount > 0) return undefined;
   const state = deriveRemoteSyncState(worktree);
+  if (worktree.changedCount > 0 && !syncRunsOnDirtyTree(state)) {
+    return undefined;
+  }
   switch (state.kind) {
     case "ahead":
       return {

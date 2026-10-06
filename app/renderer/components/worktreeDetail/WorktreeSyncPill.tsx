@@ -9,20 +9,35 @@ import {
   usePushWorktree,
 } from "@/hooks/worktrees/useWorktreeSync";
 import { pluralize } from "@/lib/pluralize";
-import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
+import {
+  deriveRemoteSyncState,
+  syncRunsOnDirtyTree,
+  type Worktree,
+} from "@shared/schemas";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { SyncActionButton } from "./SyncActionButton";
+import { cn } from "@/lib/utils";
+import { SYNC_PILL_SHAPE, SyncActionButton } from "./SyncActionButton";
 
 interface WorktreeSyncPillProps {
   worktree: Worktree;
+  // Short labels ("Push 2") for a narrow strip, the full sentence in
+  // the tooltip instead.
+  compact?: boolean;
 }
 
 // Renders the remote-sync action(s) for a worktree. Returns null in the
 // states where there's nothing to show (synced, detached) so the header
-// stays quiet. The caller takes care of the dirty-state pill, which is
-// mutually exclusive with this one.
-export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
+// stays quiet. With uncommitted changes in the tree, the moves that
+// can't run beside them (syncRunsOnDirtyTree) give way to a hint that
+// says what is waiting.
+export function WorktreeSyncPill({
+  worktree,
+  compact = false,
+}: WorktreeSyncPillProps) {
   const state = deriveRemoteSyncState(worktree);
+  // "2 commits", or just "2" where the tooltip carries the sentence.
+  const count = (n: number) => (compact ? `${n}` : pluralize(n, "commit"));
+  const compactTip = (tip: string) => (compact ? tip : undefined);
   const input = { projectId: worktree.projectId, worktreeId: worktree.id };
 
   const push = usePushWorktree();
@@ -40,15 +55,41 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
 
   if (state.kind === "detached" || state.kind === "synced") return null;
 
+  if (worktree.changedCount > 0 && !syncRunsOnDirtyTree(state)) {
+    const hint =
+      state.kind === "behind"
+        ? {
+            label: `${count(state.behind)} to pull`,
+            tip: `${pluralize(state.behind, "commit")} to pull. Commit or discard your changes to pull.`,
+          }
+        : state.kind === "pullAndPush"
+          ? {
+              label: `↑${state.ahead}↓${state.behind} to sync`,
+              tip: `${pluralize(state.ahead, "commit")} to push and ${pluralize(state.behind, "commit")} to pull. Commit or discard your changes to sync.`,
+            }
+          : {
+              label: `Diverged ↑${state.ahead}↓${state.behind}`,
+              tip: `History has split: ${state.ahead} local, ${state.behind} remote. Commit or discard your changes to pick which side wins.`,
+            };
+    return (
+      <SimpleTooltip tip={hint.tip}>
+        <span className={cn(SYNC_PILL_SHAPE, "text-muted-foreground")}>
+          {hint.label}
+          <ArrowDown aria-hidden className="size-3.5" />
+        </span>
+      </SimpleTooltip>
+    );
+  }
+
   if (state.kind === "publish") {
     return (
       <SyncActionButton
         tone="violet"
         icon={CloudUpload}
-        label="Publish branch"
+        label={compact ? "Publish" : "Publish branch"}
         tip={
           state.canPublish
-            ? undefined
+            ? compactTip("Publish this branch to the remote")
             : "No git remote is configured for this project"
         }
         disabled={!state.canPublish}
@@ -63,7 +104,10 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SyncActionButton
         tone="emerald"
         icon={ArrowUp}
-        label={`Push ${pluralize(state.ahead, "commit")}`}
+        label={`Push ${count(state.ahead)}`}
+        tip={compactTip(
+          `Push ${pluralize(state.ahead, "commit")} to the remote`,
+        )}
         pending={push.isPending}
         onClick={() => push.mutate(input)}
       />
@@ -75,7 +119,10 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SyncActionButton
         tone="sky"
         icon={ArrowDown}
-        label={`Pull ${pluralize(state.behind, "commit")}`}
+        label={`Pull ${count(state.behind)}`}
+        tip={compactTip(
+          `Pull ${pluralize(state.behind, "commit")} from the remote`,
+        )}
         pending={pull.isPending}
         onClick={() => pull.mutate(input)}
       />
@@ -86,7 +133,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
     return (
       <SyncActionButton
         tone="indigo"
-        label={`Pull and push ↑${state.ahead}↓${state.behind}`}
+        label={`${compact ? "Sync" : "Pull and push"} ↑${state.ahead}↓${state.behind}`}
         tip="git pull --rebase, falling back to a merge on conflict, then git push"
         pending={pullAndPush.isPending}
         onClick={() => pullAndPush.mutate(input)}
@@ -107,7 +154,9 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SimpleTooltip
         tip={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split. Pick which side wins.`}
       >
-        <span className="px-1.5 text-rose-500">Overwrite:</span>
+        <span className="px-1.5 text-rose-500">
+          {compact ? "Overwrite" : "Overwrite:"}
+        </span>
       </SimpleTooltip>
       <SyncActionButton
         tone="rose"
