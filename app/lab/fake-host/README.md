@@ -72,13 +72,13 @@ Give the desktop shell the app window's own size, 920x720
 spreads a screen out wider than the app ever opens, so a shot without
 a viewport shows a page people don't see. Then check the edges the
 window allows (`../../DESIGN.md`, "Window size"): its minimum,
-720x480, and a full display, 1440x900 or larger. A `viewport` step
+720x600, and a full display, 1440x900 or larger. A `viewport` step
 switches size without a reload:
 
 ```json
 { "session": "ui", "steps": [
   { "shot": "default" },
-  { "viewport": "720x480" }, { "shot": "smallest" },
+  { "viewport": "720x600" }, { "shot": "smallest" },
   { "viewport": "1728x1080" }, { "shot": "large" }
 ] }
 ```

@@ -139,7 +139,7 @@ Rules that keep that working:
 The desktop window opens at 920×720 (`main/index.ts`), and most
 people leave it near that, so that is the size a screen is designed
 and judged at. With the sidebar at its 240px default, a page gets
-about 680px of width. The window can also shrink to 720×480 or fill
+about 680px of width. The window can also shrink to 720×600 or fill
 a large display, and the desktop never switches to the phone layout,
 so every page has to hold at both ends.
 
@@ -147,7 +147,7 @@ so every page has to hold at both ends.
   of actions people reach for) fits there without wrapping or cutting
   off what matters. A layout that only reads well wider is wrong at
   the size people actually see.
-- **Smaller still works.** At 720×480 a page can be about 480px wide
+- **Smaller still works.** At 720×600 a page can be about 480px wide
   (less with the sidebar dragged wider) and short. Text in a row
   truncates instead of pushing its controls out, with the full text
   in a `whenTruncated` tooltip. Rows of controls wrap rather than
@@ -157,7 +157,7 @@ so every page has to hold at both ends.
   tables more width at the same density, never bigger type or
   controls. Running text keeps a reading measure (a description stops
   at `max-w-3xl`) instead of running the window's full width.
-- When changing UI, look at it at 920×720 first, then at 720×480 and
+- When changing UI, look at it at 920×720 first, then at 720×600 and
   at a full display. The fake host (`lab/fake-host/README.md`) poses
   any of them.
 
