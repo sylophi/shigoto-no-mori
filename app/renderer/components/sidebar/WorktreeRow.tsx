@@ -29,10 +29,10 @@ interface WorktreeRowProps {
 // A stack's rows draw as a rail through its layers, top layer first,
 // the way a git graph draws a branch: every layer a stop on one line,
 // in its PR's color, so the stack reads as one chain rather than a
-// parent with children. The rows step in by the row gutter
-// (ROW_LAYOUT's px-2), which puts the rail on the left edge of every
-// other row's box, the stops clear of the window's edge. The rail is
-// filled strips rather than a border: doubutsu clears every border
+// parent with children. Each stop's left edge sits on the column
+// every other row's title starts at, and the stack's rows step in past
+// the rail, so their hover and selection never reach over it. The rail
+// is filled strips rather than a border: doubutsu clears every border
 // color, and a rail that vanished with the theme would leave the stops
 // floating. Its text size is the title's, so `lh` is the title line's
 // height, and each stop sits on that line.
@@ -67,10 +67,11 @@ function StackRailMark({
       {/* Centered on the line by margins of half its size, not a
           translate: Chrome can snap a translated layer to a whole pixel
           when it paints, which set the stop half a pixel off the line.
-          A stop's round edge is smoothed wherever it sits. */}
+          An odd size, so the stop and the 1px line share a center on
+          whole pixels. */}
       <span
         className={cn(
-          "absolute left-[0.5px] -mt-(--stop-r) -ml-(--stop-r) size-1.75 rounded-full bg-current [--stop-r:--spacing(0.875)]",
+          "absolute left-[0.5px] -mt-(--stop-r) -ml-(--stop-r) size-1.25 rounded-full bg-current [--stop-r:--spacing(0.625)]",
           RAIL_STOP_Y,
           TONE_TEXT[tone],
         )}
@@ -111,7 +112,7 @@ export function WorktreeRow({
       state={state}
       shelf={shelf}
       hideStackPosition={stackRail?.whole}
-      className={cn(stackRail && "ml-2 w-[calc(100%-var(--spacing)*2)]")}
+      className={cn(stackRail && "ml-4.5 w-[calc(100%-var(--spacing)*4.5)]")}
     >
       <StackRailMark rail={stackRail} pr={pr} />
     </WorktreeEntry>
