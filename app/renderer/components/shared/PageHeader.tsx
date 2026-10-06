@@ -19,10 +19,10 @@ export const PAGE_HEADER_PADDING =
   "px-6 pt-7 pb-4 phone:px-4 phone:pt-4 phone:pb-3";
 
 // A header led by a device tab bar, this one's or one of its own
-// shape: its top padding (on the desktop, 10px centers the 26px pills
-// on the traffic lights' y=23, main/index.ts; a browser has no
-// lights), and the bar's wrapper, which cancels the inset so the bar
-// (which carries it as padding) scrolls out under the header's edge.
+// shape: its top padding, and the bar's wrapper, which cancels the
+// inset so the bar (which carries it as padding) scrolls out under the
+// header's edge. On the desktop, 10px centers the 26px pills on the
+// traffic lights' y=23 (main/index.ts). A browser has no lights.
 export const PAGE_HEADER_TABS_PADDING = hasLocalHost
   ? "pt-2.5"
   : "pt-4 phone:pt-3";
