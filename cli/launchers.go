@@ -13,7 +13,6 @@ import (
 	"cmp"
 	_ "embed"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -31,8 +30,6 @@ type launcherApp struct {
 	bundleNames []string
 	cli         string
 }
-
-const t3codeID = "t3code"
 
 // The tool catalog is embedded from embed/launcher-catalog.json.
 // bundleNames resolve against appRoots; "__finder__" is the
@@ -269,9 +266,6 @@ func launchDetectedApp(a launcherApp, worktreePath string) error {
 	if deepLink := deepLinkFor(a.id, worktreePath); deepLink != "" {
 		return exec.Command("open", deepLink).Run()
 	}
-	if a.id == t3codeID {
-		return launchT3Code(a, worktreePath)
-	}
 	// CLI shim first so in-app window preferences are honored; bundle
 	// fallback via Launch Services.
 	if a.cli != "" {
@@ -291,35 +285,4 @@ func launchDetectedApp(a launcherApp, worktreePath string) error {
 		}
 	}
 	return errf("No installed app found for %s.", a.label)
-}
-
-// T3 Code can't be handed a folder: its desktop app parses no argv
-// path, and its t3code:// scheme serves only its own renderer and OAuth
-// callbacks. The one way in is the bundled `t3 project add`, which
-// registers the worktree in its project list (live when the app runs,
-// straight into its store when it doesn't). So run that CLI from inside
-// the installed bundle through the app's own Electron in node mode (no
-// npm-installed t3, no version skew), treat "already exists" as
-// success, then activate the app. Its window opens a draft for the
-// project with the newest activity, which a just-added one is.
-func launchT3Code(a launcherApp, worktreePath string) error {
-	bundle := ""
-	for _, name := range a.bundleNames {
-		if bundle = bundlePathFor(name); bundle != "" {
-			break
-		}
-	}
-	if bundle == "" {
-		return errf("No installed app found for %s.", a.label)
-	}
-	appName := strings.TrimSuffix(filepath.Base(bundle), ".app")
-	binary := filepath.Join(bundle, "Contents", "MacOS", appName)
-	script := filepath.Join(bundle, "Contents", "Resources", "app.asar", "apps", "server", "dist", "bin.mjs")
-	cmd := exec.Command(binary, script, "project", "add", worktreePath)
-	cmd.Env = append(envWithoutCdFile(), "ELECTRON_RUN_AS_NODE=1")
-	if combined, err := cmd.CombinedOutput(); err != nil &&
-		!strings.Contains(string(combined), "ProjectAlreadyExistsError") {
-		return fmt.Errorf("t3 project add: %w", err)
-	}
-	return exec.Command("open", "-a", bundle).Run()
 }
