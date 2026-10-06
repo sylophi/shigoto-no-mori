@@ -47,7 +47,7 @@ Open one with weblab's `new`, the worktree's port as the address.
 stand for them:
 
 ```json
-{ "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/account" }
+{ "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/account", "viewport": "920x720" }
 ```
 
 ```json
@@ -56,13 +56,30 @@ stand for them:
 
 Then pose and capture with `run` (`../weblab.md` lists what it can
 do). The app scrolls inside its own panes, so a `fullPage` shot shows
-no more of a long page: make the viewport taller instead.
+no more of a long page: make the viewport taller instead, keeping its
+width (920x1100).
 
 ```json
 { "session": "ui", "steps": [
   { "goto": "/?theme=light&checks=failing&to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum" },
   { "expect": "happy-hummingbird" },
   { "shot": "checks-failing" }
+] }
+```
+
+Give the desktop shell the app window's own size, 920x720
+(`main/index.ts`), as above. weblab's default is 1440x900, which
+spreads a screen out wider than the app ever opens, so a shot without
+a viewport shows a page people don't see. Then check the edges the
+window allows (`../../DESIGN.md`, "Window size"): its minimum,
+640x420, and a full display, 1440x900 or larger. A `viewport` step
+switches size without a reload:
+
+```json
+{ "session": "ui", "steps": [
+  { "shot": "default" },
+  { "viewport": "640x420" }, { "shot": "smallest" },
+  { "viewport": "1728x1080" }, { "shot": "large" }
 ] }
 ```
 
