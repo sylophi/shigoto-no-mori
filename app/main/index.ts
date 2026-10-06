@@ -247,8 +247,11 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 920,
     height: 720,
-    minWidth: 640,
-    minHeight: 420,
+    // Narrow enough to tile into half of a 1440pt-wide display, wide
+    // enough that a page keeps about 480px beside the sidebar
+    // (DESIGN.md, Window size).
+    minWidth: 720,
+    minHeight: 480,
     // Inset traffic lights over a transparent shell so the
     // NSVisualEffectView material set via `vibrancy` shows through where
     // the renderer paints no background (the sidebar column). Inset as
