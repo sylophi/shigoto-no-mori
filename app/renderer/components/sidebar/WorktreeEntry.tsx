@@ -130,6 +130,9 @@ export function WorktreeEntry({
           pills ride at its end, leaving the title the full width, and
           wrap under the name rather than squeeze it below its floor. */}
       <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-3xs text-muted-foreground/70">
+        {/* No min-w-0: the group's least width is the name's floor
+            (EntryName) plus its marks, and that is what the line
+            wraps the pills at. */}
         <span className="flex flex-1 items-center gap-1">
           <EntryName worktree={worktree} />
           {/* Pulled in vertically: the device tile stands taller than
@@ -145,7 +148,7 @@ export function WorktreeEntry({
             {inline && device && <RowDeviceBadge badge={device} />}
           </span>
         </span>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1.5">
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 empty:hidden">
           {mark && <ActivityIcon kind={mark} />}
           {!(inline && isDeleting) && (
             <>
@@ -182,7 +185,9 @@ function EntryName({ worktree }: { worktree: Worktree }) {
         />
       )}
       {/* w-8 is the floor the line wraps its pills at. */}
-      <span className="w-8 max-w-fit grow truncate">{worktree.name}</span>
+      <SimpleTooltip whenTruncated tip={worktree.name}>
+        <span className="w-8 max-w-fit grow truncate">{worktree.name}</span>
+      </SimpleTooltip>
       <BirthdayBadge resident={resident} />
     </>
   );
