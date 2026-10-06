@@ -32,6 +32,7 @@ import {
 import { useForestSources } from "./forestSources";
 import { DeviceFilterBar } from "./DeviceFilterBar";
 import { buildInboxRows } from "./inbox/buildInboxRows";
+import { useShareInboxOrder } from "./inbox/inboxOrder";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { useLeaveInboxForPage } from "./inbox/useLeaveInboxForPage";
 import { setOpenProject, useOpenProject } from "./openProject";
@@ -272,12 +273,15 @@ function Forest({
       });
   const { rows, pinned, level } = view;
   // A pinned view has its tab bar, and a worktree's page replaces it.
+  const pageInbox = inbox && pinnedView === undefined;
   useLeaveInboxForPage({
-    inbox: inbox && pinnedView === undefined,
+    inbox: pageInbox,
     settled: viewSettled,
     shownDevice: activeFilter?.deviceId ?? null,
     leftOut: view.leftOut,
   });
+  // For leaving a page (a delete) to land in this list.
+  useShareInboxOrder(rows, pageInbox);
   const inProject = typeof level === "string";
   // Failed listings, local or remote, surface here whether or not the
   // filter shows their rows -- without it a peer's project would

@@ -3,8 +3,13 @@
 // device the current host scope names. The paths themselves come from
 // lib/routePaths so the route tree and these links cannot drift apart.
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { inboxTopRow } from "@/components/sidebar/inbox/inboxOrder";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { routeDeviceId, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import {
+  routeDeviceId,
+  rowDeviceId,
+  WORKTREE_ROUTE_PATHS,
+} from "@/lib/routePaths";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 
 // The worktree pages' params, read non-strictly because the pages
@@ -133,12 +138,25 @@ export function useWorktreeNav() {
       goOn(routeDeviceId(on), page, params);
     },
 
-    // Where "leave this worktree's pages" lands. The root for every
-    // device: a peer's worktree has no place of its own to fall back
-    // to, and the root is the merged tree's home either way (the web
-    // shell's root dispatches to /account).
-    toFallback(replace = false) {
-      void navigate({ to: "/", replace });
+    // Where "leave this worktree's pages" lands. While the sidebar
+    // shows the inbox, its newest work, whichever device that is, other
+    // than the worktrees `gone` from the scoped device (the page's own,
+    // and whatever left with it). Otherwise the root for every device:
+    // a peer's worktree has no place of its own to fall back to, and
+    // the root is the merged tree's home either way (the web shell's
+    // root dispatches to /account).
+    toFallback(gone: readonly string[], replace = false) {
+      const next = inboxTopRow(rowDeviceId(deviceId), gone);
+      if (next) {
+        goOn(
+          routeDeviceId(next.device?.deviceId),
+          "detail",
+          { projectId: next.project.id, worktreeId: next.worktree.id },
+          replace,
+        );
+      } else {
+        void navigate({ to: "/", replace });
+      }
     },
   };
 }
