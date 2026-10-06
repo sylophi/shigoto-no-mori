@@ -56,8 +56,7 @@ stand for them:
 
 Then pose and capture with `run` (`../weblab.md` lists what it can
 do). The app scrolls inside its own panes, so a `fullPage` shot shows
-no more of a long page: make the viewport taller instead, keeping its
-width (920x1100).
+no more of a long page: make the viewport taller instead.
 
 ```json
 { "session": "ui", "steps": [
@@ -67,13 +66,9 @@ width (920x1100).
 ] }
 ```
 
-Give the desktop shell the app window's own size, 920x720
-(`main/index.ts`), as above. weblab's default is 1440x900, which
-spreads a screen out wider than the app ever opens, so a shot without
-a viewport shows a page people don't see. Then check the range a page
-has to hold up across (`../../DESIGN.md`, "Window size"): down to
-about 800x550, and up to a full display, 1440x900 or larger. A
-`viewport` step switches size without a reload:
+The desktop shell takes the app window's default size, 920x720, not
+weblab's 1440x900. Check about 800x550 and a full display too
+(`../../DESIGN.md`, "Window size"):
 
 ```json
 { "session": "ui", "steps": [
