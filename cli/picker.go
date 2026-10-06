@@ -111,10 +111,11 @@ func pickWorktree(proj project, opts pickOpts) (located, error) {
 			syncCell(errPalette, w),
 			changesCell(errPalette, w),
 			flagsCell(errPalette, w),
+			titleCell(w),
 		}
 		names[i] = w.Name
 	}
-	header, rows := buildMenu([]string{"NAME", "BRANCH", "SYNC", "CHANGES", ""}, cells)
+	header, rows := buildMenu([]string{"NAME", "BRANCH", "SYNC", "CHANGES", "", "TITLE"}, cells)
 
 	idx, err := menuSelect("Select a worktree in "+proj.Name+":", header, rows, names, 0)
 	if err != nil {

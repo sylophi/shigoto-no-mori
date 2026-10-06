@@ -1,6 +1,6 @@
 // One-shot migration from the flat-file project config layout
 // (<dataDir>/projects/<id>.json) to the per-project directory layout
-// (projects/<id>/project.json + projects/<id>/worktrees/<wId>.json).
+// (projects/<id>/project.json).
 //
 // Runs on every app start. Idempotent: a project that's already been
 // migrated has no <id>.json file to act on, so the scan walks past it.
@@ -32,7 +32,6 @@ function projectsDir(): string {
 async function migrateOne(projectId: string): Promise<void> {
   const oldFile = join(projectsDir(), `${projectId}${LEGACY_EXT}`);
   const newProjectFile = join(projectsDir(), projectId, "project.json");
-  const newWorktreesDir = join(projectsDir(), projectId, "worktrees");
 
   let raw: string;
   try {
@@ -53,32 +52,10 @@ async function migrateOne(projectId: string): Promise<void> {
     return;
   }
 
-  const { notes, ...projectFields } = parsed;
+  // The notes this layout kept per worktree are gone from the app, so
+  // they are left behind with the file.
+  const { notes: _notes, ...projectFields } = parsed;
   await atomicWriteJson(newProjectFile, withSchemaVersion(projectFields));
-
-  if (notes && typeof notes === "object") {
-    // `allSettled` so one bad note doesn't strand the rest of the project's
-    // state mid-migration. Failures get logged and the legacy file is kept
-    // (we skip the unlink below), so a future launch can retry.
-    const writes: Promise<void>[] = [];
-    for (const [worktreeId, text] of Object.entries(notes)) {
-      if (typeof text !== "string" || text.length === 0) continue;
-      writes.push(
-        atomicWriteJson(
-          join(newWorktreesDir, `${worktreeId}.json`),
-          withSchemaVersion({ notes: text }),
-        ),
-      );
-    }
-    const results = await Promise.allSettled(writes);
-    const failures = results.filter((r) => r.status === "rejected");
-    if (failures.length > 0) {
-      for (const f of failures) {
-        console.warn(`[shigomori] migration note write failed:`, f.reason);
-      }
-      return;
-    }
-  }
 
   await unlinkIfExists(oldFile);
 }

@@ -225,6 +225,9 @@ const localWorktrees: Record<string, Worktree[]> = {
       projectId: "p_sm",
       name: "happy-hummingbird",
       branch: "v2-exp/remote-ui-flows",
+      // Its PR (#148) has taken this over, title and description both.
+      title: "Remote UI flows",
+      description: "The local description the PR replaced.",
       path: "/Users/rin/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
       createdAt: now - 4 * DAY,
       ahead: 2,
@@ -291,6 +294,8 @@ const localWorktrees: Record<string, Worktree[]> = {
       projectId: "p_sm",
       name: "odd-owl",
       branch: "exp/tray-menu",
+      title: "A tray menu for the forest",
+      description: "Sketching what a menu bar icon could open.",
       path: "/Users/rin/.sm/worktrees/shigoto-no-mori/odd-owl",
       createdAt: now - 12 * DAY,
       shelved: true,
@@ -320,6 +325,22 @@ const localWorktrees: Record<string, Worktree[]> = {
       branch: "lease-ttl",
       path: "/Users/rin/.sm/worktrees/port-pool/merry-marmot",
       behind: 1,
+      // A title and description from `sm describe`, and no PR yet: the
+      // sidebar names it by the title, and the page's description is
+      // long enough to fold.
+      title: "Expire port leases after a TTL",
+      description: [
+        "Leases a crashed process held stay taken until someone runs `port-pool release` by hand. This gives every lease a time to live and sweeps the expired ones.",
+        "",
+        "- A lease records when it was taken and how long it lives (default 24h, `--ttl` to change it).",
+        "- `provision` renews the lease it finds for the same worktree instead of minting another.",
+        "- The sweep runs before every provision, so nothing needs a daemon.",
+        "",
+        "## Still to do",
+        "",
+        "- Decide whether a lease held by a live pid outlives its TTL.",
+        "- Document the sweep in the README.",
+      ].join("\n"),
       recentCommits: [
         commit("0451ab9", "Expire leases with a TTL sweep", 2 * DAY, 40, 11),
       ],

@@ -128,6 +128,11 @@ export const WorktreeSchema = z.object({
   // Meant for the primary checkout and other branches only ever read
   // here.
   autoPull: z.boolean(),
+  // What `sm describe` set (WorktreeDescriptionSchema): the work's
+  // name and summary, until a pull request's take their place
+  // (renderer/lib/worktreeTitle.ts). Absent when unset.
+  title: z.string().optional(),
+  description: z.string().optional(),
 });
 export type Worktree = z.infer<typeof WorktreeSchema>;
 
@@ -233,7 +238,7 @@ export function isManagedWorktree(
   return !worktree.isPrimary && !worktree.isExternal;
 }
 
-// Whether the worktree has a data file (notes, custom ports) of its own.
+// Whether the worktree has a data file (title, custom ports) of its own.
 // The primary checkout lives at the project path, which never sits under
 // a managed prefix, so it's flagged external. It's still ours to
 // annotate. Only genuinely external worktrees (manual checkouts

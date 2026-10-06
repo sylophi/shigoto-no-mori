@@ -535,8 +535,14 @@ app.on("ready", async () => {
   // broadcast. (The focus signal won't do: React Query's focusManager
   // only refetches on a blur->focus transition, and the window may be
   // focused the whole time an agent works in a terminal beside it.)
-  startStateWatcher(() => {
+  startStateWatcher((worktreeDataProjects) => {
     broadcastAll(gitContract, "externalChange", undefined);
+    // A title `sm describe` wrote: announced like a git change, so a
+    // mirror of the worktree carries it now (host/mirror/gitFollow.ts),
+    // not on its next sweep.
+    for (const projectId of worktreeDataProjects) {
+      announceProjectChanged(projectId);
+    }
     // The registry may have changed (a project added or removed by
     // the CLI): re-read the project list, then follow it with the
     // git-directory watches.

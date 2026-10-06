@@ -1,25 +1,30 @@
 // Per-project on-disk state lives under <dataDir>/projects/<projectId>/:
 //   project.json                 project-wide settings (scripts, layout, ...)
-//   worktrees/<worktreeId>.json  per-worktree state (notes, ...)
+//   worktrees/<worktreeId>.json  per-worktree state (title, ports, ...)
 // Shigomori manages these itself; we don't touch the user's repo. Per-worktree
 // files exist for managed worktrees and the primary checkout (the main repo
 // root); other external worktrees deliberately have no persisted state.
 // project.json is the CLI's: read through `sm projects config read` and
 // written through `sm projects config write` (host/ipc/cliDelegate.ts).
-// The per-worktree files (notes) are the app's own.
+// The per-worktree files are shared: the app writes the custom ports,
+// and `sm describe` the title and description (cli/cmd_describe.go),
+// each under the file's lock and keeping the other's keys.
 import { join } from "node:path";
 import {
   type ShigomoriConfig,
   type ShigomoriWorktreeData,
   ShigomoriWorktreeDataSchema,
+  type WorktreeDescription,
 } from "@shared/schemas";
 import { shigomoriReadViaCli } from "@host/ipc/cliDelegate";
 import {
-  atomicWriteJson,
+  atomicWriteJsonSync,
   readJsonOrNull,
+  readJsonOrNullSync,
   unlinkIfExists,
   withSchemaVersion,
 } from "../util/jsonFile";
+import { withFileLock } from "../util/lockFile";
 import { dataDir } from "../util/paths";
 import { ttlMapCache } from "../util/ttlCache";
 
@@ -83,19 +88,55 @@ export async function readWorktreeData(
   return worktreeCache.get(worktreeKey(projectId, worktreeId));
 }
 
+// One read-modify-write of the data file under the lock the CLI
+// takes, read fresh rather than through the cache: `sm describe` can
+// have written it a moment ago.
+function updateWorktreeData(
+  projectId: string,
+  worktreeId: string,
+  update: (current: ShigomoriWorktreeData) => ShigomoriWorktreeData,
+): void {
+  const path = worktreeDataPath(projectId, worktreeId);
+  withFileLock(`${path}.lock`, () => {
+    const current = readJsonOrNullSync(path, ShigomoriWorktreeDataSchema) ?? {};
+    // The zod parse strips anything it doesn't model, the marker
+    // included, so it is stamped back on at the write rather than
+    // carried through the schema.
+    atomicWriteJsonSync(
+      path,
+      withSchemaVersion(ShigomoriWorktreeDataSchema.parse(update(current))),
+    );
+  });
+  worktreeCache.invalidate(worktreeKey(projectId, worktreeId));
+}
+
+// The renderer's write: the custom ports, the rest of the document
+// kept.
 export async function writeWorktreeData(
   projectId: string,
   worktreeId: string,
-  data: ShigomoriWorktreeData,
+  { ports }: Pick<ShigomoriWorktreeData, "ports">,
 ): Promise<void> {
-  // The zod parse strips anything it doesn't model, the marker
-  // included, so it is stamped back on at the write rather than
-  // carried through the schema.
-  await atomicWriteJson(
-    worktreeDataPath(projectId, worktreeId),
-    withSchemaVersion(ShigomoriWorktreeDataSchema.parse(data)),
+  updateWorktreeData(projectId, worktreeId, (current) => ({
+    ...current,
+    ports,
+  }));
+}
+
+// The title and description as a whole, the rest of the document kept:
+// what a worktree carries to its copy on another device. Only a pair
+// described after the one on disk lands, judged under the lock, so a
+// carry that read a stale side can't undo a newer describe.
+export async function writeWorktreeDescription(
+  projectId: string,
+  worktreeId: string,
+  { title, description, describedAt }: WorktreeDescription,
+): Promise<void> {
+  updateWorktreeData(projectId, worktreeId, (current) =>
+    (describedAt ?? 0) > (current.describedAt ?? 0)
+      ? { ...current, title, description, describedAt }
+      : current,
   );
-  worktreeCache.invalidate(worktreeKey(projectId, worktreeId));
 }
 
 export async function deleteWorktreeData(

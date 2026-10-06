@@ -793,7 +793,7 @@ export async function setAutoPullViaCli(
 }
 
 // `git worktree move` plus the re-key of everything stored under the
-// worktree's path-derived id (marks, notes, a pending dirty capture).
+// worktree's path-derived id (marks, its data file, a pending dirty capture).
 // The caller keeps the app-side guards around it (the tombstone, script
 // reaping, mirror stop).
 export async function moveViaCli(

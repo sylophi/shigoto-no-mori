@@ -27,6 +27,7 @@ import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
+import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
@@ -46,6 +47,7 @@ import { localDeviceId } from "@/lib/queryKeys";
 import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { cn } from "@/lib/utils";
+import { mappedPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
 import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
 import type { LiveCard as LiveCardModel } from "./liveModel";
 
@@ -184,8 +186,8 @@ function useCardWorktree(card: LiveCardModel): CardWorktree {
   };
 }
 
-// The worktree a card is for: its project's icon, its branch and its
-// folder and project under it, the whole of it the way to its page.
+// The worktree a card is for: its project's icon, its title (else its
+// branch) and its folder and project under it, the whole of it the way to its page.
 // One the device no longer lists (removed while something still ran
 // there) says so.
 function WorktreeHeader({
@@ -207,6 +209,15 @@ function WorktreeHeader({
     select: (projects) => projects.find((entry) => entry.id === projectId),
     meta: { silentError: true },
   }).data;
+  // What the work is called, as its sidebar row names it: its PR's
+  // title, the one `sm describe` gave it, else the branch.
+  const prs = useQuery({
+    ...projectPullRequestsQueryOptions(projectId, scope),
+    meta: { silentError: true },
+  }).data;
+  const workTitle = worktree
+    ? worktreeTitle(worktree, mappedPullRequest(prs, worktree))
+    : null;
   // Held as placeholders until the lists are in, rather than read as
   // a worktree that is gone.
   const pending = state.kind === "loading";
@@ -228,13 +239,20 @@ function WorktreeHeader({
       )}
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         {worktree ? (
-          <SimpleTooltip whenTruncated tip={worktree.branch}>
-            <span className="truncate font-mono text-sm font-medium">
-              <BranchLabel
-                branch={worktree.branch}
-                detached={worktree.detached}
-                suffixClassName="text-xs"
-              />
+          <SimpleTooltip whenTruncated tip={workTitle ?? worktree.branch}>
+            <span
+              className={cn(
+                "truncate text-sm font-medium",
+                workTitle === null && "font-mono",
+              )}
+            >
+              {workTitle ?? (
+                <BranchLabel
+                  branch={worktree.branch}
+                  detached={worktree.detached}
+                  suffixClassName="text-xs"
+                />
+              )}
             </span>
           </SimpleTooltip>
         ) : pending ? (
@@ -264,7 +282,7 @@ function WorktreeHeader({
         <Link
           to={WORKTREE_ROUTE_PATHS.detail}
           params={{ deviceId, projectId, worktreeId }}
-          aria-label={`Open ${worktree.branch}`}
+          aria-label={`Open ${workTitle ?? worktree.branch}`}
           className="group/open -m-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-md p-1.5 transition-colors outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring"
         >
           {title}

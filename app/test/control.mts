@@ -81,6 +81,7 @@ import {
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
+import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
@@ -103,6 +104,7 @@ import {
 import { setCliRunnerImpl, type CliResult } from "@host/ipc/cliDelegate";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
+import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import {
   setWorktreeRemovalBroadcaster,
@@ -424,6 +426,7 @@ async function main() {
         [worktreesContract, worktreesHandlers],
         [projectsContract, projectsHandlers],
         [mirrorContract, mirrorOnA],
+        [shigomoriContract, shigomoriHandlers],
         // The peer's home, which a send's default clone place reads.
         // The data-dir facts beside it need a booted data dir, which
         // the sandbox's seeded one is not, and are not read here.
@@ -448,6 +451,7 @@ async function main() {
       }),
       worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
       mirrorApiFor: () => buildClient(mirrorContract, peerA.transport),
+      shigomoriApiFor: () => buildClient(shigomoriContract, peerA.transport),
       thisDeviceId: () => "B",
     });
     // The account as the hub would list it: this device, the peer, a

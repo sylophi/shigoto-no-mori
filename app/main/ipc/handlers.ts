@@ -116,6 +116,7 @@ import {
 } from "@host/ipc/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import { followDescription } from "@host/lib/sync/worktreeDescription";
 import { createPortForwardEngine } from "../core/portForward/engine";
 import { createMirrorDaemon } from "../core/mirror/daemon";
 import { createMirrorGateway } from "../core/mirror/gateway";
@@ -355,6 +356,7 @@ const gitFollower = createGitFollower({
   sessions: liveMirrorSessions,
   peerSyncApiFor: peerSyncClient,
   peerMirrorApiFor: peerMirrorClient,
+  followDescription,
   // The states both sides last agreed on, beside the engine's own
   // data so a restart resumes the follow rule rather than falling
   // back to ancestry.
@@ -532,6 +534,7 @@ export function registerIpcHandlers(): void {
     syncApiFor: peerSyncClient,
     worktreesApiFor: peerClient(worktreesContract),
     mirrorApiFor: peerMirrorClient,
+    shigomoriApiFor: peerClient(shigomoriContract),
     thisDeviceId: getDeviceId,
   });
   // The mirrors this device asked peers for (host/mirror/invites.ts),

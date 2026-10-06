@@ -21,7 +21,7 @@ export function CommitDiff() {
     <DiffView
       diff={diff}
       onBack={goBack}
-      backLabel={worktree.branch}
+      worktree={worktree}
       title={commit?.subject ?? "Commit"}
       subtitle={
         <>

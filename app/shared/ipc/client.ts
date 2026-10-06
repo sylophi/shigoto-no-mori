@@ -419,7 +419,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       write: (
         projectId: string,
         worktreeId: string,
-        data: ShigomoriWorktreeData,
+        data: Pick<ShigomoriWorktreeData, "ports">,
       ) => shigomoriClient.worktreeDataWrite({ projectId, worktreeId, data }),
     },
 

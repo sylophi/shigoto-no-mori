@@ -63,11 +63,20 @@ function registryBesidesSnapshots(): string | null {
   }
 }
 
+// A worktree's data file under the projects dir (projects/<pid>/
+// worktrees/<id>.json), naming its project: `sm describe` writes the
+// title there.
+const WORKTREE_DATA_FILE = /^([^/\\]+)[/\\]worktrees[/\\][0-9a-f]{12}\.json$/;
+
 // `poke` should nudge the renderer to refetch (the caller broadcasts
 // the same signal window focus does, which drives React Query's
-// refetch-on-focus).
-export function startStateWatcher(poke: () => void): void {
+// refetch-on-focus). It is also handed the projects whose worktree
+// data files changed, which a mirror carries to its other side.
+export function startStateWatcher(
+  poke: (worktreeDataProjects: ReadonlySet<string>) => void,
+): void {
   let timer: NodeJS.Timeout | null = null;
+  let worktreeDataProjects = new Set<string>();
   // Kept current on every registry.json event, suppressed or not, so
   // each one is judged against the write before it.
   let registrySeen = registryBesidesSnapshots();
@@ -77,17 +86,22 @@ export function startStateWatcher(poke: () => void): void {
     registrySeen = now;
     return same;
   };
-  const changed = () => {
+  const changed = (worktreeDataProject?: string) => {
     // Self-echo check at event time, not timer time: a self-write
     // arriving after an external event must not cancel the pending
     // refresh that external event deserves.
     if (cliChildCount() > 0 || selfWroteWithin(SELF_ECHO_MS)) return;
+    if (worktreeDataProject !== undefined) {
+      worktreeDataProjects.add(worktreeDataProject);
+    }
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
       invalidateGlobalConfigCache();
       invalidateAllProjectConfigCaches();
-      poke();
+      const projects = worktreeDataProjects;
+      worktreeDataProjects = new Set();
+      poke(projects);
     }, DEBOUNCE_MS);
   };
   const watchDir = (dir: string, recursive: boolean, maxDepth?: number) => {
@@ -141,7 +155,11 @@ export function startStateWatcher(poke: () => void): void {
           ) {
             return;
           }
-          changed();
+          changed(
+            dir === projectsDir && file !== null
+              ? WORKTREE_DATA_FILE.exec(file)?.[1]
+              : undefined,
+          );
         },
       );
       watcher.on("error", () => {
@@ -163,7 +181,8 @@ export function startStateWatcher(poke: () => void): void {
   // outside the data dir and aren't covered. The managed-root default
   // is.)
   watchDir(dataDir(), false);
-  watchDir(join(dataDir(), "projects"), true);
+  const projectsDir = join(dataDir(), "projects");
+  watchDir(projectsDir, true);
   const worktreesDir = join(dataDir(), "worktrees");
   try {
     mkdirSync(worktreesDir, { recursive: true });

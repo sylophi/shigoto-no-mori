@@ -21,6 +21,7 @@ import {
   worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
 import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadge";
+import { worktreeTitle } from "@/lib/worktreeTitle";
 
 // One worktree the palette can land on, wherever it lives.
 export interface PaletteEntry {
@@ -158,7 +159,7 @@ export function initialPaletteKey(
   return first?.key ?? "";
 }
 
-// Best field wins: a query can name the branch, the folder, the
+// Best field wins: a query can name the branch, its title, the folder, the
 // project (alone or ahead of the branch, "sm feat"), the device, so
 // "thinkpad" narrows to that machine's work, or the pull request, by
 // "#148" or its title. Merged and shelved worktrees score at half, so
@@ -175,6 +176,7 @@ export function rankPaletteEntries(
 
 const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
   worktree.branch,
+  worktreeTitle(worktree, pr) ?? "",
   worktree.name,
   `${project.name} ${worktree.branch}`,
   device?.label ?? "",

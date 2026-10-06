@@ -33,9 +33,10 @@ checks, and [`hub/README.md`](hub/README.md) the device hub.
 ## Agent skills
 
 `skills/` holds instruction snippets that teach coding agents the `sm`
-workflow (create a worktree, switch to one, land and clean up, tear one
-down, register a project, send a worktree to another of your machines or
-bring one over, link to a worktree in the app). Install with [Vercel skills](https://github.com/vercel-labs/skills)
+workflow (create a worktree, switch to one, name its branch and give it
+a title and description, land and clean up, tear one down, register a
+project, send a worktree to another of your machines or bring one over,
+link to a worktree in the app). Install with [Vercel skills](https://github.com/vercel-labs/skills)
 (skills.sh); the installer lets you pick which ones to include:
 
 ```sh

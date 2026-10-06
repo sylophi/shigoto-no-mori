@@ -9,8 +9,9 @@ sm worktrees create
 
 Use --base <ref-name> to create a branch from a non-primary ref.
 
-**Rename the branch once the purpose of the worktree has been defined.** It starts out named
-after the worktree's random animal name; use `/sm-rename-branch`.
+**Name the work once the purpose of the worktree has been defined**: rename the branch,
+which starts out named after the worktree's random animal name, and give the worktree a
+title and description, then keep them current as the work moves. Use `/sm-name-worktree`.
 
 ## Notes:
 

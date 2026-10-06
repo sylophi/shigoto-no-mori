@@ -163,13 +163,24 @@ export const CarryOverStatSchema = z.object({
 });
 export type CarryOverStat = z.infer<typeof CarryOverStatSchema>;
 
+// A worktree's title and description: what its work is, set by `sm
+// describe` (cli/cmd_describe.go) until a pull request's title and
+// body take over. describedAt (epoch ms) is when they were last set,
+// so a mirror's two sides keep the newer pair. Only `sm describe` and
+// the moves between devices write them (writeWorktreeDescription).
+export const WorktreeDescriptionSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  describedAt: z.number().int().nonnegative().optional(),
+});
+export type WorktreeDescription = z.infer<typeof WorktreeDescriptionSchema>;
+
 // Per-worktree persistent data. Only kept for shigomori-managed worktrees;
 // external worktrees deliberately have no on-disk state.
-export const ShigomoriWorktreeDataSchema = z.object({
-  notes: z.string().optional(),
+export const ShigomoriWorktreeDataSchema = WorktreeDescriptionSchema.extend({
   // Ports the user added beside port-pool's (see shared/schemas/ports.ts).
-  // The write is a full replace, so every renderer writer goes through
-  // useWorktreeDataWrite, which merges a patch over the stored document.
+  // The renderer's one key here, written through useWorktreeDataWrite;
+  // the host merges it into the stored document under its lock.
   ports: z.array(CustomPortSchema).max(MAX_CUSTOM_PORTS).optional(),
 });
 export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
@@ -487,9 +498,16 @@ export const ReadWorktreeDataPayloadSchema = ProjectScopedPayloadSchema.extend({
   worktreeId: WorktreeIdSchema,
 });
 
+// The renderer's write: the custom ports, the one part of the file it
+// owns (the title and description have writers of their own).
 export const WriteWorktreeDataPayloadSchema =
   ReadWorktreeDataPayloadSchema.extend({
-    data: ShigomoriWorktreeDataSchema,
+    data: ShigomoriWorktreeDataSchema.pick({ ports: true }),
+  });
+
+export const WriteWorktreeDescriptionPayloadSchema =
+  ReadWorktreeDataPayloadSchema.extend({
+    description: WorktreeDescriptionSchema,
   });
 
 // Input to the window module's non-persisting theme preview.

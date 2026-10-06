@@ -75,6 +75,7 @@ const COPY_CALLS = [
   "mirror:release",
   "sync:openSource",
   "worktrees:delete",
+  "worktreeData:describe",
 ];
 const PROJECT_CALLS = ["sync:receiveBundle", "sync:hasCommits"];
 
@@ -111,6 +112,7 @@ async function main() {
       "sync:hasCommits": "project",
       "sync:openSource": "copy",
       "sync:receiveBundle": "project",
+      "worktreeData:describe": "copy",
       "worktrees:delete": "copy",
     });
   });

@@ -113,8 +113,9 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 			emit(rows)
 			return 0, nil
 		}
-		out(renderTable([]string{"NAME", "BRANCH", "SYNC", "CHANGES", ""}, [][]string{{
+		out(renderTable([]string{"NAME", "BRANCH", "SYNC", "CHANGES", "", "TITLE"}, [][]string{{
 			row.Name, row.Branch, syncCell(outPalette, row), changesCell(outPalette, row), flagsCell(outPalette, row),
+			titleCell(row),
 		}}))
 		return 0, nil
 	}
@@ -221,9 +222,9 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 	if ctx.current != nil {
 		currentID = ctx.current.worktree.ID
 	}
-	header := []string{"", "NAME", "BRANCH", "SYNC", "CHANGES", ""}
+	header := []string{"", "NAME", "BRANCH", "SYNC", "CHANGES", "", "TITLE"}
 	if multi {
-		header = []string{"", "PROJECT", "NAME", "BRANCH", "SYNC", "CHANGES", ""}
+		header = []string{"", "PROJECT", "NAME", "BRANCH", "SYNC", "CHANGES", "", "TITLE"}
 	}
 	var rows [][]string
 	for _, r := range collected {
@@ -235,6 +236,7 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 			row := []string{
 				marker, w.Name, w.Branch,
 				syncCell(outPalette, w), changesCell(outPalette, w), flagsCell(outPalette, w),
+				titleCell(w),
 			}
 			if multi {
 				projectCell := r.proj.Name

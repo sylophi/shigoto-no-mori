@@ -1,6 +1,7 @@
 import { Play, Square } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
+import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
@@ -25,6 +26,7 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
 
   const command = resolveCommand(slot, config, pkg);
   const label = slotLabel(slot);
+  const backLabel = useWorktreeName(worktree);
   const canClear = !busy && state.hasOutput;
   // Lifecycle scripts the CLI ran for the app stream here too, but
   // their process lives in the CLI, not behind one of our PTYs.
@@ -33,7 +35,7 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
   return (
     <div className="flex h-full flex-col">
       <header className="flex flex-col gap-3 border-b border-border px-6 pt-7 pb-4">
-        <BackButton onClick={onBack} label={worktree.branch} />
+        <BackButton onClick={onBack} label={backLabel} />
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1 space-y-1">
             <h1 className="truncate font-mono text-xl font-medium tracking-tight">

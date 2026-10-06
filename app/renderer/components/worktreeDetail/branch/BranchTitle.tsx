@@ -9,14 +9,48 @@ import { sanitizeBranchName } from "@shared/git/branches";
 import type { Worktree } from "@shared/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
 import { IconButton } from "@/components/ui/icon-button";
+import { cn } from "@/lib/utils";
 
-export function BranchTitle({ worktree }: { worktree: Worktree }) {
+// The branch's two sizes: the page's title, or a line under the work's
+// own title. The rename field is as tall as the line it stands in for,
+// and pulled back by its padding and border so the name stays put:
+// starting a rename doesn't move the page.
+const SIZES = {
+  title: {
+    heading: "h1",
+    text: "text-2xl font-medium tracking-tight",
+    suffix: "text-base tracking-normal",
+    input: "-ml-2.25 h-8 px-2 text-2xl font-medium tracking-tight",
+    button: "p-1.5",
+    icon: "size-4",
+  },
+  subtitle: {
+    heading: "p",
+    text: "text-sm text-muted-foreground",
+    suffix: undefined,
+    input: "-ml-1.75 h-5.5 px-1.5 text-sm",
+    button: "p-1",
+    icon: "size-3.5",
+  },
+} as const;
+
+// The branch, renamed in place. The page's title, unless the work has
+// a title of its own (useWorktreeTitle), and then a line under it.
+export function BranchTitle({
+  worktree,
+  subtitle = false,
+}: {
+  worktree: Worktree;
+  subtitle?: boolean;
+}) {
   // null while idle; the in-flight edit value otherwise. Folds "editing"
   // and "draft" together so we don't seed state from a prop.
   const [draft, setDraft] = useState<string | null>(null);
   const editing = draft !== null;
   const rename = useRenameBranch();
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const size = SIZES[subtitle ? "subtitle" : "title"];
+  const Heading = size.heading;
 
   const begin = () => {
     // Detached HEAD has no branch to rename, so guard against any caller
@@ -63,23 +97,23 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
               cancel();
             }
           }}
-          className="min-w-0 flex-1 px-2 py-1 font-mono text-2xl font-medium tracking-tight"
+          className={cn("min-w-0 flex-1 py-0 font-mono", size.input)}
         />
         <IconButton
           onClick={commit}
           disabled={rename.isPending}
           aria-label="Confirm rename"
-          className="p-1.5"
+          className={size.button}
         >
-          <Check className="size-4" />
+          <Check className={size.icon} />
         </IconButton>
         <IconButton
           onClick={cancel}
           disabled={rename.isPending}
           aria-label="Cancel rename"
-          className="p-1.5"
+          className={size.button}
         >
-          <X className="size-4" />
+          <X className={size.icon} />
         </IconButton>
         {rename.error && (
           <InlineError
@@ -94,16 +128,16 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
 
   return (
     <div className="group/copy flex min-w-0 items-center gap-1.5">
-      <h1
+      <Heading
         ref={titleRef}
-        className="min-w-0 truncate font-mono text-2xl font-medium tracking-tight"
+        className={cn("min-w-0 truncate font-mono", size.text)}
       >
         <BranchLabel
           branch={worktree.branch}
           detached={worktree.detached}
-          suffixClassName="text-base tracking-normal"
+          suffixClassName={size.suffix}
         />
-      </h1>
+      </Heading>
       {!worktree.detached && (
         <button
           type="button"

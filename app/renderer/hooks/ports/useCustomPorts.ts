@@ -1,5 +1,5 @@
 // Add, edit and remove a worktree's user-added ports. They live in the
-// worktree data file beside the notes, and useWorktreeDataWrite merges each
+// worktree data file beside its title, and useWorktreeDataWrite merges each
 // edit over the stored document. Uniqueness by number is this layer's
 // rule (PortForm refuses a duplicate up front so the user hears why,
 // but the list is what must never hold two rows on one number).

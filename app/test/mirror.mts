@@ -1327,6 +1327,9 @@ async function main() {
             released.push(worktreeId);
           },
         }),
+        shigomoriApiFor: () => {
+          throw new Error("not in this check");
+        },
         thisDeviceId: () => "B",
       });
 

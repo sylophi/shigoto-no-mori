@@ -7,6 +7,7 @@ import {
   StoredShigomoriConfigSchema,
   WriteShigomoriPayloadSchema,
   WriteWorktreeDataPayloadSchema,
+  WriteWorktreeDescriptionPayloadSchema,
 } from "@shared/schemas";
 
 export const shigomoriContract = defineContract("host", {
@@ -32,5 +33,14 @@ export const shigomoriContract = defineContract("host", {
     WriteWorktreeDataPayloadSchema,
     z.void(),
     { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  // A worktree's title and description, carried onto its copy here by
+  // the device that sent it or runs its mirror
+  // (host/lib/sync/worktreeDescription.ts).
+  worktreeDataDescribe: invoke(
+    "worktreeData:describe",
+    WriteWorktreeDescriptionPayloadSchema,
+    z.void(),
+    { remote: true, gated: true, invitable: "copy" },
   ),
 });

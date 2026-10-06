@@ -116,7 +116,7 @@ export const worktreesHandlers: Handlers<
   },
 
   // `sm worktrees move` moves the checkout and carries what is keyed by
-  // its path-derived id (marks, notes, a pending dirty capture) to the
+  // its path-derived id (marks, its data file, a pending dirty capture) to the
   // new id. What lives in this process stays here: the tombstone that
   // refuses a concurrent delete or move, the reaping of the scripts
   // running there, and the stop of mirrors rooted in it.

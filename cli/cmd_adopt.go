@@ -10,7 +10,11 @@ package main
 // setup, port-pool). Externals never got teardown/port-release on the
 // way out, because the app never provisioned them.
 
-import "strings"
+import (
+	"errors"
+	"os"
+	"strings"
+)
 
 func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
@@ -78,8 +82,15 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	if err := moveRegistryMark(autoPullKey, id.ID, worktree.ID); err != nil {
 		vlog("[state] move auto-pull: %v", err)
 	}
-	// The row was built before the mark moved onto its id.
+	// So does its data file (the title and description `describe` set,
+	// which a move outside the layout carries along).
+	if err := os.Rename(worktreeDataPath(proj.ID, id.ID), worktreeDataPath(proj.ID, worktree.ID)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		vlog("[state] move worktree data: %v", err)
+	}
+	// The row was built before the mark and the file moved onto its id.
 	worktree.AutoPull = readRegistryMarkSet(autoPullKey)[worktree.ID]
+	desc := readWorktreeDescription(proj.ID, worktree.ID)
+	worktree.Title, worktree.Description = desc.Title, desc.Description
 	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
 		"adopted "+id.Path+" as "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")
 	code := finishCreateLifecycle(proj, worktree, "", false)

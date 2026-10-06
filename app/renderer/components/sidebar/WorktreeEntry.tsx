@@ -1,6 +1,8 @@
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { worktreeTitle } from "@/lib/worktreeTitle";
 import { BranchLabel } from "@/components/ui/branch-label";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { VillagerFace } from "@/components/shared/VillagerSays";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
@@ -39,11 +41,12 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
 }
 
 // A worktree in the sidebar, the tree's row (WorktreeRow) and the
-// inbox's (InboxRow) alike: the branch with every status the row has
-// room for, over the worktree's own name.
+// inbox's (InboxRow) alike: what the work is called (its PR's title,
+// or the one `sm describe` gave it, else the branch) with every status
+// the row has room for, over the worktree's own name.
 //
 //   [icon] project                                  14m ago   (inbox)
-//   feat/the-branch                            ±3  ↑2  #142
+//   Name the work before the PR                ±3  ↑2  #142
 //   [kind] dirname [device]
 //
 // Without a context line, a running script's mark leads the pills, and
@@ -69,6 +72,7 @@ export function WorktreeEntry({
   // The tree's row, which has no context line to carry these marks.
   const inline = context === undefined;
   const mark = inline ? activityMark(state) : null;
+  const title = worktreeTitle(worktree, pr);
   return (
     <button
       type="button"
@@ -103,16 +107,24 @@ export function WorktreeEntry({
       {context}
       <span className="flex min-w-0 items-center gap-1.5">
         {/* Weight is reserved for "this is the one you have open".
-            Bolding every branch spends the page's only emphasis on the
+            Bolding every title spends the page's only emphasis on the
             thing every row has. */}
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate font-mono text-xs",
-            isSelected && "font-medium",
-          )}
-        >
-          <BranchLabel branch={worktree.branch} detached={worktree.detached} />
-        </span>
+        <SimpleTooltip whenTruncated tip={title ?? worktree.branch}>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-xs",
+              title === null && "font-mono",
+              isSelected && "font-medium",
+            )}
+          >
+            {title ?? (
+              <BranchLabel
+                branch={worktree.branch}
+                detached={worktree.detached}
+              />
+            )}
+          </span>
+        </SimpleTooltip>
         {mark && <ActivityIcon kind={mark} />}
         {!(inline && isDeleting) && (
           <>
