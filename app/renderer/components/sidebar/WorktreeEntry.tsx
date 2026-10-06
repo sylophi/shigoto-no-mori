@@ -44,12 +44,12 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
 
 // A worktree in the sidebar, the tree's row (WorktreeRow) and the
 // inbox's (InboxRow) alike: what the work is called (its PR's title,
-// or the one `sm describe` gave it, else the branch) with every status
-// the row has room for, over the worktree's own name.
+// or the one `sm describe` gave it, else the branch) across the row's
+// full width, over the worktree's own name and every status pill.
 //
 //   [icon] project                                  14m ago   (inbox)
-//   Name the work before the PR                ±3  ↑2  #142
-//   [kind] dirname [device]
+//   Name the work before the PR, at full width
+//   [kind] dirname [device]                    ±3  ↑2  #142
 //
 // Without a context line, a running script's mark leads the pills, and
 // a delete in flight takes their place: the worktree is going away, so
@@ -108,55 +108,62 @@ export function WorktreeEntry({
     >
       {children}
       {context}
-      <span className="flex min-w-0 items-center gap-1.5">
-        {/* Weight is reserved for "this is the one you have open".
-            Bolding every title spends the page's only emphasis on the
-            thing every row has. */}
-        <SimpleTooltip whenTruncated tip={title ?? worktree.branch}>
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate text-xs",
-              title === null && "font-mono",
-              isSelected && "font-medium",
-            )}
-          >
-            {title ?? (
-              <BranchLabel
-                branch={worktree.branch}
-                detached={worktree.detached}
-              />
-            )}
-          </span>
-        </SimpleTooltip>
-        {mark && <ActivityIcon kind={mark} />}
-        {!(inline && isDeleting) && (
-          <>
-            <ChangedFilesPill worktree={worktree} />
-            <RemoteSyncPill worktree={worktree} />
-            <PullRequestPill
-              pr={pr}
-              stack={stack}
-              hidePosition={hideStackPosition}
+      {/* Weight is reserved for "this is the one you have open".
+          Bolding every title spends the page's only emphasis on the
+          thing every row has. */}
+      <SimpleTooltip whenTruncated tip={title ?? worktree.branch}>
+        <span
+          className={cn(
+            "truncate text-xs",
+            title === null && "font-mono",
+            isSelected && "font-medium",
+          )}
+        >
+          {title ?? (
+            <BranchLabel
+              branch={worktree.branch}
+              detached={worktree.detached}
             />
-          </>
-        )}
-      </span>
+          )}
+        </span>
+      </SimpleTooltip>
       {/* The worktree's own name gets a line to itself rather than
           sharing one with the project: they're both "where is this",
-          and side by side the longer one just eats the other. */}
-      <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground/70">
-        <EntryName worktree={worktree} />
-        {/* Pulled in vertically: the device tile stands taller than the
-            line, and letting it set the line's height would make a
-            peer's row taller than a local one. The forward mark rides
-            here on either row: it is about this worktree, not where it
-            lives, which the inbox's context line says. */}
-        <span className="-my-1 inline-flex shrink-0 items-center gap-1">
-          {device && (
-            <ForwardMark deviceId={device.deviceId} worktree={worktree} />
+          and side by side the longer one just eats the other. The
+          pills ride at its end, leaving the title the full width, and
+          wrap under the name rather than squeeze it below its floor. */}
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-3xs text-muted-foreground/70">
+        {/* No min-w-0: the group's least width is the name's floor
+            (EntryName) plus its marks, and that is what the line
+            wraps the pills at. */}
+        <span className="flex flex-1 items-center gap-1">
+          <EntryName worktree={worktree} />
+          {/* Pulled in vertically: the device tile stands taller than
+              the line, and letting it set the line's height would make
+              a peer's row taller than a local one. The forward mark
+              rides here on either row: it is about this worktree, not
+              where it lives, which the inbox's context line says. */}
+          <span className="-my-1 inline-flex shrink-0 items-center gap-1">
+            {device && (
+              <ForwardMark deviceId={device.deviceId} worktree={worktree} />
+            )}
+            {inline && mirror && <MirrorBadge mirror={mirror} />}
+            {inline && device && <RowDeviceBadge badge={device} />}
+          </span>
+        </span>
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 empty:hidden">
+          {mark && <ActivityIcon kind={mark} />}
+          {!(inline && isDeleting) && (
+            <>
+              <ChangedFilesPill worktree={worktree} />
+              <RemoteSyncPill worktree={worktree} />
+              <PullRequestPill
+                pr={pr}
+                stack={stack}
+                hidePosition={hideStackPosition}
+              />
+            </>
           )}
-          {inline && mirror && <MirrorBadge mirror={mirror} />}
-          {inline && device && <RowDeviceBadge badge={device} />}
         </span>
       </span>
     </button>
@@ -184,7 +191,10 @@ function EntryName({ worktree }: { worktree: Worktree }) {
           className="-my-0.5 size-3.5"
         />
       )}
-      <span className="min-w-0 truncate">{worktree.name}</span>
+      {/* w-8 is the floor the line wraps its pills at. */}
+      <SimpleTooltip whenTruncated tip={worktree.name}>
+        <span className="w-8 max-w-fit grow truncate">{worktree.name}</span>
+      </SimpleTooltip>
       <BirthdayBadge resident={resident} />
     </>
   );
