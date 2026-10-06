@@ -63,7 +63,7 @@ const OUTPUT_FLUSH_BYTES = 64 * 1024;
 // Output kept per run for a window that attaches after it started (the
 // console opened from another window or device, or after a reload), so
 // it opens on the run's recent output rather than a blank terminal.
-// The renderer keeps up to a megabyte of what it has seen; this only
+// The renderer keeps up to a megabyte of what it has seen. This only
 // has to set the scene.
 const BACKLOG_BYTES = 256 * 1024;
 
