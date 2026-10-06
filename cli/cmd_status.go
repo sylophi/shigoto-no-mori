@@ -245,16 +245,19 @@ type scriptsJSON struct {
 // so a --json consumer can read a status card and a list row with the
 // same code.
 type statusJSON struct {
-	ID          string        `json:"id"`
-	ProjectID   string        `json:"projectId"`
-	ProjectName string        `json:"projectName"`
-	Name        string        `json:"name"`
-	Branch      string        `json:"branch"`
-	Path        string        `json:"path"`
-	IsPrimary   bool          `json:"isPrimary"`
-	IsExternal  bool          `json:"isExternal"`
-	Detached    bool          `json:"detached"`
-	Shelved     bool          `json:"shelved"`
+	ID          string `json:"id"`
+	ProjectID   string `json:"projectId"`
+	ProjectName string `json:"projectName"`
+	Name        string `json:"name"`
+	Branch      string `json:"branch"`
+	Path        string `json:"path"`
+	IsPrimary   bool   `json:"isPrimary"`
+	IsExternal  bool   `json:"isExternal"`
+	Detached    bool   `json:"detached"`
+	Shelved     bool   `json:"shelved"`
+	// What `describe` set, as on a `list` row.
+	Title       string        `json:"title,omitempty"`
+	Description string        `json:"description,omitempty"`
 	Git         gitStatusJSON `json:"git"`
 	Ports       []portInfo    `json:"ports"`
 	PortPool    portPoolJSON  `json:"portPool"`
@@ -418,6 +421,11 @@ func statusCard(status statusJSON, accent string) string {
 		}
 	}
 
+	// The worktree's own title until a PR takes it over, whose row
+	// below carries the PR's.
+	if status.PR == nil {
+		row("title", truncateRunes(status.Title, valueWidth))
+	}
 	row("path", dimOut(truncateRunes(collapseHome(status.Path), valueWidth)))
 	branch := cyanOut(truncateRunes(status.Branch, valueWidth-statusSyncSuffix))
 	if status.Git.Upstream != nil {
@@ -509,6 +517,8 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 		pool     portPoolJSON
 		wg       sync.WaitGroup
 	)
+	var desc worktreeDescription
+	wg.Go(func() { desc = readWorktreeDescription(id.ProjectID, id.ID) })
 	wg.Go(func() { counts = readChangeCounts(id.Path) })
 	wg.Go(func() { stashes = stashCount(id.Path) })
 	wg.Go(func() { commits = listCommits(id.Path, 0, 1) })
@@ -546,6 +556,8 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 		IsExternal:  id.IsExternal,
 		Detached:    id.Detached,
 		Shelved:     shelvedFlag(id, build),
+		Title:       desc.Title,
+		Description: desc.Description,
 		Git: gitStatusJSON{
 			Base:         base,
 			changeCounts: counts,

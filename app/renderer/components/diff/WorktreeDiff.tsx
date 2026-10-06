@@ -173,7 +173,7 @@ function ChangesView({
     <DiffView
       diff={diff}
       onBack={onBack}
-      backLabel={worktree.branch}
+      worktree={worktree}
       title="Uncommitted changes"
       subtitle={
         <>

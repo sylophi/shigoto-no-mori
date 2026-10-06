@@ -22,12 +22,12 @@ export function BackButton({
       // this too (useEscapeGoesBack).
       data-back-button
       className={cn(
-        "-ml-2 w-fit gap-1 text-xs font-normal text-muted-foreground hover:text-foreground",
+        "-ml-2 w-fit max-w-full gap-1 text-xs font-normal text-muted-foreground hover:text-foreground",
         className,
       )}
     >
       <ArrowLeft aria-hidden className="size-3" />
-      <span>{label}</span>
+      <span className="min-w-0 truncate">{label}</span>
     </Button>
   );
 }

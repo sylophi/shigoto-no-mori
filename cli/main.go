@@ -61,12 +61,12 @@ var generalItems = []helpItem{
 var worktreeItems = []helpItem{
 	{"worktrees list [--all] [--remote] [--from <device>] [--identities]", "List worktrees",
 		"All projects when outside one, or with --all; -p <project> picks one from anywhere. --remote lists this project's worktrees on your other devices (--from narrows it to one), and needs the app open. " +
-			"--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, createdAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull. --worktree-id <id> narrows the array to that one row. " +
+			"--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, createdAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull, and title and description when `describe` set them. --worktree-id <id> narrows the array to that one row. " +
 			"Listing full rows also takes a shelved worktree back off the shelf once it has been worked in since it was shelved (an edit, a new or deleted file, a commit; not the changes it was shelved with, nor an auto-pull fast-forward), and the row says shelved: false. " +
 			"--identities is the cheap form, with no git probe per worktree (only git's worktree list and the registry marks): the same scope, order and array, each entry {id, projectId, name, branch, path, isPrimary, isExternal, detached, shelved, autoPull}. Add --primary-ref for each project's primaryRef and primaryBranch (left out when it has none), resolved once per project. " +
 			"A bare repository has no primary checkout; otherwise the checkout at the project path is the primary (the first one listed when none sits there)."},
 	{"worktrees status [<name>] [--no-pr]", "Status card for one worktree",
-		"Where the worktree you're standing in stands: branch, base, changes, stash, last commit, ports, scripts, PR. The PR lookup needs gh and degrades to a note rather than stalling the card. --no-pr skips it."},
+		"Where the worktree you're standing in stands: its title, branch, base, changes, stash, last commit, ports, scripts, PR. The PR lookup needs gh and degrades to a note rather than stalling the card. --no-pr skips it."},
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
 		"Like cd without the project menu. Exit the shell to return, or cd in place with shell integration."},
 	{"worktrees path [<name>]", "Print a worktree's directory", ""},
@@ -108,10 +108,12 @@ var worktreeItems = []helpItem{
 	{"worktrees mirrors", "List the mirrors this device is part of", ""},
 	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`,
 		"A shelved worktree comes back off the shelf on its own once it is worked in: the next full listing (the app's sidebar, `worktrees list`) that finds an edit, a new or deleted file or a commit made since the shelve unshelves it."},
+	{"worktrees describe [<name>] [-t <title>] [-d <text> | --description-file <path|->]", "Set or show a worktree's title and description",
+		"What the work is, like a pull request's title and body, for before there is one: the app shows the title in place of the branch, and the description on the worktree page. Set them once the work has a purpose and again whenever it changes. Each flag replaces only its own field, and an empty value clears it. --description-file - reads stdin. With no flags it prints them. Once the branch has a pull request, its title and body are the worktree's, and describe refuses a change (edit the PR instead). They travel with send, bring and mirror. --json prints {ok, worktree: <row>}, or {ok, title, description, pullRequest} with no flags."},
 	{"worktrees autopull [on|off] [<name>]", "Set or show the app's auto-pull mark",
 		"While on, the running app fast-forwards the worktree onto its upstream after each background fetch, as long as it has no local commits, changes or running scripts. Any checkout can carry it, the primary included. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
 	{"worktrees move [<name>] <new-path>", "Move a worktree's checkout",
-		"git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, its notes and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
+		"git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
 	{"worktrees rekey --project-id <id> --from-id <id> --to-path <path>", "Re-key a worktree ahead of a move",
 		"App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf and auto-pull marks, the per-worktree data file and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}."},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
@@ -471,6 +473,7 @@ var commands = []command{
 	{name: "bundle", run: cmdBundle},
 	// App plumbing for the tidy page's sizes (diskusage.go), hidden too.
 	{name: "disk-usage", noContext: true, run: cmdDiskUsage},
+	{name: "describe", worktree: true, run: cmdDescribe},
 	{name: "autopull", aliases: []string{"auto-pull"}, worktree: true, run: cmdAutoPull},
 	{name: "move", aliases: []string{"mv"}, worktree: true, run: cmdMove},
 	{name: "launchers", aliases: []string{"launcher"}, run: cmdLaunchers},

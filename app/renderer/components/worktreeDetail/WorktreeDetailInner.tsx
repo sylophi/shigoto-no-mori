@@ -22,6 +22,7 @@ import {
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import { useWorktreeTitle } from "@/hooks/worktrees/useWorktreeTitle";
 import {
   scriptKey,
   type ScriptRunState,
@@ -57,7 +58,7 @@ import {
 import { BranchTitle } from "./branch/BranchTitle";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { CommitsSection } from "./commits/CommitsSection";
-import { NotesSection } from "./NotesSection";
+import { DescriptionSection } from "./DescriptionSection";
 
 // A cleanup script still in flight.
 const live = (state: ScriptRunState) =>
@@ -97,6 +98,7 @@ export function WorktreeDetailInner({
   const { data: runtime } = useRuntimeInfo();
   const resident = useResident(worktree);
   const mirrorCopies = useMirrorCopies(worktree);
+  const { title, description } = useWorktreeTitle(worktree);
   const {
     deleteMutation,
     needsForce,
@@ -266,7 +268,14 @@ export function WorktreeDetailInner({
         <div className="flex min-w-0 items-start gap-3">
           <ResidentFace resident={resident} party={party !== null} />
           <div className="min-w-0 flex-1">
-            <BranchTitle worktree={worktree} />
+            {title !== null && (
+              <SimpleTooltip whenTruncated tip={title}>
+                <h1 className="line-clamp-2 text-2xl font-medium tracking-tight wrap-anywhere">
+                  {title}
+                </h1>
+              </SimpleTooltip>
+            )}
+            <BranchTitle worktree={worktree} subtitle={title !== null} />
           </div>
           <WorktreeActivityIndicator worktree={worktree} />
         </div>
@@ -284,6 +293,10 @@ export function WorktreeDetailInner({
         aria-disabled={locked}
       >
         <div className="flex flex-col gap-10 phone:gap-8">
+          {description !== null && (
+            <DescriptionSection key={worktree.id} description={description} />
+          )}
+
           <LaunchSection worktree={worktree} />
 
           <PullRequestSection worktree={worktree} />
@@ -294,8 +307,6 @@ export function WorktreeDetailInner({
             <SectionHeading>Scripts</SectionHeading>
             <ScriptsSection worktree={worktree} />
           </section>
-
-          <NotesSection worktree={worktree} />
         </div>
       </div>
 

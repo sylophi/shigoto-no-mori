@@ -34,9 +34,11 @@ const PROSE = cn(
   "[&_hr]:my-4 [&_hr]:border-border",
 );
 
-// Sanitized HTML by source, for the page's life. The sources are
-// release notes, which don't change and number in the tens, and the
-// full changelog renders every one of them each time it opens.
+// Sanitized HTML by source. The sources are release notes, which don't
+// change and number in the tens (the full changelog renders every one
+// each time it opens), and worktree and PR descriptions, where every
+// edit is a new source: so a cap, the oldest going first.
+const RENDERED_CAP = 100;
 const rendered = new Map<string, string>();
 
 function htmlOf(source: string): string {
@@ -47,11 +49,15 @@ function htmlOf(source: string): string {
       { FORBID_TAGS: ["style", "form", "input", "button"] },
     );
     rendered.set(source, html);
+    if (rendered.size > RENDERED_CAP) {
+      rendered.delete(rendered.keys().next().value ?? "");
+    }
   }
   return html;
 }
 
-// GitHub-flavored markdown from outside the app (release notes),
+// GitHub-flavored markdown from outside the app (release notes, a
+// worktree's description or its pull request's),
 // rendered the way GitHub shows it, line breaks included, and
 // sanitized before it reaches the DOM. Renderer windows never
 // navigate, so a click on a link opens it in the browser instead,

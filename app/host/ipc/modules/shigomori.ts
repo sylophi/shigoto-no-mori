@@ -5,6 +5,7 @@ import {
   readShigomoriConfig,
   readWorktreeData,
   writeWorktreeData,
+  writeWorktreeDescription,
 } from "@host/lib/config/project";
 import { findProjectOrThrow } from "@host/lib/projects";
 import { shigomoriWriteViaCli } from "../cliDelegate";
@@ -34,12 +35,17 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
   },
 
   worktreeDataWrite: async ({ projectId, worktreeId, data }) => {
-    // The renderer only surfaces a notes UI for managed worktrees and the
-    // primary checkout, so we don't re-verify here. Enforcing the "no
+    // The renderer only surfaces a ports editor for managed worktrees
+    // and the primary checkout, so we don't re-verify here. Enforcing the "no
     // external state" rule would mean asking the CLI for the worktree
     // list on every save. findProjectOrThrow + the WorktreeIdSchema regex keep
     // the path-build safe against malformed input.
     await findProjectOrThrow(projectId);
     await writeWorktreeData(projectId, worktreeId, data);
+  },
+
+  worktreeDataDescribe: async ({ projectId, worktreeId, description }) => {
+    await findProjectOrThrow(projectId);
+    await writeWorktreeDescription(projectId, worktreeId, description);
   },
 };

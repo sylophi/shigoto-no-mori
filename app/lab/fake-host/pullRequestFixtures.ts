@@ -347,6 +347,12 @@ export function fakeDisableAutoMerge(): void {
 
 const FAKE_PR_DETAIL = {
   ...FAKE_PR_SLIM,
+  body: [
+    "Lists every device's worktrees in one sidebar, each badged with the machine it lives on.",
+    "",
+    "- The daemons' lists merge by repo identity.",
+    "- A peer that drops off keeps its last rows, faded.",
+  ].join("\n"),
   mergeState: "CLEAN" as PullRequestMergeState,
   autoMerge: null as MergeMethod | null,
   authorLogin: "sylophi",

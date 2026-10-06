@@ -76,6 +76,7 @@ import {
   findWorktreePathOrThrow,
 } from "@host/lib/projects";
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
+import { followDescription } from "@host/lib/sync/worktreeDescription";
 import {
   cancelMove,
   MoveCancelledError,
@@ -816,6 +817,16 @@ async function runPullWorktree(
             );
     }
     await rollBackIfCancelled(signal, landed.worktree);
+    await logFailure("[sync] carrying the title and description failed", () =>
+      followDescription(
+        sourceDeviceId,
+        {
+          projectId: landed.worktree.projectId,
+          worktreeId: landed.worktree.id,
+        },
+        { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
+      ),
+    );
     remember(
       {
         direction: "pull",
@@ -991,6 +1002,13 @@ async function sendWorktreeUnder(
     await rollBackSent(targetDeviceId, landed.worktree);
     throw new MoveCancelledError();
   }
+  await logFailure("[sync] carrying the title and description failed", () =>
+    followDescription(
+      targetDeviceId,
+      { projectId, worktreeId },
+      { projectId: landed.worktree.projectId, worktreeId: landed.worktree.id },
+    ),
+  );
   remember(
     { direction: "send", deviceId: targetDeviceId, projectId, worktreeId },
     receipt,

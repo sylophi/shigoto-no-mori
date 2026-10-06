@@ -35,12 +35,12 @@ export function useWorktreeData(
   });
 }
 
-// A patch over the stored document, or a function of it for edits that
-// depend on what is there (the custom port list). Undefined values
-// clear their key.
+// The new custom ports, or a function of the stored document for edits
+// that depend on what is there. Undefined clears them.
+type PortsPatch = Pick<ShigomoriWorktreeData, "ports">;
 type WorktreeDataPatch =
-  | Partial<ShigomoriWorktreeData>
-  | ((current: ShigomoriWorktreeData) => Partial<ShigomoriWorktreeData>);
+  | PortsPatch
+  | ((current: ShigomoriWorktreeData) => PortsPatch);
 
 interface WriteVariables {
   projectId: string;
@@ -48,18 +48,15 @@ interface WriteVariables {
   patch: WorktreeDataPatch;
 }
 
-// The one writer of a worktree's data file. worktreeData:write is a
-// full replace, so this merges the patch over the stored document
-// (fetched through the cache if the page has not read it yet) and every
-// caller only names its own keys: a notes save cannot drop the custom
-// ports, and vice versa (the mergeClientConfigWrite rule, one layer
-// over).
+// The renderer's writer of a worktree's data file, which owns only the
+// custom ports there (worktreeData:write). A patch can depend on what
+// is stored, so it is given the document fetched fresh.
 export function useWorktreeDataWrite() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation({
     // One scope for every worktree-data write in the app, so two edits
-    // in flight at once (a remove clicked twice, a notes blur racing a
+    // in flight at once (a remove clicked twice, a remove racing a
     // port add) run one after the other instead of each merging over
     // the same base and the later one undoing the earlier.
     scope: { id: "worktreeData" },
@@ -72,10 +69,11 @@ export function useWorktreeDataWrite() {
           ...worktreeDataQueryOptions(api, keys, projectId, worktreeId),
           staleTime: 0,
         })) ?? {};
-      await api.worktreeData.write(projectId, worktreeId, {
-        ...current,
-        ...(typeof patch === "function" ? patch(current) : patch),
-      });
+      await api.worktreeData.write(
+        projectId,
+        worktreeId,
+        typeof patch === "function" ? patch(current) : patch,
+      );
       return { projectId, worktreeId };
     },
     onSuccess: ({ projectId, worktreeId }) => {

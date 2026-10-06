@@ -154,6 +154,10 @@ export type MergeMethod = z.infer<typeof MergeMethodSchema>;
 // for the project-wide sweep that feeds the sidebar dots, since the
 // extra fields make `gh pr list` materially slower.
 export const PullRequestDetailSchema = PullRequestSchema.extend({
+  // The PR's description, markdown as written on GitHub: the worktree
+  // page shows it in place of the worktree's own (useWorktreeTitle).
+  // Absent from a host on an older build.
+  body: z.string().optional(),
   mergeState: PullRequestMergeStateSchema,
   // The method auto-merge is armed with, or null when it isn't:
   // GitHub merges the PR with it once the base branch's rules are met.

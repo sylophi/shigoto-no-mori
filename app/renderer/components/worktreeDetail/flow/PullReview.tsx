@@ -16,7 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, PullRequestDetail, Worktree } from "@shared/schemas";
 import {
   pullBranchCollision,
   pullFolderCollision,
@@ -45,9 +45,11 @@ import {
 } from "@/hooks/remote/useHostScope";
 import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { cn } from "@/lib/utils";
+import { worktreeTitle } from "@/lib/worktreeTitle";
 import type { LandingTarget } from "./cloneDestination";
 import { useCreatePlan } from "./createPlan";
 import type { PullChoiceState } from "./ignoreChoice";
@@ -226,6 +228,10 @@ export function PullReviewStep({
   details?: ReactNode;
 }) {
   const Link = link === "mirror" ? ArrowLeftRight : ArrowRight;
+  // What the work is called, read here in the source's scope: the copy
+  // carries the title over, so both cards lead with it.
+  const { data: pr } = useWorktreePullRequest(project.id, worktree.branch);
+  const title = worktreeTitle(worktree, pr);
   return (
     <>
       <FlowBody>
@@ -233,6 +239,8 @@ export function PullReviewStep({
           <div className="relative grid overflow-hidden rounded-xl border border-border bg-card md:grid-cols-2">
             <SourceCard
               heading={sourceHeading}
+              title={title}
+              pr={pr}
               worktree={worktree}
               project={project}
               sourceDeviceLabel={sourceDeviceLabel}
@@ -240,6 +248,7 @@ export function PullReviewStep({
             <DestinationScope>
               <DestinationCard
                 heading={destinationHeading}
+                title={title}
                 worktree={worktree}
                 target={target}
                 deviceLabel={thisDeviceLabel}
@@ -332,28 +341,43 @@ function EndCard({
   );
 }
 
-// The branch as the card's title, the folder beside it.
+// The card's title: what the work is called when it has a title, the
+// branch on a quieter line under it, and the branch alone when not.
+// The folder sits beside the branch.
 function BranchLine({
+  title,
   branch,
   folder,
   className,
 }: {
+  title: string | null;
   branch: string;
   folder: string | undefined;
   className?: string;
 }) {
+  const quiet = title !== null;
   return (
-    <p
-      className={cn(
-        "flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono",
-        className,
+    <>
+      {title !== null && (
+        <SimpleTooltip whenTruncated tip={title}>
+          <p className="min-w-0 truncate text-sm font-medium">{title}</p>
+        </SimpleTooltip>
       )}
-    >
-      <span className="text-sm font-semibold">{branch}</span>
-      {folder !== undefined && (
-        <span className="text-xs text-muted-foreground">{folder}</span>
-      )}
-    </p>
+      <p
+        className={cn(
+          "flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono",
+          quiet && "text-muted-foreground",
+          className,
+        )}
+      >
+        <span className={quiet ? "text-xs" : "text-sm font-semibold"}>
+          {branch}
+        </span>
+        {folder !== undefined && (
+          <span className="text-xs text-muted-foreground">{folder}</span>
+        )}
+      </p>
+    </>
   );
 }
 
@@ -377,11 +401,15 @@ function Fact({
 
 function SourceCard({
   heading,
+  title,
+  pr,
   worktree,
   project,
   sourceDeviceLabel,
 }: {
   heading: string;
+  title: string | null;
+  pr: PullRequestDetail | null | undefined;
   worktree: Worktree;
   project: Project;
   sourceDeviceLabel: string;
@@ -391,7 +419,6 @@ function SourceCard({
   // home, and a transplant already holds the grant that read needs.
   // Refused or not yet answered, the path shows as it is.
   const { data: runtime } = useRuntimeInfo();
-  const { data: pr } = useWorktreePullRequest(project.id, worktree.branch);
   // Only what there is: a branch in step with its upstream, a clean
   // tree and no PR say nothing, so they show nothing.
   const facts = [
@@ -434,7 +461,11 @@ function SourceCard({
       }
       aside={project.name}
     >
-      <BranchLine branch={worktree.branch} folder={worktree.name} />
+      <BranchLine
+        title={title}
+        branch={worktree.branch}
+        folder={worktree.name}
+      />
       <PathSpan
         path={worktree.path}
         home={runtime?.homedir ?? null}
@@ -455,6 +486,7 @@ function SourceCard({
 // makes one, its folder changeable.
 function DestinationCard({
   heading,
+  title,
   worktree,
   target,
   deviceLabel,
@@ -463,6 +495,7 @@ function DestinationCard({
   pull,
 }: {
   heading: string;
+  title: string | null;
   worktree: Worktree;
   target: LandingTarget | null;
   deviceLabel: string;
@@ -504,12 +537,13 @@ function DestinationCard({
         <p className="text-xs text-muted-foreground">No device picked yet.</p>
       ) : target.project ? (
         <LandingLines
+          title={title}
           worktree={worktree}
           project={target.project}
           landing={landing}
         />
       ) : (
-        <CloneLines clone={target.clone} worktree={worktree} />
+        <CloneLines clone={target.clone} title={title} worktree={worktree} />
       )}
     </EndCard>
   );
@@ -556,10 +590,12 @@ function SetupRow({
 // branch or folder the landing would refuse tints the line, and the
 // footer says why.
 function LandingLines({
+  title,
   worktree,
   project,
   landing,
 }: {
+  title: string | null;
   worktree: Worktree;
   project: Project;
   landing: Landing;
@@ -574,6 +610,7 @@ function LandingLines({
   return (
     <>
       <BranchLine
+        title={title}
         branch={landingBranch}
         folder={folder ?? "new folder"}
         className={cn(refusal !== null && "text-amber-700 dark:text-amber-300")}
@@ -593,15 +630,17 @@ function LandingLines({
 // whose folder can be changed.
 function CloneLines({
   clone,
+  title,
   worktree,
 }: {
   clone: NonNullable<LandingTarget["clone"]>;
+  title: string | null;
   worktree: Worktree;
 }) {
   const [picking, setPicking] = useState(false);
   return (
     <>
-      <BranchLine branch={worktree.branch} folder={undefined} />
+      <BranchLine title={title} branch={worktree.branch} folder={undefined} />
       <div className="flex items-center gap-2">
         <PathSpan
           path={clone.dest}
