@@ -599,6 +599,21 @@ func TestLauncherCatalog(t *testing.T) {
 	}
 }
 
+func TestLauncherDeepLinks(t *testing.T) {
+	for id, want := range map[string]string{
+		"codex":  "codex://threads/new?path=%2Ftmp%2Fa+b%26c",
+		"claude": "claude://code/new?folder=%2Ftmp%2Fa+b%26c",
+	} {
+		i := slices.IndexFunc(launcherCatalog, func(a launcherApp) bool { return a.id == id })
+		if i < 0 {
+			t.Fatalf("%s is not in the catalog", id)
+		}
+		if got := launcherCatalog[i].deepLinkTo("/tmp/a b&c"); got != want {
+			t.Errorf("%s: deepLinkTo = %q, want %q", id, got, want)
+		}
+	}
+}
+
 // --- sm run ---
 
 func TestRunDropsTransitionalFlagsAndListWritesNothing(t *testing.T) {

@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Extract a macOS .app's icon to a 128px PNG under renderer/app-icons/.
-# Usage: scripts/extract-app-icon.sh <path-to-.app> [output-name]
-# Output name defaults to the app's basename, lowercased + hyphenated.
+# Usage: scripts/extract-app-icon.sh <path-to-.app> <id>
+# The launcher row finds an icon by file name, so <id> is the app's id
+# in cli/embed/launcher-catalog.json.
 set -euo pipefail
 
 APP="${1:-}"
 NAME="${2:-}"
 
-if [ -z "$APP" ]; then
-  echo "usage: $0 <path-to-.app> [output-name]" >&2
+if [ -z "$APP" ] || [ -z "$NAME" ]; then
+  echo "usage: $0 <path-to-.app> <id>" >&2
   exit 1
 fi
 
@@ -35,11 +36,6 @@ ICNS="$APP/Contents/Resources/$ICON_FILE"
 if [ ! -f "$ICNS" ]; then
   echo "icon not found at $ICNS" >&2
   exit 1
-fi
-
-if [ -z "$NAME" ]; then
-  BASE=$(basename "$APP" .app)
-  NAME=$(echo "$BASE" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
 fi
 
 OUT="renderer/app-icons/$NAME.png"
