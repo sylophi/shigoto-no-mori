@@ -309,8 +309,7 @@ function PortsStrip({
           // news here.
           <span key={port.port} className="inline-flex items-center gap-1">
             <PortDot />
-            <span className="font-mono">{port.port}</span>
-            {port.label}
+            <PortText port={port.port} label={port.label} />
           </span>
         ),
       )}
@@ -335,11 +334,10 @@ function LocalhostLink({ port, label }: { port: number; label?: string }) {
         <ExternalLink
           href={`http://localhost:${port}`}
           errorTitle="Couldn't open the port"
-          className="inline-flex items-center gap-1 rounded-sm font-mono no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center gap-1 rounded-sm no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           <PortDot />
-          localhost:{port}
-          {label && <span className="font-sans">{label}</span>}
+          <PortText port={`localhost:${port}`} label={label} />
           <ExternalLinkIcon aria-hidden className="size-3" />
         </ExternalLink>
       </span>
@@ -376,10 +374,31 @@ function PeerPort({
         ) : (
           <Plus aria-hidden className="size-3" />
         )}
-        Forward <span className="font-mono">{port}</span>
-        {label && <span className="text-muted-foreground">{label}</span>}
+        <PortText prefix="Forward" port={port} label={label} />
       </ChipButton>
     </SimpleTooltip>
+  );
+}
+
+// A port's words as one run of text, so the mono number and the sans
+// words around it share a baseline. As separate flex items each would
+// be centered on its own box, and the mono font's different metrics
+// set the number off the words beside it.
+function PortText({
+  prefix,
+  port,
+  label,
+}: {
+  prefix?: string;
+  port: number | string;
+  label?: string;
+}) {
+  return (
+    <span className="truncate">
+      {prefix && <>{prefix} </>}
+      <span className="font-mono">{port}</span>
+      {label && <span className="text-muted-foreground"> {label}</span>}
+    </span>
   );
 }
 
