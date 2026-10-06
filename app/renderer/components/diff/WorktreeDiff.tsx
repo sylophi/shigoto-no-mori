@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -17,11 +18,18 @@ import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
-import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
+import {
+  changeKey,
+  deriveRemoteSyncState,
+  isUntracked,
+  type Worktree,
+} from "@shared/schemas";
 import { changedFilePaths, includedFiles } from "./changesControls";
+import { BranchBar } from "./BranchBar";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
+import { WorktreeSyncPill } from "@/components/worktreeDetail/WorktreeSyncPill";
 import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 
 export function WorktreeDiff() {
@@ -166,8 +174,13 @@ function ChangesView({
   };
 
   // The sidebar's count stands in until the page's own status arrives.
+  const loading = files === undefined;
   const changedCount = files ? files.length : worktree.changedCount;
   const list = files ?? [];
+  // The message box only has a job with something to commit, or a
+  // commit to amend. A clean tree keeps the branch bar and the last
+  // commit, which is where the next move (push, amend, undo) lives.
+  const showComposer = loading || list.length > 0 || amending;
 
   return (
     <DiffView
@@ -177,13 +190,16 @@ function ChangesView({
       title="Uncommitted changes"
       subtitle={
         <>
-          {pluralize(changedCount, "file")} changed in{" "}
-          <span className="font-mono">{worktree.name}</span>
+          {changedCount > 0
+            ? `${pluralize(changedCount, "file")} changed`
+            : "No changes"}{" "}
+          in <span className="font-mono">{worktree.name}</span>
         </>
       }
-      emptyMessage="No uncommitted changes."
+      emptyMessage={<CleanTreeMessage worktree={worktree} />}
       changes={{
         files: list,
+        loading,
         busy,
         selectedKey: picked ? changeKey(picked) : null,
         onSelect: setPickedKey,
@@ -192,7 +208,11 @@ function ChangesView({
         onDiscard,
       }}
       footer={
-        <>
+        <div
+          data-slot="changes-footer"
+          className="flex flex-col border-t border-border"
+        >
+          <BranchBar worktree={worktree} dirty={changedCount > 0} />
           {lastCommit && rewrite.canAmend && (
             <LastCommitStrip
               commit={lastCommit}
@@ -206,22 +226,63 @@ function ChangesView({
               }}
             />
           )}
-          <CommitComposer
-            worktree={worktree}
-            files={list}
-            draft={draft}
-            onDraftChange={setDraft}
-            pending={commit.isPending}
-            error={commit.error}
-            amend={
-              amending && lastCommit
-                ? { hash: lastCommit.hash, onCancel: () => setAmending(false) }
-                : null
-            }
-            onCommit={onCommit}
-          />
-        </>
+          {showComposer ? (
+            <CommitComposer
+              files={list}
+              draft={draft}
+              onDraftChange={setDraft}
+              pending={commit.isPending}
+              error={commit.error}
+              amend={
+                amending && lastCommit
+                  ? {
+                      hash: lastCommit.hash,
+                      onCancel: () => setAmending(false),
+                    }
+                  : null
+              }
+              onCommit={onCommit}
+            />
+          ) : (
+            <div className="pb-1.5" />
+          )}
+        </div>
       }
     />
   );
+}
+
+// What the pane says once everything is committed: that the tree is
+// clean, and what the branch still owes the remote, with the button
+// that settles it. That is the next thing to do, and the pane is
+// otherwise empty.
+function CleanTreeMessage({ worktree }: { worktree: Worktree }) {
+  const next = owedToRemote(worktree);
+  return (
+    <span className="flex flex-col items-center gap-2">
+      <CircleCheck aria-hidden className="size-6 text-muted-foreground/60" />
+      <span className="text-foreground">No uncommitted changes</span>
+      {next && <span className="text-xs">{next}</span>}
+      <WorktreeSyncPill worktree={worktree} />
+    </span>
+  );
+}
+
+function owedToRemote(worktree: Worktree): string | null {
+  const state = deriveRemoteSyncState(worktree);
+  switch (state.kind) {
+    case "synced":
+      return "Everything is committed and pushed.";
+    case "ahead":
+      return `${pluralize(state.ahead, "commit")} not pushed yet.`;
+    case "behind":
+      return `${pluralize(state.behind, "commit")} to pull.`;
+    case "pullAndPush":
+    case "diverged":
+      return `${pluralize(state.ahead, "commit")} to push, ${pluralize(state.behind, "commit")} to pull.`;
+    case "publish":
+      return state.canPublish ? "This branch isn't on the remote yet." : null;
+    case "detached":
+      return null;
+  }
 }

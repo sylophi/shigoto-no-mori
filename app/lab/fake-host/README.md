@@ -147,9 +147,11 @@ Runtime controls on `window.fakeHost`, for a `js` step:
 `setMirrorConflicts(roots)` (holds those paths still on every mirror
 started in this session, for the conflict chip. Start one first, since
 the fixtures seed none), `worktree(deviceId, "add" | "remove", name,
-{ projectId?, changedCount? })` (a worktree made or removed behind the
-app's back, the way `sm` or another device would, for the villagers
-moving in and out, and with changes to commit), plus
+{ projectId?, changedCount?, fields? })` (a worktree made, changed or
+removed behind the app's back, the way `sm` or another device would,
+for the villagers moving in and out, with changes to commit, and with
+`"update"` and `fields` a git state posed on an existing row, such as
+`{ detached: true }` or `{ hasUpstream: false }`), plus
 `emitClient`/`emitHost` for raw broadcasts. What the page logs comes
 back in each reply.
 
@@ -164,7 +166,9 @@ arms allowed: this is a fake, not the fail-closed web bridge). The sync
 verbs really mutate the fixture world, so the transplant and mirror
 flows show their outcome: a posed mirror session cycles every few
 seconds, keeps a history, and folds the peer's sidebar row into the
-local one.
+local one. The changes page keeps a working tree per worktree
+(`changesFixtures.ts`, seeded from its `changedCount`), which ticking,
+committing, discarding and pushing move.
 
 The app downloads the villager faces and profiles from Nookipedia when
 its user asks. The fake host serves its own copy from

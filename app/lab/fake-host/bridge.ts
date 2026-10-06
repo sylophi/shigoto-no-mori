@@ -54,6 +54,7 @@ import {
   fakePullRequestDetail,
   fakePullRequests,
 } from "./pullRequestFixtures";
+import { createFakeChanges } from "./changesFixtures";
 import { invokeIndexFor } from "../../web/ipc/loopback";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../../web/ipc/stubDefaults";
 import {
@@ -94,9 +95,15 @@ interface FakeHostControls {
   setMirrorConflicts(roots: string[]): void;
   worktree(
     deviceId: string,
-    action: "add" | "remove",
+    action: "add" | "update" | "remove",
     name: string,
-    options?: { projectId?: string; changedCount?: number },
+    options?: {
+      projectId?: string;
+      changedCount?: number;
+      // Any other row fields, for posing a git state (`detached`,
+      // `hasUpstream`, `behind`, …) on an added or an existing row.
+      fields?: Partial<Worktree>;
+    },
   ): void;
   emitClient: FixtureWire["emit"];
   emitHost: FixtureWire["emit"];
@@ -263,6 +270,17 @@ function hostHandlersFor(
   const allWorktrees = () => Object.values(forest.worktrees).flat();
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
+  const changes = createFakeChanges(findWorktree);
+  const syncAfter = async (
+    worktreeId: string,
+    move: (worktree: Worktree) => void,
+  ): Promise<Worktree> => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const worktree = findWorktree(worktreeId);
+    if (!worktree) throw new Error("Unknown worktree");
+    move(worktree);
+    return { ...worktree };
+  };
   const branchesOf = () => [
     "main",
     ...allWorktrees()
@@ -381,9 +399,11 @@ function hostHandlersFor(
       projectIconFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",
       ),
-    "worktrees:list": ({ projectId }) => [
-      ...(forest.worktrees[projectId] ?? []),
-    ],
+    // Copies, like a real read: the verbs below change the rows in
+    // place, and a cached row that is the same object as the answer
+    // would never look changed.
+    "worktrees:list": ({ projectId }) =>
+      structuredClone(forest.worktrees[projectId] ?? []),
     "worktrees:create": ({ projectId, worktreeName, branchName }) => {
       const name = worktreeName ?? "tender-tanuki";
       const created = worktreeFixture({
@@ -425,34 +445,50 @@ function hostHandlersFor(
     },
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
-    "worktrees:fileDiff": () => FAKE_DIFF,
+    "worktrees:fileDiff": ({ worktreeId, paths }) =>
+      changes.fileDiff(worktreeId, paths),
     "worktrees:readFile": ({ path }) => fakeFile(path),
-    // A worktree with changes lists two of them, and committing takes
-    // them all, so the commit flow runs end to end.
-    "worktrees:changeStatus": ({ worktreeId }) =>
-      (findWorktree(worktreeId)?.changedCount ?? 0) > 0
-        ? [
-            {
-              path: "renderer/lib/villagerVoice.ts",
-              kind: "modified",
-              counts: { additions: 12, deletions: 3 },
-              staged: "none",
-            },
-            {
-              path: "renderer/lib/toast.tsx",
-              kind: "modified",
-              counts: { additions: 4, deletions: 1 },
-              staged: "none",
-            },
-          ]
-        : [],
-    "worktrees:commit": ({ worktreeId }) => {
-      const committed = findWorktree(worktreeId);
-      if (committed === undefined) throw new Error("Unknown worktree");
-      committed.changedCount = 0;
-      return { hash: "3f2a1b9", worktree: committed };
-    },
+    // The working tree is kept per worktree (changesFixtures.ts), so
+    // ticking, committing and discarding show their outcome, and a
+    // commit leaves something to push.
+    "worktrees:changeStatus": ({ worktreeId }) => changes.status(worktreeId),
+    "worktrees:setStaged": ({ worktreeId, paths, staged }) =>
+      changes.setStaged(worktreeId, paths, staged),
+    "worktrees:commit": ({ worktreeId, summary, stagePaths, amend }) =>
+      changes.commit(worktreeId, { summary, stagePaths, amend }),
+    "worktrees:discardChanges": ({ worktreeId, paths }) =>
+      changes.discard(worktreeId, paths),
+    // The sync verbs move the counts the way the real ones would, after
+    // a beat so their pending state shows.
+    "worktrees:push": ({ worktreeId }) =>
+      syncAfter(worktreeId, (w) => {
+        w.ahead = 0;
+        w.unpushedCount = 0;
+      }),
+    "worktrees:publish": ({ worktreeId }) =>
+      syncAfter(worktreeId, (w) => {
+        w.hasUpstream = true;
+        w.ahead = 0;
+        w.unpushedCount = 0;
+      }),
+    "worktrees:pull": ({ worktreeId }) =>
+      syncAfter(worktreeId, (w) => {
+        w.behind = 0;
+      }),
+    "worktrees:pullAndPush": ({ worktreeId }) =>
+      syncAfter(worktreeId, (w) => {
+        w.ahead = 0;
+        w.behind = 0;
+        w.unpushedCount = 0;
+      }),
     "worktrees:commitDiff": () => FAKE_DIFF,
+    // For an amend's prefill: the subject the row carries, no body.
+    "worktrees:commitMessage": ({ worktreeId, hash }) => ({
+      summary:
+        findWorktree(worktreeId)?.recentCommits.find((c) => c.hash === hash)
+          ?.subject ?? "",
+      description: "",
+    }),
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,
     "worktreeData:write": ({ worktreeId, data }) => {
@@ -1704,7 +1740,14 @@ export function installFakeHostBridge(
     // it: the fixture world moves, then the host says so the way its fs
     // watcher would. `projectId` defaults to the device's first
     // project, and `changedCount` gives an added one changes to commit.
-    worktree(deviceId, action, name, { projectId, changedCount = 0 } = {}) {
+    // "update" changes an existing row in place (by name), the way a
+    // commit, push or checkout in a terminal would.
+    worktree(
+      deviceId,
+      action,
+      name,
+      { projectId, changedCount = 0, fields = {} } = {},
+    ) {
       const forest = forests[deviceId];
       if (forest === undefined)
         throw new Error(`[fake-host] no device ${deviceId}`);
@@ -1726,8 +1769,17 @@ export function installFakeHostBridge(
             path: `${project.path}/../worktrees/${name}`,
             hasUpstream: false,
             changedCount,
+            ...fields,
           }),
         );
+      } else if (action === "update") {
+        const row = Object.values(forest.worktrees)
+          .flat()
+          .find((w) => w.name === name);
+        if (row === undefined) {
+          throw new Error(`[fake-host] no worktree ${name} on ${deviceId}`);
+        }
+        Object.assign(row, fields);
       } else {
         forest.worktrees[project.id] = list.filter((w) => w.name !== name);
       }

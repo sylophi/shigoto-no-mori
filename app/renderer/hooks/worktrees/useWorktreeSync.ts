@@ -1,10 +1,31 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsMutating,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 
 interface SyncWorktreeInput {
   projectId: string;
   worktreeId: string;
+}
+
+const SYNC_MUTATION_KEY = ["worktreeSync"];
+
+// Whether any sync verb is in flight for this worktree, from whichever
+// control started it. A page can show the same action twice (the
+// changes page's branch bar and its clean-tree message), and the one
+// not clicked must not start a second push alongside the first.
+export function useWorktreeSyncing(worktreeId: string): boolean {
+  return (
+    useIsMutating({
+      mutationKey: SYNC_MUTATION_KEY,
+      predicate: (mutation) =>
+        (mutation.state.variables as SyncWorktreeInput | undefined)
+          ?.worktreeId === worktreeId,
+    }) > 0
+  );
 }
 
 // Shared shape for the remote-sync family (push, pull, force-push,
@@ -17,6 +38,7 @@ function useSyncMutation(
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation<Worktree, Error, SyncWorktreeInput>({
+    mutationKey: SYNC_MUTATION_KEY,
     mutationFn: (input) => apiMethod(api, input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({

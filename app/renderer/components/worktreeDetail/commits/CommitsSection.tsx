@@ -33,20 +33,25 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
           overhang it, so the commits don't shift when one appears. */}
       <div className="flex h-4 items-center justify-between gap-2">
         <SectionHeading>Branch</SectionHeading>
-        {worktree.changedCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => nav.toDiff(worktree.projectId, worktree.id)}
-            className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
-          >
-            <FileDiff aria-hidden className="size-3.5" />
-            {worktree.changedCount}{" "}
-            {worktree.changedCount === 1 ? "file" : "files"} changed
-            <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-          </button>
-        ) : (
-          <WorktreeSyncPill worktree={worktree} />
-        )}
+        <div className="flex min-w-0 items-center gap-1">
+          {worktree.changedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => nav.toDiff(worktree.projectId, worktree.id)}
+              className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
+            >
+              <FileDiff aria-hidden className="size-3.5" />
+              {worktree.changedCount}{" "}
+              {worktree.changedCount === 1 ? "file" : "files"} changed
+              <ChevronRight aria-hidden className="size-3.5 opacity-60" />
+            </button>
+          )}
+          {/* Commits made with changes left over still push from here. */}
+          <WorktreeSyncPill
+            worktree={worktree}
+            dirty={worktree.changedCount > 0}
+          />
+        </div>
       </div>
       {commits.length === 0 ? (
         <div className="text-sm text-muted-foreground">No commits yet.</div>

@@ -1,18 +1,26 @@
+import { useRef } from "react";
 import { GitCommitHorizontal, Loader2, PencilLine, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { CommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
-import type { ChangedFile, Worktree } from "@shared/schemas";
+import { cn } from "@/lib/utils";
+import type { ChangedFile } from "@shared/schemas";
 import { includedFiles } from "./changesControls";
+
+// Past this a summary is cut off in `git log --oneline`, on GitHub and
+// in most other tools. Shown as a count, never enforced.
+const SUMMARY_SOFT_LIMIT = 72;
 
 // The message box at the foot of the changes list. Summary is the
 // commit's first line. Description, when given, is its body. The draft
 // itself belongs to the page (lib/commitDraft), which also empties it
-// once the commit lands.
+// once the commit lands. Which branch it lands on is the branch bar's
+// to say, right above.
 //
 // The button reads what the commit will take. With files ticked it
 // commits those. With nothing ticked it commits everything listed,
@@ -22,7 +30,6 @@ import { includedFiles } from "./changesControls";
 // Amending: the button turns into "Amend with ...", the file rules stay
 // the same, and a message-only amend on a clean tree is allowed too.
 export function CommitComposer({
-  worktree,
   files,
   draft,
   onDraftChange,
@@ -31,7 +38,6 @@ export function CommitComposer({
   amend,
   onCommit,
 }: {
-  worktree: Worktree;
   files: ChangedFile[];
   draft: CommitDraft;
   onDraftChange: (next: CommitDraft) => void;
@@ -41,18 +47,30 @@ export function CommitComposer({
   amend: { hash: string; onCancel: () => void } | null;
   onCommit: () => void;
 }) {
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const included = includedFiles(files).length;
-  const conflicted = files.some((file) => file.conflicted);
+  const conflicted = files.filter((file) => file.conflicted).length;
+  const summary = draft.summary.trim();
   const label = buttonLabel({
     pending,
     amending: amend !== null,
     total: files.length,
     included,
   });
-  const canCommit =
-    draft.summary.trim().length > 0 &&
+  // Why the button is dead, when nothing else on screen says so:
+  // conflicts have their own line, and an empty list and a commit in
+  // flight say it on the button.
+  const blocked =
+    !pending &&
+    conflicted === 0 &&
     (files.length > 0 || amend !== null) &&
-    !conflicted &&
+    summary.length === 0
+      ? "Write a summary first"
+      : undefined;
+  const canCommit =
+    summary.length > 0 &&
+    (files.length > 0 || amend !== null) &&
+    conflicted === 0 &&
     !pending;
 
   const submit = () => {
@@ -60,23 +78,55 @@ export function CommitComposer({
   };
 
   // The commit chord works from either field. Plain Enter in the summary
-  // stays a no-op rather than committing: the field looks like a search
-  // box, and Enter there is usually a reflex.
+  // goes on to the description, the way a message is written in an
+  // editor, rather than committing: Enter there is usually a reflex.
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+    if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
       submit();
+    } else if (e.target instanceof HTMLInputElement) {
+      e.preventDefault();
+      descriptionRef.current?.focus();
     }
   };
 
+  // A whole message pasted into the summary (from a terminal, another
+  // commit, an agent) would lose its line breaks to the single-line
+  // field. Its first line becomes the summary and the rest the body.
+  const onSummaryPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData("text/plain");
+    if (!text.includes("\n")) return;
+    const input = e.currentTarget;
+    const before = draft.summary.slice(0, input.selectionStart ?? 0);
+    const after = draft.summary.slice(
+      input.selectionEnd ?? draft.summary.length,
+    );
+    const [first = "", ...rest] = text.replace(/\r\n?/g, "\n").split("\n");
+    const body = rest.join("\n").replace(/^\n+/, "").trimEnd();
+    e.preventDefault();
+    onDraftChange({
+      summary: `${before}${first}${after}`,
+      description: body
+        ? draft.description.trim()
+          ? `${body}\n\n${draft.description}`
+          : body
+        : draft.description,
+    });
+  };
+
+  const summaryLength = draft.summary.length;
+  const showCount = summaryLength > SUMMARY_SOFT_LIMIT - 10;
+  const overLimit = summaryLength > SUMMARY_SOFT_LIMIT;
+
   return (
-    <div
-      data-slot="commit-composer"
-      className="flex flex-col gap-2 border-t border-border p-3"
-    >
+    <div data-slot="commit-composer" className="flex flex-col gap-2 px-3 pb-3">
       {amend && (
-        <div className="flex items-center gap-1.5 text-xs">
-          <PencilLine aria-hidden className="size-3.5 text-amber-500" />
+        <div className="flex items-center gap-1.5 rounded-md bg-amber-500/10 py-1 pr-1 pl-2 text-xs">
+          <PencilLine
+            aria-hidden
+            className="size-3.5 shrink-0 text-amber-500"
+          />
           <span className="min-w-0 flex-1 truncate">
             Amending{" "}
             <span className="font-mono text-muted-foreground">
@@ -94,17 +144,39 @@ export function CommitComposer({
           </Button>
         </div>
       )}
-      <Input
-        value={draft.summary}
-        onChange={(e) => onDraftChange({ ...draft, summary: e.target.value })}
-        onKeyDown={onKeyDown}
-        placeholder="Summary (required)"
-        aria-label="Commit summary"
-        spellCheck
-        disabled={pending}
-        className="w-full px-2.5 py-1.5 text-xs"
-      />
+      <div className="relative">
+        <Input
+          value={draft.summary}
+          onChange={(e) => onDraftChange({ ...draft, summary: e.target.value })}
+          onKeyDown={onKeyDown}
+          onPaste={onSummaryPaste}
+          placeholder="Summary (required)"
+          aria-label="Commit summary"
+          spellCheck
+          disabled={pending}
+          className={cn("w-full px-2.5 py-1.5 text-xs", showCount && "pr-9")}
+        />
+        {showCount && (
+          <SimpleTooltip
+            tip={
+              overLimit
+                ? `Past ${SUMMARY_SOFT_LIMIT} characters, most git tools cut the summary off`
+                : `${SUMMARY_SOFT_LIMIT - summaryLength} left before most git tools cut the summary off`
+            }
+          >
+            <span
+              className={cn(
+                "tabular absolute top-1/2 right-2.5 -translate-y-1/2 text-2xs",
+                overLimit ? "text-amber-500" : "text-muted-foreground",
+              )}
+            >
+              {SUMMARY_SOFT_LIMIT - summaryLength}
+            </span>
+          </SimpleTooltip>
+        )}
+      </div>
       <Textarea
+        ref={descriptionRef}
         value={draft.description}
         onChange={(e) =>
           onDraftChange({ ...draft, description: e.target.value })
@@ -114,47 +186,42 @@ export function CommitComposer({
         aria-label="Commit description"
         rows={3}
         disabled={pending}
-        className="w-full resize-none px-2.5 py-1.5 text-xs"
+        className="[field-sizing:content] max-h-48 min-h-16 w-full resize-none px-2.5 py-1.5 text-xs"
       />
-      {conflicted && (
+      {conflicted > 0 && (
         <p className="text-xs text-amber-500">
-          Resolve the conflicted files before committing.
+          Resolve the {pluralize(conflicted, "conflicted file")} before
+          committing.
         </p>
       )}
       {error && (
         <ErrorBanner>
-          <pre className="max-h-32 overflow-auto font-mono text-2xs whitespace-pre-wrap">
+          <pre className="max-h-32 overflow-auto font-mono text-2xs whitespace-pre-wrap select-text">
             {error.message}
           </pre>
         </ErrorBanner>
       )}
-      <Button
-        type="button"
-        size="sm"
-        disabled={!canCommit}
-        onClick={submit}
-        className="w-full justify-start"
-      >
-        {pending ? (
-          <Loader2 aria-hidden className="animate-spin" />
-        ) : (
-          <GitCommitHorizontal aria-hidden />
-        )}
-        <span className="min-w-0 flex-1 truncate text-left">
-          {label}
-          {!worktree.detached && !amend && (
-            <>
-              {" "}
-              to <span className="font-mono">{worktree.branch}</span>
-            </>
+      <SimpleTooltip tip={blocked}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!canCommit}
+          onClick={submit}
+          className="w-full"
+        >
+          {pending ? (
+            <Loader2 aria-hidden className="animate-spin" />
+          ) : (
+            <GitCommitHorizontal aria-hidden />
           )}
-        </span>
-        {!pending && (
-          <Kbd className="bg-primary-foreground/20 text-primary-foreground">
-            ⌘↵
-          </Kbd>
-        )}
-      </Button>
+          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+          {canCommit && (
+            <Kbd className="bg-primary-foreground/20 text-primary-foreground">
+              ⌘↵
+            </Kbd>
+          )}
+        </Button>
+      </SimpleTooltip>
     </div>
   );
 }
@@ -173,8 +240,10 @@ function buttonLabel({
   included: number;
 }): string {
   if (pending) return amending ? "Amending…" : "Committing…";
-  const what = pluralize(included > 0 ? included : total, "file");
-  const scope = included > 0 ? what : `all ${what}`;
+  const count = included > 0 ? included : total;
+  const what = pluralize(count, "file");
+  // "all 1 file" reads wrong, and with one file there is no "all".
+  const scope = included > 0 || count === 1 ? what : `all ${what}`;
   if (amending) {
     return total === 0 ? "Amend the message" : `Amend with ${scope}`;
   }

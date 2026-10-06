@@ -16,7 +16,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useShortPath } from "@/hooks/ui/useShortPath";
 import {
   CONFIRM_QUICK_MS,
   useConfirmTwiceKeyed,
@@ -30,6 +29,12 @@ import {
   type DiffChangesControls,
 } from "./changesControls";
 import type { IndexEntry } from "@/lib/patchFiles";
+
+// Below this many files the changes list is short enough to scan, and
+// a filter field would only be one more row between the header and
+// the files. A read-only patch keeps its filter: that row also holds
+// the fold-all control.
+const FILTER_MIN_FILES = 8;
 
 // The file list for a diff: every file in scroll order with its
 // change marker and +/- counts. Order is never re-ranked, which is why
@@ -103,89 +108,102 @@ export function DiffFileIndex({
 
   return (
     <div data-slot="diff-index" className={cn("flex flex-col", className)}>
-      <div
-        data-slot="search-row"
-        className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5"
-      >
-        {changes ? (
-          <SelectAllCheckbox changes={changes} />
-        ) : (
+      {(!changes || entries.length >= FILTER_MIN_FILES || query) && (
+        <div
+          data-slot="search-row"
+          className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5"
+        >
           <Search
             aria-hidden
             className="size-3.5 shrink-0 text-muted-foreground/60"
           />
-        )}
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && query) {
-              // Clear in place rather than letting Escape bubble out to
-              // whatever the route does with it.
-              e.stopPropagation();
-              setQuery("");
-            }
-          }}
-          placeholder="Filter files"
-          aria-label="Filter files"
-          spellCheck={false}
-          className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
-        />
-        {changes && (
-          <DiscardMenu
-            changes={changes}
-            onPick={(kind) => {
-              discardArm.reset();
-              setPendingDiscard(kind);
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && query) {
+                // Clear in place rather than letting Escape bubble out to
+                // whatever the route does with it.
+                e.stopPropagation();
+                setQuery("");
+              }
             }}
+            placeholder="Filter files"
+            aria-label="Filter files"
+            spellCheck={false}
+            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
           />
-        )}
-        {onToggleAll && (
-          <button
-            type="button"
-            onClick={onToggleAll}
-            aria-label={
-              allCollapsed ? "Expand all files" : "Collapse all files"
-            }
-            data-icon-button
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            {allCollapsed ? (
-              <ChevronsUpDown aria-hidden className="size-3.5" />
-            ) : (
-              <ChevronsDownUp aria-hidden className="size-3.5" />
-            )}
-          </button>
-        )}
-      </div>
+          {onToggleAll && (
+            <button
+              type="button"
+              onClick={onToggleAll}
+              aria-label={
+                allCollapsed ? "Expand all files" : "Collapse all files"
+              }
+              data-icon-button
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              {allCollapsed ? (
+                <ChevronsUpDown aria-hidden className="size-3.5" />
+              ) : (
+                <ChevronsDownUp aria-hidden className="size-3.5" />
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {changes && (
+        // The changes list's own header: the box that ticks every row,
+        // what the ticks add up to, and the bulk discards.
+        <div className="flex items-center gap-2 pt-2 pr-2 pb-1 pl-3">
+          {/* Nothing to tick or throw away on an empty list, so the
+              header is just its line. */}
+          {changes.files.length > 0 && <SelectAllCheckbox changes={changes} />}
+          <span className="tabular min-h-5 min-w-0 flex-1 truncate text-xs leading-5 text-muted-foreground">
+            {describeSelection(changes)}
+          </span>
+          {changes.files.length > 0 && (
+            <DiscardMenu
+              changes={changes}
+              onPick={(kind) => {
+                discardArm.reset();
+                setPendingDiscard(kind);
+              }}
+            />
+          )}
+        </div>
+      )}
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1">
-        {matches.length === 0 ? (
-          <p className="px-2 py-3 text-xs text-muted-foreground">
-            {entries.length === 0
-              ? "No changed files."
-              : "No files match that filter."}
-          </p>
-        ) : (
-          matches.map((entry) => (
-            <IndexRow
-              key={entry.key}
-              entry={entry}
-              active={entry.key === activeKey}
-              collapsed={collapsedKeys.has(entry.key)}
-              onSelect={onSelect}
-              busy={changes?.busy ?? false}
-              onSetStaged={changes?.onSetStaged}
-              discardArmed={discardArm.armedKey === entry.key}
-              onDiscard={() =>
-                discardArm.trigger(entry.key, () => {
-                  if (entry.row)
-                    changes?.onDiscard(changedFilePaths(entry.row));
-                })
-              }
-            />
-          ))
-        )}
+        {/* An empty changes list has its header to say so (or that
+            it is still loading). */}
+        {matches.length === 0
+          ? (!changes || entries.length > 0) && (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                {entries.length === 0
+                  ? "No changed files."
+                  : "No files match that filter."}
+              </p>
+            )
+          : matches.map((entry) => (
+              <IndexRow
+                key={entry.key}
+                entry={entry}
+                active={entry.key === activeKey}
+                collapsed={collapsedKeys.has(entry.key)}
+                onSelect={onSelect}
+                busy={changes?.busy ?? false}
+                onSetStaged={changes?.onSetStaged}
+                discardArmed={discardArm.armedKey === entry.key}
+                onDiscard={() =>
+                  discardArm.trigger(entry.key, () => {
+                    if (entry.row)
+                      changes?.onDiscard(changedFilePaths(entry.row));
+                  })
+                }
+              />
+            ))}
       </div>
 
       {needle && matches.length > 0 && (
@@ -232,6 +250,19 @@ function SelectAllCheckbox({ changes }: { changes: DiffChangesControls }) {
       className="shrink-0"
     />
   );
+}
+
+// What the header says about the list: how many files, and how many
+// of them the next commit takes when that isn't all of them.
+function describeSelection(changes: DiffChangesControls): string {
+  if (changes.loading) return "Loading changes…";
+  const total = changes.files.length;
+  if (total === 0) return "No changes";
+  const included = includedFiles(changes.files).length;
+  if (included === 0 || included === total) {
+    return pluralize(total, "changed file");
+  }
+  return `${included} of ${pluralize(total, "file")} included`;
 }
 
 // The two bulk discards. "Unticked" is the one the checkbox model
@@ -361,11 +392,12 @@ function IndexRow({
   discardArmed: boolean;
   onDiscard: () => void;
 }) {
-  // No home to tildify against: these are repo-relative paths, so the
-  // helper only does the middle-segment abbreviation ("r/c/diff/x.tsx")
-  // against the measured width of this row's path column.
-  const [pathRef, display] = useShortPath(entry.path, null);
-  const cut = display.lastIndexOf("/");
+  // The file's name leads and its folder trails, dimmed: in a narrow
+  // list the name is what tells two rows apart, so the folder is what
+  // gives way when the row runs out of room.
+  const cut = entry.path.lastIndexOf("/");
+  const name = entry.path.slice(cut + 1);
+  const folder = cut >= 0 ? entry.path.slice(0, cut) : "";
   const { mark, label, className } = entry.mark;
   const { row } = entry;
   const select = () => onSelect(entry.key);
@@ -435,25 +467,33 @@ function IndexRow({
         >
           <span
             aria-hidden
-            className={cn("w-2 shrink-0 font-mono text-3xs", className)}
+            className={cn(
+              "w-2.5 shrink-0 text-center font-mono text-2xs font-semibold",
+              className,
+            )}
           >
             {mark}
           </span>
-          <span
-            ref={pathRef}
-            className="min-w-0 flex-1 truncate font-mono text-2xs"
-          >
-            {cut >= 0 && (
-              <span className="text-muted-foreground">
-                {display.slice(0, cut + 1)}
+          <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+            <span className="max-w-full shrink-0 truncate text-xs">{name}</span>
+            {/* Cut from its start, so what stays is the folder nearest
+                the file ("…/sidebar"), the part that tells two files of
+                one name apart. rtl moves the ellipsis to the left, and
+                the bdi keeps the path itself reading left to right. */}
+            {folder && (
+              <span
+                dir="rtl"
+                className="min-w-0 truncate text-left text-2xs text-muted-foreground"
+              >
+                <bdi>{folder}</bdi>
               </span>
             )}
-            {display.slice(cut + 1)}
           </span>
           {entry.stats && !discardArmed && (
             <DiffStats
               additions={entry.stats.additions}
               deletions={entry.stats.deletions}
+              compact
             />
           )}
         </button>
