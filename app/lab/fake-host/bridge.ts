@@ -456,7 +456,10 @@ function hostHandlersFor(
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,
     "worktreeData:write": ({ worktreeId, data }) => {
-      worktreeData.set(worktreeId, data);
+      worktreeData.set(worktreeId, {
+        ...worktreeData.get(worktreeId),
+        ports: data.ports,
+      });
     },
     // The host's own merge, with the posed liveness mapped on.
     "ports:list": ({ worktreeId }) => ({

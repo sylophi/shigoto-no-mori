@@ -60,6 +60,7 @@
 // session: one in flight, one queued.
 import type { Project } from "@shared/schemas";
 import { errorMessageOf, isEntityGoneError } from "@shared/errors";
+import type { followDescription } from "@host/lib/sync/worktreeDescription";
 import {
   GitStateSchema,
   isHaltedStatus,
@@ -295,6 +296,13 @@ export function createGitFollower(deps: {
   // answers nothing and is no such report. At most once a minute per
   // session.
   onCopyGone?: (session: FollowableSession) => void;
+  // Carries the worktree's title and description between the two
+  // sides (host/lib/sync/worktreeDescription.ts) on every reconcile
+  // that reaches the peer, whatever the git state decides, answering
+  // which side it wrote. A write here is the app's own, which the
+  // state watcher skips, so it is announced like a pull's apply
+  // (onLocalApplied). Absent in the checks that don't exercise it.
+  followDescription?: typeof followDescription;
   // A pull landed here: refs, HEAD and the index moved in the local
   // project by the app's own git, which the git-directory watcher
   // skips as the app's own writes, so nothing else would tell this
@@ -303,6 +311,9 @@ export function createGitFollower(deps: {
 }) {
   const records = new Map<string, FollowRecord>();
   const copyGoneAt = new Map<string, number>();
+  // Sessions whose title carry has failed, so a peer that can't take it
+  // (an older build) is reported once, not on every sweep.
+  const descriptionFailed = new Set<string>();
   const log = deps.log ?? ((message: string) => console.warn(message));
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
   // The agreed states by session id, loaded on the first start (the
@@ -468,6 +479,27 @@ export function createGitFollower(deps: {
           worktreeId: session.worktreeId,
         }),
       ]);
+      // Only once the peer has answered, so an unreachable one is not
+      // a failure logged on every sweep.
+      if (peerRead.status === "fulfilled") {
+        deps
+          .followDescription?.(
+            session.deviceId,
+            { projectId: localProjectId, worktreeId: localWorktreeId },
+            { projectId: session.projectId, worktreeId: session.worktreeId },
+          )
+          .then((wrote) => {
+            descriptionFailed.delete(session.session);
+            if (wrote === "here") deps.onLocalApplied?.(localProjectId);
+          })
+          .catch((error: unknown) => {
+            if (descriptionFailed.has(session.session)) return;
+            descriptionFailed.add(session.session);
+            log(
+              `[mirror] following the title and description failed: ${errorMessageOf(error)}`,
+            );
+          });
+      }
       const peerOperation =
         peerRead.status === "rejected"
           ? operationInRefusal(errorMessageOf(peerRead.reason))

@@ -14,6 +14,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { peerFilesHiddenNote } from "@/lib/commandAccessCopy";
 import { withMember } from "@/lib/toggleSet";
 import type { Worktree } from "@shared/schemas";
@@ -55,6 +56,7 @@ function FilesView({
     () => new Set(selected === null ? [] : ancestorsOf(selected)),
   );
   const phone = usePhoneLayout();
+  const backLabel = useWorktreeName(worktree);
   const [treeSheetOpen, setTreeSheetOpen] = useState(false);
 
   const toggleFolder = (folder: string, open: boolean) =>
@@ -94,14 +96,14 @@ function FilesView({
 
   return (
     <div className="flex h-full flex-col">
-      <SidebarTakeover back={{ label: worktree.branch, onClick: onBack }}>
+      <SidebarTakeover back={{ label: backLabel, onClick: onBack }}>
         {canCommand && <FileTree {...treeProps} className="min-h-0 flex-1" />}
       </SidebarTakeover>
       <header
         className={`flex flex-col gap-3 border-b border-border ${PAGE_HEADER_PADDING}`}
       >
         {/* A wide viewport's way back is the sidebar's first row. */}
-        {phone && <BackButton onClick={onBack} label={worktree.branch} />}
+        {phone && <BackButton onClick={onBack} label={backLabel} />}
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1 space-y-1">
             <h1 className="truncate text-xl font-medium tracking-tight phone:text-lg">

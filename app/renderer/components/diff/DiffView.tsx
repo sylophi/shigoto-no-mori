@@ -14,6 +14,7 @@ import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
 import { flushSync } from "react-dom";
 import { ChevronDown, Files, Loader2, WrapText } from "lucide-react";
 import { useTheme } from "@/hooks/ui/useTheme";
+import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
@@ -23,6 +24,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import type { Worktree } from "@shared/schemas";
 import type { DiffChangesControls } from "./changesControls";
 import {
   CODE_GAP_BLOCK,
@@ -133,7 +135,7 @@ function usePatchFiles(patch: string | undefined): FileDiffMetadata[] {
 export function DiffView({
   diff,
   onBack,
-  backLabel,
+  worktree,
   title,
   subtitle,
   emptyMessage,
@@ -143,7 +145,8 @@ export function DiffView({
   // The patch's read, whichever of the three pages asked for it.
   diff: UseQueryResult<string>;
   onBack: () => void;
-  backLabel: string;
+  // The worktree the back button returns to, named as its page is.
+  worktree: Worktree;
   title: ReactNode;
   subtitle: ReactNode;
   emptyMessage: ReactNode;
@@ -156,6 +159,7 @@ export function DiffView({
   footer?: ReactNode;
 }) {
   const { data: patch, isLoading, error } = diff;
+  const backLabel = useWorktreeName(worktree);
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
   const [wrapLines, setWrapLines] = useState(
     () => readStored(WRAP_STORAGE_KEY) === "true",

@@ -45,7 +45,11 @@ type worktreeJSON struct {
 	Detached          bool            `json:"detached"`
 	Shelved           bool            `json:"shelved"`
 	AutoPull          bool            `json:"autoPull"`
-	ProjectName       string          `json:"projectName"`
+	// What `describe` set: the work's name and summary until a pull
+	// request takes them over.
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	ProjectName string `json:"projectName"`
 }
 
 const recentCommitsCount = 4
@@ -169,6 +173,12 @@ func probeWorktree(proj project, id worktreeIdentity, ctx buildContext) (worktre
 	wg.Go(func() { rs = getRemoteSync(id.Path) })
 	wg.Go(func() { primary = getPrimaryRelation(id, ctx) })
 	wg.Go(func() { unpushed = getUnpushedCount(id.Path) })
+	// External worktrees keep no data file (a move out of the layout
+	// leaves one behind until adopt carries it back).
+	var desc worktreeDescription
+	if hasWorktreeData(id) {
+		desc = readWorktreeDescription(id.ProjectID, id.ID)
+	}
 	wg.Wait()
 	probe.statusOK = statusErr == nil
 	return worktreeJSON{
@@ -198,6 +208,8 @@ func probeWorktree(proj project, id worktreeIdentity, ctx buildContext) (worktre
 		// Unlike the shelf, any checkout can follow its upstream: the
 		// primary is the mark's main customer.
 		AutoPull:    ctx.autoPull[id.ID],
+		Title:       desc.Title,
+		Description: desc.Description,
 		ProjectName: proj.Name,
 	}, probe
 }

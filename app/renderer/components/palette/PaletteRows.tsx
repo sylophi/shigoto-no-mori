@@ -11,6 +11,7 @@ import { matchPositions } from "@/lib/fuzzyMatch";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
+import { worktreeTitle } from "@/lib/worktreeTitle";
 import { worktreeLastActivityAt, type Project } from "@shared/schemas";
 import type { PaletteEntry, PaletteProject } from "./buildPaletteEntries";
 
@@ -64,6 +65,8 @@ function WorktreeRow({
 }) {
   const { worktree, project, device, mirror, pr } = entry;
   const activeAt = worktreeLastActivityAt(worktree);
+  // The sidebar's line: what the work is called, the branch without.
+  const title = worktreeTitle(worktree, pr);
   const status = worktree.mergedIntoPrimary
     ? "merged"
     : worktree.shelved
@@ -80,17 +83,29 @@ function WorktreeRow({
         />
       }
       title={
-        <span className="font-mono">
-          {worktree.detached ? (
-            <BranchLabel branch={worktree.branch} detached />
-          ) : (
-            <Highlight text={worktree.branch} query={query} />
-          )}
-        </span>
+        title !== null ? (
+          <Highlight text={title} query={query} />
+        ) : (
+          <span className="font-mono">
+            {worktree.detached ? (
+              <BranchLabel branch={worktree.branch} detached />
+            ) : (
+              <Highlight text={worktree.branch} query={query} />
+            )}
+          </span>
+        )
       }
       detail={
         <>
           <Highlight text={project.name} query={query} /> ·{" "}
+          {title !== null && !worktree.detached && (
+            <>
+              <span className="font-mono">
+                <Highlight text={worktree.branch} query={query} />
+              </span>{" "}
+              ·{" "}
+            </>
+          )}
           <Highlight text={worktree.name} query={query} />
           {activeAt > 0 && ` · ${formatRelativeTime(activeAt, now)}`}
           {status && ` · ${status}`}

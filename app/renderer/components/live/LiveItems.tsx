@@ -229,6 +229,10 @@ function SessionItem({
       runnerDeviceId,
       runnerApi,
       otherDeviceId: session.deviceId,
+      otherCopy: {
+        projectId: session.projectId,
+        worktreeId: session.worktreeId,
+      },
       session,
       engine,
     },

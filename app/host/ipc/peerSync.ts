@@ -7,6 +7,7 @@
 // authed socket per deviceId, and a second dial silently supersedes
 // the session every remote-forest query is riding on.
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
+import type { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import type { ChannelMux } from "@shared/ipc/socket/channels";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
@@ -51,10 +52,18 @@ export type PeerWorktreesApi = Pick<
   "delete" | "list" | "setShelved"
 >;
 
+// A worktree's title and description, read off the source and written
+// onto the copy (host/lib/sync/worktreeDescription.ts).
+export type PeerShigomoriApi = Pick<
+  Client<typeof shigomoriContract>,
+  "worktreeDataRead" | "worktreeDataDescribe"
+>;
+
 type PeerSyncImpl = {
   syncApiFor: (deviceId: string) => PeerSyncApi;
   worktreesApiFor: (deviceId: string) => PeerWorktreesApi;
   mirrorApiFor: (deviceId: string) => PeerMirrorApi;
+  shigomoriApiFor: (deviceId: string) => PeerShigomoriApi;
   // This device's own id, the target a mirror asked for from here
   // names to the peer.
   thisDeviceId: () => string;
@@ -75,6 +84,10 @@ export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
 
 export function peerMirrorApiFor(deviceId: string): PeerMirrorApi {
   return requireImpl().mirrorApiFor(deviceId);
+}
+
+export function peerShigomoriApiFor(deviceId: string): PeerShigomoriApi {
+  return requireImpl().shigomoriApiFor(deviceId);
 }
 
 export function thisDeviceId(): string {

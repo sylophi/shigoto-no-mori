@@ -11,7 +11,7 @@
 //     registered behind the host's back resolves after one refresh, and
 //     an unknown id is the entity-gone error.
 //   - worktrees:list, a mutation's describe, the auto-pull and shelf
-//     marks and relocate (marks and notes carried to the new id) all
+//     marks and relocate (marks and the title carried to the new id) all
 //     answer with the CLI's rows, and an unknown worktree is the
 //     entity-gone error.
 //   - hygiene:diskUsage measures through `sm disk-usage`, and a file
@@ -65,7 +65,7 @@ const { sm } = await wireHostCli(dataDir);
 
 const { worktreeIdFromPath } = await import("@host/lib/git/worktrees");
 const { findProjectOrThrow, loadProjects } = await import("@host/lib/projects");
-const { readWorktreeData, writeWorktreeData } =
+const { readWorktreeData, writeWorktreeData, writeWorktreeDescription } =
   await import("@host/lib/config/project");
 const {
   forceRemoveViaCli,
@@ -398,10 +398,15 @@ async function main() {
   );
 
   await check(
-    "relocate: the move carries the marks and the notes to the new id, and the primary refuses",
+    "relocate: the move carries the marks and the title to the new id, and the primary refuses",
     async () => {
       const oldId = worktreeIdFromPath(linkedPath);
-      await writeWorktreeData(projectId, oldId, { notes: "keep me" });
+      await writeWorktreeDescription(projectId, oldId, {
+        title: "keep me",
+        describedAt: 1,
+      });
+      // The renderer's write (the ports) keeps the title on disk.
+      await writeWorktreeData(projectId, oldId, { ports: [{ port: 4100 }] });
       const destination = join(managedBase, "alpha-moved");
       const moved = await worktreesHandlers.relocate(
         {
@@ -416,8 +421,11 @@ async function main() {
       assert.equal(moved.shelved, true);
       assert.equal(moved.autoPull, true);
       assert.equal(existsSync(linkedPath), false);
+      assert.equal(moved.title, "keep me");
       assert.deepEqual(await readWorktreeData(projectId, moved.id), {
-        notes: "keep me",
+        title: "keep me",
+        describedAt: 1,
+        ports: [{ port: 4100 }],
       });
       assert.equal(await readWorktreeData(projectId, oldId), null);
       const registry = readRegistry(dataDir);

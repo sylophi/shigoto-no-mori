@@ -67,12 +67,18 @@ import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { type PeerChannels, setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { sendWorktree, syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
+import {
+  readWorktreeData,
+  writeWorktreeDescription,
+} from "@host/lib/config/project";
 import {
   getRunningScriptWorktrees,
   killScriptsForWorktree,
   startScript,
 } from "@host/lib/scripts";
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
+import { followDescription } from "@host/lib/sync/worktreeDescription";
 import {
   attachLink,
   BundleAnswerSchema,
@@ -606,6 +612,17 @@ async function main() {
       mirrorApiFor: () => {
         throw new Error("this proof asks for no mirror");
       },
+      // The title's carry. Both devices share the data dir, so A's
+      // handlers answer in-process.
+      shigomoriApiFor: (deviceId) => {
+        assert.equal(deviceId, "A", "the carry dialed an unexpected device");
+        return {
+          worktreeDataRead: async (input) =>
+            shigomoriHandlers.worktreeDataRead(input, handlerCtx()),
+          worktreeDataDescribe: async (input) =>
+            shigomoriHandlers.worktreeDataDescribe(input, handlerCtx()),
+        };
+      },
       thisDeviceId: () => "B",
     });
     const pullCtx = handlerCtx();
@@ -637,6 +654,11 @@ async function main() {
     // (6) Branch-transfer path: a clean worktree on a branch whose tip
     // the receiver lacks. The branch crosses as a thin bundle, the
     // worktree lands on it, and the incoming ref is swept.
+    await writeWorktreeDescription(
+      sourceProjectId,
+      worktreeIdFromPath(worktree2Path),
+      { title: "Second feature", description: "What it does.", describedAt: 7 },
+    );
     const cleanPull = await syncHandlers.pullWorktree(
       {
         sourceDeviceId: "A",
@@ -663,9 +685,75 @@ async function main() {
       false,
       "the incoming ref must be swept after a successful pull",
     );
-    ok(
-      "pull round trip (clean): the branch crosses the direct wire and the worktree lands on it with the incoming ref swept",
+    assert.deepEqual(
+      await readWorktreeData(
+        cleanPull.worktree.projectId,
+        cleanPull.worktree.id,
+      ),
+      { title: "Second feature", description: "What it does.", describedAt: 7 },
+      "the pull must carry the title and description onto the copy",
     );
+    ok(
+      "pull round trip (clean): the branch crosses the direct wire and the worktree lands on it, its title and description with it, with the incoming ref swept",
+    );
+
+    // A mirror's two sides keep whichever pair was described last,
+    // each way round, and an equal pair moves nothing.
+    {
+      const copy = {
+        projectId: cleanPull.worktree.projectId,
+        worktreeId: cleanPull.worktree.id,
+      };
+      const original = {
+        projectId: sourceProjectId,
+        worktreeId: worktreeIdFromPath(worktree2Path),
+      };
+      await writeWorktreeDescription(original.projectId, original.worktreeId, {
+        title: "Renamed there",
+        describedAt: 9,
+      });
+      await followDescription("A", copy, original);
+      assert.deepEqual(
+        await readWorktreeData(copy.projectId, copy.worktreeId),
+        { title: "Renamed there", describedAt: 9 },
+      );
+      await writeWorktreeDescription(copy.projectId, copy.worktreeId, {
+        title: "Renamed here",
+        description: "And described.",
+        describedAt: 12,
+      });
+      await followDescription("A", copy, original);
+      assert.deepEqual(
+        await readWorktreeData(original.projectId, original.worktreeId),
+        {
+          title: "Renamed here",
+          description: "And described.",
+          describedAt: 12,
+        },
+      );
+      // Described in the same millisecond, differently: this side
+      // (the original) wins, and both settle on it.
+      await writeWorktreeDescription(copy.projectId, copy.worktreeId, {
+        title: "Tie here",
+        describedAt: 20,
+      });
+      await writeWorktreeDescription(original.projectId, original.worktreeId, {
+        title: "Tie there",
+        describedAt: 20,
+      });
+      await followDescription("A", copy, original);
+      assert.deepEqual(
+        await readWorktreeData(original.projectId, original.worktreeId),
+        { title: "Tie here", describedAt: 21 },
+      );
+      assert.deepEqual(
+        await readWorktreeData(copy.projectId, copy.worktreeId),
+        { title: "Tie here", describedAt: 21 },
+      );
+      ok(
+        "mirror: the title and description follow whichever side was described last, and a tie settles on this side",
+      );
+    }
 
     // (7) Dirty + tip-already-local path: scratch sits at the base
     // commit the receiver already holds, so no branch bundle crosses;
