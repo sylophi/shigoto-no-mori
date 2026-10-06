@@ -21,7 +21,6 @@ import ghosttyIconUrl from "@/app-icons/ghostty.png";
 import githubDesktopIconUrl from "@/app-icons/github-desktop.png";
 import itermIconUrl from "@/app-icons/iterm.png";
 import sublimeIconUrl from "@/app-icons/sublime.png";
-import t3codeIconUrl from "@/app-icons/t3code.png";
 import terminalIconUrl from "@/app-icons/terminal.png";
 import vscodeIconUrl from "@/app-icons/vscode.png";
 import vscodeInsidersIconUrl from "@/app-icons/vscode-insiders.png";
@@ -56,7 +55,6 @@ const APP_ICON_URL = new Map<string, string>([
   ["antigravity", antigravityIconUrl],
   ["codex", chatgptIconUrl],
   ["claude", claudeIconUrl],
-  ["t3code", t3codeIconUrl],
   ["windsurf", windsurfIconUrl],
   ["vscodium", vscodiumIconUrl],
   ["sublime", sublimeIconUrl],
