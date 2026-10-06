@@ -5,10 +5,11 @@
 // show their outcome and the commit → push flow runs end to end.
 import type { ChangedFile, CommitSummary, Worktree } from "@shared/schemas";
 
-// The files a worktree's changes are drawn from, the first
-// `changedCount` of them, sorted by path like git status. One of each kind, a deep path and a long name, and
-// enough of them (8) for the list's filter, so the marks, the
-// truncation and the filter all show.
+// The files a worktree's changes are drawn from: the first
+// `changedCount` of them, then sorted by path like git status. One of
+// each kind, a deep path and a long name, and enough of them (8) for
+// the list's filter, so the marks, the truncation and the filter all
+// show.
 const POOL: readonly ChangedFile[] = [
   {
     path: "renderer/components/diff/CommitComposer.tsx",
@@ -77,7 +78,7 @@ export function createFakeChanges(
     let files = trees.get(worktreeId);
     if (!files) {
       const count = findWorktree(worktreeId)?.changedCount ?? 0;
-      files = POOL.slice(0, Math.min(count, POOL.length)).toSorted(byPath);
+      files = POOL.slice(0, count).toSorted(byPath);
       trees.set(worktreeId, files);
     }
     return files;
@@ -123,21 +124,15 @@ export function createFakeChanges(
       );
       if (taken.length === 0 && !amend) throw new Error("Nothing to commit");
       const hash = Math.random().toString(16).slice(2, 9);
-      const additions = taken.reduce(
-        (n, f) => n + (f.counts?.additions ?? 0),
-        0,
-      );
-      const deletions = taken.reduce(
-        (n, f) => n + (f.counts?.deletions ?? 0),
-        0,
-      );
+      const total = (side: "additions" | "deletions") =>
+        taken.reduce((n, f) => n + (f.counts?.[side] ?? 0), 0);
       const made: CommitSummary = {
         hash,
         subject: summary,
         author: "sylophi",
         date: new Date().toISOString(),
-        additions,
-        deletions,
+        additions: total("additions"),
+        deletions: total("deletions"),
       };
       if (amend) {
         worktree.recentCommits = [made, ...worktree.recentCommits.slice(1)];
@@ -151,9 +146,7 @@ export function createFakeChanges(
         worktreeId,
         files.filter((file) => !taken.includes(file)),
       );
-      // A copy, like the real host's fresh read: the page keys its
-      // updates on identity.
-      return { hash, worktree: { ...worktree } };
+      return { hash, worktree };
     },
 
     discard: (worktreeId: string, paths: string[]) => {
@@ -163,7 +156,7 @@ export function createFakeChanges(
         filesOf(worktreeId).filter((file) => !touches(file, set)),
       );
       if (!worktree) throw new Error("Unknown worktree");
-      return { snapshot: "5eed5ab", worktree: { ...worktree } };
+      return { snapshot: "5eed5ab", worktree };
     },
 
     // The patch for one picked file: a hunk the size of its counts.

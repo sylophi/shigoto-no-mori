@@ -1105,13 +1105,13 @@
   animation: var(--doubutsu-stripe-animation);
 }
 
-/* A diff file list row is hovered as one pill but built from three controls,
-   and the middle one (the jump button) is a <button>, so the rule
-   above would stripe a band across the row's middle instead of the row.
+/* A diff file list row is hovered as one pill but built from two controls,
+   and the second one (the jump button) is a <button>, so the rule
+   above would stripe a band across the row instead of the row itself.
    The row is on the list above. The jump button sits this one out, and
-   the two ride together (both are hooks in the CONTRACT). The tick and
-   the discard keep their own stripes: those are controls you aim at,
-   not the row's own click target. */
+   the two ride together (both are hooks in the CONTRACT). The tick
+   keeps its own stripes: it is a control you aim at, not the row's own
+   click target. */
 .doubutsu [data-slot="diff-index-jump"]:is(:hover, :active) {
   background-image: none;
   animation: none;

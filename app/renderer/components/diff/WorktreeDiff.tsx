@@ -16,6 +16,7 @@ import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
+import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import {
@@ -29,7 +30,6 @@ import { BranchBar } from "./BranchBar";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
-import { WorktreeSyncPill } from "@/components/worktreeDetail/WorktreeSyncPill";
 import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 
 export function WorktreeDiff() {
@@ -210,9 +210,12 @@ function ChangesView({
       footer={
         <div
           data-slot="changes-footer"
-          className="flex flex-col border-t border-border"
+          className={cn(
+            "flex flex-col border-t border-border",
+            !showComposer && "pb-1.5",
+          )}
         >
-          <BranchBar worktree={worktree} dirty={changedCount > 0} />
+          <BranchBar worktree={worktree} />
           {lastCommit && rewrite.canAmend && (
             <LastCommitStrip
               commit={lastCommit}
@@ -226,7 +229,7 @@ function ChangesView({
               }}
             />
           )}
-          {showComposer ? (
+          {showComposer && (
             <CommitComposer
               files={list}
               draft={draft}
@@ -243,8 +246,6 @@ function ChangesView({
               }
               onCommit={onCommit}
             />
-          ) : (
-            <div className="pb-1.5" />
           )}
         </div>
       }
@@ -253,9 +254,8 @@ function ChangesView({
 }
 
 // What the pane says once everything is committed: that the tree is
-// clean, and what the branch still owes the remote, with the button
-// that settles it. That is the next thing to do, and the pane is
-// otherwise empty.
+// clean, and what the branch still owes the remote, the next thing to
+// do, which the branch bar below has the button for.
 function CleanTreeMessage({ worktree }: { worktree: Worktree }) {
   const next = owedToRemote(worktree);
   return (
@@ -263,7 +263,6 @@ function CleanTreeMessage({ worktree }: { worktree: Worktree }) {
       <CircleCheck aria-hidden className="size-6 text-muted-foreground/60" />
       <span className="text-foreground">No uncommitted changes</span>
       {next && <span className="text-xs">{next}</span>}
-      <WorktreeSyncPill worktree={worktree} />
     </span>
   );
 }

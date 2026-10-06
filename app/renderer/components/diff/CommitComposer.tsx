@@ -57,21 +57,13 @@ export function CommitComposer({
     total: files.length,
     included,
   });
-  // Why the button is dead, when nothing else on screen says so:
-  // conflicts have their own line, and an empty list and a commit in
-  // flight say it on the button.
-  const blocked =
-    !pending &&
-    conflicted === 0 &&
-    (files.length > 0 || amend !== null) &&
-    summary.length === 0
-      ? "Write a summary first"
-      : undefined;
-  const canCommit =
-    summary.length > 0 &&
-    (files.length > 0 || amend !== null) &&
-    conflicted === 0 &&
-    !pending;
+  // Everything but the message is in place. When only the summary is
+  // missing, the button's tooltip says so: conflicts have their own
+  // line, and an empty list and a commit in flight say it on the button.
+  const ready =
+    !pending && conflicted === 0 && (files.length > 0 || amend !== null);
+  const canCommit = ready && summary.length > 0;
+  const blocked = ready && !canCommit ? "Write a summary first" : undefined;
 
   const submit = () => {
     if (canCommit) onCommit();
@@ -107,17 +99,15 @@ export function CommitComposer({
     e.preventDefault();
     onDraftChange({
       summary: `${before}${first}${after}`,
-      description: body
-        ? draft.description.trim()
-          ? `${body}\n\n${draft.description}`
-          : body
-        : draft.description,
+      description: [body, draft.description.trim() && draft.description]
+        .filter(Boolean)
+        .join("\n\n"),
     });
   };
 
-  const summaryLength = draft.summary.length;
-  const showCount = summaryLength > SUMMARY_SOFT_LIMIT - 10;
-  const overLimit = summaryLength > SUMMARY_SOFT_LIMIT;
+  const left = SUMMARY_SOFT_LIMIT - draft.summary.length;
+  const showCount = left < 10;
+  const overLimit = left < 0;
 
   return (
     <div data-slot="commit-composer" className="flex flex-col gap-2 px-3 pb-3">
@@ -161,7 +151,7 @@ export function CommitComposer({
             tip={
               overLimit
                 ? `Past ${SUMMARY_SOFT_LIMIT} characters, most git tools cut the summary off`
-                : `${SUMMARY_SOFT_LIMIT - summaryLength} left before most git tools cut the summary off`
+                : `${left} left before most git tools cut the summary off`
             }
           >
             <span
@@ -170,7 +160,7 @@ export function CommitComposer({
                 overLimit ? "text-amber-500" : "text-muted-foreground",
               )}
             >
-              {SUMMARY_SOFT_LIMIT - summaryLength}
+              {left}
             </span>
           </SimpleTooltip>
         )}

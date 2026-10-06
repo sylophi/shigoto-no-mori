@@ -27,6 +27,7 @@ import {
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
+import { getBrowseLeafSegment } from "@shared/projectPaths";
 import { changeKey, type ChangedFile } from "@shared/schemas";
 import {
   changedFilePaths,
@@ -112,6 +113,25 @@ export function DiffFileIndex({
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscard | null>(
     null,
   );
+  // The row whose context menu is up. One menu serves the whole list,
+  // anchored at the pointer: a menu per row would mount a menu's worth
+  // of state on every one of hundreds of rows to show one at a time.
+  // The key outlives `open` so the menu keeps its items while it closes.
+  const [menu, setMenu] = useState<{ key: string; open: boolean } | null>(null);
+  const menuEntry = menu && entries.find((entry) => entry.key === menu.key);
+
+  // Empty lists say so: a changes list in its header (or that it is
+  // still loading), a patch's in the list.
+  const emptyNote =
+    entries.length > 0 ? (
+      <p className="px-2 py-3 text-xs text-muted-foreground">
+        No files match that filter.
+      </p>
+    ) : changes ? null : (
+      <p className="px-2 py-3 text-xs text-muted-foreground">
+        No changed files.
+      </p>
+    );
 
   return (
     <div data-slot="diff-index" className={cn("flex flex-col", className)}>
@@ -176,30 +196,51 @@ export function DiffFileIndex({
         </div>
       )}
 
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1">
-        {/* An empty changes list has its header to say so (or that
-            it is still loading). */}
-        {matches.length === 0
-          ? (!changes || entries.length > 0) && (
-              <p className="px-2 py-3 text-xs text-muted-foreground">
-                {entries.length === 0
-                  ? "No changed files."
-                  : "No files match that filter."}
-              </p>
-            )
-          : matches.map((entry) => (
-              <IndexRow
-                key={entry.key}
-                entry={entry}
-                active={entry.key === activeKey}
-                collapsed={collapsedKeys.has(entry.key)}
-                onSelect={onSelect}
-                busy={changes?.busy ?? false}
-                onSetStaged={changes?.onSetStaged}
-                onDiscard={() => setPendingDiscard({ key: entry.key })}
-              />
-            ))}
-      </div>
+      <ContextMenu
+        open={menu?.open ?? false}
+        onOpenChange={(open, details) => {
+          if (!open) {
+            setMenu((current) => current && { ...current, open: false });
+            return;
+          }
+          // Only a row has a menu: a right click on the list's empty
+          // space finds no key and leaves it closed.
+          const target = details.event.target;
+          const key =
+            target instanceof Element
+              ? target.closest("[data-row-key]")?.getAttribute("data-row-key")
+              : null;
+          if (key) setMenu({ key, open: true });
+        }}
+      >
+        <ContextMenuTrigger
+          render={
+            <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1" />
+          }
+        >
+          {matches.length === 0
+            ? emptyNote
+            : matches.map((entry) => (
+                <IndexRow
+                  key={entry.key}
+                  entry={entry}
+                  active={entry.key === activeKey}
+                  collapsed={collapsedKeys.has(entry.key)}
+                  menuOpen={menu?.open === true && menu.key === entry.key}
+                  onSelect={onSelect}
+                  busy={changes?.busy ?? false}
+                  onSetStaged={changes?.onSetStaged}
+                />
+              ))}
+        </ContextMenuTrigger>
+        {menuEntry && (
+          <FileMenu
+            entry={menuEntry}
+            changes={changes}
+            onDiscard={() => setPendingDiscard({ key: menuEntry.key })}
+          />
+        )}
+      </ContextMenu>
 
       {needle && matches.length > 0 && (
         <p className="border-t border-border px-2.5 py-1 text-2xs text-muted-foreground">
@@ -264,8 +305,7 @@ function describeSelection(changes: DiffChangesControls): string {
 // The two bulk discards, and one file's from its row (by row key).
 // "Unticked" is the one the checkbox model earns: tick what you're
 // keeping, throw away the rest.
-type BulkDiscard = "unticked" | "all";
-type PendingDiscard = BulkDiscard | { key: string };
+type PendingDiscard = "unticked" | "all" | { key: string };
 
 function discardFiles(
   pending: PendingDiscard,
@@ -297,9 +337,7 @@ function describeDiscard(
     return `the ${pluralize(picked.length, "unticked file")}`;
   }
   const path = picked[0]?.path;
-  return path
-    ? `changes to ${path.slice(path.lastIndexOf("/") + 1)}`
-    : "changes";
+  return path ? `changes to ${getBrowseLeafSegment(path)}` : "changes";
 }
 
 // "Unticked" is disabled while nothing is ticked, since "the rest" would
@@ -387,57 +425,52 @@ function IndexRow({
   entry,
   active,
   collapsed,
+  menuOpen,
   onSelect,
   busy,
   onSetStaged,
-  onDiscard,
 }: {
   entry: IndexEntry;
   active: boolean;
   collapsed: boolean;
+  // Its context menu is up: the row stays lit while it is.
+  menuOpen: boolean;
   onSelect: (key: string) => void;
   busy: boolean;
   onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
-  onDiscard: () => void;
 }) {
   // The file's name leads and its folder trails, dimmed: in a narrow
   // list the name is what tells two rows apart, so the folder is what
   // gives way when the row runs out of room.
-  const cut = entry.path.lastIndexOf("/");
-  const name = entry.path.slice(cut + 1);
-  const folder = cut >= 0 ? entry.path.slice(0, cut) : "";
+  const name = getBrowseLeafSegment(entry.path);
+  const folder = entry.path.slice(0, -name.length - 1);
   const { mark, label, className } = entry.mark;
   const { row } = entry;
   const select = () => onSelect(entry.key);
   // The context menu is a gesture nothing on the row shows, so the
   // row's hint names it.
-  const tip = [
-    entry.prevPath
-      ? `${label}: ${entry.prevPath} → ${entry.path}`
-      : `${label}: ${entry.path}`,
-    row && "Right-click to discard or copy the path",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const tip = `${label}: ${entry.prevPath ? `${entry.prevPath} → ` : ""}${entry.path}${row ? "\nRight-click to discard or copy the path" : ""}`;
 
-  const rowElement = (
+  return (
     // A row is two controls side by side (tick, jump), so it can't be
     // one button. The wrapper takes the click so the whole pill lands on
     // the file, the tick stops it from bubbling, and the inner button is
     // what the keyboard reaches. The wrapper also carries the active
-    // marker the scroll-into-view above looks for, it is what doubutsu
-    // paints its hover treatment on (see diff-index-jump there), and it
-    // is the context menu's trigger, lit while the menu is open.
+    // marker the scroll-into-view above looks for, the key the list's
+    // context menu finds it by, and it is what doubutsu paints its hover
+    // treatment on (see diff-index-jump there).
     <div
       role="presentation"
       data-slot="diff-index-row"
+      data-row-key={entry.key}
       onClick={select}
       data-active={active || undefined}
       className={cn(
-        "group/row flex w-full items-center gap-1.5 rounded-md pr-2 pl-2 transition-colors",
+        "flex w-full items-center gap-1.5 rounded-md px-2 transition-colors",
         active
           ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent/50 hover:text-foreground data-popup-open:bg-accent/50",
+          : "hover:bg-accent/50 hover:text-foreground",
+        menuOpen && !active && "bg-accent/50",
         collapsed && "opacity-55",
       )}
     >
@@ -518,44 +551,51 @@ function IndexRow({
       </SimpleTooltip>
     </div>
   );
+}
 
+// The list's context menu, for the row it opened on: tick or untick it
+// and discard it on the changes page, copy its path anywhere.
+function FileMenu({
+  entry,
+  changes,
+  onDiscard,
+}: {
+  entry: IndexEntry;
+  changes: DiffChangesControls | undefined;
+  onDiscard: () => void;
+}) {
+  const { row } = entry;
+  const included = row?.staged === "all";
   return (
-    <ContextMenu>
-      <ContextMenuTrigger render={rowElement} />
-      <ContextMenuContent className="min-w-48">
-        {row && onSetStaged && (
-          <DropdownMenuItem
-            disabled={busy}
-            onClick={() =>
-              onSetStaged(changedFilePaths(row), row.staged !== "all")
-            }
-          >
-            {row.staged === "all" ? <Minus /> : <Check />}
-            {row.staged === "all"
-              ? "Leave out of the commit"
-              : "Include in the commit"}
-          </DropdownMenuItem>
-        )}
+    <ContextMenuContent className="min-w-48">
+      {row && changes && (
         <DropdownMenuItem
-          onClick={() => void navigator.clipboard.writeText(entry.path)}
+          disabled={changes.busy}
+          onClick={() => changes.onSetStaged(changedFilePaths(row), !included)}
         >
-          <Copy />
-          Copy path
+          {included ? <Minus /> : <Check />}
+          {included ? "Leave out of the commit" : "Include in the commit"}
         </DropdownMenuItem>
-        {row && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={busy}
-              onClick={onDiscard}
-            >
-              <Undo2 />
-              Discard changes…
-            </DropdownMenuItem>
-          </>
-        )}
-      </ContextMenuContent>
-    </ContextMenu>
+      )}
+      <DropdownMenuItem
+        onClick={() => void navigator.clipboard.writeText(entry.path)}
+      >
+        <Copy />
+        Copy path
+      </DropdownMenuItem>
+      {row && changes && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={changes.busy}
+            onClick={onDiscard}
+          >
+            <Undo2 />
+            Discard changes…
+          </DropdownMenuItem>
+        </>
+      )}
+    </ContextMenuContent>
   );
 }

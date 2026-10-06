@@ -154,8 +154,14 @@ function createFixtureWire(
         const handler = handlers[channel];
         if (handler !== undefined) {
           // Parsed the way the real registrar parses it, so a handler
-          // sees the contract's shape and a bad fixture call fails.
-          return Promise.resolve().then(() => handler(def.input.parse(input)));
+          // sees the contract's shape and a bad fixture call fails. The
+          // answer is copied the way the real wire's serializing copies
+          // it, so handlers can hand back the fixture world's own rows
+          // and change them in place later: a cached answer that is the
+          // same object as the next one would never look changed.
+          return Promise.resolve()
+            .then(() => handler(def.input.parse(input)))
+            .then((answer) => structuredClone(answer));
         }
         const stub = stubValueFor(def.output, { fabricateArms: true });
         if (stub === NO_STRUCTURAL_STUB) {
@@ -275,11 +281,11 @@ function hostHandlersFor(
     worktreeId: string,
     move: (worktree: Worktree) => void,
   ): Promise<Worktree> => {
-    await new Promise((resolve) => setTimeout(resolve, 700));
+    await sleep(700);
     const worktree = findWorktree(worktreeId);
     if (!worktree) throw new Error("Unknown worktree");
     move(worktree);
-    return { ...worktree };
+    return worktree;
   };
   const branchesOf = () => [
     "main",
@@ -399,11 +405,7 @@ function hostHandlersFor(
       projectIconFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",
       ),
-    // Copies, like a real read: the verbs below change the rows in
-    // place, and a cached row that is the same object as the answer
-    // would never look changed.
-    "worktrees:list": ({ projectId }) =>
-      structuredClone(forest.worktrees[projectId] ?? []),
+    "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
     "worktrees:create": ({ projectId, worktreeName, branchName }) => {
       const name = worktreeName ?? "tender-tanuki";
       const created = worktreeFixture({
@@ -460,16 +462,11 @@ function hostHandlersFor(
       changes.discard(worktreeId, paths),
     // The sync verbs move the counts the way the real ones would, after
     // a beat so their pending state shows.
-    "worktrees:push": ({ worktreeId }) =>
-      syncAfter(worktreeId, (w) => {
-        w.ahead = 0;
-        w.unpushedCount = 0;
-      }),
+    "worktrees:push": ({ worktreeId }) => syncAfter(worktreeId, pushed),
     "worktrees:publish": ({ worktreeId }) =>
       syncAfter(worktreeId, (w) => {
         w.hasUpstream = true;
-        w.ahead = 0;
-        w.unpushedCount = 0;
+        pushed(w);
       }),
     "worktrees:pull": ({ worktreeId }) =>
       syncAfter(worktreeId, (w) => {
@@ -477,9 +474,8 @@ function hostHandlersFor(
       }),
     "worktrees:pullAndPush": ({ worktreeId }) =>
       syncAfter(worktreeId, (w) => {
-        w.ahead = 0;
         w.behind = 0;
-        w.unpushedCount = 0;
+        pushed(w);
       }),
     "worktrees:commitDiff": () => FAKE_DIFF,
     // For an amend's prefill: the subject the row carries, no body.
@@ -780,6 +776,13 @@ function hostHandlersFor(
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// What a push or a publish leaves: every commit on the branch is on the
+// remote now.
+function pushed(worktree: Worktree): void {
+  worktree.ahead = 0;
+  worktree.unpushedCount = 0;
+}
 
 // The posed moves under way, by source worktree, and whether each was
 // asked to stop, so the dialogs' Cancel has something to cancel here.
@@ -1773,9 +1776,7 @@ export function installFakeHostBridge(
           }),
         );
       } else if (action === "update") {
-        const row = Object.values(forest.worktrees)
-          .flat()
-          .find((w) => w.name === name);
+        const row = list.find((w) => w.name === name);
         if (row === undefined) {
           throw new Error(`[fake-host] no worktree ${name} on ${deviceId}`);
         }

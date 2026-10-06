@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronRight, FileDiff, History } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { pluralize } from "@/lib/pluralize";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import type { Worktree } from "@shared/schemas";
@@ -41,16 +42,12 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
               className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
             >
               <FileDiff aria-hidden className="size-3.5" />
-              {worktree.changedCount}{" "}
-              {worktree.changedCount === 1 ? "file" : "files"} changed
+              {pluralize(worktree.changedCount, "file")} changed
               <ChevronRight aria-hidden className="size-3.5 opacity-60" />
             </button>
           )}
           {/* Commits made with changes left over still push from here. */}
-          <WorktreeSyncPill
-            worktree={worktree}
-            dirty={worktree.changedCount > 0}
-          />
+          <WorktreeSyncPill worktree={worktree} />
         </div>
       </div>
       {commits.length === 0 ? (

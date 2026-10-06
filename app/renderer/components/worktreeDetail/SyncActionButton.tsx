@@ -18,6 +18,12 @@ const TONE_CLASSES: Record<Tone, string> = {
   rose: "text-rose-500 hover:bg-rose-500/10 focus-visible:outline-rose-500",
 };
 
+// The pill's shape without its tone or its button behaviour, for a
+// status that stands where an action would (a pull held back, "Up to
+// date"), so the two line up when one takes the other's place.
+export const SYNC_PILL_SHAPE =
+  "tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs";
+
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 interface SyncActionButtonProps {
@@ -47,7 +53,8 @@ export function SyncActionButton({
         onClick={onClick}
         disabled={disabled || pending}
         className={cn(
-          "tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs transition-colors focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
+          SYNC_PILL_SHAPE,
+          "transition-colors focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50",
           TONE_CLASSES[tone],
         )}
       >
