@@ -48,15 +48,6 @@
   },
   { "id": "claude", "label": "Claude", "bundleNames": ["Claude.app"] },
   {
-    "id": "t3code",
-    "label": "T3 Code",
-    "bundleNames": [
-      "T3 Code.app",
-      "T3 Code (Alpha).app",
-      "T3 Code (Nightly).app"
-    ]
-  },
-  {
     "id": "sublime",
     "label": "Sublime Text",
     "bundleNames": ["Sublime Text.app"],
