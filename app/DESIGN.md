@@ -134,6 +134,20 @@ Rules that keep that working:
   web flavor (`lab/fake-host/README.md`) renders the phone layout at
   any viewport under 768px with no sign-in.
 
+## Window size: design at the default, hold up around it
+
+The desktop window opens at 920×720 (`main/index.ts`), which leaves a
+page about 680px beside the sidebar. Design at that size. The desktop
+never switches to the phone layout, so a page also has to hold up
+smaller and larger:
+
+- **Down to about 800×550.** Text truncates (with a `whenTruncated`
+  tooltip) rather than pushing controls out, rows of controls wrap
+  rather than overlap, and nothing scrolls sideways. The window goes
+  smaller, but nothing needs designing for below that.
+- **Up to a full display.** More room at the same density: running
+  text keeps a reading width (`max-w-3xl`).
+
 ## Devices: one identity, drawn one way
 
 A device is its name and its icon. The icon is one of the closed
