@@ -27,6 +27,7 @@ import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import { mirrorContract } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
+import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
 import { noteGitFetchActive } from "@/hooks/git/useProjectGitFetching";
@@ -58,7 +59,7 @@ function parsed<S extends z.ZodTypeAny>(
 
 export type WatchedHostApi = Pick<
   HostApi,
-  "git" | "githubCli" | "mirror" | "projects" | "updater"
+  "git" | "githubCli" | "mirror" | "projects" | "scripts" | "updater"
 >;
 
 // Subscribes for as long as the device's api lives: this machine's for
@@ -137,6 +138,15 @@ export function watchHost(
     api.mirror.onChanged(
       parsed(mirrorContract.calls.changed, (list) => {
         writeMirrorList(queryClient, deviceId, list);
+      }),
+    ),
+    // A script started or ended there, whoever ran it: the Live page's
+    // list and the sidebar's Live mark re-read.
+    api.scripts.onChanged(
+      parsed(scriptsContract.calls.changed, () => {
+        void queryClient.invalidateQueries({
+          queryKey: keys.runningScripts(),
+        });
       }),
     ),
   ];

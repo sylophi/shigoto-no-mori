@@ -95,6 +95,17 @@ const tidyRoute = createRoute({
   ),
 });
 
+// App-wide like the forest page: what runs on every device, off the
+// root so the sidebar keeps the forest beside it.
+const liveRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/live",
+  component: lazyRouteComponent(
+    () => import("@/components/live/LivePage"),
+    "LivePage",
+  ),
+});
+
 // App-wide like settings: the account and its device registry span
 // machines rather than describing this one, so they get their own page
 // beside it, sharing its list. A hostless client's account page is its
@@ -277,6 +288,7 @@ const projectRoutes = [
 const routeTree = rootRoute.addChildren([
   indexRoute,
   forestRoute,
+  liveRoute,
   // Where accountRoute hangs, as its getParentRoute says.
   ...(hasLocalHost
     ? [settingsPagesRoute.addChildren([settingsRoute, tidyRoute, accountRoute])]

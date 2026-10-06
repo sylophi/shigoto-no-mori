@@ -258,6 +258,10 @@ function buildQueryKeys(deviceId: string) {
     mirrorHistory: (worktreeId: string) =>
       host("mirrors", "history", worktreeId),
 
+    // Host-scoped: the scripts running on a device, whoever started
+    // them, driven by its own scripts:changed broadcast.
+    runningScripts: () => host("runningScripts"),
+
     // Client-scoped: the port-forward engine (its listeners and conns)
     // lives in this app instance's main process, whichever device a
     // forward targets, so no host sentinel and no device id. One key
@@ -335,6 +339,7 @@ const externalChangeExempt = new Set([
   // Driven by its own changed broadcast, like portForwards and updater.
   "mirrors",
   "portForwards",
+  "runningScripts",
   "runtime",
   // Written off its own changed broadcast, like updater.
   "sharedSettings",

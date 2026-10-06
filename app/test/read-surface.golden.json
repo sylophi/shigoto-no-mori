@@ -29,6 +29,7 @@
   "projects:listBranches",
   "projects:pickWorktreeName",
   "projects:worktreeIncludeStatus",
+  "scripts:list",
   "scripts:orphanReport",
   "sharedSettings:read",
   "shigomori:read",

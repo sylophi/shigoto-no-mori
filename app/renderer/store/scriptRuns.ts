@@ -15,7 +15,12 @@
 // Snapshots are immutable: every transition replaces the record with
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
-import type { RemovedWorktreeScripts, ScriptEvent } from "@shared/schemas";
+import {
+  type RemovedWorktreeScripts,
+  type RunningScript,
+  type ScriptEvent,
+  scriptErrorLine,
+} from "@shared/schemas";
 import { localDeviceId } from "@/lib/queryKeys";
 import { apiFor, onAccountLeft } from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
@@ -125,7 +130,12 @@ interface StartInput {
 
 type ScriptsApi = Pick<
   RendererApi["scripts"],
-  "cancel" | "write" | "resize" | "onEvent" | "onStoppedForRemovedWorktree"
+  | "attach"
+  | "cancel"
+  | "write"
+  | "resize"
+  | "onEvent"
+  | "onStoppedForRemovedWorktree"
 >;
 
 export class ScriptRunsStore {
@@ -147,6 +157,12 @@ export class ScriptRunsStore {
   // When each worktree's page was last left. A failure since then is
   // news (getActivityKind); one from before it has been seen.
   private seenAt = new Map<string, number>();
+  // Runs an attach is in flight for, so a slot asked again while the
+  // first answer is on its way does not attach twice.
+  private attaching = new Set<string>();
+  // Runs attached to and then let go (attach), whose events the host
+  // still sends until they exit.
+  private ignored = new Set<string>();
   private unsubscribers: Array<() => void> = [];
   private api: ScriptsApi;
   // Whether a removed-worktree notice is worth a toast even for a
@@ -191,7 +207,7 @@ export class ScriptRunsStore {
       runId = result.runId;
     } catch (err) {
       const message = errorMessageOf(err);
-      this.appendChunk(input.key, `\r\n\x1b[31m${message}\x1b[0m\r\n`);
+      this.appendChunk(input.key, scriptErrorLine(message));
       this.setStateWithActivity(input.key, (s) => ({
         ...s,
         status: "errored",
@@ -211,10 +227,73 @@ export class ScriptRunsStore {
     this.bindRunIdAndDrain(input.key, runId);
   }
 
-  async cancel(key: ScriptKey): Promise<void> {
+  // Takes up a run the host lists that this store does not hold (one
+  // another window or device started, or this window before a reload):
+  // its output so far, then its events as they come, so its console,
+  // status and Stop work as for a run started here. Events the host
+  // sends before the answer lands wait in the pre-bind buffer and are
+  // drained after the backlog, so nothing is missed or doubled.
+  // Resolves false only when the host could not be asked (refused, or
+  // the device away), for the caller to ask again.
+  async attach(run: RunningScript): Promise<boolean> {
+    const key = scriptKey(run.projectId, run.worktreeId, run.slot);
+    const held = this.states.get(key);
+    if (held?.runId === run.runId || this.attaching.has(run.runId)) {
+      return true;
+    }
+    if (held?.status === "starting") return true;
+    this.attaching.add(run.runId);
+    try {
+      const joined = await this.api.attach(run.runId);
+      if (joined === null) return true;
+      // This connection heard the run already (another window on it
+      // attached, or this one started it before a reload), so what it
+      // buffered is in the backlog too.
+      if (joined.streaming) this.pendingByRunId.delete(run.runId);
+      const now = this.states.get(key);
+      if (now?.status === "starting" || now?.status === "running") {
+        // The slot was taken by a run started here meanwhile. The host
+        // keeps sending this one, which nothing here will show.
+        this.ignored.add(run.runId);
+        this.pendingByRunId.delete(run.runId);
+        return true;
+      }
+      this.begin(key, run.worktreeId, run.slot, {
+        runId: run.runId,
+        status: "running",
+        interactive: run.interactive,
+      });
+      this.setStateWithActivity(key, (s) => ({
+        ...s,
+        startedAt: run.startedAt,
+      }));
+      if (joined.output !== "") this.appendChunk(key, joined.output);
+      this.bindRunIdAndDrain(key, run.runId);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      this.attaching.delete(run.runId);
+    }
+  }
+
+  // Stops a run the host lists, whether this store holds it (its
+  // console then reads "Stopping…" until the exit) or not (one another
+  // window or device started, stopped by its id).
+  // Resolves whether the host stopped it.
+  async stopRun(run: RunningScript): Promise<boolean> {
+    const key = scriptKey(run.projectId, run.worktreeId, run.slot);
+    if (this.states.get(key)?.runId === run.runId) return this.cancel(key);
+    return (await this.api.cancel(run.runId)).cancelled;
+  }
+
+  // Resolves whether the host stopped the run.
+  async cancel(key: ScriptKey): Promise<boolean> {
     const state = this.states.get(key);
-    if (!state || !state.runId) return;
-    if (state.status !== "running" && state.status !== "starting") return;
+    if (!state || !state.runId) return false;
+    if (state.status !== "running" && state.status !== "starting") {
+      return false;
+    }
     this.setStateWithActivity(key, (s) =>
       s.cancelling ? s : { ...s, cancelling: true },
     );
@@ -234,6 +313,7 @@ export class ScriptRunsStore {
           : s,
       );
     }
+    return cancelled;
   }
 
   // Console keystrokes and viewport size for a live run. Both are
@@ -419,7 +499,7 @@ export class ScriptRunsStore {
         this.appendChunk(key, event.data);
         return;
       case "error":
-        this.appendChunk(key, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`);
+        this.appendChunk(key, scriptErrorLine(event.data));
         this.setStateWithActivity(key, (s) => ({ ...s, status: "errored" }));
         return;
       case "exit": {
@@ -517,6 +597,10 @@ export class ScriptRunsStore {
     const key = this.runIdToKey.get(event.runId);
     if (key) {
       this.applyEvent(key, event);
+      return;
+    }
+    if (this.ignored.has(event.runId)) {
+      if (event.kind === "exit") this.ignored.delete(event.runId);
       return;
     }
     const bucket = this.pendingByRunId.get(event.runId) ?? [];

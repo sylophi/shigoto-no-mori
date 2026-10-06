@@ -1,9 +1,15 @@
-import type { ScriptName, ShigomoriConfig } from "@shared/schemas";
+import {
+  lifecycleSlot,
+  type ScriptName,
+  type ShigomoriConfig,
+} from "@shared/schemas";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "@host/lib/projects";
 import {
+  attachScript,
   cancelScript,
+  listRunningScripts,
   resizeScript,
   startScript,
   writeToScript,
@@ -48,7 +54,7 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
 
       const runId = startScript({
         command,
-        scriptName: script,
+        slot: lifecycleSlot(script),
         worktree: ctx.worktree,
         project,
         scriptEnv: {
@@ -70,4 +76,9 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
     resize: async ({ runId, cols, rows }) => resizeScript(runId, cols, rows),
 
     orphanReport: async () => takeOrphanSweepReport(),
+
+    list: async () => ({ runs: listRunningScripts() }),
+
+    attach: async ({ runId }, handlerCtx) =>
+      attachScript(runId, scriptEventNotifier(handlerCtx)),
   };

@@ -1,3 +1,4 @@
+import type React from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -12,7 +13,14 @@ interface ConfirmDestructiveButtonProps {
   // names one and doubles as the tooltip.
   disabled?: boolean;
   disabledReason?: string;
+  // The idle state's mark, a bin unless the act is not a removal (the
+  // Live page's Stop all takes the stop square).
+  icon?: React.ReactNode;
+  // A hint that leaves the button live, where disabledReason would not.
+  tip?: string;
 }
+
+const BIN = <Trash2 aria-hidden className="size-3.5" />;
 
 // Two-step "arm then confirm" destructive button: outline styling
 // with spinner-while-pending / "click again" / icon+label states. Used
@@ -26,9 +34,11 @@ export function ConfirmDestructiveButton({
   onClick,
   disabled = false,
   disabledReason,
+  icon = BIN,
+  tip,
 }: ConfirmDestructiveButtonProps) {
   return (
-    <SimpleTooltip tip={disabledReason}>
+    <SimpleTooltip tip={disabledReason ?? tip}>
       <Button
         type="button"
         size="sm"
@@ -46,7 +56,7 @@ export function ConfirmDestructiveButton({
           "Click again to confirm"
         ) : (
           <>
-            <Trash2 aria-hidden className="size-3.5" />
+            {icon}
             {idleLabel}
           </>
         )}

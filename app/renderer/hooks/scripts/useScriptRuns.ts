@@ -21,7 +21,16 @@ export function useScriptRuns(): ScriptRunsStore {
 }
 
 export function useScriptRunState(key: ScriptKey): ScriptRunState {
-  const store = useScriptRuns();
+  return useDeviceScriptRunState(useHostScope().deviceId, key);
+}
+
+// The same for a named device, for a list that spans devices outside
+// any scope (the Live page).
+export function useDeviceScriptRunState(
+  deviceId: string,
+  key: ScriptKey,
+): ScriptRunState {
+  const store = scriptRunsFor(deviceId);
   return useSyncExternalStore(
     (cb) => store.subscribe(key, cb),
     () => store.snapshot(key),
