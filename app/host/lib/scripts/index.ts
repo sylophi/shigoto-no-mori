@@ -14,11 +14,13 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { errorMessageOf, worktreeSettingUpError } from "@shared/errors";
 import { holdRootChecks } from "@host/mirror/registry";
-import type {
-  Project,
-  RunningScript,
-  ScriptEvent,
-  ScriptRunSlot,
+import {
+  type Project,
+  type RunningScript,
+  runScriptName,
+  type ScriptEvent,
+  scriptErrorLine,
+  type ScriptRunSlot,
 } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
@@ -71,33 +73,41 @@ interface RunStream {
 function createRunStream(starter: NotifyScriptEvent): RunStream {
   const chunks: string[] = [];
   let bytes = 0;
-  const watchers = new Set<NotifyScriptEvent>();
+  // Each attached window's notifier, and how to stop listening for its
+  // connection going, so a run that ends lets go of both (and with them
+  // this backlog), whatever the connections outlive it by.
+  const watchers = new Map<NotifyScriptEvent, () => void>();
   const keep = (data: string) => {
     chunks.push(data);
     bytes += data.length;
-    while (bytes > BACKLOG_BYTES && chunks.length > 1) {
-      bytes -= chunks.shift()?.length ?? 0;
+    let drop = 0;
+    while (bytes > BACKLOG_BYTES && drop < chunks.length - 1) {
+      bytes -= chunks[drop]?.length ?? 0;
+      drop++;
     }
+    if (drop > 0) chunks.splice(0, drop);
   };
   return {
     emit: (event) => {
       if (event.kind === "data") keep(event.data);
-      // Worded the way the renderer prints an error into the console.
-      if (event.kind === "error") keep(`\r\n\x1b[31m${event.data}\x1b[0m\r\n`);
+      if (event.kind === "error") keep(scriptErrorLine(event.data));
       starter(event);
-      for (const watcher of watchers) {
+      for (const watcher of watchers.keys()) {
         try {
           watcher(event);
         } catch {}
       }
-      if (event.kind === "exit") watchers.clear();
+      if (event.kind === "exit") {
+        for (const unlisten of watchers.values()) unlisten();
+        watchers.clear();
+        chunks.length = 0;
+      }
     },
     attach: (watcher, signal) => {
       if (!signal.aborted) {
-        watchers.add(watcher);
-        signal.addEventListener("abort", () => watchers.delete(watcher), {
-          once: true,
-        });
+        const drop = () => watchers.delete(watcher);
+        signal.addEventListener("abort", drop, { once: true });
+        watchers.set(watcher, () => signal.removeEventListener("abort", drop));
       }
       return chunks.join("");
     },
@@ -113,7 +123,7 @@ interface ScriptWorktree {
 
 interface RunArgs {
   command: string;
-  scriptName: string;
+  // The run's name (SHIGOMORI_SCRIPT_NAME, the logs) is the slot's.
   slot: ScriptRunSlot;
   worktree: ScriptWorktree;
   project: Pick<Project, "id" | "path" | "name">;
@@ -133,7 +143,6 @@ interface Killable {
   exited: boolean;
   cancelling: boolean;
   done: Promise<void>;
-  notify: NotifyScriptEvent;
   stream: RunStream;
   signal: (signal: NodeJS.Signals) => Promise<void>;
   // Sends whatever output is pooled for the next frame (see
@@ -208,14 +217,10 @@ export function cliScriptStream(notify: NotifyScriptEvent): {
         cliScripts.set(event.runId, {
           runId: event.runId,
           pid,
-          scriptName:
-            event.slot.kind === "portPool"
-              ? `port-pool ${event.slot.phase}`
-              : event.slot.kind,
+          scriptName: runScriptName(event.slot),
           exited: false,
           cancelling: false,
           done,
-          notify: stream.emit,
           stream,
           signal: (signal) => signalPidTree(pid, signal),
           flushOutput: () => {},
@@ -533,7 +538,7 @@ async function killRecord(record: Killable, opts: KillOptions): Promise<void> {
 
   if (opts.reason) {
     record.flushOutput();
-    record.notify({
+    record.stream.emit({
       runId: record.runId,
       kind: "data",
       data: `\r\n\x1b[2m[${opts.reason}]\x1b[0m\r\n`,
@@ -599,7 +604,7 @@ export function startScript(args: RunArgs): string {
     PAGER: "cat",
     GIT_PAGER: "cat",
     ...(args.scriptEnv && {
-      [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
+      [SCRIPT_ENV_KEYS.SCRIPT_NAME]: runScriptName(args.slot),
       [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
       [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
       [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: args.worktree.branch,
@@ -653,13 +658,12 @@ export function startScript(args: RunArgs): string {
     slot: args.slot,
     worktreeName: args.worktree.name,
     worktreePath: args.worktree.path,
-    scriptName: args.scriptName,
+    scriptName: runScriptName(args.slot),
     command: args.command,
     startedAt: Date.now(),
     exited: false,
     cancelling: false,
     done,
-    notify: stream.emit,
     stream,
     signal: (signal) => signalTree(pty.pid, signal),
     flushOutput,

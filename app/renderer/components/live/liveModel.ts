@@ -7,10 +7,9 @@
 import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
 import type { RunningScript } from "@shared/schemas";
 import type { HostScripts, LiveMirror } from "@/hooks/live/useLiveActivity";
-import type { HostApi } from "@/hooks/remote/useHostScope";
 
 export type LiveItem =
-  | { kind: "script"; run: RunningScript; api: HostApi }
+  | { kind: "script"; run: RunningScript }
   | { kind: "mirror"; mirror: LiveMirror }
   | { kind: "forward"; forward: PortForwardSummary };
 
@@ -23,14 +22,6 @@ export type LiveCard = {
 };
 
 export type LiveDevice = { deviceId: string; cards: LiveCard[] };
-
-// Scripts lead a card, then the mirror, then the forwards: what runs
-// in the worktree before how it is reached.
-const ITEM_ORDER: Record<LiveItem["kind"], number> = {
-  script: 0,
-  mirror: 1,
-  forward: 2,
-};
 
 export function buildLive({
   scripts,
@@ -66,36 +57,36 @@ export function buildLive({
     card.items.push(item);
   };
 
-  for (const { deviceId, api, runs } of scripts) {
-    if (api === undefined) continue;
+  // Added scripts first, then mirrors, then forwards, which is the
+  // order a card lists them: what runs in the worktree before how it
+  // is reached.
+  for (const { deviceId, runs } of scripts) {
     for (const run of runs) {
       add(
         deviceId,
         { projectId: run.projectId, worktreeId: run.worktreeId },
-        { kind: "script", run, api },
+        { kind: "script", run },
       );
     }
   }
   for (const mirror of mirrors) {
-    if (mirror.kind === "session") {
-      add(
-        mirror.runnerDeviceId,
-        {
-          projectId: mirror.session.localProjectId,
-          worktreeId: mirror.session.localWorktreeId,
-        },
-        { kind: "mirror", mirror },
-      );
-    } else {
-      add(
-        mirror.copyDeviceId,
-        {
-          projectId: mirror.stream.projectId,
-          worktreeId: mirror.stream.worktreeId,
-        },
-        { kind: "mirror", mirror },
-      );
-    }
+    const [deviceId, worktree] =
+      mirror.kind === "session"
+        ? [
+            mirror.runnerDeviceId,
+            {
+              projectId: mirror.session.localProjectId,
+              worktreeId: mirror.session.localWorktreeId,
+            },
+          ]
+        : [
+            mirror.copyDeviceId,
+            {
+              projectId: mirror.stream.projectId,
+              worktreeId: mirror.stream.worktreeId,
+            },
+          ];
+    add(deviceId, worktree, { kind: "mirror", mirror });
   }
   for (const forward of forwards) {
     add(forward.deviceId, forward.worktree ?? null, {
@@ -107,14 +98,10 @@ export function buildLive({
   const result: LiveDevice[] = [];
   for (const [deviceId, cards] of devices) {
     if (cards.size === 0) continue;
-    const sorted = [...cards.values()];
-    for (const card of sorted) {
-      card.items.sort((a, b) => ITEM_ORDER[a.kind] - ITEM_ORDER[b.kind]);
-    }
     // The loose ports close the device's cards.
     result.push({
       deviceId,
-      cards: sorted.toSorted(
+      cards: [...cards.values()].toSorted(
         (a, b) => Number(a.worktree === null) - Number(b.worktree === null),
       ),
     });

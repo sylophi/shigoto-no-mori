@@ -38,7 +38,7 @@ import {
 } from "@/hooks/remote/useMoveWorktree";
 import { quietVillagerMoves } from "@/lib/villagers/moves";
 import {
-  useHostDevices,
+  useEveryHost,
   useRemoteDeviceApi,
 } from "@/hooks/remote/useRemoteDevices";
 import { hasLocalHost } from "@/lib/localHost";
@@ -247,21 +247,16 @@ export function useWorktreeMirror(worktree: Worktree): {
 // combined array too, so both keep their references through cycles
 // that change nothing they show.
 function useOtherHostMirrors<T>(
-  exceptDeviceId: string,
+  exceptDeviceId: string | undefined,
   select: (list: MirrorListResult, deviceId: string) => T,
 ): {
   deviceId: string;
   api: HostApi | undefined;
   data: T | undefined;
 }[] {
-  const devices = useHostDevices();
-  const candidates = [
-    ...(hasLocalHost ? [{ deviceId: localDeviceId, api: window.api }] : []),
-    ...devices.map((device) => ({
-      deviceId: device.deviceId,
-      api: device.api,
-    })),
-  ].filter((candidate) => candidate.deviceId !== exceptDeviceId);
+  const candidates = useEveryHost().filter(
+    (candidate) => candidate.deviceId !== exceptDeviceId,
+  );
   return useQueries({
     queries: candidates.map(({ deviceId, api }) =>
       queryOptions<MirrorListResult, Error, T>({
@@ -292,7 +287,7 @@ export function useEveryHostMirrors(): {
   api: HostApi | undefined;
   data: MirrorListResult | undefined;
 }[] {
-  return useOtherHostMirrors("", (list) => list);
+  return useOtherHostMirrors(undefined, (list) => list);
 }
 
 // A mirror the worktree is part of, seen from its page: the device

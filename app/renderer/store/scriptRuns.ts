@@ -15,10 +15,11 @@
 // Snapshots are immutable: every transition replaces the record with
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
-import type {
-  RemovedWorktreeScripts,
-  RunningScript,
-  ScriptEvent,
+import {
+  type RemovedWorktreeScripts,
+  type RunningScript,
+  type ScriptEvent,
+  scriptErrorLine,
 } from "@shared/schemas";
 import { localDeviceId } from "@/lib/queryKeys";
 import { apiFor, onAccountLeft } from "@/lib/remote/remoteDeviceSync";
@@ -203,7 +204,7 @@ export class ScriptRunsStore {
       runId = result.runId;
     } catch (err) {
       const message = errorMessageOf(err);
-      this.appendChunk(input.key, `\r\n\x1b[31m${message}\x1b[0m\r\n`);
+      this.appendChunk(input.key, scriptErrorLine(message));
       this.setStateWithActivity(input.key, (s) => ({
         ...s,
         status: "errored",
@@ -258,6 +259,18 @@ export class ScriptRunsStore {
     } finally {
       this.attaching.delete(run.runId);
     }
+  }
+
+  // Stops a run the host lists, whether this store holds it (its
+  // console then reads "Stopping…" until the exit) or not (one another
+  // window or device started, stopped by its id).
+  async stopRun(run: RunningScript): Promise<void> {
+    const key = scriptKey(run.projectId, run.worktreeId, run.slot);
+    if (this.states.get(key)?.runId === run.runId) {
+      await this.cancel(key);
+      return;
+    }
+    await this.api.cancel(run.runId);
   }
 
   async cancel(key: ScriptKey): Promise<void> {
@@ -468,7 +481,7 @@ export class ScriptRunsStore {
         this.appendChunk(key, event.data);
         return;
       case "error":
-        this.appendChunk(key, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`);
+        this.appendChunk(key, scriptErrorLine(event.data));
         this.setStateWithActivity(key, (s) => ({ ...s, status: "errored" }));
         return;
       case "exit": {

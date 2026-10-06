@@ -1,5 +1,5 @@
 // The live things a card lists, each a block with its status and its
-// actions as labelled buttons (LiveItem). A script: its output (the
+// actions as labelled buttons (LiveBlock, at the end). A script: its output (the
 // console takes up the run's output whichever window or device started
 // it, hooks/scripts/useScriptRunner.ts), a restart and a stop. A
 // mirror: how it is doing, and its manage dialog (status, history,
@@ -7,6 +7,7 @@
 // worktree's Mirror button opens it. A forward: the local address it
 // answers on, the worktree's Ports dialog to move it to another local
 // port, and its stop, which never needs the peer.
+import type React from "react";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -25,7 +26,7 @@ import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
 import type { RunningScript, Worktree } from "@shared/schemas";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
-import { TONE_TEXT } from "@/components/ui/status-dot";
+import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { RunnerScope } from "@/components/worktreeDetail/mirror/MirrorAction";
 import { MirrorManageDialog } from "@/components/worktreeDetail/mirror/MirrorManageDialog";
@@ -33,27 +34,19 @@ import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus"
 import { useMirrorView } from "@/components/worktreeDetail/mirror/useMirrorView";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import type { LiveMirror } from "@/hooks/live/useLiveActivity";
-import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
-import type { HostApi } from "@/hooks/remote/useHostScope";
+import { usePortForwardStop } from "@/hooks/remote/usePortForwards";
 import {
   useDeviceIcon,
   useDeviceProperName,
-  useRemoteDevice,
 } from "@/hooks/remote/useRemoteDevices";
-import { useDeviceScriptRunState } from "@/hooks/scripts/useScriptRuns";
+import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useNow } from "@/hooks/ui/useNow";
 import { openExternalUrl } from "@/lib/openExternal";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { cn } from "@/lib/utils";
-import {
-  scriptKey,
-  scriptRunsFor,
-  slotLabel,
-  slotToParam,
-} from "@/store/scriptRuns";
-import { LiveItem } from "./LiveCard";
+import { slotLabel, slotToParam } from "@/store/scriptRuns";
 
 // How long something has been up, coarse like the app's relative
 // times: "up 12m", "up 3h 5m", "up 2d", or "just started".
@@ -93,63 +86,37 @@ function DeviceName({ deviceId }: { deviceId: string }) {
   );
 }
 
+// Under the card's scope (LiveCard), so the runner reads and drives
+// the run on the device it runs on, as a worktree's script row does.
 export function ScriptItem({
   deviceId,
-  api,
   run,
 }: {
   deviceId: string;
-  api: HostApi;
   run: RunningScript;
 }) {
   const navigate = useNavigate();
-  const store = scriptRunsFor(deviceId);
-  const key = scriptKey(run.projectId, run.worktreeId, run.slot);
-  const state = useDeviceScriptRunState(deviceId, key);
-  const held = state.runId === run.runId;
-  const { canCommand } = commandAccessOf(deviceId, useRemoteDevice(deviceId));
+  const { state, canRun, start, stop } = useScriptRunner(
+    { projectId: run.projectId, id: run.worktreeId },
+    run.slot,
+  );
   const deviceName = useDeviceProperName(deviceId);
-  const stopRun = async () => {
-    if (held) await store.cancel(key);
-    else await api.scripts.cancel(run.runId);
-  };
-  const stop = useMutation({
-    mutationFn: stopRun,
-    meta: { errorTitle: "Couldn't stop the script" },
-  });
   // A package script starts again the way its button starts it. The
   // lifecycle scripts belong to a create or a removal, so they only
   // stop.
   const restart = useMutation({
     mutationFn: async () => {
-      if (run.slot.kind !== "package") return;
-      const scriptName = run.slot.name;
-      await stopRun();
-      await store.run({
-        key,
-        worktreeId: run.worktreeId,
-        slot: run.slot,
-        runner: () =>
-          api.packageScripts.run({
-            projectId: run.projectId,
-            worktreeId: run.worktreeId,
-            scriptName,
-          }),
-      });
+      await stop();
+      await start();
     },
     meta: { errorTitle: "Couldn't restart the script" },
   });
-  const stopping = stop.isPending || state.cancelling;
+  const stopping = state.cancelling;
   const busy = stopping || restart.isPending;
   const label = slotLabel(run.slot);
   return (
-    <LiveItem
-      mark={
-        <span
-          aria-hidden
-          className="size-2 animate-pulse rounded-full bg-emerald-500"
-        />
-      }
+    <LiveBlock
+      mark={<StatusDot tone="emerald" pulse />}
       title={
         <SimpleTooltip whenTruncated tip={label}>
           <span
@@ -167,14 +134,14 @@ export function ScriptItem({
       // about its runs, its output included (attaching rides the same
       // grant), so the block only says so.
       detail={
-        canCommand ? undefined : (
+        canRun ? undefined : (
           <SimpleTooltip tip={peerReadOnlyNote(deviceName)}>
             <span>Read-only</span>
           </SimpleTooltip>
         )
       }
       actions={
-        canCommand && (
+        canRun && (
           <>
             <Button
               size="sm"
@@ -207,21 +174,19 @@ export function ScriptItem({
                 {restart.isPending ? "Restarting…" : "Restart"}
               </Button>
             )}
-            {
-              <Button
-                size="sm"
-                variant="ghost-destructive"
-                disabled={busy}
-                onClick={() => stop.mutate()}
-              >
-                {stopping ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Square className="size-3 fill-current" />
-                )}
-                {stopping ? "Stopping…" : "Stop"}
-              </Button>
-            }
+            <Button
+              size="sm"
+              variant="ghost-destructive"
+              disabled={busy}
+              onClick={() => void stop()}
+            >
+              {stopping ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Square className="size-3 fill-current" />
+              )}
+              {stopping ? "Stopping…" : "Stop"}
+            </Button>
           </>
         )
       }
@@ -233,7 +198,7 @@ export function MirrorItem({ mirror }: { mirror: LiveMirror }) {
   return mirror.kind === "session" ? (
     <SessionItem mirror={mirror} />
   ) : (
-    <LiveItem
+    <LiveBlock
       mark={
         <RefreshCw aria-hidden className={cn("size-4", TONE_TEXT.emerald)} />
       }
@@ -273,7 +238,7 @@ function SessionItem({
   });
   return (
     <>
-      <LiveItem
+      <LiveBlock
         mark={
           <RefreshCw
             aria-hidden
@@ -326,20 +291,18 @@ function SessionItem({
 export function ForwardItem({
   forward,
   worktree,
-  stopping,
-  onStop,
 }: {
   forward: PortForwardSummary;
   // The worktree it was switched on from, whose Ports dialog moves it.
   worktree: Worktree | undefined;
-  stopping: boolean;
-  onStop: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const stop = usePortForwardStop();
+  const stopping = stop.isPending;
   const url = `http://localhost:${forward.localPort}`;
   return (
     <>
-      <LiveItem
+      <LiveBlock
         mark={<Cable aria-hidden className="size-4 text-muted-foreground" />}
         title={
           <span className="min-w-0 truncate font-mono font-medium">
@@ -391,7 +354,7 @@ export function ForwardItem({
               size="sm"
               variant="ghost-destructive"
               disabled={stopping}
-              onClick={onStop}
+              onClick={() => stop.mutate(forward.forwardId)}
             >
               {stopping ? <Loader2 className="animate-spin" /> : <X />}
               {stopping ? "Stopping…" : "Stop"}
@@ -412,5 +375,58 @@ export function ForwardItem({
         <PortsDialog worktree={worktree} onClose={() => setOpen(false)} />
       )}
     </>
+  );
+}
+
+// One live thing inside a card, as a block of two rows: what it is
+// and how it stands (its mark, its name, the status at the end), then
+// what can be done about it, as labelled buttons, with any further
+// detail at the end of that row.
+export function LiveBlock({
+  mark,
+  title,
+  status,
+  actions,
+  detail,
+}: {
+  mark: React.ReactNode;
+  title: React.ReactNode;
+  status?: React.ReactNode;
+  actions?: React.ReactNode;
+  detail?: React.ReactNode;
+}) {
+  return (
+    <li className="flex flex-col gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-sm">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          {mark}
+        </span>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          {title}
+        </span>
+        {status && (
+          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+            {status}
+          </span>
+        )}
+      </div>
+      {(actions || detail) && (
+        // Under the title, so the buttons line up with the name above
+        // them rather than with the mark. A phone has no room for the
+        // indent: there the buttons share the row's width.
+        <div className="-ml-2 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 pl-6.5 phone:ml-0 phone:pl-0">
+          {actions && (
+            <span className="flex items-center gap-1 phone:grid phone:w-full phone:auto-cols-fr phone:grid-flow-col">
+              {actions}
+            </span>
+          )}
+          {detail && (
+            <span className="ml-auto flex min-w-0 items-center gap-1 truncate pl-2 text-xs text-muted-foreground phone:ml-0 phone:pl-0">
+              {detail}
+            </span>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

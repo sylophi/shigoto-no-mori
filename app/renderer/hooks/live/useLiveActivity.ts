@@ -16,27 +16,14 @@ import type { RunningScript } from "@shared/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { useEveryHostMirrors } from "@/hooks/remote/useMirrors";
 import { usePortForwardCount } from "@/hooks/remote/usePortForwards";
-import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
+import { useEveryHost } from "@/hooks/remote/useRemoteDevices";
+import { queryKeysFor } from "@/lib/queryKeys";
 
-// A device that can run things: this machine when it hosts projects,
-// and every peer that does. The api is undefined while a peer has no
+// A host's running scripts. The api is undefined while a peer has no
 // session.
-export type LiveHost = { deviceId: string; api: HostApi | undefined };
-
-function useLiveHosts(): LiveHost[] {
-  const devices = useHostDevices();
-  return [
-    ...(hasLocalHost ? [{ deviceId: localDeviceId, api: window.api }] : []),
-    ...devices.map((device) => ({
-      deviceId: device.deviceId,
-      api: device.api,
-    })),
-  ];
-}
-
-export type HostScripts = LiveHost & {
+export type HostScripts = {
+  deviceId: string;
+  api: HostApi | undefined;
   runs: RunningScript[];
   // The first read is still on its way.
   loading: boolean;
@@ -55,6 +42,9 @@ export function runningScriptsQueryOptions(
       api === undefined
         ? skipToken
         : async () => (await api.scripts.list()).runs,
+    // Kept fresh by the device's scripts:changed and the sweep when its
+    // session lands, so a focus or a new reader need not ask again.
+    staleTime: Infinity,
     meta: { silentError: true },
   });
 }
@@ -64,7 +54,7 @@ export function runningScriptsQueryOptions(
 // nothing here could stop it anyway. A peer whose app predates the
 // list refuses the read, and lists none too.
 export function useRunningScripts(): HostScripts[] {
-  const hosts = useLiveHosts();
+  const hosts = useEveryHost();
   return useQueries({
     queries: hosts.map(({ deviceId, api }) =>
       runningScriptsQueryOptions(deviceId, api),
@@ -95,7 +85,7 @@ export type LiveMirror =
     }
   | { kind: "served"; copyDeviceId: string; stream: MirrorServing };
 
-export function liveMirrorsOf(
+function liveMirrorsOf(
   lists: readonly {
     deviceId: string;
     api: HostApi | undefined;

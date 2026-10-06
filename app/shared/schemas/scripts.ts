@@ -164,6 +164,37 @@ const ScriptRunSlotSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("package"), name: z.string() }),
 ]);
 export type ScriptRunSlot = z.infer<typeof ScriptRunSlotSchema>;
+export type LifecycleSlot = z.infer<typeof LifecycleSlotSchema>;
+
+// The two names of a lifecycle script: the slot it takes on its
+// worktree and the ScriptName that asks for it (scripts:run).
+export function lifecycleSlot(script: ScriptName): LifecycleSlot {
+  switch (script) {
+    case "setup":
+    case "teardown":
+      return { kind: script };
+    case "port-pool-provision":
+      return { kind: "portPool", phase: "provision" };
+    case "port-pool-release":
+      return { kind: "portPool", phase: "release" };
+  }
+}
+
+export function lifecycleScriptName(slot: LifecycleSlot): ScriptName {
+  return slot.kind === "portPool" ? `port-pool-${slot.phase}` : slot.kind;
+}
+
+// The name a run goes by (SHIGOMORI_SCRIPT_NAME, the logs): a package
+// script's own, or the lifecycle script's.
+export function runScriptName(slot: ScriptRunSlot): string {
+  return slot.kind === "package" ? slot.name : lifecycleScriptName(slot);
+}
+
+// How an error reads in a run's console, the same whether the renderer
+// prints it as it happens or the host replays it to a late attach.
+export function scriptErrorLine(message: string): string {
+  return `\r\n\x1b[31m${message}\x1b[0m\r\n`;
+}
 
 // One script running on the host right now, whoever started it: the
 // app's own runs and the lifecycle scripts the CLI runs for it. What a
@@ -183,7 +214,6 @@ export type RunningScript = z.infer<typeof RunningScriptSchema>;
 export const RunningScriptsSchema = z.object({
   runs: z.array(RunningScriptSchema),
 });
-export type RunningScripts = z.infer<typeof RunningScriptsSchema>;
 
 // Scripts the app had running in a worktree that disappeared from disk
 // while the app was watching (an `sm rm` in a terminal). The app kills

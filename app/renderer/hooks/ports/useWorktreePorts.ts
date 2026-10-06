@@ -3,8 +3,9 @@
 // with a loopback liveness probe. Polled while mounted so a dev server
 // starting or stopping on the host shows up on its own. The interval is
 // the whole cost, since the host read is one small file plus a handful
-// of instant loopback dials, and the only mount is the Ports dialog,
-// so the timer lives as long as the dialog is open.
+// of instant loopback dials. The mounts are the Ports dialog and the
+// Live page's cards of worktrees running a script, so the timer lives
+// as long as one of those is open.
 import { useQuery } from "@tanstack/react-query";
 import type { WorktreePortsResult } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";

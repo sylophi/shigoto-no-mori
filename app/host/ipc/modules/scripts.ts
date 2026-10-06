@@ -1,7 +1,7 @@
-import type {
-  ScriptName,
-  ScriptRunSlot,
-  ShigomoriConfig,
+import {
+  lifecycleSlot,
+  type ScriptName,
+  type ShigomoriConfig,
 } from "@shared/schemas";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
@@ -37,19 +37,6 @@ function resolveScriptCommand(
   }
 }
 
-// The slot each ScriptName takes on its worktree.
-function slotOf(script: ScriptName): ScriptRunSlot {
-  switch (script) {
-    case "setup":
-    case "teardown":
-      return { kind: script };
-    case "port-pool-provision":
-      return { kind: "portPool", phase: "provision" };
-    case "port-pool-release":
-      return { kind: "portPool", phase: "release" };
-  }
-}
-
 export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
   {
     run: async ({ projectId, worktreeId, script }, handlerCtx) => {
@@ -67,8 +54,7 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
 
       const runId = startScript({
         command,
-        scriptName: script,
-        slot: slotOf(script),
+        slot: lifecycleSlot(script),
         worktree: ctx.worktree,
         project,
         scriptEnv: {

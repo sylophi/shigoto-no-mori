@@ -7,9 +7,8 @@
 // live is a card (liveModel.ts), filed under its device. Every list is
 // kept live by its own broadcast (hooks/live/useLiveActivity.ts).
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, Radio, Square } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Radio, Square } from "lucide-react";
+import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
@@ -20,7 +19,7 @@ import {
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
-import { scriptKey, scriptRunsFor } from "@/store/scriptRuns";
+import { scriptRunsFor } from "@/store/scriptRuns";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
 import { pluralize } from "@/lib/pluralize";
 import { notifyError, toast } from "@/lib/toast";
@@ -42,7 +41,7 @@ function summarize(devices: readonly LiveDevice[]): string {
 export function LivePage() {
   const hosts = useRunningScripts();
   const mirrors = useLiveMirrors();
-  const { forwards } = useAllPortForwards();
+  const forwards = useAllPortForwards();
   const devices = buildLive({ scripts: hosts, mirrors, forwards });
   // Which device a card is on only says something once there is more
   // than one.
@@ -111,19 +110,13 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
       deviceId,
       registry.find((device) => device.deviceId === deviceId),
     ).canCommand
-      ? hostRuns.map((run) => ({ deviceId, api, run }))
+      ? hostRuns.map((run) => ({ deviceId, run }))
       : [],
   );
   const stopAll = useMutation({
     mutationFn: () =>
       Promise.allSettled(
-        runs.map(({ deviceId, api, run }) => {
-          const store = scriptRunsFor(deviceId);
-          const key = scriptKey(run.projectId, run.worktreeId, run.slot);
-          return store.snapshot(key).runId === run.runId
-            ? store.cancel(key)
-            : api.scripts.cancel(run.runId);
-        }),
+        runs.map(({ deviceId, run }) => scriptRunsFor(deviceId).stopRun(run)),
       ),
     // The rows go as each script ends, so the outcome is said once,
     // here, rather than left to the page emptying.
@@ -141,37 +134,26 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
   // "all" only when it is: a read-only device's runs stay running.
   const readOnly = total - runs.length;
   return (
-    <SimpleTooltip
+    <ConfirmDestructiveButton
+      armed={armed}
+      pending={stopAll.isPending}
+      pendingLabel="Stopping…"
+      idleLabel={stopAllLabel(runs.length, readOnly)}
+      icon={<Square aria-hidden className="size-3 fill-current" />}
       tip={
         readOnly > 0
           ? `${pluralize(readOnly, "script")} on a read-only device ${readOnly === 1 ? "stays" : "stay"} running`
           : undefined
       }
-    >
-      <Button
-        size="sm"
-        variant="outline-destructive"
-        aria-pressed={armed}
-        disabled={stopAll.isPending}
-        onClick={() => trigger(() => stopAll.mutate())}
-      >
-        {stopAll.isPending ? (
-          <Loader2 className="animate-spin" />
-        ) : (
-          <Square className="size-3 fill-current" />
-        )}
-        {stopAll.isPending
-          ? "Stopping…"
-          : armed
-            ? "Click again to confirm"
-            : readOnly > 0
-              ? `Stop ${pluralize(runs.length, "script")}`
-              : runs.length === 1
-                ? "Stop the script"
-                : `Stop all ${runs.length} scripts`}
-      </Button>
-    </SimpleTooltip>
+      onClick={() => trigger(() => stopAll.mutate())}
+    />
   );
+}
+
+function stopAllLabel(stoppable: number, readOnly: number): string {
+  if (readOnly > 0) return `Stop ${pluralize(stoppable, "script")}`;
+  if (stoppable === 1) return "Stop the script";
+  return `Stop all ${stoppable} scripts`;
 }
 
 // Nothing live anywhere: say what would show here.

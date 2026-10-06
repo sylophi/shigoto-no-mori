@@ -85,7 +85,6 @@ export const packageScriptsHandlers: Handlers<
     const command = cliRunScriptSpawn({ projectId, worktreeId, scriptName });
     const runId = startScript({
       command,
-      scriptName,
       slot: { kind: "package", name: scriptName },
       worktree,
       project,

@@ -1,11 +1,10 @@
 // The Live page's surfaces: a device's heading, and the card of one
 // worktree's live things. A card is built like a project tile and is a
 // way into the worktree as much as a report on it: its header opens the
-// worktree's page, each live thing has its controls on its line
-// (LiveItems.tsx), and the ports that answer sit along the bottom. The card is scoped to
-// the device holding the worktree, so the dialogs it opens drive that
-// device exactly as the worktree's page would.
-import type React from "react";
+// worktree's page, each live thing has its controls in its block
+// (LiveItems.tsx), and the ports that answer sit along the bottom. The
+// card is scoped to the device holding the worktree, so its runner and
+// the dialogs it opens drive that device as the worktree's page would.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -24,7 +23,7 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChipButton } from "@/components/ui/chip-button";
 import { ExternalLink } from "@/components/ui/external-link";
-import { TONE_TEXT } from "@/components/ui/status-dot";
+import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
@@ -34,7 +33,6 @@ import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
 import { HostScopeProvider, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   canForwardPorts,
-  useAllPortForwards,
   usePortForwardControl,
 } from "@/hooks/remote/usePortForwards";
 import {
@@ -101,9 +99,17 @@ function CardBody({
   card: LiveCardModel;
   reachable: boolean;
 }) {
-  const { forwards, stop } = useAllPortForwards();
   const cardWorktree = useCardWorktree(card);
   const { worktree } = cardWorktree;
+  // The peer's ports this machine forwards already have a block of
+  // their own, so the strip leaves them out.
+  const forwarded = card.items.flatMap((item) =>
+    item.kind === "forward" ? [item.forward.remotePort] : [],
+  );
+  // Ports are polled while on screen, so only where they belong to a
+  // script running here: a card for a mirror or a forward alone has no
+  // dev server of its own to point at.
+  const scripts = card.items.some((item) => item.kind === "script");
   // The worktree's page offers the console and the dialogs too, so a
   // card that cannot reach its device still leads there.
   return (
@@ -123,7 +129,6 @@ function CardBody({
             <ScriptItem
               key={item.run.runId}
               deviceId={card.deviceId}
-              api={item.api}
               run={item.run}
             />
           ) : item.kind === "mirror" ? (
@@ -140,32 +145,21 @@ function CardBody({
               key={item.forward.forwardId}
               forward={item.forward}
               worktree={worktree}
-              stopping={
-                stop.isPending && stop.variables === item.forward.forwardId
-              }
-              onStop={() => stop.mutate(item.forward.forwardId)}
             />
           ),
         )}
       </ul>
-      {worktree && reachable && (
+      {worktree && reachable && scripts && (
         <PortsStrip
           deviceId={card.deviceId}
           worktree={worktree}
-          forwarded={forwards
-            .filter(
-              (forward) =>
-                forward.deviceId === card.deviceId &&
-                forward.worktree?.worktreeId === worktree.id,
-            )
-            .map((forward) => forward.remotePort)}
+          forwarded={forwarded}
         />
       )}
     </article>
   );
 }
 
-// The card's worktree off the same cached list the sidebar keeps.
 // Where the card's worktree stands: found in its device's list, the
 // list still loading, the list in without it (removed while something
 // ran there), or no list to be had (the device out of reach, with
@@ -327,7 +321,7 @@ function PortsStrip({
         ) : (
           // A peer's server this window cannot forward is only news.
           <span key={port.port} className="inline-flex items-center gap-1">
-            <PortDot />
+            <StatusDot tone="emerald" />
             <PortText port={port.port} label={port.label} />
           </span>
         ),
@@ -355,7 +349,7 @@ function LocalhostLink({ port, label }: { port: number; label?: string }) {
           errorTitle="Couldn't open the port"
           className="inline-flex items-center gap-1 rounded-sm no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <PortDot />
+          <StatusDot tone="emerald" />
           <PortText port={`localhost:${port}`} label={label} />
           <ExternalLinkIcon aria-hidden className="size-3" />
         </ExternalLink>
@@ -421,15 +415,6 @@ function PortText({
   );
 }
 
-function PortDot() {
-  return (
-    <span
-      aria-hidden
-      className="size-1.5 shrink-0 rounded-full bg-emerald-500"
-    />
-  );
-}
-
 // A device's loose forwards, the ones switched on from the account
 // page rather than a worktree.
 function PortsHeader() {
@@ -445,58 +430,5 @@ function PortsHeader() {
         </span>
       </div>
     </header>
-  );
-}
-
-// One live thing inside a card, as a block of two rows: what it is
-// and how it stands (its mark, its name, the status at the end), then
-// what can be done about it, as labelled buttons, with any further
-// detail at the end of that row.
-export function LiveItem({
-  mark,
-  title,
-  status,
-  actions,
-  detail,
-}: {
-  mark: React.ReactNode;
-  title: React.ReactNode;
-  status?: React.ReactNode;
-  actions?: React.ReactNode;
-  detail?: React.ReactNode;
-}) {
-  return (
-    <li className="flex flex-col gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-sm">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span className="flex size-4 shrink-0 items-center justify-center">
-          {mark}
-        </span>
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          {title}
-        </span>
-        {status && (
-          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            {status}
-          </span>
-        )}
-      </div>
-      {(actions || detail) && (
-        // Under the title, so the buttons line up with the name above
-        // them rather than with the mark. A phone has no room for the
-        // indent: there the buttons share the row's width.
-        <div className="-ml-2 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 pl-6.5 phone:ml-0 phone:pl-0">
-          {actions && (
-            <span className="flex items-center gap-1 phone:grid phone:w-full phone:auto-cols-fr phone:grid-flow-col">
-              {actions}
-            </span>
-          )}
-          {detail && (
-            <span className="ml-auto flex min-w-0 items-center gap-1 truncate pl-2 text-xs text-muted-foreground phone:ml-0 phone:pl-0">
-              {detail}
-            </span>
-          )}
-        </div>
-      )}
-    </li>
   );
 }
