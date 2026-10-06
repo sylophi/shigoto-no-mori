@@ -56,16 +56,25 @@ export function WorktreeSyncPill({
   if (state.kind === "detached" || state.kind === "synced") return null;
 
   if (worktree.changedCount > 0 && !syncRunsOnDirtyTree(state)) {
-    const owed =
+    const hint =
       state.kind === "behind"
-        ? `${pluralize(state.behind, "commit")} to pull`
-        : `Diverged from the remote: ${state.ahead} local, ${state.behind} remote`;
+        ? {
+            label: `${count(state.behind)} to pull`,
+            tip: `${pluralize(state.behind, "commit")} to pull. Commit or discard your changes to pull.`,
+          }
+        : state.kind === "pullAndPush"
+          ? {
+              label: `↑${state.ahead}↓${state.behind} to sync`,
+              tip: `${pluralize(state.ahead, "commit")} to push and ${pluralize(state.behind, "commit")} to pull. Commit or discard your changes to sync.`,
+            }
+          : {
+              label: `Diverged ↑${state.ahead}↓${state.behind}`,
+              tip: `History has split: ${state.ahead} local, ${state.behind} remote. Commit or discard your changes to pick which side wins.`,
+            };
     return (
-      <SimpleTooltip tip={`${owed}. Commit or discard your changes to pull.`}>
+      <SimpleTooltip tip={hint.tip}>
         <span className={cn(SYNC_PILL_SHAPE, "text-muted-foreground")}>
-          {state.kind === "behind"
-            ? `${count(state.behind)} to pull`
-            : `Diverged ↑${state.ahead}↓${state.behind}`}
+          {hint.label}
           <ArrowDown aria-hidden className="size-3.5" />
         </span>
       </SimpleTooltip>

@@ -73,7 +73,10 @@ function ChangesView({
 }) {
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
-  const { data: files } = useWorktreeChanges(projectId, worktreeId);
+  const { data: files, error: statusError } = useWorktreeChanges(
+    projectId,
+    worktreeId,
+  );
   // The pick is held as the row's key and resolved against the live
   // list, so a file that stops being changed (discarded, committed,
   // reverted in an editor) falls back to the first row instead of
@@ -174,13 +177,16 @@ function ChangesView({
   };
 
   // The sidebar's count stands in until the page's own status arrives.
-  const loading = files === undefined;
+  // A failed first read is not a read still coming: it says so (the
+  // query's toast has the details) instead of spinning on.
+  const failed = files === undefined && statusError !== null;
+  const loading = files === undefined && !failed;
   const changedCount = files ? files.length : worktree.changedCount;
   const list = files ?? [];
   // The message box only has a job with something to commit, or a
   // commit to amend. A clean tree keeps the branch bar and the last
   // commit, which is where the next move (push, amend, undo) lives.
-  const showComposer = loading || list.length > 0 || amending;
+  const showComposer = (loading || list.length > 0 || amending) && !failed;
 
   return (
     <DiffView
@@ -196,10 +202,17 @@ function ChangesView({
           in <span className="font-mono">{worktree.name}</span>
         </>
       }
-      emptyMessage={<CleanTreeMessage worktree={worktree} />}
+      emptyMessage={
+        failed ? (
+          "Couldn't read the changes."
+        ) : (
+          <CleanTreeMessage worktree={worktree} />
+        )
+      }
       changes={{
         files: list,
         loading,
+        failed,
         busy,
         selectedKey: picked ? changeKey(picked) : null,
         onSelect: setPickedKey,
@@ -277,8 +290,9 @@ function owedToRemote(worktree: Worktree): string | null {
     case "behind":
       return `${pluralize(state.behind, "commit")} to pull.`;
     case "pullAndPush":
-    case "diverged":
       return `${pluralize(state.ahead, "commit")} to push, ${pluralize(state.behind, "commit")} to pull.`;
+    case "diverged":
+      return "History has split from the remote. Pick which side wins below.";
     case "publish":
       return state.canPublish ? "This branch isn't on the remote yet." : null;
     case "detached":

@@ -1749,7 +1749,7 @@ export function installFakeHostBridge(
       deviceId,
       action,
       name,
-      { projectId, changedCount = 0, fields = {} } = {},
+      { projectId, changedCount, fields = {} } = {},
     ) {
       const forest = forests[deviceId];
       if (forest === undefined)
@@ -1771,7 +1771,7 @@ export function installFakeHostBridge(
             branch: name,
             path: `${project.path}/../worktrees/${name}`,
             hasUpstream: false,
-            changedCount,
+            changedCount: changedCount ?? 0,
             ...fields,
           }),
         );
@@ -1781,6 +1781,7 @@ export function installFakeHostBridge(
           throw new Error(`[fake-host] no worktree ${name} on ${deviceId}`);
         }
         Object.assign(row, fields);
+        if (changedCount !== undefined) row.changedCount = changedCount;
       } else {
         forest.worktrees[project.id] = list.filter((w) => w.name !== name);
       }

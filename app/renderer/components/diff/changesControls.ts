@@ -10,6 +10,8 @@ export interface DiffChangesControls {
   // The first status read hasn't answered yet: `files` is empty because
   // nothing is known, not because the tree is clean.
   loading: boolean;
+  // That first read failed, so the list is empty for want of an answer.
+  failed: boolean;
   onSetStaged: (paths: string[], staged: boolean) => void;
   onDiscard: (paths: string[]) => void;
   // The row whose diff is in the pane (patchFiles.changeKey), and how

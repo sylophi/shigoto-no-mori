@@ -94,7 +94,12 @@ export function CommitComposer({
     const after = draft.summary.slice(
       input.selectionEnd ?? draft.summary.length,
     );
-    const [first = "", ...rest] = text.replace(/\r\n?/g, "\n").split("\n");
+    // Leading blank lines (a terminal copy often starts with one) would
+    // otherwise make an empty summary.
+    const [first = "", ...rest] = text
+      .replace(/\r\n?/g, "\n")
+      .replace(/^\s*\n/, "")
+      .split("\n");
     const body = rest.join("\n").replace(/^\n+/, "").trimEnd();
     e.preventDefault();
     onDraftChange({
@@ -105,7 +110,8 @@ export function CommitComposer({
     });
   };
 
-  const left = SUMMARY_SOFT_LIMIT - draft.summary.length;
+  // In characters, of what gets committed (the trimmed summary).
+  const left = SUMMARY_SOFT_LIMIT - [...summary].length;
   const showCount = left < 10;
   const overLimit = left < 0;
 

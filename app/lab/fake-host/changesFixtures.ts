@@ -74,10 +74,12 @@ export function createFakeChanges(
 ) {
   const trees = new Map<string, ChangedFile[]>();
 
+  // Seeded again whenever the row's count moved behind the tree's back
+  // (a posing control), so the two never disagree.
   const filesOf = (worktreeId: string): ChangedFile[] => {
+    const count = findWorktree(worktreeId)?.changedCount ?? 0;
     let files = trees.get(worktreeId);
-    if (!files) {
-      const count = findWorktree(worktreeId)?.changedCount ?? 0;
+    if (!files || files.length !== count) {
       files = POOL.slice(0, count).toSorted(byPath);
       trees.set(worktreeId, files);
     }

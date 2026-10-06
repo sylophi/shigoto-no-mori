@@ -119,6 +119,14 @@ export function DiffFileIndex({
   // The key outlives `open` so the menu keeps its items while it closes.
   const [menu, setMenu] = useState<{ key: string; open: boolean } | null>(null);
   const menuEntry = menu && entries.find((entry) => entry.key === menu.key);
+  // A long press on a touch screen can end in a click on the row it
+  // opened over, which would select the file (on a phone, closing the
+  // sheet the menu is in). Read at click time, so a ref.
+  const menuOpenRef = useRef(false);
+  const selectRow = (key: string) => {
+    if (!menuOpenRef.current) onSelect(key);
+  };
+  const requestDiscard = (key: string) => setPendingDiscard({ key });
 
   // Empty lists say so: a changes list in its header (or that it is
   // still loading), a patch's in the list.
@@ -200,6 +208,7 @@ export function DiffFileIndex({
         open={menu?.open ?? false}
         onOpenChange={(open, details) => {
           if (!open) {
+            menuOpenRef.current = false;
             setMenu((current) => current && { ...current, open: false });
             return;
           }
@@ -210,7 +219,10 @@ export function DiffFileIndex({
             target instanceof Element
               ? target.closest("[data-row-key]")?.getAttribute("data-row-key")
               : null;
-          if (key) setMenu({ key, open: true });
+          if (key) {
+            menuOpenRef.current = true;
+            setMenu({ key, open: true });
+          }
         }}
       >
         <ContextMenuTrigger
@@ -227,9 +239,10 @@ export function DiffFileIndex({
                   active={entry.key === activeKey}
                   collapsed={collapsedKeys.has(entry.key)}
                   menuOpen={menu?.open === true && menu.key === entry.key}
-                  onSelect={onSelect}
+                  onSelect={selectRow}
                   busy={changes?.busy ?? false}
                   onSetStaged={changes?.onSetStaged}
+                  onDiscard={changes && requestDiscard}
                 />
               ))}
         </ContextMenuTrigger>
@@ -293,6 +306,7 @@ function SelectAllCheckbox({ changes }: { changes: DiffChangesControls }) {
 // of them the next commit takes when that isn't all of them.
 function describeSelection(changes: DiffChangesControls): string {
   if (changes.loading) return "Loading changes…";
+  if (changes.failed) return "Couldn't read the changes";
   const total = changes.files.length;
   if (total === 0) return "No changes";
   const included = includedFiles(changes.files).length;
@@ -336,8 +350,9 @@ function describeDiscard(
   if (pending === "unticked") {
     return `the ${pluralize(picked.length, "unticked file")}`;
   }
+  // The whole path: two changed files can share a name.
   const path = picked[0]?.path;
-  return path ? `changes to ${getBrowseLeafSegment(path)}` : "changes";
+  return path ? `changes to ${path}` : "changes";
 }
 
 // "Unticked" is disabled while nothing is ticked, since "the rest" would
@@ -429,6 +444,7 @@ function IndexRow({
   onSelect,
   busy,
   onSetStaged,
+  onDiscard,
 }: {
   entry: IndexEntry;
   active: boolean;
@@ -438,6 +454,7 @@ function IndexRow({
   onSelect: (key: string) => void;
   busy: boolean;
   onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
+  onDiscard: ((key: string) => void) | undefined;
 }) {
   // The file's name leads and its folder trails, dimmed: in a narrow
   // list the name is what tells two rows apart, so the folder is what
@@ -549,6 +566,23 @@ function IndexRow({
           )}
         </button>
       </SimpleTooltip>
+      {/* A phone's list is the full width, and a long press is a gesture
+          nobody finds, so there the discard is also a button. */}
+      {row && onDiscard && (
+        <Button
+          variant="ghost-destructive"
+          size="icon-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDiscard(entry.key);
+          }}
+          disabled={busy}
+          aria-label={`Discard changes to ${entry.path}`}
+          className="hidden phone:inline-flex"
+        >
+          <Undo2 aria-hidden />
+        </Button>
+      )}
     </div>
   );
 }
@@ -565,16 +599,22 @@ function FileMenu({
   onDiscard: () => void;
 }) {
   const { row } = entry;
-  const included = row?.staged === "all";
+  const staged = row?.staged;
   return (
     <ContextMenuContent className="min-w-48">
       {row && changes && (
         <DropdownMenuItem
           disabled={changes.busy}
-          onClick={() => changes.onSetStaged(changedFilePaths(row), !included)}
+          onClick={() =>
+            changes.onSetStaged(changedFilePaths(row), staged !== "all")
+          }
         >
-          {included ? <Minus /> : <Check />}
-          {included ? "Leave out of the commit" : "Include in the commit"}
+          {staged === "all" ? <Minus /> : <Check />}
+          {staged === "all"
+            ? "Leave out of the commit"
+            : staged === "partial"
+              ? "Include the whole file"
+              : "Include in the commit"}
         </DropdownMenuItem>
       )}
       <DropdownMenuItem
