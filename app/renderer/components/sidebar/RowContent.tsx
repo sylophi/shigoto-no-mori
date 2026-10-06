@@ -63,7 +63,7 @@ export function RowContent({
           mirrorWorktreeId={row.mirrorWorktreeId}
           pr={row.pr}
           stack={row.stack}
-          stackChild={row.stackChild}
+          stackRail={row.stackRail}
           shelf={row.shelf}
         />
       );
@@ -74,7 +74,7 @@ export function RowContent({
           device={row.device}
           pr={row.pr}
           stack={row.stack}
-          stackChild={row.stackChild}
+          stackRail={row.stackRail}
           shelf={row.shelf}
         />
       );
