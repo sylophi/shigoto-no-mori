@@ -13,6 +13,7 @@ import {
   Cable,
   ChevronRight,
   ExternalLink as ExternalLinkIcon,
+  FolderGit2,
   Loader2,
   Plus,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
 import { HostScopeProvider, useHostScope } from "@/hooks/remote/useHostScope";
 import {
@@ -100,7 +102,8 @@ function CardBody({
   reachable: boolean;
 }) {
   const { forwards, stop } = useAllPortForwards();
-  const { worktree, listed } = useCardWorktree(card);
+  const cardWorktree = useCardWorktree(card);
+  const { worktree } = cardWorktree;
   // The worktree's page offers the console and the dialogs too, so a
   // card that cannot reach its device still leads there.
   return (
@@ -109,8 +112,7 @@ function CardBody({
         <WorktreeHeader
           deviceId={card.deviceId}
           {...card.worktree}
-          worktree={worktree}
-          listed={listed}
+          state={cardWorktree}
         />
       ) : (
         <PortsHeader />
@@ -138,7 +140,6 @@ function CardBody({
               key={item.forward.forwardId}
               forward={item.forward}
               worktree={worktree}
-              showDevice={card.worktree === null}
               stopping={
                 stop.isPending && stop.variables === item.forward.forwardId
               }
@@ -165,19 +166,27 @@ function CardBody({
 }
 
 // The card's worktree off the same cached list the sidebar keeps.
-// `listed` is whether the list is in, so a worktree not found in it
-// reads as removed only once there is a list to have missed it.
-function useCardWorktree(card: LiveCardModel): {
-  worktree: Worktree | undefined;
-  listed: boolean;
-} {
+// Where the card's worktree stands: found in its device's list, the
+// list still loading, the list in without it (removed while something
+// ran there), or no list to be had (the device out of reach, with
+// nothing cached from this window's session).
+type CardWorktree =
+  | { kind: "found"; worktree: Worktree }
+  | { kind: "loading" | "missing" | "unreachable"; worktree: undefined };
+
+function useCardWorktree(card: LiveCardModel): CardWorktree {
   const scope = useDeviceApi(card.deviceId);
   const query = useQuery({
     ...worktreesQueryOptions(card.worktree?.projectId ?? null, scope),
     select: (worktrees) =>
       worktrees.find((entry) => entry.id === card.worktree?.worktreeId),
   });
-  return { worktree: query.data, listed: query.isSuccess };
+  if (query.data) return { kind: "found", worktree: query.data };
+  if (query.isSuccess) return { kind: "missing", worktree: undefined };
+  return {
+    kind: scope.api === undefined ? "unreachable" : "loading",
+    worktree: undefined,
+  };
 }
 
 // The worktree a card is for: its project's icon, its branch and its
@@ -188,15 +197,15 @@ function WorktreeHeader({
   deviceId,
   projectId,
   worktreeId,
-  worktree,
-  listed,
+  state,
 }: {
   deviceId: string;
   projectId: string;
   worktreeId: string;
-  worktree: Worktree | undefined;
-  listed: boolean;
+  state: CardWorktree;
 }) {
+  const { worktree } = state;
+  const deviceName = useDeviceProperName(deviceId);
   const scope = useDeviceApi(deviceId);
   const project = useQuery({
     ...projectsQueryOptions(scope),
@@ -205,7 +214,7 @@ function WorktreeHeader({
   }).data;
   // Held as placeholders until the lists are in, rather than read as
   // a worktree that is gone.
-  const pending = worktree === undefined && !listed;
+  const pending = state.kind === "loading";
   const title = (
     <>
       {project ? (
@@ -215,6 +224,10 @@ function WorktreeHeader({
           deviceId={deviceId}
           className="size-8"
         />
+      ) : state.kind === "unreachable" ? (
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <FolderGit2 aria-hidden className="size-4" />
+        </span>
       ) : (
         <Skeleton className="size-8 shrink-0 rounded-md" />
       )}
@@ -233,14 +246,18 @@ function WorktreeHeader({
           <Skeleton className="h-4 w-36" />
         ) : (
           <span className="truncate text-sm text-muted-foreground italic">
-            Removed worktree
+            {state.kind === "unreachable"
+              ? `A worktree on ${deviceName}`
+              : "Removed worktree"}
           </span>
         )}
         {pending ? (
           <Skeleton className="h-3 w-24" />
         ) : (
           <span className="truncate text-2xs text-muted-foreground">
-            {[worktree?.name, project?.name].filter(Boolean).join(" · ")}
+            {state.kind === "unreachable"
+              ? `${deviceName} is out of reach`
+              : [worktree?.name, project?.name].filter(Boolean).join(" · ")}
           </span>
         )}
       </span>
@@ -285,6 +302,9 @@ function PortsStrip({
   forwarded: readonly number[];
 }) {
   const { remote } = useHostScope();
+  // A forward rides the peer's grant, and a browser binds no port.
+  const { canCommand } = useCommandAccess();
+  const canForward = canForwardPorts && canCommand;
   const [open, setOpen] = useState(false);
   const ports = useWorktreePorts(worktree).data?.ports ?? [];
   const answering = ports.filter(
@@ -296,7 +316,7 @@ function PortsStrip({
       {answering.map((port) =>
         !remote ? (
           <LocalhostLink key={port.port} port={port.port} label={port.label} />
-        ) : canForwardPorts ? (
+        ) : canForward ? (
           <PeerPort
             key={port.port}
             deviceId={deviceId}
@@ -305,8 +325,7 @@ function PortsStrip({
             worktree={worktree}
           />
         ) : (
-          // A browser cannot bind a port, so a peer's server is only
-          // news here.
+          // A peer's server this window cannot forward is only news.
           <span key={port.port} className="inline-flex items-center gap-1">
             <PortDot />
             <PortText port={port.port} label={port.label} />

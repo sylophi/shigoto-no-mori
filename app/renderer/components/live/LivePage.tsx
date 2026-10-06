@@ -9,6 +9,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Radio, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
@@ -136,25 +137,40 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
     },
   });
   if (runs.length === 0 && !stopAll.isPending) return null;
+  const total = hosts.reduce((sum, host) => sum + host.runs.length, 0);
+  // "all" only when it is: a read-only device's runs stay running.
+  const readOnly = total - runs.length;
   return (
-    <Button
-      size="sm"
-      variant="outline-destructive"
-      aria-pressed={armed}
-      disabled={stopAll.isPending}
-      onClick={() => trigger(() => stopAll.mutate())}
+    <SimpleTooltip
+      tip={
+        readOnly > 0
+          ? `${pluralize(readOnly, "script")} on a read-only device ${readOnly === 1 ? "stays" : "stay"} running`
+          : undefined
+      }
     >
-      {stopAll.isPending ? (
-        <Loader2 className="animate-spin" />
-      ) : (
-        <Square className="size-3 fill-current" />
-      )}
-      {stopAll.isPending
-        ? "Stopping…"
-        : armed
-          ? "Click again to confirm"
-          : `Stop ${runs.length === 1 ? "the script" : `all ${runs.length} scripts`}`}
-    </Button>
+      <Button
+        size="sm"
+        variant="outline-destructive"
+        aria-pressed={armed}
+        disabled={stopAll.isPending}
+        onClick={() => trigger(() => stopAll.mutate())}
+      >
+        {stopAll.isPending ? (
+          <Loader2 className="animate-spin" />
+        ) : (
+          <Square className="size-3 fill-current" />
+        )}
+        {stopAll.isPending
+          ? "Stopping…"
+          : armed
+            ? "Click again to confirm"
+            : readOnly > 0
+              ? `Stop ${pluralize(runs.length, "script")}`
+              : runs.length === 1
+                ? "Stop the script"
+                : `Stop all ${runs.length} scripts`}
+      </Button>
+    </SimpleTooltip>
   );
 }
 

@@ -75,6 +75,7 @@ import {
   fakePoolPorts,
   fakeRemoteUrls,
   fakeRunningScripts,
+  addLiveEdgeRuns,
   projectIconFor,
   repoDescriptionFor,
   worktree as worktreeFixture,
@@ -1499,6 +1500,19 @@ export function installFakeHostBridge(
       },
     ],
   ]);
+  // ?liveEdge=1 (see addLiveEdgeRuns): a forward switched on from the
+  // account page, so tied to no worktree, at another local port than
+  // its own and with nothing connected.
+  if (new URLSearchParams(location.search).get("liveEdge") === "1") {
+    addLiveEdgeRuns();
+    forwards.set("b7e0aa9c1d2f4e6081b3c5d7e9f1a2b4", {
+      forwardId: "b7e0aa9c1d2f4e6081b3c5d7e9f1a2b4",
+      deviceId: THINKPAD_ID,
+      remotePort: 3000,
+      localPort: 3001,
+      connCount: 0,
+    });
+  }
 
   const clientHandlers: FixtureHandlers = {
     "account:status": accountStatus,

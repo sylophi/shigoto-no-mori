@@ -661,6 +661,61 @@ export const fakeRunningScripts: Record<string, RunningScript[]> = {
   ],
 };
 
+// ?liveEdge=1: the Live page's hard cases on top of the runs above. A
+// script name too long for its line, a worktree running five things,
+// a run in a worktree its device no longer lists, and a run on Mini,
+// which takes no commands from here (pair with mini:connected).
+const pkg = (name: string) => ({ kind: "package" as const, name });
+
+export function addLiveEdgeRuns(): void {
+  fakeRunningScripts[LOCAL_DEVICE_ID]?.push(
+    {
+      runId: "edge-long",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_hum",
+      slot: pkg("storybook:watch-with-every-addon-and-a-very-long-name"),
+      startedAt: minutesAgo(3 * 24 * 60),
+      interactive: true,
+    },
+    ...["dev", "test:watch", "typecheck:watch", "lint:watch"].map(
+      (name, index) => ({
+        runId: `edge-quail-${index}`,
+        projectId: "p_sm",
+        worktreeId: "wt_sm_quail",
+        slot: pkg(name),
+        startedAt: minutesAgo(90 + index),
+        interactive: true,
+      }),
+    ),
+    {
+      runId: "edge-quail-teardown",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_quail",
+      slot: { kind: "teardown" },
+      startedAt: minutesAgo(0),
+      interactive: false,
+    },
+    {
+      runId: "edge-gone",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_gone00",
+      slot: pkg("dev"),
+      startedAt: minutesAgo(400),
+      interactive: true,
+    },
+  );
+  fakeRunningScripts[MINI_ID] = [
+    {
+      runId: "edge-mini",
+      projectId: "mini_sm",
+      worktreeId: "ba9876543210",
+      slot: pkg("dev"),
+      startedAt: minutesAgo(25),
+      interactive: true,
+    },
+  ];
+}
+
 // ---- releases ----
 
 // The changelog's GitHub releases, newest first as the API lists

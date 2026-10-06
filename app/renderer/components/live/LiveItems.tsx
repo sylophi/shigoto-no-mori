@@ -43,6 +43,7 @@ import {
 import { useDeviceScriptRunState } from "@/hooks/scripts/useScriptRuns";
 import { useNow } from "@/hooks/ui/useNow";
 import { openExternalUrl } from "@/lib/openExternal";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,7 @@ export function ScriptItem({
   const state = useDeviceScriptRunState(deviceId, key);
   const held = state.runId === run.runId;
   const { canCommand } = commandAccessOf(deviceId, useRemoteDevice(deviceId));
+  const deviceName = useDeviceProperName(deviceId);
   const stopRun = async () => {
     if (held) await store.cancel(key);
     else await api.scripts.cancel(run.runId);
@@ -149,65 +151,79 @@ export function ScriptItem({
         />
       }
       title={
-        <span
-          className={cn(
-            "min-w-0 truncate font-medium",
-            run.slot.kind === "package" && "font-mono",
-          )}
-        >
-          {label}
-        </span>
+        <SimpleTooltip whenTruncated tip={label}>
+          <span
+            className={cn(
+              "min-w-0 truncate font-medium",
+              run.slot.kind === "package" && "font-mono",
+            )}
+          >
+            {label}
+          </span>
+        </SimpleTooltip>
       }
       status={<Uptime since={run.startedAt} />}
+      // A device that takes no commands from here lets nothing be done
+      // about its runs, its output included (attaching rides the same
+      // grant), so the block only says so.
+      detail={
+        canCommand ? undefined : (
+          <SimpleTooltip tip={peerReadOnlyNote(deviceName)}>
+            <span>Read-only</span>
+          </SimpleTooltip>
+        )
+      }
       actions={
-        <>
-          <Button
-            size="sm"
-            variant="ghost"
-            className={ON_FILL}
-            onClick={() =>
-              void navigate({
-                to: WORKTREE_ROUTE_PATHS.script,
-                params: {
-                  deviceId,
-                  projectId: run.projectId,
-                  worktreeId: run.worktreeId,
-                  scriptKey: slotToParam(run.slot),
-                },
-              })
-            }
-          >
-            <SquareTerminal />
-            Output
-          </Button>
-          {canCommand && run.slot.kind === "package" && (
+        canCommand && (
+          <>
             <Button
               size="sm"
               variant="ghost"
               className={ON_FILL}
-              disabled={busy}
-              onClick={() => restart.mutate()}
+              onClick={() =>
+                void navigate({
+                  to: WORKTREE_ROUTE_PATHS.script,
+                  params: {
+                    deviceId,
+                    projectId: run.projectId,
+                    worktreeId: run.worktreeId,
+                    scriptKey: slotToParam(run.slot),
+                  },
+                })
+              }
             >
-              <RotateCw className={cn(restart.isPending && "animate-spin")} />
-              {restart.isPending ? "Restarting…" : "Restart"}
+              <SquareTerminal />
+              Output
             </Button>
-          )}
-          {canCommand && (
-            <Button
-              size="sm"
-              variant="ghost-destructive"
-              disabled={busy}
-              onClick={() => stop.mutate()}
-            >
-              {stopping ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <Square className="size-3 fill-current" />
-              )}
-              {stopping ? "Stopping…" : "Stop"}
-            </Button>
-          )}
-        </>
+            {run.slot.kind === "package" && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className={ON_FILL}
+                disabled={busy}
+                onClick={() => restart.mutate()}
+              >
+                <RotateCw className={cn(restart.isPending && "animate-spin")} />
+                {restart.isPending ? "Restarting…" : "Restart"}
+              </Button>
+            )}
+            {
+              <Button
+                size="sm"
+                variant="ghost-destructive"
+                disabled={busy}
+                onClick={() => stop.mutate()}
+              >
+                {stopping ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Square className="size-3 fill-current" />
+                )}
+                {stopping ? "Stopping…" : "Stop"}
+              </Button>
+            }
+          </>
+        )
       }
     />
   );
@@ -310,15 +326,12 @@ function SessionItem({
 export function ForwardItem({
   forward,
   worktree,
-  showDevice,
   stopping,
   onStop,
 }: {
   forward: PortForwardSummary;
   // The worktree it was switched on from, whose Ports dialog moves it.
   worktree: Worktree | undefined;
-  // On the loose ports' card, where no worktree says whose port it is.
-  showDevice: boolean;
   stopping: boolean;
   onStop: () => void;
 }) {
@@ -385,21 +398,13 @@ export function ForwardItem({
             </Button>
           </>
         }
-        // Where it comes from, when the card does not already say:
-        // another port than the local one, or no worktree.
+        // The port it reaches, when it is not the local one's number.
+        // The card's device heading says on which device.
         detail={
-          showDevice || forward.remotePort !== forward.localPort ? (
-            <>
-              <span className="shrink-0">
-                from <span className="font-mono">{forward.remotePort}</span>
-              </span>
-              {showDevice && (
-                <>
-                  <span className="shrink-0">on</span>
-                  <DeviceName deviceId={forward.deviceId} />
-                </>
-              )}
-            </>
+          forward.remotePort !== forward.localPort ? (
+            <span className="shrink-0">
+              from <span className="font-mono">{forward.remotePort}</span>
+            </span>
           ) : undefined
         }
       />
