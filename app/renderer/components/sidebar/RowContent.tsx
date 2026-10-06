@@ -60,6 +60,7 @@ export function RowContent({
         <WorktreeRow
           worktree={row.worktree}
           mirror={row.mirror}
+          mirrorWorktreeId={row.mirrorWorktreeId}
           pr={row.pr}
           stack={row.stack}
           stackChild={row.stackChild}
@@ -86,6 +87,7 @@ export function RowContent({
           stack={row.stack}
           device={row.device}
           mirror={row.mirror}
+          mirrorWorktreeId={row.mirrorWorktreeId}
           shelf={row.shelf}
         />
       );

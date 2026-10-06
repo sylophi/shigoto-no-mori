@@ -57,6 +57,7 @@ interface Entry {
   // Undefined for this machine's own worktree.
   device: SidebarDeviceBadge | undefined;
   mirror: SidebarDeviceBadge | undefined;
+  mirrorWorktreeId: string | undefined;
   shelf: InboxShelf | null;
   activityAt: number;
 }
@@ -96,6 +97,7 @@ function worktreeRow(entry: Entry): SidebarRow {
     stack: entry.stack,
     device: entry.device,
     mirror: entry.mirror,
+    mirrorWorktreeId: entry.mirrorWorktreeId,
     shelf: entry.shelf,
   };
 }
@@ -170,6 +172,10 @@ export function buildInboxRows({
         stack: pullRequestStackPosition(prs, worktree.branch, trunk),
         device,
         mirror: device === undefined ? mirrorBadgeFor(worktree) : undefined,
+        mirrorWorktreeId:
+          device === undefined
+            ? peerOfLocal.get(worktree.id)?.peerWorktreeId
+            : undefined,
         shelf: bucket === "live" ? null : bucket,
         activityAt: worktreeLastActivityAt(worktree),
       };
