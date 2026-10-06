@@ -1,4 +1,4 @@
-// The footer's page-nav cluster (Projects, Live, Settings). Projects is the
+// The footer's page-nav cluster (Live, Projects, Settings). Projects is the
 // home page's grid (home/ProjectGrid.tsx), where a fresh window opens,
 // and the footer is the one bar both sidebar views show. Devices and
 // tidying are sections of Settings (SettingsSidebarNav). A hostless
@@ -28,15 +28,6 @@ export function SidebarNavActions() {
   const liveTip = live > 0 ? `Live (${live} running)` : "Live";
   return (
     <>
-      {hasLocalHost ? (
-        <NavIconButton to="/" tip="Projects" label="Projects">
-          <LayoutGrid className="size-3.5" />
-        </NavIconButton>
-      ) : (
-        <NavIconButton to="/account" tip="Devices" label="Devices">
-          <MonitorSmartphone className="size-3.5" />
-        </NavIconButton>
-      )}
       <NavIconButton to="/live" tip={liveTip} label={liveTip}>
         <Radio className="size-3.5" />
         {live > 0 && (
@@ -46,6 +37,15 @@ export function SidebarNavActions() {
           />
         )}
       </NavIconButton>
+      {hasLocalHost ? (
+        <NavIconButton to="/" tip="Projects" label="Projects">
+          <LayoutGrid className="size-3.5" />
+        </NavIconButton>
+      ) : (
+        <NavIconButton to="/account" tip="Devices" label="Devices">
+          <MonitorSmartphone className="size-3.5" />
+        </NavIconButton>
+      )}
       <NavIconButton
         to="/settings"
         tip={updateReady ? "Settings (update available)" : "Settings"}
