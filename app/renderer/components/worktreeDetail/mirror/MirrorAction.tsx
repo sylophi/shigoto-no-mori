@@ -108,7 +108,7 @@ function MirrorLinkAction({
 // The runner's scope over the dialog: this machine re-pinned outright
 // (the page may be a peer's, viewed from here), or the peer's
 // provider.
-function RunnerScope({
+export function RunnerScope({
   deviceId,
   api,
   children,

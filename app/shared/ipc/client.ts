@@ -334,6 +334,9 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       resize: (runId: string, cols: number, rows: number) =>
         scriptsClient.resize({ runId, cols, rows }),
       orphanReport: scriptsClient.orphanReport,
+      list: scriptsClient.list,
+      onChanged: scriptsClient.changed,
+      attach: (runId: string) => scriptsClient.attach({ runId }),
       onEvent: scriptsClient.event,
       onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,
     },

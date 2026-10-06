@@ -14,7 +14,14 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { errorMessageOf, worktreeSettingUpError } from "@shared/errors";
 import { holdRootChecks } from "@host/mirror/registry";
-import type { Project, ScriptEvent } from "@shared/schemas";
+import {
+  type Project,
+  type RunningScript,
+  runScriptName,
+  type ScriptEvent,
+  scriptErrorLine,
+  type ScriptRunSlot,
+} from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
 import {
@@ -28,7 +35,12 @@ import {
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
 // caller's window.
-export type NotifyScriptEvent = (payload: ScriptEvent) => void;
+export type NotifyScriptEvent = ((payload: ScriptEvent) => void) & {
+  // The connection it delivers to (its handler's signal, one per
+  // window generation or peer socket), so a run's stream can tell a
+  // connection that already hears it from a new one.
+  connection?: AbortSignal;
+};
 
 const DEFAULT_GRACE_MS = 3_000;
 // How long to wait for a child that survived SIGKILL (kernel-stuck I/O)
@@ -48,6 +60,86 @@ const DEFAULT_ROWS = 40;
 // frame.
 const OUTPUT_FLUSH_MS = 16;
 const OUTPUT_FLUSH_BYTES = 64 * 1024;
+// Output kept per run for a window that attaches after it started (the
+// console opened from another window or device, or after a reload), so
+// it opens on the run's recent output rather than a blank terminal.
+// The renderer keeps up to a megabyte of what it has seen. This only
+// has to set the scene.
+const BACKLOG_BYTES = 256 * 1024;
+
+// One run's event stream: the window that started it, and any that
+// attached since (scripts:attach), each fed every event from then on.
+// Output is kept as a backlog for the next to attach.
+interface RunStream {
+  emit: (event: ScriptEvent) => void;
+  // The output so far, and whether the connection already heard the
+  // run before this attach (it started it, or attached before): its
+  // events are then not sent a second time, and the caller drops what
+  // it buffered of them, which the backlog repeats.
+  attach: (watcher: NotifyScriptEvent) => {
+    output: string;
+    streaming: boolean;
+  };
+}
+
+function createRunStream(starter: NotifyScriptEvent): RunStream {
+  const chunks: string[] = [];
+  let bytes = 0;
+  // Each attached connection's notifier, and how to stop listening for
+  // the connection going, so a run that ends lets go of both (and with
+  // them this backlog), whatever the connections outlive it by.
+  const watchers = new Map<
+    AbortSignal,
+    { notify: NotifyScriptEvent; unlisten: () => void }
+  >();
+  const keep = (data: string) => {
+    chunks.push(data);
+    bytes += data.length;
+    let drop = 0;
+    while (bytes > BACKLOG_BYTES && drop < chunks.length - 1) {
+      bytes -= chunks[drop]?.length ?? 0;
+      drop++;
+    }
+    if (drop > 0) chunks.splice(0, drop);
+  };
+  return {
+    emit: (event) => {
+      if (event.kind === "data") keep(event.data);
+      if (event.kind === "error") keep(scriptErrorLine(event.data));
+      starter(event);
+      for (const { notify } of watchers.values()) {
+        try {
+          notify(event);
+        } catch {}
+      }
+      if (event.kind === "exit") {
+        for (const { unlisten } of watchers.values()) unlisten();
+        watchers.clear();
+        chunks.length = 0;
+      }
+    },
+    attach: (watcher) => {
+      const output = chunks.join("");
+      const signal = watcher.connection;
+      if (
+        signal === undefined ||
+        signal === starter.connection ||
+        watchers.has(signal)
+      ) {
+        return { output, streaming: signal !== undefined };
+      }
+      if (!signal.aborted) {
+        const drop = () => watchers.delete(signal);
+        signal.addEventListener("abort", drop, { once: true });
+        watchers.set(signal, {
+          notify: watcher,
+          unlisten: () => signal.removeEventListener("abort", drop),
+        });
+      }
+      return { output, streaming: false };
+    },
+  };
+}
 
 interface ScriptWorktree {
   id: string;
@@ -58,7 +150,8 @@ interface ScriptWorktree {
 
 interface RunArgs {
   command: string;
-  scriptName: string;
+  // The run's name (SHIGOMORI_SCRIPT_NAME, the logs) is the slot's.
+  slot: ScriptRunSlot;
   worktree: ScriptWorktree;
   project: Pick<Project, "id" | "path" | "name">;
   // The branch values of the SHIGOMORI_* env contract, for a command
@@ -77,7 +170,7 @@ interface Killable {
   exited: boolean;
   cancelling: boolean;
   done: Promise<void>;
-  notify: NotifyScriptEvent;
+  stream: RunStream;
   signal: (signal: NodeJS.Signals) => Promise<void>;
   // Sends whatever output is pooled for the next frame (see
   // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
@@ -89,6 +182,7 @@ interface RunRecord extends Killable {
   pty: ScriptPty;
   projectId: string;
   worktreeId: string;
+  slot: ScriptRunSlot;
   // Kept alongside the id so a worktree that has vanished from disk can
   // still be named in the reap notice and probed by path. Neither is
   // recoverable from the path-derived id after the fact.
@@ -110,6 +204,10 @@ const runningScripts = new Map<string, RunRecord>();
 // "exit". Not persisted: they die with the CLI at quit (killAllCli).
 interface CliScriptRun extends Killable {
   settle: () => void;
+  projectId: string;
+  worktreeId: string;
+  slot: ScriptRunSlot;
+  startedAt: number;
 }
 
 const cliScripts = new Map<string, CliScriptRun>();
@@ -142,32 +240,58 @@ export function cliScriptStream(notify: NotifyScriptEvent): {
         const done = new Promise<void>((resolve) => {
           settle = resolve;
         });
+        const stream = createRunStream(notify);
         cliScripts.set(event.runId, {
           runId: event.runId,
           pid,
-          scriptName:
-            event.slot.kind === "portPool"
-              ? `port-pool ${event.slot.phase}`
-              : event.slot.kind,
+          scriptName: runScriptName(event.slot),
           exited: false,
           cancelling: false,
           done,
-          notify,
+          stream,
           signal: (signal) => signalPidTree(pid, signal),
           flushOutput: () => {},
           settle,
+          projectId: event.projectId,
+          worktreeId: event.worktreeId,
+          slot: event.slot,
+          startedAt: Date.now(),
         });
         own.add(event.runId);
-      } else if (event.kind === "exit") {
-        const run = drop(event.runId);
-        if (run?.cancelling) event = { ...event, code: null };
+        runningScriptsChanged();
+        notify(event);
+        return;
       }
-      notify(event);
+      // A booked run's events go through its stream, so a window that
+      // attached to it hears them too.
+      const run = cliScripts.get(event.runId);
+      if (event.kind === "exit" && run) {
+        drop(event.runId);
+        if (run.cancelling) event = { ...event, code: null };
+        runningScriptsChanged();
+      }
+      (run?.stream.emit ?? notify)(event);
     },
     end: () => {
-      for (const runId of own) drop(runId);
+      if (own.size === 0) return;
+      for (const runId of own) {
+        const run = drop(runId);
+        // Its exit never came, so it is said here: the window that
+        // started it and any that attached would otherwise wait on it.
+        run?.stream.emit({ runId, kind: "exit", code: null });
+      }
+      runningScriptsChanged();
     },
   };
+}
+
+// Told whenever a script starts or ends, whoever ran it, so the
+// binding can tell every window and peer (scripts:changed). One
+// listener: the binding is the only one that asks.
+let runningScriptsChanged: () => void = () => {};
+
+export function onRunningScriptsChanged(listener: () => void): void {
+  runningScriptsChanged = listener;
 }
 
 // Mirror the live map to disk on every spawn and every settle, so a
@@ -352,6 +476,48 @@ export function getRunningScriptWorktrees(): RunningScriptWorktree[] {
   return Array.from(byWorktree.values());
 }
 
+// Every script running here now, the app's own and the CLI's
+// lifecycle runs alike, oldest first (scripts:list).
+export function listRunningScripts(): RunningScript[] {
+  const runs: RunningScript[] = [];
+  for (const record of runningScripts.values()) {
+    if (record.exited) continue;
+    runs.push({
+      runId: record.runId,
+      projectId: record.projectId,
+      worktreeId: record.worktreeId,
+      slot: record.slot,
+      startedAt: record.startedAt,
+      interactive: true,
+    });
+  }
+  for (const run of cliScripts.values()) {
+    if (run.exited) continue;
+    runs.push({
+      runId: run.runId,
+      projectId: run.projectId,
+      worktreeId: run.worktreeId,
+      slot: run.slot,
+      startedAt: run.startedAt,
+      interactive: false,
+    });
+  }
+  return runs.toSorted((a, b) => a.startedAt - b.startedAt);
+}
+
+// Joins a running script's stream from a window that did not start it:
+// every event from now on goes to `notify` too, until the run ends or
+// the caller's connection goes (`signal`). Answers the output so far,
+// or null for a run that is not running here.
+export function attachScript(
+  runId: string,
+  notify: NotifyScriptEvent,
+): { output: string; streaming: boolean } | null {
+  const run = runningScripts.get(runId) ?? cliScripts.get(runId);
+  if (!run || run.exited) return null;
+  return run.stream.attach(notify);
+}
+
 // The worktrees with a live app-started script, by id: what the
 // auto-pull paths treat as busy.
 export function runningScriptWorktreeIds(): Set<string> {
@@ -403,7 +569,7 @@ async function killRecord(record: Killable, opts: KillOptions): Promise<void> {
 
   if (opts.reason) {
     record.flushOutput();
-    record.notify({
+    record.stream.emit({
       runId: record.runId,
       kind: "data",
       data: `\r\n\x1b[2m[${opts.reason}]\x1b[0m\r\n`,
@@ -469,7 +635,7 @@ export function startScript(args: RunArgs): string {
     PAGER: "cat",
     GIT_PAGER: "cat",
     ...(args.scriptEnv && {
-      [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
+      [SCRIPT_ENV_KEYS.SCRIPT_NAME]: runScriptName(args.slot),
       [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
       [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
       [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: args.worktree.branch,
@@ -495,6 +661,7 @@ export function startScript(args: RunArgs): string {
   // terminal), so the renderer's xterm sees exactly what a real
   // terminal would, and concatenating reads before sending changes
   // nothing it renders.
+  const stream = createRunStream(args.notify);
   let pendingOutput = "";
   let flushTimer: NodeJS.Timeout | null = null;
   const flushOutput = () => {
@@ -505,7 +672,7 @@ export function startScript(args: RunArgs): string {
     if (!pendingOutput) return;
     const data = pendingOutput;
     pendingOutput = "";
-    args.notify({ runId, kind: "data", data });
+    stream.emit({ runId, kind: "data", data });
   };
 
   let resolveDone: () => void;
@@ -519,20 +686,22 @@ export function startScript(args: RunArgs): string {
     pty,
     projectId: args.project.id,
     worktreeId: args.worktree.id,
+    slot: args.slot,
     worktreeName: args.worktree.name,
     worktreePath: args.worktree.path,
-    scriptName: args.scriptName,
+    scriptName: runScriptName(args.slot),
     command: args.command,
     startedAt: Date.now(),
     exited: false,
     cancelling: false,
     done,
-    notify: args.notify,
+    stream,
     signal: (signal) => signalTree(pty.pid, signal),
     flushOutput,
   };
   runningScripts.set(runId, record);
   persistSnapshot();
+  runningScriptsChanged();
 
   pty.onData((data) => {
     pendingOutput += data;
@@ -555,7 +724,7 @@ export function startScript(args: RunArgs): string {
     const code = error.code ?? "";
     if (code.includes("EAGAIN") || code.includes("EIO")) return;
     flushOutput();
-    args.notify({ runId, kind: "error", data: errorMessageOf(error) });
+    stream.emit({ runId, kind: "error", data: errorMessageOf(error) });
   });
 
   // node-pty reports exit only after the terminal stream has drained
@@ -573,11 +742,12 @@ export function startScript(args: RunArgs): string {
     const wasSignal = signal !== undefined && signal !== 0;
     const reported = record.cancelling || wasSignal ? null : exitCode;
     flushOutput();
-    args.notify({ runId, kind: "exit", code: reported });
+    stream.emit({ runId, kind: "exit", code: reported });
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);
     persistSnapshot();
+    runningScriptsChanged();
   });
 
   return runId;

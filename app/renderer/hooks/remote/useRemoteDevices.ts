@@ -13,6 +13,8 @@ import {
   useLocalDeviceIcon,
   useLocalDeviceName,
 } from "@/hooks/account/useAccount";
+import type { HostApi } from "@/hooks/remote/useHostScope";
+import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import {
@@ -38,6 +40,24 @@ export function useRemoteDevices(): readonly RemoteDevice[] {
 // host behind it to read config, updater state or a forest from.
 export function useHostDevices(): readonly RemoteDevice[] {
   return useRemoteDevices().filter((device) => hostsProjects(device.platform));
+}
+
+// Every device that runs things, as (id, api) pairs: this machine when
+// it hosts projects, then every peer that does, its api undefined while
+// it has no session. The fan-outs across hosts (the mirror lists, the
+// running scripts) all start from this list.
+export function useEveryHost(): {
+  deviceId: string;
+  api: HostApi | undefined;
+}[] {
+  const devices = useHostDevices();
+  return [
+    ...(hasLocalHost ? [{ deviceId: localDeviceId, api: window.api }] : []),
+    ...devices.map((device) => ({
+      deviceId: device.deviceId,
+      api: device.api,
+    })),
+  ];
 }
 
 // One registered device by id, live like the list. Undefined for the

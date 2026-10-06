@@ -19,7 +19,7 @@ interface InnerProps {
 
 export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
   const { key, state, busy, canRun, disabledReason, start, stop, clear } =
-    useScriptRunner(worktree, slot);
+    useScriptRunner(worktree, slot, { follow: true });
   const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
 

@@ -92,6 +92,15 @@ export function describeForwardError(
   return message;
 }
 
+// Stopping a forward, from any surface that lists them. A purely
+// local act, whatever the peer.
+export function usePortForwardStop() {
+  return useMutation({
+    mutationFn: (forwardId: string) => window.api.portForward.stop(forwardId),
+    meta: { errorTitle: "Couldn't stop forwarding" },
+  });
+}
+
 export function usePortForwards(deviceId: string) {
   const { data } = usePortForwardList();
   const start = useMutation({
@@ -109,10 +118,7 @@ export function usePortForwards(deviceId: string) {
     },
     meta: { silentError: true },
   });
-  const stop = useMutation({
-    mutationFn: (forwardId: string) => window.api.portForward.stop(forwardId),
-    meta: { errorTitle: "Couldn't stop forwarding" },
-  });
+  const stop = usePortForwardStop();
   return {
     forwards: (data?.forwards ?? []).filter(
       (forward) => forward.deviceId === deviceId,
@@ -121,6 +127,19 @@ export function usePortForwards(deviceId: string) {
     stop,
   };
 }
+
+// How many forwards this machine holds, for the sidebar's Live mark.
+export function usePortForwardCount(): number {
+  return usePortForwardList((list) => list.forwards.length).data ?? 0;
+}
+
+// Every forward this machine holds, whichever device it reaches: the
+// Live page's list.
+export function useAllPortForwards(): PortForwardSummary[] {
+  return usePortForwardList().data?.forwards ?? NO_FORWARDS;
+}
+
+const NO_FORWARDS: PortForwardSummary[] = [];
 
 // What the marks on a peer's worktree (the sidebar row, the Ports
 // button) say while this machine forwards its ports, matched on the

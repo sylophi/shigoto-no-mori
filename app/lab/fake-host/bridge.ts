@@ -15,6 +15,7 @@ import { stackCleanupForWorktree } from "@shared/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type {
   Project,
+  RunningScript,
   SharedSettingsDoc,
   ShigomoriWorktreeData,
   Worktree,
@@ -73,6 +74,8 @@ import {
   fakeListeningPorts,
   fakePoolPorts,
   fakeRemoteUrls,
+  fakeRunningScripts,
+  addLiveEdgeRuns,
   projectIconFor,
   repoDescriptionFor,
   worktree as worktreeFixture,
@@ -573,6 +576,60 @@ function hostHandlersFor(
         .filter((stream) => stream.deviceId === forest.deviceId)
         .map(({ deviceId: _device, ...stream }) => stream),
     }),
+    // The posed running scripts. A stop ends the run at once and says
+    // so the way the host does, so the Live page's row goes.
+    "scripts:list": () => ({
+      runs: [...(fakeRunningScripts[forest.deviceId] ?? [])],
+    }),
+    // A console opened on a posed run replays a posed log, then the
+    // run keeps printing a line every few seconds while it is listed.
+    "scripts:attach": ({ runId }) => {
+      const run = (fakeRunningScripts[forest.deviceId] ?? []).find(
+        (entry) => entry.runId === runId,
+      );
+      if (run === undefined) return null;
+      fakeScriptTicker(forest.deviceId, runId, emit);
+      return { output: fakeScriptLog(run), streaming: false };
+    },
+    // A package script started (its button, the Live page's restart):
+    // listed as running, with a log of its own.
+    "packageScripts:run": ({ projectId, worktreeId, scriptName }) => {
+      const runId = `run-${Date.now().toString(36)}`;
+      const run = {
+        runId,
+        projectId,
+        worktreeId,
+        slot: { kind: "package" as const, name: scriptName },
+        startedAt: Date.now(),
+        interactive: true,
+      };
+      fakeRunningScripts[forest.deviceId] = [
+        ...(fakeRunningScripts[forest.deviceId] ?? []),
+        run,
+      ];
+      emit("scripts:changed", undefined);
+      setTimeout(() => {
+        emit("scripts:event", {
+          runId,
+          kind: "data",
+          data: fakeScriptLog(run),
+        });
+        fakeScriptTicker(forest.deviceId, runId, emit);
+      }, 300);
+      return { runId };
+    },
+    "scripts:cancel": ({ runId }) => {
+      const runs = fakeRunningScripts[forest.deviceId] ?? [];
+      const cancelled = runs.some((run) => run.runId === runId);
+      fakeRunningScripts[forest.deviceId] = runs.filter(
+        (run) => run.runId !== runId,
+      );
+      if (cancelled) {
+        emit("scripts:event", { runId, kind: "exit", code: null });
+        emit("scripts:changed", undefined);
+      }
+      return { cancelled };
+    },
     "mirror:history": ({ localWorktreeId }) => ({
       events: [...(fakeMirrors.history[localWorktreeId] ?? [])],
     }),
@@ -772,6 +829,58 @@ const FAKE_TREE: Record<
   "src/generated": [{ name: "schema.ts", isDirectory: false, ignored: true }],
   dist: [{ name: "bundle.js", isDirectory: false, ignored: true }],
 };
+
+// ---- running script fixtures ----
+
+// What a posed run has printed so far: a dev server's start-up, or a
+// setup's install.
+function fakeScriptLog(run: RunningScript): string {
+  const lines =
+    run.slot.kind === "package"
+      ? [
+          `\x1b[2m$ pnpm ${run.slot.name}\x1b[0m`,
+          "",
+          "  \x1b[32m\x1b[1mVITE\x1b[0m v7.1.4  ready in \x1b[1m412\x1b[0m ms",
+          "",
+          "  \x1b[32m➜\x1b[0m  \x1b[1mLocal\x1b[0m:   \x1b[36mhttp://localhost:5731/\x1b[0m",
+          "  \x1b[2m➜  Network: use --host to expose\x1b[0m",
+          "",
+        ]
+      : [
+          "\x1b[2m$ pnpm install\x1b[0m",
+          "Lockfile is up to date, resolution step is skipped",
+          "Progress: resolved 812, reused 790, downloaded 22, added 812",
+        ];
+  return lines.join("\r\n") + "\r\n";
+}
+
+// A line every few seconds from a posed run while it is listed, so an
+// open console is seen following it.
+const fakeTickers = new Set<string>();
+function fakeScriptTicker(
+  deviceId: string,
+  runId: string,
+  emit: FixtureWire["emit"],
+) {
+  if (fakeTickers.has(runId)) return;
+  fakeTickers.add(runId);
+  const timer = setInterval(() => {
+    const live = (fakeRunningScripts[deviceId] ?? []).some(
+      (run) => run.runId === runId,
+    );
+    if (!live) {
+      clearInterval(timer);
+      fakeTickers.delete(runId);
+      return;
+    }
+    const time = new Date().toLocaleTimeString();
+    emit("scripts:event", {
+      runId,
+      kind: "data",
+      data: `\x1b[2m${time}\x1b[0m \x1b[36m[vite]\x1b[0m hmr update \x1b[2m/src/App.tsx\x1b[0m\r\n`,
+    });
+  }, 4_000);
+}
 
 // ---- mirror fixtures ----
 //
@@ -1391,6 +1500,19 @@ export function installFakeHostBridge(
       },
     ],
   ]);
+  // ?liveEdge=1 (see addLiveEdgeRuns): a forward switched on from the
+  // account page, so tied to no worktree, at another local port than
+  // its own and with nothing connected.
+  if (new URLSearchParams(location.search).get("liveEdge") === "1") {
+    addLiveEdgeRuns();
+    forwards.set("b7e0aa9c1d2f4e6081b3c5d7e9f1a2b4", {
+      forwardId: "b7e0aa9c1d2f4e6081b3c5d7e9f1a2b4",
+      deviceId: THINKPAD_ID,
+      remotePort: 3000,
+      localPort: 3001,
+      connCount: 0,
+    });
+  }
 
   const clientHandlers: FixtureHandlers = {
     "account:status": accountStatus,
@@ -1615,4 +1737,16 @@ export function installFakeHostBridge(
     emitClient: client.emit,
     emitHost: localHost.emit,
   };
+
+  // ?mirrored=1: a mirror running from boot, Studio Mac's brave-badger
+  // kept in step with a copy on Thinkpad, through the posed start.
+  if (new URLSearchParams(location.search).get("mirrored") === "1") {
+    void fakeMirrorStartTo(localForest, {
+      targetDeviceId: THINKPAD_ID,
+      projectId: "p_sm",
+      worktreeId: "wt_sm_badger",
+      ignoreMode: "gitignored",
+      ignores: [],
+    });
+  }
 }

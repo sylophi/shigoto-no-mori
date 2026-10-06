@@ -877,7 +877,7 @@ async function main() {
     // is what the refusal flag consults), reaped in the finally below.
     startScript({
       command: 'node -e "setTimeout(() => {}, 30000)"',
-      scriptName: "sleep",
+      slot: { kind: "package", name: "sleep" },
       worktree: { id: wt5Id, name: "wt5", branch: "feature5", path: wt5Path },
       project: { id: sourceProjectId, path: sourceRepo, name: "source" },
       scriptEnv: { projectBranch: "main", defaultBranch: "main" },

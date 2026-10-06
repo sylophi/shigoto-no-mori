@@ -9,6 +9,7 @@ import type {
   Project,
   ProjectIcon,
   Release,
+  RunningScript,
   Worktree,
 } from "@shared/schemas";
 
@@ -616,6 +617,104 @@ export const fakeCustomPorts: Record<string, CustomPort[]> = {
 };
 
 export const fakeListeningPorts = new Set([5731, 5173, 6006, 8787, 5182]);
+
+// The scripts each device runs right now, as scripts:list answers (the
+// Live page). The dev servers behind the listening ports above, and a
+// setup still going on Thinkpad. Stopping one drops it here.
+const minutesAgo = (minutes: number) => Date.now() - minutes * 60_000;
+export const fakeRunningScripts: Record<string, RunningScript[]> = {
+  [LOCAL_DEVICE_ID]: [
+    {
+      runId: "run-sm-badger-dev",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_badger",
+      slot: { kind: "package", name: "dev" },
+      startedAt: minutesAgo(52),
+      interactive: true,
+    },
+    {
+      runId: "run-sm-hum-storybook",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_hum",
+      slot: { kind: "package", name: "fake-host" },
+      startedAt: minutesAgo(7),
+      interactive: true,
+    },
+  ],
+  [THINKPAD_ID]: [
+    {
+      runId: "run-tp-gecko-dev",
+      projectId: "tp_sm",
+      worktreeId: "a1b2c3d4e5f6",
+      slot: { kind: "package", name: "dev" },
+      startedAt: minutesAgo(180),
+      interactive: true,
+    },
+    {
+      runId: "run-tp-panda-setup",
+      projectId: "tp_sm",
+      worktreeId: "c0ffee123456",
+      slot: { kind: "setup" },
+      startedAt: minutesAgo(1),
+      interactive: false,
+    },
+  ],
+};
+
+// ?liveEdge=1: the Live page's hard cases on top of the runs above. A
+// script name too long for its line, a worktree running five things,
+// a run in a worktree its device no longer lists, and a run on Mini,
+// which takes no commands from here (pair with mini:connected).
+const pkg = (name: string) => ({ kind: "package" as const, name });
+
+export function addLiveEdgeRuns(): void {
+  fakeRunningScripts[LOCAL_DEVICE_ID]?.push(
+    {
+      runId: "edge-long",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_hum",
+      slot: pkg("storybook:watch-with-every-addon-and-a-very-long-name"),
+      startedAt: minutesAgo(3 * 24 * 60),
+      interactive: true,
+    },
+    ...["dev", "test:watch", "typecheck:watch", "lint:watch"].map(
+      (name, index) => ({
+        runId: `edge-quail-${index}`,
+        projectId: "p_sm",
+        worktreeId: "wt_sm_quail",
+        slot: pkg(name),
+        startedAt: minutesAgo(90 + index),
+        interactive: true,
+      }),
+    ),
+    {
+      runId: "edge-quail-teardown",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_quail",
+      slot: { kind: "teardown" },
+      startedAt: minutesAgo(0),
+      interactive: false,
+    },
+    {
+      runId: "edge-gone",
+      projectId: "p_sm",
+      worktreeId: "wt_sm_gone00",
+      slot: pkg("dev"),
+      startedAt: minutesAgo(400),
+      interactive: true,
+    },
+  );
+  fakeRunningScripts[MINI_ID] = [
+    {
+      runId: "edge-mini",
+      projectId: "mini_sm",
+      worktreeId: "ba9876543210",
+      slot: pkg("dev"),
+      startedAt: minutesAgo(25),
+      interactive: true,
+    },
+  ];
+}
 
 // ---- releases ----
 

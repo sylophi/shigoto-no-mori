@@ -2,13 +2,11 @@
 // keys agree on one shape: parsing `/scripts/:scriptKey` (paramToSlot)
 // and minting a sidebar/store key (scriptKey) both go through this file.
 
+import type { ScriptRunSlot } from "@shared/schemas";
 import { assertNever } from "@/lib/utils";
 
-export type ScriptSlot =
-  | { kind: "setup" }
-  | { kind: "teardown" }
-  | { kind: "portPool"; phase: "provision" | "release" }
-  | { kind: "package"; name: string };
+// The slot a run takes on its worktree, as the host lists it too.
+export type ScriptSlot = ScriptRunSlot;
 
 export type ScriptKey = string;
 
