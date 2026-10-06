@@ -348,8 +348,8 @@ export function buildSidebarRows({
         projectId: project.id,
       });
     }
-    // In the project's sort, then a stack's rows sit together as a
-    // tree, bottom layer first, wherever its layers are checked out:
+    // In the project's sort, then a stack's rows sit together on a
+    // rail, top layer first, wherever its layers are checked out:
     // gathered at its first layer's place. The trunk comes off
     // whichever listing the group has.
     const trunk =
@@ -369,10 +369,10 @@ export function buildSidebarRows({
         (row) => row.worktree.branch,
         group.pullRequests,
         trunk,
-      ).map(({ item, position, child }) => {
+      ).map(({ item, position, rail }) => {
         // The rows were built for this call, so they are ours to fill in.
         item.stack = position;
-        item.stackChild = child;
+        item.stackRail = rail;
         return item;
       });
     rows.push(...placed(localVisible, remoteVisible, null));

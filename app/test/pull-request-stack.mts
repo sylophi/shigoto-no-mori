@@ -159,7 +159,7 @@ try {
   );
 
   await proof.check(
-    "rows of a stack gather where its first row was, bottom first, peers' copies beside",
+    "rows of a stack gather where its first row was, top first, peers' copies beside",
     () => {
       const rows = [
         "main",
@@ -173,18 +173,36 @@ try {
       const placed = placeByStack(rows, (r) => r, prs, "main");
       assert.deepEqual(
         placed.map((p) => p.item),
-        ["main", "hotfix", "layer-a", "layer-b", "layer-b", "layer-c", "other"],
+        ["main", "hotfix", "layer-c", "layer-b", "layer-b", "layer-a", "other"],
       );
       assert.deepEqual(
         placed.map(
           (p) => p.position && `${p.position.index + 1}/${p.position.size}`,
         ),
-        [null, null, "1/3", "2/3", "2/3", "3/3", null],
+        [null, null, "3/3", "2/3", "2/3", "1/3", null],
       );
       assert.deepEqual(
-        placed.map((p) => p.child ?? null),
-        [null, null, null, "middle", "middle", "last", null],
-        "every member above the group's first row is its child, the last closing",
+        placed.map((p) => p.rail ?? null),
+        [
+          null,
+          null,
+          { last: false, whole: true },
+          { last: false, whole: true },
+          { last: false, whole: true },
+          { last: true, whole: true },
+          null,
+        ],
+        "every gathered member is a stop on the rail, the bottom one last",
+      );
+      assert.deepEqual(
+        placeByStack(["layer-c", "layer-a"], (r) => r, prs, "main").map(
+          (p) => p.rail,
+        ),
+        [
+          { last: false, whole: false },
+          { last: true, whole: false },
+        ],
+        "a rail that skips a layer is not whole",
       );
       assert.deepEqual(
         placeByStack(rows, (r) => r, undefined, "main").map((p) => p.item),
@@ -202,10 +220,17 @@ try {
         ).map((p) => p.item),
         ["layer-a", "layer-b", "layer-b2"],
       );
-      // One row showing of a stack nests nothing.
+      // One layer showing of a stack gets no rail, even with a peer's
+      // copy of it beside the local row.
+      assert.deepEqual(
+        placeByStack(["layer-b", "layer-b"], (r) => r, prs, "main").map(
+          (p) => p.rail ?? null,
+        ),
+        [null, null],
+      );
       assert.deepEqual(
         placeByStack(["layer-b", "other"], (r) => r, prs, "main").map(
-          (p) => p.child ?? null,
+          (p) => p.rail ?? null,
         ),
         [null, null],
       );

@@ -25,6 +25,8 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
   worktree: Worktree;
   pr: PullRequest | undefined;
   stack: StackPosition | null;
+  // The PR pill's hidePosition, for a row on a whole stack rail.
+  hideStackPosition?: boolean;
   // The peer the worktree lives on, absent for this machine's own, and
   // the peer a local one is mirrored with.
   device: SidebarDeviceBadge | undefined;
@@ -52,12 +54,13 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
 // Without a context line, a running script's mark leads the pills, and
 // a delete in flight takes their place: the worktree is going away, so
 // the trash standing alone reads as "destroying". Children lead the
-// button (the tree's stack connector). Props pass through to the
+// button (the tree's stack rail). Props pass through to the
 // button, so a menu trigger can render it as its own element.
 export function WorktreeEntry({
   worktree,
   pr,
   stack,
+  hideStackPosition,
   device,
   mirror,
   state,
@@ -154,7 +157,11 @@ export function WorktreeEntry({
             <>
               <ChangedFilesPill worktree={worktree} />
               <RemoteSyncPill worktree={worktree} />
-              <PullRequestPill pr={pr} stack={stack} />
+              <PullRequestPill
+                pr={pr}
+                stack={stack}
+                hidePosition={hideStackPosition}
+              />
             </>
           )}
         </span>
