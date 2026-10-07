@@ -1,8 +1,13 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { DeviceIdZod, PortNumberZod } from "@shared/schemas/zodBridge";
-import { WorktreeScopedPayloadSchema } from "@shared/schemas/zodPayloads";
+import {
+  PortNumberSchema,
+  VoidSchema,
+  WorktreeScopedPayloadSchema,
+} from "@shared/schemas";
+import { strict } from "@shared/schemas/strict";
 
 // Client-scoped control surface for the port-forward engine. The engine
 // binds real TCP listeners on THIS machine's loopback
@@ -28,39 +33,49 @@ const ForwardIdSchema = HexId32Schema;
 // but marks only its own worktree.
 const PortForwardWorktreeSchema = WorktreeScopedPayloadSchema;
 
-export type PortForwardWorktree = z.infer<typeof PortForwardWorktreeSchema>;
+export type PortForwardWorktree = typeof PortForwardWorktreeSchema.Type;
 
-const PortForwardStartPayloadSchema = z.strictObject({
-  deviceId: DeviceIdZod,
-  remotePort: PortNumberZod,
-  // Omitted means an ephemeral local port, the common case.
-  localPort: PortNumberZod.optional(),
-  worktree: PortForwardWorktreeSchema.optional(),
-});
+const PortForwardStartPayloadSchema = strict(
+  Schema.Struct({
+    deviceId: DeviceIdSchema,
+    remotePort: PortNumberSchema,
+    // Omitted means an ephemeral local port, the common case.
+    localPort: Schema.optional(PortNumberSchema),
+    worktree: Schema.optional(PortForwardWorktreeSchema),
+  }),
+);
 
-const PortForwardStartResultSchema = z.strictObject({
-  forwardId: ForwardIdSchema,
-  localPort: PortNumberZod,
-});
+const PortForwardStartResultSchema = strict(
+  Schema.Struct({
+    forwardId: ForwardIdSchema,
+    localPort: PortNumberSchema,
+  }),
+);
 
-const PortForwardStopPayloadSchema = z.strictObject({
-  forwardId: ForwardIdSchema,
-});
+const PortForwardStopPayloadSchema = strict(
+  Schema.Struct({
+    forwardId: ForwardIdSchema,
+  }),
+);
 
-const PortForwardSummarySchema = z.strictObject({
-  forwardId: ForwardIdSchema,
-  deviceId: DeviceIdZod,
-  remotePort: PortNumberZod,
-  localPort: PortNumberZod,
-  connCount: z.number().int().min(0),
-  worktree: PortForwardWorktreeSchema.optional(),
-});
+const PortForwardSummarySchema = strict(
+  Schema.Struct({
+    forwardId: ForwardIdSchema,
+    deviceId: DeviceIdSchema,
+    remotePort: PortNumberSchema,
+    localPort: PortNumberSchema,
+    connCount: Schema.Natural,
+    worktree: Schema.optional(PortForwardWorktreeSchema),
+  }),
+);
 
-export type PortForwardSummary = z.infer<typeof PortForwardSummarySchema>;
+export type PortForwardSummary = typeof PortForwardSummarySchema.Type;
 
-const PortForwardListResultSchema = z.strictObject({
-  forwards: z.array(PortForwardSummarySchema),
-});
+const PortForwardListResultSchema = strict(
+  Schema.Struct({
+    forwards: Schema.Array(PortForwardSummarySchema),
+  }),
+);
 
 export const portForwardContract = defineContract("client", {
   start: invoke(
@@ -68,10 +83,10 @@ export const portForwardContract = defineContract("client", {
     PortForwardStartPayloadSchema,
     PortForwardStartResultSchema,
   ),
-  stop: invoke("portForward:stop", PortForwardStopPayloadSchema, z.void()),
-  list: invoke("portForward:list", z.void(), PortForwardListResultSchema),
+  stop: invoke("portForward:stop", PortForwardStopPayloadSchema, VoidSchema),
+  list: invoke("portForward:list", VoidSchema, PortForwardListResultSchema),
   // Fired by the engine whenever the forward or conn set changes, so
   // the list query refreshes without polling. Payload-free on purpose:
   // the list read is cheap and one signal shape cannot drift.
-  changed: broadcast("portForward:changed", z.void()),
+  changed: broadcast("portForward:changed", VoidSchema),
 });

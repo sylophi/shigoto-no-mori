@@ -22,8 +22,8 @@ import { randomBytes } from "node:crypto";
 import { Resolver } from "node:dns";
 import type { LookupFunction } from "node:net";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 import { WebSocket } from "ws";
-import { z } from "zod";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createWsServerBinding } from "@host/socket/server";
 import { mintHexId } from "@host/lib/hexId";
@@ -177,7 +177,9 @@ async function sendPieces(link: Link): Promise<void> {
 }
 
 // A bench channel's invoke input.
-const ChannelPayloadSchema = z.object({ channelId: HexId32Schema });
+const decodeChannelPayload = Schema.decodeUnknownSync(
+  Schema.Struct({ channelId: HexId32Schema }),
+);
 
 const payloads = {
   small: { ok: true, branch: "main", ahead: 0, behind: 0 },
@@ -204,7 +206,7 @@ async function main() {
   binding.handle(
     "bench:bundle",
     async (ctx, raw) => {
-      const { channelId } = ChannelPayloadSchema.parse(raw);
+      const { channelId } = decodeChannelPayload(raw);
       const link = attachLinkFarEnd(ctx, channelId);
       void (async () => {
         await link.write({ bundle: { bytes: BUNDLE_BYTES } });
@@ -219,7 +221,7 @@ async function main() {
   binding.handle(
     "bench:receive",
     async (ctx, raw) => {
-      const { channelId } = ChannelPayloadSchema.parse(raw);
+      const { channelId } = decodeChannelPayload(raw);
       const link = attachLinkFarEnd(ctx, channelId);
       await link.write({ ask: "bundle" });
       await link.readBytes(BUNDLE_BYTES, async () => {});

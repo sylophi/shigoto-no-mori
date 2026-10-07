@@ -69,8 +69,8 @@ import {
   type DirectCandidate,
   type DirectCandidateKind,
   type DirectConnectInfoInput,
-  DirectConnectInfoSchema,
 } from "@shared/ipc/modules/direct";
+import { DirectConnectInfoZod } from "@shared/schemas/zodBridge";
 import { errorMessageOf } from "@shared/errors";
 import {
   openDevice,
@@ -433,7 +433,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       }
       throw error;
     }
-    const info = DirectConnectInfoSchema.parse(answer);
+    const info = DirectConnectInfoZod.parse(answer);
     if (!info.available) {
       // The peer's listener is down, or it has nothing THIS caller can
       // dial. Unreachable for data RIGHT NOW, which is not the same as

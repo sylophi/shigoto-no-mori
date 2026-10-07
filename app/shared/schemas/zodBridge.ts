@@ -1,6 +1,9 @@
 import type * as Schema from "effect/Schema";
 import { z } from "zod";
-import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
+import { DeviceIdSchema } from "@shared/hub/protocol";
+import { HexId32Schema } from "@shared/ipc/hexId";
+import { DoctorReportSchema } from "@shared/ipc/modules/cli";
+import { DirectConnectInfoSchema } from "@shared/ipc/modules/direct";
 import { safeDecode } from "@shared/ipc/schema";
 import {
   CloneFolderNameSchema,
@@ -8,7 +11,6 @@ import {
   ProjectSchema,
 } from "./project";
 import { WorktreeIdSchema } from "./config";
-import { PortNumberSchema } from "./ports";
 import {
   PullRequestMergeStateSchema,
   PullRequestReviewDecisionSchema,
@@ -36,12 +38,13 @@ function toZod<S extends Schema.Codec<unknown, unknown>>(
 }
 
 export const DeviceIdZod = toZod(DeviceIdSchema);
-export const DeviceInfoZod = toZod(DeviceInfoSchema);
+export const DirectConnectInfoZod = toZod(DirectConnectInfoSchema);
+export const DoctorReportZod = toZod(DoctorReportSchema);
 export const CloneFolderNameZod = toZod(CloneFolderNameSchema);
 export const CommitHashZod = toZod(CommitHashSchema);
 export const CreatePhaseZod = toZod(CreatePhaseSchema);
 export const GitRefNameZod = toZod(GitRefNameSchema);
-export const PortNumberZod = toZod(PortNumberSchema);
+export const HexId32Zod = toZod(HexId32Schema);
 export const ProjectZod = toZod(ProjectSchema);
 export const PullRequestMergeStateZod = toZod(PullRequestMergeStateSchema);
 export const PullRequestReviewDecisionZod = toZod(

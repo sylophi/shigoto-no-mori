@@ -156,7 +156,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
   }
 
   function buildStatus(current: HubConnectionStatus): HubStatus {
-    const snapshot: HubStatus = {
+    return {
       socket: current.socket,
       onlineDeviceIds: current.onlineDeviceIds,
       // Folded into the snapshot so the renderer stops polling
@@ -167,15 +167,14 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       // derives connectedness from the keys).
       peerAppVersions: handlers.directPeerVersions(),
       peerAcceptsCommands: handlers.directPeerAccess(),
+      // THIS device's tunnel endpoint state. The
+      // state only, never the hostname or token. Absent without a host
+      // half (the web bridge runs no cloudflared). HubStatus is the
+      // remote-plane snapshot (hub control plane plus the direct data
+      // plane it brokers), which is why the tunnel and direct surfaces
+      // ride it.
+      ...(deps.host === undefined ? {} : { tunnel: deps.host.tunnelState() }),
     };
-    // THIS device's tunnel endpoint state. The
-    // state only, never the hostname or token. Absent without a host
-    // half (the web bridge runs no cloudflared). HubStatus is the
-    // remote-plane snapshot (hub control plane plus the direct data
-    // plane it brokers), which is why the tunnel and direct surfaces
-    // ride it.
-    if (deps.host !== undefined) snapshot.tunnel = deps.host.tunnelState();
-    return snapshot;
   }
 
   function status(): HubStatus {
