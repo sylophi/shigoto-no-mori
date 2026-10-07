@@ -79,6 +79,8 @@ import { syncHandlers } from "./sync";
 import { worktreesHandlers } from "./worktrees";
 import { implSlot } from "@host/lib/util/implSlot";
 
+const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
+
 // The Electron layer injects the account and the peer reach at boot
 // (main/ipc/handlers.ts), like the other peer seams (peerSync.ts): the
 // device registry rides the stored credential and the peer transport
@@ -956,8 +958,7 @@ async function worktreesOn(standings: ControlDevice[]): Promise<{
           () => null,
         );
         if (answer === null) throw new Error("no answer");
-        return WorktreeSchema.array()
-          .parse(answer)
+        return decodeWorktrees(answer)
           .filter(
             (worktree) => !worktree.detached && isRealBranch(worktree.branch),
           )

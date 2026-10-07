@@ -40,6 +40,7 @@
 // empty device: there the sending side's CLI runs against a registry
 // of its own (see sendsAsOtherDevice). Run: pnpm test sync-transfer.
 import assert from "node:assert/strict";
+import * as Schema from "effect/Schema";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
 import {
@@ -877,7 +878,7 @@ it("transplant (clean): the worktree lands here and the source worktree, its sm 
   );
   const wt3Doc = wt3Create.docs.find((doc) => doc.event === "created");
   assert.ok(wt3Doc, "sm create emitted no created doc");
-  const wt3 = WorktreeSchema.parse(wt3Doc.worktree);
+  const wt3 = Schema.decodeUnknownSync(WorktreeSchema)(wt3Doc.worktree);
   const wt3Path = wt3.path;
   wt3Id = wt3.id;
   await commitFile(wt3Path, "third.txt", "third feature\n", "third feature");

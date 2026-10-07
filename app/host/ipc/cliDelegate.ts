@@ -17,7 +17,6 @@ import {
   CarryOverReportSchema,
   CleanupErrorSchema,
   CommitHashSchema,
-  CreatePhaseSchema,
   type CleanupError,
   type CreateWorktreeResult,
   type DeleteStackResult,
@@ -51,6 +50,7 @@ import {
   WorktreeDiskUsageSchema,
   type WorktreeIdentity,
   WorktreeIdentitySchema,
+  WorktreeLifecyclePhaseSchema,
   type WorktreeLifecyclePhase,
   WorktreeSchema,
 } from "@shared/schemas";
@@ -141,7 +141,12 @@ function worktreeArgv(
   return [...verb, "--project-id", project.id, "--worktree-id", worktreeId];
 }
 
-const PhaseSchema = z.union([CreatePhaseSchema, z.literal("idle")]);
+const decodeWorktree = Schema.decodeUnknownSync(WorktreeSchema);
+const decodeCarryOverReport = Schema.decodeUnknownSync(CarryOverReportSchema);
+const decodeCleanupError = Schema.decodeUnknownSync(CleanupErrorSchema);
+const decodePhase = Schema.decodeUnknownSync(
+  WorktreeLifecyclePhaseSchema.fields.phase,
+);
 
 // The failure for a run that produced no ok result. The CLI's --json
 // error document carries a stable `code` for entity-gone failures;
@@ -247,14 +252,14 @@ function runStreamingCreate(
     const onDoc = (doc: CliDoc) => {
       switch (doc.event) {
         case "created": {
-          created = WorktreeSchema.parse(doc["worktree"]);
+          created = decodeWorktree(doc["worktree"]);
           if (resolveOn === "created") resolve({ worktree: created });
           if (signal?.aborted) kill.abort();
           break;
         }
         case "phase": {
           if (!created) break;
-          setPhase(created.id, PhaseSchema.parse(doc["phase"]));
+          setPhase(created.id, decodePhase(doc["phase"]));
           break;
         }
         case "carryOver": {
@@ -262,7 +267,7 @@ function runStreamingCreate(
           notify.notifyCarryOverComplete({
             projectId: project.id,
             worktreeId: created.id,
-            report: CarryOverReportSchema.parse(doc["report"]),
+            report: decodeCarryOverReport(doc["report"]),
           });
           break;
         }
@@ -447,7 +452,7 @@ async function runRemoval(
   if (final?.["ok"] === false && final["cleanupError"] !== undefined) {
     return {
       ok: false,
-      cleanupError: CleanupErrorSchema.parse(final["cleanupError"]),
+      cleanupError: decodeCleanupError(final["cleanupError"]),
       final,
     };
   }
@@ -514,7 +519,7 @@ export async function doneViaCli(
     "--force",
   ]);
   const final = finalOkDoc(result, "sm done failed", { worktreeId });
-  return WorktreeSchema.parse(final["worktree"]);
+  return decodeWorktree(final["worktree"]);
 }
 
 // `stack`: the PR and every open PR under it in its stack, which the
@@ -712,6 +717,14 @@ export async function dirtyCaptureViaCli(
 // the worktree and consumes the ref (`sm dirty apply`, cli/cmd_dirty.go).
 // The CLI's own guards (HEAD must be the capture's parent, tree clean,
 // no added-path collisions) are the failure surface here.
+const decodeDirtyApplied = Schema.decodeUnknownSync(
+  Schema.Struct({
+    applied: Schema.Literal(true),
+    commit: CommitHashSchema,
+    changedFiles: Schema.Natural,
+  }),
+);
+
 export async function dirtyApplyViaCli(
   project: Project,
   worktreeId: string,
@@ -720,23 +733,29 @@ export async function dirtyApplyViaCli(
     worktreeArgv(["dirty", "apply"], project, worktreeId),
   );
   const final = finalOkDoc(result, "sm dirty apply failed", { worktreeId });
-  return z
-    .object({
-      applied: z.literal(true),
-      commit: CommitHashSchema,
-      changedFiles: z.number().int().nonnegative(),
-    })
-    .parse(final);
+  return decodeDirtyApplied(final);
 }
 
-const RefTipDocSchema = z.object({ ref: z.string(), commit: CommitHashSchema });
+const RefTipDocSchema = Schema.Struct({
+  ref: Schema.String,
+  commit: CommitHashSchema,
+});
+const decodeBundleCreated = Schema.decodeUnknownSync(
+  Schema.Struct({ bytes: Schema.Natural, refs: Schema.Array(RefTipDocSchema) }),
+);
+const decodeBundleUnpacked = Schema.decodeUnknownSync(
+  Schema.Struct({ fetched: Schema.mutable(Schema.Array(RefTipDocSchema)) }),
+);
 
 export async function bundleCreateViaCli(
   project: Project,
   outPath: string,
   refs: string[],
   haves: string[],
-): Promise<{ bytes: number; refs: { ref: string; commit: string }[] }> {
+): Promise<{
+  bytes: number;
+  refs: readonly { ref: string; commit: string }[];
+}> {
   const result = await runner().runCli([
     "bundle",
     "create",
@@ -750,12 +769,7 @@ export async function bundleCreateViaCli(
   const final = finalOkDoc(result, "sm bundle create failed", {
     projectId: project.id,
   });
-  return z
-    .object({
-      bytes: z.number().int().nonnegative(),
-      refs: z.array(RefTipDocSchema),
-    })
-    .parse(final);
+  return decodeBundleCreated(final);
 }
 
 // Into a registered project, or into a repository by path: the clone
@@ -778,7 +792,7 @@ export async function bundleUnpackViaCli(
   const final = finalOkDoc(result, "sm bundle unpack failed", {
     projectId: project?.id,
   });
-  return z.object({ fetched: z.array(RefTipDocSchema) }).parse(final);
+  return decodeBundleUnpacked(final);
 }
 
 // Registry removal and per-project state deletion only; the app-side
@@ -840,7 +854,7 @@ export async function setAutoPullViaCli(
   const final = finalOkDoc(result, "sm worktrees autopull failed", {
     worktreeId,
   });
-  return WorktreeSchema.parse(final["worktree"]);
+  return decodeWorktree(final["worktree"]);
 }
 
 // `git worktree move` plus the re-key of everything stored under the
@@ -860,7 +874,7 @@ export async function moveViaCli(
   const final = finalOkDoc(result, "sm worktrees move failed", {
     worktreeId,
   });
-  return WorktreeSchema.parse(final["worktree"]);
+  return decodeWorktree(final["worktree"]);
 }
 
 // The re-key half of a move, for the data folder move, which relocates
@@ -930,17 +944,25 @@ async function readDoc(
   return doc;
 }
 
+const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
+const decodeOneWorktree = Schema.decodeUnknownSync(
+  Schema.Tuple([WorktreeSchema]),
+);
+const decodeWorktreeIdentities = Schema.decodeUnknownSync(
+  Schema.Array(WorktreeIdentitySchema),
+);
+
 // A project's rows, primary first: the sidebar's list, one spawn per
 // project per refresh.
 export async function listWorktreesViaCli(
   projectId: string,
-): Promise<Worktree[]> {
+): Promise<readonly Worktree[]> {
   const doc = await readDoc(
     ["worktrees", "list", "--project-id", projectId],
     "sm worktrees list failed",
     { projectId },
   );
-  return z.array(WorktreeSchema).parse(doc);
+  return decodeWorktrees(doc);
 }
 
 // One row, freshly probed: what a mutation hands back to the renderer.
@@ -960,7 +982,7 @@ export async function describeWorktreeViaCli(
     "sm worktrees list failed",
     { projectId, worktreeId },
   );
-  return z.tuple([WorktreeSchema]).parse(doc)[0];
+  return decodeOneWorktree(doc)[0];
 }
 
 // Identities without git probes (see WorktreeIdentitySchema): a
@@ -969,7 +991,7 @@ export async function describeWorktreeViaCli(
 export async function listWorktreeIdentitiesViaCli(
   scope: { projectId?: string; worktreeId?: string },
   opts: { primaryRef?: boolean } = {},
-): Promise<WorktreeIdentity[]> {
+): Promise<readonly WorktreeIdentity[]> {
   const args = ["worktrees", "list", "--identities"];
   if (scope.projectId === undefined) args.push("--all");
   else args.push("--project-id", scope.projectId);
@@ -978,7 +1000,7 @@ export async function listWorktreeIdentitiesViaCli(
   }
   if (opts.primaryRef) args.push("--primary-ref");
   const doc = await readDoc(args, "sm worktrees list failed", scope);
-  return z.array(WorktreeIdentitySchema).parse(doc);
+  return decodeWorktreeIdentities(doc);
 }
 
 const decodeProjectRows = Schema.decodeUnknownSync(

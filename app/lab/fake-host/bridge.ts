@@ -80,6 +80,7 @@ import {
   addLiveEdgeRuns,
   projectIconFor,
   repoDescriptionFor,
+  type FakeWorktree,
   worktree as worktreeFixture,
 } from "./fixtures";
 import { villagerHandlersFor } from "./villagerData";
@@ -280,7 +281,7 @@ function hostHandlersFor(
   const changes = createFakeChanges(findWorktree);
   const syncAfter = async (
     worktreeId: string,
-    move: (worktree: Worktree) => void,
+    move: (worktree: FakeWorktree) => void,
   ): Promise<Worktree> => {
     await sleep(700);
     const worktree = findWorktree(worktreeId);
@@ -780,7 +781,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // What a push or a publish leaves: every commit on the branch is on the
 // remote now.
-function pushed(worktree: Worktree): void {
+function pushed(worktree: FakeWorktree): void {
   worktree.ahead = 0;
   worktree.unpushedCount = 0;
 }
@@ -1343,7 +1344,7 @@ function initCrowd(): void {
       forest: DeviceForest,
       id: string,
       path: string,
-      extra: (id: string) => Worktree[] = () => [],
+      extra: (id: string) => FakeWorktree[] = () => [],
     ) => {
       forest.projects.push({
         id,

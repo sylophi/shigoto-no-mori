@@ -149,7 +149,7 @@ export function buildInboxRows({
   const localBucket = new Map<string, InboxShelf | "live">();
   const file = (
     project: Project,
-    trees: Worktree[],
+    trees: readonly Worktree[],
     prs: Record<string, PullRequest> | undefined,
     // Undefined while the project's config is unread.
     showPrimary: boolean | undefined,
@@ -192,7 +192,7 @@ export function buildInboxRows({
     if (project.pathExists === false) return;
     file(
       project,
-      (worktreeQueries[i]?.data ?? []) as Worktree[],
+      (worktreeQueries[i]?.data ?? []) as readonly Worktree[],
       pullRequestQueries[i]?.data,
       showPrimaryInInbox(configQueries[i]?.data),
       undefined,

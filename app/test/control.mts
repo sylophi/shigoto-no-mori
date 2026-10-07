@@ -87,11 +87,8 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import {
-  WorktreeSchema,
-  type RuntimeInfo,
-  type WorktreeRemoval,
-} from "@shared/schemas";
+import type { RuntimeInfo, WorktreeRemoval } from "@shared/schemas";
+import { WorktreeZod } from "@shared/schemas/zodBridge";
 import { only } from "@shared/util/only";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import {
@@ -156,9 +153,7 @@ const RefusalDocSchema = z.object({
 });
 // list --remote's rows: list's worktree, each saying whose it is.
 const RemoteRowsSchema = z.array(
-  WorktreeSchema.extend({
-    device: ControlPeerWorktreeSchema.shape.device,
-  }),
+  WorktreeZod.and(z.object({ device: ControlPeerWorktreeSchema.shape.device })),
 );
 const devicesDoc = (result: CliResult) =>
   DevicesDocSchema.parse(finalDoc(result));

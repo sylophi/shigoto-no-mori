@@ -25,7 +25,7 @@ interface LocationFormProps {
   projectId: string;
   projectPath: string;
   device: DeviceLayout;
-  worktrees: Worktree[];
+  worktrees: readonly Worktree[];
   config: ShigomoriConfig | null;
   resolvedDefaultBranch: string;
 }

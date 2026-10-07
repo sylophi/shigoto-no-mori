@@ -87,12 +87,12 @@ function visitKey(deviceId: string, worktree: Worktree): string {
 // Every worktree list the window holds, with the device it is from.
 function cachedLists(
   queryClient: QueryClient,
-): { deviceId: string; list: Worktree[] }[] {
+): { deviceId: string; list: readonly Worktree[] }[] {
   return queryClient
     .getQueryCache()
     .findAll({ predicate: (query) => isWorktreeListKey(query.queryKey) })
     .flatMap((query) => {
-      const list = query.state.data as Worktree[] | undefined;
+      const list = query.state.data as readonly Worktree[] | undefined;
       return list === undefined
         ? []
         : [{ deviceId: String(hostKeyDeviceId(query.queryKey)), list }];

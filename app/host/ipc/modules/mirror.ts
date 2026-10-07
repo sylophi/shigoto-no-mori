@@ -28,6 +28,7 @@
 // mirror/<branch> in a mirror-<name> folder (shared/git/branches.ts),
 // and the session labelled so the git follower reads the two branch
 // names as one. Both primaries keep what they had.
+import * as Schema from "effect/Schema";
 import type { z } from "zod";
 import { join } from "node:path";
 import {
@@ -313,7 +314,7 @@ async function stopAndRemoveCopy(
     })
     .then(
       (result) => {
-        const removed = DeleteWorktreeResultSchema.parse(result);
+        const removed = Schema.decodeSync(DeleteWorktreeResultSchema)(result);
         return removed.ok
           ? null
           : `its ${removed.cleanupError.phase} step failed`;

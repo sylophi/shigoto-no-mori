@@ -24,9 +24,9 @@ export function useBranchCommits(
 ) {
   const { api, keys } = useHostScope();
   return useInfiniteQuery<
-    CommitSummary[],
+    readonly CommitSummary[],
     Error,
-    { pages: CommitSummary[][]; pageParams: number[] },
+    { pages: (readonly CommitSummary[])[]; pageParams: number[] },
     ReturnType<QueryKeyRegistry["branchCommits"]>,
     number
   >({

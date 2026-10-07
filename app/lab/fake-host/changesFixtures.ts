@@ -3,7 +3,8 @@
 // is picked. Seeded from the fixture's `changedCount` the first time a
 // worktree is read, then kept, so ticking, committing and discarding
 // show their outcome and the commit → push flow runs end to end.
-import type { ChangedFile, CommitSummary, Worktree } from "@shared/schemas";
+import type { ChangedFile, CommitSummary } from "@shared/schemas";
+import type { FakeWorktree } from "./fixtures";
 
 // The files a worktree's changes are drawn from: the first
 // `changedCount` of them, then sorted by path like git status. One of
@@ -70,7 +71,7 @@ const touches = (file: ChangedFile, paths: ReadonlySet<string>) =>
   (file.prevPath !== undefined && paths.has(file.prevPath));
 
 export function createFakeChanges(
-  findWorktree: (worktreeId: string) => Worktree | undefined,
+  findWorktree: (worktreeId: string) => FakeWorktree | undefined,
 ) {
   const trees = new Map<string, ChangedFile[]>();
 

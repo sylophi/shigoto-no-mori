@@ -74,7 +74,7 @@ export interface RemoteForestItem {
   // its chip on the account page.
   tone: StatusTone;
   project: Project;
-  worktrees: Worktree[];
+  worktrees: readonly Worktree[];
   // Branch -> PR on that device, what its own sidebar reads for the
   // pills and the inbox's merged shelf. Empty until it lands.
   pullRequests: Record<string, PullRequest>;

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isSafeRelPath } from "../git/gitPaths";
 import { WorktreeScopedPayloadSchema } from "./zodPayloads";
-import { CommitHashSchema, WorktreeSchema } from "./worktree";
+import { CommitHashZod, WorktreeZod } from "./zodBridge";
 
 // How much of a changed file is in the index, i.e. what a commit right
 // now would take from it. The changes page draws this as a checkbox:
@@ -108,20 +108,20 @@ export type CommitMessage = z.infer<typeof CommitMessageSchema>;
 // `expectHead` names the commit HEAD must still be on (the redo of an
 // undo, refused once anything else has been committed).
 export const ResetSoftPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  target: CommitHashSchema,
-  expectHead: CommitHashSchema.optional(),
+  target: CommitHashZod,
+  expectHead: CommitHashZod.optional(),
 });
 
 export const ResetSoftResultSchema = z.object({
   // Where HEAD was before the move, what a redo resets back to.
-  previousHead: CommitHashSchema,
-  worktree: WorktreeSchema,
+  previousHead: CommitHashZod,
+  worktree: WorktreeZod,
 });
 export type ResetSoftResult = z.infer<typeof ResetSoftResultSchema>;
 
 export const CommitChangesResultSchema = z.object({
-  hash: CommitHashSchema,
-  worktree: WorktreeSchema,
+  hash: CommitHashZod,
+  worktree: WorktreeZod,
 });
 export type CommitChangesResult = z.infer<typeof CommitChangesResultSchema>;
 
@@ -133,11 +133,11 @@ export const DiscardChangesResultSchema = z.object({
   // The commit the discarded content was snapshotted into before the
   // tree was reset (under refs/shigomori/discards/). Feed it back to
   // restoreDiscard to undo.
-  snapshot: CommitHashSchema,
-  worktree: WorktreeSchema,
+  snapshot: CommitHashZod,
+  worktree: WorktreeZod,
 });
 export type DiscardChangesResult = z.infer<typeof DiscardChangesResultSchema>;
 
 export const RestoreDiscardPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  snapshot: CommitHashSchema,
+  snapshot: CommitHashZod,
 });

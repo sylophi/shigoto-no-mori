@@ -20,7 +20,10 @@ interface DeleteOpts {
 // Owns the force/cleanup retry state that the deletion affordances hang
 // off of, since both the detail footer and the closed-PR box drive the
 // same deletion.
-export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
+export function useDeleteAndNavigate(
+  worktree: Worktree,
+  siblings: readonly Worktree[],
+) {
   const nav = useWorktreeNav();
   const deleteMutation = useDeleteWorktree();
   // Delete waits out the create run (carry-over, setup, port

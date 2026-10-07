@@ -118,12 +118,15 @@ function commit(
   };
 }
 
+// A row of the fake forest, which the bridge's verbs update in place.
+export type FakeWorktree = Types.Mutable<Worktree>;
+
 // Every field WorktreeSchema requires, with quiet defaults. Overrides
 // pose the interesting states.
 export function worktree(
   base: Pick<Worktree, "id" | "projectId" | "name" | "branch" | "path"> &
     Partial<Worktree>,
-): Worktree {
+): FakeWorktree {
   return {
     ahead: 0,
     behind: 0,
@@ -147,7 +150,7 @@ export function worktree(
 export type DeviceForest = {
   deviceId: string;
   projects: Project[];
-  worktrees: Record<string, Worktree[]>;
+  worktrees: Record<string, FakeWorktree[]>;
   // Whether this device accepts commands from the account's other
   // devices (its HubStatus.peerAcceptsCommands entry), so this page
   // may mutate it.
@@ -196,7 +199,7 @@ const localProjects: Project[] = [
   },
 ];
 
-const localWorktrees: Record<string, Worktree[]> = {
+const localWorktrees: Record<string, FakeWorktree[]> = {
   p_sm: [
     worktree({
       id: "wt_sm_main",
@@ -389,7 +392,7 @@ const thinkpadProjects: Project[] = [
   },
 ];
 
-const thinkpadWorktrees: Record<string, Worktree[]> = {
+const thinkpadWorktrees: Record<string, FakeWorktree[]> = {
   tp_sm: [
     worktree({
       id: "aa11bb22cc33",
@@ -475,7 +478,7 @@ const miniProjects: Project[] = [
   },
 ];
 
-const miniWorktrees: Record<string, Worktree[]> = {
+const miniWorktrees: Record<string, FakeWorktree[]> = {
   mini_sm: [
     worktree({
       id: "0123456789ab",
