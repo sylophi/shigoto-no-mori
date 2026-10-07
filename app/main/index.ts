@@ -31,6 +31,7 @@ import {
 } from "./electron/deepLink";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
+import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import { startBackgroundFetch, sweepProjects } from "./electron/fetch";
 import {
@@ -137,6 +138,9 @@ if (!app.isPackaged) {
   // stays derived from the shared productName.
   app.setName(`${app.name}${DEV_NAME_SUFFIX}${devProfileSuffix()}`);
 }
+
+// After the rename above, which names the log folder.
+captureConsoleToFile();
 
 // The dev launcher's Electron-resolution override must never leak into
 // processes the host spawns (launchers, script runs, the CLI): any
