@@ -5,6 +5,7 @@
     "node": ">=22.18"
   },
   "scripts": {
+    "postinstall": "pnpm -r run postinstall",
     "start": "pnpm -F ./app start",
     "dev": "pnpm -F ./app dev",
     "device": "pnpm -F ./app device",
