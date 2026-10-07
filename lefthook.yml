@@ -6,34 +6,34 @@ pre-commit:
   piped: true
   jobs:
     - name: format
-      run: app/node_modules/.bin/oxfmt --no-error-on-unmatched-pattern {staged_files}
+      run: node_modules/.bin/oxfmt --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
     - name: checks
       group:
         parallel: true
         jobs:
           - name: typecheck
-            run: pnpm -C app run typecheck
+            run: pnpm run typecheck
           - name: lint
-            run: app/node_modules/.bin/oxlint --no-error-on-unmatched-pattern {staged_files}
+            run: node_modules/.bin/oxlint --no-error-on-unmatched-pattern {staged_files}
           # format and lint only see staged files, so a change to the
-          # tools' config (or their versions, pinned in app/package.json)
-          # reruns them over the whole repo.
+          # tools' config (or their versions, pinned in the root
+          # package.json) reruns them over the whole repo.
           - name: lint-all
-            glob: "{.oxlintrc.json,lint/**,app/package.json}"
-            run: pnpm -C app run lint
+            glob: "{.oxlintrc.json,lint/**,package.json}"
+            run: pnpm run lint
           - name: format-all
-            glob: "{.oxfmtrc.json,app/renderer/index.css,app/package.json}"
-            run: pnpm -C app run format:check
+            glob: "{.oxfmtrc.json,app/renderer/index.css,package.json}"
+            run: pnpm run format:check
           # The proofs the staged files reach: vitest related, plus the
           # proofs' covers lines (app/test/README.md).
           - name: proofs
             run: pnpm -C app test --changed {staged_files}
-          # hub/'s typecheck and suite, for hub/ and the app files it
-          # imports (hub/README.md).
+          # hub/'s typecheck and suite, for hub/, the app files it imports
+          # (hub/README.md) and the workspace files that pin its packages.
           - name: hub
-            glob: "{hub/**,app/shared/hub/protocol.ts,app/shared/ipc/socket/frames.ts,app/shared/ipc/socket/proof.ts,app/shared/account/deviceIcon.ts,app/shared/account/platform.ts,app/shared/util/only.ts}"
-            run: pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check
+            glob: "{hub/**,pnpm-lock.yaml,pnpm-workspace.yaml,app/shared/hub/protocol.ts,app/shared/ipc/socket/frames.ts,app/shared/ipc/socket/proof.ts,app/shared/account/deviceIcon.ts,app/shared/account/platform.ts,app/shared/util/only.ts}"
+            run: pnpm -C hub run check
           - name: go-test
             glob: "{cli/**,app/shared/fixtures/git-log.json}"
             run: go test -C cli ./...

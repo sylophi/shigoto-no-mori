@@ -19,27 +19,25 @@ jobs:
   lint-and-format:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # oxlint and oxfmt are app/ dev dependencies, and their scripts run
-    # from the repo root over every package (app, hub, marketing, cli).
+    # oxlint and oxfmt are root dev dependencies, and their scripts run
+    # over every package (app, hub, marketing, packages, cli).
     steps:
       # Pinned to commit digests like release.yml, so a retagged action
       # cannot change what runs here.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          package_json_file: app/package.json
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       # Only the two binaries are needed, so no install scripts: that
       # skips the Electron download and the app's own postinstall.
       - name: Install dependencies
-        run: pnpm -C app install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Lint
         run: pnpm run check:lint
@@ -47,9 +45,9 @@ jobs:
       - name: Format
         run: pnpm run check:format
 
-  # Dead files, exports and dependencies across app, hub and marketing
-  # (knip.jsonc). knip loads each project's tool configs, so all three
-  # are installed: app/ here, the other two by check:knip itself.
+  # Dead files, exports and dependencies across the workspace
+  # (knip.jsonc). knip loads each package's tool configs, which the one
+  # workspace install covers.
   knip:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -57,20 +55,15 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          package_json_file: app/package.json
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: |
-            app/pnpm-lock.yaml
-            hub/pnpm-lock.yaml
-            marketing/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm -C app install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Knip
         run: pnpm run check:knip
@@ -87,14 +80,12 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          package_json_file: app/package.json
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       # The notices also cover the Go modules linked into the bundled
       # CLI and file-sync engine.
@@ -108,7 +99,7 @@ jobs:
       # license-checker only reads package metadata, so no install
       # scripts.
       - name: Install dependencies
-        run: pnpm -C app install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Third-party notices are up to date
         run: pnpm run check:licenses
@@ -123,26 +114,23 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          package_json_file: app/package.json
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       # tsc reads sources and types only.
       - name: Install dependencies
-        run: pnpm -C app install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Typecheck
         run: pnpm run check:typecheck
 
-  # The hub Worker's typecheck and its vitest suite inside workerd, with
-  # app/ installed too (hub/README.md has why). check:hub installs hub/
-  # itself, running the esbuild and workerd builds its
-  # pnpm-workspace.yaml allows.
+  # The hub Worker's typecheck and its vitest suite inside workerd. The
+  # install runs the esbuild and workerd builds pnpm-workspace.yaml
+  # allows.
   hub:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -150,19 +138,15 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          package_json_file: app/package.json
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: |
-            app/pnpm-lock.yaml
-            hub/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm -C app install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile
 
       - name: Hub checks
         run: pnpm run check:hub
@@ -178,8 +162,6 @@ jobs:
 
       # Only to run the root script: nothing is installed.
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          package_json_file: app/package.json
 
       # file-sync/go.mod asks for the newer Go of the two modules.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -203,14 +185,12 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          package_json_file: app/package.json
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       # file-sync/go.mod asks for the newer Go of the two modules.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -225,7 +205,7 @@ jobs:
       # start scripts need node-pty's spawn-helper made executable.
       - name: Install dependencies
         run: |
-          pnpm -C app install --frozen-lockfile --ignore-scripts
+          pnpm install --frozen-lockfile --ignore-scripts
           pnpm -C app run postinstall
 
       - name: Proofs

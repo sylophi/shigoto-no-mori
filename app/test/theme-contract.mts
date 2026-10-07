@@ -17,7 +17,7 @@
 //      so a stripped hook there is invisible until a release.
 //
 // covers: app/renderer/** app/scripts/dmg-background.html
-// covers: app/pnpm-lock.yaml
+// covers: pnpm-lock.yaml
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
