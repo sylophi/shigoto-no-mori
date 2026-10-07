@@ -73,3 +73,30 @@ export function StatusDot({
     </span>
   );
 }
+
+// The mark for an update this window could install: the sidebar's
+// Settings dot, carried onto the Settings row and the device tab that
+// hold it, so the dot that brought the visitor there points at what it
+// meant.
+// `version` names the release where the mark stands for one device.
+export function UpdateMark({
+  version,
+  className,
+}: {
+  version?: string;
+  className?: string;
+}) {
+  return (
+    <StatusDot
+      tone="sky"
+      className={className}
+      label={
+        <span className="sr-only">
+          {version === undefined
+            ? "update available"
+            : `update to v${version} available`}
+        </span>
+      }
+    />
+  );
+}

@@ -178,8 +178,7 @@ Rules that keep a machine looking like itself everywhere:
   the `StatusDot` beside its glyph (or the tint of its mark), through
   `deviceStatusView`. This device has no connection to show: it wears
   the glyph alone, and where a surface tags it, the tag is
-  `THIS_DEVICE_VIEW` (a `RowTag` in a list, the emerald pill in the
-  settings header), never a lowercase aside.
+  `THIS_DEVICE_VIEW` (a `RowTag` in a list), never a lowercase aside.
 - **Tooltips use `deviceTitle`** ("Thinkpad, Connected", "Studio Mac,
   This device"), so a pill, a tab and a badge naming the same machine
   say the same thing on hover.

@@ -124,7 +124,7 @@ export function watchHost(
     ),
     // Its updater moved. The state rides the push whole, so it is
     // written rather than re-asked, and always on, so the update flags
-    // (the sidebar's Settings dot, the Settings device rows) follow a
+    // (the sidebar's Settings dot, Settings' device tabs) follow a
     // check that finishes with no Version section mounted.
     api.updater.onState(
       parsed(updaterContract.calls.state, (state) => {
