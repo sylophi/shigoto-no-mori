@@ -62,6 +62,10 @@ function stubFromAst(
   ast: SchemaAST.AST,
   opts: StubOptions,
 ): unknown | typeof NO_STRUCTURAL_STUB {
+  // A strict struct (shared/schemas/strict.ts) is stubbed as the
+  // struct it wraps.
+  const [wrapped] = SchemaAST.isDeclaration(ast) ? ast.typeParameters : [];
+  if (wrapped !== undefined) return stubFromAst(wrapped, opts);
   if (SchemaAST.isObjects(ast)) {
     const out: Record<string, unknown> = {};
     for (const field of ast.propertySignatures) {

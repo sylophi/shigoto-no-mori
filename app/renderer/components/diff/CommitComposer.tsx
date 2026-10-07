@@ -38,7 +38,7 @@ export function CommitComposer({
   amend,
   onCommit,
 }: {
-  files: ChangedFile[];
+  files: readonly ChangedFile[];
   draft: CommitDraft;
   onDraftChange: (next: CommitDraft) => void;
   pending: boolean;

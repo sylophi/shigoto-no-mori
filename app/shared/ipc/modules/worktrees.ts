@@ -1,5 +1,4 @@
 import * as Schema from "effect/Schema";
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   ChangedFileSchema,
@@ -116,7 +115,7 @@ export const worktreesContract = defineContract("host", {
   // One file's working-tree diff, which is what the changes page reads
   // as you pick files. Per file rather than per worktree so the pane
   // can't be describing a different moment than the list beside it.
-  fileDiff: invoke("worktrees:fileDiff", FileDiffPayloadSchema, z.string(), {
+  fileDiff: invoke("worktrees:fileDiff", FileDiffPayloadSchema, Schema.String, {
     remote: true,
     gated: false,
   }),
@@ -136,14 +135,14 @@ export const worktreesContract = defineContract("host", {
   changeStatus: invoke(
     "worktrees:changeStatus",
     WorktreeScopedPayloadSchema,
-    z.array(ChangedFileSchema),
+    Schema.Array(ChangedFileSchema),
     { remote: true, gated: false },
   ),
   // Answers with the fresh status so a tick settles in one round trip.
   setStaged: invoke(
     "worktrees:setStaged",
     SetStagedPayloadSchema,
-    z.array(ChangedFileSchema),
+    Schema.Array(ChangedFileSchema),
     { remote: true, gated: true },
   ),
   commit: invoke(
