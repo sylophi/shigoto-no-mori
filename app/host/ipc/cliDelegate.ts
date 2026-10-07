@@ -11,6 +11,7 @@
 // here instead of surfacing as undefined-flavored breakage in the
 // renderer.
 import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 import { z } from "zod";
 import {
   CarryOverReportSchema,
@@ -541,12 +542,14 @@ export async function mergeViaCli(
   return { outcome: mergeOutcomeOf(final) };
 }
 
+const isMergeOutcome = Schema.is(MergeOutcomeSchema);
+
 // The CLI spells the outcome the way MergeOutcomeSchema does
 // (cli/cmd_merge.go mergeOutcome.addTo). A document without one (a
 // stack merge's) landed.
 function mergeOutcomeOf(doc: CliDoc): MergeOutcome {
-  const parsed = MergeOutcomeSchema.safeParse(doc["outcome"]);
-  return parsed.success ? parsed.data : "merged";
+  const outcome = doc["outcome"];
+  return isMergeOutcome(outcome) ? outcome : "merged";
 }
 
 export async function setShelvedViaCli(
@@ -1049,6 +1052,10 @@ export async function shigomoriReadViaCli(
     .config;
 }
 
+const decodeDiskUsage = Schema.decodeUnknownSync(
+  WorktreeDiskUsageSchema.mapFields(Struct.omit(["worktreeId"])),
+);
+
 // One directory's disk footprint and what removing it would free,
 // stepping over the `exclude` directories (nested worktrees, measured as
 // rows of their own). Unreadable entries come back as `partial`.
@@ -1060,7 +1067,7 @@ export async function diskUsageViaCli(
     ["disk-usage", path, ...exclude.flatMap((dir) => ["--exclude", dir])],
     "sm disk-usage failed",
   );
-  return WorktreeDiskUsageSchema.omit({ worktreeId: true }).parse(doc);
+  return decodeDiskUsage(doc);
 }
 
 // The project's launcher row: installed tools, the GitHub entry and

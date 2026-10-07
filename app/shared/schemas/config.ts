@@ -1,9 +1,14 @@
 import { z } from "zod";
 import { isSafeRelPath } from "../git/gitPaths";
 import { ProjectScopedPayloadSchema } from "./zodPayloads";
-import { MergeMethodSchema } from "./pullRequest";
-import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
-import { ProjectSortModeZod, SidebarViewZod } from "./zodBridge";
+import { MAX_CUSTOM_PORTS } from "./ports";
+import {
+  CustomPortZod,
+  MergeMethodZod,
+  PortNumberZod,
+  ProjectSortModeZod,
+  SidebarViewZod,
+} from "./zodBridge";
 
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
@@ -94,7 +99,7 @@ export const ShigomoriConfigSchema = z.object({
   // button's primary action so each repo remembers its house style.
   // Falls back to whatever the repo allows when the saved value is
   // disabled at GitHub.
-  lastMergeMethod: MergeMethodSchema.optional(),
+  lastMergeMethod: MergeMethodZod.optional(),
   // When true, the inbox view lists this project's primary checkout
   // alongside its worktrees (always live, never shelved or merged).
   // Per project because the primary means different things in
@@ -207,7 +212,7 @@ export const ShigomoriWorktreeDataSchema = WorktreeDescriptionSchema.extend({
   // Ports the user added beside port-pool's (see shared/schemas/ports.ts).
   // The renderer's one key here, written through useWorktreeDataWrite;
   // the host merges it into the stored document under its lock.
-  ports: z.array(CustomPortSchema).max(MAX_CUSTOM_PORTS).optional(),
+  ports: z.array(CustomPortZod).max(MAX_CUSTOM_PORTS).optional(),
 });
 export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 
@@ -436,7 +441,7 @@ export const ClientConfigSchema = z.object({
   // dedupes on the same pair). Only preferences that differ from the
   // default (the remote port itself) are stored, so the map stays as
   // small as the user's overrides.
-  forwardLocalPorts: z.record(z.string(), PortNumberSchema).optional(),
+  forwardLocalPorts: z.record(z.string(), PortNumberZod).optional(),
   // Legacy: the create-device picks, from before they became a shared
   // setting (shared/sharedSettings.ts, quickCreateDevice). Nothing
   // reads it but the one-time move in

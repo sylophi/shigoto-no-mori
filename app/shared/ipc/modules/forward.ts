@@ -3,7 +3,7 @@ import { z } from "zod";
 import { errorMessageOf } from "@shared/errors";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { PortNumberSchema } from "@shared/schemas";
+import { PortNumberZod } from "@shared/schemas/zodBridge";
 
 // Port forwarding over byte channels: a
 // forwarded TCP connection crosses the direct websocket as raw binary
@@ -48,7 +48,7 @@ export function isForwardConnectFailedError(error: unknown): boolean {
 export const FORWARD_TOO_MANY_CONNS = CHANNEL_OPEN_TOO_MANY;
 
 const ForwardOpenPayloadSchema = z.strictObject({
-  port: PortNumberSchema,
+  port: PortNumberZod,
   channelId: ChannelIdSchema,
 });
 

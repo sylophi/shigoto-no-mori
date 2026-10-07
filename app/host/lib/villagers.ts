@@ -40,7 +40,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shared/errors";
 import { type ContractSchema, type Decoded } from "@shared/ipc/schema";
 import {
@@ -78,12 +78,12 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // One character as the manifest lists them, with their slug.
 type ManifestEntry = [slug: string, VillagerManifest["villagers"][string]];
 
-const MetaSchema = z.object({
-  downloadedAt: z.string(),
-  manifest: z.string(),
-  villagers: z.number(),
+const MetaSchema = Schema.Struct({
+  downloadedAt: Schema.String,
+  manifest: Schema.String,
+  villagers: Schema.Finite,
 });
-type Meta = z.infer<typeof MetaSchema>;
+type Meta = typeof MetaSchema.Type;
 
 export interface VillagerData {
   status(): Promise<VillagerDataStatus>;
