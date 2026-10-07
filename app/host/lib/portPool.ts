@@ -7,7 +7,8 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type { PoolPort } from "@shared/ports/mergeWorktreePorts";
 import { readGlobalConfig } from "./config/global";
 import { binaryOnPath } from "./util/binaries";
@@ -69,17 +70,20 @@ export async function isPortPoolActive(cwd: string): Promise<boolean> {
 // this file and may grow it. `portOrder` is the declared order from the
 // project's config, which is the order the user thinks in. `ports`
 // alone is unordered.
-const AllocationSchema = z.object({
-  dir: z.string(),
-  ports: z.record(z.string(), z.number().int().positive()),
-  portOrder: z.array(z.string()).optional(),
+const AllocationSchema = Schema.Struct({
+  dir: Schema.String,
+  ports: Schema.Record(
+    Schema.String,
+    Schema.Int.check(Schema.isGreaterThan(0)),
+  ),
+  portOrder: Schema.optional(Schema.Array(Schema.String)),
 });
+const decodeAllocation = Schema.decodeUnknownOption(AllocationSchema);
 
-const PortPoolStateSchema = z
-  .object({
-    allocations: z.array(z.unknown()).optional(),
-  })
-  .loose();
+const PortPoolStateSchema = Schema.Struct({
+  allocations: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+const decodePortPoolState = Schema.decodeUnknownSync(PortPoolStateSchema);
 
 function portPoolStatePath(): string {
   const dataHome =
@@ -106,7 +110,7 @@ const allocationsCache = ttlMapCache<string, Map<string, PoolPort[]>>(
     const byDir = new Map<string, PoolPort[]>();
     let state;
     try {
-      state = PortPoolStateSchema.parse(
+      state = decodePortPoolState(
         JSON.parse(await readFile(statePath, "utf8")),
       );
     } catch {
@@ -115,9 +119,9 @@ const allocationsCache = ttlMapCache<string, Map<string, PoolPort[]>>(
       return byDir;
     }
     for (const entry of state.allocations ?? []) {
-      const parsed = AllocationSchema.safeParse(entry);
-      if (!parsed.success) continue;
-      const { dir, ports, portOrder } = parsed.data;
+      const parsed = decodeAllocation(entry);
+      if (Option.isNone(parsed)) continue;
+      const { dir, ports, portOrder } = parsed.value;
       const names = [
         ...(portOrder ?? []).filter((name) => name in ports),
         ...Object.keys(ports).filter((name) => !portOrder?.includes(name)),

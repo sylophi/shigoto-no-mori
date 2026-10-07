@@ -3,7 +3,8 @@
 // copy to keep in step. Pure, over an injected fetch, so the desktop
 // binding (main, node's fetch) and the web one (the page's) serve the
 // same answer, and a check can drive it with a stub.
-import { z } from "zod";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { UPDATE_FEED_REPO } from "@shared/packaging/updateFeed.mts";
 import type { Release } from "@shared/schemas";
 
@@ -16,14 +17,17 @@ const RELEASE_LIST_URL = `https://api.github.com/repos/${UPDATE_FEED_REPO}/relea
 // The fields read off each entry. Drafts never reach an
 // unauthenticated caller, but the flag is dropped on the floor anyway
 // rather than trusted to stay that way.
-const GitHubReleaseSchema = z.object({
-  tag_name: z.string(),
-  body: z.string().nullish(),
-  published_at: z.string().nullish(),
-  prerelease: z.boolean(),
-  draft: z.boolean().optional(),
-  html_url: z.string(),
+const GitHubReleaseSchema = Schema.Struct({
+  tag_name: Schema.String,
+  body: Schema.optional(Schema.NullOr(Schema.String)),
+  published_at: Schema.optional(Schema.NullOr(Schema.String)),
+  prerelease: Schema.Boolean,
+  draft: Schema.optional(Schema.Boolean),
+  html_url: Schema.String,
 });
+const decodeReleaseList = Schema.decodeUnknownResult(
+  Schema.Array(GitHubReleaseSchema),
+);
 
 // The refusal for the hourly limit. It reaches the renderer as a
 // message (errors cross IPC as text), where a retry waits on it.
@@ -57,11 +61,11 @@ export async function fetchReleases(
   if (!response.ok) {
     throw new Error(`GitHub answered HTTP ${response.status}.`);
   }
-  const parsed = z.array(GitHubReleaseSchema).safeParse(await response.json());
-  if (!parsed.success) {
+  const parsed = decodeReleaseList(await response.json());
+  if (Result.isFailure(parsed)) {
     throw new Error("GitHub answered with a release list this app can't read.");
   }
-  return parsed.data
+  return parsed.success
     .filter((release) => release.draft !== true)
     .map((release) => ({
       version: release.tag_name.replace(/^v/, ""),
