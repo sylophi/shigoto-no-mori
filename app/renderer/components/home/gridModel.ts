@@ -68,6 +68,8 @@ export function buildGrid({ visits, byOwner, ...forest }: GridInput): {
     // Only an open project's rows are sorted.
     worktreeSort: "name",
     openShelves: NO_SHELVES,
+    // Only an open project's rows are grouped.
+    byPrefix: null,
     arrangeMode: false,
     byOwner: byOwner ? { shut: new Set() } : null,
   });

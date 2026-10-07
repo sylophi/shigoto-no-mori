@@ -31,7 +31,7 @@ import { localDeviceId } from "@/lib/queryKeys";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
 import type { DarkTheme, LightTheme } from "@shared/themes";
 import { AppearanceSection } from "./AppearanceSection";
-import { HiddenWorktreesSection } from "./HiddenWorktreesSection";
+import { WorktreePrefixesSection } from "./WorktreePrefixesSection";
 import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
@@ -266,7 +266,8 @@ export function SettingsForm({
               onVillageLifeChange={setField("villageLife")}
             />
             <SidebarSection form={form} setForm={setForm} />
-            <HiddenWorktreesSection />
+            <WorktreePrefixesSection list="hidden" />
+            <WorktreePrefixesSection list="grouped" />
             {/* The desktop states its build in this device's General
                 section. A hostless client has no such section, and its
                 build is still worth a line, so it goes with the other

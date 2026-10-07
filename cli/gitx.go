@@ -354,9 +354,10 @@ func isRenameOrCopy(column byte) bool {
 	return column == 'R' || column == 'C'
 }
 
-// The error matters to callers guarding destructive operations: a
-// worktree whose status can't be read (broken gitdir pointer,
-// unreadable index) must NOT count as clean.
+// The display probe behind a row's change count and last change. No
+// guard reads it (they go through changedCount). buildWorktree shows
+// an unreadable status (broken gitdir pointer, unreadable index) as
+// clean, and the error keeps the shelf from comparing that 0.
 func getWorkingTreeChanges(worktreePath string) (workingTreeChanges, error) {
 	paths, err := statusPaths(worktreePath)
 	if err != nil {
@@ -380,28 +381,31 @@ func getWorkingTreeChanges(worktreePath string) (workingTreeChanges, error) {
 	return out, nil
 }
 
-// Count only. The destructive-op guards just want "is it dirty", and
-// the mtime scan getWorkingTreeChanges layers on top costs up to
+// Counts untracked files whatever the config says, for the guards
+// ahead of rm, land and adopt, which delete the folder they sit in.
+// Count only: the guards just want "is it dirty", and the mtime scan
+// getWorkingTreeChanges layers on top costs up to
 // changeMtimeStatLimit stats they would throw away.
 func changedCount(worktreePath string) (int, error) {
-	paths, err := statusPaths(worktreePath)
+	entries, err := statusEntriesUntracked(worktreePath)
 	if err != nil {
 		return 0, err
 	}
-	return len(paths), nil
+	return len(entries), nil
 }
 
-// The one place the porcelain invocation and its parse live, so the
-// display probes and the destructive-op guards can never read the
-// working tree differently.
+// The working tree as the display probes read it, honoring the user's
+// untracked-files setting. The destructive-op guards go through
+// statusEntriesUntracked instead.
 func statusEntries(worktreePath string) ([]statusEntry, error) {
 	return porcelainStatus(worktreePath)
 }
 
 // statusEntries pinning --untracked-files=normal, for guards ahead of
-// a working-tree overwrite (dirty apply): those must see untracked
-// files even where the user configured `status.showUntrackedFiles no`,
-// because the overwrite would destroy them (same rationale as
+// a working-tree overwrite or removal (dirty apply, changedCount):
+// those must see untracked files even where the user configured
+// `status.showUntrackedFiles no`, because the overwrite or removal
+// would destroy them (same rationale as
 // overwriteFromUpstream in host/lib/git/sync.ts). statusEntries
 // deliberately doesn't pin it -- `-uno` is a setting people choose to
 // make the display probes cheap.
@@ -409,6 +413,9 @@ func statusEntriesUntracked(worktreePath string) ([]statusEntry, error) {
 	return porcelainStatus(worktreePath, "--untracked-files=normal")
 }
 
+// The one place the porcelain invocation and its parse live, so the
+// display probes and the destructive-op guards differ only in the
+// untracked-files flag.
 func porcelainStatus(worktreePath string, extra ...string) ([]statusEntry, error) {
 	stdout, err := runGit(worktreePath, append([]string{"status", "--porcelain=v1", "-z"}, extra...)...)
 	if err != nil {
@@ -925,8 +932,11 @@ func gitWorktreeCheckout(projectPath, worktreePath, ref string, remotes []string
 	return err
 }
 
+// Unforced, git refuses a dirty tree. The status it runs for that
+// honors `status.showUntrackedFiles no`, so the override makes it see
+// the untracked files the delete would take.
 func gitWorktreeRemove(projectPath, worktreePath string, force bool) error {
-	args := []string{"worktree", "remove", worktreePath}
+	args := []string{"-c", "status.showUntrackedFiles=normal", "worktree", "remove", worktreePath}
 	if force {
 		args = append(args, "--force")
 	}

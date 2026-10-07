@@ -29,6 +29,7 @@
  *      button (+ data-variant)   ui/button.tsx
  *      input, textarea           ui/input.tsx, ui/textarea.tsx
  *      checkbox (+ data-variant) ui/checkbox.tsx
+ *      switch                    ui/switch.tsx
  *      chip                      ui/chip-button.tsx
  *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup   shared/BranchCombobox.tsx
@@ -42,6 +43,7 @@
  *      diff-index-row, diff-index-jump   diff/DiffFileIndex.tsx
  *      file-tree                 files/FileTree.tsx
  *      file-view                 files/FileViewer.tsx
+ *      live-card                 live/LiveCard.tsx
  *      accept-commands-panel     remote/AcceptCommandsToggle.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
@@ -592,6 +594,17 @@
   ) {
   background-color: var(--input);
 }
+/* A field under the pointer deepens its tray, where v1 tints its
+   border (ui/input.tsx). Not once focused: the focus ring says more. */
+@media (hover: hover) {
+  .doubutsu
+    :is([data-slot="input"], [data-slot="textarea"]):hover:not(
+      :focus,
+      :disabled
+    ) {
+    background-color: color-mix(in oklab, var(--input), var(--foreground) 12%);
+  }
+}
 
 /* --- Search strips and popup footers, without rules ---
    v1 rules a search strip off from the list under it, and a popup's
@@ -714,11 +727,17 @@
    wants the same band to read as its own panel. Keeping it on this
    selector list means the alpha above stays the single knob. On a wide
    viewport it is the app sidebar's list instead (SidebarTakeover), on
-   the mint like the tree it stands in for. */
+   the mint like the tree it stands in for.
+
+   The Live page's cards wear it too. A page of them, each holding
+   blocks of its own, read as hard slabs on the wallpaper, louder than
+   the header over them. Their own title rows are not <header>s, so the
+   band does not stack inside them. */
 .doubutsu [data-doubutsu-zone="main"] :is(header, footer),
 .doubutsu
   :is([data-doubutsu-zone="main"], [data-slot="sheet-content"])
-  :is([data-slot="diff-index"], [data-slot="file-tree"]) {
+  :is([data-slot="diff-index"], [data-slot="file-tree"]),
+.doubutsu [data-doubutsu-zone="main"] [data-slot="live-card"] {
   background-color: color-mix(in oklab, var(--card) 70%, transparent);
 }
 
@@ -1041,6 +1060,8 @@
    already has, no markup changes required.
 
    Coverage comes in two kinds. Pointer things: buttons, links,
+   switches and checkboxes (but one in a label, which stripes as the
+   label),
    radio/checkbox option cards, the file-picker rows. They stripe under
    a hovering pointer and while held. Composite widgets (Base UI
    menus/comboboxes, cmdk lists) move a highlight themselves instead of
@@ -1078,6 +1099,7 @@
       [role="button"],
       a[href],
       li[data-row-idx].cursor-pointer,
+      :is([data-slot="switch"], [data-slot="checkbox"]):not(label *),
       [data-slot="diff-index-row"],
       [data-slot="sidebar-project-row"]
     ):not(:disabled, [aria-disabled="true"], [data-disabled]),

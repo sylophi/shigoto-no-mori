@@ -378,6 +378,16 @@ export const RelocateWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend(
   },
 );
 
+// force false: run `sm adopt` unforced, so it refuses a worktree with
+// uncommitted changes or untracked files (convertRefusedError), which
+// the row's count can miss (it honors `status.showUntrackedFiles no`).
+// The convert page always sends it. Missing means forced, what a
+// renderer from before the field expects, and an older host strips it
+// and forces too.
+export const ConvertExternalPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  force: z.boolean().optional(),
+});
+
 export const DeleteWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend({
   force: z.boolean().optional(),
   skipCleanup: z.boolean().optional(),

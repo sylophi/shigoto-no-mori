@@ -14,16 +14,16 @@
 // Electron-free on purpose: the spawn is injected (main/electron owns
 // the binary path and the quit-time reaping), so the mirror check
 // drives this exact supervisor against a freshly built engine.
+import { z } from "zod";
 import type { StreamChild } from "@host/fileSync/spawn";
 import { errorMessageOf } from "@shared/errors";
-import type {
-  MirrorCreateInput,
-  MirrorSessionRaw,
-} from "@host/ipc/modules/mirror";
+import type { MirrorCreateInput } from "@host/ipc/modules/mirror";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import {
   mirrorEngineBlocker,
   type MirrorDaemonStatus,
+  type MirrorSessionRaw,
+  MirrorSessionRawSchema,
 } from "@shared/ipc/modules/mirror";
 import { MIRROR_GATEWAY_TOKEN_ENV } from "./gateway";
 import {
@@ -32,14 +32,36 @@ import {
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
 
-type DaemonResponse = {
-  id?: string;
-  ok?: boolean;
-  session?: string;
-  error?: string;
-  event?: string;
-  sessions?: unknown[];
-};
+// The lines the daemon writes (file-sync/engine.go, the daemon control
+// protocol): an event, or a response echoing its request's id. Each is
+// read against its schema, and one that breaks it is dropped and
+// logged: the bridge keeps reading, the last state snapshot stands,
+// and a request the line named is answered with the error. What a
+// newer engine may add is let through: an event this build does not
+// know is ignored, and a top-level key the schema does not name, on a
+// line or on a session, is stripped. The nested shapes (endpoint,
+// staging, conflict, problem, change) are the IPC contract's strict
+// ones, so a field added inside them still drops the line.
+const DaemonEventSchema = z.discriminatedUnion("event", [
+  z.object({ event: z.literal("ready") }),
+  z.object({
+    event: z.literal("state"),
+    sessions: z.array(MirrorSessionRawSchema),
+  }),
+  z.object({ event: z.literal("error"), error: z.string() }),
+]);
+type DaemonEvent = z.infer<typeof DaemonEventSchema>;
+const KNOWN_EVENTS: ReadonlySet<string> = new Set(
+  DaemonEventSchema.options.map((option) => option.shape.event.value),
+);
+
+const DaemonResponseSchema = z.object({
+  id: z.string(),
+  ok: z.boolean(),
+  session: z.string().optional(),
+  error: z.string().optional(),
+});
+type DaemonResponse = z.infer<typeof DaemonResponseSchema>;
 
 type Pending = {
   resolve: (response: DaemonResponse) => void;
@@ -104,39 +126,91 @@ export function createMirrorDaemon(deps: {
     }
   }
 
+  // The last rejection logged per kind of line (an event's name, or
+  // "response"), so a daemon that keeps writing the same bad line
+  // (every snapshot, once the contract has drifted) logs it once until
+  // a line of that kind reads again. The requests in between do not
+  // count.
+  const lastRejection = new Map<string, string>();
+
   function handleLine(line: string): void {
-    let doc: DaemonResponse;
+    let doc: unknown;
     try {
-      doc = JSON.parse(line) as DaemonResponse;
+      doc = JSON.parse(line);
     } catch {
       log(`[mirror] daemon emitted a non-JSON line: ${line.slice(0, 200)}`);
       return;
     }
-    if (doc.event === "ready") {
-      setStatus("running");
+    if (typeof doc !== "object" || doc === null) {
+      rejectLine("other", line, "not an object");
       return;
     }
-    if (doc.event === "state") {
-      sessions = Array.isArray(doc.sessions)
-        ? (doc.sessions as MirrorSessionRaw[])
-        : [];
-      deps.onChange?.();
+    if (
+      "event" in doc &&
+      typeof doc.event === "string" &&
+      !KNOWN_EVENTS.has(doc.event)
+    ) {
       return;
     }
-    if (doc.event === "error") {
-      log(`[mirror] daemon error: ${doc.error ?? "unknown"}`);
+    const kind = "event" in doc ? String(doc.event) : "response";
+    const parsed =
+      "event" in doc
+        ? DaemonEventSchema.safeParse(doc)
+        : DaemonResponseSchema.safeParse(doc);
+    if (!parsed.success) {
+      const reason = z.prettifyError(parsed.error).replaceAll("\n", " ");
+      rejectLine(kind, line, reason);
+      // A request the line names is answered now, not at the timeout.
+      if ("id" in doc && typeof doc.id === "string") {
+        takePending(doc.id)?.reject(
+          new Error("mirror daemon sent a malformed response"),
+        );
+      }
       return;
     }
-    if (typeof doc.id === "string") {
-      const entry = pending.get(doc.id);
-      if (entry === undefined) return;
-      pending.delete(doc.id);
-      entry.resolve(doc);
+    lastRejection.delete(kind);
+    if ("event" in parsed.data) handleEvent(parsed.data);
+    else handleResponse(parsed.data);
+  }
+
+  function rejectLine(kind: string, line: string, reason: string): void {
+    if (lastRejection.get(kind) === reason) return;
+    lastRejection.set(kind, reason);
+    log(
+      `[mirror] daemon line dropped, off the protocol: ${reason}: ${line.slice(0, 200)}`,
+    );
+  }
+
+  // The request waiting on an id, taken off the list to be settled.
+  function takePending(id: string): Pending | undefined {
+    const entry = pending.get(id);
+    pending.delete(id);
+    return entry;
+  }
+
+  function handleEvent(event: DaemonEvent): void {
+    switch (event.event) {
+      case "ready":
+        setStatus("running");
+        return;
+      case "state":
+        sessions = event.sessions;
+        deps.onChange?.();
+        return;
+      case "error":
+        log(`[mirror] daemon error: ${event.error}`);
+        return;
+    }
+  }
+
+  function handleResponse(response: DaemonResponse): void {
+    // mirrorResponse always writes its id, so a request the daemon
+    // could not read comes back with an empty one. Nothing to match.
+    if (response.id === "") {
+      log(`[mirror] daemon refused a request: ${response.error ?? "unknown"}`);
       return;
     }
-    // A malformed-request response carries no id. Nothing to match.
-    if (doc.ok === false)
-      log(`[mirror] daemon refused a request: ${doc.error}`);
+    takePending(response.id)?.resolve(response);
   }
 
   function spawnNow(): void {
@@ -274,7 +348,7 @@ export function createMirrorDaemon(deps: {
     fields: Record<string, unknown>,
   ): Promise<string> {
     const response = await request(op, fields);
-    if (response.ok !== true) {
+    if (!response.ok) {
       throw new Error(response.error ?? `mirror ${op} failed`);
     }
     return response.session ?? "";

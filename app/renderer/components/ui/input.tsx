@@ -7,7 +7,7 @@ import type { WithoutTitle } from "./tooltip";
 // every field reads the same and theme overlays (doubutsu) have one
 // stable data-slot hook instead of a per-site class contract.
 export const fieldClass =
-  "rounded-md border border-input bg-background transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-md border border-input bg-background transition-colors outline-none hover:border-ring/50 focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Input({
   className,

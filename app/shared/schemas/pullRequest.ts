@@ -43,13 +43,35 @@ export const PullRequestSchema = Schema.Struct({
   // read off the project-wide map: a PR whose base is another PR's
   // head is stacked on it (shared/pullRequestStack.ts).
   baseRefName: Schema.String,
-  // Whether the PR comes from a fork. A branch name is matched across
-  // every fork, so one from a fork may be a stranger's branch of the
-  // same name (lib/worktreeTitle.ts). Absent from a host on an older
-  // build.
+  // Whether the PR comes from a fork (isFromThisRepository). Absent
+  // from a host on an older build.
   isCrossRepository: Schema.optional(Schema.Boolean),
+  // Set on a fork's PR that a branch here was checked out from (the
+  // app's PR checkout), which makes it the branch's own. Only a host on
+  // this build or later sets it.
+  checkedOutFrom: Schema.optional(Schema.Literal(true)),
 });
 export type PullRequest = typeof PullRequestSchema.Type;
+
+// Whether a PR comes from this repository. GitHub matches a branch
+// name across every fork, so a PR from a fork may be a stranger's
+// branch of the same name, and nothing found by branch takes one for
+// the branch's own, unless the branch was checked out from it
+// (isBranchsPullRequest).
+export function isFromThisRepository(
+  pr: Pick<PullRequest, "isCrossRepository">,
+): boolean {
+  return pr.isCrossRepository !== true;
+}
+
+// Whether a PR found by its head branch's name is the branch's own:
+// one from this repository, or the fork's PR the branch was checked
+// out from.
+export function isBranchsPullRequest(
+  pr: Pick<PullRequest, "isCrossRepository" | "checkedOutFrom">,
+): boolean {
+  return isFromThisRepository(pr) || pr.checkedOutFrom === true;
+}
 
 // The slim fields, in PullRequestSchema's declaration order, read off
 // the schema so the strip and the equality below stay in lockstep with
