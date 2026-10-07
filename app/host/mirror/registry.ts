@@ -64,7 +64,7 @@ export type MirrorCreateInput = {
   // a label the engine would have to know the key of.
   localWorktreeId: string;
   labels: Record<string, string>;
-  ignores: string[];
+  ignores: readonly string[];
   // A pull (file-sync/engine.go mirrorRequest.pull): files flow one
   // way, remote to local, and nothing here reaches the peer. The
   // transplant's one-shot transfer. Absent, a two-way mirror.
@@ -114,11 +114,10 @@ export function localWorktreeIdOf(raw: MirrorSessionRaw | undefined): string {
 }
 
 // The ignore mode a session's labels carry, "everything" when none.
+const isMirrorIgnoreMode = Schema.is(MirrorIgnoreModeSchema);
 export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
-  const mode = MirrorIgnoreModeSchema.safeParse(
-    labels[MIRROR_LABEL_IGNORE_MODE],
-  );
-  return mode.success ? mode.data : "everything";
+  const mode = labels[MIRROR_LABEL_IGNORE_MODE];
+  return isMirrorIgnoreMode(mode) ? mode : "everything";
 }
 
 // The daemon (engine), or null before it is wired (engineOrNull), for

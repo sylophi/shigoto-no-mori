@@ -1,20 +1,22 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shared/errors";
 import { MIRROR_IGNORES_LIMIT } from "@shared/mirrorIgnores";
 import { isValidWorktreeDirName } from "@shared/git/branches";
 import { isSafeRelPath } from "@shared/git/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
-  CloneFolderNameZod,
-  CommitHashZod,
-  CreatePhaseZod,
-  DeviceIdZod,
-  GitRefNameZod,
-  HexId32Zod,
-  ProjectZod,
-  WorktreeIdZod,
-  WorktreeZod,
-} from "@shared/schemas/zodBridge";
+  CloneFolderNameSchema,
+  CommitHashSchema,
+  CreatePhaseSchema,
+  GitRefNameSchema,
+  ProjectSchema,
+  VoidSchema,
+  WorktreeIdSchema,
+  WorktreeSchema,
+} from "@shared/schemas";
+import { HexId32Schema } from "@shared/ipc/hexId";
+import { strict } from "@shared/schemas/strict";
 
 // Moving a worktree between devices. Commits cross on a SOURCE LINK:
 // one byte channel (shared/ipc/socket/channels.ts) between the device
@@ -70,33 +72,42 @@ import {
 const BUNDLE_REF_RE =
   /^refs\/(heads\/[A-Za-z0-9][A-Za-z0-9._/-]*|shigomori\/(dirty|index)\/[0-9a-f]{12})$/;
 
-export const SyncBundleRefSchema = z
-  .string()
-  .regex(BUNDLE_REF_RE, { message: "Ref outside the sync allowlist" })
-  .refine((ref) => !ref.includes("..") && !ref.includes("//"), {
+export const SyncBundleRefSchema = Schema.String.check(
+  Schema.isPattern(BUNDLE_REF_RE, {
     message: "Ref outside the sync allowlist",
-  });
+  }),
+  Schema.makeFilter(
+    (ref: string) =>
+      (!ref.includes("..") && !ref.includes("//")) ||
+      "Ref outside the sync allowlist",
+  ),
+);
+const isSyncBundleRef = Schema.is(SyncBundleRefSchema);
 
 // Where an unpacked ref may land (the CLI enforces the same prefix
 // fail-closed): the app-owned namespace, never a branch or a tag. Also
 // the refs a mirror apply may sweep afterwards.
-export const SyncLandingRefSchema = z
-  .string()
-  .regex(/^refs\/shigomori\/[A-Za-z0-9][A-Za-z0-9._/-]*$/)
-  .refine((ref) => !ref.includes("..") && !ref.includes("//"), {
-    message: "Ref outside the app's namespace",
-  });
+export const SyncLandingRefSchema = Schema.String.check(
+  Schema.isPattern(/^refs\/shigomori\/[A-Za-z0-9][A-Za-z0-9._/-]*$/),
+  Schema.makeFilter(
+    (ref: string) =>
+      (!ref.includes("..") && !ref.includes("//")) ||
+      "Ref outside the app's namespace",
+  ),
+);
 
 // A capture of a worktree's uncommitted state: its commit under
 // refs/shigomori/dirty/<worktreeId> (cli/cmd_dirty.go), and that
 // commit's tree, which is what a teardown compares (capture commits
 // are not deterministic, their trees are).
-export const SyncCaptureSchema = z.strictObject({
-  captured: z.boolean(),
-  commit: CommitHashZod.optional(),
-  tree: CommitHashZod.optional(),
-});
-export type SyncCapture = z.infer<typeof SyncCaptureSchema>;
+export const SyncCaptureSchema = strict(
+  Schema.Struct({
+    captured: Schema.Boolean,
+    commit: Schema.optional(CommitHashSchema),
+    tree: Schema.optional(CommitHashSchema),
+  }),
+);
+export type SyncCapture = typeof SyncCaptureSchema.Type;
 
 // What a capture leaves behind. The dirty capture has `git add -A`
 // semantics (cli/cmd_dirty.go), so ignored files never cross a
@@ -108,10 +119,12 @@ export type SyncCapture = z.infer<typeof SyncCaptureSchema>;
 // Same shape as the carry-over listing (host/lib/git/branches.ts
 // listIgnoredPaths): fully-ignored directories collapse to one
 // trailing-slash entry.
-const SyncIgnoredPathsPayloadSchema = z.strictObject({
-  projectId: z.string().min(1),
-  worktreeId: WorktreeIdZod,
-});
+const SyncIgnoredPathsPayloadSchema = strict(
+  Schema.Struct({
+    projectId: Schema.NonEmptyString,
+    worktreeId: WorktreeIdSchema,
+  }),
+);
 
 // Capped on the wire: a worktree with scattered per-file ignores can
 // hold thousands. Wide enough for the mirror dialog's picker to list a
@@ -120,18 +133,22 @@ export const SYNC_IGNORED_PATHS_LIMIT = 32;
 // The rules ride under the engine's own cap (MIRROR_IGNORES_LIMIT),
 // not the path list's: a repo's gitignore files easily hold more than
 // 32 lines.
-const SyncIgnoredPathsResultSchema = z.strictObject({
-  paths: z.array(z.string()).max(SYNC_IGNORED_PATHS_LIMIT),
-  total: z.number().int().nonnegative(),
-  // The gitignore rules behind them (the root .gitignore and
-  // info/exclude, host/lib/git/ignoreRules.ts), for a mirror that
-  // leaves gitignored files behind: a rule keeps out what is ignored
-  // tomorrow, where the paths above only cover today.
-  patterns: z.array(z.string()).max(MIRROR_IGNORES_LIMIT),
-});
-export type SyncIgnoredPathsResult = z.infer<
-  typeof SyncIgnoredPathsResultSchema
->;
+const SyncIgnoredPathsResultSchema = strict(
+  Schema.Struct({
+    paths: Schema.Array(Schema.String).check(
+      Schema.isMaxLength(SYNC_IGNORED_PATHS_LIMIT),
+    ),
+    total: Schema.Natural,
+    // The gitignore rules behind them (the root .gitignore and
+    // info/exclude, host/lib/git/ignoreRules.ts), for a mirror that
+    // leaves gitignored files behind: a rule keeps out what is ignored
+    // tomorrow, where the paths above only cover today.
+    patterns: Schema.Array(Schema.String).check(
+      Schema.isMaxLength(MIRROR_IGNORES_LIMIT),
+    ),
+  }),
+);
+export type SyncIgnoredPathsResult = typeof SyncIgnoredPathsResultSchema.Type;
 
 // One folder of a worktree, for the mirror dialog's picker of what
 // stays behind: the same browse the carry-over picker offers, over one
@@ -140,19 +157,25 @@ export type SyncIgnoredPathsResult = z.infer<
 // the engine reads the rules and stays out of it whole), and only
 // ignored entries take an exception (a tracked file kept back would
 // leave the two git states disagreeing). .git is never listed.
-const SyncWorktreeFolderPayloadSchema = SyncIgnoredPathsPayloadSchema.extend({
-  relative: z.string().refine(isSafeRelPath, {
-    message: "Path must stay within the worktree",
+const SyncWorktreeFolderPayloadSchema = strict(
+  Schema.Struct({
+    ...SyncIgnoredPathsPayloadSchema.struct.fields,
+    relative: Schema.String.check(
+      Schema.makeFilter(
+        (relative: string) =>
+          isSafeRelPath(relative) || "Path must stay within the worktree",
+      ),
+    ),
   }),
-});
-const SyncWorktreeFolderEntrySchema = z.strictObject({
-  name: z.string().min(1),
-  isDirectory: z.boolean(),
-  ignored: z.boolean(),
-});
-export type SyncWorktreeFolderEntry = z.infer<
-  typeof SyncWorktreeFolderEntrySchema
->;
+);
+const SyncWorktreeFolderEntrySchema = strict(
+  Schema.Struct({
+    name: Schema.NonEmptyString,
+    isDirectory: Schema.Boolean,
+    ignored: Schema.Boolean,
+  }),
+);
+export type SyncWorktreeFolderEntry = typeof SyncWorktreeFolderEntrySchema.Type;
 
 // The local pull orchestration's input: which peer, which of ITS
 // project/worktree ids, and the branch to land here. sourceIdentity is
@@ -173,23 +196,23 @@ export type SyncWorktreeFolderEntry = z.infer<
 // say which rule is in force. The patterns themselves are the engine's
 // ignore list, in its gitignore-like syntax (a leading / anchors to
 // the root, ! negates, the last match wins).
-export const MirrorIgnoreModeSchema = z.enum([
+export const MirrorIgnoreModeSchema = Schema.Literals([
   "everything",
   "gitignored",
   "custom",
   "bring",
 ]);
-export type MirrorIgnoreMode = z.infer<typeof MirrorIgnoreModeSchema>;
-const MirrorIgnorePatternSchema = z
-  .string()
-  .min(1)
-  .max(1024)
-  .refine((pattern) => !/[\r\n]/.test(pattern), {
-    message: "Ignore pattern must be one line",
-  });
-export const MirrorIgnoresSchema = z
-  .array(MirrorIgnorePatternSchema)
-  .max(MIRROR_IGNORES_LIMIT);
+export type MirrorIgnoreMode = typeof MirrorIgnoreModeSchema.Type;
+const MirrorIgnorePatternSchema = Schema.String.check(
+  Schema.isBetweenLength(1, 1024),
+  Schema.makeFilter(
+    (pattern: string) =>
+      !/[\r\n]/.test(pattern) || "Ignore pattern must be one line",
+  ),
+);
+export const MirrorIgnoresSchema = Schema.Array(
+  MirrorIgnorePatternSchema,
+).check(Schema.isMaxLength(MIRROR_IGNORES_LIMIT));
 
 // Whether a pull with this rule has ignored files to bring: the
 // capture never carries them, and gitignored leaves every one of them
@@ -204,55 +227,65 @@ export function pullBringsIgnoredFiles(
 // A new checkout's place on this device: the folder it goes in and
 // its name, one segment (the add-project dialog's clone takes the
 // same pair, CloneProjectPayloadSchema). `~` is expanded by the host.
-export const SyncCloneIntoSchema = z.strictObject({
-  parentDir: z.string().min(1),
-  name: CloneFolderNameZod,
-});
-export type SyncCloneInto = z.infer<typeof SyncCloneIntoSchema>;
+export const SyncCloneIntoSchema = strict(
+  Schema.Struct({
+    parentDir: Schema.NonEmptyString,
+    name: CloneFolderNameSchema,
+  }),
+);
+export type SyncCloneInto = typeof SyncCloneIntoSchema.Type;
 
-export const SyncPullWorktreePayloadSchema = z.strictObject({
-  sourceDeviceId: DeviceIdZod,
-  sourceProjectId: z.string().min(1),
-  sourceWorktreeId: WorktreeIdZod,
-  sourceIdentity: z.string().min(1),
-  branch: GitRefNameZod.refine(
-    (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
-    { message: "Branch name outside the sync allowlist" },
-  ),
-  // The source worktree's folder name, so the copy lands under the
-  // same name here and the two sides read as one worktree. Omitted
-  // when the source's name is not a valid managed dirname (an external
-  // worktree with an odd folder), in which case the create picks a
-  // fresh pool name. The handler refuses, rather than renaming, when
-  // that folder already exists on this device.
-  worktreeName: z
-    .string()
-    .min(1)
-    .refine(isValidWorktreeDirName, { message: "Not a valid folder name" })
-    .optional(),
-  // Whether the create here runs the project's setup script. The
-  // dialogs default it by the ignore rule and the user can flip it.
-  // Absent reads as yes, the create's ordinary lifecycle.
-  runSetup: z.boolean().optional(),
-  // The ignored files to bring across once the worktree is here, as
-  // the leave-out rule and its patterns: the capture has `git add -A`
-  // semantics, so this is the only way an ignored file travels. A
-  // one-shot run of the mirror engine carries them (the "files" step).
-  // Absent: nothing beyond the capture, the move as the mirror start
-  // drives it (its own session brings the files and keeps bringing
-  // them). Gitignored leaves nothing to carry, so it skips the step.
-  ignoreMode: MirrorIgnoreModeSchema.optional(),
-  ignores: MirrorIgnoresSchema.optional(),
-  // Where to clone the repo when this device has no checkout of it
-  // yet: the pull's landing project is made first (the peer's default
-  // branch, fetched over the device link like the branch itself, so a
-  // repo with no remote crosses too), registered, and the copy lands
-  // in it as usual. Ignored when a local project already matches: the
-  // dialog that offered it was reading a stale list, and the pull
-  // takes the checkout it has. Without it, a device with no checkout
-  // refuses as before.
-  cloneInto: SyncCloneIntoSchema.optional(),
-});
+export const SyncPullWorktreePayloadSchema = strict(
+  Schema.Struct({
+    sourceDeviceId: DeviceIdSchema,
+    sourceProjectId: Schema.NonEmptyString,
+    sourceWorktreeId: WorktreeIdSchema,
+    sourceIdentity: Schema.NonEmptyString,
+    branch: GitRefNameSchema.check(
+      Schema.makeFilter(
+        (name: string) =>
+          isSyncBundleRef(`refs/heads/${name}`) ||
+          "Branch name outside the sync allowlist",
+      ),
+    ),
+    // The source worktree's folder name, so the copy lands under the
+    // same name here and the two sides read as one worktree. Omitted
+    // when the source's name is not a valid managed dirname (an external
+    // worktree with an odd folder), in which case the create picks a
+    // fresh pool name. The handler refuses, rather than renaming, when
+    // that folder already exists on this device.
+    worktreeName: Schema.optional(
+      Schema.NonEmptyString.check(
+        Schema.makeFilter(
+          (name: string) =>
+            isValidWorktreeDirName(name) || "Not a valid folder name",
+        ),
+      ),
+    ),
+    // Whether the create here runs the project's setup script. The
+    // dialogs default it by the ignore rule and the user can flip it.
+    // Absent reads as yes, the create's ordinary lifecycle.
+    runSetup: Schema.optional(Schema.Boolean),
+    // The ignored files to bring across once the worktree is here, as
+    // the leave-out rule and its patterns: the capture has `git add -A`
+    // semantics, so this is the only way an ignored file travels. A
+    // one-shot run of the mirror engine carries them (the "files" step).
+    // Absent: nothing beyond the capture, the move as the mirror start
+    // drives it (its own session brings the files and keeps bringing
+    // them). Gitignored leaves nothing to carry, so it skips the step.
+    ignoreMode: Schema.optional(MirrorIgnoreModeSchema),
+    ignores: Schema.optional(MirrorIgnoresSchema),
+    // Where to clone the repo when this device has no checkout of it
+    // yet: the pull's landing project is made first (the peer's default
+    // branch, fetched over the device link like the branch itself, so a
+    // repo with no remote crosses too), registered, and the copy lands
+    // in it as usual. Ignored when a local project already matches: the
+    // dialog that offered it was reading a stale list, and the pull
+    // takes the checkout it has. Without it, a device with no checkout
+    // refuses as before.
+    cloneInto: Schema.optional(SyncCloneIntoSchema),
+  }),
+);
 
 // The pull's progress, one frame per step change and per transferred
 // chunk, keyed by the SOURCE worktree id (the only id the caller holds
@@ -260,7 +293,7 @@ export const SyncPullWorktreePayloadSchema = z.strictObject({
 // worktree's ordinary lifecycle phase as it streams (carry-over, setup,
 // port provision). `transfer` frames carry the byte count, and so do
 // `clone` frames, for the repo's own bundle.
-export const SyncPullStepSchema = z.enum([
+export const SyncPullStepSchema = Schema.Literals([
   // The repo cloned here first, a pull with `cloneInto` alone.
   "clone",
   "capture",
@@ -272,44 +305,49 @@ export const SyncPullStepSchema = z.enum([
   // staging figures.
   "files",
 ]);
-export type SyncPullStep = z.infer<typeof SyncPullStepSchema>;
+export type SyncPullStep = typeof SyncPullStepSchema.Type;
 
-export const SyncPullProgressSchema = z.strictObject({
-  sourceWorktreeId: WorktreeIdZod,
-  step: SyncPullStepSchema,
-  bytes: z.number().int().nonnegative().optional(),
-  totalBytes: z.number().int().nonnegative().optional(),
-  createPhase: CreatePhaseZod.optional(),
-});
-export type SyncPullProgress = z.infer<typeof SyncPullProgressSchema>;
+export const SyncPullProgressSchema = strict(
+  Schema.Struct({
+    sourceWorktreeId: WorktreeIdSchema,
+    step: SyncPullStepSchema,
+    bytes: Schema.optional(Schema.Natural),
+    totalBytes: Schema.optional(Schema.Natural),
+    createPhase: Schema.optional(CreatePhaseSchema),
+  }),
+);
+export type SyncPullProgress = typeof SyncPullProgressSchema.Type;
 
-export const SyncPullWorktreeResultSchema = z.strictObject({
-  worktree: WorktreeZod,
-  // captured && !dirtyApplied is the partial-success case: the source
-  // had uncommitted changes, the worktree landed, but the apply was
-  // refused. The capture stays parked under the local worktree id and
-  // the source still holds the original dirty state.
-  captured: z.boolean(),
-  dirtyApplied: z.boolean(),
-  // The "files" step's outcome, present when a leave-out rule asked
-  // for it. crossed:false with the reason means the ignored files are
-  // still only on the source. conflicts counts the paths both sides
-  // held differently, which keep this side's version.
-  files: z
-    .strictObject({
-      crossed: z.boolean(),
-      conflicts: z.number().int().nonnegative(),
-      error: z.string().optional(),
-    })
-    .optional(),
-  // The project the pull made for the copy to land in (`cloneInto`),
-  // as registered. Absent when the copy landed in a checkout this
-  // device already had.
-  cloned: ProjectZod.optional(),
-});
-export type SyncPullWorktreeResult = z.infer<
-  typeof SyncPullWorktreeResultSchema
->;
+// The "files" step's outcome. crossed:false with the reason means the
+// ignored files are still only on the source. conflicts counts the
+// paths both sides held differently, which keep this side's version.
+export const SyncPullFilesSchema = strict(
+  Schema.Struct({
+    crossed: Schema.Boolean,
+    conflicts: Schema.Natural,
+    error: Schema.optional(Schema.String),
+  }),
+);
+
+export const SyncPullWorktreeResultSchema = strict(
+  Schema.Struct({
+    worktree: WorktreeSchema,
+    // captured && !dirtyApplied is the partial-success case: the source
+    // had uncommitted changes, the worktree landed, but the apply was
+    // refused. The capture stays parked under the local worktree id and
+    // the source still holds the original dirty state.
+    captured: Schema.Boolean,
+    dirtyApplied: Schema.Boolean,
+    // The "files" step's outcome, present when a leave-out rule asked
+    // for it (SyncPullFilesSchema).
+    files: Schema.optional(SyncPullFilesSchema),
+    // The project the pull made for the copy to land in (`cloneInto`),
+    // as registered. Absent when the copy landed in a checkout this
+    // device already had.
+    cloned: Schema.optional(ProjectSchema),
+  }),
+);
+export type SyncPullWorktreeResult = typeof SyncPullWorktreeResultSchema.Type;
 
 // The send's input: which peer, and which of THIS device's worktrees.
 // The branch, the folder name and the repo identity are read off the
@@ -318,41 +356,48 @@ export type SyncPullWorktreeResult = z.infer<
 // checkout of the repo on the peer, the peer clones it from here first
 // (the destination's landing is the pull's, so it takes a pull's
 // `cloneInto`, named in the peer's own terms).
-export const SyncSendWorktreePayloadSchema = z.strictObject({
-  targetDeviceId: DeviceIdZod,
-  projectId: z.string().min(1),
-  worktreeId: WorktreeIdZod,
-  runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
-  ignoreMode: SyncPullWorktreePayloadSchema.shape.ignoreMode,
-  ignores: SyncPullWorktreePayloadSchema.shape.ignores,
-  cloneInto: SyncPullWorktreePayloadSchema.shape.cloneInto,
-});
+const pullFields = SyncPullWorktreePayloadSchema.struct.fields;
+export const SyncSendWorktreePayloadSchema = strict(
+  Schema.Struct({
+    targetDeviceId: DeviceIdSchema,
+    projectId: Schema.NonEmptyString,
+    worktreeId: WorktreeIdSchema,
+    runSetup: pullFields.runSetup,
+    ignoreMode: pullFields.ignoreMode,
+    ignores: pullFields.ignores,
+    cloneInto: pullFields.cloneInto,
+  }),
+);
 
 // The id of a source link's channel, minted by the device that opens
 // it (shared/ipc/socket/channels.ts).
-const ChannelIdSchema = HexId32Zod;
+const ChannelIdSchema = HexId32Schema;
 
 // A pull's source link: the source worktree on this host, which the
 // link captures and whose repo it bundles.
-const SyncOpenSourcePayloadSchema = z.strictObject({
-  projectId: z.string().min(1),
-  worktreeId: WorktreeIdZod,
-  channelId: ChannelIdSchema,
-});
+const SyncOpenSourcePayloadSchema = strict(
+  Schema.Struct({
+    projectId: Schema.NonEmptyString,
+    worktreeId: WorktreeIdSchema,
+    channelId: ChannelIdSchema,
+  }),
+);
 
 // What a move recorded, for the teardown that may follow: the branch
 // and the tip it had, what was captured (and its tree), and whether the
 // capture was applied at the destination. Computed by the landing and
 // kept by the device that ran the move, so the data-loss rule runs on
 // the hosts' own facts, never on a caller's say-so.
-const SyncReceiptSchema = z.strictObject({
-  branch: GitRefNameZod,
-  branchTip: CommitHashZod,
-  captured: z.boolean(),
-  dirtyApplied: z.boolean(),
-  captureTree: CommitHashZod.optional(),
-});
-export type SyncReceipt = z.infer<typeof SyncReceiptSchema>;
+const SyncReceiptSchema = strict(
+  Schema.Struct({
+    branch: GitRefNameSchema,
+    branchTip: CommitHashSchema,
+    captured: Schema.Boolean,
+    dirtyApplied: Schema.Boolean,
+    captureTree: Schema.optional(CommitHashSchema),
+  }),
+);
+export type SyncReceipt = typeof SyncReceiptSchema.Type;
 
 // The send's landing, asked of the destination: the pull's landing
 // input with the facts a pull reads off the source's list (the
@@ -361,60 +406,79 @@ export type SyncReceipt = z.infer<typeof SyncReceiptSchema>;
 // is created on when it is not the source's own (a primary's mirror
 // lands on mirror/<branch>, shared/git/branches.ts). The commits still
 // arrive under `branch`.
-const SyncReceiveWorktreePayloadSchema = z.strictObject({
-  identity: z.string().min(1),
-  branch: SyncPullWorktreePayloadSchema.shape.branch,
-  worktreeName: SyncPullWorktreePayloadSchema.shape.worktreeName,
-  landBranch: GitRefNameZod.optional(),
-  sourceWorktreeId: WorktreeIdZod,
-  runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
-  cloneInto: SyncPullWorktreePayloadSchema.shape.cloneInto,
-  channelId: ChannelIdSchema,
-});
-export const SyncReceiveWorktreeResultSchema =
-  SyncPullWorktreeResultSchema.omit({ files: true }).extend({
+const SyncReceiveWorktreePayloadSchema = strict(
+  Schema.Struct({
+    identity: Schema.NonEmptyString,
+    branch: pullFields.branch,
+    worktreeName: pullFields.worktreeName,
+    landBranch: Schema.optional(GitRefNameSchema),
+    sourceWorktreeId: WorktreeIdSchema,
+    runSetup: pullFields.runSetup,
+    cloneInto: pullFields.cloneInto,
+    channelId: ChannelIdSchema,
+  }),
+);
+const pullResultFields = SyncPullWorktreeResultSchema.struct.fields;
+export const SyncReceiveWorktreeResultSchema = strict(
+  Schema.Struct({
+    worktree: pullResultFields.worktree,
+    captured: pullResultFields.captured,
+    dirtyApplied: pullResultFields.dirtyApplied,
+    cloned: pullResultFields.cloned,
     receipt: SyncReceiptSchema,
-  });
+  }),
+);
 
 // The git follower's push (host/mirror/gitFollow.ts): the refs to land
 // under refs/shigomori/ here and the tips this host already holds,
 // which it asks the link for as one bundle.
-const SyncReceiveBundlePayloadSchema = z.strictObject({
-  projectId: z.string().min(1),
-  refs: z.array(SyncBundleRefSchema).min(1).max(64),
-  haves: z.array(CommitHashZod).max(256),
-  channelId: ChannelIdSchema,
-});
-const SyncFetchedSchema = z.strictObject({
-  fetched: z.array(z.strictObject({ ref: z.string(), commit: CommitHashZod })),
-});
+const SyncReceiveBundlePayloadSchema = strict(
+  Schema.Struct({
+    projectId: Schema.NonEmptyString,
+    refs: Schema.Array(SyncBundleRefSchema).check(
+      Schema.isBetweenLength(1, 64),
+    ),
+    haves: Schema.Array(CommitHashSchema).check(Schema.isMaxLength(256)),
+    channelId: ChannelIdSchema,
+  }),
+);
+const SyncFetchedSchema = strict(
+  Schema.Struct({
+    fetched: Schema.Array(
+      strict(Schema.Struct({ ref: Schema.String, commit: CommitHashSchema })),
+    ),
+  }),
+);
 
 // The teardown's fate. A refused or failed teardown never fails the
 // call: by then the move succeeded and the state is safe on both
 // sides, so the caller learns via sourceRemoved:false with sourceError
 // carrying the stable marker or message ("scripts-running", a
 // cleanup-script failure, a dirty state that did not land).
-const SyncTeardownSourceResultSchema = z.strictObject({
-  sourceRemoved: z.boolean(),
-  sourceError: z.string().optional(),
-});
-export type SyncTeardownSourceResult = z.infer<
-  typeof SyncTeardownSourceResultSchema
->;
+const SyncTeardownSourceResultSchema = strict(
+  Schema.Struct({
+    sourceRemoved: Schema.Boolean,
+    sourceError: Schema.optional(Schema.String),
+  }),
+);
+export type SyncTeardownSourceResult =
+  typeof SyncTeardownSourceResultSchema.Type;
 
 // Which move a teardown follows, as the device that ran it names it:
 // the direction, the peer the worktree came from or went to, and the
 // SOURCE worktree (the peer's after a pull, this device's after a
 // send). What the move captured and applied is NOT on the wire: the
 // host reads back its own receipt.
-const SyncMoveDirectionSchema = z.enum(["pull", "send"]);
-const SyncTeardownSourcePayloadSchema = z.strictObject({
-  direction: SyncMoveDirectionSchema,
-  deviceId: DeviceIdZod,
-  projectId: z.string().min(1),
-  worktreeId: WorktreeIdZod,
-});
-export type SyncMoveRef = z.infer<typeof SyncTeardownSourcePayloadSchema>;
+const SyncMoveDirectionSchema = Schema.Literals(["pull", "send"]);
+const SyncTeardownSourcePayloadSchema = strict(
+  Schema.Struct({
+    direction: SyncMoveDirectionSchema,
+    deviceId: DeviceIdSchema,
+    projectId: Schema.NonEmptyString,
+    worktreeId: WorktreeIdSchema,
+  }),
+);
+export type SyncMoveRef = typeof SyncTeardownSourcePayloadSchema.Type;
 
 // A move's cancel, keyed the way the caller keys its progress: by the
 // SOURCE worktree id, since the copy has no id of its own until the
@@ -427,12 +491,16 @@ export type SyncMoveRef = z.infer<typeof SyncTeardownSourcePayloadSchema>;
 // tears the link down, which the landing runs under. `cancelled` is
 // false when nothing by that key is in flight here, which a caller
 // reads as "already over".
-const SyncCancelMovePayloadSchema = z.strictObject({
-  sourceWorktreeId: WorktreeIdZod,
-});
-const SyncCancelMoveResultSchema = z.strictObject({
-  cancelled: z.boolean(),
-});
+const SyncCancelMovePayloadSchema = strict(
+  Schema.Struct({
+    sourceWorktreeId: WorktreeIdSchema,
+  }),
+);
+const SyncCancelMoveResultSchema = strict(
+  Schema.Struct({
+    cancelled: Schema.Boolean,
+  }),
+);
 
 // How a cancelled move fails, as text: Electron's IPC flattens an
 // error to its message, and a peer's answer arrives re-worded ("The
@@ -449,14 +517,20 @@ export function isMoveCancelledError(error: unknown): boolean {
 // thin a bundle (and skip a ref whose tip the receiver has, which
 // `git bundle create` would otherwise drop silently).
 const SYNC_HAS_COMMITS_LIMIT = 64;
-const SyncHasCommitsPayloadSchema = z.strictObject({
-  projectId: z.string().min(1),
-  commits: z.array(CommitHashZod).min(1).max(SYNC_HAS_COMMITS_LIMIT),
-});
+const SyncHasCommitsPayloadSchema = strict(
+  Schema.Struct({
+    projectId: Schema.NonEmptyString,
+    commits: Schema.Array(CommitHashSchema).check(
+      Schema.isBetweenLength(1, SYNC_HAS_COMMITS_LIMIT),
+    ),
+  }),
+);
 
-export const SyncHasCommitsResultSchema = z.strictObject({
-  present: z.array(CommitHashZod),
-});
+export const SyncHasCommitsResultSchema = strict(
+  Schema.Struct({
+    present: Schema.Array(CommitHashSchema),
+  }),
+);
 
 export const syncContract = defineContract("host", {
   // A read that discloses repo state (the names of ignored files), so
@@ -464,7 +538,7 @@ export const syncContract = defineContract("host", {
   worktreeFolder: invoke(
     "sync:worktreeFolder",
     SyncWorktreeFolderPayloadSchema,
-    z.array(SyncWorktreeFolderEntrySchema),
+    Schema.Array(SyncWorktreeFolderEntrySchema),
     { remote: true, gated: true, movesHostState: false },
   ),
   ignoredPaths: invoke(
@@ -485,12 +559,17 @@ export const syncContract = defineContract("host", {
   // the channel, and a capture it takes is announced by the git
   // watcher like any ref write, so the open itself pings no viewer. The
   // follower fetching the copy's commits opens one on the copy.
-  openSource: invoke("sync:openSource", SyncOpenSourcePayloadSchema, z.void(), {
-    remote: true,
-    gated: true,
-    movesHostState: false,
-    invitable: "copy",
-  }),
+  openSource: invoke(
+    "sync:openSource",
+    SyncOpenSourcePayloadSchema,
+    VoidSchema,
+    {
+      remote: true,
+      gated: true,
+      movesHostState: false,
+      invitable: "copy",
+    },
+  ),
   // Both land refs (and a worktree), so both keep the viewer ping,
   // which fires once they are done. Both are a mirror's into the copy's
   // device: the landing of the invited original, and the follower's

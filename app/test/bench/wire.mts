@@ -176,6 +176,8 @@ async function sendPieces(link: Link): Promise<void> {
   }
 }
 
+const decodeBundleAnswer = Schema.decodeUnknownSync(BundleAnswerSchema);
+
 // A bench channel's invoke input.
 const decodeChannelPayload = Schema.decodeUnknownSync(
   Schema.Struct({ channelId: HexId32Schema }),
@@ -354,7 +356,7 @@ async function main() {
   await measure(`${megabytes} MB bundle down a link`, async () => {
     const { channelId, bundleLink } = openLink();
     await transport.invoke("bench:bundle", { channelId });
-    const header = BundleAnswerSchema.parse(await bundleLink.read());
+    const header = decodeBundleAnswer(await bundleLink.read());
     await bundleLink.readBytes(header.bundle.bytes, async () => {});
     bundleLink.end();
   });
