@@ -54,7 +54,7 @@ function presentationOf(status: RemoteDeviceStatus): {
 
 // The machine this window runs on, in the same vocabulary: it has no
 // connection to describe, so it is always here, and every surface
-// that tags it (the settings header, its nav row) reads this one
+// that tags it (a row tag, a tooltip, a live card) reads this one
 // entry rather than spelling "This device" and emerald on its own.
 export const THIS_DEVICE_VIEW: DeviceStatusView = {
   tone: "emerald",

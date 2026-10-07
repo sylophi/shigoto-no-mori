@@ -1,12 +1,20 @@
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
-import { BookHeart, Palette, Rocket, type LucideIcon } from "lucide-react";
+import {
+  BookHeart,
+  GitBranch,
+  Palette,
+  Plug,
+  Rocket,
+  SlidersHorizontal,
+  type LucideIcon,
+} from "lucide-react";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
-import type { StatusTone } from "@/components/ui/status-dot";
-import type { RemoteDevice } from "@/lib/remote/devices";
-import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
+import {
+  pickHostDevice,
+  useDeviceRoster,
+  useHostDevicePick,
+} from "@/components/shared/DeviceTabs";
 
 // The Settings page's navigation lives in the app sidebar (the project
 // tree gives way to the section list while /settings is open), while
@@ -14,7 +22,9 @@ import { localDeviceId } from "@/lib/queryKeys";
 // two: the sidebar writes which section is selected and the form reads
 // it. Module state on purpose: the selection is a navigation nicety
 // for this window's lifetime (coming back to Settings lands on the
-// same device), not a preference worth persisting.
+// same section), not a preference worth persisting. Which machine a
+// host section shows is the pick it shares with Tidy
+// (useHostDevicePick).
 
 export const APPEARANCE_TAB = "appearance";
 export const LAUNCH_TAB = "launch";
@@ -22,16 +32,33 @@ export const LAUNCH_TAB = "launch";
 // Village life shows.
 export const VISITORS_TAB = "visitors";
 
-export function deviceTab(deviceId: string): string {
-  return `device:${deviceId}`;
+// The host sections: what is stored on a machine, one form per
+// machine, picked with the device tab bar in the page header.
+export const GENERAL_TAB = "general";
+export const WORKTREES_TAB = "worktrees";
+export const INTEGRATIONS_TAB = "integrations";
+export const HOST_TABS = [
+  GENERAL_TAB,
+  WORKTREES_TAB,
+  INTEGRATIONS_TAB,
+] as const;
+export type HostTab = (typeof HOST_TABS)[number];
+
+export function isHostTab(tab: string): tab is HostTab {
+  return (HOST_TABS as readonly string[]).includes(tab);
 }
 
-export const LOCAL_DEVICE_TAB = deviceTab(localDeviceId);
+export type SettingsTab =
+  | typeof APPEARANCE_TAB
+  | typeof LAUNCH_TAB
+  | typeof VISITORS_TAB
+  | HostTab;
 
 // The panel element a sidebar row controls, so the aria wiring on both
-// sides comes from one place.
-export function settingsPanelId(tab: string): string {
-  return `settings-panel-${tab.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+// sides comes from one place. A host section has one panel per device.
+export function settingsPanelId(tab: string, deviceId?: string): string {
+  const id = deviceId === undefined ? tab : `${tab}:${deviceId}`;
+  return `settings-panel-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 }
 
 const selectedTab = createExternalStore<string>(APPEARANCE_TAB);
@@ -46,48 +73,39 @@ export function useSelectedSettingsTab(): string {
   return useExternalStore(selectedTab);
 }
 
-// Launch tools and this device describe the machine the window runs
-// on. A hostless client (the web shell) has no such machine, so it
-// offers neither and falls back to Appearance where the desktop falls
-// back to this device.
-const FALLBACK_TAB = hasLocalHost ? LOCAL_DEVICE_TAB : APPEARANCE_TAB;
+// A section this window no longer offers (Visitors once Village life
+// is off) falls back to the General section. A hostless client (the
+// web shell) has no device of its own, so it falls back to Appearance.
+const FALLBACK_TAB = hasLocalHost ? GENERAL_TAB : APPEARANCE_TAB;
 
-// One machine on the account means no roster to place it in: the
-// Devices group reads as this device's settings rather than a list of
-// one, and the presence dot (a fact about peers) stays off. Never true
-// on a hostless client, whose roster is peers only.
-export function isSolo(devices: readonly RemoteDevice[]): boolean {
-  return hasLocalHost && devices.length === 0;
-}
-
-// The selection resolved against the live device list, for the
-// sidebar's highlight and the form's panel alike. A remembered peer
-// that has left the registry (revoked, or the account signed out)
-// falls back to this device rather than stranding an empty selection;
-// a peer that is merely not rostered YET keeps its selection pending
-// and takes over the moment it appears.
-export function useActiveSettingsTab(devices: readonly RemoteDevice[]): {
-  activeTab: string;
-  // The peer the active tab names, undefined for every other tab.
-  peer: RemoteDevice | undefined;
-} {
+// The selection, minus a section this window doesn't offer (Visitors
+// with Village life off), for the sidebar's highlight and the form's
+// panel alike.
+export function useActiveSettingsTab(): SettingsTab {
   const selected = useSelectedSettingsTab();
   const villageLife = useVillageLife();
-  const peer = devices.find(
-    (device) => deviceTab(device.deviceId) === selected,
-  );
-  const known =
-    selected === APPEARANCE_TAB ||
-    (selected === VISITORS_TAB && villageLife) ||
-    (hasLocalHost &&
-      (selected === LAUNCH_TAB || selected === LOCAL_DEVICE_TAB)) ||
-    peer !== undefined;
-  return { activeTab: known ? selected : FALLBACK_TAB, peer };
+  if (selected === APPEARANCE_TAB || isHostTab(selected)) return selected;
+  if (selected === VISITORS_TAB && villageLife) return selected;
+  if (hasLocalHost && selected === LAUNCH_TAB) return selected;
+  return FALLBACK_TAB;
+}
+
+// The panel a section's row or chip controls, for its aria-controls: a
+// host section's belongs to the picked device, and there is none while
+// no device is on offer.
+export function useSettingsPanelControls(): (
+  tab: string,
+) => string | undefined {
+  const picked = useHostDevicePick(useDeviceRoster());
+  return (tab) =>
+    !isHostTab(tab)
+      ? settingsPanelId(tab)
+      : picked && settingsPanelId(tab, picked.deviceId);
 }
 
 // The sidebar's "update available" dot leads to Settings, and the
-// button it promises lives on the section of the device holding the
-// update, so the first visit while a given update is staged lands
+// button it promises lives on the General section of the device holding
+// the update, so the first visit while a given update is staged lands
 // there. Once per device and version: after that the visitor's own
 // choice stands.
 const noticedUpdates = new Set<string>();
@@ -102,75 +120,60 @@ export function landOnStagedUpdate(
     const update = `${deviceId}@${version}`;
     if (noticedUpdates.has(update)) continue;
     noticedUpdates.add(update);
-    selectSettingsTab(deviceTab(deviceId));
+    selectSettingsTab(GENERAL_TAB);
+    pickHostDevice(deviceId);
     return;
   }
 }
 
-// One section of the page as a list draws it: its tab id, its label,
-// and either an icon (the visual sections) or the device's glyph and
-// a presence tone (the device sections, where the tone is absent for a
-// lone device, which has no roster to be present in). A device section holding a staged update this window
-// could install carries its version, which the list flags.
+// One section of the page as a list draws it: its tab id, its label
+// and its icon. The General section flags a staged update this window
+// could install on any device, which its tab bar then places.
 export interface SettingsSection {
   id: string;
   label: string;
-  icon?: LucideIcon;
-  deviceIcon?: DeviceIcon;
-  tone?: StatusTone;
-  tip?: string;
-  update?: string;
+  icon: LucideIcon;
+  update?: boolean;
 }
 
 // The page's sections in order, for whichever surface lists them: the
 // sidebar's nav on a wide viewport (SettingsSidebarNav), the chip row
 // under the header in the phone layout (SettingsSectionChips). Two
-// groups, since the split is the page's whole point: "visual" is what
-// this window shows, "devices" is one section per machine, this one
-// first. A hostless client has no machine behind the window, so its
-// visual group is Appearance alone and its devices are all peers.
-// Visitors joins the visual group while Village life shows, which it
-// never does on a hostless client.
+// groups, since the split is the page's whole point: "client" is what
+// this window shows, "host" is what each machine stores, edited one
+// machine at a time. A hostless client has no machine behind the
+// window, so its client group is Appearance alone. Visitors joins the
+// client group while Village life shows, which it never does on a
+// hostless client.
 export function settingsSections(
-  devices: readonly RemoteDevice[],
-  local: { name: string; icon: DeviceIcon },
-  // useStagedUpdates' answer: deviceId to the version staged there.
-  updates: Readonly<Record<string, string>>,
+  // Whether any device holds a staged update this window could install
+  // (useStagedUpdates' answer is non-empty).
+  update: boolean,
   // useVillageLife's answer.
   villageLife: boolean,
-): { visual: SettingsSection[]; devices: SettingsSection[] } {
-  const solo = isSolo(devices);
-  const visual: SettingsSection[] = [
-    { id: APPEARANCE_TAB, label: "Appearance", icon: Palette },
+): { client: SettingsSection[]; host: SettingsSection[] } {
+  const section = (id: SettingsTab, icon: LucideIcon): SettingsSection => ({
+    id,
+    label: SECTION_LABELS[id],
+    icon,
+  });
+  const client = [section(APPEARANCE_TAB, Palette)];
+  if (hasLocalHost) client.push(section(LAUNCH_TAB, Rocket));
+  if (villageLife) client.push(section(VISITORS_TAB, BookHeart));
+  const host = [
+    { ...section(GENERAL_TAB, SlidersHorizontal), update },
+    section(WORKTREES_TAB, GitBranch),
+    section(INTEGRATIONS_TAB, Plug),
   ];
-  if (hasLocalHost) {
-    visual.push({ id: LAUNCH_TAB, label: "Launch tools", icon: Rocket });
-  }
-  if (villageLife) {
-    visual.push({ id: VISITORS_TAB, label: "Visitors", icon: BookHeart });
-  }
-  const deviceRows: SettingsSection[] = [];
-  if (hasLocalHost) {
-    const update = updates[localDeviceId];
-    deviceRows.push({
-      id: LOCAL_DEVICE_TAB,
-      label: local.name,
-      deviceIcon: local.icon,
-      tone: solo ? undefined : THIS_DEVICE_VIEW.tone,
-      update,
-    });
-  }
-  for (const device of devices) {
-    const { tone, label } = deviceStatusView(device.status);
-    const update = updates[device.deviceId];
-    deviceRows.push({
-      id: deviceTab(device.deviceId),
-      label: device.label,
-      deviceIcon: device.icon,
-      tone,
-      tip: `${device.label}: ${label}`,
-      update,
-    });
-  }
-  return { visual, devices: deviceRows };
+  return { client, host };
 }
+
+// Each section's name, for its row in the list and its page title.
+export const SECTION_LABELS: Readonly<Record<SettingsTab, string>> = {
+  [APPEARANCE_TAB]: "Appearance",
+  [LAUNCH_TAB]: "Launch tools",
+  [VISITORS_TAB]: "Visitors",
+  [GENERAL_TAB]: "General",
+  [WORKTREES_TAB]: "Worktrees",
+  [INTEGRATIONS_TAB]: "Integrations",
+};

@@ -138,7 +138,7 @@ function useUpdateTargets(): UpdateTarget[] {
 
 // The updates this window could install right now, as deviceId to the
 // staged version, the local machine's first. What the sidebar's
-// Settings dot and the Settings device rows flag. A plain object so
+// Settings dot, Settings' General row and its device tabs flag. A plain object so
 // react-query can hand back the same reference while the answer is
 // unchanged.
 export function useStagedUpdates(): Readonly<Record<string, string>> {

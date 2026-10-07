@@ -8,9 +8,9 @@
 // hiding.
 // Live wears a dot while anything runs: a script on any device, a
 // forward this machine holds, a mirror.
-// Settings wears a dot while any device's section there holds an update
-// this window could install: the local machine's, or a peer's (the only
-// kind a hostless client can have).
+// Settings wears a dot while any device holds an update this window
+// could install from its General section there: the local machine's,
+// or a peer's (the only kind a hostless client can have).
 import {
   LayoutGrid,
   MonitorSmartphone,

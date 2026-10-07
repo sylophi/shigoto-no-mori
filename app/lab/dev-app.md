@@ -250,7 +250,7 @@ removed one the next time they read the registry. A relaunch after
   projects, so anything a desktop can do to a peer (browse its
   worktrees, run and watch its scripts, change its settings) works
   from a browser tab the same way, and anything local by nature
-  (launch tools, this device's section, port forwarding) is absent.
+  (launch tools, this device's settings, port forwarding) is absent.
 - **Local hub** (`pnpm -C ../hub dev`). Set `SM_DEVICE_HUB_URL` to
   `http://localhost:8787` to run against a Worker on this machine
   instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in the repo root's

@@ -41,6 +41,7 @@ import {
   type DeviceStatusView,
 } from "@/lib/remote/deviceStatus";
 import { cn, dragRegion } from "@/lib/utils";
+import { createExternalStore, useExternalStore } from "@/store/externalStore";
 
 export interface DeviceRosterEntry {
   deviceId: string;
@@ -123,19 +124,48 @@ export function useDeviceTabs(): DeviceTab[] {
   return tabs;
 }
 
-// The pick, opening on `initialId` (the device the route named) and
-// falling back to it, then to the first tab, when the picked device
-// leaves the list.
+// The tab `pickedId` names, falling back to `initialId`, then to the
+// first tab, when the picked device leaves the list. Undefined only
+// while there are no tabs.
+function resolvePick<T extends { deviceId: string }>(
+  tabs: readonly T[],
+  pickedId: string,
+  initialId: string,
+): T | undefined {
+  return (
+    tabs.find((tab) => tab.deviceId === pickedId) ??
+    tabs.find((tab) => tab.deviceId === initialId) ??
+    tabs[0]
+  );
+}
+
+// The pick, opening on `initialId` (the device the route named).
 export function usePickedDevice<T extends DeviceTab>(
   tabs: readonly T[],
   initialId: string,
 ): [T | undefined, (deviceId: string) => void] {
   const [pickedId, setPickedId] = useState(initialId);
-  const picked =
-    tabs.find((tab) => tab.deviceId === pickedId) ??
-    tabs.find((tab) => tab.deviceId === initialId) ??
-    tabs[0];
-  return [picked, setPickedId];
+  return [resolvePick(tabs, pickedId, initialId), setPickedId];
+}
+
+// One pick shared by the pages about a whole machine (Settings' host
+// sections and Tidy), so stepping between them stays on the machine
+// being looked at. Module state on purpose, like Settings' own
+// section pick: a navigation nicety for this window's lifetime. It
+// opens on this device. A remembered peer that has left falls back
+// like any pick, while the raw pick stays, so a peer merely not
+// rostered YET takes over the moment it appears.
+const hostPick = createExternalStore<string>(localDeviceId);
+
+export function pickHostDevice(deviceId: string): void {
+  if (hostPick.get() === deviceId) return;
+  hostPick.publish(deviceId);
+}
+
+export function useHostDevicePick<T extends { deviceId: string }>(
+  tabs: readonly T[],
+): T | undefined {
+  return resolvePick(tabs, useExternalStore(hostPick), localDeviceId);
 }
 
 // The id the all-devices tab is picked by. Not a device id (those are
@@ -153,6 +183,9 @@ export type DeviceBarTab = Pick<
   // An arrow ahead of the pill, from the tab before it (a mirror's
   // original to its copy).
   arrowBefore?: boolean;
+  // A mark after the name (Settings' UpdateMark on a device holding a
+  // staged update).
+  badge?: ReactNode;
 };
 
 export function DeviceTabBar({
@@ -160,6 +193,7 @@ export function DeviceTabBar({
   selectedId,
   onSelect,
   allDevicesTab = false,
+  trailing,
   className,
 }: {
   tabs: readonly DeviceBarTab[];
@@ -168,6 +202,11 @@ export function DeviceTabBar({
   // Leads the row with the tab for what every device shares, picked
   // as ALL_DEVICES_TAB_ID.
   allDevicesTab?: boolean;
+  // An action for every tab at once (Settings' Update all), after the
+  // last tab in the same scrolling row, so it never covers one. It
+  // keeps to the row's end while the tabs leave room, and takes their
+  // height.
+  trailing?: ReactNode;
   // Overrides the page inset for a bar that sits in a dialog instead.
   className?: string;
 }) {
@@ -183,6 +222,7 @@ export function DeviceTabBar({
             label: "All devices",
             note: undefined,
             arrowBefore: false,
+            badge: undefined,
           },
         ]
       : []),
@@ -195,6 +235,7 @@ export function DeviceTabBar({
       label: tab.label,
       note: tab.note,
       arrowBefore: tab.arrowBefore === true,
+      badge: tab.badge,
     })),
   ];
   const { listRef, onKeyDown } = useRovingPick({
@@ -204,66 +245,82 @@ export function DeviceTabBar({
     pickedSelector: '[aria-selected="true"]',
   });
 
+  // The row scrolls as one, a trailing action with it, while only the
+  // tabs are the tablist. The page inset is padding rather than the
+  // header's, so a long row scrolls out under the header's edge (which
+  // cancels the inset with a matching negative margin) instead of
+  // clipping.
   return (
     <div
       ref={listRef}
-      role="tablist"
-      aria-label="Device"
-      // The page inset as padding rather than the header's, so a long
-      // row scrolls out under the header's edge (which cancels the
-      // inset with a matching negative margin) instead of clipping.
       className={cn(
         "flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto px-6 phone:px-4",
         className,
       )}
     >
-      {pills.map((pill) => {
-        const selected = pill.id === selectedId;
-        return (
-          <Fragment key={pill.id}>
-            {pill.arrowBefore && (
-              <ArrowRight
-                aria-hidden
-                className="size-3.5 shrink-0 text-muted-foreground"
-              />
-            )}
-            <SimpleTooltip tip={pill.tip}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                tabIndex={selected ? 0 : -1}
-                data-slot="device-chip"
-                onClick={() => onSelect(pill.id)}
-                onKeyDown={onKeyDown}
-                // A page header puts the row under the window's drag strip
-                // (AppShell): each pill carves its own click out of it.
-                style={dragRegion("no-drag")}
-                className={cn(
-                  DEVICE_PILL_CLASS,
-                  "transition-colors",
-                  selected
-                    ? "border-transparent bg-accent text-accent-foreground"
-                    : "hover:text-foreground",
-                )}
-              >
-                {pill.lead}
-                <span className="max-w-40 truncate">{pill.label}</span>
-                {pill.note !== undefined && (
-                  <span
-                    className={cn(
-                      "text-2xs",
-                      selected ? "opacity-70" : "text-muted-foreground/70",
-                    )}
-                  >
-                    {pill.note}
-                  </span>
-                )}
-              </button>
-            </SimpleTooltip>
-          </Fragment>
-        );
-      })}
+      <div
+        role="tablist"
+        aria-label="Device"
+        className="flex items-center gap-1.5"
+      >
+        {pills.map((pill) => {
+          const selected = pill.id === selectedId;
+          return (
+            <Fragment key={pill.id}>
+              {pill.arrowBefore && (
+                <ArrowRight
+                  aria-hidden
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
+              )}
+              <SimpleTooltip tip={pill.tip}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  tabIndex={selected ? 0 : -1}
+                  data-slot="device-chip"
+                  onClick={() => onSelect(pill.id)}
+                  onKeyDown={onKeyDown}
+                  // A page header puts the row under the window's drag strip
+                  // (AppShell): each pill carves its own click out of it.
+                  style={dragRegion("no-drag")}
+                  className={cn(
+                    DEVICE_PILL_CLASS,
+                    "transition-colors",
+                    selected
+                      ? "border-transparent bg-accent text-accent-foreground"
+                      : "hover:text-foreground",
+                  )}
+                >
+                  {pill.lead}
+                  <span className="max-w-40 truncate">{pill.label}</span>
+                  {pill.note !== undefined && (
+                    <span
+                      className={cn(
+                        "text-2xs",
+                        selected ? "opacity-70" : "text-muted-foreground/70",
+                      )}
+                    >
+                      {pill.note}
+                    </span>
+                  )}
+                  {pill.badge}
+                </button>
+              </SimpleTooltip>
+            </Fragment>
+          );
+        })}
+      </div>
+      {trailing !== undefined && (
+        // Under the drag strip like the pills (AppShell).
+        <div
+          style={dragRegion("no-drag")}
+          className="ml-auto flex shrink-0 self-stretch"
+        >
+          {trailing}
+        </div>
+      )}
     </div>
   );
 }

@@ -19,21 +19,30 @@ import { cn } from "@/lib/utils";
 import { CliSection } from "./CliSection";
 import { DataLocationSection } from "./DataLocationSection";
 import { DoctorSection } from "./DoctorSection";
-import { DeviceToggleSections } from "./DeviceSettingsSections";
+import { IntegrationToggles, WorktreeToggles } from "./DeviceSettingsSections";
+import { HostPanels, type HostSections, onEveryHostTab } from "./SettingsPanel";
+import type { HostTab } from "./settingsNav";
 import { useRegisterSettingsEditor } from "./useSettingsEditors";
 import { VersionSection } from "./VersionSection";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
-// Another device's section on the Settings page. Everything under the
-// version routes through the HostScope this mounts (the scoped config
+// Another device's host sections on the Settings page. Everything under
+// the version routes through the HostScope this mounts (the scoped config
 // read, the host-scoped queries inside the shared section components,
 // the updater, and the writeDeviceSettings patch save), so no
 // client-scoped call reaches for a peer. The health check, CLI and
 // data location sections are the local ones mounted under this scope,
 // so they act on the peer's shell and disk behind its command grant.
 // The danger zone is absent by construction: wiping a machine is for
-// whoever sits at it, and only the local section renders it.
-export function PeerDeviceSettings({ device }: { device: RemoteDevice }) {
+// whoever sits at it, and only the local General section renders it.
+// `active` is the host section showing while this device is picked.
+export function PeerDeviceSettings({
+  device,
+  active,
+}: {
+  device: RemoteDevice;
+  active: HostTab | undefined;
+}) {
   const { reachable } = deviceStatusView(device.status);
   const api = useLastGoodApi(device);
   const offline = !reachable || device.api === undefined;
@@ -42,11 +51,23 @@ export function PeerDeviceSettings({ device }: { device: RemoteDevice }) {
   // there is nothing honest to render. Say where the settings are
   // instead of showing a form that could not save (or, worse, defaults
   // that would look like the device's real answers).
-  if (api === undefined) return <OfflineNote device={device} />;
+  if (api === undefined) {
+    return (
+      <HostPanels
+        deviceId={device.deviceId}
+        active={active}
+        sections={onEveryHostTab(<OfflineNote device={device} />)}
+      />
+    );
+  }
 
   return (
     <HostScopeProvider deviceId={device.deviceId} api={api}>
-      <ReachablePeerSettings device={device} offline={offline} />
+      <ReachablePeerSettings
+        device={device}
+        offline={offline}
+        active={active}
+      />
     </HostScopeProvider>
   );
 }
@@ -66,12 +87,30 @@ function OfflineNote({ device }: { device: RemoteDevice }) {
   );
 }
 
+// The build the device reported, at the head of its General section.
+function PeerVersion({ device }: { device: RemoteDevice }) {
+  return (
+    <VersionSection
+      installed={device.appVersion}
+      version={
+        device.appVersion === "" ? (
+          <span className="text-muted-foreground">Not reported yet</span>
+        ) : (
+          `v${device.appVersion}`
+        )
+      }
+    />
+  );
+}
+
 function ReachablePeerSettings({
   device,
   offline,
+  active,
 }: {
   device: RemoteDevice;
   offline: boolean;
+  active: HostTab | undefined;
 }) {
   const {
     data: config,
@@ -86,39 +125,39 @@ function ReachablePeerSettings({
   // real settings. Gate on data presence only, not isError, so a failed
   // BACKGROUND refetch (focus refetch over a flaky socket) cannot
   // unmount an already-seeded form and discard unsaved edits.
+  if (config === undefined) {
+    const status = offline ? (
+      <OfflineNote device={device} />
+    ) : isError ? (
+      <EmptyPanel>
+        Couldn&apos;t load this device&apos;s settings: {errorMessageOf(error)}.
+      </EmptyPanel>
+    ) : (
+      <p className="text-sm text-muted-foreground">Loading…</p>
+    );
+    return (
+      <HostPanels
+        deviceId={device.deviceId}
+        active={active}
+        sections={{
+          ...onEveryHostTab(status),
+          general: (
+            <>
+              {!offline && <PeerVersion device={device} />}
+              {status}
+            </>
+          ),
+        }}
+      />
+    );
+  }
   return (
-    <>
-      {offline ? (
-        <OfflineNote device={device} />
-      ) : (
-        <VersionSection
-          installed={device.appVersion}
-          version={
-            device.appVersion === "" ? (
-              <span className="text-muted-foreground">Not reported yet</span>
-            ) : (
-              `v${device.appVersion}`
-            )
-          }
-        />
-      )}
-      {config === undefined ? (
-        offline ? null : isError ? (
-          <EmptyPanel>
-            Couldn&apos;t load this device&apos;s settings:{" "}
-            {errorMessageOf(error)}.
-          </EmptyPanel>
-        ) : (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        )
-      ) : (
-        <PeerSettingsForm
-          device={device}
-          initialConfig={config}
-          offline={offline}
-        />
-      )}
-    </>
+    <PeerSettingsForm
+      device={device}
+      initialConfig={config}
+      offline={offline}
+      active={active}
+    />
   );
 }
 
@@ -126,10 +165,12 @@ function PeerSettingsForm({
   device,
   initialConfig,
   offline,
+  active,
 }: {
   device: RemoteDevice;
   initialConfig: GlobalConfig;
   offline: boolean;
+  active: HostTab | undefined;
 }) {
   const save = useDeviceSettingsSave();
   // A reachable device this client may read but not command: the
@@ -177,53 +218,70 @@ function PeerSettingsForm({
     discard: () => setForm(savedSnapshot),
   });
 
-  // Offline: the note above stands in for the sections. The form state
-  // (and the registration) stays alive for when the device is back.
-  if (offline) return null;
+  const readOnlyNote = readOnly && (
+    // Same shape as the offline note, in the neutral family: this is a
+    // normal permission state, not a warning.
+    <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground select-text">
+      {peerReadOnlyNote(device.label)}
+    </p>
+  );
+  const saveError = save.error && (
+    <ErrorBanner
+      message={save.error.message}
+      title="Couldn't save the device's settings"
+    />
+  );
+  // inert rather than a disabled prop on every row: the toggles are
+  // shared verbatim with the local form, and a read-only visitor needs
+  // them readable, just not operable.
+  const toggles = (children: React.ReactNode) => (
+    <>
+      {readOnlyNote}
+      <div inert={readOnly} className={cn(readOnly && "opacity-60")}>
+        {children}
+      </div>
+      {saveError}
+    </>
+  );
+
+  // Offline: the note stands in for the sections. The form state (and
+  // the registration) stays alive for when the device is back.
+  const sections: HostSections = offline
+    ? onEveryHostTab(<OfflineNote device={device} />)
+    : {
+        general: (
+          <>
+            <PeerVersion device={device} />
+            {/* The health check sits right under the version, like the
+                local General section. Its report, the CLI's and the
+                data location all name the device's paths, which the
+                device only names to a peer it lets command it, so a
+                read-only visitor has nothing to show here. Mounted on
+                the landed verdict, not the optimistic one the toggles
+                use: these sections read on mount, and asking a device
+                that turns out not to allow it is a refusal per read. */}
+            {access.granted ? (
+              <>
+                <DoctorSection />
+                <CliSection />
+                <DataLocationSection />
+              </>
+            ) : (
+              readOnlyNote
+            )}
+          </>
+        ),
+        worktrees: toggles(<WorktreeToggles form={form} setForm={setForm} />),
+        integrations: toggles(
+          <IntegrationToggles form={form} setForm={setForm} />,
+        ),
+      };
 
   return (
-    <>
-      {/* Right under the version, like the local section. The report
-          names the device's paths, so like the CLI and data location
-          sections below it waits for the landed grant. */}
-      {access.granted && <DoctorSection />}
-
-      {readOnly && (
-        // Same shape as the offline note, in the neutral family: this is
-        // a normal permission state, not a warning.
-        <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground select-text">
-          {peerReadOnlyNote(device.label)}
-        </p>
-      )}
-
-      {/* inert rather than a disabled prop on every row: the sections
-          are shared verbatim with the local tab, and a read-only
-          visitor needs them readable, just not operable. */}
-      <div
-        inert={readOnly}
-        className={cn("flex flex-col gap-10", readOnly && "opacity-60")}
-      >
-        <DeviceToggleSections form={form} setForm={setForm} />
-      </div>
-
-      {/* Both read paths the device only names to a peer it lets
-          command it, so a read-only visitor has nothing to show here.
-          Mounted on the landed verdict, not the optimistic one the
-          form uses: these sections read on mount, and asking a device
-          that turns out not to allow it is a refusal per read. */}
-      {access.granted && (
-        <>
-          <CliSection />
-          <DataLocationSection />
-        </>
-      )}
-
-      {save.error && (
-        <ErrorBanner
-          message={save.error.message}
-          title="Couldn't save the device's settings"
-        />
-      )}
-    </>
+    <HostPanels
+      deviceId={device.deviceId}
+      active={active}
+      sections={sections}
+    />
   );
 }

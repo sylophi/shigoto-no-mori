@@ -518,8 +518,8 @@ function hostHandlersFor(
     "globalConfig:read": () => fakeGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (Thinkpad alone by default) have an
-    // update staged, so their Settings sections' restart-to-update
-    // buttons have something to show, and the ones ?downloading poses
+    // update staged, so the restart-to-update buttons on their Settings
+    // General sections have something to show, and the ones ?downloading poses
     // are fetching it. Installing stands in for the restart into the
     // new build: the device reports up to date. Updating one with
     // nothing staged shows the download first.

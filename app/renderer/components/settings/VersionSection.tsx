@@ -18,7 +18,7 @@ import { UpdaterStatusLine } from "./UpdaterStatusLine";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 // This build's version and commit, the way every version line here
-// spells it: the local device's section on the desktop, the client
+// spells it: the local General section on the desktop, the client
 // line on a hostless shell.
 export function BuildVersionLine() {
   return (
@@ -30,11 +30,12 @@ export function BuildVersionLine() {
 }
 
 // The Version section of a device: the build it runs and the update
-// action. One shape and one set of words on every device section. Only
-// the updater it talks to differs, through the surrounding host scope
-// (this window's own with no provider mounted, a peer's over its direct
-// session inside one). Under the status line, the changelog, measured
-// against the device's version, which previews a staged update.
+// action. One shape and one set of words on every device's General
+// section. Only the updater it talks to differs, through the
+// surrounding host scope (this window's own with no provider mounted,
+// a peer's over its direct session inside one). Under the status line,
+// the changelog, measured against the device's version, which previews
+// a staged update.
 export function VersionSection({
   version,
   installed,
