@@ -20,6 +20,7 @@
 // exercised by hand.
 //
 // Run: pnpm test account.
+import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1111,7 +1112,10 @@ it("shape: the device credential never appears in a renderer-visible object", ()
   // DeviceInfo is the per-device shape the device hub reports and
   // the renderer lists. The credential belongs only to the enroll
   // response, never to a listed device.
-  const device = DeviceInfoSchema.parse({ ...DEVICE, credential: "c" });
+  const device = Schema.decodeUnknownSync(DeviceInfoSchema)({
+    ...DEVICE,
+    credential: "c",
+  });
   assert.ok(!("credential" in device), "a DeviceInfo carries a credential");
 });
 

@@ -37,7 +37,7 @@ pre-commit:
           # hub/'s typecheck and suite, for hub/, the app files it imports
           # (hub/README.md) and the workspace files that pin its packages.
           - name: hub
-            glob: "{hub/**,pnpm-lock.yaml,pnpm-workspace.yaml,app/shared/hub/protocol.ts,app/shared/ipc/socket/frames.ts,app/shared/ipc/socket/proof.ts,app/shared/account/deviceIcon.ts,app/shared/account/platform.ts,app/shared/util/only.ts}"
+            glob: "{hub/**,pnpm-lock.yaml,pnpm-workspace.yaml,app/shared/hub/protocol.ts,app/shared/schemas/ports.ts,app/shared/account/deviceIcon.ts,app/shared/account/platform.ts,app/shared/util/only.ts}"
             run: pnpm -C hub run check
           - name: go-test
             glob: "{cli/**,app/shared/fixtures/git-log.json}"

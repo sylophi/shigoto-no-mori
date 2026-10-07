@@ -5,7 +5,6 @@ import { isValidWorktreeDirName } from "@shared/git/branches";
 import { isSafeRelPath } from "@shared/git/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
   CommitHashSchema,
   CreatePhaseSchema,
@@ -14,6 +13,7 @@ import {
 } from "@shared/schemas";
 import {
   CloneFolderNameZod,
+  DeviceIdZod,
   GitRefNameZod,
   ProjectZod,
 } from "@shared/schemas/zodBridge";
@@ -213,7 +213,7 @@ export const SyncCloneIntoSchema = z.strictObject({
 export type SyncCloneInto = z.infer<typeof SyncCloneIntoSchema>;
 
 export const SyncPullWorktreePayloadSchema = z.strictObject({
-  sourceDeviceId: DeviceIdSchema,
+  sourceDeviceId: DeviceIdZod,
   sourceProjectId: z.string().min(1),
   sourceWorktreeId: WorktreeIdSchema,
   sourceIdentity: z.string().min(1),
@@ -321,7 +321,7 @@ export type SyncPullWorktreeResult = z.infer<
 // (the destination's landing is the pull's, so it takes a pull's
 // `cloneInto`, named in the peer's own terms).
 export const SyncSendWorktreePayloadSchema = z.strictObject({
-  targetDeviceId: DeviceIdSchema,
+  targetDeviceId: DeviceIdZod,
   projectId: z.string().min(1),
   worktreeId: WorktreeIdSchema,
   runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
@@ -414,7 +414,7 @@ export type SyncTeardownSourceResult = z.infer<
 const SyncMoveDirectionSchema = z.enum(["pull", "send"]);
 const SyncTeardownSourcePayloadSchema = z.strictObject({
   direction: SyncMoveDirectionSchema,
-  deviceId: DeviceIdSchema,
+  deviceId: DeviceIdZod,
   projectId: z.string().min(1),
   worktreeId: WorktreeIdSchema,
 });

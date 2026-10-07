@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
+import { DeviceIdZod, DeviceInfoZod } from "@shared/schemas/zodBridge";
 import { DeviceIconSchema } from "@shared/account/deviceIcon";
 
 // The hub account layer as the renderer sees it. Client-scoped on
@@ -64,15 +64,11 @@ export const accountContract = defineContract("client", {
   // instead, which ends the Clerk session first -- with the session
   // still live ClerkAccountSync would see "signed in, not enrolled" and
   // silently re-enroll, undoing the revoke).
-  revokeDevice: invoke("account:revokeDevice", DeviceIdSchema, z.void()),
+  revokeDevice: invoke("account:revokeDevice", DeviceIdZod, z.void()),
   // The account's device registry from the device hub, under the stored
   // credential. Element shape is the shared hub DeviceInfo so the app
   // and the Worker cannot drift. Empty when signed out or unconfigured.
-  listDevices: invoke(
-    "account:listDevices",
-    z.void(),
-    z.array(DeviceInfoSchema),
-  ),
+  listDevices: invoke("account:listDevices", z.void(), z.array(DeviceInfoZod)),
   // Renames any device of the account, this one or a peer, online or
   // not: the device hub's registry holds the name (shared/account/
   // enroll.ts updateDevice). Throws when the hub did not take it.
@@ -80,7 +76,7 @@ export const accountContract = defineContract("client", {
   setDeviceName: invoke(
     "account:setDeviceName",
     z.object({
-      deviceId: DeviceIdSchema,
+      deviceId: DeviceIdZod,
       // Bounded to match EnrollRequestSchema.name so a stored name can
       // never later fail enroll's schema or blank the device identity.
       name: z.string().min(1).max(256),
@@ -92,7 +88,7 @@ export const accountContract = defineContract("client", {
   // puts it back to its default. Resolves to the updated status.
   setDeviceIcon: invoke(
     "account:setDeviceIcon",
-    z.object({ deviceId: DeviceIdSchema, icon: DeviceIconSchema }),
+    z.object({ deviceId: DeviceIdZod, icon: DeviceIconSchema }),
     AccountStatusSchema,
   ),
   // Whether THIS host accepts commands from the account's other

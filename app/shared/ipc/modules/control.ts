@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
-import { DeviceIdSchema } from "@shared/hub/protocol";
+import { DeviceIdZod } from "@shared/schemas/zodBridge";
 import {
   SyncCloneIntoSchema,
   SyncPullWorktreeResultSchema,
@@ -28,7 +28,7 @@ import { WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
 const ControlDeviceBlockSchema = z.enum(["offline", "no-project", "no-grant"]);
 
 const ControlDeviceSchema = z.strictObject({
-  deviceId: DeviceIdSchema,
+  deviceId: DeviceIdZod,
   name: z.string(),
   platform: z.string(),
   // Absent when no project was asked about: then only `offline` can be
@@ -92,7 +92,7 @@ const ControlSourceOutcomeSchema = z.strictObject({
 });
 
 const ControlTransferResultSchema = SyncPullWorktreeResultSchema.extend({
-  device: z.strictObject({ deviceId: DeviceIdSchema, name: z.string() }),
+  device: z.strictObject({ deviceId: DeviceIdZod, name: z.string() }),
   // Which device `worktree` (the copy) is on: "remote" for a send,
   // "local" for a bring. Its path means something here only when local.
   copySide: z.enum(["local", "remote"]),
@@ -106,7 +106,7 @@ const ControlTransferResultSchema = SyncPullWorktreeResultSchema.extend({
 export type ControlTransferResult = z.infer<typeof ControlTransferResultSchema>;
 
 export const ControlPeerWorktreeSchema = z.strictObject({
-  device: z.strictObject({ deviceId: DeviceIdSchema, name: z.string() }),
+  device: z.strictObject({ deviceId: DeviceIdZod, name: z.string() }),
   projectId: z.string(),
   worktree: WorktreeSchema,
 });

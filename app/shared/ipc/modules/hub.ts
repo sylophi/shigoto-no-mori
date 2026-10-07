@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { DeviceIdSchema } from "@shared/hub/protocol";
+import { DeviceIdZod } from "@shared/schemas/zodBridge";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
 
 // The renderer's bridge onto the main-process hub socket. The single hub socket lives in main, because the Durable
@@ -124,7 +124,7 @@ export const hubContract = defineContract("client", {
     z.object({
       // Routed to a peer session keyed by this id (M6), so it carries the
       // shared device-id bound.
-      deviceId: DeviceIdSchema,
+      deviceId: DeviceIdZod,
       channel: z.string().min(1),
       input: z.unknown().optional(),
     }),
