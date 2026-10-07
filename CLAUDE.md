@@ -41,4 +41,6 @@ Opus for UI and UX design given direction, for copy and prose (PR
 titles and bodies, docs, release notes, user-facing strings), and for
 working out what the owner needs from a loose ask. Fable for the
 large plans, the decisions and trade-offs, and the orchestration
-thread, which delegates the former and keeps the latter.
+thread, which delegates the former and keeps the latter. Sonnet for
+linear bulk verification once the judgment has been made: walking a
+checklist over many files, or confirming a mechanical change held.
