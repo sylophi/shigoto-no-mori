@@ -8,9 +8,9 @@
     "dev": "wrangler dev --env dev",
     "deploy": "wrangler deploy --env dev",
     "deploy:prod": "wrangler deploy --env \"\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "$(effect-tsgo get-exe-path)",
     "test": "vitest run",
-    "check": "tsc --noEmit && vitest run"
+    "check": "pnpm run typecheck && vitest run"
   },
   "dependencies": {
     "@clerk/backend": "^3.16.0",
@@ -19,6 +19,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.21.0",
     "@cloudflare/workers-types": "^5.20260801.0",
+    "@effect/tsgo": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
