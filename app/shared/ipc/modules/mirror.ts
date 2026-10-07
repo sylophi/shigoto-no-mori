@@ -376,7 +376,7 @@ export type MirrorStartToPayload = z.infer<typeof MirrorStartToPayloadSchema>;
 // target, and the peer's send and session reach the copy through that
 // invitation (host/mirror/invites.ts), so this device's switch is not
 // in the way.
-export const MirrorStartFromPayloadSchema = SyncPullWorktreePayloadSchema.pick({
+const MirrorStartFromPayloadSchema = SyncPullWorktreePayloadSchema.pick({
   sourceDeviceId: true,
   sourceProjectId: true,
   sourceWorktreeId: true,
@@ -483,12 +483,11 @@ export function mirrorStopBlocker(
 const MirrorStopResultSchema = z
   .strictObject({ removedCopy: z.boolean() })
   .optional();
-export type MirrorStopResult = z.infer<typeof MirrorStopResultSchema>;
 
 // The refusal's leading text, which the renderer matches to offer
 // discard-and-stop. Text rather than a code because Electron's IPC
 // flattens an error to its message (see COMMAND_REFUSED_MESSAGE).
-export const MIRROR_STOP_UNCONFIRMED =
+const MIRROR_STOP_UNCONFIRMED =
   "The copy is not confirmed in step with the other device";
 
 export function isMirrorStopUnconfirmed(error: unknown): boolean {
@@ -546,7 +545,7 @@ const MirrorSetIgnoresPayloadSchema = MirrorSessionPayloadSchema.extend({
 // it, keyed by its local worktree so a re-opened session (an ignore
 // change) keeps the thread. Bounded per worktree (main/core/mirror/
 // history.ts), so the list is a recent window, not an archive.
-export const MirrorEventKindSchema = z.enum([
+const MirrorEventKindSchema = z.enum([
   "started",
   "stopped",
   "paused",

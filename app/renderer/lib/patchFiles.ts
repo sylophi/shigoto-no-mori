@@ -35,7 +35,7 @@ function fileStats(file: FileDiffMetadata): {
 // column reads faster than five icons and costs one character of rail
 // width. Colors stay inside the families doubutsu remaps, an addition
 // on green like the diff stats.
-export interface ChangeMark {
+interface ChangeMark {
   mark: string;
   label: string;
   className: string;

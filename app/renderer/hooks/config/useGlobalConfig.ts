@@ -27,7 +27,7 @@ export function useGlobalConfig({ silentError = false } = {}) {
 // lib/villagers/speakers.ts) sharing the hook's cache entry.
 // Silent on its own: a caller that wants a failed read said out loud
 // (the hooks above) sets its own meta.
-export function globalConfigQueryOptions(scope: HostReadScope) {
+function globalConfigQueryOptions(scope: HostReadScope) {
   return queryOptions<GlobalConfig>({
     queryKey: scope.keys.globalConfig(),
     queryFn: () => scope.api.globalConfig.read(),

@@ -17,8 +17,7 @@ export const SCRIPT_ENV_KEYS = {
   DEFAULT_BRANCH: "SHIGOMORI_DEFAULT_BRANCH",
 } as const;
 
-export type ScriptEnvKey =
-  (typeof SCRIPT_ENV_KEYS)[keyof typeof SCRIPT_ENV_KEYS];
+type ScriptEnvKey = (typeof SCRIPT_ENV_KEYS)[keyof typeof SCRIPT_ENV_KEYS];
 
 export interface ScriptEnvDoc {
   name: ScriptEnvKey;

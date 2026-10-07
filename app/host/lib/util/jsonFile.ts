@@ -34,7 +34,7 @@ export async function unlinkIfExists(filePath: string): Promise<void> {
 // same key with the same value (cli/state.go). The two writers have to
 // move together, since a marker the two disagree on is worse than no
 // marker at all.
-export const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 1;
 
 // Stamps the marker on a document about to be written. Always this
 // build's constant, never whatever the file happened to carry: a

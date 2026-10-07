@@ -55,7 +55,7 @@ let sweepHandle: NodeJS.Timeout | null = null;
 let attendedUntil = 0;
 
 // Resolves to whether a fetch ran (false inside the freshness window).
-export function maybeFetchProject(
+function maybeFetchProject(
   projectId: string,
   projectPath: string,
   maxAgeMs = FRESHNESS_MS,

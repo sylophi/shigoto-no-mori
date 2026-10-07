@@ -105,7 +105,7 @@ export async function enrollDevice(
 // the tunnel, the mirrors, the forwards) waits behind this call, so
 // on a black-holed network it must give up in seconds, not at the
 // platform's own fetch timeout minutes later.
-export const SIGN_OUT_REVOKE_TIMEOUT_MS = 10_000;
+const SIGN_OUT_REVOKE_TIMEOUT_MS = 10_000;
 
 // Best-effort revoke of THIS device on the device hub, then the local
 // credential clear. The revoke failure is reported, not thrown,

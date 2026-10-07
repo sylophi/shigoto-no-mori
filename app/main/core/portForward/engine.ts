@@ -48,7 +48,7 @@ export const MAX_CONNS_PER_DEVICE = 16;
 // in bursts (one page load moves ~a dozen conns), and each signal
 // triggers a renderer list refetch, so burst members collapse into one
 // signal shortly after the first.
-export const CHANGE_COALESCE_MS = 150;
+const CHANGE_COALESCE_MS = 150;
 
 type Forward = {
   forwardId: string;

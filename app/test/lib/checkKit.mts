@@ -164,7 +164,7 @@ export function makeChecker(): Checker {
   return { check, failures };
 }
 
-export type Teardown = () => unknown;
+type Teardown = () => unknown;
 
 export type Track = <T extends Teardown>(fn: T) => T;
 
@@ -457,7 +457,7 @@ export function tempDir(prefix: string, track: Track): string {
 
 // A file's text, or null when it is not there, so an assert on it
 // reports what was found instead of a bare false.
-export function readOrNull(path: string): string | null {
+function readOrNull(path: string): string | null {
   return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
 
@@ -497,7 +497,7 @@ function lineSplitter(onLine: (line: string) => void): (chunk: Buffer) => void {
   };
 }
 
-export type RunCli = CliRunnerImpl["runCli"];
+type RunCli = CliRunnerImpl["runCli"];
 
 export type CliRunner = {
   runCli: RunCli;

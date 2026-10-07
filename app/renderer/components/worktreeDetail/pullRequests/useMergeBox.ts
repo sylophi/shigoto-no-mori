@@ -35,7 +35,7 @@ export type StackReach = "upTo" | "stack";
 // waiting on its base branch's rules on a repo that allows it. Or,
 // with auto-merge armed already (here or on github.com), call it off,
 // since GitHub lands the PR on its own.
-export type MergeBoxMode = "merge" | "arm" | "armed";
+type MergeBoxMode = "merge" | "arm" | "armed";
 
 export const STACK_REACH_OPTIONS: readonly {
   value: StackReach;

@@ -91,9 +91,9 @@ const CAPTURE_IDENT: NodeJS.ProcessEnv = {
 // followed by ": " and the operation's name. Text rather than a code
 // because the read's refusal reaches the other device as an error, and
 // an error crosses the wire flattened to its message.
-export const GIT_OPERATION_IN_PROGRESS = "A git operation is in progress";
+const GIT_OPERATION_IN_PROGRESS = "A git operation is in progress";
 
-export function operationRefusal(operation: string): string {
+function operationRefusal(operation: string): string {
   return `${GIT_OPERATION_IN_PROGRESS}: ${operation}`;
 }
 

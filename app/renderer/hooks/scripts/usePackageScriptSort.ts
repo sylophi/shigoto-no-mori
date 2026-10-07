@@ -18,7 +18,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 
 const DEFAULT_MODE: PackageScriptSortMode = "frequent";
 
-export function usePackageScriptSort(projectId: string | null) {
+function usePackageScriptSort(projectId: string | null) {
   const { api, keys } = useHostScope();
   return useQuery<PackageScriptSortMode>({
     queryKey: keys.packageScriptSort(projectId),
@@ -43,11 +43,11 @@ export function useSetPackageScriptSort(projectId: string | null) {
   );
 }
 
-export const NO_ORDER: readonly string[] = [];
+const NO_ORDER: readonly string[] = [];
 
 // The stored "manual" order, read only while the sort is manual: the
 // list reads it for nothing else.
-export function usePackageScriptOrder(
+function usePackageScriptOrder(
   projectId: string | null,
   sortMode: PackageScriptSortMode,
 ) {

@@ -12,7 +12,7 @@ export type GitRunner = (cwd: string, args: string[]) => Promise<string>;
 
 // Spelled out for the user in RemoteWorktreeActions.tsx (NO_IDENTITY_NOTE),
 // so a change here changes that sentence.
-export const DEFAULT_BRANCH_CANDIDATES = ["main", "master", "dev"] as const;
+const DEFAULT_BRANCH_CANDIDATES = ["main", "master", "dev"] as const;
 
 async function refExists(
   run: GitRunner,

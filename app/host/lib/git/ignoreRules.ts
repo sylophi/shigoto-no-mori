@@ -13,7 +13,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { run } from "./core";
 
-export const IGNORE_RULES_LIMIT = 512;
+const IGNORE_RULES_LIMIT = 512;
 
 async function readRules(path: string): Promise<string[]> {
   const text = await readFile(path, "utf8").catch(() => null);
@@ -25,7 +25,7 @@ async function readRules(path: string): Promise<string[]> {
 }
 
 // A nested .gitignore's rule as a root-relative pattern.
-export function anchorRule(rule: string, folder: string): string {
+function anchorRule(rule: string, folder: string): string {
   if (folder === "") return rule;
   const negated = rule.startsWith("!");
   const body = negated ? rule.slice(1) : rule;

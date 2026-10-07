@@ -1,0 +1,57 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // The three pnpm projects are separate installs today, so they are
+  // named here rather than read from a pnpm workspace.
+  "workspaces": {
+    ".": {
+      // The oxlint plugin, loaded by path from .oxlintrc.json.
+      "entry": ["lint/*.mts"],
+    },
+    "app": {
+      "entry": [
+        // forge.config.ts names main's entry to Vite as a string.
+        "forge.config.ts",
+        "main/index.ts",
+        "vite.*.config.ts",
+        // The fake host (lab/fake-host/README.md): its pages load their
+        // scripts by root-relative path, and clerkStub.tsx stands in for
+        // Clerk through a Vite alias in vite.base.ts.
+        "lab/fake-host/{web-main,villager-icons,clerkStub}.tsx",
+        // Each proof and bench is a script run by test/run.mts or by hand.
+        "test/*.mts",
+        "test/bench/*.mts",
+        // Run through package.json scripts or by hand (their headers say how).
+        "scripts/*.{mts,cts}",
+      ],
+      "ignoreDependencies": [
+        // Loaded from an inline script in index.html, in dev only.
+        "react-grab",
+        // Runs as the git hook its install script writes; knip only sees
+        // it through that hook, which a CI install without scripts lacks.
+        "lefthook",
+      ],
+    },
+    "hub": {
+      "ignoreDependencies": [
+        // The app's shared modules the hub imports resolve zod from
+        // app/node_modules; this pin keeps the two installs on one zod
+        // (hub/README.md).
+        "zod",
+        // cloudflare:test and cloudflare:workers are workerd's built-in
+        // modules, provided by @cloudflare/vitest-pool-workers.
+        "cloudflare",
+      ],
+    },
+    "marketing": {},
+  },
+  "ignoreBinaries": [
+    // System tools and the owner's own port-pool, not npm packages.
+    "go",
+    "plutil",
+    "osascript",
+    "pgrep",
+    "port-pool",
+    // app's, run by release.yml from app/ (knip reads it from the root).
+    "electron-forge",
+  ],
+}

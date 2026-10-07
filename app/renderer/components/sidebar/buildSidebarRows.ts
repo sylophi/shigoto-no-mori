@@ -478,9 +478,7 @@ interface ProjectGroup {
 // is left off the label for github.com, where nearly every remote is.
 // Null when the project has no network remote, or its path has no
 // owner segment.
-export function ownerOf(
-  project: Project,
-): { key: string; label: string } | null {
+function ownerOf(project: Project): { key: string; label: string } | null {
   const [host, owner, ...repo] = project.remote?.split("/") ?? [];
   if (!host || !owner || repo.length === 0) return null;
   return {
@@ -537,7 +535,7 @@ const NO_OWNER_KEY = "none";
 // peer-only group. A missing local project
 // claims nothing: its remote counterpart is alive and belongs under
 // its own header.
-export const claimsPeers = (
+const claimsPeers = (
   project: Project,
 ): project is Project & { identity: string } =>
   project.pathExists !== false && project.identity != null;
@@ -682,8 +680,7 @@ function withMergedUsage(
 // so it can never collide with a local project's id and the shell can
 // read the key back off a toggle.
 const REMOTE_GROUP_PREFIX = "rp:";
-export const remoteGroupId = (groupKey: string) =>
-  `${REMOTE_GROUP_PREFIX}${groupKey}`;
+const remoteGroupId = (groupKey: string) => `${REMOTE_GROUP_PREFIX}${groupKey}`;
 export const remoteGroupKeyOf = (groupId: string): string | undefined =>
   groupId.startsWith(REMOTE_GROUP_PREFIX)
     ? groupId.slice(REMOTE_GROUP_PREFIX.length)

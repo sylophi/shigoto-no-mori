@@ -187,10 +187,4 @@ function overflows(trigger: Element | undefined): boolean {
 }
 
 export type { WithoutTitle };
-export {
-  SimpleTooltip,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider,
-};
+export { SimpleTooltip, TooltipProvider };

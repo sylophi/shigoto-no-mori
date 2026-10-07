@@ -388,7 +388,7 @@ export function ForwardItem({
 // and how it stands (its mark, its name, the status at the end), then
 // what can be done about it, as labelled buttons, with any further
 // detail at the end of that row.
-export function LiveBlock({
+function LiveBlock({
   mark,
   title,
   status,

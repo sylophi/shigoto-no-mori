@@ -26,7 +26,7 @@ export function useScriptRunState(key: ScriptKey): ScriptRunState {
 
 // The same for a named device, for a list that spans devices outside
 // any scope (the Live page).
-export function useDeviceScriptRunState(
+function useDeviceScriptRunState(
   deviceId: string,
   key: ScriptKey,
 ): ScriptRunState {

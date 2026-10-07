@@ -5,7 +5,7 @@ import type { PullRequestTone } from "@/lib/pullRequest";
 
 // Superset of PullRequestTone so the PR badge and sync-state badges
 // share one pill primitive. Add new tones as new states show up.
-export type PillTone = PullRequestTone | "amber" | "sky" | "indigo";
+type PillTone = PullRequestTone | "amber" | "sky" | "indigo";
 
 const TONE_CLASSES: Record<PillTone, string> = {
   emerald: "text-emerald-500",
