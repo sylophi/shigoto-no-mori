@@ -5,8 +5,8 @@
 //
 // never from the root barrel (`import { Effect } from "effect"`) and
 // never as named values from a subpath, so a call site always reads
-// `Effect.gen`, `Layer.effect`, `Schema.String`. A type-only import is
-// fine: it brings in no value.
+// `Effect.gen`, `Layer.effect`, `Schema.String`. A type-only import from a
+// subpath is fine: it brings in no value. The root is never imported.
 import type { Rule } from "../types.mts";
 
 export default {
