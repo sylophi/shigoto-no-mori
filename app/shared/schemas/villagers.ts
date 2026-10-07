@@ -43,7 +43,7 @@ export const VillagerDataStatusSchema = z.discriminatedUnion("kind", [
 ]);
 export type VillagerDataStatus = z.infer<typeof VillagerDataStatusSchema>;
 
-export const VillagerKindSchema = z.enum(["villager", "special"]);
+const VillagerKindSchema = z.enum(["villager", "special"]);
 export type VillagerKind = z.infer<typeof VillagerKindSchema>;
 
 // What the villager's wiki page says about them, as far as it does:

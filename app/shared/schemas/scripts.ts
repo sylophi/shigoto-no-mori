@@ -17,7 +17,6 @@ export const RunScriptPayloadSchema = WorktreeScopedPayloadSchema.extend({
 });
 
 const PackageManagerSchema = z.enum(["bun", "pnpm", "yarn", "npm"]);
-export type PackageManager = z.infer<typeof PackageManagerSchema>;
 
 const PackageScriptUsageSchema = z.object({
   // Epoch ms of the most recent run; 0 when the script has never been run.

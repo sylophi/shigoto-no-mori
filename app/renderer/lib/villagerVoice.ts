@@ -98,11 +98,6 @@ function sayable(text: string | undefined): string | null {
   return said;
 }
 
-// A character's quote as this voice would say it, or null.
-export function villagerQuote(profile: VillagerProfile): string | null {
-  return sayable(profile.quote);
-}
-
 // A character's catchphrase as this voice would say it, or null.
 export function villagerCatchphrase(profile: VillagerProfile): string | null {
   return sayable(profile.catchphrase);

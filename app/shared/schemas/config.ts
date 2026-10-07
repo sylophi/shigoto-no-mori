@@ -35,7 +35,7 @@ const DarkThemeSchema = z.enum(DARK_THEME_IDS);
 export type LightTheme = z.infer<typeof LightThemeSchema>;
 export type DarkTheme = z.infer<typeof DarkThemeSchema>;
 
-export const LauncherCommandSchema = z.object({
+const LauncherCommandSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
   command: z.string().min(1),
@@ -45,7 +45,7 @@ export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 // Files/folders to carry over from the primary checkout into newly-created
 // worktrees. `path` is relative to the project root; gitignored entries are
 // the expected source. `symlink` keeps state shared; `copy` snapshots.
-export const CarryOverEntrySchema = z.object({
+const CarryOverEntrySchema = z.object({
   path: z.string().min(1).refine(isSafeRelPath, {
     message: "Path must stay within the project root",
   }),
@@ -194,7 +194,7 @@ export type CarryOverStat = z.infer<typeof CarryOverStatSchema>;
 // body take over. describedAt (epoch ms) is when they were last set,
 // so a mirror's two sides keep the newer pair. Only `sm describe` and
 // the moves between devices write them (writeWorktreeDescription).
-export const WorktreeDescriptionSchema = z.object({
+const WorktreeDescriptionSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   describedAt: z.number().int().nonnegative().optional(),
@@ -222,7 +222,7 @@ export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 // Reads use the loose Stored variant below: pre-split installs can
 // still carry legacy client keys (and keys from newer builds) in
 // config.json, and those have to pass through unrejected.
-export const GlobalConfigSchema = z.object({
+const GlobalConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
   // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
   // user has switched off, so they're skipped when building a project's

@@ -229,7 +229,7 @@ export function forgetDeletedWorktree(
 
 // Several at once (a stack's layers): one list write and one
 // invalidation for all of them, not a refetch per row.
-export function forgetDeletedWorktrees(
+function forgetDeletedWorktrees(
   queryClient: QueryClient,
   deviceId: string,
   projectId: string,

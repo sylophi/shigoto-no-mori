@@ -318,7 +318,7 @@ const CloneFactsSchema = z.strictObject({
   branch: GitRefNameSchema,
   remoteUrl: z.string().nullable(),
 });
-export type CloneFacts = z.infer<typeof CloneFactsSchema>;
+type CloneFacts = z.infer<typeof CloneFactsSchema>;
 
 // Where a fetched branch lands: never the branch itself.
 export function incomingRefFor(branch: string): string {
@@ -577,9 +577,7 @@ export type WorktreeSource = SourceFacts & {
 // The destination's questions over a link: one a peer opened here (a
 // send's, a push's), or a pull's, opened on first use (its refusals are
 // this device's own and come before any question).
-export function askSource(
-  linkOrOpen: Link | (() => Promise<Link>),
-): WorktreeSource {
+function askSource(linkOrOpen: Link | (() => Promise<Link>)): WorktreeSource {
   const linkOf =
     typeof linkOrOpen === "function" ? linkOrOpen : async () => linkOrOpen;
   async function answer(

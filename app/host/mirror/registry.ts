@@ -162,7 +162,7 @@ export function mirrorSessions(
 // the session only, never a worktree, and its thread (the copy's page)
 // says why and what to do. Each is asked once, like the orphaned
 // transfers: a terminate that fails is logged.
-export function isLegacyMirror(raw: MirrorSessionRaw): boolean {
+function isLegacyMirror(raw: MirrorSessionRaw): boolean {
   return (
     !isTransferSession(raw) && raw.labels[MIRROR_LABEL_COPY_SIDE] !== "remote"
   );
@@ -299,7 +299,7 @@ async function endSessionsOnWorktree(
 // the copy is an ordinary worktree there. Best effort: a peer away, or
 // on a build without the verb, keeps the invitation until the copy is
 // deleted, which only ever admits this device's calls on that copy.
-export function releaseCopy(raw: MirrorSessionRaw): void {
+function releaseCopy(raw: MirrorSessionRaw): void {
   void Promise.resolve()
     .then(() =>
       peerMirrorApiFor(raw.deviceId).release({

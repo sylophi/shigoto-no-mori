@@ -317,7 +317,7 @@ export type PeerTransport = {
 // checks assert separately via forwardedCount). Its subscribe hears
 // the peer's pushes off the bridge's fan-out, the way main's peer
 // transport does.
-export function bridgePeerTransport(
+function bridgePeerTransport(
   bridge: HubHandlers,
   deviceId: string,
   pushListeners: Set<(push: HubPeerPush) => void>,

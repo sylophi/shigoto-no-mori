@@ -60,7 +60,7 @@ function invalidateLanded(queryClient: QueryClient, landed: Landed): void {
 // Where a pull comes from: the dialog's scope is the peer holding it.
 // Where it lands is this machine's checkout of the same repo, which
 // the host resolves.
-export type PullSource = {
+type PullSource = {
   worktree: Worktree;
   sourceProjectId: string;
   sourceIdentity: string;
@@ -100,7 +100,7 @@ export type PullChoice = MirrorIgnoreChoice & { runSetup: boolean };
 
 // And where to clone the repo first when the destination has no
 // checkout of it (the review's clone section), either way round.
-export type LandingChoice = PullChoice & { cloneInto?: SyncCloneInto };
+type LandingChoice = PullChoice & { cloneInto?: SyncCloneInto };
 
 type Landed = Pick<SyncPullWorktreeResult, "worktree" | "cloned">;
 

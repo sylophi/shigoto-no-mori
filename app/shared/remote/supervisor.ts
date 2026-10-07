@@ -97,7 +97,7 @@ export type ConnectFn = (
 // hub produces for every device at once and which recovers on its own.
 // "superseded" is another instance of this device taking the socket
 // over.
-export type BlockReason = "revoked" | "superseded" | "refused";
+type BlockReason = "revoked" | "superseded" | "refused";
 
 // The one block a device acts on by leaving the account.
 export function credentialRevoked(status: SupervisorStatus): boolean {

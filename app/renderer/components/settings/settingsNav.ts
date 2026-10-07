@@ -35,8 +35,8 @@ export const VISITORS_TAB = "visitors";
 // The host sections: what is stored on a machine, one form per
 // machine, picked with the device tab bar in the page header.
 export const GENERAL_TAB = "general";
-export const WORKTREES_TAB = "worktrees";
-export const INTEGRATIONS_TAB = "integrations";
+const WORKTREES_TAB = "worktrees";
+const INTEGRATIONS_TAB = "integrations";
 export const HOST_TABS = [
   GENERAL_TAB,
   WORKTREES_TAB,
@@ -69,7 +69,7 @@ export function selectSettingsTab(tab: string): void {
 }
 
 // The raw selection. The resolved tab is the hook below.
-export function useSelectedSettingsTab(): string {
+function useSelectedSettingsTab(): string {
   return useExternalStore(selectedTab);
 }
 

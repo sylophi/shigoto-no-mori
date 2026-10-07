@@ -54,7 +54,7 @@ export interface RevokeRequest {
   // cannot be deleted by a stale revoke.
   accountId: string;
 }
-export interface RevokeResponse {
+interface RevokeResponse {
   ok: true;
 }
 

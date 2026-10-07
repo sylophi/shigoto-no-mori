@@ -49,7 +49,7 @@ export const MAX_DIRECT_CANDIDATES = 6;
 // port (the listener always binds an ephemeral port, so a portless
 // URL is never legitimate); "tunnel" means wss:// at a DNS hostname
 // with no explicit port (the tunnel edge serves 443 only).
-export function candidateUrlMatchesKind(
+function candidateUrlMatchesKind(
   kind: "lan" | "tunnel",
   rawUrl: string,
 ): boolean {

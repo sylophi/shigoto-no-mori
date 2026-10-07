@@ -116,7 +116,7 @@ export function useRemoteDeviceLabel(deviceId: string): string {
 // this machine, which the registry does not list: "this device" for
 // it, a peer's label, and a neutral phrase for an id the registry no
 // longer knows.
-export function useDeviceName(deviceId: string): string {
+function useDeviceName(deviceId: string): string {
   const label = useRemoteDevice(deviceId)?.label;
   if (deviceId === localDeviceId) return "this device";
   return label ?? "another device";

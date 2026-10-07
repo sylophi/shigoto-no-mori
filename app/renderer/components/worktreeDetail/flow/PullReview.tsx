@@ -120,7 +120,7 @@ function useLocalCollision(
 // flow's own reassurance when there is not, and the start button held
 // until both clear. A flow to a peer with no destination picked yet
 // has nothing to check, and the band asks for the pick.
-export function PullReviewFooter({
+function PullReviewFooter({
   worktree,
   target,
   landing,

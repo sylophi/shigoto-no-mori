@@ -22,7 +22,7 @@ Install the app's dependencies with `pnpm -C app install` (the root
 `postinstall` script does the same). The root `package.json` forwards
 the app's everyday scripts, so `pnpm dev` and `pnpm test` work from
 either place. The repo-wide checks (`lefthook.yml`,
-`.oxlintrc.json`, `.oxfmtrc.json`) stay at the root. `pnpm check`
+`.oxlintrc.json`, `.oxfmtrc.json`, `knip.jsonc`) stay at the root. `pnpm check`
 runs every check CI runs.
 
 Each folder documents itself: [`app/README.md`](app/README.md) is the

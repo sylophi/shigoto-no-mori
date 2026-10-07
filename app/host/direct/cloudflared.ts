@@ -205,7 +205,7 @@ const PROBE_TIMEOUT_MS = 10_000;
 // probed-routable and the tunnel is advertised. error: the last
 // attempt failed, with either a backoff restart scheduled or (for a
 // denied provision) nothing until the next reconcile trigger.
-export type TunnelStatus = {
+type TunnelStatus = {
   state: TunnelState;
   hostname: string | null;
 };

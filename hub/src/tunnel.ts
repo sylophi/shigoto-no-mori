@@ -51,7 +51,7 @@ const NAME_HEX = 32;
 // widening still has a tunnel under it. Delete once none remain.
 const LEGACY_NAME_HEX = 12;
 
-export async function tunnelNameFor(
+async function tunnelNameFor(
   accountId: string,
   deviceId: string,
   hexWidth = NAME_HEX,

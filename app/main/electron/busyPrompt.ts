@@ -63,7 +63,7 @@ function isBusy(busy: BusyOperations): boolean {
 // would show. An action requested by ANOTHER device (a peer's Settings
 // page restarting this app into an update) has nobody here to answer a
 // dialog, so it takes this refusal as its error instead of prompting.
-export function busyActionRefusal(action: BusyAction): string | null {
+function busyActionRefusal(action: BusyAction): string | null {
   const busy = getBusyOperations();
   if (!isBusy(busy)) return null;
   return formatBusyDetail(busy, COPY[action].gerund);

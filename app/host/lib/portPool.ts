@@ -42,7 +42,7 @@ const configuredCache = ttlMapCache<string, boolean>(
   },
 );
 
-export function isPortPoolConfigured(cwd: string): Promise<boolean> {
+function isPortPoolConfigured(cwd: string): Promise<boolean> {
   return configuredCache.get(cwd);
 }
 

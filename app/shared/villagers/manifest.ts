@@ -6,7 +6,7 @@
 // and sha1 here.
 import manifestJson from "./manifest.json";
 
-export interface VillagerFaceRef {
+interface VillagerFaceRef {
   // The wiki's file title, e.g. "File:Ace NH Villager Icon.png".
   file: string;
   // The file's own page on the wiki, where its credits live.

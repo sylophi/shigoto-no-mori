@@ -60,7 +60,7 @@ const MAX_PENDING_CHUNKS = 500;
 // applyEvent's switch stay exhaustive with assertNever as the safety net.
 type PostStartEvent = Exclude<ScriptEvent, { kind: "started" }>;
 
-export type RunStatus = "idle" | "starting" | "running" | "exited" | "errored";
+type RunStatus = "idle" | "starting" | "running" | "exited" | "errored";
 
 export interface ScriptRunState {
   runId: string | null;

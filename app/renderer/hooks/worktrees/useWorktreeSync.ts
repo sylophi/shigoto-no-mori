@@ -38,9 +38,9 @@ function useSyncMutation(
   });
 }
 
-export const usePushWorktree = () =>
+const usePushWorktree = () =>
   useSyncMutation((api, i) => api.worktrees.push(i), "Couldn't push");
-export const usePullWorktree = () =>
+const usePullWorktree = () =>
   useSyncMutation((api, i) => api.worktrees.pull(i), "Couldn't pull");
 export const usePushForceWorktree = () =>
   useSyncMutation(
@@ -52,12 +52,12 @@ export const useOverwriteWorktree = () =>
     (api, i) => api.worktrees.overwrite(i),
     "Couldn't overwrite from upstream",
   );
-export const usePublishWorktree = () =>
+const usePublishWorktree = () =>
   useSyncMutation(
     (api, i) => api.worktrees.publish(i),
     "Couldn't publish branch",
   );
-export const usePullAndPushWorktree = () =>
+const usePullAndPushWorktree = () =>
   useSyncMutation(
     (api, i) => api.worktrees.pullAndPush(i),
     "Couldn't pull and push",

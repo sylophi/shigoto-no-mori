@@ -7,7 +7,7 @@ import { CommitHashSchema, WorktreeSchema } from "./worktree";
 // now would take from it. The changes page draws this as a checkbox:
 // "all" ticked, "none" clear, "partial" indeterminate (hunks staged from
 // a terminal. The app leaves those alone unless the box is toggled).
-export const StagedStateSchema = z.enum(["none", "partial", "all"]);
+const StagedStateSchema = z.enum(["none", "partial", "all"]);
 export type StagedState = z.infer<typeof StagedStateSchema>;
 
 // What happened to the file, in git's own four buckets. Taken from the
@@ -15,17 +15,12 @@ export type StagedState = z.infer<typeof StagedStateSchema>;
 // question (how HEAD and the working tree differ, with renames paired
 // across the two), and the changes page has to describe what a commit
 // would record.
-export const ChangeKindSchema = z.enum([
-  "added",
-  "modified",
-  "deleted",
-  "renamed",
-]);
+const ChangeKindSchema = z.enum(["added", "modified", "deleted", "renamed"]);
 export type ChangeKind = z.infer<typeof ChangeKindSchema>;
 
 // Lines added and removed against HEAD. Absent for a binary file, where
 // git won't say, so the row shows no counts rather than zeros.
-export const ChangeCountsSchema = z.object({
+const ChangeCountsSchema = z.object({
   additions: z.number().int().nonnegative(),
   deletions: z.number().int().nonnegative(),
 });

@@ -7,7 +7,7 @@
 //
 // .mts with no imports: plain `node scripts/*.mts` must be able to
 // load it without a bundler. Never import this from the renderer.
-export const NODE_PTY_PACKAGE = "node_modules/node-pty";
+const NODE_PTY_PACKAGE = "node_modules/node-pty";
 export const NODE_PTY_PREBUILDS = `${NODE_PTY_PACKAGE}/prebuilds`;
 export const NODE_PTY_ADDON = "pty.node";
 export const NODE_PTY_SPAWN_HELPER = "spawn-helper";
