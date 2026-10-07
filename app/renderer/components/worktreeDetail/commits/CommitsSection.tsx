@@ -35,6 +35,8 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
       <div className="flex h-4 items-center justify-between gap-2">
         <SectionHeading>Branch</SectionHeading>
         <div className="flex min-w-0 items-center gap-1">
+          {/* Commits made with changes left over still push from here. */}
+          <WorktreeSyncPill worktree={worktree} />
           {worktree.changedCount > 0 && (
             <button
               type="button"
@@ -46,8 +48,6 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
               <ChevronRight aria-hidden className="size-3.5 opacity-60" />
             </button>
           )}
-          {/* Commits made with changes left over still push from here. */}
-          <WorktreeSyncPill worktree={worktree} />
         </div>
       </div>
       {commits.length === 0 ? (
