@@ -8,6 +8,8 @@
 // to the same fixture.
 //
 // Run: pnpm test git-log.
+//
+// covers: app/shared/fixtures/git-log.json
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
