@@ -235,6 +235,13 @@ it("stubs: read-classified channels answer structural defaults, the previewTheme
     ),
     { name: "" },
   );
+  const { strict } = await import("../shared/schemas/strict.ts");
+  assert.deepEqual(
+    stubValueFor(strict(Schema.Struct({ name: Schema.String })), {
+      fabricateArms: false,
+    }),
+    { name: "" },
+  );
   assert.equal(
     stubValueFor(
       Schema.Struct({ state: Schema.Literals(["granted", "denied"]) }),

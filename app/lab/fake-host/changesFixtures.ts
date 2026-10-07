@@ -97,7 +97,11 @@ export function createFakeChanges(
   return {
     status: (worktreeId: string) => filesOf(worktreeId),
 
-    setStaged: (worktreeId: string, paths: string[], staged: boolean) => {
+    setStaged: (
+      worktreeId: string,
+      paths: readonly string[],
+      staged: boolean,
+    ) => {
       const set = new Set(paths);
       const next = filesOf(worktreeId).map((file) =>
         touches(file, set)
@@ -116,7 +120,7 @@ export function createFakeChanges(
         summary,
         stagePaths,
         amend,
-      }: { summary: string; stagePaths?: string[]; amend?: boolean },
+      }: { summary: string; stagePaths?: readonly string[]; amend?: boolean },
     ) => {
       const worktree = findWorktree(worktreeId);
       if (!worktree) throw new Error("Unknown worktree");
@@ -152,7 +156,7 @@ export function createFakeChanges(
       return { hash, worktree };
     },
 
-    discard: (worktreeId: string, paths: string[]) => {
+    discard: (worktreeId: string, paths: readonly string[]) => {
       const set = new Set(paths);
       const worktree = settle(
         worktreeId,
@@ -163,7 +167,7 @@ export function createFakeChanges(
     },
 
     // The patch for one picked file: a hunk the size of its counts.
-    fileDiff: (worktreeId: string, paths: string[]) => {
+    fileDiff: (worktreeId: string, paths: readonly string[]) => {
       const path = paths.at(-1) ?? "";
       const file = filesOf(worktreeId).find((f) => f.path === path);
       if (!file) return "";
