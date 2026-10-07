@@ -8,6 +8,9 @@
 // this compares the two. Same shape as licenses:check.
 //
 // Run by lefthook pre-commit, and by hand as `pnpm test dmg-art`.
+//
+// covers: app/renderer/doubutsu.css app/scripts/dmg-background.html
+// covers: app/assets/dmg/** app/pnpm-lock.yaml
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DMG_ART_DIR } from "../shared/packaging/dmgLayout.mts";

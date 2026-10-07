@@ -13,6 +13,8 @@
 //   pool, once
 //
 // Run: pnpm test villager-manifest.
+//
+// covers: app/shared/villagers/manifest.json cli/embed/doubutsu-names.json
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

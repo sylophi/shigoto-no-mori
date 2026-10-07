@@ -33,6 +33,8 @@
 //      from source (the Pick list, and buildApi's return object joined
 //      with each contract's defineContract scope), so the rule fails
 //      when either side drifts.
+//
+// covers: app/host/** app/main/** app/renderer/** app/shared/** app/web/**
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { appRoot, report, stripComments, walk } from "./lib/checkKit.mts";

@@ -17,7 +17,6 @@
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test fresh-install.
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -28,12 +27,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { ensureDataDir, FRESH_CONFIG_SEED } from "@host/lib/bootstrap";
 import { initDataDirAt } from "@host/lib/util/paths";
 import type { GlobalConfig } from "@shared/schemas/config";
 import { errorCodeOf } from "@shared/errors";
-import { createCliRunner, makeProof, repoRoot } from "./lib/checkKit.mts";
+import { createCliRunner, makeProof } from "./lib/checkKit.mts";
+import { builtSm } from "./lib/smBinary.mts";
 
 // The settings encoders sit beside their React hook, whose imports read
 // window.api.deviceId at load. Nothing here calls into window, so a
@@ -43,12 +42,13 @@ Object.assign(globalThis, {
 });
 const { fromConfig } = await import("@/hooks/config/useSettingsSave");
 
-const execFileP = promisify(execFile);
 const proof = makeProof("fresh-install proof");
 console.log("fresh-install proof\n");
 
 const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-fresh-check-")));
-const smBinary = join(sandbox, "sm");
+// Built inside the try below, so a failed build still reports and
+// cleans up.
+let smBinary = "";
 // ensureDataDir takes its folder as an argument, so every case below
 // passes its own. This one only satisfies the one-shot init.
 initDataDirAt(join(sandbox, "unused"));
@@ -94,12 +94,9 @@ const namesOn = { value: true, set: true };
 const namesOff = { value: false, set: false };
 
 try {
+  smBinary = builtSm();
   await proof.check("the seed is Doubutsu names alone", () => {
     assert.deepEqual(FRESH_CONFIG_SEED, { doubutsuNames: true });
-  });
-
-  await execFileP("go", ["build", "-o", smBinary, "."], {
-    cwd: join(repoRoot, "cli"),
   });
 
   await proof.check(
