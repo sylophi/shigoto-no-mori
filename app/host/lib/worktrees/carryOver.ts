@@ -135,7 +135,17 @@ export async function listCarryOverCandidates(
   if (listed.every((r) => r === null)) {
     throw new Error(`Couldn't read ${relative || "the project root"}`);
   }
-  const byName = new Map<string, CarryOverCandidate>();
+  // Built up checkout by checkout, so mutable until it is returned.
+  const byName = new Map<
+    string,
+    {
+      name: string;
+      isDirectory: boolean;
+      ignored: boolean;
+      inPrimary: boolean;
+      worktrees: string[];
+    }
+  >();
   for (const result of listed) {
     if (!result) continue;
     for (const entry of result.entries) {
@@ -239,7 +249,7 @@ export async function listWorktreeFolder(
 export async function statCarryOverPaths(
   projectId: string,
   projectPath: string,
-  paths: string[],
+  paths: readonly string[],
 ): Promise<Record<string, CarryOverStat>> {
   const checkouts = await listCarryOverCheckouts(projectId, projectPath);
   const stats: Record<string, CarryOverStat> = {};

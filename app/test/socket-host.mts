@@ -60,6 +60,7 @@ import {
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
+import { safeDecode } from "@shared/ipc/schema";
 import { registerContract } from "@shared/ipc/registerContract";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
@@ -1204,18 +1205,18 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
     { cloudflaredPath: "/tmp/not-cloudflared" },
   ]) {
     assert.equal(
-      writeDeviceSettings.input.safeParse({ patch }).success,
+      safeDecode(writeDeviceSettings.input, { patch }).success,
       false,
       `writeDeviceSettings accepted ${JSON.stringify(patch)}`,
     );
   }
   assert.equal(
-    writeDeviceSettings.input.safeParse({ patch: {} }).success,
+    safeDecode(writeDeviceSettings.input, { patch: {} }).success,
     true,
     "an empty patch must parse",
   );
   assert.equal(
-    writeDeviceSettings.input.safeParse({
+    safeDecode(writeDeviceSettings.input, {
       patch: { githubCli: false, portPool: true },
     }).success,
     true,

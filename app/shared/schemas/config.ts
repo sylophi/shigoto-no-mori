@@ -1,17 +1,15 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 import { isSafeRelPath } from "../git/gitPaths";
-import { ProjectScopedPayloadSchema } from "./zodPayloads";
-import { MAX_CUSTOM_PORTS } from "./ports";
-import {
-  CustomPortZod,
-  MergeMethodZod,
-  PortNumberZod,
-  ProjectSortModeZod,
-  SidebarViewZod,
-} from "./zodBridge";
+import { loose } from "./loose";
+import { ProjectScopedPayloadSchema } from "./payloads";
+import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
+import { ProjectSortModeSchema, SidebarViewSchema } from "./project";
+import { MergeMethodSchema } from "./pullRequest";
+import { strict } from "./strict";
 
-const ThemeSchema = z.enum(["light", "dark", "system"]);
-export type Theme = z.infer<typeof ThemeSchema>;
+const ThemeSchema = Schema.Literals(["light", "dark", "system"]);
+export type Theme = typeof ThemeSchema.Type;
 
 // The doubutsu palettes, one list per appearance. renderer/doubutsu.css
 // carries the defaults (cream, charcoal), renderer/palettes.css the
@@ -35,28 +33,32 @@ export const DARK_THEME_IDS = [
   "midnight",
   "yozakura",
 ] as const;
-const LightThemeSchema = z.enum(LIGHT_THEME_IDS);
-const DarkThemeSchema = z.enum(DARK_THEME_IDS);
-export type LightTheme = z.infer<typeof LightThemeSchema>;
-export type DarkTheme = z.infer<typeof DarkThemeSchema>;
+const LightThemeSchema = Schema.Literals(LIGHT_THEME_IDS);
+const DarkThemeSchema = Schema.Literals(DARK_THEME_IDS);
+export type LightTheme = typeof LightThemeSchema.Type;
+export type DarkTheme = typeof DarkThemeSchema.Type;
 
-const LauncherCommandSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  command: z.string().min(1),
+const LauncherCommandSchema = Schema.Struct({
+  id: Schema.NonEmptyString,
+  label: Schema.NonEmptyString,
+  command: Schema.NonEmptyString,
 });
-export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
+export type LauncherCommand = typeof LauncherCommandSchema.Type;
 
 // Files/folders to carry over from the primary checkout into newly-created
 // worktrees. `path` is relative to the project root; gitignored entries are
 // the expected source. `symlink` keeps state shared; `copy` snapshots.
-const CarryOverEntrySchema = z.object({
-  path: z.string().min(1).refine(isSafeRelPath, {
-    message: "Path must stay within the project root",
-  }),
-  mode: z.enum(["copy", "symlink"]),
+const CarryOverPathSchema = Schema.NonEmptyString.check(
+  Schema.makeFilter(
+    (path: string) =>
+      isSafeRelPath(path) || "Path must stay within the project root",
+  ),
+);
+const CarryOverEntrySchema = Schema.Struct({
+  path: CarryOverPathSchema,
+  mode: Schema.Literals(["copy", "symlink"]),
 });
-export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
+export type CarryOverEntry = typeof CarryOverEntrySchema.Type;
 
 // Where shigomori's managed worktrees for this project live on disk.
 // - managed-root: <dataDir>/worktrees/<projectName>/<worktreeName>
@@ -69,69 +71,91 @@ export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 // - custom: <customWorktreePath>/<worktreeName>
 //   (escape hatch, not recommended, since it can collide with other
 //   repos and complicates external-vs-managed detection)
-const WorktreeLayoutSchema = z.enum(["managed-root", "in-project", "custom"]);
-export type WorktreeLayout = z.infer<typeof WorktreeLayoutSchema>;
+const WorktreeLayoutSchema = Schema.Literals([
+  "managed-root",
+  "in-project",
+  "custom",
+]);
+export type WorktreeLayout = typeof WorktreeLayoutSchema.Type;
 
 // Per-project config. Stored at <dataDir>/projects/<projectId>.json
 // and managed by the app, not committed to the user's repo.
-// Strict on purpose. It doubles as the shigomori:write IPC input, so a
-// key the renderer invents is dropped at the boundary instead of being
-// persisted into the user's file. Reads use the Stored variant below.
-export const ShigomoriConfigSchema = z.object({
-  scripts: z
-    .object({
-      setup: z.string().optional(),
-      teardown: z.string().optional(),
-    })
-    .partial()
-    .optional(),
-  launchers: z.array(LauncherCommandSchema).optional(),
-  portBase: z.number().int().positive().optional(),
-  defaultBranch: z.string().min(1),
-  carryOver: z.array(CarryOverEntrySchema).optional(),
+// Drops keys it does not model. It doubles as the shigomori:write IPC
+// input, so a key the renderer invents is dropped at the boundary
+// instead of being persisted into the user's file. Reads use the Stored
+// variant below.
+export const ShigomoriConfigSchema = Schema.Struct({
+  scripts: Schema.optional(
+    Schema.Struct({
+      setup: Schema.optional(Schema.String),
+      teardown: Schema.optional(Schema.String),
+    }),
+  ),
+  launchers: Schema.optional(Schema.Array(LauncherCommandSchema)),
+  portBase: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  defaultBranch: Schema.NonEmptyString,
+  carryOver: Schema.optional(Schema.Array(CarryOverEntrySchema)),
   // When false, the repo's .worktreeinclude file is ignored at worktree
   // creation. Absent = enabled (the integration is opt-out).
-  useWorktreeInclude: z.boolean().optional(),
-  worktreeLayout: WorktreeLayoutSchema.optional(),
+  useWorktreeInclude: Schema.optional(Schema.Boolean),
+  worktreeLayout: Schema.optional(WorktreeLayoutSchema),
   // Absolute path; only meaningful when worktreeLayout === "custom".
-  customWorktreePath: z.string().optional(),
+  customWorktreePath: Schema.optional(Schema.String),
   // Last merge method picked for this project's PRs. Drives the split-
   // button's primary action so each repo remembers its house style.
   // Falls back to whatever the repo allows when the saved value is
   // disabled at GitHub.
-  lastMergeMethod: MergeMethodZod.optional(),
+  lastMergeMethod: Schema.optional(MergeMethodSchema),
   // When true, the inbox view lists this project's primary checkout
   // alongside its worktrees (always live, never shelved or merged).
   // Per project because the primary means different things in
   // different repos: in some it's a place you work, in most it's just
   // the root. Off by default. Absent = hidden.
-  showPrimaryInInbox: z.boolean().optional(),
+  showPrimaryInInbox: Schema.optional(Schema.Boolean),
 });
-export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
+export type ShigomoriConfig = typeof ShigomoriConfigSchema.Type;
 
-// In a module of its own, which the layout math can import without zod.
+// In a module of its own, which the layout math can import without the
+// schema library.
 export { PROJECT_CONFIG_DEFAULTS } from "./projectConfigDefaults";
 
-// The object shape a schema field holds under its wrappers (optional,
-// nullable, default and the like), or null for a field that isn't an
-// object.
-function objectShapeOf(field: z.ZodType): Record<string, z.ZodType> | null {
-  let inner = field;
-  while ("innerType" in inner.def) inner = inner.def.innerType as z.ZodType;
-  return inner instanceof z.ZodObject ? inner.shape : null;
+// The fields an object node models, seen through an optional or
+// nullable union, or null for a node that isn't a struct (a record, an
+// array, a scalar).
+function structFieldsOf(
+  ast: SchemaAST.AST,
+): ReadonlyArray<SchemaAST.PropertySignature> | null {
+  if (SchemaAST.isUnion(ast)) {
+    const members = ast.types.filter(
+      (member) => !SchemaAST.isUndefined(member) && !SchemaAST.isNull(member),
+    );
+    return members.length === 1 && members[0] !== undefined
+      ? structFieldsOf(members[0])
+      : null;
+  }
+  return SchemaAST.isObjects(ast) && ast.indexSignatures.length === 0
+    ? ast.propertySignatures
+    : null;
 }
 
 // Every field a schema models, as the keys down to it, nested objects
 // field by field (["scripts", "setup"]). The host's project write and
 // the cli-reads key check both walk it.
 export function modeledKeyPaths(
-  shape: Record<string, z.ZodType>,
+  schema: Schema.Top,
   prefix: string[] = [],
 ): string[][] {
-  return Object.entries(shape).flatMap(([name, field]) => {
-    const path = prefix.concat(name);
-    const nested = objectShapeOf(field);
-    return nested ? modeledKeyPaths(nested, path) : [path];
+  return walkKeyPaths(structFieldsOf(schema.ast) ?? [], prefix);
+}
+
+function walkKeyPaths(
+  fields: ReadonlyArray<SchemaAST.PropertySignature>,
+  prefix: string[],
+): string[][] {
+  return fields.flatMap((field) => {
+    const path = prefix.concat(String(field.name));
+    const nested = structFieldsOf(field.type);
+    return nested ? walkKeyPaths(nested, path) : [path];
   });
 }
 
@@ -140,81 +164,86 @@ export function modeledKeyPaths(
 // them out from under the user. They never have to ride back out in a
 // write payload: the CLI's `config write` merges into the file rather
 // than replacing it, so a key the payload doesn't mention stays put.
-export const StoredShigomoriConfigSchema = ShigomoriConfigSchema.loose();
+export const StoredShigomoriConfigSchema = loose(ShigomoriConfigSchema);
 
 // Snapshot of the repo's .worktreeinclude file (Claude Code convention:
 // gitignore-syntax patterns whose gitignored matches are copied into new
 // worktrees). Read-only from the app's side; the file belongs to the repo.
-export const WorktreeIncludeStatusSchema = z.object({
-  fileExists: z.boolean(),
+export const WorktreeIncludeStatusSchema = Schema.Struct({
+  fileExists: Schema.Boolean,
   // Paths the file's patterns currently resolve to (matched AND
   // gitignored), in git's raw shape: fully-ignored directories keep
   // their trailing slash. Matches what creation-time reconciliation
   // sees, so the UI's covered badge and the actual auto-removal agree.
   // Empty when resolution fails.
-  matchedPaths: z.array(z.string()),
+  matchedPaths: Schema.Array(Schema.String),
 });
-export type WorktreeIncludeStatus = z.infer<typeof WorktreeIncludeStatusSchema>;
+export type WorktreeIncludeStatus = typeof WorktreeIncludeStatusSchema.Type;
 
 // The carry-over picker reads a union of the primary and every
 // worktree: entries are root-relative, so any checkout can hold them
 // and the CLI copies from whichever has the file at creation.
-export const CarryOverListingPayloadSchema = ProjectScopedPayloadSchema.extend({
+export const CarryOverListingPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
   // Folder being browsed, root-relative, with "" for the root.
-  relative: z.union([z.literal(""), CarryOverEntrySchema.shape.path]),
+  relative: Schema.Union([Schema.Literal(""), CarryOverPathSchema]),
   // Also call a folder ignored when a rule names it though it holds a
   // force-added file (what a mirror leaves out, where carry-over needs
   // git's own verdict). A peer from before the flag drops it and
   // answers without.
-  ruleIgnored: z.boolean().optional(),
+  ruleIgnored: Schema.optional(Schema.Boolean),
 });
 
 // One name in the browsed folder, across checkouts. `ignored` is judged
 // by the gitignore of a checkout that has it. `worktrees` names the
 // non-primary checkouts holding it.
-export const CarryOverCandidateSchema = z.object({
-  name: z.string(),
-  isDirectory: z.boolean(),
-  ignored: z.boolean(),
-  inPrimary: z.boolean(),
-  worktrees: z.array(z.string()),
+export const CarryOverCandidateSchema = Schema.Struct({
+  name: Schema.String,
+  isDirectory: Schema.Boolean,
+  ignored: Schema.Boolean,
+  inPrimary: Schema.Boolean,
+  worktrees: Schema.Array(Schema.String),
 });
-export type CarryOverCandidate = z.infer<typeof CarryOverCandidateSchema>;
+export type CarryOverCandidate = typeof CarryOverCandidateSchema.Type;
 
-export const CarryOverStatsPayloadSchema = ProjectScopedPayloadSchema.extend({
-  paths: z.array(CarryOverEntrySchema.shape.path),
+export const CarryOverStatsPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  paths: Schema.Array(CarryOverPathSchema),
 });
 
 // Where a configured entry currently exists. Missing everywhere when
 // neither `inPrimary` nor any `worktrees`.
-export const CarryOverStatSchema = z.object({
-  isDirectory: z.boolean(),
-  inPrimary: z.boolean(),
-  worktrees: z.array(z.string()),
+export const CarryOverStatSchema = Schema.Struct({
+  isDirectory: Schema.Boolean,
+  inPrimary: Schema.Boolean,
+  worktrees: Schema.Array(Schema.String),
 });
-export type CarryOverStat = z.infer<typeof CarryOverStatSchema>;
+export type CarryOverStat = typeof CarryOverStatSchema.Type;
 
 // A worktree's title and description: what its work is, set by `sm
 // describe` (cli/cmd_describe.go) until a pull request's title and
 // body take over. describedAt (epoch ms) is when they were last set,
 // so a mirror's two sides keep the newer pair. Only `sm describe` and
 // the moves between devices write them (writeWorktreeDescription).
-const WorktreeDescriptionSchema = z.object({
-  title: z.string().optional(),
-  description: z.string().optional(),
-  describedAt: z.number().int().nonnegative().optional(),
+const WorktreeDescriptionSchema = Schema.Struct({
+  title: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  describedAt: Schema.optional(Schema.Natural),
 });
-export type WorktreeDescription = z.infer<typeof WorktreeDescriptionSchema>;
+export type WorktreeDescription = typeof WorktreeDescriptionSchema.Type;
 
 // Per-worktree persistent data. Only kept for shigomori-managed worktrees;
 // external worktrees deliberately have no on-disk state.
-export const ShigomoriWorktreeDataSchema = WorktreeDescriptionSchema.extend({
+export const ShigomoriWorktreeDataSchema = Schema.Struct({
+  ...WorktreeDescriptionSchema.fields,
   // Ports the user added beside port-pool's (see shared/schemas/ports.ts).
   // The renderer's one key here, written through useWorktreeDataWrite;
   // the host merges it into the stored document under its lock.
-  ports: z.array(CustomPortZod).max(MAX_CUSTOM_PORTS).optional(),
+  ports: Schema.optional(
+    Schema.Array(CustomPortSchema).check(Schema.isMaxLength(MAX_CUSTOM_PORTS)),
+  ),
 });
-export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
+export type ShigomoriWorktreeData = typeof ShigomoriWorktreeDataSchema.Type;
 
 // Global, per-device config kept in <dataDir>/config.json. Holds
 // preferences that span every project: custom launchers the user wants
@@ -227,8 +256,8 @@ export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 // Reads use the loose Stored variant below: pre-split installs can
 // still carry legacy client keys (and keys from newer builds) in
 // config.json, and those have to pass through unrejected.
-const GlobalConfigSchema = z.object({
-  launchers: z.array(LauncherCommandSchema).optional(),
+const GlobalConfigSchema = Schema.Struct({
+  launchers: Schema.optional(Schema.Array(LauncherCommandSchema)),
   // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
   // user has switched off, so they're skipped when building a project's
   // launcher row, and therefore also absent from the File menu's
@@ -236,30 +265,30 @@ const GlobalConfigSchema = z.object({
   // absent = nothing hidden. Ids that no longer resolve (an app the user
   // uninstalled, a deleted custom tool) simply never match and are
   // harmless to keep.
-  hiddenLaunchers: z.array(z.string()).optional(),
+  hiddenLaunchers: Schema.optional(Schema.Array(Schema.String)),
   // When true, the Launch section carries a second row of the worktree's
   // top package.json scripts, as many as fit on one line, ordered by the
   // project's script sort. On by default; absent = on, explicit `false` is
   // the opt-out.
-  launchScripts: z.boolean().optional(),
+  launchScripts: Schema.optional(Schema.Boolean),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
   // use by another worktree). ON by default. Unset means delete
   // (cli/cmd_rm.go, which every removal runs through).
-  deleteBranchOnRemove: z.boolean().optional(),
+  deleteBranchOnRemove: Schema.optional(Schema.Boolean),
   // When true, adding a project with a package.json seeds its setup
   // script with `<detected-pm> install`. Only fires at project-add
   // time; existing projects are untouched.
-  autoPopulateInstall: z.boolean().optional(),
+  autoPopulateInstall: Schema.optional(Schema.Boolean),
   // When true, a new worktree, and the primary checkout of a newly
   // added project, start out with auto-pull on (the mark `sm worktrees
   // autopull` sets). Only fires at create and add time, in the CLI
   // (cli/state.go markAutoPullIfNew). Existing
   // worktrees keep their footer toggle as they are.
-  autoPullNew: z.boolean().optional(),
+  autoPullNew: Schema.optional(Schema.Boolean),
   // When true, autoPullNew covers only the primary checkout of a newly
   // added project. Nothing on its own.
-  autoPullPrimaryOnly: z.boolean().optional(),
+  autoPullPrimaryOnly: Schema.optional(Schema.Boolean),
   // When true, auto-picked worktree names are Animal Crossing villager
   // and character names, the ones with a face on Nookipedia
   // (cli/embed/doubutsu-names.json, e.g. `raymond`), instead of
@@ -269,14 +298,14 @@ const GlobalConfigSchema = z.object({
   // install from before it defaulted on keeps its names. A fresh
   // install is seeded with `true` instead (host/lib/bootstrap.ts,
   // cli/state.go seedFreshInstall).
-  doubutsuNames: z.boolean().optional(),
+  doubutsuNames: Schema.optional(Schema.Boolean),
   // When true, an external worktree whose folder is just the repo's
   // name (Codex and other tools lay worktrees out as
   // <worktree-name>/<repo-name>) is named after the folder above it.
   // Off by default: a worktree that merely shares the repo's folder
   // name would take whatever folder it sits in. Applied wherever the
   // CLI lists worktrees (cli/gitx.go), the app's rows included.
-  codexWorktreeNames: z.boolean().optional(),
+  codexWorktreeNames: Schema.optional(Schema.Boolean),
   // When true, a project on an external drive keeps its managed-layout
   // worktrees on that drive
   // (<volume>/<dataDirName>/worktrees/<projectName>/<worktreeName>)
@@ -286,11 +315,11 @@ const GlobalConfigSchema = z.object({
   // (cli/paths.go resolveWorktreeBase). Worktrees made before the
   // switch stay where they are until the project's Worktree location
   // page moves them. Off by default.
-  managedOnProjectDrive: z.boolean().optional(),
+  managedOnProjectDrive: Schema.optional(Schema.Boolean),
   // When true, projects with a valid port-pool.config.json run
   // `port-pool provision` after setup at create and
   // `port-pool release` before teardown at delete.
-  portPool: z.boolean().optional(),
+  portPool: Schema.optional(Schema.Boolean),
   // When true, repos registered in terrier (github.com/dittofleet/terrier)
   // are listed as projects alongside the registry's own. Terrier-sourced
   // projects can't be removed here, only `terrier rm` unregisters them. A
@@ -298,28 +327,28 @@ const GlobalConfigSchema = z.object({
   // removing its registry entry demotes it back to terrier-sourced. Off by
   // default, and only active while `terrier` is on PATH at a version
   // this build understands (cli/terrier.go).
-  terrier: z.boolean().optional(),
+  terrier: Schema.optional(Schema.Boolean),
   // When true, GitHub CLI features light up wherever they apply.
   // Activates only when `gh` is on PATH and authenticated. On by
   // default; matches the integration being opt-out rather than opt-in.
-  githubCli: z.boolean().optional(),
+  githubCli: Schema.optional(Schema.Boolean),
   // Direct data plane: when false, this device neither runs the direct
   // listener nor is advertised to peers, so it serves no peers at all
   // (its own dials to peers are unaffected). ON by default (absent =
   // enrolled, explicit `false` is the opt-out). Config-only (no
   // Settings UI): toggle by editing config.json or `sm config edit`.
-  directConnections: z.boolean().optional(),
+  directConnections: Schema.optional(Schema.Boolean),
   // Tunnel endpoints: absolute path to the
   // cloudflared binary, for installs not on PATH. Absent means PATH
   // discovery. A missing binary reads as tunnels off with a typed
   // status, never an error loop. Config-only, like directConnections.
-  cloudflaredPath: z.string().optional(),
+  cloudflaredPath: Schema.optional(Schema.String),
 });
-export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
+export type GlobalConfig = typeof GlobalConfigSchema.Type;
 
 // Read-side counterpart, loose like StoredShigomoriConfigSchema. Also
 // the globalConfig:read output, so legacy and newer keys pass through.
-export const StoredGlobalConfigSchema = GlobalConfigSchema.loose();
+export const StoredGlobalConfigSchema = loose(GlobalConfigSchema);
 
 // The device settings the Settings form writes, this machine's and a
 // peer's alike: exactly the keys the form manages. STRICT on purpose,
@@ -333,26 +362,26 @@ export const StoredGlobalConfigSchema = GlobalConfigSchema.loose();
 // field types, so a managed key's shape cannot drift. A NEW managed
 // device setting has to be named here and in DEVICE_SETTINGS_DEFAULTS
 // below, or the strict reject makes it un-writable.
-export const DeviceSettingsPatchSchema = z.strictObject(
-  GlobalConfigSchema.pick({
-    launchers: true,
-    hiddenLaunchers: true,
-    launchScripts: true,
-    deleteBranchOnRemove: true,
-    autoPopulateInstall: true,
-    autoPullNew: true,
-    autoPullPrimaryOnly: true,
-    doubutsuNames: true,
-    codexWorktreeNames: true,
-    managedOnProjectDrive: true,
-    portPool: true,
-    terrier: true,
-    githubCli: true,
-  }).shape,
+export const DeviceSettingsPatchSchema = strict(
+  Schema.Struct({
+    launchers: GlobalConfigSchema.fields.launchers,
+    hiddenLaunchers: GlobalConfigSchema.fields.hiddenLaunchers,
+    launchScripts: GlobalConfigSchema.fields.launchScripts,
+    deleteBranchOnRemove: GlobalConfigSchema.fields.deleteBranchOnRemove,
+    autoPopulateInstall: GlobalConfigSchema.fields.autoPopulateInstall,
+    autoPullNew: GlobalConfigSchema.fields.autoPullNew,
+    autoPullPrimaryOnly: GlobalConfigSchema.fields.autoPullPrimaryOnly,
+    doubutsuNames: GlobalConfigSchema.fields.doubutsuNames,
+    codexWorktreeNames: GlobalConfigSchema.fields.codexWorktreeNames,
+    managedOnProjectDrive: GlobalConfigSchema.fields.managedOnProjectDrive,
+    portPool: GlobalConfigSchema.fields.portPool,
+    terrier: GlobalConfigSchema.fields.terrier,
+    githubCli: GlobalConfigSchema.fields.githubCli,
+  }),
 );
-export type DeviceSettingsPatch = z.infer<typeof DeviceSettingsPatchSchema>;
+export type DeviceSettingsPatch = typeof DeviceSettingsPatchSchema.Type;
 
-export const WriteDeviceSettingsPayloadSchema = z.object({
+export const WriteDeviceSettingsPayloadSchema = Schema.Struct({
   patch: DeviceSettingsPatchSchema,
 });
 
@@ -383,46 +412,46 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
 // Client config: how this app instance looks, kept in clientConfig.json
 // under Electron's userData and owned by the main process alone. The
 // CLI never reads or writes it, unlike the device config above.
-// Doubles as the clientConfig:write IPC input. z.object STRIPS unknown
-// keys rather than rejecting them, which drops a key the renderer
-// invents at the boundary, and it must not become .strict(): a key
-// from a newer build has to keep passing through unrejected.
-export const ClientConfigSchema = z.object({
-  theme: ThemeSchema.optional(),
+// Doubles as the clientConfig:write IPC input. A plain struct STRIPS
+// unknown keys rather than rejecting them, which drops a key the
+// renderer invents at the boundary, and it must not become strict: a
+// key from a newer build has to keep passing through unrejected.
+export const ClientConfigSchema = Schema.Struct({
+  theme: Schema.optional(ThemeSchema),
   // "Animal Crossing" visual mode. Orthogonal to theme: when on, both
   // the light and dark palettes shift to a bolder, color-blocked,
   // Zen-Maru-Gothic-typeset look. On by default (absent = on), explicit
   // `false` is the opt-out back to the v1 look. Mirrored to
   // localStorage so startup paints without a flash.
-  doubutsu: z.boolean().optional(),
+  doubutsu: Schema.optional(Schema.Boolean),
   // Which doubutsu palette each appearance wears (shared/themes.ts),
   // picked separately for light and dark the way most apps offer it.
   // Absent is the default of each list, cream and charcoal. Kept while
   // doubutsu is off, so switching it back on restores the picks.
   // Mirrored to localStorage with the switch.
-  lightTheme: LightThemeSchema.optional(),
-  darkTheme: DarkThemeSchema.optional(),
+  lightTheme: Schema.optional(LightThemeSchema),
+  darkTheme: Schema.optional(DarkThemeSchema),
   // Village life: the purely visual villager extras on worktrees named
   // after a character, on every device this window shows. Needs the
   // villager data, downloaded into this device's data dir
   // (host/lib/villagers.ts), so only the desktop offers it: a web
   // client has no device of its own. Off by default (absent = off),
   // explicit `true` is the opt-in. Nothing on a device reads it.
-  villageLife: z.boolean().optional(),
+  villageLife: Schema.optional(Schema.Boolean),
   // Mark the sidebar's terrier-sourced projects (Project.source), the
   // ones the terrier registry lists rather than this app's own, with
   // terrier's paw, on every device this window shows. Off by default
   // (absent = off), explicit `true` is the opt-in.
-  markTerrierProjects: z.boolean().optional(),
+  markTerrierProjects: Schema.optional(Schema.Boolean),
   // The device badges on the sidebar's rows: the mark of each device a
   // project spans on its header, and of the device a worktree lives on
   // (or is mirrored with) on its row. On by default (absent = on),
   // explicit `false` hides them, on every device this window shows.
-  showDeviceBadges: z.boolean().optional(),
+  showDeviceBadges: Schema.optional(Schema.Boolean),
   // Pause the doubutsu wallpaper drift while this machine runs on
   // battery, the same pause an unfocused window gets. On by default
   // (absent = on), explicit `false` keeps it drifting on battery.
-  pauseAnimationsOnBattery: z.boolean().optional(),
+  pauseAnimationsOnBattery: Schema.optional(Schema.Boolean),
   // "Keep this device reachable": the single opt-in behind two liveness
   // capabilities the main process reconciles (main/electron/liveness.ts).
   // When on, the app registers a login item so it starts when the user
@@ -432,7 +461,7 @@ export const ClientConfigSchema = z.object({
   // the CLI never reads it and it does not ride any sync path. Default is
   // on (absent = on): a machine on the account is meant to be there for
   // the others, and explicit `false` is the opt-out.
-  keepReachable: z.boolean().optional(),
+  keepReachable: Schema.optional(Schema.Boolean),
   // Where a peer's port lands on this machine when forwarded: local port
   // by `${deviceId}:${remotePort}` (renderer/hooks/config/
   // useForwardLocalPort.ts is the only reader and writer). Keyed by
@@ -441,36 +470,40 @@ export const ClientConfigSchema = z.object({
   // dedupes on the same pair). Only preferences that differ from the
   // default (the remote port itself) are stored, so the map stays as
   // small as the user's overrides.
-  forwardLocalPorts: z.record(z.string(), PortNumberZod).optional(),
+  forwardLocalPorts: Schema.optional(
+    Schema.Record(Schema.String, PortNumberSchema),
+  ),
   // Legacy: the create-device picks, from before they became a shared
   // setting (shared/sharedSettings.ts, quickCreateDevice). Nothing
   // reads it but the one-time move in
   // renderer/lib/remote/sharedSettingsSync.ts, which clears it. Still
   // modeled so a doc that carries it parses and the move can see it.
-  quickCreateDevices: z.record(z.string(), z.string()).optional(),
+  quickCreateDevices: Schema.optional(
+    Schema.Record(Schema.String, Schema.String),
+  ),
   // Which sidebar layout this window shows: the classic tree, or the
   // flat cross-project inbox. A preference of the window rather than
   // of a host, so a hostless client keeps one too. Absent means the
   // tree.
-  sidebarView: SidebarViewZod.optional(),
+  sidebarView: Schema.optional(SidebarViewSchema),
   // How the sidebar orders its projects. A preference of the window,
   // like the view above: the CLI never reads it, and a peer has no say
   // in how this machine lists them. Absent means the manual order
   // (renderer/hooks/projects/useProjectSort.ts is the only reader and
   // writer, and stores the default as nothing).
-  projectsSort: ProjectSortModeZod.optional(),
+  projectsSort: Schema.optional(ProjectSortModeSchema),
   // Whether the sidebar's list of projects is split under a header per
   // owner (the org or user of each project's remote, Project.remote).
   // Kept like the sort above. On by default (absent = on), explicit
   // `false` is the opt-out (renderer/hooks/projects/useProjectSort.ts).
-  groupProjectsByOwner: z.boolean().optional(),
+  groupProjectsByOwner: Schema.optional(Schema.Boolean),
   // Legacy: the sidebar's folded projects, by group key, from when its
   // tree folded project by project. Nothing reads it. Still modeled
   // because a doc can carry it and its keys name peers and repos, so
   // withoutPeerState has to be able to see it to drop it.
-  collapsedProjects: z.array(z.string()).optional(),
+  collapsedProjects: Schema.optional(Schema.Array(Schema.String)),
 });
-export type ClientConfig = z.infer<typeof ClientConfigSchema>;
+export type ClientConfig = typeof ClientConfigSchema.Type;
 
 // The group key of a peer's project with no repo identity: it can only
 // group with itself, so it is named by its device and its id. The
@@ -506,13 +539,14 @@ export function keepReachableOn(
 }
 
 // Read-side counterpart, loose like StoredGlobalConfigSchema.
-export const StoredClientConfigSchema = ClientConfigSchema.loose();
+export const StoredClientConfigSchema = loose(ClientConfigSchema);
 
-export const WriteClientConfigPayloadSchema = z.object({
+export const WriteClientConfigPayloadSchema = Schema.Struct({
   config: ClientConfigSchema,
 });
 
-export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
+export const WriteShigomoriPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
   config: ShigomoriConfigSchema,
 });
 
@@ -524,25 +558,28 @@ export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
 // The derived worktree id (worktreeIDFromPath in cli/paths.go): the
 // first 12 hex chars of the path's sha256. One schema for every
 // payload that names one.
-export const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
+export const WorktreeIdSchema = Schema.String.check(
+  Schema.isPattern(/^[0-9a-f]{12}$/),
+);
 
-export const ReadWorktreeDataPayloadSchema = ProjectScopedPayloadSchema.extend({
+export const ReadWorktreeDataPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
   worktreeId: WorktreeIdSchema,
 });
 
 // The renderer's write: the custom ports, the one part of the file it
 // owns (the title and description have writers of their own).
-export const WriteWorktreeDataPayloadSchema =
-  ReadWorktreeDataPayloadSchema.extend({
-    data: ShigomoriWorktreeDataSchema.pick({ ports: true }),
-  });
+export const WriteWorktreeDataPayloadSchema = Schema.Struct({
+  ...ReadWorktreeDataPayloadSchema.fields,
+  data: Schema.Struct({ ports: ShigomoriWorktreeDataSchema.fields.ports }),
+});
 
-export const WriteWorktreeDescriptionPayloadSchema =
-  ReadWorktreeDataPayloadSchema.extend({
-    description: WorktreeDescriptionSchema,
-  });
+export const WriteWorktreeDescriptionPayloadSchema = Schema.Struct({
+  ...ReadWorktreeDataPayloadSchema.fields,
+  description: WorktreeDescriptionSchema,
+});
 
 // Input to the window module's non-persisting theme preview.
-export const PreviewThemePayloadSchema = z.object({
+export const PreviewThemePayloadSchema = Schema.Struct({
   theme: ThemeSchema,
 });

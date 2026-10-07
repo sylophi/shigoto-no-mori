@@ -603,7 +603,7 @@ it("config keys: sm config and sm projects config list the schemas' keys with th
   assertListedDefaults(
     "sm projects config",
     settingsOf(projectList),
-    modeledKeyPaths(ShigomoriConfigSchema.shape).map((path) => path.join(".")),
+    modeledKeyPaths(ShigomoriConfigSchema).map((path) => path.join(".")),
     PROJECT_CONFIG_DEFAULTS,
     "defaultBranch",
   );

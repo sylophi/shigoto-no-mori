@@ -11,8 +11,11 @@ import {
   SyncPullWorktreeResultSchema,
   SyncSendWorktreePayloadSchema,
 } from "@shared/ipc/modules/sync";
-import { WorktreeIdSchema } from "@shared/schemas";
-import { CommitHashZod, GitRefNameZod } from "@shared/schemas/zodBridge";
+import {
+  CommitHashZod,
+  GitRefNameZod,
+  WorktreeIdZod,
+} from "@shared/schemas/zodBridge";
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
 // remote work"): a worktree kept identical on two devices, every file,
@@ -217,7 +220,7 @@ export const GitStateSchema = GitStateCoreSchema.extend({
 
 export const MirrorWorktreePayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
 });
 
 const MirrorApplyGitStatePayloadSchema = MirrorWorktreePayloadSchema.extend({
@@ -323,13 +326,13 @@ export type MirrorSessionRaw = z.infer<typeof MirrorSessionRawSchema>;
 const MirrorServingSchema = z.strictObject({
   channelId: HexId32Schema,
   projectId: z.string(),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
   // The calling device, or "" on a wire that stamps no caller.
   peerDeviceId: z.string(),
   // The peer's own worktree for this stream (its local copy), when the
   // peer named it: what lets this device's sidebar fold the peer's row
   // into the served worktree's. Absent on a peer that predates it.
-  peerWorktreeId: WorktreeIdSchema.optional(),
+  peerWorktreeId: WorktreeIdZod.optional(),
   since: z.number().int().nonnegative(),
 });
 export type MirrorServing = z.infer<typeof MirrorServingSchema>;
@@ -546,7 +549,7 @@ export function isMirrorCopyStayed(error: unknown): boolean {
 const MirrorOpenStreamPayloadSchema = MirrorWorktreePayloadSchema.extend({
   channelId: HexId32Schema,
   // See MirrorServingSchema.peerWorktreeId.
-  peerWorktreeId: WorktreeIdSchema.optional(),
+  peerWorktreeId: WorktreeIdZod.optional(),
 });
 
 // Changing what a mirror leaves out: the engine cannot re-configure a
@@ -587,7 +590,7 @@ export const MirrorEventSchema = z.strictObject({
 export type MirrorEvent = z.infer<typeof MirrorEventSchema>;
 export const MIRROR_HISTORY_LIMIT = 100;
 const MirrorHistoryPayloadSchema = z.strictObject({
-  localWorktreeId: WorktreeIdSchema,
+  localWorktreeId: WorktreeIdZod,
 });
 const MirrorHistoryResultSchema = z.strictObject({
   events: z.array(MirrorEventSchema).max(MIRROR_HISTORY_LIMIT),

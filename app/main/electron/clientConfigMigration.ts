@@ -11,6 +11,8 @@
 // Only an absent store seeds: a corrupt one reads as defaults instead
 // (see clientConfig.ts) and must not be silently reseeded over.
 import { existsSync } from "node:fs";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { type ClientConfig, ClientConfigSchema } from "@shared/schemas";
 import {
   dropLegacyAppearance,
@@ -65,6 +67,9 @@ export async function seedClientConfigFromLegacy(): Promise<void> {
 // move retries next boot.
 const LEGACY_SORT_KEY = "projectsSort";
 const LEGACY_FOLD_KEY = "projectsCollapsed";
+const decodeLegacySort = Schema.decodeUnknownOption(
+  ClientConfigSchema.fields.projectsSort,
+);
 
 export async function seedProjectsSortFromState(): Promise<void> {
   if (!existsSync(clientConfigPath())) return;
@@ -82,16 +87,15 @@ export async function seedProjectsSortFromState(): Promise<void> {
   // the default is the right replacement for a value no build could
   // read. The manual order is the default, stored as nothing, and a
   // sort the store already holds is newer than this one.
-  const sort = ClientConfigSchema.shape.projectsSort.safeParse(legacySort);
+  const sort = Option.getOrUndefined(decodeLegacySort(legacySort));
   const current = readClientConfigSync();
   if (
-    sort.success &&
-    sort.data !== undefined &&
-    sort.data !== "manual" &&
+    sort !== undefined &&
+    sort !== "manual" &&
     current.projectsSort === undefined
   ) {
     try {
-      await writeClientConfig({ ...current, projectsSort: sort.data });
+      await writeClientConfig({ ...current, projectsSort: sort });
     } catch (error) {
       console.warn("[clientConfig] seeding the project sort failed:", error);
       return;

@@ -6,12 +6,10 @@ import {
   CloneFolderNameSchema,
   GitRefNameSchema,
   ProjectSchema,
-  ProjectSortModeSchema,
-  SidebarViewSchema,
 } from "./project";
-import { CustomPortSchema, PortNumberSchema } from "./ports";
+import { WorktreeIdSchema } from "./config";
+import { PortNumberSchema } from "./ports";
 import {
-  MergeMethodSchema,
   PullRequestMergeStateSchema,
   PullRequestReviewDecisionSchema,
   PullRequestStateSchema,
@@ -42,16 +40,13 @@ export const DeviceInfoZod = toZod(DeviceInfoSchema);
 export const CloneFolderNameZod = toZod(CloneFolderNameSchema);
 export const CommitHashZod = toZod(CommitHashSchema);
 export const CreatePhaseZod = toZod(CreatePhaseSchema);
-export const CustomPortZod = toZod(CustomPortSchema);
 export const GitRefNameZod = toZod(GitRefNameSchema);
-export const MergeMethodZod = toZod(MergeMethodSchema);
 export const PortNumberZod = toZod(PortNumberSchema);
-export const ProjectSortModeZod = toZod(ProjectSortModeSchema);
 export const ProjectZod = toZod(ProjectSchema);
 export const PullRequestMergeStateZod = toZod(PullRequestMergeStateSchema);
 export const PullRequestReviewDecisionZod = toZod(
   PullRequestReviewDecisionSchema,
 );
 export const PullRequestStateZod = toZod(PullRequestStateSchema);
-export const SidebarViewZod = toZod(SidebarViewSchema);
+export const WorktreeIdZod = toZod(WorktreeIdSchema);
 export const WorktreeZod = toZod(WorktreeSchema);
