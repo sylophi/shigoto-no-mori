@@ -2,7 +2,7 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import { PortNumberSchema } from "@shared/schemas";
+import { PortNumberZod } from "@shared/schemas/zodBridge";
 import { WorktreeScopedPayloadSchema } from "@shared/schemas/zodPayloads";
 
 // Client-scoped control surface for the port-forward engine. The engine
@@ -33,15 +33,15 @@ export type PortForwardWorktree = z.infer<typeof PortForwardWorktreeSchema>;
 
 const PortForwardStartPayloadSchema = z.strictObject({
   deviceId: DeviceIdSchema,
-  remotePort: PortNumberSchema,
+  remotePort: PortNumberZod,
   // Omitted means an ephemeral local port, the common case.
-  localPort: PortNumberSchema.optional(),
+  localPort: PortNumberZod.optional(),
   worktree: PortForwardWorktreeSchema.optional(),
 });
 
 const PortForwardStartResultSchema = z.strictObject({
   forwardId: ForwardIdSchema,
-  localPort: PortNumberSchema,
+  localPort: PortNumberZod,
 });
 
 const PortForwardStopPayloadSchema = z.strictObject({
@@ -51,8 +51,8 @@ const PortForwardStopPayloadSchema = z.strictObject({
 const PortForwardSummarySchema = z.strictObject({
   forwardId: ForwardIdSchema,
   deviceId: DeviceIdSchema,
-  remotePort: PortNumberSchema,
-  localPort: PortNumberSchema,
+  remotePort: PortNumberZod,
+  localPort: PortNumberZod,
   connCount: z.number().int().min(0),
   worktree: PortForwardWorktreeSchema.optional(),
 });

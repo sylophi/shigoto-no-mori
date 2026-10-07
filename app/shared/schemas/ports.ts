@@ -1,8 +1,10 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 
 // One bound for every port number the app models: the forward engine's
 // payloads, a worktree's user-added ports, the local-port preference.
-export const PortNumberSchema = z.number().int().min(1).max(65535);
+export const PortNumberSchema = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: 65535 }),
+);
 
 export const PORT_LABEL_MAX = 32;
 // Cap on user-added ports per worktree. Well above what a dev setup
@@ -14,38 +16,42 @@ export const MAX_CUSTOM_PORTS = 16;
 // (an api the dev script starts on a fixed number, a storybook), kept
 // in the worktree's data file. The label is optional: an unlabeled
 // entry shows as its number.
-export const CustomPortSchema = z.object({
+export const CustomPortSchema = Schema.Struct({
   port: PortNumberSchema,
-  label: z.string().trim().min(1).max(PORT_LABEL_MAX).optional(),
+  label: Schema.optional(
+    Schema.Trim.check(Schema.isBetweenLength(1, PORT_LABEL_MAX)),
+  ),
 });
-export type CustomPort = z.infer<typeof CustomPortSchema>;
+export type CustomPort = typeof CustomPortSchema.Type;
 
 // Where a listed port came from: port-pool's allocation for the
 // worktree directory (named after the entry in the project's
 // port-pool.config.json), or the worktree data file.
-const WorktreePortSourceSchema = z.enum(["pool", "custom"]);
+const WorktreePortSourceSchema = Schema.Literals(["pool", "custom"]);
 
 // One row of a worktree's port list as the host reports it: the merged
 // pool + custom set, each probed once on the host's own loopback so the
 // UI can show which ones have a server behind them right now.
-const WorktreePortSchema = z.object({
+const WorktreePortSchema = Schema.Struct({
   port: PortNumberSchema,
-  label: z.string().optional(),
+  label: Schema.optional(Schema.String),
   source: WorktreePortSourceSchema,
-  listening: z.boolean(),
+  listening: Schema.Boolean,
 });
-export type WorktreePort = z.infer<typeof WorktreePortSchema>;
+export type WorktreePort = typeof WorktreePortSchema.Type;
 
-export const WorktreePortsResultSchema = z.object({
-  ports: z.array(WorktreePortSchema),
+export const WorktreePortsResultSchema = Schema.Struct({
+  ports: Schema.Array(WorktreePortSchema),
 });
-export type WorktreePortsResult = z.infer<typeof WorktreePortsResultSchema>;
+export type WorktreePortsResult = typeof WorktreePortsResultSchema.Type;
+
+const isPortNumber = Schema.is(PortNumberSchema);
 
 // A port typed into a field: the number in range, or undefined for
 // anything else (empty, junk, out of range).
 export function parsePortNumber(raw: string): number | undefined {
-  const parsed = PortNumberSchema.safeParse(Number(raw));
-  return parsed.success ? parsed.data : undefined;
+  const port = Number(raw);
+  return isPortNumber(port) ? port : undefined;
 }
 
 // Keystroke filter for a port field: digits only, so the parse above

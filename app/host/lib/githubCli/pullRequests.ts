@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import {
   type MergeMethod,
@@ -6,14 +7,16 @@ import {
   type PullRequestCheck,
   type PullRequestCheckBucket,
   type PullRequestDetail,
-  PullRequestMergeStateSchema,
-  PullRequestReviewDecisionSchema,
   PullRequestReviewerStateSchema,
   type PullRequestReviews,
-  PullRequestStateSchema,
   pullRequestsEqual,
   summarizeChecks,
 } from "@shared/schemas";
+import {
+  PullRequestMergeStateZod,
+  PullRequestReviewDecisionZod,
+  PullRequestStateZod,
+} from "@shared/schemas/zodBridge";
 import { execGh } from "./exec";
 import { ghReadyForRepo } from "./remote";
 
@@ -21,7 +24,7 @@ const GhPrListItemSchema = z.object({
   number: z.number().int().positive(),
   url: z.url(),
   title: z.string(),
-  state: PullRequestStateSchema,
+  state: PullRequestStateZod,
   isDraft: z.boolean(),
   headRefName: z.string(),
   baseRefName: z.string(),
@@ -163,9 +166,9 @@ const GhPrDetailSchema = z.object({
   title: z.string(),
   body: z.string().default(""),
   isCrossRepository: z.boolean().default(false),
-  state: PullRequestStateSchema,
+  state: PullRequestStateZod,
   isDraft: z.boolean(),
-  mergeStateStatus: PullRequestMergeStateSchema.catch("UNKNOWN"),
+  mergeStateStatus: PullRequestMergeStateZod.catch("UNKNOWN"),
   // GitHub's record of an armed auto-merge, null when there is none.
   // Loose: it also carries who armed it and when, which nothing reads.
   autoMergeRequest: z
@@ -228,16 +231,16 @@ function toCheckUrl(value: string | undefined): string | undefined {
   }
 }
 
+const isMergeMethod = Schema.is(MergeMethodSchema);
+
 // GraphQL spells the armed method MERGE / SQUASH / REBASE. A spelling
 // this build doesn't know reads as "not armed" rather than failing
 // the whole PR.
 function autoMergeMethod(
   request: { mergeMethod?: string } | null | undefined,
 ): MergeMethod | null {
-  const parsed = MergeMethodSchema.safeParse(
-    request?.mergeMethod?.toLowerCase(),
-  );
-  return parsed.success ? parsed.data : null;
+  const method = request?.mergeMethod?.toLowerCase();
+  return isMergeMethod(method) ? method : null;
 }
 
 // Single-branch lookup for the currently open worktree page. Uncached,
@@ -301,7 +304,7 @@ const GqlReviewSchema = z.object({
 const GqlReviewsPullRequestSchema = z.object({
   number: z.number().int().positive(),
   author: z.object({ login: z.string() }).nullable(),
-  reviewDecision: PullRequestReviewDecisionSchema.nullable().catch(null),
+  reviewDecision: PullRequestReviewDecisionZod.nullable().catch(null),
   latestOpinionatedReviews: z.object({ nodes: z.array(GqlReviewSchema) }),
   latestReviews: z.object({ nodes: z.array(GqlReviewSchema) }),
   reviewRequests: z.object({
@@ -358,9 +361,13 @@ async function fetchReviews(
   }
 }
 
-const SUBMITTED_REVIEW_STATE = PullRequestReviewerStateSchema.exclude([
-  "REQUESTED",
-]);
+const isSubmittedReviewState = Schema.is(
+  PullRequestReviewerStateSchema.pick([
+    "APPROVED",
+    "CHANGES_REQUESTED",
+    "COMMENTED",
+  ]),
+);
 
 // Each reviewer's opinion (an approval or a request for changes),
 // else their comment, then whoever's asked and hasn't answered. The
@@ -368,17 +375,18 @@ const SUBMITTED_REVIEW_STATE = PullRequestReviewerStateSchema.exclude([
 // out, and DISMISSED fails the state parse and drops.
 function toReviews(pr: GqlReviewsPullRequest): PullRequestReviews {
   const author = pr.author?.login;
-  const reviewers: PullRequestReviews["reviewers"] = [];
+  const reviewers: PullRequestReviews["reviewers"][number][] = [];
   const seen = new Set<string>();
   for (const review of [
     ...pr.latestOpinionatedReviews.nodes,
     ...pr.latestReviews.nodes,
   ]) {
     const login = review.author?.login ?? "ghost";
-    const state = SUBMITTED_REVIEW_STATE.safeParse(review.state);
-    if (login === author || seen.has(login) || !state.success) continue;
+    const { state } = review;
+    if (login === author || seen.has(login) || !isSubmittedReviewState(state))
+      continue;
     seen.add(login);
-    reviewers.push({ login, state: state.data });
+    reviewers.push({ login, state });
   }
   for (const { requestedReviewer } of pr.reviewRequests.nodes) {
     const login = requestedReviewer?.login ?? requestedReviewer?.combinedSlug;
