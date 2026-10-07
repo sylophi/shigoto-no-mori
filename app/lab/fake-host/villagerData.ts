@@ -107,6 +107,8 @@ export function villagerHandlersFor(): AllChannelHandlers {
 // in localStorage, posed fresh on every load, before the renderer reads
 // it: a spread of visits, or none with
 // ?visits=none. Slug, times, and the days ago of the first and last.
+// Frillard and Lloid carry the longest species and a wiki-flavored one,
+// for the back of a card.
 const DAY = 24 * 60 * 60_000;
 const FAKE_VISITS: [string, number, number, number][] = [
   ["raymond", 17, 200, 1],
@@ -134,6 +136,8 @@ const FAKE_VISITS: [string, number, number, number][] = [
   ["katrina", 1, 45, 45],
   ["leif", 2, 100, 14],
   ["daisy-mae", 2, 70, 16],
+  ["frillard", 1, 33, 33],
+  ["lloid", 1, 75, 75],
 ];
 
 function poseFakeVisits(): void {
@@ -150,5 +154,7 @@ function poseFakeVisits(): void {
     }
   }
   localStorage.setItem("villagers.visits", JSON.stringify(log));
+  // A reset tried on an earlier load would leave the posed album empty.
+  localStorage.removeItem("villagers.visits.since");
 }
 poseFakeVisits();
