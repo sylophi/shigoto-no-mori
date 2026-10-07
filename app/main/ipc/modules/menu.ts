@@ -7,7 +7,7 @@ import type { LaunchToolMenuEntry } from "@shared/schemas";
 // the renderer drive native menu state.
 type SetLaunchToolsEnabledFn = (
   enabled: boolean,
-  entries?: LaunchToolMenuEntry[],
+  entries?: readonly LaunchToolMenuEntry[],
 ) => void;
 
 let impl: SetLaunchToolsEnabledFn = () => {

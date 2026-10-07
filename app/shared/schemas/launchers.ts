@@ -1,21 +1,21 @@
-import { z } from "zod";
-import { WorktreeScopedPayloadSchema } from "./zodPayloads";
+import * as Schema from "effect/Schema";
+import { WorktreeScopedPayloadSchema } from "./payloads";
 
 // Detected apps + custom commands from the per-project config, ready for
 // the renderer to display in a single launcher row.
 
-export const DetectedLauncherSchema = z.object({
-  kind: z.literal("detected"),
-  id: z.string(),
-  label: z.string(),
-  available: z.boolean(),
+export const DetectedLauncherSchema = Schema.Struct({
+  kind: Schema.Literal("detected"),
+  id: Schema.String,
+  label: Schema.String,
+  available: Schema.Boolean,
 });
-export type DetectedLauncher = z.infer<typeof DetectedLauncherSchema>;
+export type DetectedLauncher = typeof DetectedLauncherSchema.Type;
 
-const CustomLauncherSchema = z.object({
-  kind: z.literal("custom"),
-  id: z.string(),
-  label: z.string(),
+const CustomLauncherSchema = Schema.Struct({
+  kind: Schema.Literal("custom"),
+  id: Schema.String,
+  label: Schema.String,
 });
 
 // URL-based launcher. The id encodes which provider it is so the main
@@ -38,32 +38,33 @@ export function parseLauncherId(
   return { kind, id: launcherId.slice(separator + 1) };
 }
 
-const WebLauncherSchema = z.object({
-  kind: z.literal("web"),
-  id: z.string(),
-  label: z.string(),
+const WebLauncherSchema = Schema.Struct({
+  kind: Schema.Literal("web"),
+  id: Schema.String,
+  label: Schema.String,
 });
 
-export const LauncherEntrySchema = z.discriminatedUnion("kind", [
+export const LauncherEntrySchema = Schema.Union([
   DetectedLauncherSchema,
   CustomLauncherSchema,
   WebLauncherSchema,
 ]);
-export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
+export type LauncherEntry = typeof LauncherEntrySchema.Type;
 
-export const LaunchPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  launcherId: z.string().min(1),
+export const LaunchPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  launcherId: Schema.NonEmptyString,
 });
 
-const LaunchToolMenuEntrySchema = z.object({
-  id: z.string(),
-  label: z.string(),
+const LaunchToolMenuEntrySchema = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
 });
-export type LaunchToolMenuEntry = z.infer<typeof LaunchToolMenuEntrySchema>;
+export type LaunchToolMenuEntry = typeof LaunchToolMenuEntrySchema.Type;
 
-export const SetLaunchToolsEnabledPayloadSchema = z.object({
-  enabled: z.boolean(),
+export const SetLaunchToolsEnabledPayloadSchema = Schema.Struct({
+  enabled: Schema.Boolean,
   // When enabling, the renderer passes the exact entries it's showing so
   // ⌘1..⌘9 always mirror the visible launcher row. Omit when disabling.
-  entries: z.array(LaunchToolMenuEntrySchema).optional(),
+  entries: Schema.optional(Schema.Array(LaunchToolMenuEntrySchema)),
 });

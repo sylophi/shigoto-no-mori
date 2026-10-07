@@ -24,7 +24,7 @@ import { queryKeysFor } from "@/lib/queryKeys";
 export type HostScripts = {
   deviceId: string;
   api: HostApi | undefined;
-  runs: RunningScript[];
+  runs: readonly RunningScript[];
   // The first read is still on its way.
   loading: boolean;
 };

@@ -2,10 +2,10 @@
 // stored write) and the renderer (the optimistic cache write), so the
 // two agree. Returns the same array when nothing changes.
 export function withLaunchRowScript(
-  launchRow: string[],
+  launchRow: readonly string[],
   scriptName: string,
   onRow: boolean,
-): string[] {
+): readonly string[] {
   if (launchRow.includes(scriptName) === onRow) return launchRow;
   return onRow
     ? [...launchRow, scriptName]
