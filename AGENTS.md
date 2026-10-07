@@ -14,4 +14,7 @@
 - Effect code follows `EFFECT.md`. While the `release/v3` branch lives, `V3.md`
   is its charter and checklist, and `CLAUDE.md` holds the rules for a
   thread working one of its items.
+- Docs state what is and why it is so. A comparison with another
+  product or codebase goes in a report, a PR body or a thread, not a
+  doc.
 - `skills/` is for people using `sm`, not instructions for this repo.
