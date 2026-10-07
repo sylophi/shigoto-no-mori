@@ -22,7 +22,10 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 | `skills/` | Agent skills for the `sm` workflow (below) |
 
 The JavaScript packages are one pnpm workspace (`pnpm-workspace.yaml`)
-with one lockfile: run `pnpm install` at the root. The workspace file
+with one lockfile: run `pnpm install` at the root, then
+`pnpm run postinstall`. Install scripts are off, so that second command
+is what runs the packages' own setup (the app's icons and its node-pty
+helper). The workspace file
 holds the supply-chain settings and the catalog that pins the versions
 the packages share. The root scripts run the app's through pnpm filters
 (`pnpm dev`, `pnpm test`), and `pnpm typecheck` runs every package's.
