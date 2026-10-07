@@ -23,8 +23,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { z } from "zod";
 import { isValidWorktreeDirName } from "../shared/git/branches.ts";
 import { VillagerSlugSchema } from "../shared/schemas/villagers.ts";
 import {
@@ -58,36 +59,35 @@ interface Character {
 // dropped, and an answer missing one of these fails the run. A file
 // entry that isn't a whole image (a file page whose file is gone) reads
 // as no entry, the same as a missing page.
-const CategoryMembersSchema = z.object({
-  continue: z.record(z.string(), z.string()).optional(),
-  query: z.object({
-    categorymembers: z.array(z.object({ title: z.string() })),
+const CategoryMembersSchema = Schema.Struct({
+  continue: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  query: Schema.Struct({
+    categorymembers: Schema.Array(Schema.Struct({ title: Schema.String })),
   }),
 });
-const ImageInfoSchema = z.object({
-  query: z.object({
-    normalized: z
-      .array(z.object({ from: z.string(), to: z.string() }))
-      .optional(),
-    pages: z.array(
-      z.object({
-        title: z.string(),
-        missing: z.boolean().optional(),
-        imageinfo: z
-          .array(
-            z
-              .object({
-                url: z.string(),
-                descriptionurl: z.string(),
-                size: z.number(),
-                sha1: z.string(),
-                width: z.number(),
-                height: z.number(),
-              })
-              .optional()
-              .catch(undefined),
-          )
-          .optional(),
+const ImageInfoSchema = Schema.Struct({
+  query: Schema.Struct({
+    normalized: Schema.optional(
+      Schema.Array(Schema.Struct({ from: Schema.String, to: Schema.String })),
+    ),
+    pages: Schema.Array(
+      Schema.Struct({
+        title: Schema.String,
+        missing: Schema.optional(Schema.Boolean),
+        imageinfo: Schema.optional(
+          Schema.Array(
+            Schema.UndefinedOr(
+              Schema.Struct({
+                url: Schema.String,
+                descriptionurl: Schema.String,
+                size: Schema.Finite,
+                sha1: Schema.String,
+                width: Schema.Finite,
+                height: Schema.Finite,
+              }),
+            ).pipe(Schema.catchDecoding(() => Effect.succeedSome(undefined))),
+          ),
+        ),
       }),
     ),
   }),
@@ -95,7 +95,7 @@ const ImageInfoSchema = z.object({
 
 async function api<T>(
   params: Record<string, string>,
-  schema: z.ZodType<T>,
+  schema: Schema.Decoder<T>,
 ): Promise<T> {
   const url = `${WIKI_API}?${new URLSearchParams({ format: "json", formatversion: "2", ...params })}`;
   for (let attempt = 1; ; attempt++) {
@@ -103,9 +103,11 @@ async function api<T>(
       headers: { "User-Agent": WIKI_USER_AGENT },
     });
     if (response.ok) {
-      const parsed = schema.safeParse(await response.json());
-      if (parsed.success) return parsed.data;
-      throw new Error(`Unexpected answer for ${url}: ${parsed.error.message}`);
+      const parsed = Schema.decodeUnknownResult(schema)(await response.json());
+      if (Result.isSuccess(parsed)) return parsed.success;
+      throw new Error(
+        `Unexpected answer for ${url}: ${parsed.failure.message}`,
+      );
     }
     if (attempt >= 4) {
       throw new Error(`${response.status} ${response.statusText} for ${url}`);
@@ -115,9 +117,11 @@ async function api<T>(
 }
 
 // Follows MediaWiki's `continue` tokens until the query is exhausted.
-async function* paged<T extends { continue?: Record<string, string> }>(
+async function* paged<
+  T extends { readonly continue?: { readonly [key: string]: string } },
+>(
   params: Record<string, string>,
-  schema: z.ZodType<T>,
+  schema: Schema.Decoder<T>,
 ): AsyncGenerator<T> {
   let cont: Record<string, string> = {};
   for (;;) {

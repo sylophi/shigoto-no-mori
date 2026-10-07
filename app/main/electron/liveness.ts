@@ -16,7 +16,7 @@ import { keepReachableOn } from "@shared/schemas/config";
 import { app, type BrowserWindow } from "electron";
 import { platform } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shared/errors";
 import { markShuttingDown } from "@host/lib/scripts";
 import {
@@ -180,11 +180,13 @@ function relaunchMarkerPath(): string {
 // cannot be READ is treated as no recent relaunches (fine: a marker that
 // cannot be WRITTEN vetoes the relaunch just below, so an unwritable
 // userData can never loop).
+const RelaunchMarkerSchema = Schema.Array(Schema.Finite);
+
 function consumeRelaunchBudget(now: number): boolean {
-  let recent: number[] = [];
+  let recent: readonly number[] = [];
   try {
     recent =
-      readJsonOrNullSync(relaunchMarkerPath(), z.array(z.number())) ?? [];
+      readJsonOrNullSync(relaunchMarkerPath(), RelaunchMarkerSchema) ?? [];
   } catch {
     // Missing, unreadable, or corrupt marker: no known recent relaunches.
     // The next successful write re-accumulates from empty.
