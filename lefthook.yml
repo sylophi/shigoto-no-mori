@@ -286,6 +286,11 @@ pre-commit:
           - name: worktree-palette
             glob: "{app/renderer/components/palette/buildPaletteEntries.ts,app/renderer/lib/fuzzyMatch.ts,app/renderer/components/sidebar/buildSidebarRows.ts,app/test/worktree-palette.mts,app/lab/fake-host/fixtures.ts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test worktree-palette
+          # Each sync state's move, and which wait for a clean tree. The
+          # glob is lib/syncState.ts and what it imports at runtime.
+          - name: sync-state
+            glob: "{app/renderer/lib/syncState.ts,app/renderer/lib/pluralize.ts,app/renderer/lib/utils.ts,app/shared/schemas/**,app/shared/git/**,app/shared/webUrl.ts,app/shared/cloneUrl.ts,app/test/sync-state.mts,app/lab/fake-host/fixtures.ts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test sync-state
           # The home page's grid files projects under their owners, and a
           # tile lands on the worktree visited last that isn't put away.
           - name: project-grid
