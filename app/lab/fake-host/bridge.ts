@@ -27,6 +27,7 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
 import type { ContractScope } from "@shared/ipc/contract";
+import { decode } from "@shared/ipc/schema";
 import { WEB_PLATFORM } from "@shared/account/platform";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import {
@@ -160,7 +161,7 @@ function createFixtureWire(
           // and change them in place later: a cached answer that is the
           // same object as the next one would never look changed.
           return Promise.resolve()
-            .then(() => handler(def.input.parse(input)))
+            .then(() => handler(decode(def.input, input)))
             .then((answer) => structuredClone(answer));
         }
         const stub = stubValueFor(def.output, { fabricateArms: true });

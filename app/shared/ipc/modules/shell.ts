@@ -3,13 +3,14 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   PathPayloadSchema,
   ShellOpenExternalPayloadSchema,
+  VoidSchema,
 } from "@shared/schemas";
 
 export const shellContract = defineContract("client", {
   openExternal: invoke(
     "shell:openExternal",
     ShellOpenExternalPayloadSchema,
-    z.void(),
+    VoidSchema,
   ),
   showItemInFolder: invoke(
     "shell:showItemInFolder",

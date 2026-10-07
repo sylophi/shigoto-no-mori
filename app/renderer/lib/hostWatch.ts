@@ -21,7 +21,6 @@
 // stores that keep a stream (store/scriptRuns.ts,
 // store/worktreeLifecycle.ts).
 import type { QueryClient } from "@tanstack/react-query";
-import type { z } from "zod";
 import type { BroadcastDef } from "@shared/ipc/contract";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
@@ -29,6 +28,11 @@ import { mirrorContract } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { updaterContract } from "@shared/ipc/modules/updater";
+import {
+  type ContractSchema,
+  type Decoded,
+  safeDecode,
+} from "@shared/ipc/schema";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
 import { noteGitFetchActive } from "@/hooks/git/useProjectGitFetching";
 import { syncProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
@@ -47,12 +51,12 @@ const git = gitContract.calls;
 // The bridge forwards a peer's pushes wholesale, so a payload is parsed
 // against the contract's own schema rather than trusted. This
 // machine's go through the same check: one path, and it costs nothing.
-function parsed<S extends z.ZodTypeAny>(
+function parsed<S extends ContractSchema>(
   def: BroadcastDef<S>,
-  handler: (payload: z.output<S>) => void,
+  handler: (payload: Decoded<S>) => void,
 ): (payload: unknown) => void {
   return (payload) => {
-    const result = def.payload.safeParse(payload);
+    const result = safeDecode(def.payload, payload);
     if (result.success) handler(result.data);
   };
 }
