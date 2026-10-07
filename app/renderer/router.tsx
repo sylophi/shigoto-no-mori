@@ -27,6 +27,7 @@ import { withDeviceScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
+import { PAGES } from "@/lib/pages";
 import { PROJECT_ROUTE_PATHS, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
 const rootRoute = createRootRoute({
@@ -42,11 +43,11 @@ const rootRoute = createRootRoute({
 // and replaced in history so Back never lands on the dispatcher again.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/",
+  path: PAGES.home.path,
   beforeLoad: () => {
     if (!hasLocalHost) {
       throw redirect({
-        to: isPhoneLayout() ? "/forest/$view" : "/account",
+        to: isPhoneLayout() ? "/forest/$view" : PAGES.account.path,
         params: { view: "inbox" },
         replace: true,
       });
@@ -77,7 +78,7 @@ const settingsPagesRoute = createRoute({
 
 const settingsRoute = createRoute({
   getParentRoute: () => settingsPagesRoute,
-  path: "/settings",
+  path: PAGES.settings.path,
   component: Settings,
 });
 
@@ -88,7 +89,7 @@ const settingsRoute = createRoute({
 // scoping to one, so it sits beside settings instead of under a device.
 const tidyRoute = createRoute({
   getParentRoute: () => settingsPagesRoute,
-  path: "/tidy",
+  path: PAGES.tidy.path,
   component: lazyRouteComponent(
     () => import("@/components/tidy/TidyForest"),
     "TidyForest",
@@ -99,7 +100,7 @@ const tidyRoute = createRoute({
 // root so the sidebar keeps the forest beside it.
 const liveRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/live",
+  path: PAGES.live.path,
   component: lazyRouteComponent(
     () => import("@/components/live/LivePage"),
     "LivePage",
@@ -113,7 +114,7 @@ const liveRoute = createRoute({
 // root and the sidebar keeps the peers' forest.
 const accountRoute = createRoute({
   getParentRoute: () => (hasLocalHost ? settingsPagesRoute : rootRoute),
-  path: "/account",
+  path: PAGES.account.path,
   component: DevicesPage,
 });
 
@@ -124,7 +125,7 @@ const devicesRedirectRoute = createRoute({
   path: "/devices",
   beforeLoad: ({ location }) => {
     throw redirect({
-      to: "/account",
+      to: PAGES.account.path,
       search: location.search,
       hash: location.hash,
       replace: true,

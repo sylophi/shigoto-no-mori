@@ -32,6 +32,7 @@ import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
+import { PAGES } from "@/lib/pages";
 import { cn, dragRegion } from "@/lib/utils";
 
 const SIDEBAR_MIN = 200;
@@ -47,7 +48,8 @@ export function AppShell() {
   const phone = usePhoneLayout();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  usePaletteVariantHotkey(!pathname.startsWith("/settings"));
+  // Off the Settings form alone (it stages the pick), not Tidy or the account.
+  usePaletteVariantHotkey(!pathname.startsWith(PAGES.settings.path));
   useEscapeGoesBack();
   // The forest tab a stacked page returns to on a phone.
   const forestTab = forestTabFor(useSidebarView());
@@ -72,7 +74,7 @@ export function AppShell() {
   useEffect(
     () =>
       window.api.nav.onOpenSettings(() => {
-        void navigate({ to: "/settings" });
+        void navigate({ to: PAGES.settings.path });
       }),
     [navigate],
   );

@@ -27,6 +27,7 @@ import { fieldSetter, useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { hasLocalHost } from "@/lib/localHost";
+import { PAGES } from "@/lib/pages";
 import { localDeviceId } from "@/lib/queryKeys";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
 import type { DarkTheme, LightTheme } from "@shared/themes";
@@ -448,7 +449,7 @@ function headingFor(activeTab: SettingsTab): {
     };
   }
   return {
-    eyebrow: "Settings",
+    eyebrow: PAGES.settings.label,
     title: SECTION_LABELS[activeTab],
   };
 }

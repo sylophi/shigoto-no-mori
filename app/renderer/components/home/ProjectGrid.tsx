@@ -28,6 +28,7 @@ import { useRepoDescription } from "@/hooks/projects/useRepoDescription";
 import { useNow } from "@/hooks/ui/useNow";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import { PAGES } from "@/lib/pages";
 import { pluralize } from "@/lib/pluralize";
 import { readWorktreeVisits } from "@/lib/recentWorktrees";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -66,7 +67,7 @@ export function ProjectGrid() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Projects" watermark="森" />
+      <PageHeader title={PAGES.home.label} watermark="森" />
       <div className={PAGE_BODY}>
         {sections.length > 0 ? (
           <Grid sections={sections} work={work} />

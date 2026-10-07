@@ -14,6 +14,7 @@ import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { notifyError } from "@/lib/toast";
+import { PAGES } from "@/lib/pages";
 import {
   type CarryOverEntry,
   type LauncherCommand,
@@ -306,7 +307,7 @@ export function ConfigureForm({
                     type="button"
                     onClick={() => {
                       selectSettingsTab(LAUNCH_TAB);
-                      void navigate({ to: "/settings" });
+                      void navigate({ to: PAGES.settings.path });
                     }}
                     className="underline underline-offset-2 hover:text-foreground"
                   >

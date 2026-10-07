@@ -22,6 +22,7 @@ import {
   useSidebarViewSettled,
 } from "@/hooks/projects/useSidebarView";
 import { hasLocalHost } from "@/lib/localHost";
+import { PAGES } from "@/lib/pages";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import {
   buildSidebarRows,
@@ -345,10 +346,10 @@ function Forest({
     return (
       <SidebarEmptyState message="Sign in to reach this account's devices.">
         <Link
-          to="/account"
+          to={PAGES.account.path}
           className="text-primary underline-offset-2 hover:underline"
         >
-          Open Devices
+          Open {PAGES.account.label}
         </Link>
       </SidebarEmptyState>
     );
@@ -533,7 +534,7 @@ function emptyForestMessage({
   if (noProjects && empty) {
     return hasLocalHost
       ? "No projects yet."
-      : "No reachable devices with projects yet. Open the Devices page to see this account's machines.";
+      : `No reachable devices with projects yet. Open the ${PAGES.account.label} page to see this account's machines.`;
   }
   return viewMessage;
 }

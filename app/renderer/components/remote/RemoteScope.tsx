@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { hasLocalHost } from "@/lib/localHost";
+import { PAGES } from "@/lib/pages";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
@@ -112,7 +113,7 @@ function OpenDevicesButton() {
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void navigate({ to: "/account" })}
+      onClick={() => void navigate({ to: PAGES.account.path })}
     >
       {hasLocalHost ? "Open account page" : "Open Devices"}
     </Button>

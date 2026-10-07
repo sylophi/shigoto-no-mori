@@ -10,6 +10,7 @@ import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
+import { PAGES } from "@/lib/pages";
 import type { LauncherEntry, Worktree } from "@shared/schemas";
 import {
   LAUNCH_TAB,
@@ -58,7 +59,7 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
           size="sm"
           onClick={() => {
             selectSettingsTab(LAUNCH_TAB);
-            void navigate({ to: "/settings" });
+            void navigate({ to: PAGES.settings.path });
           }}
         >
           Choose tools

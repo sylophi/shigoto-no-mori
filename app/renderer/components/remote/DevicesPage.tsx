@@ -1,5 +1,6 @@
 import { PageShell } from "@/components/shared/PageShell";
 import { hasLocalHost } from "@/lib/localHost";
+import { PAGES } from "@/lib/pages";
 import { AccountSection } from "./AccountSection";
 
 // "/account": the account and its machines, on their own page. The
@@ -13,10 +14,13 @@ import { AccountSection } from "./AccountSection";
 // On a desktop it is the Account row of Settings' list (SettingsPages
 // keeps that list in the sidebar here). A hostless client has no
 // forest of its own and this page is its home, so there it is Devices,
-// and wears the devices watermark.
-const HEADER = hasLocalHost
-  ? { eyebrow: "Settings", title: "Account", watermark: "アカウント" }
-  : { eyebrow: "Shigoto no Mori", title: "Devices", watermark: "機器" };
+// and wears the devices watermark. Its name is lib/pages.ts's.
+const HEADER = {
+  title: PAGES.account.label,
+  ...(hasLocalHost
+    ? { eyebrow: PAGES.settings.label, watermark: "アカウント" }
+    : { eyebrow: "Shigoto no Mori", watermark: "機器" }),
+};
 
 export function DevicesPage() {
   return (

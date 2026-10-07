@@ -4,7 +4,6 @@ import {
   useMatches,
   useNavigate,
 } from "@tanstack/react-router";
-import { CircleUserRound, Trees } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { useGoBack } from "@/hooks/ui/useGoBack";
@@ -12,6 +11,7 @@ import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { UpdateMark } from "@/components/ui/status-dot";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { hasLocalHost } from "@/lib/localHost";
+import { PAGES } from "@/lib/pages";
 import { cn } from "@/lib/utils";
 import {
   selectSettingsTab,
@@ -69,7 +69,7 @@ export function useOnSettingsPages(): boolean {
 function SettingsSidebarNav() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (l) => l.pathname });
-  const onPage = pathname !== SETTINGS_PATH;
+  const onPage = pathname !== PAGES.settings.path;
   const activeTab = useActiveSettingsTab();
   const controls = useSettingsPanelControls();
   const update = Object.keys(useStagedUpdates()).length > 0;
@@ -83,30 +83,29 @@ function SettingsSidebarNav() {
       controls={controls(section.id)}
       onSelect={() => {
         selectSettingsTab(section.id);
-        if (onPage) void navigate({ to: SETTINGS_PATH, replace: true });
+        if (onPage) void navigate({ to: PAGES.settings.path, replace: true });
       }}
     />
   );
-  // A row leading to one of the pages beside Settings.
-  const pageRow = (section: SettingsSection, to: PagePath) => (
+  // A row leading to one of the pages beside Settings, named and drawn
+  // as the page list has it.
+  const pageRow = (page: SettingsPage) => (
     <NavRow
-      section={section}
-      active={pathname === to}
-      onSelect={() => void navigate({ to, replace: true })}
+      section={page}
+      active={pathname === page.path}
+      onSelect={() => void navigate({ to: page.path, replace: true })}
     />
   );
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
-      {hasLocalHost && (
-        <div className="pt-3">{pageRow(ACCOUNT_SECTION, "/account")}</div>
-      )}
+      {hasLocalHost && <div className="pt-3">{pageRow(PAGES.account)}</div>}
 
       <NavGroup label="Client">{sections.client.map(row)}</NavGroup>
 
       <NavGroup label="Host">
         {sections.host.map(row)}
-        {hasLocalHost && pageRow(TIDY_SECTION, "/tidy")}
+        {hasLocalHost && pageRow(PAGES.tidy)}
       </NavGroup>
     </nav>
   );
@@ -117,7 +116,7 @@ function SettingsSidebarNav() {
 // update, trails the sidebar Settings dot's own mark, so the dot that
 // brought the visitor here points at the row it meant (and the tab bar
 // there at the device).
-export function SectionLabel({ section }: { section: SettingsSection }) {
+export function SectionLabel({ section }: { section: RowLabel }) {
   const Icon = section.icon;
   return (
     <>
@@ -148,20 +147,11 @@ function NavGroup({
   );
 }
 
-const SETTINGS_PATH = "/settings";
-type PagePath = "/tidy" | "/account";
+// The pages beside Settings that its list leads to.
+type SettingsPage = (typeof PAGES)["account" | "tidy"];
 
-const TIDY_SECTION: SettingsSection = {
-  id: "tidy",
-  label: "Tidy the forest",
-  icon: Trees,
-};
-
-const ACCOUNT_SECTION: SettingsSection = {
-  id: "account",
-  label: "Account",
-  icon: CircleUserRound,
-};
+// What a row or chip draws: a section's, or a page's, name and icon.
+type RowLabel = Pick<SettingsSection, "label" | "icon" | "update">;
 
 // One row, with the sidebar rows' selection fill, so the list reads as
 // the sidebar's rather than a foreign widget dropped in.
@@ -171,7 +161,7 @@ function NavRow({
   controls,
   onSelect,
 }: {
-  section: SettingsSection;
+  section: RowLabel;
   active: boolean;
   // The settings panel the row shows. Tidy's and the account's rows
   // lead to pages.

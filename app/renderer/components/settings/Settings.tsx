@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
+import { PAGES } from "@/lib/pages";
 import { SettingsForm } from "./SettingsForm";
 import { SettingsSkeleton } from "./SettingsSkeleton";
 
@@ -17,7 +18,7 @@ export function Settings() {
       <div data-doubutsu-page="settings" className="flex h-full flex-col">
         <PageHeader
           eyebrow="Shigoto no Mori"
-          title="Settings"
+          title={PAGES.settings.label}
           watermark="設定"
         />
         <SettingsSkeleton />

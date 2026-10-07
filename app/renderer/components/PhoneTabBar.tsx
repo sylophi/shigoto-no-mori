@@ -10,16 +10,11 @@
 // a cream tray with a leaf-green sticker on the current tab
 // (doubutsu.css).
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import {
-  Inbox,
-  MonitorSmartphone,
-  Settings as SettingsIcon,
-  TreeDeciduous,
-  type LucideIcon,
-} from "lucide-react";
+import { Inbox, TreeDeciduous, type LucideIcon } from "lucide-react";
 import type { SidebarView } from "@shared/schemas";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
+import { PAGES } from "@/lib/pages";
 import { cn } from "@/lib/utils";
 
 // The forest tabs share one route, told apart by its view param.
@@ -29,7 +24,7 @@ type Tab = {
   pathname: string;
   to:
     | { to: "/forest/$view"; params: { view: SidebarView } }
-    | { to: "/account" | "/settings" };
+    | { to: typeof PAGES.account.path | typeof PAGES.settings.path };
 };
 
 const forestTab = (
@@ -43,21 +38,18 @@ const forestTab = (
   to: { to: "/forest/$view", params: { view } },
 });
 
+const pageTab = (page: (typeof PAGES)["account" | "settings"]): Tab => ({
+  label: page.label,
+  icon: page.icon,
+  pathname: page.path,
+  to: { to: page.path },
+});
+
 const TABS: readonly [Tab, ...Tab[]] = [
   forestTab("inbox", "Inbox", Inbox),
   forestTab("projects", "Projects", TreeDeciduous),
-  {
-    label: "Devices",
-    icon: MonitorSmartphone,
-    pathname: "/account",
-    to: { to: "/account" },
-  },
-  {
-    label: "Settings",
-    icon: SettingsIcon,
-    pathname: "/settings",
-    to: { to: "/settings" },
-  },
+  pageTab(PAGES.account),
+  pageTab(PAGES.settings),
 ];
 
 // The forest tab a view lives on: where a page stacked over the forest
@@ -70,7 +62,10 @@ export function forestTabFor(view: SidebarView): Tab {
 // that lands on one), as opposed to a page stacked over the forest,
 // which the shell puts a back bar over.
 export function isTabRoute(pathname: string): boolean {
-  return pathname === "/" || TABS.some((tab) => tab.pathname === pathname);
+  return (
+    pathname === PAGES.home.path ||
+    TABS.some((tab) => tab.pathname === pathname)
+  );
 }
 
 export function PhoneTabBar() {
@@ -115,7 +110,7 @@ export function PhoneTabBar() {
               )}
             >
               <Icon aria-hidden className="size-5" />
-              {tabPath === "/settings" && updateReady && (
+              {tabPath === PAGES.settings.path && updateReady && (
                 <span
                   aria-hidden
                   className="pointer-events-none absolute top-1 right-4.5 size-1.5 rounded-full bg-sky-500"
@@ -123,7 +118,7 @@ export function PhoneTabBar() {
               )}
             </span>
             {label}
-            {tabPath === "/settings" && updateReady && (
+            {tabPath === PAGES.settings.path && updateReady && (
               <span className="sr-only">(update available)</span>
             )}
           </button>

@@ -13,6 +13,7 @@ import {
   useHostDevicePick,
   type DeviceTab,
 } from "@/components/shared/DeviceTabs";
+import { PAGES } from "@/lib/pages";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {
@@ -82,8 +83,8 @@ export function TidyForest() {
   return (
     <div data-doubutsu-page="tidy" className="flex h-full flex-col">
       <PageHeader
-        eyebrow="Settings"
-        title="Tidy the forest"
+        eyebrow={PAGES.settings.label}
+        title={PAGES.tidy.label}
         watermark="掃除"
         tabs={
           tabbed ? (

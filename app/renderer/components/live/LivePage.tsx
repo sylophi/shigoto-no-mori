@@ -21,6 +21,7 @@ import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { scriptRunsFor } from "@/store/scriptRuns";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
+import { PAGES } from "@/lib/pages";
 import { pluralize } from "@/lib/pluralize";
 import { notifyError, toast } from "@/lib/toast";
 import { DeviceHeading, LiveCard } from "./LiveCard";
@@ -61,7 +62,7 @@ export function LivePage() {
               ? "Asking your devices…"
               : "Nothing running"
         }
-        title="Live"
+        title={PAGES.live.label}
         watermark="稼働"
         trailing={<StopAllScripts hosts={hosts} />}
       />
@@ -75,7 +76,7 @@ export function LivePage() {
             {devices.map((device) => (
               <section
                 key={device.deviceId}
-                aria-label={multiDevice ? undefined : "Live"}
+                aria-label={multiDevice ? undefined : PAGES.live.label}
                 className="flex flex-col gap-3"
               >
                 {multiDevice && (
