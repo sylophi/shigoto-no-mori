@@ -496,7 +496,21 @@ type commitSummary struct {
 	Deletions int    `json:"deletions"`
 }
 
-const logSentinel = "\x01"
+// `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
+// on its own line after each commit's formatted output. A SOH (\x01)
+// sentinel opens each record, and NUL separates its fields, since an
+// author name can hold a tab. Mirrors LOG_FORMAT and parseLog in
+// app/host/lib/git/worktrees.ts, and both are held to
+// app/shared/fixtures/git-log.json.
+const (
+	logSentinel = "\x01"
+	logFormat   = logSentinel + "%h%x00%an%x00%aI%x00%s"
+)
+
+// Mirrors COMMIT_HASH_RE in shared/schemas/worktree.ts: hex only, so a
+// hash can never occupy a flag position when it travels back into git
+// argv.
+var commitHashRe = regexp.MustCompile(`^[0-9a-f]{4,64}$`)
 
 var (
 	insertionsRe = regexp.MustCompile(`(\d+) insertions?\(\+\)`)
@@ -506,18 +520,38 @@ var (
 func listCommits(worktreePath string, skip, count int) []commitSummary {
 	stdout, err := runGit(worktreePath,
 		"log", fmt.Sprintf("--skip=%d", skip), fmt.Sprintf("-%d", count),
-		"--pretty=format:"+logSentinel+"%h%x09%an%x09%aI%x09%s", "--shortstat")
+		"--pretty=format:"+logFormat, "--shortstat")
 	if err != nil {
 		return []commitSummary{}
 	}
-	commits := []commitSummary{}
-	for _, chunk := range strings.Split(stdout, logSentinel) {
-		if chunk == "" {
+	return parseLog(stdout)
+}
+
+func parseLog(stdout string) []commitSummary {
+	// A record only opens at a sentinel that starts a line. Git emits a
+	// raw SOH from `%s`, but it folds a subject's newlines into spaces,
+	// so a subject carrying one stays inside its own header line rather
+	// than opening a record of its own. Anything else on a line belongs
+	// to the open record's `--shortstat` tail.
+	type record struct{ header, stats string }
+	records := []record{}
+	for _, line := range strings.Split(stdout, "\n") {
+		if header, ok := strings.CutPrefix(line, logSentinel); ok {
+			records = append(records, record{header: header})
 			continue
 		}
-		header, stats, _ := strings.Cut(chunk, "\n")
-		parts := strings.SplitN(header, "\t", 4)
-		if len(parts) == 0 || parts[0] == "" {
+		if len(records) > 0 {
+			records[len(records)-1].stats += line
+		}
+	}
+	commits := []commitSummary{}
+	for _, r := range records {
+		parts := strings.SplitN(r.header, "\x00", 4)
+		// A record whose first field isn't an abbreviated sha isn't a
+		// commit: drop it instead of handing the app an attacker-chosen
+		// string (which also fails the app's hash schema, and with it
+		// the whole worktree list).
+		if !commitHashRe.MatchString(parts[0]) {
 			continue
 		}
 		c := commitSummary{Hash: parts[0]}
@@ -530,10 +564,10 @@ func listCommits(worktreePath string, skip, count int) []commitSummary {
 		if len(parts) > 3 {
 			c.Subject = parts[3]
 		}
-		if m := insertionsRe.FindStringSubmatch(stats); m != nil {
+		if m := insertionsRe.FindStringSubmatch(r.stats); m != nil {
 			c.Additions, _ = strconv.Atoi(m[1])
 		}
-		if m := deletionsRe.FindStringSubmatch(stats); m != nil {
+		if m := deletionsRe.FindStringSubmatch(r.stats); m != nil {
 			c.Deletions, _ = strconv.Atoi(m[1])
 		}
 		commits = append(commits, c)

@@ -98,11 +98,14 @@ export async function getUpstreamCounts(
 // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
 // on its own line after each commit's formatted output. A SOH (\x01)
 // sentinel between records keeps parsing robust against subjects that
-// contain tabs or newlines.
+// contain tabs or newlines, and NUL between fields against an author
+// name with a tab (git keeps those). The CLI reads its own `git log` the
+// same way (cli/gitx.go), and both are held to
+// shared/fixtures/git-log.json.
 const LOG_SENTINEL = "\x01";
-const LOG_FORMAT = `${LOG_SENTINEL}%h%x09%an%x09%aI%x09%s`;
+export const LOG_FORMAT = `${LOG_SENTINEL}%h%x00%an%x00%aI%x00%s`;
 
-function parseLog(stdout: string): CommitSummary[] {
+export function parseLog(stdout: string): CommitSummary[] {
   // A record only opens at a sentinel that starts a line. Git emits a raw
   // SOH from `%s`, but it folds a subject's newlines into spaces, so a
   // subject carrying one stays inside its own header line rather than
@@ -119,7 +122,7 @@ function parseLog(stdout: string): CommitSummary[] {
   }
   const commits: CommitSummary[] = [];
   for (const { header, stats } of records) {
-    const [hash, author, date, ...subjectParts] = header.split("\t");
+    const [hash, author, date, ...subjectParts] = header.split("\0");
     // Belt and braces on top of the line-anchored split: a record whose
     // first field isn't an abbreviated sha isn't a commit, so drop it
     // instead of letting it reach the renderer (and, from there, git
@@ -131,7 +134,7 @@ function parseLog(stdout: string): CommitSummary[] {
       hash,
       author: author ?? "",
       date: date ?? "",
-      subject: subjectParts.join("\t"),
+      subject: subjectParts.join("\0"),
       additions: insMatch ? Number(insMatch[1]) : 0,
       deletions: delMatch ? Number(delMatch[1]) : 0,
     });
