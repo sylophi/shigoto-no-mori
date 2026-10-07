@@ -28,14 +28,6 @@ func seedBundleFixture(t *testing.T) (srcPath, dstPath, base, workTip, captureTi
 
 	dstPath = filepath.Join(parent, "dst")
 	runGitT(t, parent, "clone", "-q", "--", srcPath, dstPath)
-	// No background housekeeping: fetch spawns a detached
-	// `git maintenance run --auto` whose repack races t.TempDir's
-	// cleanup, failing RemoveAll on a still-populated .git.
-	for _, repo := range []string{srcPath, dstPath} {
-		runGitT(t, repo, "config", "gc.auto", "0")
-		runGitT(t, repo, "config", "maintenance.auto", "false")
-	}
-
 	runGitT(t, srcPath, "checkout", "-q", "-b", "work")
 	writeFileT(t, filepath.Join(srcPath, "b.txt"), "branch work\n")
 	runGitT(t, srcPath, "add", "-A")
