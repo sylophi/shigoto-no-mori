@@ -396,7 +396,11 @@ export function decodeEnvelope<S extends Schema.Decoder<unknown>>(
   text: string,
   schema: S,
 ): S["Type"] | null {
-  return Option.getOrNull(
-    Schema.decodeUnknownOption(Schema.fromJsonString(schema))(text),
-  );
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  return Option.getOrNull(Schema.decodeUnknownOption(schema)(raw));
 }
