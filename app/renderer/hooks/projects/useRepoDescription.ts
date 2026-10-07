@@ -6,7 +6,7 @@ import { queryKeysFor } from "@/lib/queryKeys";
 // A project's GitHub About text, scoped to (device, project) and kept
 // as the icon is (projectIconQueryOptions): once per launch, as the
 // host reads it.
-export function repoDescriptionQueryOptions(
+function repoDescriptionQueryOptions(
   projectId: string,
   scope: Pick<HostScope, "deviceId"> & { api: HostScope["api"] | undefined },
 ) {

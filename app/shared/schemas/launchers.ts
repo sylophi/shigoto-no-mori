@@ -12,26 +12,21 @@ export const DetectedLauncherSchema = z.object({
 });
 export type DetectedLauncher = z.infer<typeof DetectedLauncherSchema>;
 
-export const CustomLauncherSchema = z.object({
+const CustomLauncherSchema = z.object({
   kind: z.literal("custom"),
   id: z.string(),
   label: z.string(),
 });
-export type CustomLauncher = z.infer<typeof CustomLauncherSchema>;
 
 // URL-based launcher. The id encodes which provider it is so the main
 // process can resolve the URL at launch time. Shared so both ends of
 // the IPC compare against the same string.
 export const WEB_GITHUB_ID = "web:github";
 
-// A launcher id is "<kind>:<id>". Builder and parser live together so
-// the prefixes exist once, rather than being decoded by hand-counted
-// slices at each call site. Mirrored by cli/launchers.go.
+// A launcher id is "<kind>:<id>". The parser keeps the prefixes in one
+// place, rather than decoding them by hand-counted slices at each call
+// site. Mirrored by cli/launchers.go.
 export type LauncherKind = "app" | "custom" | "web";
-
-export function launcherIdFor(kind: LauncherKind, id: string): string {
-  return `${kind}:${id}`;
-}
 
 export function parseLauncherId(
   launcherId: string,
@@ -43,12 +38,11 @@ export function parseLauncherId(
   return { kind, id: launcherId.slice(separator + 1) };
 }
 
-export const WebLauncherSchema = z.object({
+const WebLauncherSchema = z.object({
   kind: z.literal("web"),
   id: z.string(),
   label: z.string(),
 });
-export type WebLauncher = z.infer<typeof WebLauncherSchema>;
 
 export const LauncherEntrySchema = z.discriminatedUnion("kind", [
   DetectedLauncherSchema,
@@ -61,7 +55,7 @@ export const LaunchPayloadSchema = WorktreeScopedPayloadSchema.extend({
   launcherId: z.string().min(1),
 });
 
-export const LaunchToolMenuEntrySchema = z.object({
+const LaunchToolMenuEntrySchema = z.object({
   id: z.string(),
   label: z.string(),
 });

@@ -120,7 +120,7 @@ export const SYNC_IGNORED_PATHS_LIMIT = 32;
 // The rules ride under the engine's own cap (MIRROR_IGNORES_LIMIT),
 // not the path list's: a repo's gitignore files easily hold more than
 // 32 lines.
-export const SyncIgnoredPathsResultSchema = z.strictObject({
+const SyncIgnoredPathsResultSchema = z.strictObject({
   paths: z.array(z.string()).max(SYNC_IGNORED_PATHS_LIMIT),
   total: z.number().int().nonnegative(),
   // The gitignore rules behind them (the root .gitignore and
@@ -145,7 +145,7 @@ const SyncWorktreeFolderPayloadSchema = SyncIgnoredPathsPayloadSchema.extend({
     message: "Path must stay within the worktree",
   }),
 });
-export const SyncWorktreeFolderEntrySchema = z.strictObject({
+const SyncWorktreeFolderEntrySchema = z.strictObject({
   name: z.string().min(1),
   isDirectory: z.boolean(),
   ignored: z.boolean(),
@@ -345,7 +345,7 @@ const SyncOpenSourcePayloadSchema = z.strictObject({
 // capture was applied at the destination. Computed by the landing and
 // kept by the device that ran the move, so the data-loss rule runs on
 // the hosts' own facts, never on a caller's say-so.
-export const SyncReceiptSchema = z.strictObject({
+const SyncReceiptSchema = z.strictObject({
   branch: GitRefNameSchema,
   branchTip: CommitHashSchema,
   captured: z.boolean(),
@@ -361,7 +361,7 @@ export type SyncReceipt = z.infer<typeof SyncReceiptSchema>;
 // is created on when it is not the source's own (a primary's mirror
 // lands on mirror/<branch>, shared/git/branches.ts). The commits still
 // arrive under `branch`.
-export const SyncReceiveWorktreePayloadSchema = z.strictObject({
+const SyncReceiveWorktreePayloadSchema = z.strictObject({
   identity: z.string().min(1),
   branch: SyncPullWorktreePayloadSchema.shape.branch,
   worktreeName: SyncPullWorktreePayloadSchema.shape.worktreeName,
@@ -385,7 +385,7 @@ const SyncReceiveBundlePayloadSchema = z.strictObject({
   haves: z.array(CommitHashSchema).max(256),
   channelId: ChannelIdSchema,
 });
-export const SyncFetchedSchema = z.strictObject({
+const SyncFetchedSchema = z.strictObject({
   fetched: z.array(
     z.strictObject({ ref: z.string(), commit: CommitHashSchema }),
   ),
@@ -409,9 +409,8 @@ export type SyncTeardownSourceResult = z.infer<
 // SOURCE worktree (the peer's after a pull, this device's after a
 // send). What the move captured and applied is NOT on the wire: the
 // host reads back its own receipt.
-export const SyncMoveDirectionSchema = z.enum(["pull", "send"]);
-export type SyncMoveDirection = z.infer<typeof SyncMoveDirectionSchema>;
-export const SyncTeardownSourcePayloadSchema = z.strictObject({
+const SyncMoveDirectionSchema = z.enum(["pull", "send"]);
+const SyncTeardownSourcePayloadSchema = z.strictObject({
   direction: SyncMoveDirectionSchema,
   deviceId: DeviceIdSchema,
   projectId: z.string().min(1),
@@ -451,7 +450,7 @@ export function isMoveCancelledError(error: unknown): boolean {
 // Which of the named commits the host already holds, so a sender can
 // thin a bundle (and skip a ref whose tip the receiver has, which
 // `git bundle create` would otherwise drop silently).
-export const SYNC_HAS_COMMITS_LIMIT = 64;
+const SYNC_HAS_COMMITS_LIMIT = 64;
 const SyncHasCommitsPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
   commits: z.array(CommitHashSchema).min(1).max(SYNC_HAS_COMMITS_LIMIT),

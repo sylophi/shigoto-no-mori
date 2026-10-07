@@ -39,7 +39,7 @@ import { villageProfiles } from "./speakers";
 const LOG_KEY = "villagers.visits";
 
 // A visit: who, and when (epoch ms). Null for a copy.
-export type VisitEntry = { slug: string; at: number } | null;
+type VisitEntry = { slug: string; at: number } | null;
 export type VisitLog = Readonly<Record<string, VisitEntry>>;
 
 // Anything but a visit or a copy (a hand-edited or corrupt record) is

@@ -28,7 +28,7 @@ const execFileP = promisify(execFile);
 
 // What a shelved worktree looked like when it went on the shelf, as the
 // CLI's listing records it (cli/shelf.go).
-export type ShelfSnapshot = {
+type ShelfSnapshot = {
   at: number;
   head: string | null;
   changed: number;
@@ -60,8 +60,6 @@ function gitFailure(cwd: string, args: string[], error: unknown): Error {
     { cause: error },
   );
 }
-
-export type CliSandbox = ReturnType<typeof cliSandbox>;
 
 // `prefix` names the temp dir, `extraSmEnv` lands on top of the env
 // the sm binary runs under.

@@ -65,7 +65,7 @@ export function useLocateProject(
 // still there, the usual neighbourhood of a move or a rename. A parent
 // that went too would open the picker on an error. Undefined, the
 // picker opens at home.
-export async function locateStartFolder(
+async function locateStartFolder(
   api: HostApi,
   path: string,
 ): Promise<string | undefined> {
@@ -84,7 +84,7 @@ export async function locateStartFolder(
   return undefined;
 }
 
-export function LocateProjectPicker({
+function LocateProjectPicker({
   project,
   from,
   onClose,

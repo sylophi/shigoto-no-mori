@@ -89,7 +89,7 @@ function SelectionNote({ pr }: { pr: PullRequestCandidate }) {
 // resolver has no free branch name left for are shown but not
 // selectable. Hiding them would leave the user hunting for a PR that's
 // right there on GitHub.
-export function PullRequestPicker({
+function PullRequestPicker({
   pullRequests,
   selected,
   onSelect,

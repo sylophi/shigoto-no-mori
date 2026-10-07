@@ -18,7 +18,7 @@ export const PickFolderPayloadSchema = z
   .optional();
 export type PickFolderPayload = z.infer<typeof PickFolderPayloadSchema>;
 
-export const DirectoryEntrySchema = z.object({
+const DirectoryEntrySchema = z.object({
   name: z.string(),
   isGitRepo: z.boolean(),
 });

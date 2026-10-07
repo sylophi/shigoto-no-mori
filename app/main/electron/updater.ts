@@ -85,7 +85,7 @@ function setState(next: UpdaterState): void {
   void publishUpdaterState(state);
 }
 
-export function getUpdaterState(): UpdaterState {
+function getUpdaterState(): UpdaterState {
   return state;
 }
 
@@ -126,7 +126,7 @@ function readyStateFrom(manifest: {
   };
 }
 
-export function checkForUpdates(): void {
+function checkForUpdates(): void {
   void runCheck();
 }
 

@@ -3,7 +3,7 @@ import type { CommitSummary } from "@shared/schemas";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
-export const BRANCH_COMMITS_PAGE_SIZE = 50;
+const BRANCH_COMMITS_PAGE_SIZE = 50;
 
 // Pages the worktree's `git log HEAD` in PAGE_SIZE chunks. The cursor is
 // the cumulative number of commits already loaded, which we feed back as

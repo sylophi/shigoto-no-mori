@@ -27,7 +27,7 @@ export const localDeviceId: string = window.api.deviceId;
 // builders use, so it sits beside this machine's data without
 // colliding. queryKeyDomain still classifies these correctly: it reads
 // the domain off the third slot whatever id sits in the second.
-export function hostKeysFor(
+function hostKeysFor(
   deviceId: string,
 ): <const T extends readonly unknown[]>(
   ...segments: T
@@ -41,7 +41,7 @@ export function hostKeysFor(
 // key classifies the same as ours. Predicates that classify keys by
 // domain go through this instead of indexing around the prefix by
 // hand.
-export function queryKeyDomain(queryKey: readonly unknown[]): unknown {
+function queryKeyDomain(queryKey: readonly unknown[]): unknown {
   return queryKey[0] === HOST_SCOPE ? queryKey[2] : queryKey[0];
 }
 

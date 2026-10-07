@@ -12,7 +12,7 @@ import { queryKeysFor } from "@/lib/queryKeys";
 // dropping it. Cached forever: `null` is the success case for
 // icon-less projects, not an error, and an icon does not change while
 // the app runs.
-export function projectIconQueryOptions(
+function projectIconQueryOptions(
   projectId: string,
   scope: Pick<HostScope, "deviceId"> & { api: HostScope["api"] | undefined },
 ) {

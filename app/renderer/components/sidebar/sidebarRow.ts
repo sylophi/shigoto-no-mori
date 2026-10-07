@@ -182,7 +182,7 @@ export interface SidebarViewModel {
   leftOut?: (worktreeId: string, deviceId?: string) => boolean;
 }
 
-export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
+const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   project: 28,
   "owner-header": 32,
   worktree: 49,

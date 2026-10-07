@@ -23,7 +23,7 @@ import {
   type WorktreeIdentity,
 } from "../git/worktrees";
 
-export type AutoPullSkipReason =
+type AutoPullSkipReason =
   | "detached"
   | "no-upstream"
   | "synced"

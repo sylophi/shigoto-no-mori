@@ -38,7 +38,7 @@ function entriesEqual(
   );
 }
 
-export function setLaunchToolsEnabled(
+function setLaunchToolsEnabled(
   enabled: boolean,
   entries?: LaunchToolMenuEntry[],
 ): void {

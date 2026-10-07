@@ -12,7 +12,7 @@ import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
 import { bundledBinaryResolver } from "./bundledBinary";
 import { registerBackgroundChild } from "./cliRunner";
 
-export const fileSyncBinaryPath = bundledBinaryResolver(
+const fileSyncBinaryPath = bundledBinaryResolver(
   FILE_SYNC_DIST_DIR,
   FILE_SYNC_BINARY_NAME,
 );

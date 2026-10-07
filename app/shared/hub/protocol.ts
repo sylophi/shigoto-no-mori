@@ -250,7 +250,6 @@ export type EnrollResponseWire = z.input<typeof EnrollResponseSchema>;
 export const DeviceListResponseSchema = z.object({
   devices: z.array(DeviceInfoSchema),
 });
-export type DeviceListResponse = z.infer<typeof DeviceListResponseSchema>;
 export type DeviceListResponseWire = z.input<typeof DeviceListResponseSchema>;
 
 // POST /tickets response. The ticket string is opaque to clients: the

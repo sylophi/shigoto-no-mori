@@ -435,7 +435,6 @@ export const DeleteStackPayloadSchema = WorktreeScopedPayloadSchema.extend({
   force: z.boolean().optional(),
   skipCleanup: z.boolean().optional(),
 });
-export type DeleteStackPayload = z.infer<typeof DeleteStackPayloadSchema>;
 
 // `removed` lists the worktree ids that went, on a cleanup failure the
 // ones removed before it.

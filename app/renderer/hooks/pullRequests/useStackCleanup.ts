@@ -19,7 +19,7 @@ import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { CALM_REFETCH } from "@/hooks/remote/useRemoteForests";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 
-export interface StackCleanupDevice {
+interface StackCleanupDevice {
   deviceId: string;
   label: string;
   // The page's own device: its removal navigates the page on.

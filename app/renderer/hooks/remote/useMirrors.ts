@@ -140,7 +140,7 @@ export type MirrorLink = {
   localWorktreeId: string;
 };
 
-export function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
+function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
   const links: MirrorLink[] = [];
   for (const session of mirrors.sessions) {
     if (session.localWorktreeId === "") continue;
@@ -221,7 +221,7 @@ export function useMirrorLinks(): MirrorLink[] {
 // The one mirror picture a worktree row cares about: the session this
 // device runs ON it (it is the original of a copy made on a peer), and
 // the streams this device serves FROM it (it is a peer's copy).
-export function useWorktreeMirror(worktree: Worktree): {
+function useWorktreeMirror(worktree: Worktree): {
   session: MirrorSession | undefined;
   serving: MirrorServing[];
 } {

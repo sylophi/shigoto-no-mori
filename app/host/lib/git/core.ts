@@ -204,7 +204,7 @@ export async function runLenient(
 // Pathspecs travel as argv, and a big refactor can carry enough paths
 // to brush the OS arg-length limit. Callers run one git process per
 // chunk.
-export const PATHSPEC_CHUNK = 500;
+const PATHSPEC_CHUNK = 500;
 
 export function chunked<T>(items: readonly T[]): T[][] {
   const chunks: T[][] = [];

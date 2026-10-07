@@ -5,7 +5,7 @@ import { ProjectScopedPayloadSchema } from "./payloads";
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
 // no detached HEAD we can read. Treated as "not a real branch" by every
 // consumer that filters branches for operations (delete, switch, etc.).
-export const UNKNOWN_BRANCH = "(unknown)";
+const UNKNOWN_BRANCH = "(unknown)";
 
 export const isRealBranch = (branch: string): boolean =>
   branch !== UNKNOWN_BRANCH;

@@ -70,7 +70,7 @@ export const PullRequestMergeStateSchema = z.enum([
 ]);
 export type PullRequestMergeState = z.infer<typeof PullRequestMergeStateSchema>;
 
-export const PullRequestCheckBucketSchema = z.enum([
+const PullRequestCheckBucketSchema = z.enum([
   "passed",
   "failing",
   "pending",
@@ -81,14 +81,14 @@ export type PullRequestCheckBucket = z.infer<
   typeof PullRequestCheckBucketSchema
 >;
 
-export const PullRequestCheckSchema = z.object({
+const PullRequestCheckSchema = z.object({
   name: z.string(),
   bucket: PullRequestCheckBucketSchema,
   url: z.url().optional(),
 });
 export type PullRequestCheck = z.infer<typeof PullRequestCheckSchema>;
 
-export const PullRequestChecksSummarySchema = z.object({
+const PullRequestChecksSummarySchema = z.object({
   total: z.number().int().nonnegative(),
   passed: z.number().int().nonnegative(),
   failing: z.number().int().nonnegative(),
@@ -125,9 +125,6 @@ export const PullRequestReviewDecisionSchema = z.enum([
   "CHANGES_REQUESTED",
   "REVIEW_REQUIRED",
 ]);
-export type PullRequestReviewDecision = z.infer<
-  typeof PullRequestReviewDecisionSchema
->;
 
 // Where one reviewer stands: their latest submitted review, or
 // REQUESTED while they've been asked and haven't given one. Dismissed
@@ -143,7 +140,7 @@ export type PullRequestReviewerState = z.infer<
   typeof PullRequestReviewerStateSchema
 >;
 
-export const PullRequestReviewsSchema = z.object({
+const PullRequestReviewsSchema = z.object({
   decision: PullRequestReviewDecisionSchema.nullable(),
   // A user's login, or org/team for a request to a team.
   reviewers: z.array(
@@ -220,7 +217,7 @@ export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 // recognize the PR and resolve its head, and statusCheckRollup is the
 // field that makes `gh pr list` materially slower (same reason the
 // sidebar sweep skips it).
-export const PullRequestCandidateSchema = z.object({
+const PullRequestCandidateSchema = z.object({
   number: z.number().int().positive(),
   url: z.url(),
   title: z.string(),
@@ -241,7 +238,7 @@ export type PullRequestCandidate = z.infer<typeof PullRequestCandidateSchema>;
 
 // Why gh itself can't be used, independent of any one repo. This is
 // what the readiness gate answers.
-export const GhUnavailableReasonSchema = z.enum([
+const GhUnavailableReasonSchema = z.enum([
   "integration-off",
   "gh-missing",
   "gh-signed-out",
@@ -252,7 +249,7 @@ export type GhUnavailableReason = z.infer<typeof GhUnavailableReasonSchema>;
 // plus the two that are about this repo. Kept as codes rather than prose
 // so the renderer owns the wording (and can point at the setting that
 // fixes it).
-export const PullRequestSourceUnavailableSchema = z.enum([
+const PullRequestSourceUnavailableSchema = z.enum([
   ...GhUnavailableReasonSchema.options,
   "no-github-remote",
   "gh-failed",

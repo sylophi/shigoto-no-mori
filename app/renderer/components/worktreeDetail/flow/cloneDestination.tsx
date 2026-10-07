@@ -24,7 +24,7 @@ import { useDestinationScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
 import { ensureTrailingSep, tildify } from "@shared/projectPaths";
 
-export type CloneDestination = {
+type CloneDestination = {
   // The project on the peer, for the name and the words.
   projectName: string;
   // The pair the pull takes, the parent tildified as the picker

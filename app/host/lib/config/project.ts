@@ -21,7 +21,6 @@ import {
   atomicWriteJsonSync,
   readJsonOrNull,
   readJsonOrNullSync,
-  unlinkIfExists,
   withSchemaVersion,
 } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
@@ -137,18 +136,6 @@ export async function writeWorktreeDescription(
       ? { ...current, title, description, describedAt }
       : current,
   );
-}
-
-export async function deleteWorktreeData(
-  projectId: string,
-  worktreeId: string,
-): Promise<void> {
-  const key = worktreeKey(projectId, worktreeId);
-  try {
-    await unlinkIfExists(worktreeDataPath(projectId, worktreeId));
-  } finally {
-    worktreeCache.invalidate(key);
-  }
 }
 
 // For delegated CLI writes of project.json, which the state watcher

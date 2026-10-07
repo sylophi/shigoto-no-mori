@@ -83,9 +83,7 @@ export function pullRequestFolderName(pr: PullRequestCandidate): string {
 // is shared with the resolver so the two can't disagree). Callers
 // checking whether a PR is already checked out have to consider every
 // candidate, or the common fork case looks occupied when it isn't.
-export function pullRequestBranchCandidates(
-  pr: PullRequestCandidate,
-): string[] {
+function pullRequestBranchCandidates(pr: PullRequestCandidate): string[] {
   if (!pr.fromFork) return [pr.headRefName];
   return forkBranchCandidates(
     pr.number,
@@ -121,7 +119,7 @@ export interface MergeStateDescriptor {
 
 // The verdicts auto-merge is for: the same two as the CLI's
 // autoMergeArms (cli/cmd_merge.go), which says why.
-export function autoMergeArms(state: PullRequestMergeState): boolean {
+function autoMergeArms(state: PullRequestMergeState): boolean {
   return state === "BLOCKED" || state === "BEHIND";
 }
 

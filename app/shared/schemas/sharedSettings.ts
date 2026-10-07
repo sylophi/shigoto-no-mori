@@ -35,7 +35,7 @@ export const SharedSettingValueSchema = z.union([
 ]);
 export type SharedSettingValue = z.infer<typeof SharedSettingValueSchema>;
 
-export const SharedSettingEntrySchema = z.object({
+const SharedSettingEntrySchema = z.object({
   value: SharedSettingValueSchema,
   // The write's stamp: milliseconds, never below the writing copy's
   // highest stamp plus one (withSharedSetting), so a device with a slow

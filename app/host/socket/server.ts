@@ -134,7 +134,7 @@ export type WsServerStartOpts = {
 
 // Observable listener state so a bind failure (port taken, EACCES) is
 // not a silent enabled-but-not-listening hole. Exposed via status().
-export type WsServerStatus = {
+type WsServerStatus = {
   listening: boolean;
   port: number | null;
   bindAddress: string | null;
@@ -206,7 +206,7 @@ function isLoopbackAddress(address: string): boolean {
 // loopback connections may delegate to the header: a LAN peer cannot
 // spoof its way into another bucket because its remoteAddress is not
 // loopback.
-export function clientIdentityOf(
+function clientIdentityOf(
   remoteAddress: string | undefined,
   cfConnectingIp: string | undefined,
 ): string {
@@ -231,7 +231,7 @@ function tunnelBorne(
 
 // Which advertised candidate a connection came in on, so a ticket can
 // be held to the kind it was minted for.
-export function arrivalKindOf(
+function arrivalKindOf(
   remoteAddress: string | undefined,
   cfConnectingIp: string | undefined,
 ): DirectCandidateKind {
@@ -272,7 +272,7 @@ async function answerProof(
 // from the same SM_ACCOUNT_WEB_ORIGIN env the app's account layer
 // reads, never hardcoded. Anything else is a drive-by browser page,
 // refused before it can even attempt a hello.
-export function isAllowedOrigin(
+function isAllowedOrigin(
   origin: string | undefined,
   allowedOrigin?: string,
 ): boolean {

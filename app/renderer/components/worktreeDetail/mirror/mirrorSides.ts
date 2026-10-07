@@ -15,7 +15,7 @@ import type {
   WorktreeMirrorLink,
 } from "@/hooks/remote/useMirrors";
 
-export type MirrorSide = "original" | "copy";
+type MirrorSide = "original" | "copy";
 
 // The other side's worktree rides along. Undefined for the page's own.
 export type MirrorSideTab = DeviceBarTab & { at: MirrorCopyAt | undefined };

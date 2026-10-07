@@ -158,11 +158,6 @@ function sameName(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
 
-export function githubRepoUrl(info: GithubRepoInfo): string {
-  const host = info.port ? `${info.host}:${info.port}` : info.host;
-  return `https://${host}/${info.owner}/${info.repo}`;
-}
-
 // Combined gate for read paths: gh itself ready, AND this specific repo
 // has a remote gh can resolve. Mutations keep ghReady() so their error
 // messages can stay specific.

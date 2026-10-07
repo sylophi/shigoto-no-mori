@@ -27,7 +27,7 @@ function deviceIdOfTicket(ticket: string): string | null {
   return parts[0] === "t" && parts[1] ? parts[1] : null;
 }
 
-export type StubSend = { from: string; to: string; frame: unknown };
+type StubSend = { from: string; to: string; frame: unknown };
 
 export type StubHub = {
   port: number;

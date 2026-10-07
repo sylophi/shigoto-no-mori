@@ -85,7 +85,7 @@ class RemoteDisconnectedError extends Error {
 // block all read identically, while `ws` names the errno
 // (ECONNREFUSED, EHOSTUNREACH, ETIMEDOUT), which is the one fact that
 // tells "wrong network" from "the OS is blocking local network access".
-export type ClientSocket = {
+type ClientSocket = {
   // A string is a JSON frame. Bytes are a binary channel frame
   // (shared/ipc/socket/channels.ts). Both the browser global and the
   // `ws` package send a Uint8Array as a binary message.

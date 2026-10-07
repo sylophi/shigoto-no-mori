@@ -210,7 +210,7 @@ export const controlContract = defineContract("host", {
 
 // The failure codes a control op's refusal carries across the wire, so
 // the CLI keys its exit handling on the code and not on the prose.
-export const CONTROL_ERROR_CODES = [
+const CONTROL_ERROR_CODES = [
   "no-device",
   "ambiguous-device",
   "device-blocked",

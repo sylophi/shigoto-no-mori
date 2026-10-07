@@ -15,7 +15,7 @@ interface OverlaysState {
   openAddProject: (target?: AddProjectTarget) => void;
 }
 
-export interface AddProjectTarget {
+interface AddProjectTarget {
   // Undefined opens on this device (or, on a hostless client, the
   // first device that answers).
   deviceId?: string;

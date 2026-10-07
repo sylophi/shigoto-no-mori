@@ -11,7 +11,6 @@
 // the app AND every CLI child it spawns land on the profile's data dir
 // (children inherit the launcher's environment, the app itself never
 // injects SHIGOMORI_DATA_DIR, see host/lib/util/paths.ts).
-import { execFileSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -30,18 +29,10 @@ import {
   devProfileUserData,
   CLONED_LOGIN_MARKER,
 } from "../../shared/packaging/appName.mts";
-import {
-  CLI_DIST_DIR,
-  cliBinaryName,
-  cliDataDirName,
-} from "../../shared/packaging/cliDist.mts";
-import { appRoot } from "./appRoot.mts";
+import { cliDataDirName } from "../../shared/packaging/cliDist.mts";
 import { productName } from "./devBundle.mts";
 
-export const PROFILES_DIR = join(
-  homedir(),
-  `${cliDataDirName("dev")}-profiles`,
-);
+const PROFILES_DIR = join(homedir(), `${cliDataDirName("dev")}-profiles`);
 
 export type DevProfile = {
   name: string;
@@ -140,36 +131,6 @@ export function parseDevProfileArgs(argv: string[]): DevProfileArgs {
   return out;
 }
 
-// The dev CLI the app delegates to (main/electron/cliRunner.ts finds
-// it the same way), built by `pnpm start` and buildDevCli.
-export function devCliPath(): string {
-  const cli = join(appRoot, CLI_DIST_DIR, cliBinaryName("dev"));
-  if (!existsSync(cli)) {
-    throw new Error(
-      `The dev CLI is missing at ${cli}: run \`pnpm cli:build --dev\` (or ` +
-        "`pnpm start` once) first.",
-    );
-  }
-  return cli;
-}
-
-export function buildDevCli(): void {
-  execFileSync("node", [join(appRoot, "scripts", "dev-cli.mts")], {
-    cwd: appRoot,
-    stdio: "inherit",
-  });
-}
-
-// Registers every repo under `dir` as a project of the profile's
-// data dir, through the dev CLI so the registry is written the one way.
-export function registerProjects(profile: DevProfile, dir: string): void {
-  execFileSync(devCliPath(), ["projects", "add", dir, "--all", "--yes"], {
-    cwd: appRoot,
-    stdio: "inherit",
-    env: { ...process.env, ...devProfileEnv(profile) },
-  });
-}
-
 function holdsCredential(accountFile: string): boolean {
   if (!existsSync(accountFile)) return false;
   try {
@@ -190,7 +151,7 @@ function holdsCredential(accountFile: string): boolean {
 // usually follows a kill, and a Chromium helper that has not noticed
 // yet can write into userData while the walk is partway through it,
 // which surfaces as ENOTEMPTY. Retrying rides that out.
-export function rmTree(target: string): void {
+function rmTree(target: string): void {
   rmSync(target, {
     recursive: true,
     force: true,
@@ -203,7 +164,7 @@ export function rmTree(target: string): void {
 // profile enrolled stays on the hub (and keeps its tunnel) until it is
 // revoked, so revoking is the tidy way to end a profile, and this is
 // the way to start over after a crash or a hard kill.
-export function wipeDevProfile(profile: DevProfile): void {
+function wipeDevProfile(profile: DevProfile): void {
   // The file also holds a signed-out remainder (the device's name, a
   // parked revoke), so only a live credential means enrolled.
   if (holdsCredential(join(profile.userData, "account.json"))) {
@@ -243,7 +204,7 @@ function devLoginSource(): string {
 // either window ends the session for both: end a cloned profile by
 // revoking its device (the account:signOut IPC, or the account page),
 // never with the window's Sign out button.
-export function cloneDevLogin(profile: DevProfile): void {
+function cloneDevLogin(profile: DevProfile): void {
   const source = devLoginSource();
   mkdirSync(profile.userData, { recursive: true });
   copyFileSync(source, join(profile.userData, TOKEN_STORE_FILE));

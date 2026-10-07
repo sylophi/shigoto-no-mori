@@ -8,7 +8,7 @@ import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
 import type { RunningScript } from "@shared/schemas";
 import type { HostScripts, LiveMirror } from "@/hooks/live/useLiveActivity";
 
-export type LiveItem =
+type LiveItem =
   | { kind: "script"; run: RunningScript }
   | { kind: "mirror"; mirror: LiveMirror }
   | { kind: "forward"; forward: PortForwardSummary };
