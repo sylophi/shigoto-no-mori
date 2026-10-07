@@ -38,7 +38,6 @@ export function PullRequestLead({
           pr={pr}
           repoConfig={repoConfig ?? null}
           lastMergeMethod={shigomori?.lastMergeMethod}
-          headed
         />
       )}
     </div>

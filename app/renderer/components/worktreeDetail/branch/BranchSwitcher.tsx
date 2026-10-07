@@ -16,15 +16,12 @@ export function BranchSwitcher({
   anchorRef,
   open,
   onOpenChange,
-  trigger = true,
 }: {
   worktree: Worktree;
   anchorRef: React.RefObject<HTMLElement | null>;
-  // Opened from elsewhere (BranchTitle's menu), with no trigger of its
-  // own.
+  // Opened from elsewhere (BranchMenu), with no trigger of its own.
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  trigger?: boolean;
 }) {
   const { data: branches, isFetching: branchesFetching } = useBranches(
     worktree.projectId,
@@ -34,8 +31,12 @@ export function BranchSwitcher({
   const queryClient = useQueryClient();
   const { keys } = useHostScope();
   const [query, setQuery] = useState("");
-  // A fresh list each time it opens.
-  const refresh = () => {
+  const [ownOpen, setOwnOpen] = useState(false);
+  const controlled = open !== undefined;
+  const isOpen = open ?? ownOpen;
+  // A fresh list each time it opens, however it was opened.
+  useEffect(() => {
+    if (!isOpen) return;
     setQuery("");
     void queryClient.invalidateQueries({
       queryKey: keys.branches(worktree.projectId),
@@ -43,12 +44,8 @@ export function BranchSwitcher({
     void queryClient.invalidateQueries({
       queryKey: keys.worktrees(worktree.projectId),
     });
-  };
-  // Opened from outside, onOpenChange doesn't fire for it.
-  useEffect(() => {
-    if (open) refresh();
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- on opening only
-  }, [open]);
+  }, [isOpen]);
 
   // Exclude branches in use by *other* worktrees only; keeping this
   // worktree's own branch lets the popup show it with a check mark.
@@ -87,14 +84,14 @@ export function BranchSwitcher({
       }}
       inputValue={query}
       onInputValueChange={setQuery}
-      open={open}
+      open={isOpen}
       onOpenChange={(next) => {
+        setOwnOpen(next);
         onOpenChange?.(next);
-        if (next) refresh();
       }}
       autoHighlight
     >
-      {trigger && (
+      {!controlled && (
         <Combobox.Trigger
           aria-label="Switch branch"
           data-icon-button

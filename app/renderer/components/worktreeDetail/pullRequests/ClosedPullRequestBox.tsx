@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Button } from "@/components/ui/button";
-import {
-  CONFIRM_QUICK_MS,
-  useConfirmTwiceKeyed,
-} from "@/hooks/ui/useConfirmTwice";
+import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { Check, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,13 +54,16 @@ export function ClosedPullRequestBox({
     kind: StackCleanupFailure["kind"];
   } | null>(null);
   const {
-    armedKey,
+    armed,
     trigger: confirm,
     reset: resetConfirm,
-  } = useConfirmTwiceKeyed(CONFIRM_QUICK_MS);
-  const [reach, setReach] = useState<"one" | "stack">("one");
+  } = useConfirmTwice(CONFIRM_QUICK_MS);
+  const [chosenReach, setReach] = useState<"one" | "stack">("one");
   const cleanup = useStackCleanup(worktree, stack);
   const count = cleanup?.count ?? 0;
+  // The stack only while there is one to take: a stack that shrank to
+  // this worktree has no menu left to choose it back from.
+  const reach = count > 1 ? chosenReach : "one";
   const stackPending = stackMutation.isPending;
   const pending = stackPending || deleteMutation.isPending;
 
@@ -156,28 +156,26 @@ export function ClosedPullRequestBox({
           // button's sets its method. This worktree by default: taking
           // more than the page you are on is the surprise to avoid.
           <div className="inline-flex items-stretch">
-            {reach === "stack" ? (
-              <ConfirmDestructiveButton
-                armed={armedKey === "stack"}
-                pending={stackPending}
-                disabled={deleteMutation.isPending}
-                pendingLabel="Deleting stack…"
-                idleLabel={`Delete ${count} stack worktrees`}
-                onClick={() => confirm("stack", () => runStack())}
-                className="rounded-r-none border-r-0"
-              />
-            ) : (
-              <ConfirmDestructiveButton
-                armed={armedKey === "one"}
-                pending={deleteMutation.isPending}
-                disabled={stackPending}
-                pendingLabel="Deleting…"
-                idleLabel="Delete worktree"
-                onClick={() => confirm("one", () => runDelete())}
-                disabledReason={deleteBlockedReason}
-                className={cn(count > 1 && "rounded-r-none border-r-0")}
-              />
-            )}
+            <ConfirmDestructiveButton
+              armed={armed}
+              {...(reach === "stack"
+                ? {
+                    pending: stackPending,
+                    disabled: deleteMutation.isPending,
+                    pendingLabel: "Deleting stack…",
+                    idleLabel: `Delete ${count} stack worktrees`,
+                    onClick: () => confirm(() => runStack()),
+                  }
+                : {
+                    pending: deleteMutation.isPending,
+                    disabled: stackPending,
+                    pendingLabel: "Deleting…",
+                    idleLabel: "Delete worktree",
+                    onClick: () => confirm(() => runDelete()),
+                    disabledReason: deleteBlockedReason,
+                  })}
+              className={cn(count > 1 && "rounded-r-none border-r-0")}
+            />
             {count > 1 && (
               <DropdownMenu>
                 <DropdownMenuTrigger

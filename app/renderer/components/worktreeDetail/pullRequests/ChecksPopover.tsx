@@ -1,79 +1,39 @@
 import { ChevronDown } from "lucide-react";
-import { Chip, ChipButton } from "@/components/ui/chip-button";
+import { ChipButton } from "@/components/ui/chip-button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   checksBreakdown,
   describeChecks,
-  type MergeVerdict,
   sortChecksWorstFirst,
 } from "@/lib/pullRequest";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { PullRequestDetail } from "@shared/schemas";
 import { CheckEntry } from "./CheckEntry";
 import { ChecksSummaryIcon } from "./ChecksSummaryIcon";
-import { MergeStateIcon } from "./MergeStateIcon";
-import { TONE_TEXT } from "./pullRequestShared";
 
 // The PR's CI as one chip beside the merge state, with the run list in
 // a popover so a long list never pushes the merge box down the page.
-// Given the merge `verdict` (describeMergeVerdict), the chip is the
-// merge box's one status: its words, with the checks' icon when the
-// checks are what it speaks of, and the run list still a click away.
-// With no checks to list it is the verdict alone. One line. `compact`
-// keeps the icon alone, its words in the tooltip, for a row with no
-// room (MergeBox); the words carry data-status-label for that measuring.
+// `children` stands in for the chip's own words (MergeStatus, which is
+// the merge box's one status with the run list still a click away),
+// and `tip` names the chip when those leave out its words.
 export function ChecksPopover({
   pr,
-  verdict,
-  compact = false,
+  children,
+  tip = null,
+  className,
 }: {
   pr: PullRequestDetail;
-  verdict?: MergeVerdict;
-  compact?: boolean;
+  children?: React.ReactNode;
+  tip?: string | null;
+  className?: string;
 }) {
   const summary = describeChecks(pr.checks);
-  const content = verdict ? (
-    <>
-      {verdict.by === "checks" && summary ? (
-        <ChecksSummaryIcon tone={summary.tone} />
-      ) : (
-        <MergeStateIcon tone={verdict.tone} />
-      )}
-      {!compact && (
-        <span
-          data-status-label
-          className={cn("min-w-0 truncate", TONE_TEXT[verdict.tone])}
-        >
-          {verdict.label}
-        </span>
-      )}
-    </>
-  ) : (
-    summary && (
-      <>
-        <ChecksSummaryIcon tone={summary.tone} />
-        {summary.label}
-      </>
-    )
-  );
-  const tip = compact && verdict ? verdict.label : null;
-  if (!summary) {
-    return verdict ? (
-      <SimpleTooltip tip={tip}>
-        <Chip
-          aria-label={tip ?? undefined}
-          className="max-w-full text-sm whitespace-nowrap"
-        >
-          {content}
-        </Chip>
-      </SimpleTooltip>
-    ) : null;
-  }
+  if (!summary) return null;
   return (
     <Popover>
       <SimpleTooltip tip={tip}>
@@ -81,12 +41,14 @@ export function ChecksPopover({
           render={
             <ChipButton
               aria-label={tip ?? undefined}
-              className={cn(
-                "max-w-full whitespace-nowrap",
-                verdict && "text-sm",
-              )}
+              className={cn("max-w-full whitespace-nowrap", className)}
             >
-              {content}
+              {children ?? (
+                <>
+                  <ChecksSummaryIcon tone={summary.tone} />
+                  {summary.label}
+                </>
+              )}
               <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
             </ChipButton>
           }

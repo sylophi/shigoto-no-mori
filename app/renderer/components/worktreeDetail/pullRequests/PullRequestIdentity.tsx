@@ -139,14 +139,18 @@ function MetaSentence({
 }
 
 // The PR's title as the link to it on GitHub. Shared with the stack
-// list, whose rows are the same link one per layer.
+// list, whose rows are the same link one per layer, and the page's PR
+// header, whose number is the link (`children` in place of the title).
 export function PullRequestTitleLink({
   pr,
   className,
+  children,
+  ...props
 }: {
   pr: PullRequest;
   className?: string;
-}) {
+  children?: React.ReactNode;
+} & Omit<React.ComponentProps<"button">, "title" | "onClick">) {
   return (
     <button
       type="button"
@@ -155,8 +159,9 @@ export function PullRequestTitleLink({
         "rounded text-left text-foreground transition-colors select-text hover:text-primary focus-visible:outline-2 focus-visible:outline-ring",
         className,
       )}
+      {...props}
     >
-      {pr.title}
+      {children ?? pr.title}
     </button>
   );
 }

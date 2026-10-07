@@ -20,6 +20,7 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import { ChecksPopover } from "./ChecksPopover";
+import { MergeStatus } from "./MergeStatus";
 import { ReviewsPopover } from "./ReviewsPopover";
 import { STACK_REACH_OPTIONS, useMergeBox } from "./useMergeBox";
 
@@ -60,22 +61,21 @@ export function MergeBox({
     toggleDraft,
     runDisableAutoMerge,
   } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod, stack });
+  const canMerge = primary !== null && activeMethod !== null;
   const rowRef = useRef<HTMLDivElement>(null);
   const verdict = describeMergeVerdict(pr, status, mode === "armed");
   // The reviews' words would only repeat a status that names them.
   const reviewsSaid = verdict.by === "reviews";
-  const compact = useCompactChips(rowRef, reviewsSaid);
+  const compact = useCompactChips(rowRef, reviewsSaid, canMerge);
 
-  // The merge box's one status (describeMergeVerdict), its checks a
-  // click away (or why there's no merge button, with the checks beside
-  // it), then the reviews. Items of the
-  // row they sit in, so a chip that doesn't fit wraps beside the
-  // buttons rather than onto a line of its own.
-  const canMerge = primary !== null && activeMethod !== null;
+  // The merge box's one status (or why there's no merge button, with
+  // the checks beside it), then the reviews. Items of the row they sit
+  // in, so a chip that doesn't fit wraps beside the buttons rather than
+  // onto a line of its own.
   const statusItems = (
     <>
       {canMerge ? (
-        <ChecksPopover pr={pr} verdict={verdict} compact={compact.status} />
+        <MergeStatus pr={pr} verdict={verdict} compact={compact.status} />
       ) : (
         <>
           <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -249,25 +249,29 @@ export function MergeBox({
 // words go first, then the status's. Each one's width is kept from
 // when it last showed, so the answer doesn't flip back and forth as
 // the words come and go. `reviewsSaid`: the reviews show no words
-// anyway (the status says them), so they make no room.
-const ROW_GAP = 12; // gap-x-3
-const CHIP_GAP = 6; // a chip's gap-1.5
-
+// anyway (the status says them), so they make no room. `present`: the
+// row is drawn (the box has a merge button), so there is one to watch.
 function useCompactChips(
   rowRef: React.RefObject<HTMLElement | null>,
   reviewsSaid: boolean,
+  present: boolean,
 ): { reviews: boolean; status: boolean } {
   const [level, setLevel] = useState(0);
   const widths = useRef({ reviews: 0, status: 0 });
   useLayoutEffect(() => {
     const row = rowRef.current;
     if (!row) return;
+    const gapOf = (el: Element) =>
+      parseFloat(getComputedStyle(el).columnGap) || 0;
     const check = () => {
       const label = (key: "reviews" | "status") =>
         row.querySelector<HTMLElement>(`[data-${key}-label]`);
       for (const key of ["reviews", "status"] as const) {
         const el = label(key);
-        if (el) widths.current[key] = el.scrollWidth + CHIP_GAP;
+        // The words and the chip's gap before them.
+        if (el?.parentElement) {
+          widths.current[key] = el.scrollWidth + gapOf(el.parentElement);
+        }
       }
       const reviews = reviewsSaid ? 0 : widths.current.reviews;
       const status = widths.current.status;
@@ -275,7 +279,7 @@ function useCompactChips(
       // The row's width as if every word showed.
       const full =
         items.reduce((sum, el) => sum + el.offsetWidth, 0) +
-        ROW_GAP * (items.length - 1) +
+        gapOf(row) * (items.length - 1) +
         (label("reviews") ? 0 : reviews) +
         (label("status") ? 0 : status);
       const room = row.clientWidth;
@@ -286,6 +290,6 @@ function useCompactChips(
     observer.observe(row);
     for (const child of row.children) observer.observe(child);
     return () => observer.disconnect();
-  }, [rowRef, reviewsSaid]);
+  }, [rowRef, reviewsSaid, present]);
   return { reviews: level >= 1, status: level >= 2 };
 }

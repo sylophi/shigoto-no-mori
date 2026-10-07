@@ -18,7 +18,8 @@ import { BranchTitle } from "../branch/BranchTitle";
 import { DiffButton } from "../DiffButton";
 import { PullRequestStateLabel } from "./PullRequestStateLabel";
 import { StackList } from "./StackList";
-import { MERGE_VERB, openPullRequest } from "./pullRequestShared";
+import { PullRequestTitleLink } from "./PullRequestIdentity";
+import { MERGE_VERB } from "./pullRequestShared";
 
 // The worktree page's header while its PR names the work
 // (useWorktreeTitle): what the PR is, so the page names it once. Its
@@ -37,7 +38,6 @@ export function PullRequestHeader({
   pr: PullRequest | PullRequestDetail;
 }) {
   const nav = useWorktreeNav();
-  const now = useNow();
   const { data: detail } = useWorktreePullRequest(
     worktree.projectId,
     worktree.branch,
@@ -49,29 +49,6 @@ export function PullRequestHeader({
   const stackName = stack
     ? `Stack, ${stack.index + 1} of ${stack.entries.length}`
     : undefined;
-  // Who opened it and when it last moved, behind the state: it's
-  // nearly always yours, so it doesn't earn a place on the line.
-  const byline = detail
-    ? `@${detail.authorLogin}, updated ${formatRelativeTime(new Date(detail.updatedAt).getTime(), now)}`
-    : null;
-  const numberLink = (
-    <button
-      type="button"
-      onClick={() => openPullRequest(pr.url)}
-      aria-label={`Open pull request #${pr.number} on GitHub`}
-      data-no-hit-area
-      className="rounded font-normal text-muted-foreground/60 transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
-    >
-      #{pr.number}
-    </button>
-  );
-  const statePill = (
-    <SimpleTooltip tip={byline}>
-      <span className="inline-flex">
-        <PullRequestStateLabel pr={pr} pill />
-      </span>
-    </SimpleTooltip>
-  );
   return (
     <>
       {/* One line too: the title truncates beside its number, and the
@@ -81,10 +58,23 @@ export function PullRequestHeader({
           <SimpleTooltip whenTruncated tip={pr.title}>
             <span className="min-w-0 truncate">{pr.title}</span>
           </SimpleTooltip>
-          <span className="shrink-0">{numberLink}</span>
+          <PullRequestTitleLink
+            pr={pr}
+            aria-label={`Open pull request #${pr.number} on GitHub`}
+            data-no-hit-area
+            className="shrink-0 font-normal text-muted-foreground/60"
+          >
+            #{pr.number}
+          </PullRequestTitleLink>
         </h1>
         {/* At the row's end, where a status sits. */}
-        <span className="ml-auto inline-flex shrink-0">{statePill}</span>
+        {/* Who opened it and when it last moved, behind the state:
+            it's nearly always yours, so it doesn't earn a place. */}
+        <SimpleTooltip tip={detail ? <UpdatedByline detail={detail} /> : null}>
+          <span className="ml-auto inline-flex shrink-0">
+            <PullRequestStateLabel pr={pr} pill />
+          </span>
+        </SimpleTooltip>
       </div>
       {/* One line however narrow. The base gives way first, and goes
           altogether before the branch would have to; then the branch.
@@ -96,7 +86,10 @@ export function PullRequestHeader({
         >
           {showBase && (
             <>
-              <span className="min-w-6 shrink-[1000] truncate font-mono text-foreground/80">
+              <span
+                data-pr-base
+                className="min-w-6 shrink-[1000] truncate font-mono text-foreground/80"
+              >
                 {pr.baseRefName}
               </span>
               <ArrowLeft
@@ -154,15 +147,19 @@ export function PullRequestHeader({
   );
 }
 
-// The least the base and its arrow take: a couple of letters, the
-// arrow, and the gaps around it (min-w-6, size-3.5, gap-1.5 twice),
-// and a pixel or two for widths that round.
-const BASE_MIN = 24 + 14 + 6 * 2 + 2;
+// "@someone, updated 5m ago", on its own clock: the tooltip ticks,
+// and the header doesn't re-render with it.
+function UpdatedByline({ detail }: { detail: PullRequestDetail }) {
+  const now = useNow();
+  return `@${detail.authorLogin}, updated ${formatRelativeTime(new Date(detail.updatedAt).getTime(), now)}`;
+}
 
 // Whether the base fits beside the branch with the branch shown in
 // full. The branch's own width is read off its name (scrollWidth is
 // the full text even while cut off) and controls, so hiding the base
 // doesn't change the answer and the line never flips back and forth.
+// The least the base takes (its min width, the arrow and the gaps) is
+// read while it shows and kept for while it doesn't.
 function useBaseFits(
   lineRef: React.RefObject<HTMLElement | null>,
   branchRef: React.RefObject<HTMLElement | null>,
@@ -170,21 +167,31 @@ function useBaseFits(
   branchName: string,
 ): boolean {
   const [fits, setFits] = useState(true);
+  const baseMin = useRef(0);
   useLayoutEffect(() => {
     const line = lineRef.current;
     const branch = branchRef.current;
     if (!line || !branch) return;
     const check = () => {
-      // BranchTitle's row: the name, then its menu button. Absent while
-      // the rename field stands in, and then the answer holds.
-      const row = branch.firstElementChild;
-      const name = row?.firstElementChild;
-      if (!(row instanceof HTMLElement) || !(name instanceof HTMLElement)) {
-        return;
+      const gap = parseFloat(getComputedStyle(line).columnGap) || 0;
+      const base = line.querySelector<HTMLElement>("[data-pr-base]");
+      const arrow = base?.nextElementSibling;
+      if (base && arrow instanceof Element) {
+        baseMin.current =
+          (parseFloat(getComputedStyle(base).minWidth) || 0) +
+          arrow.getBoundingClientRect().width +
+          gap * 2 +
+          // Widths that round.
+          2;
       }
+      // BranchTitle's name and its menu button. Absent while the
+      // rename field stands in, and then the answer holds.
+      const name = branch.querySelector<HTMLElement>("[data-branch-name]");
+      const row = name?.parentElement;
+      if (!name || !row) return;
       const controls = row.scrollWidth - name.clientWidth;
       const needed = name.scrollWidth + controls;
-      setFits(needed + BASE_MIN <= line.clientWidth);
+      setFits(needed + baseMin.current <= line.clientWidth);
     };
     check();
     const observer = new ResizeObserver(check);

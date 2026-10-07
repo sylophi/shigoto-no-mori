@@ -100,15 +100,9 @@ function fakePosedPullRequests(): Record<string, typeof FAKE_PR_SLIM> {
   const prs = merged ? FAKE_PRS_MERGED : FAKE_PRS;
   const pose = fakePrStatePose();
   if (!pose) return prs;
-  const { state, isDraft } = pose;
-  return {
-    ...prs,
-    [FAKE_PR_BRANCH]: {
-      ...FAKE_PR_SLIM,
-      ...(state && { state }),
-      ...(isDraft && { isDraft }),
-    },
-  };
+  // The slim map carries no merge state.
+  const { mergeState: _, ...slim } = pose;
+  return { ...prs, [FAKE_PR_BRANCH]: { ...FAKE_PR_SLIM, ...slim } };
 }
 
 export function fakePullRequests(projectId: string) {
