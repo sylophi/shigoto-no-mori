@@ -24,7 +24,7 @@ export interface ProjectHygiene {
 
 function combineHygiene(
   results: readonly {
-    data: WorktreeHygiene[] | undefined;
+    data: readonly WorktreeHygiene[] | undefined;
     isPending: boolean;
   }[],
 ): ProjectHygiene {

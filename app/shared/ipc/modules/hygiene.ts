@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   ProjectScopedPayloadSchema,
@@ -12,7 +12,7 @@ export const hygieneContract = defineContract("host", {
   list: invoke(
     "hygiene:list",
     ProjectScopedPayloadSchema,
-    z.array(WorktreeHygieneSchema),
+    Schema.Array(WorktreeHygieneSchema),
     { remote: true, gated: false },
   ),
   // Slow, per-worktree: the renderer fires one of these per row so each
