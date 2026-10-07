@@ -23,6 +23,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
@@ -230,7 +231,7 @@ it("hidden worktree prefixes: one value, the same list is the same value, a prim
 });
 
 it("forward compatibility: a key this build never heard of parses, merges and is offered on", () => {
-  const future = SharedSettingsDocSchema.parse({
+  const future = Schema.decodeSync(SharedSettingsDocSchema)({
     entries: { "someFutureSetting/x": { value: 3, at: 9, by: LYCHEE } },
   });
   const merged = mergeSharedSettings(EMPTY_SHARED_SETTINGS, future);
@@ -238,7 +239,7 @@ it("forward compatibility: a key this build never heard of parses, merges and is
 });
 
 it("tolerance: an entry this build cannot hold is left out, and the rest of the document still reads", () => {
-  const doc = SharedSettingsDocSchema.parse({
+  const doc = Schema.decodeSync(SharedSettingsDocSchema)({
     entries: {
       [KEY]: { value: KIWI, at: 3, by: KIWI },
       tooLong: { value: "x".repeat(10_000), at: 4, by: KIWI },

@@ -15,6 +15,7 @@
 //
 // Run: pnpm test villager-wiki.
 import assert from "node:assert/strict";
+import * as Schema from "effect/Schema";
 import {
   infobox,
   namesOnPage,
@@ -113,7 +114,7 @@ it("a villager's profile takes every field", () => {
     japaneseNameRomaji: "Fezā",
     url: "https://nookipedia.com/wiki/Ace",
   });
-  assert.ok(VillagerProfileSchema.safeParse(profile).success);
+  assert.ok(Schema.is(VillagerProfileSchema)(profile));
 });
 
 it("a field the page lacks is left out", () => {
@@ -133,7 +134,7 @@ it("a field the page lacks is left out", () => {
     url: "https://nookipedia.com/wiki/Isabelle",
   });
   assert.ok(!("catchphrase" in profile) && !("birthday" in profile));
-  assert.ok(VillagerProfileSchema.safeParse(profile).success);
+  assert.ok(Schema.is(VillagerProfileSchema)(profile));
   // A page with no infobox still names the character.
   assert.deepEqual(
     villagerProfile("ace", { title: "Ace", wikitext: "", categories: [] }),

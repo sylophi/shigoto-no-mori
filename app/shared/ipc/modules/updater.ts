@@ -1,6 +1,5 @@
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { UpdaterStateSchema } from "@shared/schemas";
+import { UpdaterStateSchema, VoidSchema } from "@shared/schemas";
 
 // The app updater, as a HOST module: the update is a fact about the
 // machine the app runs on, and the Settings page shows every device
@@ -11,16 +10,16 @@ import { UpdaterStateSchema } from "@shared/schemas";
 // state a viewer caches (the state rides its own broadcast), so they
 // opt out of the resolved-mutation cache ping.
 export const updaterContract = defineContract("host", {
-  get: invoke("updater:get", z.void(), UpdaterStateSchema, {
+  get: invoke("updater:get", VoidSchema, UpdaterStateSchema, {
     remote: true,
     gated: false,
   }),
-  check: invoke("updater:check", z.void(), z.void(), {
+  check: invoke("updater:check", VoidSchema, VoidSchema, {
     remote: true,
     gated: true,
     movesHostState: false,
   }),
-  install: invoke("updater:install", z.void(), z.void(), {
+  install: invoke("updater:install", VoidSchema, VoidSchema, {
     remote: true,
     gated: true,
     movesHostState: false,
@@ -28,7 +27,7 @@ export const updaterContract = defineContract("host", {
   // Install the staged update, or fetch one first and install it once
   // it is staged (Update all, for a device that hasn't found the
   // release yet). Answers once the install started or was armed.
-  update: invoke("updater:update", z.void(), z.void(), {
+  update: invoke("updater:update", VoidSchema, VoidSchema, {
     remote: true,
     gated: true,
     movesHostState: false,
