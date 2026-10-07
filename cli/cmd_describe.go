@@ -59,6 +59,16 @@ func readWorktreeDescription(projectID, worktreeID string) worktreeDescription {
 	return desc
 }
 
+// The worktree's own title and description, or none for an external
+// worktree, which keeps no data file (a move out of the layout leaves
+// one behind until adopt carries it back).
+func describedOf(id worktreeIdentity) worktreeDescription {
+	if !hasWorktreeData(id) {
+		return worktreeDescription{}
+	}
+	return readWorktreeDescription(id.ProjectID, id.ID)
+}
+
 // Updates the three keys in the data file from what they hold under
 // the lock, so a write that landed since the caller last looked (the
 // app's mirror follower, another describe) isn't undone. An empty value

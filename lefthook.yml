@@ -30,7 +30,7 @@ pre-commit:
           - name: proofs
             run: pnpm -C app test --changed {staged_files}
           - name: go-test
-            glob: "cli/**"
+            glob: "{cli/**,app/shared/fixtures/git-log.json}"
             run: go test -C cli ./...
           # The file-sync engine (continuous worktree mirroring) is its own
           # Go module, tested on its own.

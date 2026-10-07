@@ -6,7 +6,7 @@
 // reads this machine, so callers sit under LocalHostScope. Under a
 // project not there yet (the pull clones it first) every answer is
 // empty: nobody has configured the checkout its create goes into.
-import type { Project } from "@shared/schemas";
+import { PROJECT_CONFIG_DEFAULTS, type Project } from "@shared/schemas";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { worktreeIncludeExtras } from "@/lib/carryOverPaths";
@@ -33,10 +33,10 @@ export function useCarryOverRows(localProject: Project | undefined): {
     localProject?.id ?? null,
   );
   const { data: include } = useWorktreeIncludeStatus(localProject?.id ?? null);
-  const manual = config?.carryOver ?? [];
+  const manual = config?.carryOver ?? PROJECT_CONFIG_DEFAULTS.carryOver;
   const included = worktreeIncludeExtras(
     manual,
-    config?.useWorktreeInclude !== false,
+    config?.useWorktreeInclude ?? PROJECT_CONFIG_DEFAULTS.useWorktreeInclude,
     include,
   );
   return {

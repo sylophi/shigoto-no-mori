@@ -1,6 +1,7 @@
 import { type CSSProperties, useState } from "react";
 import { Heart } from "lucide-react";
 import { VillagerFace } from "@/components/shared/VillagerSays";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { StationeryPrint } from "@/components/villagers/StationeryPrint";
 import { FaceStamp } from "@/components/villagers/VillagerLetter";
 import {
@@ -14,7 +15,7 @@ import { useNow } from "@/hooks/ui/useNow";
 import { useToday } from "@/hooks/ui/useToday";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
-import { villagerCatchphrase } from "@/lib/villagerVoice";
+import { villagerCatchphrase, villagerSpecies } from "@/lib/villagerVoice";
 import { birthdayLabel } from "@/lib/villagers/birthdays";
 import { stationeryFor } from "@/lib/villagers/stationery";
 import {
@@ -28,7 +29,8 @@ import {
 
 // One slot in the Visitors album. A villager who has visited is a
 // sticker stuck in at a slight lean: their face, their name and how
-// often they have come. Pressed, it flips over to their card.
+// often they have come. Pressed, it flips over to their card, which
+// says what kind of villager they are.
 // One who hasn't is an empty slot holding their silhouette. The rarer
 // the character, the more the sticker carries (DESIGN.md, "Village
 // life: rarity"): a regular villager's is plain, a special character's
@@ -37,7 +39,7 @@ import {
 
 // Every slot is one size, so the album lines up and a flip keeps its
 // place, in a grid of as many as fit.
-export const ALBUM_SLOT = "h-44";
+export const ALBUM_SLOT = "h-40";
 export const ALBUM_GRID =
   "grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3";
 
@@ -152,16 +154,11 @@ function StickerFront({
   const color = useFaceColor(rarity === "rare" ? face : null);
   const paper = stationeryFor(slug);
   const today = useToday();
-  // "Smug cat", or whichever half the profile has.
-  const kind = [profile.personality, profile.species?.toLowerCase()]
-    .filter(Boolean)
-    .join(" ");
-  const about = kind.charAt(0).toUpperCase() + kind.slice(1);
   return (
     <span
       data-slot="visitor-sticker"
       style={villagerInk(color)}
-      className={cn(FACE_SIDE, "bg-card px-2.5 pt-5 pb-3 shadow-sm")}
+      className={cn(FACE_SIDE, "bg-card px-2.5 pt-7 pb-3 shadow-sm")}
     >
       {rarity === "legendary" && (
         <StationeryPrint paper={paper} className="opacity-20" />
@@ -184,7 +181,7 @@ function StickerFront({
           </span>
         )
       )}
-      <span className="relative flex size-14 items-center justify-center">
+      <span className="relative flex size-16 items-center justify-center">
         {face !== null &&
           (rarity === "legendary" ? (
             <FaceStamp
@@ -215,9 +212,6 @@ function StickerFront({
           </span>
         )}
       </span>
-      <span className="relative mt-0.5 h-4 max-w-full truncate text-2xs text-muted-foreground">
-        {about}
-      </span>
       <span className="relative mt-auto text-2xs font-medium text-muted-foreground">
         Visited {visitedTimes(visits.count)}
       </span>
@@ -226,7 +220,7 @@ function StickerFront({
 }
 
 // The back of the card: what the guest book knows of them, written on
-// lined paper.
+// lined paper. How often they came is on the front.
 function StickerBack({
   entry,
   visits,
@@ -241,37 +235,42 @@ function StickerBack({
   const ink = rarity === "legendary" ? stationeryFor(slug).ink : "";
   const catchphrase = villagerCatchphrase(profile);
   const birthday = birthdayLabel(profile.birthday);
-  // Key, label, value.
-  const rows: [string, string, string][] = [
-    ["visits", "Visits", String(visits.count)],
-    ["first", "First visit", visitDate(visits.first)],
-    ["last", "Last visit", formatRelativeTime(visits.last, now)],
+  // Label, value. A special character has a species and no personality,
+  // and a legend may have neither: a row the profile leaves out goes.
+  const rows: [string, string | null | undefined][] = [
+    ["Personality", profile.personality],
+    ["Species", villagerSpecies(profile)],
+    ["Birthday", birthday],
+    ["First visit", visitDate(visits.first)],
+    ["Last visit", formatRelativeTime(visits.last, now)],
   ];
-  if (birthday !== null) rows.push(["birthday", "Birthday", birthday]);
+  const filled = rows.filter((row): row is [string, string] => !!row[1]);
   return (
     <span
       data-slot="visitor-sticker"
       className={cn(
         FACE_SIDE,
-        "items-stretch bg-popover px-2.5 py-2.5 shadow-sm [transform:rotateY(180deg)]",
+        "items-stretch bg-popover px-2.5 py-2 shadow-sm [transform:rotateY(180deg)]",
       )}
     >
       <span className="flex items-center gap-2">
-        {face !== null && <VillagerFace face={face} className="size-6" />}
+        {face !== null && <VillagerFace face={face} className="size-5" />}
         <span className={cn("min-w-0 truncate text-xs font-bold", ink)}>
           {profile.name}
         </span>
       </span>
-      <span className="mt-2 flex flex-col bg-[linear-gradient(transparent_calc(100%-1px),color-mix(in_oklab,var(--color-amber-400)_40%,transparent)_0)] bg-size-[100%_1.25rem] text-2xs leading-5">
-        {rows.map(([key, label, value]) => (
-          <span key={key} className="flex justify-between gap-2">
-            <span className="truncate text-muted-foreground">{label}</span>
-            <span className="shrink-0 font-medium">{value}</span>
+      <span className="mt-1.5 flex flex-col bg-[linear-gradient(transparent_calc(100%-1px),color-mix(in_oklab,var(--color-amber-400)_40%,transparent)_0)] bg-size-[100%_1.125rem] text-2xs leading-[1.125rem]">
+        {filled.map(([label, value]) => (
+          <span key={label} className="flex justify-between gap-2">
+            <span className="shrink-0 text-muted-foreground">{label}</span>
+            <SimpleTooltip whenTruncated tip={value}>
+              <span className="min-w-0 truncate font-medium">{value}</span>
+            </SimpleTooltip>
           </span>
         ))}
       </span>
       {catchphrase !== null && (
-        <span className="mt-auto truncate pt-1 text-center text-2xs font-medium text-muted-foreground italic">
+        <span className="mt-auto truncate pt-0.5 text-center text-2xs font-medium text-muted-foreground italic">
           “{catchphrase}”
         </span>
       )}
@@ -288,7 +287,8 @@ function EmptySlot({
   entry: AlbumEntry;
   face: string | null;
 }) {
-  const hint = entry.rarity === "common" ? entry.profile.species : undefined;
+  const hint =
+    entry.rarity === "common" ? villagerSpecies(entry.profile) : undefined;
   return (
     <div
       aria-label="Hasn't visited yet"

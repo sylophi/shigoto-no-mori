@@ -78,7 +78,7 @@ export function ReviewsPopover({
           }
         />
       </SimpleTooltip>
-      <PopoverContent className="flex w-72 flex-col overflow-hidden">
+      <PopoverContent className="flex w-max max-w-[min(--spacing(72),var(--available-width))] min-w-40 flex-col overflow-hidden">
         <ul className="max-h-80 min-h-0 space-y-0.5 overflow-y-auto">
           {sortReviewersWorstFirst(reviewers).map(({ login, state }) => {
             const { Icon: StateIcon, tone, label } = REVIEWER_STATE[state];
@@ -96,7 +96,9 @@ export function ReviewsPopover({
                 <span className="min-w-0 flex-1 truncate text-foreground">
                   {login}
                 </span>
-                <span className="shrink-0 text-muted-foreground">{label}</span>
+                <span className="ml-2 shrink-0 text-muted-foreground">
+                  {label}
+                </span>
               </li>
             );
           })}

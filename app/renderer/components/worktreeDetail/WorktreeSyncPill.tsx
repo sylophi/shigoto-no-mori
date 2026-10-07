@@ -1,21 +1,14 @@
-import { ArrowDown, ArrowUp, CloudUpload } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import {
   useOverwriteWorktree,
-  usePublishWorktree,
-  usePullAndPushWorktree,
-  usePullWorktree,
   usePushForceWorktree,
-  usePushWorktree,
+  useSyncMoveMutations,
 } from "@/hooks/worktrees/useWorktreeSync";
-import { pluralize } from "@/lib/pluralize";
-import {
-  deriveRemoteSyncState,
-  syncRunsOnDirtyTree,
-  type Worktree,
-} from "@shared/schemas";
+import { worktreeSyncView } from "@/lib/syncState";
+import type { Worktree } from "@shared/schemas";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { assertNever, cn } from "@/lib/utils";
 import { SYNC_PILL_SHAPE, SyncActionButton } from "./SyncActionButton";
 
 interface WorktreeSyncPillProps {
@@ -25,134 +18,102 @@ interface WorktreeSyncPillProps {
   compact?: boolean;
 }
 
-// Renders the remote-sync action(s) for a worktree. Returns null in the
-// states where there's nothing to show (synced, detached) so the header
-// stays quiet. With uncommitted changes in the tree, the moves that
-// can't run beside them (syncRunsOnDirtyTree) give way to a hint that
-// says what is waiting.
+// The remote-sync action(s) for a worktree, as lib/syncState says.
 export function WorktreeSyncPill({
   worktree,
   compact = false,
 }: WorktreeSyncPillProps) {
-  const state = deriveRemoteSyncState(worktree);
-  // "2 commits", or just "2" where the tooltip carries the sentence.
-  const count = (n: number) => (compact ? `${n}` : pluralize(n, "commit"));
-  const compactTip = (tip: string) => (compact ? tip : undefined);
+  const { state, move, held, waiting } = worktreeSyncView(worktree);
   const input = { projectId: worktree.projectId, worktreeId: worktree.id };
-
-  const push = usePushWorktree();
-  const pull = usePullWorktree();
+  const mutations = useSyncMoveMutations();
+  // Held here, not in PickSide: a dirty tree swaps PickSide for the
+  // held hint, and an overwrite still running must keep both buttons
+  // disabled when it comes back.
   const pushForce = usePushForceWorktree();
   const overwrite = useOverwriteWorktree();
-  const publish = usePublishWorktree();
-  const pullAndPush = usePullAndPushWorktree();
-  // Both diverged actions throw away one side's commits, which is more
-  // destructive than "Delete worktree" (that one keeps the branch). Same
-  // two-step confirm, and arming one disarms the other so a stray second
-  // click can't land on the button the user didn't mean.
-  const confirmPushForce = useConfirmTwice(CONFIRM_QUICK_MS);
-  const confirmOverwrite = useConfirmTwice(CONFIRM_QUICK_MS);
 
-  if (state.kind === "detached" || state.kind === "synced") return null;
-
-  if (worktree.changedCount > 0 && !syncRunsOnDirtyTree(state)) {
-    const hint =
-      state.kind === "behind"
-        ? {
-            label: `${count(state.behind)} to pull`,
-            tip: `${pluralize(state.behind, "commit")} to pull. Commit or discard your changes to pull.`,
-          }
-        : state.kind === "pullAndPush"
-          ? {
-              label: `↑${state.ahead}↓${state.behind} to sync`,
-              tip: `${pluralize(state.ahead, "commit")} to push and ${pluralize(state.behind, "commit")} to pull. Commit or discard your changes to sync.`,
-            }
-          : {
-              label: `Diverged ↑${state.ahead}↓${state.behind}`,
-              tip: `History has split: ${state.ahead} local, ${state.behind} remote. Commit or discard your changes to pick which side wins.`,
-            };
+  if (waiting) {
+    // Never the move while it waits.
+    if (!held) return null;
     return (
-      <SimpleTooltip tip={hint.tip}>
+      <SimpleTooltip tip={held.tip}>
         <span className={cn(SYNC_PILL_SHAPE, "text-muted-foreground")}>
-          {hint.label}
-          <ArrowDown aria-hidden className="size-3.5" />
+          {compact ? (held.compactLabel ?? held.label) : held.label}
+          {held.Icon && <held.Icon aria-hidden className="size-3.5" />}
         </span>
       </SimpleTooltip>
     );
   }
 
-  if (state.kind === "publish") {
-    return (
-      <SyncActionButton
-        tone="violet"
-        icon={CloudUpload}
-        label={compact ? "Publish" : "Publish branch"}
-        tip={
-          state.canPublish
-            ? compactTip("Publish this branch to the remote")
-            : "No git remote is configured for this project"
-        }
-        disabled={!state.canPublish}
-        pending={publish.isPending}
-        onClick={() => publish.mutate(input)}
-      />
-    );
+  switch (state.kind) {
+    case "detached":
+    case "synced":
+      return null;
+    case "publish":
+    case "ahead":
+    case "behind":
+    case "pullAndPush": {
+      if (!move) return null;
+      const mutation = mutations[move.key];
+      return (
+        <SyncActionButton
+          tone={move.tone}
+          icon={move.arrowsInLabel ? undefined : move.Icon}
+          label={compact ? move.compactLabel : move.label}
+          tip={move.disabledReason ?? (compact ? move.compactTip : move.tip)}
+          disabled={move.disabledReason !== undefined}
+          pending={mutation.isPending}
+          onClick={() => mutation.mutate(input)}
+        />
+      );
+    }
+    case "diverged":
+      return (
+        <PickSide
+          input={input}
+          pushForce={pushForce}
+          overwrite={overwrite}
+          ahead={state.ahead}
+          behind={state.behind}
+          compact={compact}
+        />
+      );
+    default:
+      return assertNever(state);
   }
+}
 
-  if (state.kind === "ahead") {
-    return (
-      <SyncActionButton
-        tone="emerald"
-        icon={ArrowUp}
-        label={`Push ${count(state.ahead)}`}
-        tip={compactTip(
-          `Push ${pluralize(state.ahead, "commit")} to the remote`,
-        )}
-        pending={push.isPending}
-        onClick={() => push.mutate(input)}
-      />
-    );
-  }
-
-  if (state.kind === "behind") {
-    return (
-      <SyncActionButton
-        tone="sky"
-        icon={ArrowDown}
-        label={`Pull ${count(state.behind)}`}
-        tip={compactTip(
-          `Pull ${pluralize(state.behind, "commit")} from the remote`,
-        )}
-        pending={pull.isPending}
-        onClick={() => pull.mutate(input)}
-      />
-    );
-  }
-
-  if (state.kind === "pullAndPush") {
-    return (
-      <SyncActionButton
-        tone="indigo"
-        label={`${compact ? "Sync" : "Pull and push"} ↑${state.ahead}↓${state.behind}`}
-        tip="git pull --rebase, falling back to a merge on conflict, then git push"
-        pending={pullAndPush.isPending}
-        onClick={() => pullAndPush.mutate(input)}
-      />
-    );
-  }
-
-  // Histories have truly diverged. The only moves left are "overwrite the
-  // remote" (force-push) or "overwrite local" (reset hard), both behind a
-  // two-step confirm.
-  // pull --rebase would almost certainly fail mid-flight here, so we don't
-  // offer it. The user picks which side wins.
+// Histories have truly diverged. The only moves left are "overwrite the
+// remote" (force-push) or "overwrite local" (reset hard), both behind a
+// two-step confirm. The user picks which side wins.
+function PickSide({
+  input,
+  pushForce,
+  overwrite,
+  ahead,
+  behind,
+  compact,
+}: {
+  input: { projectId: string; worktreeId: string };
+  pushForce: ReturnType<typeof usePushForceWorktree>;
+  overwrite: ReturnType<typeof useOverwriteWorktree>;
+  ahead: number;
+  behind: number;
+  compact: boolean;
+}) {
+  // Both actions throw away one side's commits, which is more
+  // destructive than "Delete worktree" (that one keeps the branch). Same
+  // two-step confirm, and arming one disarms the other so a stray second
+  // click can't land on the button the user didn't mean.
+  const confirmPushForce = useConfirmTwice(CONFIRM_QUICK_MS);
+  const confirmOverwrite = useConfirmTwice(CONFIRM_QUICK_MS);
   const busy = pushForce.isPending || overwrite.isPending;
   return (
     <span className="inline-flex shrink-0 items-center gap-1 self-center text-xs">
       {/* On the label, not the row: each button has its own tip, and
           two tooltips would stack. */}
       <SimpleTooltip
-        tip={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split. Pick which side wins.`}
+        tip={`Diverged: ${ahead} local, ${behind} remote. History has split. Pick which side wins.`}
       >
         <span className="px-1.5 text-rose-500">
           {compact ? "Overwrite" : "Overwrite:"}
@@ -161,7 +122,7 @@ export function WorktreeSyncPill({
       <SyncActionButton
         tone="rose"
         icon={ArrowUp}
-        label={confirmPushForce.armed ? "Confirm?" : `Push ${state.ahead}`}
+        label={confirmPushForce.armed ? "Confirm?" : `Push ${ahead}`}
         tip={
           confirmPushForce.armed
             ? "Click again to confirm"
@@ -177,7 +138,7 @@ export function WorktreeSyncPill({
       <SyncActionButton
         tone="rose"
         icon={ArrowDown}
-        label={confirmOverwrite.armed ? "Confirm?" : `Pull ${state.behind}`}
+        label={confirmOverwrite.armed ? "Confirm?" : `Pull ${behind}`}
         tip={
           confirmOverwrite.armed
             ? "Click again to confirm"

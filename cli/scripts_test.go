@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"reflect"
 	"slices"
 	"strings"
@@ -86,6 +87,23 @@ func TestLifecycleEnv(t *testing.T) {
 	jsonMode = true
 	if got := lookup(lifecycleEnv(in), "COLORTERM"); got != "truecolor" {
 		t.Errorf("--json COLORTERM = %q, want truecolor (the app's console)", got)
+	}
+}
+
+// The description is free text, and exec refuses an env value holding
+// a NUL, so scriptEnv drops them rather than let one byte stop every
+// script.
+func TestScriptEnvDropsNul(t *testing.T) {
+	in := scriptEnvInputs{scriptName: "setup", description: worktreeDescription{Description: "a\x00b"}}
+	for _, kv := range scriptEnv(in) {
+		if strings.ContainsRune(kv, 0) {
+			t.Fatalf("env entry %q holds a NUL", kv)
+		}
+	}
+	cmd := exec.Command("/bin/sh", "-c", "true")
+	cmd.Env = scriptEnv(in)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("a description with a NUL kept the script from starting: %v", err)
 	}
 }
 

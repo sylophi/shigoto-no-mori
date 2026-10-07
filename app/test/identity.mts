@@ -9,7 +9,7 @@
 // registered with the sm binary built from cli/ and its row held to
 // the same literal: the two implementations cannot drift apart.
 //
-// covers: app/shared/fixtures/**
+// covers: app/shared/fixtures/repo-identity-*.json
 import { execFile } from "node:child_process";
 import {
   mkdirSync,

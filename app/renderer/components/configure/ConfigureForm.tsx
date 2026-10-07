@@ -14,15 +14,16 @@ import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { notifyError } from "@/lib/toast";
-import type {
-  CarryOverEntry,
-  LauncherCommand,
-  ShigomoriConfig,
+import {
+  type CarryOverEntry,
+  type LauncherCommand,
+  PROJECT_CONFIG_DEFAULTS,
+  type ShigomoriConfig,
 } from "@shared/schemas";
-import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { CarryOverSection } from "./CarryOverSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
+import { ScriptEnvPopover } from "@/components/shared/ScriptEnvPopover";
 import { ScriptField } from "./ScriptField";
 import { WorktreeLocationField } from "./WorktreeLocationField";
 import {
@@ -49,12 +50,17 @@ function fromConfig(
     defaultBranch: config?.defaultBranch ?? resolvedDefaultBranch,
     setup: config?.scripts?.setup ?? "",
     teardown: config?.scripts?.teardown ?? "",
-    launchers: config?.launchers ?? [],
-    carryOver: config?.carryOver ?? [],
-    useWorktreeInclude: config?.useWorktreeInclude !== false,
-    showPrimaryInInbox: config?.showPrimaryInInbox ?? false,
+    launchers: config?.launchers ?? PROJECT_CONFIG_DEFAULTS.launchers,
+    carryOver: config?.carryOver ?? PROJECT_CONFIG_DEFAULTS.carryOver,
+    useWorktreeInclude:
+      config?.useWorktreeInclude ?? PROJECT_CONFIG_DEFAULTS.useWorktreeInclude,
+    showPrimaryInInbox:
+      config?.showPrimaryInInbox ?? PROJECT_CONFIG_DEFAULTS.showPrimaryInInbox,
   };
 }
+
+const unlessDefault = <T,>(value: T, fallback: T): T | undefined =>
+  value === fallback ? undefined : value;
 
 function toConfig(
   original: ShigomoriConfig | null,
@@ -74,10 +80,15 @@ function toConfig(
     scripts: Object.keys(scripts).length > 0 ? scripts : undefined,
     launchers: validLaunchers.length > 0 ? validLaunchers : undefined,
     carryOver: state.carryOver.length > 0 ? state.carryOver : undefined,
-    // Enabled is the default; only persist the opt-out.
-    useWorktreeInclude: state.useWorktreeInclude ? undefined : false,
-    // Hidden is the default, so only the opt-in is persisted.
-    showPrimaryInInbox: state.showPrimaryInInbox ? true : undefined,
+    // Defaults are stored by omission.
+    useWorktreeInclude: unlessDefault(
+      state.useWorktreeInclude,
+      PROJECT_CONFIG_DEFAULTS.useWorktreeInclude,
+    ),
+    showPrimaryInInbox: unlessDefault(
+      state.showPrimaryInInbox,
+      PROJECT_CONFIG_DEFAULTS.showPrimaryInInbox,
+    ),
   };
 }
 
@@ -260,22 +271,9 @@ export function ConfigureForm({
           />
 
           <section className="space-y-4">
-            <div>
-              <SectionHeading className="mb-1">Scripts</SectionHeading>
-              <p className="text-xs text-muted-foreground">
-                Run inside the worktree directory. These env vars are available:
-              </p>
-              <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground select-text">
-                {SCRIPT_ENV_DOCS.map((row) => (
-                  <li key={row.name}>
-                    <span className="font-mono text-foreground/80">
-                      {row.name}
-                    </span>
-                    : {row.desc}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <SectionIntro title="Scripts" action={<ScriptEnvPopover />}>
+              Run inside the worktree directory.
+            </SectionIntro>
             <ScriptField
               id="script-setup"
               label="Setup"
@@ -294,7 +292,7 @@ export function ConfigureForm({
             {/* The Settings link opens THIS machine's launch tools, which
                 say nothing about a peer's. A remote project's tools run
                 from the window on that device, so say that instead. */}
-            <SectionIntro title="Custom tools">
+            <SectionIntro title="Custom tools" action={<ScriptEnvPopover />}>
               {remote ? (
                 <>
                   Tools specific to this project, launched from {deviceLabel}

@@ -19,12 +19,8 @@ import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
-import {
-  changeKey,
-  deriveRemoteSyncState,
-  isUntracked,
-  type Worktree,
-} from "@shared/schemas";
+import { worktreeSyncView } from "@/lib/syncState";
+import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
 import { changedFilePaths, includedFiles } from "./changesControls";
 import { BranchBar } from "./BranchBar";
 import { CommitComposer } from "./CommitComposer";
@@ -270,7 +266,7 @@ function ChangesView({
 // clean, and what the branch still owes the remote, the next thing to
 // do, which the branch bar below has the button for.
 function CleanTreeMessage({ worktree }: { worktree: Worktree }) {
-  const next = owedToRemote(worktree);
+  const next = worktreeSyncView(worktree).owed;
   return (
     <span className="flex flex-col items-center gap-2">
       <CircleCheck aria-hidden className="size-6 text-muted-foreground/60" />
@@ -278,24 +274,4 @@ function CleanTreeMessage({ worktree }: { worktree: Worktree }) {
       {next && <span className="text-xs">{next}</span>}
     </span>
   );
-}
-
-function owedToRemote(worktree: Worktree): string | null {
-  const state = deriveRemoteSyncState(worktree);
-  switch (state.kind) {
-    case "synced":
-      return "Everything is committed and pushed.";
-    case "ahead":
-      return `${pluralize(state.ahead, "commit")} not pushed yet.`;
-    case "behind":
-      return `${pluralize(state.behind, "commit")} to pull.`;
-    case "pullAndPush":
-      return `${pluralize(state.ahead, "commit")} to push, ${pluralize(state.behind, "commit")} to pull.`;
-    case "diverged":
-      return "History has split from the remote. Pick which side wins below.";
-    case "publish":
-      return state.canPublish ? "This branch isn't on the remote yet." : null;
-    case "detached":
-      return null;
-  }
 }
