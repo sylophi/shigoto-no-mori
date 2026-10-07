@@ -2,7 +2,7 @@
 // after the owner's v2 flow mockups: Studio Mac local, Thinkpad online
 // with a direct session, Mini and Work PC offline. Pure data, served
 // over fixture transports by the bridge (bridge.ts).
-import type { Mutable } from "effect/Types";
+import type * as Types from "effect/Types";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import type {
   CommitSummary,
@@ -59,7 +59,8 @@ export function repoDescriptionFor(name: string): string | null {
   return REPO_DESCRIPTION[name] ?? null;
 }
 
-export const accountDevices: DeviceInfo[] = [
+// Mutable: a rename or icon pick for a peer lands on its entry here.
+export const accountDevices: Types.Mutable<DeviceInfo>[] = [
   {
     deviceId: LOCAL_DEVICE_ID,
     name: "Studio Mac",
@@ -118,7 +119,7 @@ function commit(
 }
 
 // A row of the fake forest, which the bridge's verbs update in place.
-export type FakeWorktree = Mutable<Worktree>;
+export type FakeWorktree = Types.Mutable<Worktree>;
 
 // Every field WorktreeSchema requires, with quiet defaults. Overrides
 // pose the interesting states.

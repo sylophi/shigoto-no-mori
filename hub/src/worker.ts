@@ -17,6 +17,8 @@
 // the Durable Objects, Clerk). It cannot stop the Worker invocation
 // itself from being billed, only a WAF rule at the zone can, see
 // README.md (Abuse limits).
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import {
   CONNECT_TICKET_PARAM,
   DEVICE_REVOKED_CODE,
@@ -390,10 +392,12 @@ export function createWorker(deps: HubDeps): HubWorker {
     const token = bearerToken(request);
     const login = token === null ? null : await deps.verifyLogin(token, env);
     if (login === null) return jsonError(401, { error: "invalid login token" });
-    const body = EnrollRequestSchema.safeParse(await readJson(request));
-    if (!body.success)
+    const body = Schema.decodeUnknownOption(EnrollRequestSchema)(
+      await readJson(request),
+    );
+    if (Option.isNone(body))
       return jsonError(400, { error: "invalid enroll request" });
-    const { deviceId, name, platform, icon } = body.data;
+    const { deviceId, name, platform, icon } = body.value;
     const existing = await getDeviceById(env.DB, deviceId);
     if (existing !== null && existing.account_id !== login.accountId) {
       return jsonError(409, { error: ENROLLED_ELSEWHERE });
@@ -567,14 +571,16 @@ export function createWorker(deps: HubDeps): HubWorker {
   ) {
     const { device, hash } = await authDevice(request, env);
     if (device === null) return await refuseCredential(env, hash);
-    const parsed = DevicePatchRequestSchema.safeParse(await readJson(request));
-    if (!parsed.success)
+    const parsed = Schema.decodeUnknownOption(DevicePatchRequestSchema)(
+      await readJson(request),
+    );
+    if (Option.isNone(parsed))
       return jsonError(400, { error: "invalid device update" });
     const updated = await updateDevice(
       env.DB,
       targetId,
       device.account_id,
-      parsed.data,
+      parsed.value,
     );
     if (!updated) return jsonError(404, { error: "unknown device" });
     return new Response(null, { status: 204 });
@@ -595,10 +601,10 @@ export function createWorker(deps: HubDeps): HubWorker {
         error: "tunnel provisioning is not configured",
       });
     }
-    const body = TunnelProvisionRequestSchema.safeParse(
+    const body = Schema.decodeUnknownOption(TunnelProvisionRequestSchema)(
       await readJson(request),
     );
-    if (!body.success)
+    if (Option.isNone(body))
       return jsonError(400, { error: "invalid tunnel request" });
     try {
       const provisioned = await provisionTunnel(
@@ -606,7 +612,7 @@ export function createWorker(deps: HubDeps): HubWorker {
         cfFetch,
         device.account_id,
         device.device_id,
-        body.data.port,
+        body.value.port,
       );
       return Response.json(provisioned satisfies TunnelProvisionResponse);
     } catch {

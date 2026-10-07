@@ -1,5 +1,6 @@
 import type * as Schema from "effect/Schema";
 import { z } from "zod";
+import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
 import { safeDecode } from "@shared/ipc/schema";
 import {
   CloneFolderNameSchema,
@@ -36,6 +37,8 @@ function toZod<S extends Schema.Codec<unknown, unknown>>(
   });
 }
 
+export const DeviceIdZod = toZod(DeviceIdSchema);
+export const DeviceInfoZod = toZod(DeviceInfoSchema);
 export const CloneFolderNameZod = toZod(CloneFolderNameSchema);
 export const CommitHashZod = toZod(CommitHashSchema);
 export const CreatePhaseZod = toZod(CreatePhaseSchema);
