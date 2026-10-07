@@ -29,8 +29,8 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	}
 	// Adopting wipes the old directory and re-checks-out the branch
 	// tip, so anything uncommitted (or untracked) there is destroyed.
-	// The app's convert flow carries this in its confirmation dialog;
-	// the CLI needs the guard itself.
+	// This guard is the only one: the app's convert flow runs adopt
+	// unforced first and asks before it forces.
 	if err := requireClean(id, parsed.bools["force"], "adopt", "adopting"); err != nil {
 		return 1, err
 	}

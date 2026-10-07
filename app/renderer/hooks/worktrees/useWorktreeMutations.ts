@@ -117,6 +117,7 @@ export function useCreateWorktreeFromPullRequest() {
 interface ConvertExternalWorktreeInput {
   projectId: string;
   worktreeId: string;
+  force: boolean;
 }
 
 // Convert and relocate both leave the worktree under a new id: swap

@@ -55,24 +55,27 @@ func removePreflight(id worktreeIdentity, force bool) error {
 // must not pass for clean when the next step destroys the directory.
 // Shared by rm, land and adopt so the semantics can't drift. verb shapes
 // the --force prose; destroys is set when the operation takes the
-// changes with it, which earns the louder message.
+// changes with it, which earns the louder message. The --json codes
+// (uncommitted-changes, status-unreadable) are what the app's convert
+// flow keys on (host/ipc/cliDelegate.ts).
 func requireClean(id worktreeIdentity, force bool, verb, destroys string) error {
 	if force {
 		return nil
 	}
 	changed, err := changedCount(id.Path)
 	if err != nil {
-		return errf("Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to %s anyway.", err, verb)
+		return codedErrf("status-unreadable",
+			"Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to %s anyway.", err, verb)
 	}
 	if changed == 0 {
 		return nil
 	}
 	if destroys != "" {
-		return errf(
+		return codedErrf("uncommitted-changes",
 			"Worktree has %d uncommitted change(s) that %s would destroy. Commit them first, or pass --force.",
 			changed, destroys)
 	}
-	return errf("Worktree has %d uncommitted change(s). Pass --force to %s anyway.", changed, verb)
+	return codedErrf("uncommitted-changes", "Worktree has %d uncommitted change(s). Pass --force to %s anyway.", changed, verb)
 }
 
 // A lifecycle script failed during removal, so the worktree was left

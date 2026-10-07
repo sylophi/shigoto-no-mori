@@ -153,7 +153,7 @@ func TestRemovalGuardsSeeUntrackedFilesTheConfigHides(t *testing.T) {
 	ctx := resolveContext(proj.Path, []project{proj})
 	refused := func(what string, err error) {
 		t.Helper()
-		if err == nil || !strings.Contains(err.Error(), "uncommitted change") {
+		if err == nil || !strings.Contains(err.Error(), "uncommitted change") || errorKindOf(err) != "uncommitted-changes" {
 			t.Errorf("%s err = %v, want the uncommitted-changes refusal", what, err)
 		}
 	}
@@ -216,5 +216,21 @@ func TestRemovalChecksAgainAfterTheTeardown(t *testing.T) {
 	}
 	if _, err := os.Stat(wt.Path); !os.IsNotExist(err) {
 		t.Errorf("forced removal left the checkout: %v", err)
+	}
+}
+
+// The app keys on the refusal's code, not its prose.
+func TestCleanGuardRefusalsCarryTheirCode(t *testing.T) {
+	proj := autoPullSandbox(t)
+	wt := createViaCmd(t, proj, "otter")
+	writeFileT(t, filepath.Join(wt.Path, "a.txt"), "a\n")
+	if kind := errorKindOf(requireClean(wt, false, "adopt", "adopting")); kind != "uncommitted-changes" {
+		t.Errorf("dirty kind %q, want uncommitted-changes", kind)
+	}
+	if err := os.WriteFile(filepath.Join(wt.Path, ".git"), []byte("gitdir: /nowhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if kind := errorKindOf(requireClean(wt, false, "adopt", "adopting")); kind != "status-unreadable" {
+		t.Errorf("unreadable status kind %q, want status-unreadable", kind)
 	}
 }
