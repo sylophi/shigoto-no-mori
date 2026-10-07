@@ -148,6 +148,18 @@ interface ScriptWorktree {
   path: string;
 }
 
+// The SHIGOMORI_* values startScript can't derive from the worktree
+// and project it is given (the CLI's lifecycleEnvInputs).
+export interface ScriptEnvValues {
+  // Branch checked out in the primary worktree; "" when there is none.
+  projectBranch: string;
+  // "" when the default branch can't be resolved (no remote, empty repo).
+  defaultBranch: string;
+  // What `sm describe` set, "" when unset.
+  title: string;
+  description: string;
+}
+
 interface RunArgs {
   command: string;
   // The run's name (SHIGOMORI_SCRIPT_NAME, the logs) is the slot's.
@@ -156,7 +168,7 @@ interface RunArgs {
   project: Pick<Project, "id" | "path" | "name">;
   // The branch values of the SHIGOMORI_* env contract, for a command
   // that doesn't set that env itself. Absent for `sm run`, which does.
-  scriptEnv?: { projectBranch: string; defaultBranch: string };
+  scriptEnv?: ScriptEnvValues;
   notify: NotifyScriptEvent;
 }
 
@@ -640,6 +652,8 @@ export function startScript(args: RunArgs): string {
       [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
       [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: args.worktree.branch,
       [SCRIPT_ENV_KEYS.WORKTREE_ID]: args.worktree.id,
+      [SCRIPT_ENV_KEYS.WORKTREE_TITLE]: args.scriptEnv.title,
+      [SCRIPT_ENV_KEYS.WORKTREE_DESCRIPTION]: args.scriptEnv.description,
       [SCRIPT_ENV_KEYS.PROJECT_PATH]: args.project.path,
       [SCRIPT_ENV_KEYS.PROJECT_NAME]: args.project.name,
       [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: args.scriptEnv.projectBranch,
