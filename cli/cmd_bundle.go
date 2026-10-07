@@ -40,11 +40,6 @@ func validBundleRef(ref string) bool {
 		!strings.HasSuffix(ref, ".lock")
 }
 
-// Mirrors COMMIT_HASH_RE in shared/schemas/worktree.ts: hex only, so a
-// have can never occupy a flag position (and ^-prefixing it stays a
-// revision exclusion, never an option).
-var bundleHaveRe = regexp.MustCompile(`^[0-9a-f]{4,64}$`)
-
 // The only namespace unpack may write. Everything below it is
 // shigomori-owned bookkeeping (dirty captures, incoming branch tips),
 // never a branch, which is what makes the forced fetch safe.
@@ -122,7 +117,9 @@ func createBundle(projectPath, out string, refs, haves []string) (bundleCreateRe
 		}
 	}
 	for _, have := range haves {
-		if !bundleHaveRe.MatchString(have) {
+		// Hex only, so ^-prefixing a have below stays a revision
+		// exclusion, never an option.
+		if !commitHashRe.MatchString(have) {
 			return bundleCreateResult{}, codedErrf("bad-have", "Invalid have %q (must be a hex commit hash).", have)
 		}
 	}

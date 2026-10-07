@@ -1,0 +1,118 @@
+{
+  "format": "\u0001%h%x00%an%x00%aI%x00%s",
+  "cases": [
+    {
+      "name": "commits with and without a shortstat",
+      "stdout": "\u0001cdb97a6\u0000t\u00002005-04-07T22:13:13+00:00\u0000add f\n 1 file changed, 1 insertion(+)\n\n\u00014094f57\u0000t\u00002005-04-07T22:13:13+00:00\u0000empty\n\n\u00011a2b3c4\u0000t\u00002005-04-07T22:13:13+00:00\u0000trim\n 2 files changed, 3 insertions(+), 12 deletions(-)",
+      "commits": [
+        {
+          "hash": "cdb97a6",
+          "subject": "add f",
+          "author": "t",
+          "date": "2005-04-07T22:13:13+00:00",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "hash": "4094f57",
+          "subject": "empty",
+          "author": "t",
+          "date": "2005-04-07T22:13:13+00:00",
+          "additions": 0,
+          "deletions": 0
+        },
+        {
+          "hash": "1a2b3c4",
+          "subject": "trim",
+          "author": "t",
+          "date": "2005-04-07T22:13:13+00:00",
+          "additions": 3,
+          "deletions": 12
+        }
+      ]
+    },
+    {
+      "name": "a sentinel inside a subject stays in that subject, tabs and all",
+      "stdout": "\u0001cdb97a6\u0000t\u00002005-04-07T22:13:13+00:00\u0000add f\n 1 file changed, 1 insertion(+)\n\n\u00014094f57\u0000t\u00002005-04-07T22:13:13+00:00\u0000evil\u0001NOTAHASH\tx\ty\tinjected",
+      "commits": [
+        {
+          "hash": "cdb97a6",
+          "subject": "add f",
+          "author": "t",
+          "date": "2005-04-07T22:13:13+00:00",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "hash": "4094f57",
+          "subject": "evil\u0001NOTAHASH\tx\ty\tinjected",
+          "author": "t",
+          "date": "2005-04-07T22:13:13+00:00",
+          "additions": 0,
+          "deletions": 0
+        }
+      ]
+    },
+    {
+      "name": "an author name with a tab keeps every field in place",
+      "stdout": "\u00014094f57\u0000Evil\tAuthor\u00002005-04-07T22:13:13+00:00\u0000fix",
+      "commits": [
+        {
+          "hash": "4094f57",
+          "subject": "fix",
+          "author": "Evil\tAuthor",
+          "date": "2005-04-07T22:13:13+00:00",
+          "additions": 0,
+          "deletions": 0
+        }
+      ]
+    },
+    {
+      "name": "a record whose first field isn't a hash is dropped",
+      "stdout": "\u0001--output=/tmp/x\u0000t\u00002005-04-07T22:13:13+00:00\u0000forged\n\n\u00014094f57\u0000t\u00002005-04-07T22:13:13+00:00\u0000real\n 1 file changed, 2 deletions(-)\n\n\u0001\u0000t\u00002005-04-07T22:13:13+00:00\u0000no hash",
+      "commits": [
+        {
+          "hash": "4094f57",
+          "subject": "real",
+          "author": "t",
+          "date": "2005-04-07T22:13:13+00:00",
+          "additions": 0,
+          "deletions": 2
+        }
+      ]
+    },
+    {
+      "name": "a sha256 repo's full-length hash is kept",
+      "stdout": "\u0001abababababababababababababababababababababababababababababababab\u0000t\u00002005-04-07T22:13:13+00:00\u0000sha256",
+      "commits": [
+        {
+          "hash": "abababababababababababababababababababababababababababababababab",
+          "subject": "sha256",
+          "author": "t",
+          "date": "2005-04-07T22:13:13+00:00",
+          "additions": 0,
+          "deletions": 0
+        }
+      ]
+    },
+    {
+      "name": "a header cut short keeps what it has",
+      "stdout": "\u00014094f57\u0000t",
+      "commits": [
+        {
+          "hash": "4094f57",
+          "subject": "",
+          "author": "t",
+          "date": "",
+          "additions": 0,
+          "deletions": 0
+        }
+      ]
+    },
+    {
+      "name": "no output, no commits",
+      "stdout": "",
+      "commits": []
+    }
+  ]
+}

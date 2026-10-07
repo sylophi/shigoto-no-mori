@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -30,6 +32,55 @@ func TestParseStatusPaths(t *testing.T) {
 				t.Errorf("status paths of %q = %v, want %v", tc.stdout, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestParseLogFixture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "app", "shared", "fixtures", "git-log.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Format string `json:"format"`
+		Cases  []struct {
+			Name    string          `json:"name"`
+			Stdout  string          `json:"stdout"`
+			Commits []commitSummary `json:"commits"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if logFormat != fixture.Format {
+		t.Fatalf("logFormat %q, the fixture's %q", logFormat, fixture.Format)
+	}
+	if len(fixture.Cases) == 0 {
+		t.Fatal("the fixture has no cases")
+	}
+	for _, tc := range fixture.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			if got := parseLog(tc.Stdout); !reflect.DeepEqual(got, tc.Commits) {
+				t.Errorf("got %+v\nwant %+v", got, tc.Commits)
+			}
+		})
+	}
+}
+
+// A subject carrying the record sentinel, as git really prints it: it
+// must stay one commit with that subject, not forge a second row.
+func TestListCommitsCraftedSubject(t *testing.T) {
+	repo := t.TempDir()
+	deterministicGitEnv(t)
+	runGitT(t, repo, "init", "-q")
+	runGitT(t, repo, "commit", "-q", "--allow-empty", "-m", "first")
+	crafted := "evil\x01NOTAHASH\tx\ty\tinjected"
+	runGitT(t, repo, "commit", "-q", "--allow-empty", "-m", crafted)
+	commits := listCommits(repo, 0, 10)
+	if len(commits) != 2 {
+		t.Fatalf("got %d commits, want 2: %+v", len(commits), commits)
+	}
+	if commits[0].Subject != crafted || commits[1].Subject != "first" {
+		t.Errorf("subjects %q, %q", commits[0].Subject, commits[1].Subject)
 	}
 }
 

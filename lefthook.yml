@@ -40,7 +40,7 @@ pre-commit:
           # project rows' `identity`) to the same fixtures, so cli/ gates it
           # too.
           - name: identity
-            glob: "{cli/**,app/shared/git/repoIdentity.mts,app/shared/git/defaultBranch.mts,app/shared/fixtures/**,app/shared/schemas/project.ts,app/test/identity.mts,app/test/lib/smBinary.mts}"
+            glob: "{cli/**,app/shared/git/repoIdentity.mts,app/shared/git/defaultBranch.mts,app/shared/fixtures/repo-identity-*.json,app/shared/schemas/project.ts,app/test/identity.mts,app/test/lib/smBinary.mts}"
             run: pnpm -C app test identity
           # The host reads the data model through the CLI: projects, rows,
           # identities, the marks, relocate, reorder, config, launchers,
@@ -53,8 +53,14 @@ pre-commit:
             glob: "{cli/**,app/host/ipc/cliDelegate.ts,app/host/ipc/modules/cli.ts,app/shared/ipc/modules/cli.ts,app/host/ipc/modules/projects.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/modules/launchers.ts,app/host/ipc/modules/packageScripts.ts,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/shigomori.ts,app/host/lib/projects/**,app/host/lib/git/worktrees.ts,app/host/lib/config/**,app/shared/schemas/**,app/shared/git/worktreeLayout.ts,app/test/cli-reads.mts,app/test/lib/checkKit.mts,app/test/lib/smBinary.mts,app/test/lib/cliSandbox.mts}"
             run: pnpm -C app test cli-reads
           - name: go-test
-            glob: "cli/**"
+            glob: "{cli/**,app/shared/fixtures/git-log.json}"
             run: go test -C cli ./...
+          # The app's commit-list parser, held to the same fixture as the
+          # CLI's (go-test above), so a crafted subject can't forge a row
+          # in either.
+          - name: git-log
+            glob: "{app/host/lib/git/worktrees.ts,app/host/lib/git/core.ts,app/shared/schemas/worktree.ts,app/shared/fixtures/git-log.json,app/test/git-log.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test git-log
           # The file-sync engine (continuous worktree mirroring) is its own
           # Go module, tested on its own.
           - name: file-sync-test
