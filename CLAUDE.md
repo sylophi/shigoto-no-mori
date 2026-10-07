@@ -34,3 +34,11 @@ item works like this. Remove this section when `release/v3` merges into
    merge itself when green. Report to the orchestration thread with
    the PR link, what was left out and why, and what the next item
    should know.
+
+## Which model for what, while the branch lives
+
+Opus for UI and UX design given direction, for copy and prose (PR
+titles and bodies, docs, release notes, user-facing strings), and for
+working out what the owner needs from a loose ask. Fable for the
+large plans, the decisions and trade-offs, and the orchestration
+thread, which delegates the former and keeps the latter.
