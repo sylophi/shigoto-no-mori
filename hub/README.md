@@ -12,14 +12,12 @@ device registry in D1, mints short-lived connection tickets and
 forwards envelopes it never parses. The wire contract lives in
 `../app/shared/hub/protocol.ts`.
 
-This directory is a standalone pnpm project (like `cli/` is a
-standalone Go module) with its own lockfile. Install and run its
-scripts from `hub/`. One caveat on isolation: the shared contract it
+This directory is a package of the repo's pnpm workspace: install from
+the repo root, and run its scripts from `hub/`. The shared contract it
 imports (`../app/shared/hub/protocol.ts` and the `frames.ts` that
 file re-exports) lives outside `hub/`, so its `zod` import resolves
-from `app/node_modules`, not `hub/node_modules`. Both installs pin the
-same zod, so an `app/` install is a prerequisite for building or
-deploying the shared half.
+from `app/node_modules`, not `hub/node_modules`. Both take zod from the
+workspace catalog, so they get the same version.
 
 ## Domains (production)
 
@@ -69,7 +67,7 @@ with `--env dev` for dev and no flag for production. Everything below
 is written for dev, drop `--env dev` for the production equivalent.
 
 Prerequisites: a Cloudflare account, a Clerk application, and
-`pnpm install` run in this directory.
+`pnpm install` run at the repo root.
 
 1. Create the database, if it does not exist yet, and paste the
    printed id into the matching `database_id` in `wrangler.jsonc`:
@@ -314,7 +312,8 @@ touches it.
 
 The production web client deploys from the `web-client-prod` branch,
 Vercel's production branch for the project. The Vercel project's Root
-Directory is `app`, where `vercel.json` and the app's lockfile live. The release workflow
+Directory is `app`, where `vercel.json` lives, and the install uses
+the workspace's lockfile at the repo root. The release workflow
 fast-forwards it to the tagged commit at the end of every full
 (non-prerelease) release, once the desktop assets are uploaded, so the
 web client ships the same source as the `.app` without a push by hand.

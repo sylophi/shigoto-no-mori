@@ -1,10 +1,11 @@
 # Marketing site
 
 The site for shigomori.com, built with Astro into plain static HTML
-(no client framework). It is a standalone pnpm project, like `hub/`.
+(no client framework). It is a package of the repo's pnpm workspace,
+like `hub/`: install from the repo root, run its scripts from here.
 
 ```sh
-pnpm install
+pnpm install  # from the repo root
 pnpm dev      # local preview with reload
 pnpm check    # type-check the pages, components and scripts (build runs it too)
 pnpm build    # static output in dist/
@@ -14,7 +15,8 @@ TypeScript stays on 6.x for now: `astro check` needs its programmatic
 API, which the native TypeScript 7 compiler doesn't ship yet.
 
 It deploys as its own Vercel project with the Root Directory set to
-`marketing`. `vercel.json` pins the Astro preset and holds the headers.
+`marketing`, and the install uses the workspace's lockfile at the
+repo root. `vercel.json` pins the Astro preset and holds the headers.
 
 ## Layout
 

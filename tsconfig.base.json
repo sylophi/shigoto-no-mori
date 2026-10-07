@@ -1,0 +1,23 @@
+// The compiler options every TypeScript package shares. Each one
+// extends this and adds what is its own (lib, types, include).
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "erasableSyntaxOnly": true,
+    "noEmit": true
+  }
+}

@@ -10,7 +10,7 @@
 // Run by lefthook pre-commit, and by hand as `pnpm test dmg-art`.
 //
 // covers: app/renderer/doubutsu.css app/scripts/dmg-background.html
-// covers: app/assets/dmg/** app/pnpm-lock.yaml
+// covers: app/assets/dmg/** pnpm-lock.yaml
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

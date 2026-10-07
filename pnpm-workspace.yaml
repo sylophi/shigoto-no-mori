@@ -1,15 +1,24 @@
-# Project-local pnpm settings.
-#
+# The repo's one pnpm workspace: every JavaScript package, one lockfile,
+# and the settings below for all of them.
+packages:
+  - app
+  - hub
+  - marketing
+  - packages/*
+
 # nodeLinker: hoisted is required by electron-forge so it can crawl a
-# flat node_modules tree when packaging.
-#
+# flat node_modules tree when packaging. hoistingLimits keeps each
+# package's dependencies in its own node_modules instead of hoisting
+# them to the root, so app/node_modules stays the tree forge packages
+# and the app's scripts read.
+nodeLinker: hoisted
+hoistingLimits: workspaces
+
 # blockExoticSubdeps: false is a project-scoped allowance for the
 # @electron/node-gyp transitive dep (git+https://github.com/electron/node-gyp.git,
 # pinned SHA, used by @electron/rebuild during native-module builds).
-# Your other guards still apply: minimumReleaseAge: 10080 (7 days),
-# ignoreScripts: true, strictDepBuilds: true.
-nodeLinker: hoisted
 blockExoticSubdeps: false
+
 # Supply-chain hardening, pinned in-repo so it holds for every clone
 # (not just machines with a hardened global rc): delay installs of
 # newly published versions by 7 days (minutes), and refuse updates
@@ -31,12 +40,21 @@ trustPolicyExclude:
   # project's own maintainers. @pierre/diffs pins it from 1.3.0 on.
   - "@pierre/theme@2.0.0"
   - material-icon-theme@5.36.1
-# Per-package build-script trust. pnpm 11 uses this map (not the older
-# `onlyBuiltDependencies` / `ignoredBuiltDependencies` arrays) to gate
-# which dependencies are allowed to run install scripts.
+  # chokidar 4.0.3 (reached through marketing's @astrojs/check) was
+  # published without the provenance its 4.0.1 had. Verified on the
+  # registry: the same sole maintainer (paulmillr) published both, and
+  # 5.0.0 is back to provenance from CI.
+  - chokidar@4.0.3
+
+# Per-package build-script trust: only the packages set to true here may
+# run install scripts.
 allowBuilds:
   electron: true
+  # esbuild (vite's, Astro's and wrangler's bundler) and workerd (the
+  # hub's Worker runtime) validate their platform binary in a
+  # postinstall, the binary itself arriving as an optional dependency.
   esbuild: true
+  workerd: true
   lefthook: true
   electron-winstaller: false
   # appdmg's two native addons, pulled in by the dmg maker
@@ -58,8 +76,9 @@ allowBuilds:
   # loads as-is, and forge.config.ts's rebuildConfig skips rebuilding it,
   # so its install-time node-gyp build is skipped too. Those scripts
   # would have made the bundled spawn-helper executable, and that is
-  # scripts/fix-node-pty-helper.mts's job instead.
+  # app/scripts/fix-node-pty-helper.mts's job instead.
   node-pty: false
+
 # Force tar >= 7.5.10 to patch CVE-2026-29786 (GHSA-qffp-2rhf-9h96):
 # hardlink path traversal via drive-relative linkpath. Pulled in transitively
 # through @electron/rebuild -> @electron/node-gyp. No 6.x backport exists.
@@ -77,3 +96,24 @@ overrides:
   # re-resolution of the lockfile trips trustPolicy: no-downgrade.
   # Forcing 7.x keeps every consumer on the attested line.
   "semver@<7.7.2": "^7.7.2"
+  # Force sharp >= 0.35.4 to patch the bundled libheif (GHSA-g89c-p67h-r497,
+  # GHSA-2jg2-4ch7-h545). miniflare (under the hub's wrangler) pins sharp
+  # to an exact version, and even the newest @cloudflare/vitest-pool-workers
+  # still pins a miniflare on 0.35.2. Drop this once wrangler and
+  # vitest-pool-workers ship past it.
+  "sharp@<0.35.4": "^0.35.4"
+
+# The versions the packages share, or will once code moves into
+# packages/, pinned once. A package depends on one as "catalog:".
+# marketing keeps TypeScript 6 on its own (marketing/README.md has why).
+# vitest stays on 4.1.x: @cloudflare/vitest-pool-workers, which runs the
+# hub's suite, supports ^4.1 only.
+catalog:
+  "@types/node": ^24.13.5
+  "@types/react": ^19.2.17
+  "@types/react-dom": ^19.2.3
+  react: ~19.2.7
+  react-dom: ~19.2.7
+  typescript: ~7.0.2
+  vitest: 4.1.11
+  zod: ^4.4.3
