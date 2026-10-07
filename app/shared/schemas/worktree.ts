@@ -3,7 +3,7 @@ import { isValidWorktreeDirName } from "../git/branches";
 import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,
-} from "./payloads";
+} from "./zodPayloads";
 import { GitRefNameSchema, isRealBranch } from "./project";
 
 // Abbreviated commit hashes are produced by `git log %h` and travel back

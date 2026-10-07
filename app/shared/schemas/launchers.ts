@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorktreeScopedPayloadSchema } from "./payloads";
+import { WorktreeScopedPayloadSchema } from "./zodPayloads";
 
 // Detected apps + custom commands from the per-project config, ready for
 // the renderer to display in a single launcher row.

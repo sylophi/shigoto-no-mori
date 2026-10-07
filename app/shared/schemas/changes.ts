@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isSafeRelPath } from "../git/gitPaths";
-import { WorktreeScopedPayloadSchema } from "./payloads";
+import { WorktreeScopedPayloadSchema } from "./zodPayloads";
 import { CommitHashSchema, WorktreeSchema } from "./worktree";
 
 // How much of a changed file is in the index, i.e. what a commit right

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { RepoRelPathSchema } from "./changes";
-import { WorktreeScopedPayloadSchema } from "./payloads";
+import { WorktreeScopedPayloadSchema } from "./zodPayloads";
 
 // Largest file the files page reads whole. Past this a file is a
 // log, a bundle or a dump, which a read-only viewer has no business

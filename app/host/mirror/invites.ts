@@ -24,6 +24,7 @@
 // beside the follower's store, so a relaunch still serves the mirrors
 // it asked for. Pending ones do not: an ask dies with the process that
 // made it.
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { errorMessageOf } from "@shared/errors";
 import { DeviceIdSchema } from "@shared/hub/protocol";
@@ -229,24 +230,22 @@ export function mirrorInviteAdmits(
       );
     }
     case "project": {
-      const named = ProjectScopedPayloadSchema.safeParse(input);
       return (
-        named.success &&
+        Schema.is(ProjectScopedPayloadSchema)(input) &&
         mine.some(
           (invite) =>
-            isLanded(invite) && invite.copy.projectId === named.data.projectId,
+            isLanded(invite) && invite.copy.projectId === input.projectId,
         )
       );
     }
     case "copy": {
-      const named = WorktreeScopedPayloadSchema.safeParse(input);
       return (
-        named.success &&
+        Schema.is(WorktreeScopedPayloadSchema)(input) &&
         mine.some(
           (invite) =>
             isLanded(invite) &&
-            invite.copy.projectId === named.data.projectId &&
-            invite.copy.worktreeId === named.data.worktreeId,
+            invite.copy.projectId === input.projectId &&
+            invite.copy.worktreeId === input.worktreeId,
         )
       );
     }
