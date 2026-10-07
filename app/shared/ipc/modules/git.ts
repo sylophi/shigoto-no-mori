@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
@@ -28,7 +29,10 @@ export const gitContract = defineContract("host", {
   }),
   fetchActive: broadcast(
     "git:fetchActive",
-    ProjectScopedPayloadSchema.extend({ active: z.boolean() }),
+    Schema.Struct({
+      ...ProjectScopedPayloadSchema.fields,
+      active: Schema.Boolean,
+    }),
     { remote: true },
   ),
   // Something outside the app (the CLI) changed worktrees or state

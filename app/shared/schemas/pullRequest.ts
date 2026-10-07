@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProjectScopedPayloadSchema } from "./payloads";
+import { ProjectScopedPayloadSchema } from "./zodPayloads";
 
 export const PullRequestStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
 
