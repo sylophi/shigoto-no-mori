@@ -81,7 +81,7 @@ function TooltipContent({
 }
 
 // The browser's own tooltip is banned (no-native-tooltip in
-// lint/shigomori.mts). A wrapper that passes its props to the DOM drops
+// lint/rules/no-native-tooltip.mts). A wrapper that passes its props to the DOM drops
 // `title` from them with this, so `<Button title>` fails to type check
 // where the lint rule, which can't see through a component, would miss
 // it. Wrap the element in SimpleTooltip instead.

@@ -64,9 +64,6 @@ export function useSidebarViewHotkey(enabled: boolean): void {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // setView is a fresh closure per render (the patch hook rebuilds
-    // it), and re-subscribing on every sidebar render for a handler
-    // that only reads the cache would be churn for nothing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setView is a fresh closure per render, and the handler only reads the cache, so re-subscribing each render would be churn.
   }, [enabled, queryClient]);
 }

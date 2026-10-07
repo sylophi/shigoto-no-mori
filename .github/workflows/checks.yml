@@ -42,6 +42,9 @@ jobs:
       - name: Lint
         run: pnpm run check:lint
 
+      - name: Lint rule tests
+        run: pnpm run check:lint-rules
+
       - name: Format
         run: pnpm run check:format
 

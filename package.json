@@ -19,9 +19,10 @@
     "fake-host:web": "pnpm -F ./app fake-host:web",
     "package": "pnpm -F ./app package",
     "make": "pnpm -F ./app make",
-    "check": "pnpm run check:typecheck && pnpm run check:lint && pnpm run check:format && pnpm run check:knip && pnpm run check:licenses && pnpm run check:proofs && pnpm run check:hub && pnpm run check:go",
+    "check": "pnpm run check:typecheck && pnpm run check:lint && pnpm run check:lint-rules && pnpm run check:format && pnpm run check:knip && pnpm run check:licenses && pnpm run check:proofs && pnpm run check:hub && pnpm run check:go",
     "check:typecheck": "pnpm run typecheck",
     "check:lint": "pnpm run lint",
+    "check:lint-rules": "pnpm -F @shigomori/lint test",
     "check:format": "pnpm run format:check",
     "check:knip": "knip",
     "check:licenses": "pnpm -C app licenses:check",
@@ -33,6 +34,6 @@
     "knip": "6.39.0",
     "lefthook": "^2.1.10",
     "oxfmt": "0.58.0",
-    "oxlint": "1.73.0"
+    "oxlint": "catalog:"
   }
 }

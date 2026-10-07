@@ -18,10 +18,15 @@ pre-commit:
             run: node_modules/.bin/oxlint --no-error-on-unmatched-pattern {staged_files}
           # format and lint only see staged files, so a change to the
           # tools' config (or their versions, pinned in the root
-          # package.json) reruns them over the whole repo.
+          # package.json and oxlint's in the catalog) reruns them over the
+          # whole repo.
           - name: lint-all
-            glob: "{.oxlintrc.json,lint/**,package.json}"
+            glob: "{.oxlintrc.json,lint/**,package.json,pnpm-workspace.yaml}"
             run: pnpm run lint
+          # The lint plugin's own rules (lint/README.md).
+          - name: lint-rules
+            glob: "lint/**"
+            run: pnpm run check:lint-rules
           - name: format-all
             glob: "{.oxfmtrc.json,app/renderer/index.css,package.json}"
             run: pnpm run format:check

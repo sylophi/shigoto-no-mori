@@ -15,6 +15,7 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 | `app/` | The Electron desktop app and the web client |
 | `hub/` | The device hub, a Cloudflare Worker |
 | `marketing/` | The shigomori.com site, built with Astro |
+| `lint/` | The repo's own oxlint rules, with their tests |
 | `packages/` | The packages the v3 refactor moves code into (`contracts`, `engine`, `host`, `ui`, `cli`), empty until their step (`V3.md`) |
 | `cli/` | The `sm` CLI, a Go module bundled into the app |
 | `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
@@ -33,7 +34,8 @@ Each folder documents itself: [`app/README.md`](app/README.md) is the
 app's layout, [`app/DESIGN.md`](app/DESIGN.md) its visual rules,
 [`app/lab/README.md`](app/lab/README.md) how to test it by hand on the
 real UI, [`app/test/README.md`](app/test/README.md) its programmatic
-checks, and [`hub/README.md`](hub/README.md) the device hub.
+checks, [`hub/README.md`](hub/README.md) the device hub, and
+[`lint/README.md`](lint/README.md) the repo's lint rules.
 
 While the `release/v3` branch lives, [`V3.md`](V3.md) is its charter and
 checklist and [`EFFECT.md`](EFFECT.md) the conventions every Effect

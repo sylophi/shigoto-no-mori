@@ -4,6 +4,7 @@ packages:
   - app
   - hub
   - marketing
+  - lint
   - packages/*
 
 # nodeLinker: hoisted is required by electron-forge so it can crawl a
@@ -112,6 +113,7 @@ catalog:
   "@types/node": ^24.13.5
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
+  oxlint: 1.73.0
   react: ~19.2.7
   react-dom: ~19.2.7
   typescript: ~7.0.2
