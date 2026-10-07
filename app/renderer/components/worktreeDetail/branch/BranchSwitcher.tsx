@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,9 +14,17 @@ import { isRealBranch, type Worktree } from "@shared/schemas";
 export function BranchSwitcher({
   worktree,
   anchorRef,
+  open,
+  onOpenChange,
+  trigger = true,
 }: {
   worktree: Worktree;
   anchorRef: React.RefObject<HTMLElement | null>;
+  // Opened from elsewhere (BranchTitle's menu), with no trigger of its
+  // own.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: boolean;
 }) {
   const { data: branches, isFetching: branchesFetching } = useBranches(
     worktree.projectId,
@@ -26,6 +34,21 @@ export function BranchSwitcher({
   const queryClient = useQueryClient();
   const { keys } = useHostScope();
   const [query, setQuery] = useState("");
+  // A fresh list each time it opens.
+  const refresh = () => {
+    setQuery("");
+    void queryClient.invalidateQueries({
+      queryKey: keys.branches(worktree.projectId),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: keys.worktrees(worktree.projectId),
+    });
+  };
+  // Opened from outside, onOpenChange doesn't fire for it.
+  useEffect(() => {
+    if (open) refresh();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- on opening only
+  }, [open]);
 
   // Exclude branches in use by *other* worktrees only; keeping this
   // worktree's own branch lets the popup show it with a check mark.
@@ -64,26 +87,22 @@ export function BranchSwitcher({
       }}
       inputValue={query}
       onInputValueChange={setQuery}
-      onOpenChange={(open) => {
-        if (open) {
-          setQuery("");
-          void queryClient.invalidateQueries({
-            queryKey: keys.branches(worktree.projectId),
-          });
-          void queryClient.invalidateQueries({
-            queryKey: keys.worktrees(worktree.projectId),
-          });
-        }
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange?.(next);
+        if (next) refresh();
       }}
       autoHighlight
     >
-      <Combobox.Trigger
-        aria-label="Switch branch"
-        data-icon-button
-        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
-      >
-        <ChevronsUpDown aria-hidden className="size-3.5" />
-      </Combobox.Trigger>
+      {trigger && (
+        <Combobox.Trigger
+          aria-label="Switch branch"
+          data-icon-button
+          className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
+        >
+          <ChevronsUpDown aria-hidden className="size-3.5" />
+        </Combobox.Trigger>
+      )}
       <Combobox.Portal>
         <Combobox.Positioner
           anchor={anchorRef}

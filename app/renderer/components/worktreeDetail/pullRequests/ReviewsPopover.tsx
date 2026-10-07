@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   describeReviews,
@@ -26,8 +27,16 @@ const SUMMARY_ICON: Partial<Record<PullRequestTone, typeof UserRound>> = {
 
 // The PR's reviews as one chip beside the checks, with who stands
 // where in a popover. A required review nobody has been asked for has
-// no list to show, so it reads as a plain chip.
-export function ReviewsPopover({ pr }: { pr: PullRequestDetail }) {
+// no list to show, so it reads as a plain chip. `compact` keeps the
+// icon alone, its words in the tooltip, for a row with no room
+// (MergeBox); the label carries data-reviews-label for that measuring.
+export function ReviewsPopover({
+  pr,
+  compact = false,
+}: {
+  pr: PullRequestDetail;
+  compact?: boolean;
+}) {
   // Absent from a host on an older build.
   if (!pr.reviews) return null;
   const { reviewers } = pr.reviews;
@@ -40,25 +49,35 @@ export function ReviewsPopover({ pr }: { pr: PullRequestDetail }) {
       className={cn("size-3.5 shrink-0", TONE_TEXT[summary.tone])}
     />
   );
+  const words = compact ? null : (
+    <span data-reviews-label>{summary.label}</span>
+  );
   if (reviewers.length === 0) {
     return (
-      <Chip className="text-muted-foreground/80">
-        {icon}
-        {summary.label}
-      </Chip>
+      <SimpleTooltip tip={compact ? summary.label : null}>
+        <Chip
+          aria-label={compact ? summary.label : undefined}
+          className="text-muted-foreground/80"
+        >
+          {icon}
+          {words}
+        </Chip>
+      </SimpleTooltip>
     );
   }
   return (
     <Popover>
-      <PopoverTrigger
-        render={
-          <ChipButton>
-            {icon}
-            {summary.label}
-            <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
-          </ChipButton>
-        }
-      />
+      <SimpleTooltip tip={compact ? summary.label : null}>
+        <PopoverTrigger
+          render={
+            <ChipButton aria-label={compact ? summary.label : undefined}>
+              {icon}
+              {words}
+              <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
+            </ChipButton>
+          }
+        />
+      </SimpleTooltip>
       <PopoverContent className="flex w-72 flex-col overflow-hidden">
         <ul className="max-h-80 min-h-0 space-y-0.5 overflow-y-auto">
           {sortReviewersWorstFirst(reviewers).map(({ login, state }) => {

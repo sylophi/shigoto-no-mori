@@ -1,7 +1,13 @@
 import { useRef, useState } from "react";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, ChevronDown, Pencil, X } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { CopyButton } from "@/components/ui/copy-button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { InlineError } from "@/components/ui/inline-error";
 import { Input } from "@/components/ui/input";
 import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
@@ -36,12 +42,16 @@ const SIZES = {
 
 // The branch, renamed in place. The page's title, unless the work has
 // a title of its own (useWorktreeTitle), and then a line under it.
+// `menu` folds rename, switch and copy into one button, for a row with
+// little room to spare (PullRequestHeader).
 export function BranchTitle({
   worktree,
   subtitle = false,
+  menu = false,
 }: {
   worktree: Worktree;
   subtitle?: boolean;
+  menu?: boolean;
 }) {
   // null while idle; the in-flight edit value otherwise. Folds "editing"
   // and "draft" together so we don't seed state from a prop.
@@ -49,6 +59,10 @@ export function BranchTitle({
   const editing = draft !== null;
   const rename = useRenameBranch();
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [switching, setSwitching] = useState(false);
+  // Set when a menu item hands focus on (the rename field, the
+  // switcher), so the closing menu doesn't take it back to its button.
+  const handedOff = useRef(false);
   const size = SIZES[subtitle ? "subtitle" : "title"];
   const Heading = size.heading;
 
@@ -81,7 +95,8 @@ export function BranchTitle({
 
   if (editing) {
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      // Grows to the room it's given, where a row has more beside it.
+      <div className="flex min-w-0 grow flex-wrap items-center gap-2">
         <Input
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- intentional: editing
           autoFocus
@@ -138,22 +153,89 @@ export function BranchTitle({
           suffixClassName={size.suffix}
         />
       </Heading>
-      {!worktree.detached && (
-        <button
-          type="button"
-          onClick={begin}
-          aria-label="Rename branch"
-          data-icon-button
-          className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 phone:opacity-100"
-        >
-          <Pencil className="size-3.5" />
-        </button>
+      {menu ? (
+        <>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Branch actions"
+                  data-icon-button
+                  className="shrink-0 rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
+                >
+                  <ChevronDown aria-hidden className="size-3.5" />
+                </button>
+              }
+            />
+            <DropdownMenuContent
+              align="start"
+              sideOffset={4}
+              finalFocus={() => {
+                const keep = handedOff.current;
+                handedOff.current = false;
+                return !keep;
+              }}
+            >
+              {!worktree.detached && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    handedOff.current = true;
+                    begin();
+                  }}
+                >
+                  Rename branch
+                </DropdownMenuItem>
+              )}
+              {!worktree.detached && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    handedOff.current = true;
+                    setSwitching(true);
+                  }}
+                >
+                  Switch branch…
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onClick={() =>
+                  void navigator.clipboard.writeText(worktree.branch)
+                }
+              >
+                {worktree.detached ? "Copy commit hash" : "Copy branch name"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {!worktree.detached && (
+            <BranchSwitcher
+              worktree={worktree}
+              anchorRef={titleRef}
+              open={switching}
+              onOpenChange={setSwitching}
+              trigger={false}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          {!worktree.detached && (
+            <button
+              type="button"
+              onClick={begin}
+              aria-label="Rename branch"
+              data-icon-button
+              className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 phone:opacity-100"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          )}
+          <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
+          <CopyButton
+            value={worktree.branch}
+            label={worktree.detached ? "Copy commit hash" : "Copy branch name"}
+          />
+        </>
       )}
-      <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
-      <CopyButton
-        value={worktree.branch}
-        label={worktree.detached ? "Copy commit hash" : "Copy branch name"}
-      />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
 import { DiffButton } from "../DiffButton";
 import { PullRequestStateLabel } from "./PullRequestStateLabel";
-import { openPullRequest } from "./pullRequestShared";
+import { MERGE_VERB, openPullRequest } from "./pullRequestShared";
 
 // Title row carries the PR's identity: title + #num on the left, state
 // pill on the right where the eye expects a status badge. The meta row
@@ -56,6 +56,7 @@ export function PullRequestIdentity({
     <>
       <MetaSentence
         authorLogin={pr.authorLogin}
+        verb={MERGE_VERB[pr.state]}
         baseRefName={pr.baseRefName}
         updatedTip={updatedTip}
         trailing={trailing}
@@ -115,11 +116,13 @@ export function PullRequestIdentity({
 
 function MetaSentence({
   authorLogin,
+  verb,
   baseRefName,
   updatedTip,
   trailing,
 }: {
   authorLogin: string;
+  verb: string;
   baseRefName: string;
   updatedTip: string;
   trailing: string | null;
@@ -127,8 +130,8 @@ function MetaSentence({
   return (
     <SimpleTooltip tip={updatedTip}>
       <p className="text-xs text-muted-foreground select-text">
-        <span className="text-foreground/80">@{authorLogin}</span> is merging
-        into <span className="font-mono text-foreground/80">{baseRefName}</span>
+        <span className="text-foreground/80">@{authorLogin}</span> {verb}{" "}
+        <span className="font-mono text-foreground/80">{baseRefName}</span>
         {trailing}
       </p>
     </SimpleTooltip>

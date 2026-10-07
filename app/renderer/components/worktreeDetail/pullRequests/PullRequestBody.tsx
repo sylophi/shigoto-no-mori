@@ -16,19 +16,23 @@ export function PullRequestBody({
   pr,
   repoConfig,
   lastMergeMethod,
+  headed = false,
 }: {
   worktree: Worktree;
   pr: PullRequestDetail;
   repoConfig: RepoMergeConfig | null;
   lastMergeMethod: MergeMethod | undefined;
+  // Under the page's PR header (PullRequestLead), which already says
+  // what the PR is and holds its stack.
+  headed?: boolean;
 }) {
   const isOpen = pr.state === "OPEN";
   const stack = usePullRequestStack(worktree.projectId, worktree.branch);
 
   return (
     <div className="space-y-4">
-      <PullRequestIdentity worktree={worktree} pr={pr} />
-      {stack && <StackList worktree={worktree} stack={stack} />}
+      {!headed && <PullRequestIdentity worktree={worktree} pr={pr} />}
+      {stack && !headed && <StackList worktree={worktree} stack={stack} />}
       {isOpen && (
         <MergeBox
           worktree={worktree}

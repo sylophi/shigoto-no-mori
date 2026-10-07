@@ -201,6 +201,44 @@ export function describeMergeState(
   }
 }
 
+// The merge box's one status: what most stands between the PR and
+// landing, said once. The merge state alone often only restates its
+// cause ("Waiting on requirements" while checks run), so the cause
+// speaks instead: conflicts, then failing or running checks, then a
+// review the rule wants, then whatever the merge state says. `by`
+// says where the words came from, so the checks chip draws their
+// icon and the reviews chip can drop words it would repeat.
+export interface MergeVerdict {
+  label: string;
+  tone: PullRequestTone;
+  by: "merge" | "checks" | "reviews";
+}
+
+const said = (
+  { label, tone }: { label: string; tone: PullRequestTone },
+  by: MergeVerdict["by"],
+): MergeVerdict => ({ label, tone, by });
+
+export function describeMergeVerdict(
+  pr: PullRequestDetail,
+  status: { label: string; tone: PullRequestTone },
+  armed: boolean,
+): MergeVerdict {
+  if (pr.isDraft || pr.mergeState === "DIRTY") return said(status, "merge");
+  const checks = describeChecks(pr.checks);
+  if (checks?.tone === "rose") return said(checks, "checks");
+  // Armed, the merge state already says it waits ("Will squash and
+  // merge when ready"), and the checks' spinner says on what.
+  if (checks?.tone === "amber") return said(armed ? status : checks, "checks");
+  if (pr.mergeState === "BLOCKED" && pr.reviews) {
+    const reviews = describeReviews(pr.reviews);
+    if (reviews && (reviews.tone === "amber" || reviews.tone === "rose")) {
+      return said(reviews, "reviews");
+    }
+  }
+  return said(status, "merge");
+}
+
 // GitHub computes mergeStateStatus in the background, so right after a
 // PR is marked ready gh still reports DRAFT (or UNKNOWN) for a while
 // even though isDraft has already flipped. The worktree page polls

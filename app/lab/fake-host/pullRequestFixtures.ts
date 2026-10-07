@@ -1,8 +1,9 @@
 // The fake host's GitHub fixtures: the repo's pull requests by head branch
 // (three of them a stack across two devices), the detail with its CI
 // rollup posed by ?checks= and its reviews by ?reviews=, the merged
-// stack posed by ?stack=merged, and one diff for the diff pages. Pure
-// data plus readers of location.search, served by bridge.ts.
+// stack posed by ?stack=merged, #148's state by ?prState=, and one
+// diff for the diff pages. Pure data plus readers of location.search,
+// served by bridge.ts.
 import {
   type MergeMethod,
   type MergePullRequestResult,
@@ -59,7 +60,8 @@ const FAKE_PRS = {
   ),
 };
 
-const FAKE_PR_SLIM = FAKE_PRS["v2-exp/remote-ui-flows"];
+const FAKE_PR_BRANCH = "v2-exp/remote-ui-flows";
+const FAKE_PR_SLIM = FAKE_PRS[FAKE_PR_BRANCH];
 
 // ?stack=merged poses the whole stack as landed, so the closed-PR box
 // offers the stack cleanup (the merged layers' worktrees together).
@@ -75,9 +77,38 @@ const FAKE_PRS_MERGED = Object.fromEntries(
   ]),
 );
 
+// ?prState=<pose> poses #148 in a state the CI poses don't reach: a
+// draft, closed without merging, conflicting with its base, or behind
+// it. Unknown or absent keeps it open.
+const FAKE_PR_STATE_POSES: Record<
+  string,
+  { state?: "CLOSED"; isDraft?: true; mergeState?: PullRequestMergeState }
+> = {
+  draft: { isDraft: true, mergeState: "DRAFT" },
+  closed: { state: "CLOSED" },
+  conflicts: { mergeState: "DIRTY" },
+  behind: { mergeState: "BEHIND" },
+};
+
+function fakePrStatePose() {
+  const key = new URLSearchParams(location.search).get("prState");
+  return key ? FAKE_PR_STATE_POSES[key] : undefined;
+}
+
 function fakePosedPullRequests(): Record<string, typeof FAKE_PR_SLIM> {
   const merged = new URLSearchParams(location.search).get("stack") === "merged";
-  return merged ? FAKE_PRS_MERGED : FAKE_PRS;
+  const prs = merged ? FAKE_PRS_MERGED : FAKE_PRS;
+  const pose = fakePrStatePose();
+  if (!pose) return prs;
+  const { state, isDraft } = pose;
+  return {
+    ...prs,
+    [FAKE_PR_BRANCH]: {
+      ...FAKE_PR_SLIM,
+      ...(state && { state }),
+      ...(isDraft && { isDraft }),
+    },
+  };
 }
 
 export function fakePullRequests(projectId: string) {
@@ -89,7 +120,7 @@ export function fakePullRequests(projectId: string) {
 export function fakePullRequestDetail(branch: string) {
   const slim = fakePosedPullRequests()[branch];
   if (!slim) return null;
-  if (slim === FAKE_PR_SLIM) return fakePosedDetail();
+  if (branch === FAKE_PR_BRANCH) return fakePosedDetail();
   return {
     ...FAKE_PR_DETAIL,
     ...slim,
@@ -329,7 +360,8 @@ function fakePosedDetail() {
         mergeState: "BLOCKED" as const,
       }),
     }),
-    state: fakeMerged ? ("MERGED" as const) : posed.state,
+    ...fakePrStatePose(),
+    ...(fakeMerged && { state: "MERGED" as const }),
     autoMerge: fakeAutoMerge ? fakeAutoMerge.method : posed.autoMerge,
   };
 }
