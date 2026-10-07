@@ -18,6 +18,7 @@
 // Electron-free on purpose, like the port-forward engine: the mirror
 // check drives this exact gateway over a real direct wire.
 import { createServer, type Server, type Socket } from "node:net";
+import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shared/errors";
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { Client } from "@shared/ipc/types";
@@ -32,6 +33,8 @@ import {
   listenLoopback,
   type PeerChannels,
 } from "../portForward/bridge";
+
+const isWorktreeId = Schema.is(WorktreeIdSchema);
 
 // file-sync/engine.go reads this exact name.
 export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
@@ -82,14 +85,14 @@ function parsePreface(line: string): Preface {
     deviceId: field("deviceId"),
     projectId: field("projectId"),
     worktreeId: field("worktreeId"),
-    localWorktreeId: WorktreeIdSchema.safeParse(localWorktreeId).success
+    localWorktreeId: isWorktreeId(localWorktreeId)
       ? localWorktreeId
       : undefined,
   };
   if (
     preface.deviceId === "" ||
     preface.projectId === "" ||
-    !WorktreeIdSchema.safeParse(preface.worktreeId).success
+    !isWorktreeId(preface.worktreeId)
   ) {
     throw new Error("bad preface");
   }

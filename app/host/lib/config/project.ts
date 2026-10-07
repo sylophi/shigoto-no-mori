@@ -10,6 +10,7 @@
 // and `sm describe` the title and description (cli/cmd_describe.go),
 // each under the file's lock and keeping the other's keys.
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 import {
   type ShigomoriConfig,
   type ShigomoriWorktreeData,
@@ -87,6 +88,8 @@ export async function readWorktreeData(
   return worktreeCache.get(worktreeKey(projectId, worktreeId));
 }
 
+const decodeWorktreeData = Schema.decodeSync(ShigomoriWorktreeDataSchema);
+
 // One read-modify-write of the data file under the lock the CLI
 // takes, read fresh rather than through the cache: `sm describe` can
 // have written it a moment ago.
@@ -98,12 +101,12 @@ function updateWorktreeData(
   const path = worktreeDataPath(projectId, worktreeId);
   withFileLock(`${path}.lock`, () => {
     const current = readJsonOrNullSync(path, ShigomoriWorktreeDataSchema) ?? {};
-    // The zod parse strips anything it doesn't model, the marker
+    // The decode strips anything it doesn't model, the marker
     // included, so it is stamped back on at the write rather than
     // carried through the schema.
     atomicWriteJsonSync(
       path,
-      withSchemaVersion(ShigomoriWorktreeDataSchema.parse(update(current))),
+      withSchemaVersion(decodeWorktreeData(update(current))),
     );
   });
   worktreeCache.invalidate(worktreeKey(projectId, worktreeId));

@@ -7,8 +7,9 @@
 // owns the file: reads go through `sm config read` and writes through
 // `sm config write` (host/ipc/cliDelegate.ts). The one-time drains at
 // the bottom are the exception, sync on the boot path.
-import { z } from "zod";
 import { join } from "node:path";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shared/errors";
 import { createLimiter } from "@shared/util/limit";
 import {
@@ -104,24 +105,27 @@ export function invalidateGlobalConfigCache(): void {
   }
 }
 
-// One locked read-mutate-write of config.json for the drains: `mutate`
-// edits the parsed doc in place and says whether it changed anything,
-// and only a change is written back (schemaVersion restamped) and
-// invalidates the cache. Runs under the same sibling
+// One locked read-update-write of config.json for the drains: `update`
+// returns the changed doc, or null when it changes nothing, and only a
+// change is written back (schemaVersion restamped) and invalidates the
+// cache. Runs under the same sibling
 // .lock the CLI's updateConfigDoc takes (cli/cmd_config.go,
 // host/lib/util/lockFile.ts), so app and CLI writes exclude each
 // other. Sync because two callers sit on the boot path before the
 // first window. Returns false when config.json is missing.
 function updateConfigDocSync(
-  mutate: (doc: z.infer<typeof StoredGlobalConfigSchema>) => boolean,
+  update: (
+    doc: typeof StoredGlobalConfigSchema.Type,
+  ) => typeof StoredGlobalConfigSchema.Type | null,
 ): boolean {
   const path = configPath();
   return withFileLock(`${path}.lock`, () => {
     const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
-    if (doc === null || !mutate(doc)) return false;
+    const updated = doc === null ? null : update(doc);
+    if (updated === null) return false;
     // Owner-only, like the CLI's writes of this file (cli/state.go
     // configFileMode).
-    atomicWriteJsonSync(path, withSchemaVersion(doc), { mode: 0o600 });
+    atomicWriteJsonSync(path, withSchemaVersion(updated), { mode: 0o600 });
     cache.invalidate();
     return true;
   });
@@ -137,12 +141,22 @@ function updateConfigDocSync(
 // every boot, and reads without writing when neither key is present.
 export function dropRemovedLanKeys(): void {
   updateConfigDocSync((doc) => {
-    if (!("socketHost" in doc) && !("remoteDevices" in doc)) return false;
-    delete doc["socketHost"];
-    delete doc["remoteDevices"];
-    return true;
+    if (!("socketHost" in doc) && !("remoteDevices" in doc)) return null;
+    const {
+      socketHost: _socketHost,
+      remoteDevices: _remoteDevices,
+      ...rest
+    } = doc;
+    return rest;
   });
 }
+
+const decodeLegacyTheme = Schema.decodeUnknownOption(
+  ClientConfigSchema.fields.theme,
+);
+const decodeLegacyDoubutsu = Schema.decodeUnknownOption(
+  ClientConfigSchema.fields.doubutsu,
+);
 
 // The pre-split appearance keys in config.json, for the client config
 // migration (main/electron/clientConfigMigration.ts): read first, so a
@@ -151,18 +165,16 @@ export function dropRemovedLanKeys(): void {
 // the migration for that boot.
 export function readLegacyAppearance(): ClientConfig {
   const doc = readJsonOrNullSync(configPath(), StoredGlobalConfigSchema);
-  const found: ClientConfig = {};
-  if (doc === null) return found;
+  if (doc === null) return {};
   // Field by field so one bad value can't void the other. An invalid
   // value is still drained by dropLegacyAppearance: the store's
   // defaults are the right replacement for a value no build could read.
-  const theme = ClientConfigSchema.shape.theme.safeParse(doc["theme"]);
-  if (theme.success && theme.data !== undefined) found.theme = theme.data;
-  const doubutsu = ClientConfigSchema.shape.doubutsu.safeParse(doc["doubutsu"]);
-  if (doubutsu.success && doubutsu.data !== undefined) {
-    found.doubutsu = doubutsu.data;
-  }
-  return found;
+  const theme = Option.getOrUndefined(decodeLegacyTheme(doc["theme"]));
+  const doubutsu = Option.getOrUndefined(decodeLegacyDoubutsu(doc["doubutsu"]));
+  return {
+    ...(theme !== undefined && { theme }),
+    ...(doubutsu !== undefined && { doubutsu }),
+  };
 }
 
 // The drain half, run once the values are safely in the client store.
@@ -170,9 +182,8 @@ export function readLegacyAppearance(): ClientConfig {
 // config.json passes through untouched.
 export function dropLegacyAppearance(): void {
   updateConfigDocSync((doc) => {
-    if (!("theme" in doc) && !("doubutsu" in doc)) return false;
-    delete doc["theme"];
-    delete doc["doubutsu"];
-    return true;
+    if (!("theme" in doc) && !("doubutsu" in doc)) return null;
+    const { theme: _theme, doubutsu: _doubutsu, ...rest } = doc;
+    return rest;
   });
 }

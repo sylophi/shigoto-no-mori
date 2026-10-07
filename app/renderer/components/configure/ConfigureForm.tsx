@@ -36,8 +36,8 @@ interface FormState {
   defaultBranch: string;
   setup: string;
   teardown: string;
-  launchers: LauncherCommand[];
-  carryOver: CarryOverEntry[];
+  launchers: readonly LauncherCommand[];
+  carryOver: readonly CarryOverEntry[];
   useWorktreeInclude: boolean;
   showPrimaryInInbox: boolean;
 }

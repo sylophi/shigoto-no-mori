@@ -13,6 +13,8 @@
 //
 // Run: pnpm test village-life.
 import assert from "node:assert/strict";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { FRESH_CONFIG_SEED } from "@host/lib/bootstrap";
 import { ClientConfigSchema, DeviceSettingsPatchSchema } from "@shared/schemas";
 import type { VillagerDataStatus } from "@shared/schemas/villagers";
@@ -71,12 +73,11 @@ it("the device patch never carries Village life", () => {
     villageLife: true,
   });
   assert.ok(!("villageLife" in patch));
-  assert.ok(DeviceSettingsPatchSchema.safeParse(patch).success);
-  assert.ok(
-    !DeviceSettingsPatchSchema.safeParse({ villageLife: true }).success,
-  );
+  const decodePatch = Schema.decodeUnknownOption(DeviceSettingsPatchSchema);
+  assert.ok(Option.isSome(decodePatch(patch)));
+  assert.ok(Option.isNone(decodePatch({ villageLife: true })));
   assert.equal(
-    ClientConfigSchema.parse({ villageLife: true }).villageLife,
+    Schema.decodeSync(ClientConfigSchema)({ villageLife: true }).villageLife,
     true,
   );
 });

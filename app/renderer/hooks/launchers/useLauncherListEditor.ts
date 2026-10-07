@@ -6,9 +6,11 @@ import type { LauncherCommand } from "@shared/schemas";
 // own siblings (theme, scripts, ...) on the same form state. React
 // Compiler memoizes the returned callbacks so no useCallback here.
 export function useLauncherListEditor<
-  F extends { launchers: LauncherCommand[] },
+  F extends { launchers: readonly LauncherCommand[] },
 >(setForm: Dispatch<SetStateAction<F>>) {
-  const edit = (f: (launchers: LauncherCommand[]) => LauncherCommand[]) => {
+  const edit = (
+    f: (launchers: readonly LauncherCommand[]) => LauncherCommand[],
+  ) => {
     setForm((prev) => ({ ...prev, launchers: f(prev.launchers) }));
   };
 

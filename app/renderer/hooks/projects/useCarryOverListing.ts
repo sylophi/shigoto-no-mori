@@ -22,7 +22,7 @@ export function carryOverListingQueryOptions(
   { ruleIgnored = false }: { ruleIgnored?: boolean } = {},
 ) {
   const { deviceId, api } = resolveForestScope(scope);
-  return queryOptions<CarryOverCandidate[]>({
+  return queryOptions<readonly CarryOverCandidate[]>({
     queryKey: queryKeysFor(deviceId).carryOverListing(
       projectId,
       relative,

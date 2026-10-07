@@ -9,7 +9,7 @@ import { carryOverListingQueryOptions } from "@/hooks/projects/useCarryOverListi
 export interface RepoEntryHolder {
   device: string;
   inPrimary: boolean;
-  worktrees: string[];
+  worktrees: readonly string[];
 }
 
 // A folder entry of the repo as the devices holding it have it.

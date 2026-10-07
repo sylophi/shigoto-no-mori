@@ -27,14 +27,13 @@
 import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { errorMessageOf } from "@shared/errors";
-import { DeviceIdZod } from "@shared/schemas/zodBridge";
+import { DeviceIdZod, WorktreeIdZod } from "@shared/schemas/zodBridge";
 import { allContractModules } from "@shared/ipc/client";
 import type { InvitableScope } from "@shared/ipc/contract";
 import { MirrorWorktreePayloadSchema } from "@shared/ipc/modules/mirror";
 import { SyncCloneIntoSchema } from "@shared/ipc/modules/sync";
 import {
   ProjectScopedPayloadSchema,
-  WorktreeIdSchema,
   WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
 
@@ -44,7 +43,7 @@ type MirrorWorktreePayload = z.infer<typeof MirrorWorktreePayloadSchema>;
 const MirrorInviteAskSchema = z.strictObject({
   peerDeviceId: DeviceIdZod,
   // The peer's original, the id its landing names.
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
   // The repo it belongs to, and where the copy lands when this device
   // has no checkout of it.
   identity: z.string().min(1),
@@ -192,7 +191,7 @@ export const invitableChannels = (): ReadonlyMap<string, InvitableScope> =>
   invitable;
 
 const LandingScopeSchema = z.object({
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
   identity: z.string().min(1),
   cloneInto: SyncCloneIntoSchema.optional(),
 });

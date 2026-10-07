@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 interface OnlyInWorktreesProps {
   inPrimary: boolean;
-  worktrees: string[];
+  worktrees: readonly string[];
   className?: string;
 }
 

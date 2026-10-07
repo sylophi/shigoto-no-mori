@@ -1,10 +1,11 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   ProjectScopedPayloadSchema,
   ReadWorktreeDataPayloadSchema,
   ShigomoriWorktreeDataSchema,
   StoredShigomoriConfigSchema,
+  VoidSchema,
   WriteShigomoriPayloadSchema,
   WriteWorktreeDataPayloadSchema,
   WriteWorktreeDescriptionPayloadSchema,
@@ -14,10 +15,10 @@ export const shigomoriContract = defineContract("host", {
   read: invoke(
     "shigomori:read",
     ProjectScopedPayloadSchema,
-    StoredShigomoriConfigSchema.nullable(),
+    Schema.NullOr(StoredShigomoriConfigSchema),
     { remote: true, gated: false },
   ),
-  write: invoke("shigomori:write", WriteShigomoriPayloadSchema, z.void(), {
+  write: invoke("shigomori:write", WriteShigomoriPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
@@ -25,13 +26,13 @@ export const shigomoriContract = defineContract("host", {
   worktreeDataRead: invoke(
     "worktreeData:read",
     ReadWorktreeDataPayloadSchema,
-    ShigomoriWorktreeDataSchema.nullable(),
+    Schema.NullOr(ShigomoriWorktreeDataSchema),
     { remote: true, gated: false },
   ),
   worktreeDataWrite: invoke(
     "worktreeData:write",
     WriteWorktreeDataPayloadSchema,
-    z.void(),
+    VoidSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   // A worktree's title and description, carried onto its copy here by
@@ -40,7 +41,7 @@ export const shigomoriContract = defineContract("host", {
   worktreeDataDescribe: invoke(
     "worktreeData:describe",
     WriteWorktreeDescriptionPayloadSchema,
-    z.void(),
+    VoidSchema,
     { remote: true, gated: true, invitable: "copy" },
   ),
 });

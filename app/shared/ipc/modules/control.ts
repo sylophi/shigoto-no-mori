@@ -5,8 +5,7 @@ import {
   SyncCloneIntoSchema,
   SyncPullWorktreeResultSchema,
 } from "@shared/ipc/modules/sync";
-import { WorktreeIdSchema } from "@shared/schemas";
-import { WorktreeZod } from "@shared/schemas/zodBridge";
+import { WorktreeIdZod, WorktreeZod } from "@shared/schemas/zodBridge";
 
 // What the CLI asks of the running app: the cross-device verbs (`sm
 // worktrees send|bring|mirror|unmirror|mirrors`, `sm devices`). Reaching
@@ -68,7 +67,7 @@ const TransferOptionsSchema = z.strictObject({
 
 const ControlSendPayloadSchema = TransferOptionsSchema.extend({
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
   // Where the target clones the repo when it has no checkout of it: the
   // folder the checkout goes in, on the target (a leading `~` is its
   // home). Absent is the dialogs' default. Unread when the target holds
@@ -140,7 +139,7 @@ export type ControlMirror = z.infer<typeof ControlMirrorSchema>;
 const ControlMirrorTargetSchema = z.strictObject({
   projectId: z.string().min(1),
   // This device's side of the mirror, original or copy.
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
 });
 
 export const controlContract = defineContract("host", {
