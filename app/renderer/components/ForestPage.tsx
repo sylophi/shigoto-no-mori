@@ -36,9 +36,7 @@ export function ForestPage() {
   const { mutate: setView } = useSetSidebarView();
   useEffect(() => {
     if (phone && preferred !== view) setView(view);
-    // setView is a fresh closure per render. The write keys off the
-    // three values that matter.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setView is a fresh closure per render; the write keys off the three values that matter.
   }, [phone, preferred, view]);
   if (!phone) {
     return <CenteredMessage>Pick a worktree from the sidebar.</CenteredMessage>;

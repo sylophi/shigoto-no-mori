@@ -26,6 +26,9 @@
     "shigomori/no-double-cast": "error",
     "shigomori/disable-needs-reason": "error",
     "shigomori/no-native-tooltip": "error",
+    "shigomori/effect-namespace-imports": "error",
+    "shigomori/no-runtime-in-service": "error",
+    "shigomori/no-node-builtins-in-service": "error",
     "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
     "no-restricted-imports": [
       "error",
