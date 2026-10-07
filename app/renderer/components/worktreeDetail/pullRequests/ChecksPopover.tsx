@@ -53,7 +53,7 @@ export function ChecksPopover({
           }
         />
       </SimpleTooltip>
-      <PopoverContent className="flex w-80 flex-col overflow-hidden">
+      <PopoverContent className="flex w-max max-w-[min(--spacing(80),var(--available-width))] min-w-40 flex-col overflow-hidden">
         <p className="shrink-0 px-1.5 pt-1 pb-1.5 text-xs text-muted-foreground">
           {checksBreakdown(pr.checks)}
         </p>
