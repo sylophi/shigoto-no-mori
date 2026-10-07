@@ -13,7 +13,7 @@ const LAUNCH_ROW_KEY = "packageScriptLaunchRow";
 
 type SortMap = Record<string, PackageScriptSortMode>;
 type OrderMap = Record<string, string[]>;
-type LaunchRowMap = Record<string, string[]>;
+type LaunchRowMap = Record<string, readonly string[]>;
 
 // "frequent" is the implicit default: new repos open with the most-used
 // scripts on top, and switching back to it deletes the persisted entry
@@ -56,7 +56,10 @@ export function readScriptOrder(projectId: string): string[] {
 // against the stored order read under the lock, rather than by the
 // client against its cached copy, which another window may have written
 // past.
-export function writeScriptOrder(projectId: string, arranged: string[]): void {
+export function writeScriptOrder(
+  projectId: string,
+  arranged: readonly string[],
+): void {
   stateStore.updateKey<OrderMap>(ORDER_KEY, {}, (map) => {
     const current = map[projectId] ?? [];
     const next = mergeArrangedOrder(current, arranged);
@@ -95,7 +98,7 @@ export function mergeArrangedOrder(
 // The scripts put on the launch row by hand, which the row limits itself
 // to under the "manual" sort. Project-wide like the order, so it can
 // name scripts a given worktree lacks. Empty means none were picked.
-export function readLaunchRow(projectId: string): string[] {
+export function readLaunchRow(projectId: string): readonly string[] {
   const map = stateStore.readHint<LaunchRowMap>(LAUNCH_ROW_KEY, {});
   return map[projectId] ?? [];
 }

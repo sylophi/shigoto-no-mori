@@ -52,7 +52,7 @@ function usePackageScriptOrder(
   sortMode: PackageScriptSortMode,
 ) {
   const { api, keys } = useHostScope();
-  return useQuery<string[]>({
+  return useQuery<readonly string[]>({
     queryKey: keys.packageScriptOrder(projectId),
     queryFn:
       projectId !== null && sortMode === "manual"

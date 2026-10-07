@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   CancelScriptPayloadSchema,
@@ -8,6 +8,7 @@ import {
   RunScriptPayloadSchema,
   RunningScriptsSchema,
   ScriptEventSchema,
+  VoidSchema,
   WriteScriptPayloadSchema,
 } from "@shared/schemas";
 
@@ -15,13 +16,13 @@ export const scriptsContract = defineContract("host", {
   run: invoke(
     "scripts:run",
     RunScriptPayloadSchema,
-    z.object({ runId: z.string() }),
+    Schema.Struct({ runId: Schema.String }),
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   cancel: invoke(
     "scripts:cancel",
     CancelScriptPayloadSchema,
-    z.object({ cancelled: z.boolean() }),
+    Schema.Struct({ cancelled: Schema.Boolean }),
     { remote: true, gated: true },
   ),
   // Console input and viewport size for a run the app spawned. Both are
@@ -30,12 +31,12 @@ export const scriptsContract = defineContract("host", {
   // treats those runs as output-only. Keystrokes change nothing a
   // remote viewer caches (the output comes back over `event`), so
   // they don't ping the viewer cache.
-  write: invoke("scripts:write", WriteScriptPayloadSchema, z.void(), {
+  write: invoke("scripts:write", WriteScriptPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     movesHostState: false,
   }),
-  resize: invoke("scripts:resize", ResizeScriptPayloadSchema, z.void(), {
+  resize: invoke("scripts:resize", ResizeScriptPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     movesHostState: false,
@@ -43,14 +44,14 @@ export const scriptsContract = defineContract("host", {
   // Every script running on the host now, for a window that did not
   // see them start (the Live page, a console opened after a reload).
   // A read, so it rides no grant, like mirror:list.
-  list: invoke("scripts:list", z.void(), RunningScriptsSchema, {
+  list: invoke("scripts:list", VoidSchema, RunningScriptsSchema, {
     remote: true,
     gated: false,
   }),
   // The set of running scripts changed (one started or ended), on
   // every wire, so a list on screen re-reads. Payload-free like
   // portForward:changed: the list read is cheap.
-  changed: broadcast("scripts:changed", z.void(), { remote: true }),
+  changed: broadcast("scripts:changed", VoidSchema, { remote: true }),
   // Joins a run this window did not start (another window's or
   // device's, or its own from before a reload): its output so far, and
   // every event from then on over `event`, as if it had started it.
@@ -58,12 +59,14 @@ export const scriptsContract = defineContract("host", {
   // a run's output is as private as its terminal.
   attach: invoke(
     "scripts:attach",
-    z.object({ runId: z.string() }),
+    Schema.Struct({ runId: Schema.String }),
     // `streaming`: this connection already heard the run (it started
     // it, or another window on the same connection attached), so its
     // events come once and what the caller buffered of them is in
     // `output` already.
-    z.object({ output: z.string(), streaming: z.boolean() }).nullable(),
+    Schema.NullOr(
+      Schema.Struct({ output: Schema.String, streaming: Schema.Boolean }),
+    ),
     { remote: true, gated: true, movesHostState: false },
   ),
   event: broadcast("scripts:event", ScriptEventSchema, { remote: true }),
@@ -81,7 +84,7 @@ export const scriptsContract = defineContract("host", {
   // a crash.
   orphanReport: invoke(
     "scripts:orphanReport",
-    z.void(),
+    VoidSchema,
     OrphanScriptReportSchema,
     { remote: true, gated: false },
   ),
