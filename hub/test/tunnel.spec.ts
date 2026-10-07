@@ -5,6 +5,7 @@
 // Enrollment rides the shared helpers (D1 is shared across worker
 // instances), the tunnel calls ride a helper-made worker with the CF
 // stub injected.
+import * as Schema from "effect/Schema";
 import { only } from "../../app/shared/util/only.ts";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
@@ -174,7 +175,9 @@ describe("POST /tunnel", () => {
       worker,
     );
     expect(response.status).toBe(200);
-    const body = TunnelProvisionResponseSchema.parse(await response.json());
+    const body = Schema.decodeUnknownSync(TunnelProvisionResponseSchema)(
+      await response.json(),
+    );
     // Deterministic name: sm- plus 32 hex under the configured domain.
     expect(body.hostname).toMatch(/^sm-[0-9a-f]{32}\.sm\.example\.test$/);
     const tunnel = only(stub.liveTunnels());
@@ -213,14 +216,18 @@ describe("POST /tunnel", () => {
       worker,
     );
     expect(first.status).toBe(200);
-    const firstBody = TunnelProvisionResponseSchema.parse(await first.json());
+    const firstBody = Schema.decodeUnknownSync(TunnelProvisionResponseSchema)(
+      await first.json(),
+    );
     const second = await call(
       provisionRequest(credential, 9999),
       tunnelEnv(),
       worker,
     );
     expect(second.status).toBe(200);
-    const secondBody = TunnelProvisionResponseSchema.parse(await second.json());
+    const secondBody = Schema.decodeUnknownSync(TunnelProvisionResponseSchema)(
+      await second.json(),
+    );
     // Same tunnel, same hostname, same DNS record: nothing duplicated.
     // Only the first provision created the record.
     expect(secondBody.hostname).toBe(firstBody.hostname);

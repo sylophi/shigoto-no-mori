@@ -22,6 +22,7 @@
 // loop) the way it does on the desktop.
 //
 // Run: pnpm test web-bridge.
+import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
 import { it } from "vitest";
 import { buildApi } from "@shared/ipc/client";
@@ -136,7 +137,7 @@ it("deviceId: stable across bridges over the same storage, schema-valid, and dis
   const first = createWebBridge(makeDeps({ localStorage }));
   const second = createWebBridge(makeDeps({ localStorage }));
   assert.equal(first.api.deviceId, second.api.deviceId);
-  assert.equal(DeviceIdSchema.safeParse(first.api.deviceId).success, true);
+  assert.ok(Schema.is(DeviceIdSchema)(first.api.deviceId));
   assert.match(
     first.api.deviceId,
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
@@ -148,7 +149,7 @@ it("deviceId: stable across bridges over the same storage, schema-valid, and dis
   localStorage.setItem("sm.web.deviceId", "not-a-uuid");
   const healed = createWebBridge(makeDeps({ localStorage }));
   assert.notEqual(healed.api.deviceId, "not-a-uuid");
-  assert.equal(DeviceIdSchema.safeParse(healed.api.deviceId).success, true);
+  assert.ok(Schema.is(DeviceIdSchema)(healed.api.deviceId));
 });
 
 it("clientConfig: reads default to {}, writes round-trip through localStorage, and corrupt JSON heals to defaults", async () => {
@@ -212,7 +213,6 @@ it("stubs: read-classified channels answer structural defaults, the previewTheme
   // The same rules over an Effect schema: optional fields are left
   // out, required ones built, and an arm is only fabricated when
   // allowed.
-  const Schema = await import("effect/Schema");
   const effectUnion = Schema.Union([
     Schema.Struct({ t: Schema.Literal("a"), n: Schema.Int }),
     Schema.Struct({ t: Schema.Literal("b") }),

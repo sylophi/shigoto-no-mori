@@ -24,6 +24,7 @@
 // snapshot's peerAcceptsCommands follows the switch live.
 const COMMAND_ACCESS_CHANGED = accountContract.calls.commandAccessChanged;
 import { accountContract } from "@shared/ipc/modules/account";
+import { safeDecode } from "@shared/ipc/schema";
 import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shared/ipc/modules/hub";
 import type { HubConnectionStatus } from "@shared/hub/connectionTypes";
@@ -140,7 +141,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       // so the renderer's subscriber registry stays wire-agnostic.
       onAnyPush: (deviceId, channel, payload) => {
         if (channel === COMMAND_ACCESS_CHANGED.channel) {
-          const accepts = COMMAND_ACCESS_CHANGED.payload.safeParse(payload);
+          const accepts = safeDecode(COMMAND_ACCESS_CHANGED.payload, payload);
           if (accepts.success) {
             handlers.setPeerAcceptsCommands(deviceId, accepts.data);
           }

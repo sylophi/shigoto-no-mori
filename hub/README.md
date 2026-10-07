@@ -14,10 +14,10 @@ forwards envelopes it never parses. The wire contract lives in
 
 This directory is a package of the repo's pnpm workspace: install from
 the repo root, and run its scripts from `hub/`. The shared contract it
-imports (`../app/shared/hub/protocol.ts` and the `frames.ts` that
-file re-exports) lives outside `hub/`, so its `zod` import resolves
-from `app/node_modules`, not `hub/node_modules`. Both take zod from the
-workspace catalog, so they get the same version.
+imports (`../app/shared/hub/protocol.ts` and the device icon catalog
+it reads) lives outside `hub/`, so its `effect` and `zod` imports
+resolve from `app/node_modules`, not `hub/node_modules`. Both packages
+take them from the workspace catalog, so they get the same versions.
 
 ## Domains (production)
 
