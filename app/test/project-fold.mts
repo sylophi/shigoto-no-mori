@@ -24,7 +24,12 @@ import {
 } from "@/components/sidebar/buildSidebarRows";
 import type { SidebarRow } from "@/components/sidebar/sidebarRow";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import type { Project, Worktree, WorktreeSortMode } from "@shared/schemas";
+import type {
+  Project,
+  PullRequest,
+  Worktree,
+  WorktreeSortMode,
+} from "@shared/schemas";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { makeProof } from "./lib/checkKit.mts";
 
@@ -52,6 +57,15 @@ const worktree = (
     path: `/src/${p.name}-${name}`,
     ...marks,
   });
+
+const pr = (number: number, baseRefName: string): PullRequest => ({
+  number,
+  url: `https://example.com/pull/${number}`,
+  title: `PR ${number}`,
+  state: "OPEN",
+  isDraft: false,
+  baseRefName,
+});
 
 const lichen = project("lichen");
 const portPool = project("port-pool");
@@ -91,6 +105,7 @@ const build = (
   open: Project | null,
   worktreeSort: WorktreeSortMode = "name",
   byPrefix: Parameters<typeof buildSidebarRows>[0]["byPrefix"] = null,
+  pullRequests: Record<string, PullRequest> = {},
 ) =>
   buildSidebarRows({
     projects,
@@ -110,7 +125,7 @@ const build = (
       listed(undefined),
     ],
     pullRequestQueries: projects.map(() => ({
-      data: {},
+      data: pullRequests,
       isLoading: false,
       isPending: false,
       error: null,
@@ -265,6 +280,36 @@ try {
       assert.equal(lichenRows.at(-1), "shelved-toggle");
     },
   );
+
+  await proof.check("a stack goes whole where its lowest layer files", () => {
+    // zebra is stacked on lease-ttl.
+    const stacked = { "lease-ttl": pr(1, "main"), zebra: pr(2, "lease-ttl") };
+    const grouped = (prefixes: string[]) =>
+      build(
+        portPool,
+        "name",
+        { prefixes, shut: () => false },
+        stacked,
+      ).rows.map(line);
+    // zebra follows its bottom layer under lease-, top layer first.
+    assert.deepEqual(grouped(["lease-"]), [
+      "main",
+      "main",
+      "quiet-quail",
+      "v lease- 2",
+      "zebra",
+      "lease-ttl",
+    ]);
+    // A prefix only the top layer matches leaves the stack where its
+    // bottom layer sits.
+    assert.deepEqual(grouped(["zebra"]), [
+      "main",
+      "main",
+      "zebra",
+      "lease-ttl",
+      "quiet-quail",
+    ]);
+  });
 
   proof.done();
 } catch (error) {

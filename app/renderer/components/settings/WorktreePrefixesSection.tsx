@@ -33,7 +33,7 @@ const COPY: Record<
   grouped: {
     title: "Grouped worktrees",
     intro:
-      "Group worktrees whose name or branch starts with one of these under a header for it.",
+      "Group worktrees whose name or branch starts with one of these under a header for it. Hidden ones stay hidden.",
     placeholder: "v3/",
   },
 };
@@ -86,7 +86,7 @@ export function WorktreePrefixesSection({
                   type="button"
                   size="icon-xs"
                   variant="ghost"
-                  aria-label={`Remove ${prefix}`}
+                  aria-label={`Remove ${prefix} from ${copy.title.toLowerCase()}`}
                   className="size-5 text-muted-foreground"
                   disabled={!settled}
                   onClick={() => commit(prefixes.filter((p) => p !== prefix))}
@@ -104,7 +104,7 @@ export function WorktreePrefixesSection({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={copy.placeholder}
-          aria-label="Prefix"
+          aria-label={`${copy.title}: new prefix`}
           disabled={!settled}
           className="w-56 px-3 py-1.5 font-mono text-sm"
         />

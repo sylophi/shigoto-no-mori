@@ -1,4 +1,8 @@
-import { placeByStack, trunkOf } from "@shared/pullRequestStack";
+import {
+  placeByStack,
+  pullRequestStackFor,
+  trunkOf,
+} from "@shared/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
 import { peerProjectKey } from "@shared/schemas/config";
 import { groupPrefixOf, isHiddenByPrefix } from "@shared/sharedSettings";
@@ -400,13 +404,42 @@ export function buildSidebarRows({
       return [];
     };
     // The open rows a prefix gathers sit under its header, after the
-    // rest, the prefixes in their (sorted) order. Each group places its
-    // own stacks, so a rail never runs across a header.
+    // rest, the prefixes in their (sorted) order. A stack goes whole to
+    // where its lowest listed layer files, so its rail stays in one
+    // piece under one header.
     const { prefixes, shut } = byPrefix ?? NO_PREFIX_GROUPS;
+    // Stacks by their bottom branch, each with the prefix its lowest
+    // listed layer files under.
+    const stackOf = (worktree: Worktree) =>
+      group.pullRequests && !worktree.detached
+        ? pullRequestStackFor(group.pullRequests, worktree.branch, trunk)
+        : null;
+    const stackPrefix = new Map<
+      string,
+      { index: number; prefix: string | null }
+    >();
+    for (const worktree of [
+      ...localVisible,
+      ...remoteVisible.map((row) => row.worktree),
+    ]) {
+      const stack = stackOf(worktree);
+      const bottom = stack?.entries[0]?.branch;
+      if (!stack || bottom === undefined) continue;
+      const held = stackPrefix.get(bottom);
+      if (held && held.index <= stack.index) continue;
+      stackPrefix.set(bottom, {
+        index: stack.index,
+        prefix: groupPrefixOf(worktree, prefixes),
+      });
+    }
     const rest: Bucket = { local: [], peers: [] };
     const grouped = new Map<string, Bucket>();
     const bucketOf = (worktree: Worktree): Bucket => {
-      const prefix = groupPrefixOf(worktree, prefixes);
+      const bottom = stackOf(worktree)?.entries[0]?.branch;
+      const prefix =
+        bottom === undefined
+          ? groupPrefixOf(worktree, prefixes)
+          : (stackPrefix.get(bottom)?.prefix ?? null);
       if (prefix === null) return rest;
       const bucket = grouped.get(prefix) ?? { local: [], peers: [] };
       grouped.set(prefix, bucket);
