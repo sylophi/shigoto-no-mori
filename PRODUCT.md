@@ -39,7 +39,7 @@ There are exactly three ways to work with a worktree that lives on another machi
 
 Priorities, in order. When two pull apart, resolve in this order and say so.
 
-1. **Simplicity, YAGNI, maintainability.** The smallest correct thing one person can hold in their head and keep working. Prefer the boring, conventional mechanism over the clever one. When a review proposes armor, ceremony, or abstraction beyond that, cut it.
+1. **Simplicity, YAGNI, maintainability.** The smallest correct thing one person can hold in their head and keep working. Prefer the boring, conventional mechanism over the clever one. In this codebase Effect is that mechanism (`EFFECT.md`): a service, a layer, a scope, a schedule or a stream is the boring choice, and a hand-rolled lifetime, retry or error string is the clever one. When a review proposes armor, ceremony, or abstraction beyond that, cut it.
 2. **Seamlessness.** It matters enormously. A remote machine has to stop feeling remote. Anything that makes the happy path slower, chattier, or more confusing is a bug, not a nice-to-have.
 3. **Everything else.**
 

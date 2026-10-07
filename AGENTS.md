@@ -11,4 +11,7 @@
   screenshot, the real app on several devices), start at
   `app/lab/README.md`. Pages and windows are driven with weblab.
 - UI changes follow `app/DESIGN.md`.
+- Effect code follows `EFFECT.md`. While the `v3` branch lives, `V3.md`
+  is its charter and checklist, and `CLAUDE.md` holds the rules for a
+  thread working one of its items.
 - `skills/` is for people using `sm`, not instructions for this repo.

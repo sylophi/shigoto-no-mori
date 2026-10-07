@@ -30,6 +30,10 @@ app's layout, [`app/DESIGN.md`](app/DESIGN.md) its visual rules,
 real UI, [`app/test/README.md`](app/test/README.md) its programmatic
 checks, and [`hub/README.md`](hub/README.md) the device hub.
 
+While the `v3` branch lives, [`V3.md`](V3.md) is its charter and
+checklist and [`EFFECT.md`](EFFECT.md) the conventions every Effect
+change follows.
+
 ## Agent skills
 
 `skills/` holds instruction snippets that teach coding agents the `sm`
