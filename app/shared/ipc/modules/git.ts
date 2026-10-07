@@ -1,7 +1,6 @@
 import * as Schema from "effect/Schema";
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
+import { ProjectScopedPayloadSchema, VoidSchema } from "@shared/schemas";
 
 export const gitContract = defineContract("host", {
   // gated: beyond the fetch (a cache refresh, read-class on its
@@ -10,7 +9,7 @@ export const gitContract = defineContract("host", {
   refreshProject: invoke(
     "git:refreshProject",
     ProjectScopedPayloadSchema,
-    z.void(),
+    VoidSchema,
     { remote: true, gated: true },
   ),
   // A peer saying it is looking at this host: runs the host's
@@ -20,10 +19,12 @@ export const gitContract = defineContract("host", {
   // Read-class: the sweep is the host's own scheduled pass, including
   // the auto-pulls the host's user marked for it, and a request only
   // decides when it runs, never more often than its interval.
-  sweep: invoke("git:sweep", z.void(), z.object({ leaseMs: z.number() }), {
-    remote: true,
-    gated: false,
-  }),
+  sweep: invoke(
+    "git:sweep",
+    VoidSchema,
+    Schema.Struct({ leaseMs: Schema.Finite }),
+    { remote: true, gated: false },
+  ),
   refsRefreshed: broadcast("git:refsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,
   }),
@@ -39,7 +40,7 @@ export const gitContract = defineContract("host", {
   // on disk. The renderer invalidates its queries. Refetch-on-focus
   // can't cover this, since the window may already be focused while an
   // agent works in a terminal beside it.
-  externalChange: broadcast("git:externalChange", z.void(), { remote: true }),
+  externalChange: broadcast("git:externalChange", VoidSchema, { remote: true }),
   // One project's git state moved (a commit, checkout, branch or ref
   // change made by any tool, observed by the host's git-directory
   // watcher, main/core/gitWatcher.ts). Narrower than

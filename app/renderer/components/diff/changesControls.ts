@@ -6,7 +6,7 @@ import type { ChangedFile } from "@shared/schemas";
 // as its own prop, so typing a message never changes this object's
 // identity.
 export interface DiffChangesControls {
-  files: ChangedFile[];
+  files: readonly ChangedFile[];
   // The first status read hasn't answered yet: `files` is empty because
   // nothing is known, not because the tree is clean.
   loading: boolean;

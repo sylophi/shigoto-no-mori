@@ -35,7 +35,7 @@ export function useWorktreeChanges(
   options: { refetchOnWindowFocus?: boolean } = {},
 ) {
   const { api, keys } = useHostScope();
-  return useQuery<ChangedFile[]>({
+  return useQuery<readonly ChangedFile[]>({
     queryKey: keys.worktreeChanges(projectId, worktreeId),
     queryFn: worktreeId
       ? () => api.worktrees.changeStatus({ projectId, worktreeId })
@@ -61,13 +61,13 @@ interface SetStagedInput {
 export function useSetStaged() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  return useMutation<ChangedFile[], Error, SetStagedInput>({
+  return useMutation<readonly ChangedFile[], Error, SetStagedInput>({
     mutationFn: (input) => api.worktrees.setStaged(input),
     onMutate: async (vars) => {
       const key = keys.worktreeChanges(vars.projectId, vars.worktreeId);
       await queryClient.cancelQueries({ queryKey: key });
       const paths = new Set(vars.paths);
-      queryClient.setQueryData<ChangedFile[]>(key, (current) =>
+      queryClient.setQueryData<readonly ChangedFile[]>(key, (current) =>
         current?.map((file) =>
           paths.has(file.path)
             ? { ...file, staged: vars.staged ? "all" : "none" }
@@ -84,7 +84,7 @@ export function useSetStaged() {
       // read.
       const carried = new Map(
         queryClient
-          .getQueryData<ChangedFile[]>(key)
+          .getQueryData<readonly ChangedFile[]>(key)
           ?.map((file) => [changeKey(file), file.counts]),
       );
       queryClient.setQueryData(
