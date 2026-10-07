@@ -43,7 +43,6 @@ import {
 } from "@shared/sharedSettings";
 import {
   MAX_SHARED_SETTING_ENTRIES,
-  type SharedSettingEntry,
   SharedSettingsDocSchema,
   type SharedSettingsDoc,
 } from "@shared/schemas/sharedSettings";
@@ -252,7 +251,7 @@ it("tolerance: an entry this build cannot hold is left out, and the rest of the 
 });
 
 it("full copy: a new key is refused out loud, while held keys still take writes", () => {
-  const entries: Record<string, SharedSettingEntry> = {};
+  const entries: SharedSettingsDoc["entries"] = {};
   for (let i = 0; i < MAX_SHARED_SETTING_ENTRIES; i += 1) {
     entries[`filler/${i}`] = { value: i, at: 1, by: KIWI };
   }

@@ -27,11 +27,7 @@
 // picks travel only by being offered. (A desktop always has a window
 // to do its pulling: the app quits with its last one.)
 import type { QueryClient } from "@tanstack/react-query";
-import type {
-  SharedSettingEntry,
-  SharedSettingsDoc,
-  SharedSettingValue,
-} from "@shared/schemas";
+import type { SharedSettingsDoc, SharedSettingValue } from "@shared/schemas";
 import {
   exchangeSharedSettings,
   mergeSharedSettings,
@@ -112,7 +108,7 @@ async function migrateQuickCreateDevices(
   const config = await queryClient.fetchQuery(clientConfigQueryOptions);
   const legacy = config.quickCreateDevices;
   if (legacy === undefined) return;
-  const entries: Record<string, SharedSettingEntry> = {};
+  const entries: SharedSettingsDoc["entries"] = {};
   for (const [identity, deviceId] of Object.entries(legacy)) {
     entries[sharedSettingKeys.quickCreateDevice(identity)] = {
       value: deviceId,

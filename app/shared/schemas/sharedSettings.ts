@@ -60,30 +60,43 @@ const decodeSharedSettingEntry = Schema.decodeUnknownOption(
   SharedSettingEntrySchema,
 );
 
+type SharedSettingEntries = Record<string, SharedSettingEntry>;
+
 // Read entry by entry: one this build cannot hold (a newer build's
 // longer value, a hand-mangled stamp) is left out and the rest still
 // merge. Failing the whole document over it would cut this device off
 // from every setting a newer peer holds, not just the one it cannot
-// read.
+// read. Writing applies the same rule, so a document this build holds
+// always encodes.
+function readableEntries(raw: {
+  readonly [key: string]: unknown;
+}): SharedSettingEntries {
+  const entries: SharedSettingEntries = {};
+  let count = 0;
+  for (const [key, value] of Object.entries(raw)) {
+    if (count >= MAX_SHARED_SETTING_ENTRIES) break;
+    if (!isSharedSettingKey(key)) continue;
+    const entry = decodeSharedSettingEntry(value);
+    if (Option.isNone(entry)) continue;
+    entries[key] = entry.value;
+    count += 1;
+  }
+  return entries;
+}
+
 export const SharedSettingsDocSchema = Schema.Struct({
   entries: Schema.Record(Schema.String, Schema.Unknown).pipe(
     Schema.decodeTo(
-      Schema.Record(Schema.String, SharedSettingEntrySchema),
-      SchemaTransformation.transform({
-        decode: (raw) => {
-          const entries: Record<string, SharedSettingEntry> = {};
-          let count = 0;
-          for (const [key, value] of Object.entries(raw)) {
-            if (count >= MAX_SHARED_SETTING_ENTRIES) break;
-            if (!isSharedSettingKey(key)) continue;
-            const entry = decodeSharedSettingEntry(value);
-            if (Option.isNone(entry)) continue;
-            entries[key] = entry.value;
-            count += 1;
-          }
-          return entries;
-        },
-        encode: (entries) => entries,
+      Schema.declare(
+        (value: unknown): value is SharedSettingEntries =>
+          typeof value === "object" && value !== null && !Array.isArray(value),
+      ),
+      SchemaTransformation.transform<
+        SharedSettingEntries,
+        { readonly [key: string]: unknown }
+      >({
+        decode: readableEntries,
+        encode: readableEntries,
       }),
     ),
   ),
