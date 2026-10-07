@@ -1673,7 +1673,7 @@ export function installFakeHostBridge(
         ) {
           claimed ??= forward.worktree;
           if (forward.localPort === bound) {
-            forward.worktree = claimed;
+            forwards.set(id, { ...forward, worktree: claimed });
             client.emit("portForward:changed", undefined);
             return { forwardId: id, localPort: bound };
           }

@@ -65,6 +65,7 @@ import {
   AccountStatusSchema,
   accountContract,
 } from "@shared/ipc/modules/account";
+import { safeDecode } from "@shared/ipc/schema";
 import {
   DeviceInfoSchema,
   HUB_ROUTES,
@@ -1096,10 +1097,10 @@ it("shape: the device credential never appears in a renderer-visible object", ()
   // never carry the credential, so a compromised renderer cannot read
   // it back out of a status poll.
   assert.ok(
-    !("credential" in AccountStatusSchema.shape),
+    !("credential" in AccountStatusSchema.fields),
     "AccountStatusSchema exposes a credential field",
   );
-  const status = AccountStatusSchema.parse({
+  const status = Schema.decodeSync(AccountStatusSchema)({
     configured: true,
     signedIn: true,
     accountId: "acct-1",
@@ -1122,7 +1123,7 @@ it("shape: the device credential never appears in a renderer-visible object", ()
 it("contract: setDeviceName rejects an empty and an over-256-char name", () => {
   const input = accountContract.calls.setDeviceName.input;
   const rename = (name: string) =>
-    input.safeParse({ deviceId: "device-uuid", name }).success;
+    safeDecode(input, { deviceId: "device-uuid", name }).success;
   assert.equal(rename("A valid name"), true);
   assert.equal(rename(""), false, "an empty device name should be rejected");
   assert.equal(
@@ -1134,9 +1135,9 @@ it("contract: setDeviceName rejects an empty and an over-256-char name", () => {
 
 it("contract: enroll rejects an empty session token", () => {
   const input = accountContract.calls.enroll.input;
-  assert.equal(input.safeParse(fakeSessionJwt("user_x")).success, true);
+  assert.equal(safeDecode(input, fakeSessionJwt("user_x")).success, true);
   assert.equal(
-    input.safeParse("").success,
+    safeDecode(input, "").success,
     false,
     "an empty enroll token should be rejected",
   );

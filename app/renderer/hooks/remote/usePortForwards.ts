@@ -50,7 +50,7 @@ export function watchPortForwards(queryClient: QueryClient): void {
   });
 }
 
-type PortForwardList = { forwards: PortForwardSummary[] };
+type PortForwardList = { readonly forwards: readonly PortForwardSummary[] };
 
 // `select` narrows what a consumer re-renders on: the list refetches on
 // every conn open and close, and a projection that comes out equal
@@ -135,11 +135,11 @@ export function usePortForwardCount(): number {
 
 // Every forward this machine holds, whichever device it reaches: the
 // Live page's list.
-export function useAllPortForwards(): PortForwardSummary[] {
+export function useAllPortForwards(): readonly PortForwardSummary[] {
   return usePortForwardList().data?.forwards ?? NO_FORWARDS;
 }
 
-const NO_FORWARDS: PortForwardSummary[] = [];
+const NO_FORWARDS: readonly PortForwardSummary[] = [];
 
 // What the mark on a peer's worktree's sidebar row says while this
 // machine forwards its ports, matched on the worktree each forward was

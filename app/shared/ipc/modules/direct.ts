@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 
 // Brokering vocabulary for the direct data plane: a peer asks this
 // host, with the device hub's one ask (connectInfo, shared/hub/link.ts),
@@ -74,34 +74,35 @@ function candidateUrlMatchesKind(
   );
 }
 
-export const DirectCandidateSchema = z
-  .object({
-    kind: z.enum(["lan", "tunnel"]),
-    url: z.string(),
-    ticket: z.string(),
-  })
-  .refine(
-    (candidate) => candidateUrlMatchesKind(candidate.kind, candidate.url),
-    { message: "candidate url does not match its kind" },
-  );
-export type DirectCandidate = z.infer<typeof DirectCandidateSchema>;
-export type DirectCandidateKind = DirectCandidate["kind"];
+const DirectCandidateKindSchema = Schema.Literals(["lan", "tunnel"]);
+export type DirectCandidateKind = typeof DirectCandidateKindSchema.Type;
+
+export const DirectCandidateSchema = Schema.Struct({
+  kind: DirectCandidateKindSchema,
+  url: Schema.String,
+  ticket: Schema.String,
+}).check(
+  Schema.makeFilter(
+    (candidate: { readonly kind: DirectCandidateKind; readonly url: string }) =>
+      candidateUrlMatchesKind(candidate.kind, candidate.url) ||
+      "candidate url does not match its kind",
+  ),
+);
+export type DirectCandidate = typeof DirectCandidateSchema.Type;
 
 // Every candidate kind, derived from the schema so the vocabulary has
 // one owner: the dialer's race-everything default reads this.
 export const ALL_DIRECT_CANDIDATE_KINDS: readonly DirectCandidateKind[] =
-  DirectCandidateSchema.shape.kind.options;
+  DirectCandidateKindSchema.literals;
 
 // The caller's dial capability, carried in the connectInfo INPUT so
 // the host mints only tickets the caller can actually spend: a web
 // caller declaring ["tunnel"] does not burn and abandon one lan ticket
 // per interface address on every ask.
-export const DirectConnectInfoInputSchema = z.object({
-  dialableKinds: z.array(DirectCandidateSchema.shape.kind),
+export const DirectConnectInfoInputSchema = Schema.Struct({
+  dialableKinds: Schema.Array(DirectCandidateKindSchema),
 });
-export type DirectConnectInfoInput = z.infer<
-  typeof DirectConnectInfoInputSchema
->;
+export type DirectConnectInfoInput = typeof DirectConnectInfoInputSchema.Type;
 
 // Candidates exactly when available, and never an empty list: a host
 // with nothing dialable (for this caller's declared kinds) answers
@@ -110,12 +111,14 @@ export type DirectConnectInfoInput = z.infer<
 // gated calls. Every asker is a device of the same account, so it is
 // the same bit for all of them. It informs the asker's UI and CLI
 // only; the listener's dispatch gate still decides every call.
-export const DirectConnectInfoSchema = z.discriminatedUnion("available", [
-  z.object({ available: z.literal(false) }),
-  z.object({
-    available: z.literal(true),
-    candidates: z.array(DirectCandidateSchema).min(1),
-    acceptsCommands: z.boolean(),
+export const DirectConnectInfoSchema = Schema.Union([
+  Schema.Struct({ available: Schema.Literal(false) }),
+  Schema.Struct({
+    available: Schema.Literal(true),
+    candidates: Schema.Array(DirectCandidateSchema).check(
+      Schema.isMinLength(1),
+    ),
+    acceptsCommands: Schema.Boolean,
   }),
 ]);
-export type DirectConnectInfo = z.infer<typeof DirectConnectInfoSchema>;
+export type DirectConnectInfo = typeof DirectConnectInfoSchema.Type;

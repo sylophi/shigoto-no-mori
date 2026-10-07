@@ -8,6 +8,7 @@
 // instances.
 //
 // This file must stay Electron free (pnpm test host-boundary).
+import * as Schema from "effect/Schema";
 import {
   type DirectCandidate,
   type DirectCandidateKind,
@@ -15,6 +16,10 @@ import {
   DirectConnectInfoInputSchema,
 } from "@shared/ipc/modules/direct";
 import { candidateAddresses } from "@host/direct/addresses";
+
+const decodeConnectInfoInput = Schema.decodeUnknownSync(
+  DirectConnectInfoInputSchema,
+);
 
 type ConnectInfoDeps = {
   // The direct listener's bound port, or null while it is not running
@@ -57,7 +62,7 @@ export function makeConnectInfo(
   deps: ConnectInfoDeps,
 ): (callerDeviceId: string, rawInput: unknown) => DirectConnectInfo {
   return (callerDeviceId, rawInput) => {
-    const input = DirectConnectInfoInputSchema.parse(rawInput);
+    const input = decodeConnectInfoInput(rawInput);
     const port = deps.listenerPort();
     if (port === null) return { available: false };
     // Mint only what the caller declared it can dial: a web caller

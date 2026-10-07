@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { HexId32Schema } from "@shared/ipc/hexId";
 import { broughtPaths } from "@shared/mirrorIgnores";
 import {
   type MirrorIgnoreMode,
@@ -14,6 +13,7 @@ import {
 import {
   CommitHashZod,
   GitRefNameZod,
+  HexId32Zod,
   WorktreeIdZod,
 } from "@shared/schemas/zodBridge";
 
@@ -324,7 +324,7 @@ export type MirrorSessionRaw = z.infer<typeof MirrorSessionRawSchema>;
 // from here, on the channel the peer minted with openStream. Known
 // from the open until the channel is gone.
 const MirrorServingSchema = z.strictObject({
-  channelId: HexId32Schema,
+  channelId: HexId32Zod,
   projectId: z.string(),
   worktreeId: WorktreeIdZod,
   // The calling device, or "" on a wire that stamps no caller.
@@ -547,7 +547,7 @@ export function isMirrorCopyStayed(error: unknown): boolean {
 // channels.ts), and the host attaches a fresh `file-sync serve` for
 // the named worktree as the far end before answering.
 const MirrorOpenStreamPayloadSchema = MirrorWorktreePayloadSchema.extend({
-  channelId: HexId32Schema,
+  channelId: HexId32Zod,
   // See MirrorServingSchema.peerWorktreeId.
   peerWorktreeId: WorktreeIdZod.optional(),
 });

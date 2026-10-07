@@ -129,6 +129,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import { it } from "vitest";
 import {
@@ -491,7 +492,7 @@ it("brokering: connectInfo over the device hub carries fully dialable candidates
       { dialableKinds: ["lan", "tunnel"] },
       3000,
     );
-  const info = DirectConnectInfoSchema.parse(await ask());
+  const info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(await ask());
   assert.equal(info.available, true);
   // The host builds the complete dial URLs, so the two sides can
   // never disagree on how URL and ticket line up.
@@ -543,7 +544,7 @@ it("brokering serves the roster only: an ask forged from outside the host's live
     (error) => error instanceof HubAskRefusedError,
   );
   assert.equal(minted.length, 0, "a malformed ask minted a ticket");
-  const info = DirectConnectInfoSchema.parse(
+  const info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(
     await client.connection.askConnectInfo(
       "B",
       { dialableKinds: ["lan"] },
@@ -832,7 +833,7 @@ it("candidate boundary: a tunnel-kind ws:// candidate is refused by the schema a
   ];
   for (const candidate of refused) {
     assert.equal(
-      DirectCandidateSchema.safeParse(candidate).success,
+      Schema.is(DirectCandidateSchema)(candidate),
       false,
       `schema admitted ${candidate.kind} ${candidate.url}`,
     );
@@ -844,7 +845,7 @@ it("candidate boundary: a tunnel-kind ws:// candidate is refused by the schema a
   ];
   for (const candidate of admitted) {
     assert.equal(
-      DirectCandidateSchema.safeParse(candidate).success,
+      Schema.is(DirectCandidateSchema)(candidate),
       true,
       `schema refused ${candidate.kind} ${candidate.url}`,
     );

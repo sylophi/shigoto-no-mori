@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   PathPayloadSchema,
@@ -15,6 +14,6 @@ export const shellContract = defineContract("client", {
   showItemInFolder: invoke(
     "shell:showItemInFolder",
     PathPayloadSchema,
-    z.void(),
+    VoidSchema,
   ),
 });

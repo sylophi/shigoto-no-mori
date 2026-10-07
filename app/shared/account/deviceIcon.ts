@@ -11,7 +11,7 @@
 // and what it reads as until its owner picks. The marks are picked
 // only: a leaf, a cat, a rocket, things that tell two laptops apart at
 // a glance, which a shape never can.
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { WEB_PLATFORM } from "./platform";
 
 export const DEVICE_SHAPES = [
@@ -60,7 +60,7 @@ export const DEVICE_ICONS = [...DEVICE_SHAPES, ...DEVICE_MARKS] as const;
 export type DeviceShape = (typeof DEVICE_SHAPES)[number];
 export type DeviceIcon = DeviceShape | (typeof DEVICE_MARKS)[number];
 
-export const DeviceIconSchema = z.enum(DEVICE_ICONS);
+export const DeviceIconSchema = Schema.Literals(DEVICE_ICONS);
 const ICON_SET: ReadonlySet<string> = new Set(DEVICE_ICONS);
 
 // The icon as the picker names it.
