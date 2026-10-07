@@ -20,6 +20,7 @@ import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
 import { navContract } from "@shared/ipc/modules/nav";
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { coalesce } from "@host/lib/util/coalesce";
 import {
@@ -658,9 +659,9 @@ export function registerIpcHandlers(): void {
   // peer's worktree gone, which ends the mirrors into it running here.
   onPeerPush((push) => {
     if (push.channel === "git:projectChanged") {
-      const parsed = ProjectScopedPayloadSchema.safeParse(push.payload);
-      if (parsed.success) {
-        gitFollower.onPeerProjectChanged(push.deviceId, parsed.data.projectId);
+      const { payload } = push;
+      if (Schema.is(ProjectScopedPayloadSchema)(payload)) {
+        gitFollower.onPeerProjectChanged(push.deviceId, payload.projectId);
       }
     } else if (push.channel === "mirror:gitChanged") {
       const parsed = MirrorWorktreePayloadSchema.safeParse(push.payload);

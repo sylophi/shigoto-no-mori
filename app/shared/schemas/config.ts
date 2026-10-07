@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isSafeRelPath } from "../git/gitPaths";
-import { ProjectScopedPayloadSchema } from "./payloads";
+import { ProjectScopedPayloadSchema } from "./zodPayloads";
 import { MergeMethodSchema } from "./pullRequest";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
 import { ProjectSortModeSchema, SidebarViewSchema } from "./project";

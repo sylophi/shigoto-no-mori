@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isCloneableRemote } from "@shared/cloneUrl";
-import { ProjectScopedPayloadSchema } from "./payloads";
+import { ProjectScopedPayloadSchema } from "./zodPayloads";
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
 // no detached HEAD we can read. Treated as "not a real branch" by every

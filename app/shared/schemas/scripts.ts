@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,
-} from "./payloads";
+} from "./zodPayloads";
 
 const ScriptNameSchema = z.enum([
   "setup",

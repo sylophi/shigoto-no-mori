@@ -2,7 +2,8 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import { PortNumberSchema, WorktreeScopedPayloadSchema } from "@shared/schemas";
+import { PortNumberSchema } from "@shared/schemas";
+import { WorktreeScopedPayloadSchema } from "@shared/schemas/zodPayloads";
 
 // Client-scoped control surface for the port-forward engine. The engine
 // binds real TCP listeners on THIS machine's loopback
