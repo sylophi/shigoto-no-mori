@@ -254,7 +254,7 @@ removed one the next time they read the registry. A relaunch after
 - **Local hub** (`pnpm -C ../hub dev`). Set `SM_DEVICE_HUB_URL` to
   `http://localhost:8787` to run against a Worker on this machine
   instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in the repo root's
-  `hub/.dev.vars`.
+  `hub/.dev.vars`, see `hub/README.md`, "Develop and test".
 - **Packaged build** (`pnpm make`). The only way to test the prod
   scheme registration. Without `APPLE_SIGNING_IDENTITY` in the build
   environment the bundle is unsigned and, like dev, runs on

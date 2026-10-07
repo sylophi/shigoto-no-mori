@@ -344,6 +344,13 @@ pnpm run test   # just the suite
 The suite runs inside workerd via @cloudflare/vitest-pool-workers with
 real (local) D1, Durable Object and websocket implementations. Clerk
 is stubbed through the `createWorker(deps)` seam, so no network or
-real credentials are needed. For `wrangler dev` against real Clerk,
-put `CLERK_SECRET_KEY` and a `TICKET_SIGNING_KEY` of any value in a
-local `.dev.vars` (gitignored).
+real credentials are needed.
+
+`pnpm run dev` serves the Worker on `http://localhost:8787` (loopback
+only, and it fails rather than move when the port is taken) with its
+own local database. It applies any pending migrations to that database
+first, without asking, and passes a fixed `TICKET_SIGNING_KEY`, which
+wins over one in `.dev.vars`. Enrollment also needs the development
+Clerk instance's `CLERK_SECRET_KEY` in a local `.dev.vars`
+(gitignored). Point the dev app at this Worker with
+`SM_DEVICE_HUB_URL` (`app/lab/dev-app.md`, "Other tools").
