@@ -18,6 +18,7 @@
 // - a rare or legendary one in a crowd keeps their own moment, and a
 //   later move joins the news of its own group
 // - moves net out one for one by project and name (a relocate is none)
+// - a species reads without the wiki's disambiguation
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test villager-voice.
 import assert from "node:assert/strict";
@@ -33,6 +34,7 @@ import {
   speakerFor,
   speakerSlug,
   villagerLine,
+  villagerSpecies,
   worktreeMoves,
   type Speaker,
 } from "@/lib/villagerVoice";
@@ -313,6 +315,19 @@ try {
       moveNews("out", pair, speakersOf(pair))?.detail,
       "Landed their branch",
     );
+  });
+
+  await proof.check("a species reads without the wiki's disambiguation", () => {
+    const lloid = { name: "Lloid", kind: "special", url: "" } as const;
+    assert.equal(
+      villagerSpecies({ ...lloid, species: "Gyroid (species)" }),
+      "Gyroid",
+    );
+    assert.equal(
+      villagerSpecies({ ...lloid, species: "Frill-necked lizard" }),
+      "Frill-necked lizard",
+    );
+    assert.equal(villagerSpecies(lloid), undefined);
   });
 
   proof.done();

@@ -13,10 +13,11 @@ export interface Visits {
   last: number;
 }
 
-export function tallyVisits(log: VisitLog): Map<string, Visits> {
+// Visits from `since` on (epoch ms): the album started over then.
+export function tallyVisits(log: VisitLog, since = 0): Map<string, Visits> {
   const tally = new Map<string, Visits>();
   for (const visit of Object.values(log)) {
-    if (visit === null) continue;
+    if (visit === null || visit.at < since) continue;
     const held = tally.get(visit.slug);
     if (held === undefined) {
       tally.set(visit.slug, { count: 1, first: visit.at, last: visit.at });

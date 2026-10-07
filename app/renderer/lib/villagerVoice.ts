@@ -108,6 +108,12 @@ export function villagerCatchphrase(profile: VillagerProfile): string | null {
   return sayable(profile.catchphrase);
 }
 
+// What kind of animal a character is, less a wiki disambiguation the
+// downloaded profile kept: Lloid's "Gyroid (species)" is a Gyroid.
+export function villagerSpecies(profile: VillagerProfile): string | undefined {
+  return profile.species?.replace(/\s*\([^)]*\)$/, "");
+}
+
 // `message` in the speaker's voice, or null when they have no
 // catchphrase to end it with.
 export function villagerLine(

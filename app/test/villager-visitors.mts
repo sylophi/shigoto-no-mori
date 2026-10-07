@@ -2,7 +2,8 @@
 // (renderer/lib/villagers/visitors.ts).
 //
 // Asserts:
-// - the visit log tallies by villager, leaving out a mirror's copy
+// - the visit log tallies by villager, leaving out a mirror's copy, and
+//   from a reset on, only visits made since
 // - the album holds a slot for every character, by rarity, and leaves
 //   out a visit by a name no profile knows
 // - visited come first in the sort's order, the empty slots after
@@ -46,6 +47,20 @@ try {
     assert.deepEqual(tally.get("raymond"), { count: 3, first: 100, last: 500 });
     assert.deepEqual(tally.get("ace"), { count: 1, first: 900, last: 900 });
     assert.equal(tally.size, 4);
+  });
+
+  await proof.check("a reset counts only visits made since", () => {
+    const since = tallyVisits(
+      {
+        "mac:w1:100": { slug: "raymond", at: 100 },
+        "mac:w2:500": { slug: "raymond", at: 500 },
+        "mac:w5:900": { slug: "ace", at: 900 },
+        "pad:w4:600": null,
+      },
+      500,
+    );
+    assert.deepEqual(since.get("raymond"), { count: 1, first: 500, last: 500 });
+    assert.equal(since.size, 2);
   });
 
   const album = buildAlbum(profiles, tally);

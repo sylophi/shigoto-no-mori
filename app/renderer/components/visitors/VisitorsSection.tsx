@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { FoldVertical, RotateCcw } from "lucide-react";
 import { VillagerFace } from "@/components/shared/VillagerSays";
 import { DialogueFrame } from "@/components/villagers/VillagerDialogue";
 import { TypedWords } from "@/components/villagers/TypedWords";
 import { ChipButton } from "@/components/ui/chip-button";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
+import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -11,7 +13,13 @@ import {
   useVillagerProfiles,
 } from "@/hooks/villagers/useVillagers";
 import { useVisitors } from "@/hooks/villagers/useVisitors";
+import {
+  CONFIRM_DESTRUCTIVE_MS,
+  useConfirmTwice,
+} from "@/hooks/ui/useConfirmTwice";
+import { withMember } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
+import { resetVisits } from "@/lib/villagers/visitLog";
 import {
   type AlbumEntry,
   buildAlbum,
@@ -49,40 +57,82 @@ export function VisitorsSection() {
   const profiles = useVillagerProfiles();
   const visits = useVisitors();
   const [sort, setSort] = useState<VisitorSort>("visits");
-  const [everyone, setEveryone] = useState(false);
+  // The sections showing who hasn't visited too. Each opens and folds
+  // on its own, the chip above does all of them.
+  const [open, setOpen] = useState<ReadonlySet<VillagerRarity>>(new Set());
 
   if (profiles === undefined) return <AlbumSkeleton />;
   const album = buildAlbum(profiles, visits);
+  // The sections that fold: not every slot shows, and someone is left
+  // to meet.
+  const folding = SECTIONS.filter(
+    ({ rarity, allSlots }) =>
+      !allSlots && album.met[rarity] < album.sections[rarity].length,
+  ).map(({ rarity }) => rarity);
+  const everyone = folding.every((rarity) => open.has(rarity));
   return (
     <div className="flex flex-col gap-8">
       {album.metTotal === 0 ? <NobodyYet /> : <GuestBook album={album} />}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentedControl
-          aria-label="Sort"
-          value={sort}
-          onChange={setSort}
-          options={SORT_OPTIONS}
-          optionClassName="px-2.5 py-1 text-xs"
-        />
-        <ChipButton
-          aria-pressed={everyone}
-          onClick={() => setEveryone(!everyone)}
-        >
-          {everyone ? "Hide who hasn't visited" : "Show who hasn't visited"}
-        </ChipButton>
-      </div>
-      {SECTIONS.map(({ rarity, title, allSlots }) => (
+      {(album.metTotal > 0 || folding.length > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Only who has visited is sorted: the rest go by name. */}
+          {album.metTotal > 0 && (
+            <SegmentedControl
+              aria-label="Sort"
+              value={sort}
+              onChange={setSort}
+              options={SORT_OPTIONS}
+              optionClassName="px-2.5 py-1 text-xs"
+            />
+          )}
+          {folding.length > 0 && (
+            <ChipButton
+              aria-pressed={everyone}
+              onClick={() => setOpen(new Set(everyone ? [] : folding))}
+              className="ml-auto"
+            >
+              {everyone ? "Hide who hasn't visited" : "Show who hasn't visited"}
+            </ChipButton>
+          )}
+        </div>
+      )}
+      {SECTIONS.map(({ rarity, title }) => (
         <AlbumSection
           key={rarity}
           title={title}
           entries={sortAlbum(album.sections[rarity], sort)}
           met={album.met[rarity]}
-          allSlots={allSlots || everyone}
+          open={folding.includes(rarity) ? open.has(rarity) : null}
+          onOpen={(show) => setOpen((was) => withMember(was, rarity, show))}
           bestFriend={album.bestFriend?.slug ?? null}
-          onShowEveryone={() => setEveryone(true)}
         />
       ))}
+      {album.metTotal > 0 && <StartOver />}
     </div>
+  );
+}
+
+// Clearing the guest book takes a second click: the visits can't be
+// counted again.
+function StartOver() {
+  const confirm = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
+  return (
+    <SectionIntro
+      title="Start over"
+      action={
+        <ConfirmDestructiveButton
+          armed={confirm.armed}
+          pending={false}
+          pendingLabel=""
+          idleLabel="Reset the guest book"
+          icon={<RotateCcw aria-hidden className="size-3.5" />}
+          onClick={() => confirm.trigger(resetVisits)}
+        />
+      }
+    >
+      Clears every visit. Villagers living here now won't sign again, only the
+      ones who move in next.
+    </SectionIntro>
   );
 }
 
@@ -90,24 +140,35 @@ function AlbumSection({
   title,
   entries,
   met,
-  allSlots,
+  open,
+  onOpen,
   bestFriend,
-  onShowEveryone,
 }: {
   title: string;
   // Visited first (sortAlbum), `met` of them.
   entries: AlbumEntry[];
   met: number;
-  allSlots: boolean;
+  // Whether who hasn't visited shows too, or null in a section that
+  // doesn't fold (every slot shows).
+  open: boolean | null;
+  onOpen: (open: boolean) => void;
   bestFriend: string | null;
-  onShowEveryone: () => void;
 }) {
+  const heading = useRef<HTMLDivElement>(null);
   if (entries.length === 0) return null;
-  const shown = allSlots ? entries : entries.slice(0, met);
-  const hidden = entries.length - shown.length;
+  const unmet = entries.length - met;
+  const shown = open === false ? entries.slice(0, met) : entries;
+  // Folded from the foot of a long section, the page would be left
+  // somewhere past it: bring its heading back into view.
+  const fold = () => {
+    onOpen(false);
+    requestAnimationFrame(() => {
+      if (heading.current) revealAbove(heading.current);
+    });
+  };
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
+      <div ref={heading} className="flex items-center gap-3">
         <SectionHeading>{title}</SectionHeading>
         <span className="text-xs font-medium text-muted-foreground tabular-nums">
           {met} of {entries.length}
@@ -118,6 +179,12 @@ function AlbumSection({
           label={`${title} met`}
           className="h-1.5 max-w-40 flex-1"
         />
+        {open === true && (
+          <ChipButton className="ml-auto" onClick={fold}>
+            <FoldVertical aria-hidden className="size-3.5" />
+            Fold away
+          </ChipButton>
+        )}
       </div>
       <div className={ALBUM_GRID}>
         {shown.map((entry, index) => (
@@ -128,22 +195,54 @@ function AlbumSection({
             bestFriend={entry.slug === bestFriend}
           />
         ))}
-        {hidden > 0 && (
+        {open !== null && (
           <button
             type="button"
-            onClick={onShowEveryone}
+            aria-expanded={open}
+            onClick={open ? fold : () => onOpen(true)}
             className={cn(
               ALBUM_SLOT,
               "flex flex-col items-center justify-center gap-1 rounded-2xl bg-muted/60 px-3 text-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
             )}
           >
-            <span className="text-lg font-black tabular-nums">+{hidden}</span>
-            <span className="text-xs font-medium">still to meet</span>
+            {open ? (
+              <>
+                <FoldVertical aria-hidden className="size-6" />
+                <span className="text-xs font-medium">Fold away</span>
+              </>
+            ) : (
+              <>
+                <span className="text-lg font-black tabular-nums">
+                  +{unmet}
+                </span>
+                <span className="text-xs font-medium">still to meet</span>
+              </>
+            )}
           </button>
         )}
       </div>
     </section>
   );
+}
+
+// Scrolls the nearest ancestor that scrolls alone (not scrollIntoView,
+// which would pull every one, the settings page's own frame too) until
+// `element` is no longer above its top.
+function revealAbove(element: HTMLElement) {
+  let pane = element.parentElement;
+  while (
+    pane &&
+    !(
+      pane.scrollHeight > pane.clientHeight &&
+      /auto|scroll/.test(getComputedStyle(pane).overflowY)
+    )
+  ) {
+    pane = pane.parentElement;
+  }
+  if (!pane) return;
+  const gap = element.getBoundingClientRect().top - 16;
+  const top = pane.getBoundingClientRect().top;
+  if (gap < top) pane.scrollTop -= top - gap;
 }
 
 // An empty guest book: Isabelle explains, in her dialogue box.

@@ -19,9 +19,14 @@
 // whenever this window first sees it. A transfer that tears its source
 // down before then is caught by the move this window started
 // (quietVillagerMoves), passed in as `quiet`.
+//
+// Starting the album over (resetVisits) leaves the log as it is and
+// counts from then on: a visit is when its worktree was made, so the
+// residents of the day, a device not heard from yet included, stay
+// before it, and a copy is still found against what it copied.
 import type { QueryClient } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
-import { readStoredJson, writeStored } from "@/lib/localStorage";
+import { readStored, readStoredJson, writeStored } from "@/lib/localStorage";
 import {
   hostKeyDeviceId,
   isWorktreeListKey,
@@ -56,6 +61,21 @@ const log = createExternalStore<VisitLog>(readLog());
 
 export function useVisitLog(): VisitLog {
   return useExternalStore(log);
+}
+
+const SINCE_KEY = "villagers.visits.since";
+
+// When the album was last started over (epoch ms), 0 for never.
+const since = createExternalStore<number>(Number(readStored(SINCE_KEY)) || 0);
+
+export function useVisitsSince(): number {
+  return useExternalStore(since);
+}
+
+export function resetVisits(): void {
+  const now = Date.now();
+  writeStored(SINCE_KEY, String(now));
+  since.publish(now);
 }
 
 // A worktree's key in the log: its device, its place and when it was
