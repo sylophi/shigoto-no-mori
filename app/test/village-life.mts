@@ -11,7 +11,7 @@
 // - the Settings form shows each one's stored value
 // - the device patch never carries Village life
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test village-life.
+// Run: pnpm test village-life.
 import assert from "node:assert/strict";
 import { FRESH_CONFIG_SEED } from "@host/lib/bootstrap";
 import { ClientConfigSchema, DeviceSettingsPatchSchema } from "@shared/schemas";
@@ -21,7 +21,7 @@ import {
   villageLifeEnabled,
   villageLifeShows,
 } from "@shared/villageLife";
-import { makeProof } from "./lib/checkKit.mts";
+import { it } from "vitest";
 
 // The settings encoders sit beside their React hook, whose imports read
 // window.api.deviceId at load. Nothing here calls into window, so a
@@ -31,61 +31,52 @@ globalThis.window = { api: { deviceId: "village-life-check" } };
 const { fromConfig, toDeviceSettingsPatch } =
   await import("@/hooks/config/useSettingsSave");
 
-const proof = makeProof("village-life proof");
-console.log("village-life proof\n");
+it("unset, each setting reads off", () => {
+  assert.equal(doubutsuNamesEnabled({}), false);
+  assert.equal(doubutsuNamesEnabled({ doubutsuNames: false }), false);
+  assert.equal(doubutsuNamesEnabled({ doubutsuNames: true }), true);
+  assert.equal(doubutsuNamesEnabled(FRESH_CONFIG_SEED), true);
+  assert.equal(villageLifeEnabled({}), false);
+  assert.equal(villageLifeEnabled({ villageLife: false }), false);
+  assert.equal(villageLifeEnabled({ villageLife: true }), true);
+});
 
-try {
-  await proof.check("unset, each setting reads off", () => {
-    assert.equal(doubutsuNamesEnabled({}), false);
-    assert.equal(doubutsuNamesEnabled({ doubutsuNames: false }), false);
-    assert.equal(doubutsuNamesEnabled({ doubutsuNames: true }), true);
-    assert.equal(doubutsuNamesEnabled(FRESH_CONFIG_SEED), true);
-    assert.equal(villageLifeEnabled({}), false);
-    assert.equal(villageLifeEnabled({ villageLife: false }), false);
-    assert.equal(villageLifeEnabled({ villageLife: true }), true);
+it("Village life shows only with the villager data", () => {
+  const on = { villageLife: true };
+  assert.equal(villageLifeShows(on, { kind: "ready" }), true);
+  const statuses: (Pick<VillagerDataStatus, "kind"> | undefined)[] = [
+    undefined,
+    { kind: "absent" },
+    { kind: "downloading" },
+    { kind: "failed" },
+  ];
+  for (const status of statuses) {
+    assert.equal(villageLifeShows(on, status), false, status?.kind);
+  }
+  assert.equal(villageLifeShows({}, { kind: "ready" }), false);
+});
+
+it("the form shows each stored value", () => {
+  const unset = fromConfig({}, {});
+  assert.equal(unset.doubutsuNames, false);
+  assert.equal(unset.villageLife, false);
+  const seeded = fromConfig(FRESH_CONFIG_SEED, {});
+  assert.equal(seeded.doubutsuNames, true);
+  assert.equal(fromConfig({}, { villageLife: true }).villageLife, true);
+});
+
+it("the device patch never carries Village life", () => {
+  const patch = toDeviceSettingsPatch({
+    ...fromConfig({}, {}),
+    villageLife: true,
   });
-
-  await proof.check("Village life shows only with the villager data", () => {
-    const on = { villageLife: true };
-    assert.equal(villageLifeShows(on, { kind: "ready" }), true);
-    const statuses: (Pick<VillagerDataStatus, "kind"> | undefined)[] = [
-      undefined,
-      { kind: "absent" },
-      { kind: "downloading" },
-      { kind: "failed" },
-    ];
-    for (const status of statuses) {
-      assert.equal(villageLifeShows(on, status), false, status?.kind);
-    }
-    assert.equal(villageLifeShows({}, { kind: "ready" }), false);
-  });
-
-  await proof.check("the form shows each stored value", () => {
-    const unset = fromConfig({}, {});
-    assert.equal(unset.doubutsuNames, false);
-    assert.equal(unset.villageLife, false);
-    const seeded = fromConfig(FRESH_CONFIG_SEED, {});
-    assert.equal(seeded.doubutsuNames, true);
-    assert.equal(fromConfig({}, { villageLife: true }).villageLife, true);
-  });
-
-  await proof.check("the device patch never carries Village life", () => {
-    const patch = toDeviceSettingsPatch({
-      ...fromConfig({}, {}),
-      villageLife: true,
-    });
-    assert.ok(!("villageLife" in patch));
-    assert.ok(DeviceSettingsPatchSchema.safeParse(patch).success);
-    assert.ok(
-      !DeviceSettingsPatchSchema.safeParse({ villageLife: true }).success,
-    );
-    assert.equal(
-      ClientConfigSchema.parse({ villageLife: true }).villageLife,
-      true,
-    );
-  });
-
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+  assert.ok(!("villageLife" in patch));
+  assert.ok(DeviceSettingsPatchSchema.safeParse(patch).success);
+  assert.ok(
+    !DeviceSettingsPatchSchema.safeParse({ villageLife: true }).success,
+  );
+  assert.equal(
+    ClientConfigSchema.parse({ villageLife: true }).villageLife,
+    true,
+  );
+});

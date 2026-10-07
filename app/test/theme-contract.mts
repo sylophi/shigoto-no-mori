@@ -18,9 +18,11 @@
 //
 // covers: app/renderer/** app/scripts/dmg-background.html
 // covers: app/pnpm-lock.yaml
+import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { report, walk } from "./lib/checkKit.mts";
+import { it } from "vitest";
+import { walk } from "./lib/checkKit.mts";
 
 const root = join(import.meta.dirname, "..");
 // Strip comments: only selectors are contract, prose may name anything.
@@ -45,7 +47,7 @@ for (const file of walk(join(root, "renderer"), /\.(tsx?|css)$/)) {
   rendererSource += readFileSync(file, "utf8");
 }
 
-const failures = [];
+const failures: string[] = [];
 
 // 1. data-* hooks the CSS selects must be set in renderer source.
 //    (data-highlighted / data-popup-open / data-disabled / data-unchecked
@@ -285,8 +287,8 @@ for (const [, name = ""] of clerkSrc.matchAll(/var\((--[\w-]+)\)/g)) {
   }
 }
 
-report({
-  name: "theme contract",
-  failures,
-  hint: "Either restore the hook, or update renderer/doubutsu.css (and its CONTRACT header) to the new one.",
+// When one fails: either restore the hook, or update
+// renderer/doubutsu.css (and its CONTRACT header) to the new one.
+it("theme contract", () => {
+  assert.deepEqual(failures, []);
 });

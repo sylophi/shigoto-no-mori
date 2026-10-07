@@ -15,7 +15,7 @@
 // remote last, a shut owner is its header alone, and a list of one
 // owner draws no header at all.
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test project-order.
+// Run: pnpm test project-order.
 import assert from "node:assert/strict";
 import {
   buildSidebarRows,
@@ -29,10 +29,7 @@ import {
   type Project,
   type ProjectSortMode,
 } from "@shared/schemas";
-import { makeProof } from "./lib/checkKit.mts";
-
-const proof = makeProof("project-order proof");
-console.log("project-order proof\n");
+import { it } from "vitest";
 
 const project = (
   name: string,
@@ -187,183 +184,156 @@ function assertFilterKeepsOrder(stored: Project[], peers: RemoteForestItem[]) {
   }
 }
 
-try {
-  await proof.check(
-    "manual: this machine's order, peer-only repos trail",
-    () => {
-      assert.deepEqual(headers("manual"), [
-        "alder",
-        "birch",
-        "cedar",
-        "dogwood",
-      ]);
-    },
+it("manual: this machine's order, peer-only repos trail", () => {
+  assert.deepEqual(headers("manual"), ["alder", "birch", "cedar", "dogwood"]);
+});
+
+it("manual: narrowed to the peer, the local order holds", () => {
+  assert.deepEqual(headers("manual", PEER), ["alder", "birch", "dogwood"]);
+  assert.deepEqual(headers("manual", "local"), ["alder", "birch", "cedar"]);
+});
+
+it("recent: a repo's newest use on any device", () => {
+  // birch's peer use (900) beats alder's local one (300).
+  assert.deepEqual(headers("recent"), ["birch", "alder", "cedar", "dogwood"]);
+});
+
+it("frequent: a repo's uses on every device summed", () => {
+  // alder 1 + 4, cedar 3, birch 1 + 1, dogwood 2 (tie broken by name).
+  assert.deepEqual(headers("frequent"), ["alder", "cedar", "birch", "dogwood"]);
+});
+
+it("the filter drops groups and never reorders them", () => {
+  assertFilterKeepsOrder(local, remote);
+});
+
+it("a repo registered twice here ranks one way", () => {
+  // The second registration is used more recently here, so the
+  // recent sort puts it first and it takes the peer's checkouts. The
+  // peer's own recent use of alder must lift that registration and
+  // not the first one, or the peer's group jumps when narrowed.
+  assertFilterKeepsOrder(
+    [...local, project("alder-2", "repo/alder", 400, 2)],
+    [
+      project("birch", "repo/birch", 900, 1),
+      project("alder", "repo/alder", 950, 1),
+    ].map(onPeer),
   );
+});
 
-  await proof.check(
-    "manual: narrowed to the peer, the local order holds",
-    () => {
-      assert.deepEqual(headers("manual", PEER), ["alder", "birch", "dogwood"]);
-      assert.deepEqual(headers("manual", "local"), ["alder", "birch", "cedar"]);
-    },
-  );
+// Grouped by owner: alder and birch are acme's (birch through
+// GitHub's case-insensitive owner), dogwood is a user's on another
+// host, cedar has no remote.
+const [alder, birch, cedar] = local as [Project, Project, Project];
+const ownedLocal = [
+  owned(alder, "github.com/acme/alder"),
+  owned(birch, "github.com/ACME/birch"),
+  owned(cedar, null),
+];
+const ownedRemote = [
+  owned(project("dogwood", "repo/dogwood", 1000, 2), "gitlab.com/zed/dogwood"),
+].map(onPeer);
+const ownerOutline = (
+  sortMode: ProjectSortMode,
+  shut: ReadonlySet<string> = new Set(),
+) =>
+  outline(treeRows({ sortMode, stored: ownedLocal, peers: ownedRemote, shut }));
 
-  await proof.check("recent: a repo's newest use on any device", () => {
-    // birch's peer use (900) beats alder's local one (300).
-    assert.deepEqual(headers("recent"), ["birch", "alder", "cedar", "dogwood"]);
-  });
+it("by owner: owners in the projects' sort", () => {
+  assert.deepEqual(ownerOutline("manual"), [
+    "# acme",
+    "alder",
+    "birch",
+    "# gitlab.com/zed",
+    "dogwood",
+    "# No remote",
+    "cedar",
+  ]);
+});
 
-  await proof.check("frequent: a repo's uses on every device summed", () => {
-    // alder 1 + 4, cedar 3, birch 1 + 1, dogwood 2 (tie broken by name).
-    assert.deepEqual(headers("frequent"), [
-      "alder",
-      "cedar",
-      "birch",
-      "dogwood",
-    ]);
-  });
+it("by owner: alphabetical goes by owner name", () => {
+  // dogwood is the most recently used, so its owner leads the recent
+  // sort, and the alphabetical one puts it back by name.
+  assert.deepEqual(ownerOutline("recent"), [
+    "# gitlab.com/zed",
+    "dogwood",
+    "# acme",
+    "alder",
+    "birch",
+    "# No remote",
+    "cedar",
+  ]);
+  assert.deepEqual(ownerOutline("alphabetical"), [
+    "# acme",
+    "alder",
+    "birch",
+    "# gitlab.com/zed",
+    "dogwood",
+    "# No remote",
+    "cedar",
+  ]);
+});
 
-  await proof.check("the filter drops groups and never reorders them", () => {
-    assertFilterKeepsOrder(local, remote);
-  });
+it("by owner: a shut owner is its header alone", () => {
+  assert.deepEqual(ownerOutline("manual", new Set(["github.com/acme"])), [
+    "# acme (2)",
+    "# gitlab.com/zed",
+    "dogwood",
+    "# No remote",
+    "cedar",
+  ]);
+});
 
-  await proof.check("a repo registered twice here ranks one way", () => {
-    // The second registration is used more recently here, so the
-    // recent sort puts it first and it takes the peer's checkouts. The
-    // peer's own recent use of alder must lift that registration and
-    // not the first one, or the peer's group jumps when narrowed.
-    assertFilterKeepsOrder(
-      [...local, project("alder-2", "repo/alder", 400, 2)],
-      [
-        project("birch", "repo/birch", 900, 1),
-        project("alder", "repo/alder", 950, 1),
-      ].map(onPeer),
-    );
-  });
-
-  // Grouped by owner: alder and birch are acme's (birch through
-  // GitHub's case-insensitive owner), dogwood is a user's on another
-  // host, cedar has no remote.
-  const [alder, birch, cedar] = local as [Project, Project, Project];
-  const ownedLocal = [
-    owned(alder, "github.com/acme/alder"),
-    owned(birch, "github.com/ACME/birch"),
-    owned(cedar, null),
-  ];
-  const ownedRemote = [
-    owned(
-      project("dogwood", "repo/dogwood", 1000, 2),
-      "gitlab.com/zed/dogwood",
-    ),
+it("by owner: the filter drops owners, never reorders", () => {
+  // acme leads on alder here, beta on birch at the peer, and acme's
+  // other project trails birch there. Narrowed to the peer, acme
+  // keeps the place alder gave it.
+  const stored = [owned(alder, "github.com/acme/alder")];
+  const peers = [
+    owned(project("birch", "repo/birch", 200, 1), "github.com/beta/birch"),
+    owned(project("elm", "repo/elm", 100, 1), "github.com/acme/elm"),
   ].map(onPeer);
-  const ownerOutline = (
-    sortMode: ProjectSortMode,
-    shut: ReadonlySet<string> = new Set(),
-  ) =>
+  const narrowed = (filter?: string) =>
     outline(
-      treeRows({ sortMode, stored: ownedLocal, peers: ownedRemote, shut }),
+      treeRows({
+        sortMode: "recent",
+        filter,
+        stored,
+        peers,
+        shut: new Set(),
+      }),
     );
+  assert.deepEqual(narrowed(), ["# acme", "alder", "elm", "# beta", "birch"]);
+  assert.deepEqual(narrowed(PEER), ["# acme", "elm", "# beta", "birch"]);
+});
 
-  await proof.check("by owner: owners in the projects' sort", () => {
-    assert.deepEqual(ownerOutline("manual"), [
-      "# acme",
-      "alder",
-      "birch",
-      "# gitlab.com/zed",
-      "dogwood",
-      "# No remote",
-      "cedar",
-    ]);
+it("by owner: a single owner draws no header", () => {
+  const only = (stored: Project[]) =>
+    outline(
+      treeRows({
+        sortMode: "manual",
+        stored,
+        peers: [],
+        shut: new Set(["github.com/acme"]),
+      }),
+    );
+  // All acme's, even shut: one run, nothing folded away.
+  assert.deepEqual(only(ownedLocal.slice(0, 2)), ["alder", "birch"]);
+  // None with a remote: one run too.
+  assert.deepEqual(only([owned(cedar, null)]), ["cedar"]);
+  // One owner beside the projects with none is two sections.
+  assert.deepEqual(only(ownedLocal), ["# acme (2)", "# No remote", "cedar"]);
+});
+
+it("by owner: an open project draws no owners", () => {
+  const rows = treeRows({
+    sortMode: "manual",
+    stored: ownedLocal,
+    peers: ownedRemote,
+    shut: new Set(),
+    openKey: "repo/alder",
   });
-
-  await proof.check("by owner: alphabetical goes by owner name", () => {
-    // dogwood is the most recently used, so its owner leads the recent
-    // sort, and the alphabetical one puts it back by name.
-    assert.deepEqual(ownerOutline("recent"), [
-      "# gitlab.com/zed",
-      "dogwood",
-      "# acme",
-      "alder",
-      "birch",
-      "# No remote",
-      "cedar",
-    ]);
-    assert.deepEqual(ownerOutline("alphabetical"), [
-      "# acme",
-      "alder",
-      "birch",
-      "# gitlab.com/zed",
-      "dogwood",
-      "# No remote",
-      "cedar",
-    ]);
-  });
-
-  await proof.check("by owner: a shut owner is its header alone", () => {
-    assert.deepEqual(ownerOutline("manual", new Set(["github.com/acme"])), [
-      "# acme (2)",
-      "# gitlab.com/zed",
-      "dogwood",
-      "# No remote",
-      "cedar",
-    ]);
-  });
-
-  await proof.check("by owner: the filter drops owners, never reorders", () => {
-    // acme leads on alder here, beta on birch at the peer, and acme's
-    // other project trails birch there. Narrowed to the peer, acme
-    // keeps the place alder gave it.
-    const stored = [owned(alder, "github.com/acme/alder")];
-    const peers = [
-      owned(project("birch", "repo/birch", 200, 1), "github.com/beta/birch"),
-      owned(project("elm", "repo/elm", 100, 1), "github.com/acme/elm"),
-    ].map(onPeer);
-    const narrowed = (filter?: string) =>
-      outline(
-        treeRows({
-          sortMode: "recent",
-          filter,
-          stored,
-          peers,
-          shut: new Set(),
-        }),
-      );
-    assert.deepEqual(narrowed(), ["# acme", "alder", "elm", "# beta", "birch"]);
-    assert.deepEqual(narrowed(PEER), ["# acme", "elm", "# beta", "birch"]);
-  });
-
-  await proof.check("by owner: a single owner draws no header", () => {
-    const only = (stored: Project[]) =>
-      outline(
-        treeRows({
-          sortMode: "manual",
-          stored,
-          peers: [],
-          shut: new Set(["github.com/acme"]),
-        }),
-      );
-    // All acme's, even shut: one run, nothing folded away.
-    assert.deepEqual(only(ownedLocal.slice(0, 2)), ["alder", "birch"]);
-    // None with a remote: one run too.
-    assert.deepEqual(only([owned(cedar, null)]), ["cedar"]);
-    // One owner beside the projects with none is two sections.
-    assert.deepEqual(only(ownedLocal), ["# acme (2)", "# No remote", "cedar"]);
-  });
-
-  await proof.check("by owner: an open project draws no owners", () => {
-    const rows = treeRows({
-      sortMode: "manual",
-      stored: ownedLocal,
-      peers: ownedRemote,
-      shut: new Set(),
-      openKey: "repo/alder",
-    });
-    // Its header pins over the rows, and it holds no worktrees here:
-    // nothing at all, owner headers included.
-    assert.deepEqual(outline(rows), []);
-  });
-
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+  // Its header pins over the rows, and it holds no worktrees here:
+  // nothing at all, owner headers included.
+  assert.deepEqual(outline(rows), []);
+});

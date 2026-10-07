@@ -1,8 +1,7 @@
 // The two-device boot helper shared by the hub-transport e2e checks
 // (hub-link.mts, sync-transfer.mts,
 // port-forward.mts): a REAL hub connection against the stub
-// Durable Object (hubStub.mts, extracted for the same reason). Runs under
-// register-ts-alias so the shared TypeScript imports resolve.
+// Durable Object (hubStub.mts, extracted for the same reason).
 import {
   createHubConnection,
   type HubConnectionBinding,

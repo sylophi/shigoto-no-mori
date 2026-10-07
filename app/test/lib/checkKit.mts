@@ -1,6 +1,7 @@
-// Shared plumbing for the repo's check scripts. Scripts collect their
-// own failure strings and hand them to `report` for the one epilogue
-// shape every check prints.
+// Shared plumbing for the proofs: fixtures, teardown, sandboxes and the
+// sm runner. The harness itself is vitest's.
+//
+// covers: app/vitest.config.ts
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -24,7 +25,6 @@ import type {
   CliResult,
   CliRunnerImpl,
 } from "../../host/ipc/cliDelegate.ts";
-import { errorMessageOf } from "../../shared/errors.ts";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
 import type { SupervisorClock } from "../../shared/remote/supervisor.ts";
 import type { KeyValueStorage } from "../../web/lib/kvStorage.ts";
@@ -141,29 +141,6 @@ export function startLoopbackServer(
   });
 }
 
-export type Checker = {
-  check(label: string, fn: () => void): void;
-  failures: string[];
-};
-
-// The failure-collecting harness every check script hand-rolls: a
-// `failures` list and a `check(label, fn)` that runs one assertion group
-// and records its message instead of throwing, so one failing group does
-// not hide the rest. Returns both so the script can hand `failures` to
-// `report` below. Synchronous, matching the assertion callbacks that use
-// it.
-export function makeChecker(): Checker {
-  const failures: string[] = [];
-  function check(label: string, fn: () => void): void {
-    try {
-      fn();
-    } catch (error) {
-      failures.push(`${label}: ${errorMessageOf(error)}`);
-    }
-  }
-  return { check, failures };
-}
-
 type Teardown = () => unknown;
 
 export type Track = <T extends Teardown>(fn: T) => T;
@@ -173,13 +150,12 @@ export type Tracker = {
   teardown(): Promise<void>;
 };
 
-// Teardown bookkeeping for fixture-heavy checks: register teardowns in
+// Teardown bookkeeping for the proofs whose scenarios share long-lived
+// fixtures (their afterAll runs `teardown`): register teardowns in
 // creation order, run them in reverse, and keep going past a failing
 // one so an assertion failure mid-scenario still releases every
 // listener and socket instead of hanging the process (a cleanup
-// failure never masks the test outcome). Used standalone by the checks
-// whose scenarios share long-lived fixtures, and by makeProof's
-// per-check cleanup below.
+// failure never masks the test outcome).
 export function makeTracker(): Tracker {
   const teardowns: Teardown[] = [];
   return {
@@ -205,7 +181,6 @@ export function makeTracker(): Tracker {
 export const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-// Polls a predicate, sync or async, until it holds.
 // Whether a process is still there (signal 0 delivers nothing).
 export function processAlive(pid: number): boolean {
   try {
@@ -216,18 +191,32 @@ export function processAlive(pid: number): boolean {
   }
 }
 
+// Polls a predicate, sync or async, until it holds. The timeout names
+// what it waited for. Loads vitest only once called, which keeps this
+// module free of it for the scripts.
 export async function waitFor(
   predicate: () => unknown,
   what: string,
   timeoutMs = 5_000,
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    if (await predicate()) return;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(25);
+  const { vi } = await import("vitest");
+  let threw = false;
+  try {
+    await vi.waitUntil(
+      async () => {
+        try {
+          return await predicate();
+        } catch (error) {
+          threw = true;
+          throw error;
+        }
+      },
+      { timeout: timeoutMs, interval: 25 },
+    );
+  } catch (error) {
+    // vi.waitUntil's own timeout names nothing.
+    if (threw) throw error;
+    throw new Error(`timed out waiting for ${what}`, { cause: error });
   }
 }
 
@@ -281,59 +270,6 @@ export function sandboxGit(
       ["-c", "user.name=sm", "-c", "user.email=sm@example.test", ...args],
       { cwd, env: gitEnv, encoding: "utf8" },
     );
-}
-
-export type Proof = {
-  check(label: string, fn: (track: Track) => unknown): Promise<void>;
-  ok(label: string): void;
-  done(): void;
-  fail(error: unknown): void;
-};
-
-// The async sibling of makeChecker, for the e2e proof scripts: named
-// scenario groups that drive real transports sequentially, where the
-// first failure aborts the run. `name` is the proof phrase the summary
-// lines print, like "sync-transfer proof".
-//
-//   - check(label, fn) awaits fn(track) and prints the "  ok" line.
-//     track(cleanup) registers teardown on a per-check makeTracker, so
-//     cleanups run in reverse order even when the assertions throw and
-//     a failed check cannot leak the event loop.
-//   - ok(label) records an assertion group the script ran inline, for
-//     proofs whose scenarios share long-lived fixtures instead of
-//     per-check setup.
-//   - done() prints the "<name> OK (N assertions)" summary.
-//   - fail(error) prints the FAILED epilogue and sets a nonzero exit
-//     code, shaped for main().catch(fail).
-export function makeProof(name: string): Proof {
-  const passed: string[] = [];
-  function ok(label: string): void {
-    passed.push(label);
-    console.log(`  ok  ${label}`);
-  }
-  async function check(
-    label: string,
-    fn: (track: Track) => unknown,
-  ): Promise<void> {
-    const { track, teardown } = makeTracker();
-    try {
-      await fn(track);
-    } finally {
-      await teardown();
-    }
-    ok(label);
-  }
-  return {
-    check,
-    ok,
-    done: () => {
-      console.log(`\n${name} OK (${passed.length} assertions)`);
-    },
-    fail: (error) => {
-      console.error(`\n${name} FAILED: ${errorMessageOf(error)}`);
-      process.exitCode = 1;
-    },
-  };
 }
 
 export type FakeClock = SupervisorClock & {
@@ -407,31 +343,6 @@ export function handlerCtx(
     notifier: () => () => {},
     ...overrides,
   };
-}
-
-// `name` is the lowercase check phrase, like "host boundary". Failures
-// print a capitalized header, each failure line, and the hint, then set
-// a nonzero exit code. Setting exitCode instead of calling
-// process.exit lets stderr flush when piped. Success prints "<name> OK".
-export function report({
-  name,
-  failures,
-  hint,
-}: {
-  name: string;
-  failures: readonly string[];
-  hint: string;
-}): void {
-  if (failures.length > 0) {
-    console.error(
-      `${name.charAt(0).toUpperCase()}${name.slice(1)} check failed:\n`,
-    );
-    for (const f of failures) console.error(`  ✗ ${f}`);
-    console.error(`\n${hint}`);
-    process.exitCode = 1;
-    return;
-  }
-  console.log(`${name} OK`);
 }
 
 // A fake Clerk session JWT whose payload carries the given sub,

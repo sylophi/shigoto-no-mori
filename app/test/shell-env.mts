@@ -17,9 +17,9 @@ import {
   parseShellEnv,
   replaceProcessEnv,
 } from "../main/core/shellEnv.ts";
-import { makeChecker, makeTracker, report, tempDir } from "./lib/checkKit.mts";
+import { afterAll, beforeAll, it } from "vitest";
+import { makeTracker, tempDir } from "./lib/checkKit.mts";
 
-const { check, failures } = makeChecker();
 const { track, teardown } = makeTracker();
 
 // An agent's launch from inside an sm worktree: launchd's variables,
@@ -63,44 +63,40 @@ const BASE = {
   SHELL: "/bin/zsh",
 };
 
-check(
-  "the base is launchd's variables, PATH and the shell, nothing else",
-  () => {
-    assert.deepEqual(launchBaseEnv(LAUNCH, "/bin/zsh"), BASE);
-  },
-);
+// When one fails: see main/core/shellEnv.ts: the packaged app's
+// environment rebuild.
+it("the base is launchd's variables, PATH and the shell, nothing else", () => {
+  assert.deepEqual(launchBaseEnv(LAUNCH, "/bin/zsh"), BASE);
+});
 
 const wrapped = (entries: string[]): string =>
   `__SHIGOMORI_ENV__${entries.join("\0")}__SHIGOMORI_ENV_END__`;
 
-check(
-  "the parse reads between the sentinels and keeps multi-line values",
-  () => {
-    const stdout =
-      "Welcome!\nLast login: today\n" +
-      wrapped([
-        "A=1",
-        "MULTI=two\nlines",
-        "EQ=a=b",
-        "BASH_FUNC_f%%=() { :; }",
-        "=x",
-        "",
-      ]) +
-      "session=1 ended\n";
-    assert.deepEqual(parseShellEnv(stdout), {
-      A: "1",
-      MULTI: "two\nlines",
-      EQ: "a=b",
-    });
-  },
-);
+it("the parse reads between the sentinels and keeps multi-line values", () => {
+  const stdout =
+    "Welcome!\nLast login: today\n" +
+    wrapped([
+      "A=1",
+      "MULTI=two\nlines",
+      "EQ=a=b",
+      "BASH_FUNC_f%%=() { :; }",
+      "=x",
+      "",
+    ]) +
+    "session=1 ended\n";
+  assert.deepEqual(parseShellEnv(stdout), {
+    A: "1",
+    MULTI: "two\nlines",
+    EQ: "a=b",
+  });
+});
 
-check("no END is no capture yet", () => {
+it("no END is no capture yet", () => {
   assert.equal(parseShellEnv("Welcome!\n__SHIGOMORI_ENV__A=1\0"), null);
   assert.equal(parseShellEnv("Welcome!\nA=1\0"), null);
 });
 
-check("the merge is base, then exports, then the app's own override", () => {
+it("the merge is base, then exports, then the app's own override", () => {
   const captured = {
     PATH: "/opt/homebrew/bin:/usr/bin:/bin",
     SSH_AUTH_SOCK: "/Users/u/.1password/agent.sock",
@@ -127,7 +123,7 @@ check("the merge is base, then exports, then the app's own override", () => {
   });
 });
 
-check("a profile's SHIGOMORI_DATA_DIR is not the app's", () => {
+it("a profile's SHIGOMORI_DATA_DIR is not the app's", () => {
   const { SHIGOMORI_DATA_DIR: _unset, ...finderLaunch } = LAUNCH;
   const env = mergeShellEnv(
     BASE,
@@ -137,14 +133,14 @@ check("a profile's SHIGOMORI_DATA_DIR is not the app's", () => {
   assert.deepEqual(env, BASE);
 });
 
-check("a failed capture leaves the Finder-launch environment", () => {
+it("a failed capture leaves the Finder-launch environment", () => {
   assert.deepEqual(mergeShellEnv(BASE, null, LAUNCH), {
     ...BASE,
     SHIGOMORI_DATA_DIR: "/tmp/sandbox",
   });
 });
 
-check("replaceProcessEnv drops what the target lacks", () => {
+it("replaceProcessEnv drops what the target lacks", () => {
   process.env["SM_SHELL_ENV_TEST_GONE"] = "1";
   const { SM_SHELL_ENV_TEST_GONE: _gone, ...target } = process.env as Record<
     string,
@@ -163,37 +159,40 @@ check("replaceProcessEnv drops what the target lacks", () => {
 // system's, not from launchd's four entries.
 const ZSH = "/bin/zsh";
 if (existsSync(ZSH)) {
-  const zdotdir = tempDir("sm-shell-env-", track);
+  let zdotdir: string;
   const rc = (lines: string[]): void =>
     writeFileSync(join(zdotdir, ".zshrc"), lines.join("\n") + "\n");
-  const base = { ...BASE, HOME: zdotdir, ZDOTDIR: zdotdir };
+  let base: typeof BASE & { ZDOTDIR: string };
+  beforeAll(() => {
+    zdotdir = tempDir("sm-shell-env-", track);
+    base = { ...BASE, HOME: zdotdir, ZDOTDIR: zdotdir };
+  });
+  afterAll(teardown);
 
-  rc([
-    "echo 'Welcome to a chatty .zshrc'",
-    "export SM_SHELL_ENV_TEST_EXPORT=$'two\\nlines'",
-    'export PATH="/opt/test/bin:$PATH"',
-    "SM_SHELL_ENV_TEST_UNEXPORTED=1",
-  ]);
-  writeFileSync(join(zdotdir, ".zlogout"), "echo 'session=1 ended'\n");
-  const captured = await captureShellEnv(ZSH, base);
-  check(
-    "zsh's exports come back; unexported vars and logout output don't",
-    () => {
-      assert.notEqual(captured, null, "the capture failed");
-      assert.equal(captured?.["SM_SHELL_ENV_TEST_EXPORT"], "two\nlines");
-      assert.equal(captured?.["SM_SHELL_ENV_TEST_UNEXPORTED"], undefined);
-      assert.equal(captured?.["session"], undefined);
-      assert.match(captured?.["PATH"] ?? "", /^\/opt\/test\/bin:/);
-    },
-  );
+  it("zsh's exports come back; unexported vars and logout output don't", async () => {
+    rc([
+      "echo 'Welcome to a chatty .zshrc'",
+      "export SM_SHELL_ENV_TEST_EXPORT=$'two\\nlines'",
+      'export PATH="/opt/test/bin:$PATH"',
+      "SM_SHELL_ENV_TEST_UNEXPORTED=1",
+    ]);
+    writeFileSync(join(zdotdir, ".zlogout"), "echo 'session=1 ended'\n");
+    const captured = await captureShellEnv(ZSH, base);
+    assert.notEqual(captured, null, "the capture failed");
+    assert.equal(captured?.["SM_SHELL_ENV_TEST_EXPORT"], "two\nlines");
+    assert.equal(captured?.["SM_SHELL_ENV_TEST_UNEXPORTED"], undefined);
+    assert.equal(captured?.["session"], undefined);
+    assert.match(captured?.["PATH"] ?? "", /^\/opt\/test\/bin:/);
+  });
 
-  // A startup file that leaves a child behind with the shell's stdout
-  // (an agent, a `nohup x &`). The shell is done at once and so must
-  // the capture be, not when the child lets go of the pipe.
-  rc(["(sleep 2 &)", "export SM_SHELL_ENV_TEST_EXPORT=orphaned"]);
-  let started = Date.now();
-  const orphaned = await captureShellEnv(ZSH, base);
-  check("a child holding stdout does not hold the capture", () => {
+  let started: number;
+  it("a child holding stdout does not hold the capture", async () => {
+    // A startup file that leaves a child behind with the shell's stdout
+    // (an agent, a `nohup x &`). The shell is done at once and so must
+    // the capture be, not when the child lets go of the pipe.
+    rc(["(sleep 2 &)", "export SM_SHELL_ENV_TEST_EXPORT=orphaned"]);
+    started = Date.now();
+    const orphaned = await captureShellEnv(ZSH, base);
     assert.equal(orphaned?.["SM_SHELL_ENV_TEST_EXPORT"], "orphaned");
     assert.ok(
       Date.now() - started < 1500,
@@ -201,12 +200,12 @@ if (existsSync(ZSH)) {
     );
   });
 
-  // A startup file that hangs. Interactive zsh ignores SIGTERM, so
-  // this is also the proof the timeout really ends the shell.
-  rc(["sleep 1"]);
-  started = Date.now();
-  const hung = await captureShellEnv(ZSH, base, 200);
-  check("a hanging startup file is a failed capture, on time", () => {
+  it("a hanging startup file is a failed capture, on time", async () => {
+    // A startup file that hangs. Interactive zsh ignores SIGTERM, so
+    // this is also the proof the timeout really ends the shell.
+    rc(["sleep 1"]);
+    started = Date.now();
+    const hung = await captureShellEnv(ZSH, base, 200);
     assert.equal(hung, null);
     assert.ok(
       Date.now() - started < 1500,
@@ -216,10 +215,3 @@ if (existsSync(ZSH)) {
 } else {
   console.log("(no /bin/zsh here, the live capture checks were skipped)");
 }
-
-await teardown();
-report({
-  name: "shell-env",
-  failures,
-  hint: "See main/core/shellEnv.ts: the packaged app's environment rebuild.",
-});

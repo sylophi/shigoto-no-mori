@@ -11,6 +11,7 @@
 //
 // covers: app/renderer/doubutsu.css app/scripts/dmg-background.html
 // covers: app/assets/dmg/** app/pnpm-lock.yaml
+import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DMG_ART_DIR } from "../shared/packaging/dmgLayout.mts";
@@ -19,30 +20,31 @@ import {
   ART_STAMP_FILE,
   artInputsHash,
 } from "../scripts/lib/dmgArtStamp.mts";
-import { report, appRoot } from "./lib/checkKit.mts";
+import { it } from "vitest";
+import { appRoot } from "./lib/checkKit.mts";
 
-const failures = [];
-const missing = ART_FILES.filter((file) => !existsSync(join(appRoot, file)));
-if (missing.length > 0) {
-  // Hashing reads every art file, so a missing twin short-circuits
-  // before the stamp comparison.
-  failures.push(
-    `the installer artwork is incomplete, missing ${missing.join(", ")}.`,
-  );
-} else {
-  const stamped = existsSync(ART_STAMP_FILE)
-    ? readFileSync(ART_STAMP_FILE, "utf8").trim()
-    : null;
-  if (stamped !== artInputsHash()) {
+// When one fails: re-render it with `pnpm dmg:background` and commit
+// the result.
+it("dmg art", () => {
+  const failures = [];
+  const missing = ART_FILES.filter((file) => !existsSync(join(appRoot, file)));
+  if (missing.length > 0) {
+    // Hashing reads every art file, so a missing twin short-circuits
+    // before the stamp comparison.
     failures.push(
-      stamped === null
-        ? `no stamp at ${DMG_ART_DIR}/inputs.sha256.`
-        : "the installer artwork predates a change to the design it is rendered from.",
+      `the installer artwork is incomplete, missing ${missing.join(", ")}.`,
     );
+  } else {
+    const stamped = existsSync(ART_STAMP_FILE)
+      ? readFileSync(ART_STAMP_FILE, "utf8").trim()
+      : null;
+    if (stamped !== artInputsHash()) {
+      failures.push(
+        stamped === null
+          ? `no stamp at ${DMG_ART_DIR}/inputs.sha256.`
+          : "the installer artwork predates a change to the design it is rendered from.",
+      );
+    }
   }
-}
-report({
-  name: "dmg art",
-  failures,
-  hint: "Re-render it with `pnpm dmg:background` and commit the result.",
+  assert.deepEqual(failures, []);
 });

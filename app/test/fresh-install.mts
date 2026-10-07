@@ -15,7 +15,7 @@
 // The pick itself (cli/names.go, which the app's New Worktree pre-pick
 // asks through `sm worktrees destination`) is proven in cli/names_test.go.
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test fresh-install.
+// Run: pnpm test fresh-install.
 import assert from "node:assert/strict";
 import {
   mkdirSync,
@@ -31,7 +31,8 @@ import { ensureDataDir, FRESH_CONFIG_SEED } from "@host/lib/bootstrap";
 import { initDataDirAt } from "@host/lib/util/paths";
 import type { GlobalConfig } from "@shared/schemas/config";
 import { errorCodeOf } from "@shared/errors";
-import { createCliRunner, makeProof } from "./lib/checkKit.mts";
+import { afterAll, beforeAll, it } from "vitest";
+import { createCliRunner } from "./lib/checkKit.mts";
 import { builtSm } from "./lib/smBinary.mts";
 
 // The settings encoders sit beside their React hook, whose imports read
@@ -42,16 +43,20 @@ Object.assign(globalThis, {
 });
 const { fromConfig } = await import("@/hooks/config/useSettingsSave");
 
-const proof = makeProof("fresh-install proof");
-console.log("fresh-install proof\n");
-
-const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-fresh-check-")));
+let sandbox: string;
 // Built inside the try below, so a failed build still reports and
 // cleans up.
 let smBinary = "";
-// ensureDataDir takes its folder as an argument, so every case below
-// passes its own. This one only satisfies the one-shot init.
-initDataDirAt(join(sandbox, "unused"));
+beforeAll(() => {
+  sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-fresh-check-")));
+  // ensureDataDir takes its folder as an argument, so every case below
+  // passes its own. This one only satisfies the one-shot init.
+  initDataDirAt(join(sandbox, "unused"));
+  smBinary = builtSm();
+});
+afterAll(() => {
+  rmSync(sandbox, { recursive: true, force: true });
+});
 
 let dirCount = 0;
 // A data dir for one case, with an sm runner pointed at it. `create`
@@ -93,82 +98,56 @@ function install({ create = true }: { create?: boolean } = {}) {
 const namesOn = { value: true, set: true };
 const namesOff = { value: false, set: false };
 
-try {
-  smBinary = builtSm();
-  await proof.check("the seed is Doubutsu names alone", () => {
-    assert.deepEqual(FRESH_CONFIG_SEED, { doubutsuNames: true });
-  });
+it("the seed is Doubutsu names alone", () => {
+  assert.deepEqual(FRESH_CONFIG_SEED, { doubutsuNames: true });
+});
 
-  await proof.check(
-    "the app seeds a new machine once, and the CLI agrees",
-    async () => {
-      const target = install({ create: false });
-      await ensureDataDir(target.dir);
-      assert.equal(target.config().doubutsuNames, true);
-      const seeded = target.configText();
-      assert.deepEqual(await target.names(), namesOn);
-      assert.equal(fromConfig(target.config(), {}).doubutsuNames, true);
-      await ensureDataDir(target.dir);
-      assert.equal(
-        target.configText(),
-        seeded,
-        "a second launch rewrote config",
-      );
-    },
-  );
+it("the app seeds a new machine once, and the CLI agrees", async () => {
+  const target = install({ create: false });
+  await ensureDataDir(target.dir);
+  assert.equal(target.config().doubutsuNames, true);
+  const seeded = target.configText();
+  assert.deepEqual(await target.names(), namesOn);
+  assert.equal(fromConfig(target.config(), {}).doubutsuNames, true);
+  await ensureDataDir(target.dir);
+  assert.equal(target.configText(), seeded, "a second launch rewrote config");
+});
 
-  await proof.check(
-    "the CLI seeds a new machine once, and the app agrees",
-    async () => {
-      const target = install();
-      assert.deepEqual(await target.names(), namesOn);
-      const seeded = target.configText();
-      await ensureDataDir(target.dir);
-      await target.names();
-      assert.equal(
-        target.configText(),
-        seeded,
-        "config changed after the seed",
-      );
-      assert.equal(fromConfig(target.config(), {}).doubutsuNames, true);
-    },
-  );
+it("the CLI seeds a new machine once, and the app agrees", async () => {
+  const target = install();
+  assert.deepEqual(await target.names(), namesOn);
+  const seeded = target.configText();
+  await ensureDataDir(target.dir);
+  await target.names();
+  assert.equal(target.configText(), seeded, "config changed after the seed");
+  assert.equal(fromConfig(target.config(), {}).doubutsuNames, true);
+});
 
-  await proof.check(
-    "an existing install without the key stays off",
-    async () => {
-      // Projects registered, config.json never written: app first.
-      const appFirst = install();
-      appFirst.write("registry.json", { schemaVersion: 1, projects: [] });
-      await ensureDataDir(appFirst.dir);
-      assert.ok(!("doubutsuNames" in appFirst.config()));
-      assert.deepEqual(await appFirst.names(), namesOff);
-      // An app-bootstrapped install (state.json, empty config): CLI first.
-      const cliFirst = install();
-      cliFirst.write("state.json", { schemaVersion: 1 });
-      cliFirst.write("config.json", { schemaVersion: 1 });
-      assert.deepEqual(await cliFirst.names(), namesOff);
-      await ensureDataDir(cliFirst.dir);
-      assert.deepEqual(cliFirst.config(), { schemaVersion: 1 });
-      assert.equal(fromConfig(cliFirst.config(), {}).doubutsuNames, false);
-    },
-  );
+it("an existing install without the key stays off", async () => {
+  // Projects registered, config.json never written: app first.
+  const appFirst = install();
+  appFirst.write("registry.json", { schemaVersion: 1, projects: [] });
+  await ensureDataDir(appFirst.dir);
+  assert.ok(!("doubutsuNames" in appFirst.config()));
+  assert.deepEqual(await appFirst.names(), namesOff);
+  // An app-bootstrapped install (state.json, empty config): CLI first.
+  const cliFirst = install();
+  cliFirst.write("state.json", { schemaVersion: 1 });
+  cliFirst.write("config.json", { schemaVersion: 1 });
+  assert.deepEqual(await cliFirst.names(), namesOff);
+  await ensureDataDir(cliFirst.dir);
+  assert.deepEqual(cliFirst.config(), { schemaVersion: 1 });
+  assert.equal(fromConfig(cliFirst.config(), {}).doubutsuNames, false);
+});
 
-  await proof.check("explicit values are never touched", async () => {
-    const explicit = async (value: boolean) => {
-      const target = install();
-      const doc = { doubutsuNames: value };
-      target.write("config.json", doc);
-      await ensureDataDir(target.dir);
-      assert.deepEqual(await target.names(), { value, set: true });
-      assert.deepEqual(target.config(), doc);
-    };
-    await Promise.all([explicit(true), explicit(false)]);
-  });
-
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-} finally {
-  rmSync(sandbox, { recursive: true, force: true });
-}
+it("explicit values are never touched", async () => {
+  const explicit = async (value: boolean) => {
+    const target = install();
+    const doc = { doubutsuNames: value };
+    target.write("config.json", doc);
+    await ensureDataDir(target.dir);
+    assert.deepEqual(await target.names(), { value, set: true });
+    assert.deepEqual(target.config(), doc);
+  };
+  await Promise.all([explicit(true), explicit(false)]);
+});
