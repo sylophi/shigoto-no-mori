@@ -2,6 +2,7 @@
 // verifier (tokens look like `test-token:<accountId>`), HTTP helpers,
 // and a TestSocket wrapper that turns websocket events into awaitable
 // queues so tests read as straight-line scripts.
+import * as Schema from "effect/Schema";
 import {
   createExecutionContext,
   env,
@@ -128,7 +129,7 @@ export async function enroll(
     }),
   );
   expect(response.status).toBe(200);
-  return EnrollResponseSchema.parse(await response.json());
+  return Schema.decodeUnknownSync(EnrollResponseSchema)(await response.json());
 }
 
 export async function mintTicket(
@@ -137,7 +138,7 @@ export async function mintTicket(
 ): Promise<TicketResponse> {
   const response = await call(ticketRequest(credential), testEnv);
   expect(response.status).toBe(200);
-  return TicketResponseSchema.parse(await response.json());
+  return Schema.decodeUnknownSync(TicketResponseSchema)(await response.json());
 }
 
 export function sleep(ms: number): Promise<void> {

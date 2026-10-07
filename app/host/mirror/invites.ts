@@ -27,7 +27,7 @@
 import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { errorMessageOf } from "@shared/errors";
-import { DeviceIdSchema } from "@shared/hub/protocol";
+import { DeviceIdZod } from "@shared/schemas/zodBridge";
 import { allContractModules } from "@shared/ipc/client";
 import type { InvitableScope } from "@shared/ipc/contract";
 import { MirrorWorktreePayloadSchema } from "@shared/ipc/modules/mirror";
@@ -42,7 +42,7 @@ type MirrorWorktreePayload = z.infer<typeof MirrorWorktreePayloadSchema>;
 
 // What the ask named, which the landing must match.
 const MirrorInviteAskSchema = z.strictObject({
-  peerDeviceId: DeviceIdSchema,
+  peerDeviceId: DeviceIdZod,
   // The peer's original, the id its landing names.
   sourceWorktreeId: WorktreeIdSchema,
   // The repo it belongs to, and where the copy lands when this device

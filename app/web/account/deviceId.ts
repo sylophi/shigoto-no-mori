@@ -6,6 +6,7 @@
 // browser is the same hub device across sessions, and clearing site
 // data re-enrolls it as a brand new device, exactly like a registry
 // reset does on desktop.
+import * as Schema from "effect/Schema";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import { readKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 
@@ -21,9 +22,7 @@ const UUID_SHAPE =
 
 function isValidDeviceId(value: string | null): value is string {
   return (
-    value !== null &&
-    UUID_SHAPE.test(value) &&
-    DeviceIdSchema.safeParse(value).success
+    value !== null && UUID_SHAPE.test(value) && Schema.is(DeviceIdSchema)(value)
   );
 }
 

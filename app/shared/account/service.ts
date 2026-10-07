@@ -1,6 +1,6 @@
 // The typed HTTP client for the hub Worker's device and ticket
 // endpoints. Pure: it takes a base URL and an injected fetch, uses the
-// shared route table and zod schemas from shared/hub/protocol.ts, and
+// shared route table and schemas from shared/hub/protocol.ts, and
 // imports no electron and no node builtins, so the account check script
 // can drive every method with a recording fetch stub.
 //
@@ -10,6 +10,7 @@
 // enroll response returned. Mixing the two would either leak the login
 // token past its one use or try to enroll under a credential the
 // endpoint does not accept.
+import * as Schema from "effect/Schema";
 import {
   DeviceListResponseSchema,
   EnrollRequestSchema,
@@ -149,10 +150,10 @@ async function fail(response: Response): Promise<never> {
   let message = `hub request failed with status ${response.status}`;
   let code: string | undefined;
   try {
-    const parsed = ErrorBodySchema.safeParse(await response.json());
-    if (parsed.success) {
-      message = parsed.data.error;
-      code = parsed.data.code;
+    const body: unknown = await response.json();
+    if (Schema.is(ErrorBodySchema)(body)) {
+      message = body.error;
+      code = body.code;
     }
   } catch {
     // Non-JSON or unreadable body. The status-code message stands.
@@ -201,9 +202,9 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
   return {
     async enroll(sessionToken, fields) {
       // Validate the body before sending so a bad deviceId/name/platform
-      // fails here with a clear zod error, not as a hub 400.
-      const body = EnrollRequestSchema.parse(fields);
-      return EnrollResponseSchema.parse(
+      // fails here with a clear schema error, not as a hub 400.
+      const body = Schema.decodeUnknownSync(EnrollRequestSchema)(fields);
+      return Schema.decodeUnknownSync(EnrollResponseSchema)(
         await credentialed(
           HUB_ROUTES.enroll,
           HUB_ROUTES.enroll.path,
@@ -214,13 +215,14 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     },
 
     async listDevices(credential) {
-      return DeviceListResponseSchema.parse(
+      const { devices } = Schema.decodeUnknownSync(DeviceListResponseSchema)(
         await credentialed(
           HUB_ROUTES.listDevices,
           HUB_ROUTES.listDevices.path,
           credential,
         ),
-      ).devices;
+      );
+      return [...devices];
     },
 
     async revoke(credential, deviceId, signal) {
@@ -235,7 +237,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     },
 
     async update(credential, deviceId, patch) {
-      const body = DevicePatchRequestSchema.parse(patch);
+      const body = Schema.decodeUnknownSync(DevicePatchRequestSchema)(patch);
       // 204 No Content on success, like revoke.
       await credentialed(
         HUB_ROUTES.updateDevice,
@@ -246,7 +248,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     },
 
     async mintTicket(credential, signal) {
-      return TicketResponseSchema.parse(
+      return Schema.decodeUnknownSync(TicketResponseSchema)(
         await credentialed(
           HUB_ROUTES.mintTicket,
           HUB_ROUTES.mintTicket.path,
@@ -258,10 +260,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
 
     async provisionTunnel(credential, port, signal) {
       // Validate before sending, like enroll, so a bad port fails here
-      // with a clear zod error instead of a hub 400.
-      const body = TunnelProvisionRequestSchema.parse({ port });
+      // with a clear schema error instead of a hub 400.
+      const body = Schema.decodeUnknownSync(TunnelProvisionRequestSchema)({
+        port,
+      });
       try {
-        return TunnelProvisionResponseSchema.parse(
+        return Schema.decodeUnknownSync(TunnelProvisionResponseSchema)(
           await credentialed(
             HUB_ROUTES.provisionTunnel,
             HUB_ROUTES.provisionTunnel.path,

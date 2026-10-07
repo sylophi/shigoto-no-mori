@@ -1,6 +1,7 @@
 // The HTTP surface: enrollment, device listing, revocation, tickets
 // and CORS. Runs inside workerd against real D1 and DO bindings, with
 // the stub Clerk verifier from helpers.ts.
+import * as Schema from "effect/Schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import {
@@ -105,7 +106,7 @@ describe("POST /devices/enroll", () => {
       again.devices.find((d) => d.deviceId === "dev-icon-newer")?.icon,
     ).toBe("toaster");
     expect(
-      DeviceListResponseSchema.parse(again).devices.find(
+      Schema.decodeUnknownSync(DeviceListResponseSchema)(again).devices.find(
         (d) => d.deviceId === "dev-icon-newer",
       )?.icon,
     ).toBe("desktop");
@@ -227,10 +228,14 @@ describe("POST /devices/enroll", () => {
     expect(await loser.json()).toMatchObject({ error: expect.any(String) });
     // The winner's credential authenticates and lists exactly its own
     // device, never a foreign account's.
-    const winnerBody = EnrollResponseSchema.parse(await winner.json());
+    const winnerBody = Schema.decodeUnknownSync(EnrollResponseSchema)(
+      await winner.json(),
+    );
     const list = await call(listRequest(winnerBody.credential));
     expect(list.status).toBe(200);
-    const body = DeviceListResponseSchema.parse(await list.json());
+    const body = Schema.decodeUnknownSync(DeviceListResponseSchema)(
+      await list.json(),
+    );
     expect(body.devices.map((device) => device.deviceId)).toEqual([deviceId]);
   });
 
@@ -260,7 +265,9 @@ describe("GET /devices", () => {
     await socket.untilPresence(["dev-list-a2-online"]);
     const response = await call(listRequest(a1.credential));
     expect(response.status).toBe(200);
-    const body = DeviceListResponseSchema.parse(await response.json());
+    const body = Schema.decodeUnknownSync(DeviceListResponseSchema)(
+      await response.json(),
+    );
     const byId = new Map(
       body.devices.map((device) => [device.deviceId, device]),
     );

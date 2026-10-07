@@ -55,7 +55,7 @@ export const DEVICE_MARKS = [
   "gamepad",
 ] as const;
 
-const DEVICE_ICONS = [...DEVICE_SHAPES, ...DEVICE_MARKS] as const;
+export const DEVICE_ICONS = [...DEVICE_SHAPES, ...DEVICE_MARKS] as const;
 
 export type DeviceShape = (typeof DEVICE_SHAPES)[number];
 export type DeviceIcon = DeviceShape | (typeof DEVICE_MARKS)[number];
