@@ -1,10 +1,10 @@
-import type { z } from "zod";
 import type {
   BroadcastDef,
   Contract,
   ContractModule,
   InvokeDef,
 } from "./contract";
+import type { Decoded, Encoded } from "./schema";
 
 // Internals stay keyed on Contract. The public aliases at the bottom
 // unwrap M["calls"] exactly once, so module wrapping never leaks into
@@ -17,30 +17,30 @@ type BroadcastKeysOf<C extends Contract> = {
   [K in keyof C]: C[K] extends BroadcastDef ? K : never;
 }[keyof C];
 
-// Inputs flow through `schema.parse(...)`. Producers (renderer client,
-// broadcast caller) provide the wire shape (`z.input`); consumers
-// (handler, broadcast subscriber) see the parsed shape (`z.output`).
-// For plain object schemas the two collapse, but they diverge for
-// z.coerce / preprocess / .default / .transform.
-type ClientIn<D> = D extends InvokeDef ? z.input<D["input"]> : never;
-type HandlerIn<D> = D extends InvokeDef ? z.output<D["input"]> : never;
-type Out<D> = D extends InvokeDef ? z.output<D["output"]> : never;
+// Inputs are decoded on arrival. Producers (renderer client, broadcast
+// caller) provide the wire shape (`Encoded`); consumers (handler,
+// broadcast subscriber) see the decoded shape (`Decoded`). For plain
+// object schemas the two collapse, but they diverge for defaults and
+// transforms.
+type ClientIn<D> = D extends InvokeDef ? Encoded<D["input"]> : never;
+type HandlerIn<D> = D extends InvokeDef ? Decoded<D["input"]> : never;
+type Out<D> = D extends InvokeDef ? Decoded<D["output"]> : never;
 
 type BroadcastSubscriberPayload<D> = D extends BroadcastDef
-  ? z.output<D["payload"]>
+  ? Decoded<D["payload"]>
   : never;
 
 type BroadcastProducerPayloadOf<
   C extends Contract,
   K extends keyof C,
-> = C[K] extends BroadcastDef ? z.input<C[K]["payload"]> : never;
+> = C[K] extends BroadcastDef ? Encoded<C[K]["payload"]> : never;
 
-// `z.void()` infers as `void`. Map void inputs to a zero-arg call so
+// A void input schema decodes to `void`. Map void inputs to a zero-arg call so
 // no-input clients don't force callers to pass `undefined`.
 type Args<I> = [I] extends [void] ? [] : [input: I];
 
 // Handlers are always called positionally as `(input, context)`. Even
-// when the input schema is `z.void()`, the registrar still passes
+// when the input schema is void, the registrar still passes
 // `undefined` in slot 0 so the `context` slot stays at index 1; using
 // `Args<I>` here would let a void-input handler typecheck as
 // `(ctx) => ...` and silently receive `undefined` at runtime.

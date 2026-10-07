@@ -36,6 +36,7 @@ import {
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
+import { safeDecode } from "@shared/ipc/schema";
 import { queryKeys } from "@/lib/queryKeys";
 import { deviceStatusView } from "./deviceStatus";
 import { remoteDeviceStore } from "./devices";
@@ -71,8 +72,10 @@ export async function writeSharedSetting(
 // in. The bridge forwards a peer's pushes wholesale, so the copy is
 // parsed against the contract's schema rather than trusted.
 function mergePeerSharedSettings(payload: unknown): void {
-  const parsed =
-    sharedSettingsContract.calls.changed.payload.safeParse(payload);
+  const parsed = safeDecode(
+    sharedSettingsContract.calls.changed.payload,
+    payload,
+  );
   if (!parsed.success) return;
   window.api.sharedSettings.merge(parsed.data).catch(() => undefined);
 }

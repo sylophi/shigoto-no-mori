@@ -1,8 +1,8 @@
-import { z } from "zod";
+import type { ContractSchema } from "./schema";
 
 export type InvokeDef<
-  I extends z.ZodTypeAny = z.ZodTypeAny,
-  O extends z.ZodTypeAny = z.ZodTypeAny,
+  I extends ContractSchema = ContractSchema,
+  O extends ContractSchema = ContractSchema,
   // The channel name as written, so a channel-keyed table can be typed
   // from the contracts (ChannelHandlers in types.ts).
   Ch extends string = string,
@@ -66,7 +66,7 @@ export type InvokeDef<
 
 export type InvitableScope = "landing" | "copy" | "project";
 
-export type BroadcastDef<P extends z.ZodTypeAny = z.ZodTypeAny> = {
+export type BroadcastDef<P extends ContractSchema = ContractSchema> = {
   kind: "broadcast";
   channel: string;
   payload: P;
@@ -94,8 +94,8 @@ export type ContractModule<C extends Contract = Contract> = {
 
 export const invoke = <
   Ch extends string,
-  I extends z.ZodTypeAny,
-  O extends z.ZodTypeAny,
+  I extends ContractSchema,
+  O extends ContractSchema,
 >(
   channel: Ch,
   input: I,
@@ -129,7 +129,7 @@ export const invoke = <
   invitable: opts?.invitable,
 });
 
-export const broadcast = <P extends z.ZodTypeAny>(
+export const broadcast = <P extends ContractSchema>(
   channel: string,
   payload: P,
   opts?: { remote?: boolean },

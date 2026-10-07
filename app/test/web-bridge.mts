@@ -209,6 +209,39 @@ it("stubs: read-classified channels answer structural defaults, the previewTheme
     }),
     NO_STRUCTURAL_STUB,
   );
+  // The same rules over an Effect schema: optional fields are left
+  // out, required ones built, and an arm is only fabricated when
+  // allowed.
+  const Schema = await import("effect/Schema");
+  const effectUnion = Schema.Union([
+    Schema.Struct({ t: Schema.Literal("a"), n: Schema.Int }),
+    Schema.Struct({ t: Schema.Literal("b") }),
+  ]);
+  assert.equal(
+    stubValueFor(effectUnion, { fabricateArms: false }),
+    NO_STRUCTURAL_STUB,
+  );
+  assert.equal(
+    Schema.is(effectUnion)(stubValueFor(effectUnion, { fabricateArms: true })),
+    true,
+  );
+  assert.deepEqual(
+    stubValueFor(
+      Schema.Struct({
+        name: Schema.String,
+        note: Schema.optional(Schema.NonEmptyString),
+      }),
+      { fabricateArms: false },
+    ),
+    { name: "" },
+  );
+  assert.equal(
+    stubValueFor(
+      Schema.Struct({ state: Schema.Literals(["granted", "denied"]) }),
+      { fabricateArms: false },
+    ),
+    NO_STRUCTURAL_STUB,
+  );
 });
 
 it("fail-closed: mutation-shaped and unclassified channels reject on the web instead of reporting stub success", async () => {

@@ -4,10 +4,10 @@
 //
 // PROTOCOL INVARIANT: a field whose value is undefined is OMITTED from
 // the frame. JSON.stringify already drops undefined object properties,
-// and a reader sees the absent field as undefined again, so z.void()
+// and a reader sees the absent field as undefined again, so void
 // inputs, outputs and broadcast payloads survive the wire unchanged:
-// the registrar's `def.input.parse(undefined)` behaves exactly as it
-// does on the Electron wire.
+// the registrar's decode of undefined behaves exactly as it does on
+// the Electron wire.
 //
 // Frame size: the server caps INBOUND frames at 1 MiB (server.ts
 // maxPayload, MAX_INBOUND_FRAME_BYTES below). That bound is about the

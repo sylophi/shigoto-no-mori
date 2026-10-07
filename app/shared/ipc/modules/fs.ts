@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { DirectoryListingSchema, PathPayloadSchema } from "@shared/schemas";
 
@@ -19,10 +19,10 @@ export const fsContract = defineContract("host", {
   scanForGitRepos: invoke(
     "fs:scanForGitRepos",
     PathPayloadSchema,
-    z.array(z.string()),
+    Schema.Array(Schema.String),
     { remote: true, gated: true },
   ),
-  isGitRepo: invoke("fs:isGitRepo", PathPayloadSchema, z.boolean(), {
+  isGitRepo: invoke("fs:isGitRepo", PathPayloadSchema, Schema.Boolean, {
     remote: true,
     gated: true,
   }),

@@ -16,14 +16,17 @@
 // permission-shaped query can never silently answer "granted". Only a
 // channel on the bridge's explicit allowlist (where the arm choice has
 // been judged harmless) may pass fabricateArms to opt back in.
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 import { z } from "zod";
+import { type ContractSchema, safeDecode } from "@shared/ipc/schema";
 
 // Distinct from every legal stub value (undefined included), so the
 // caller can tell "no safe stub exists" from "the stub is undefined".
 export const NO_STRUCTURAL_STUB = Symbol("no structural stub");
 
-// Candidate scalars tried against the schema first, cheapest first.
-// This resolves most read-shaped defs outright: void and unknown accept
+// Candidates tried against the schema first, cheapest first. They
+// resolve most read-shaped defs outright: void and unknown accept
 // undefined, booleans accept false, counts accept 0, ids accept "",
 // nullables accept null, lists accept [] and loose objects and records
 // accept {}.
@@ -36,21 +39,56 @@ export type StubOptions = {
 };
 
 export function stubValueFor(
+  schema: ContractSchema,
+  opts: StubOptions,
+): unknown | typeof NO_STRUCTURAL_STUB {
+  // The list and object candidates are fresh per call, so no two
+  // stubs share one.
+  for (const candidate of [...SCALAR_CANDIDATES, [], {}]) {
+    const result = safeDecode(schema, candidate);
+    if (result.success) return result.data;
+  }
+  return Schema.isSchema(schema)
+    ? stubFromAst(schema.ast, opts)
+    : stubFromZod(schema as z.ZodType, opts);
+}
+
+// Objects with required members are built recursively from the same
+// rules, so a nested enum still blocks the whole stub unless
+// fabrication was allowed. Fabrication, allowlist-only: literals and
+// enums pin or pick a value, a union (discriminated included) takes its
+// first arm, and bounded scalars get an obviously synthetic placeholder.
+function stubFromAst(
+  ast: SchemaAST.AST,
+  opts: StubOptions,
+): unknown | typeof NO_STRUCTURAL_STUB {
+  if (SchemaAST.isObjects(ast)) {
+    const out: Record<string, unknown> = {};
+    for (const field of ast.propertySignatures) {
+      if (SchemaAST.isOptional(field.type)) continue;
+      const value = stubValueFor(Schema.make(field.type), opts);
+      if (value === NO_STRUCTURAL_STUB) return NO_STRUCTURAL_STUB;
+      if (value !== undefined) out[String(field.name)] = value;
+    }
+    return out;
+  }
+  if (!opts.fabricateArms) return NO_STRUCTURAL_STUB;
+  if (SchemaAST.isLiteral(ast)) return ast.literal;
+  if (SchemaAST.isUnion(ast)) {
+    const first = ast.types[0];
+    return first === undefined
+      ? NO_STRUCTURAL_STUB
+      : stubValueFor(Schema.make(first), opts);
+  }
+  if (SchemaAST.isString(ast)) return "unavailable";
+  if (SchemaAST.isNumber(ast)) return 0;
+  return NO_STRUCTURAL_STUB;
+}
+
+function stubFromZod(
   schema: z.ZodType,
   opts: StubOptions,
 ): unknown | typeof NO_STRUCTURAL_STUB {
-  for (const candidate of SCALAR_CANDIDATES) {
-    const result = schema.safeParse(candidate);
-    if (result.success) return result.data;
-  }
-  const asArray = schema.safeParse([]);
-  if (asArray.success) return asArray.data;
-  const asObject = schema.safeParse({});
-  if (asObject.success) return asObject.data;
-
-  // Objects with required members are built recursively from the same
-  // rules, so a nested enum still blocks the whole stub unless
-  // fabrication was allowed.
   if (schema instanceof z.ZodObject) {
     const out: Record<string, unknown> = {};
     for (const [key, field] of Object.entries<z.ZodType>(schema.shape)) {
@@ -60,12 +98,7 @@ export function stubValueFor(
     }
     return out;
   }
-
   if (!opts.fabricateArms) return NO_STRUCTURAL_STUB;
-
-  // Fabrication, allowlist-only: literals and enums pin or pick a
-  // value, a union (discriminated included) takes its first arm, and
-  // bounded scalars get an obviously synthetic placeholder.
   if (schema instanceof z.ZodLiteral) return schema.value;
   if (schema instanceof z.ZodEnum) return schema.options[0];
   if (schema instanceof z.ZodUnion) {
