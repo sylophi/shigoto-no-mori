@@ -26,6 +26,9 @@
       "ignoreDependencies": [
         // Loaded from an inline script in index.html, in dev only.
         "react-grab",
+        // Runs as the git hook its install script writes; knip only sees
+        // it through that hook, which a CI install without scripts lacks.
+        "lefthook",
       ],
     },
     "hub": {
