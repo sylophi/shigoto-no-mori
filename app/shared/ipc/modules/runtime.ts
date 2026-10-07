@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   MoveDataDirPayloadSchema,
@@ -26,7 +25,7 @@ export const runtimeContract = defineContract("host", {
     gated: true,
     movesHostState: false,
   }),
-  nuke: invoke("runtime:nuke", z.void(), z.void(), { remote: false }),
+  nuke: invoke("runtime:nuke", VoidSchema, VoidSchema, { remote: false }),
   moveDataDir: invoke(
     "runtime:moveDataDir",
     MoveDataDirPayloadSchema,
