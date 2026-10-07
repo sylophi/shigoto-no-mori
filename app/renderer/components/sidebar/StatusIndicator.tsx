@@ -1,13 +1,6 @@
-import {
-  ArrowDown,
-  ArrowDownUp,
-  ArrowUp,
-  CloudUpload,
-  FileDiff,
-  GitCompareArrows,
-} from "lucide-react";
-import { assertNever } from "@/lib/utils";
-import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
+import { FileDiff } from "lucide-react";
+import { worktreeSyncView } from "@/lib/syncState";
+import type { Worktree } from "@shared/schemas";
 import { StatusPill } from "./StatusPill";
 
 interface StatusIndicatorProps {
@@ -38,74 +31,20 @@ export function ChangedFilesPill({ worktree }: StatusIndicatorProps) {
   );
 }
 
+// Just a "needs attention" signal for the sidebar: icon and count, in
+// the state's tone (lib/syncState). The detail header carries the
+// actions and full labels.
 export function RemoteSyncPill({ worktree }: StatusIndicatorProps) {
-  const state = deriveRemoteSyncState(worktree);
-
-  // Each remote-sync state has the same compact shape: icon + (optional)
-  // count, tone-colored. The detail header carries the actions and full
-  // labels; this is just a "needs attention" signal for the sidebar.
-  switch (state.kind) {
-    case "detached":
-    case "synced":
-      return null;
-    case "publish":
-      // Without a remote there's no action to take, so the icon would just be
-      // noise on every "personal" repo without an origin. Detail header still
-      // shows the disabled Publish button for discoverability.
-      if (!state.canPublish) return null;
-      return (
-        <StatusPill
-          icon={CloudUpload}
-          tone="violet"
-          tip="Branch not yet published"
-          aria-label="Unpublished branch"
-        />
-      );
-    case "ahead":
-      return (
-        <StatusPill
-          icon={ArrowUp}
-          tone="emerald"
-          tip={`${state.ahead} commit${state.ahead === 1 ? "" : "s"} to push`}
-          aria-label={`${state.ahead} ahead`}
-        >
-          {state.ahead}
-        </StatusPill>
-      );
-    case "behind":
-      return (
-        <StatusPill
-          icon={ArrowDown}
-          tone="sky"
-          tip={`${state.behind} commit${state.behind === 1 ? "" : "s"} to pull`}
-          aria-label={`${state.behind} behind`}
-        >
-          {state.behind}
-        </StatusPill>
-      );
-    case "pullAndPush":
-      return (
-        <StatusPill
-          icon={ArrowDownUp}
-          tone="indigo"
-          tip={`Mergeable: ${state.ahead} ahead, ${state.behind} behind`}
-          aria-label={`${state.ahead} ahead, ${state.behind} behind`}
-        >
-          {state.ahead}/{state.behind}
-        </StatusPill>
-      );
-    case "diverged":
-      return (
-        <StatusPill
-          icon={GitCompareArrows}
-          tone="rose"
-          tip={`Diverged: ${state.ahead} ahead, ${state.behind} behind`}
-          aria-label={`Diverged ${state.ahead}/${state.behind}`}
-        >
-          {state.ahead}/{state.behind}
-        </StatusPill>
-      );
-    default:
-      return assertNever(state);
-  }
+  const { badge } = worktreeSyncView(worktree);
+  if (!badge) return null;
+  return (
+    <StatusPill
+      icon={badge.Icon}
+      tone={badge.tone}
+      tip={badge.tip}
+      aria-label={badge.label}
+    >
+      {badge.count}
+    </StatusPill>
+  );
 }
