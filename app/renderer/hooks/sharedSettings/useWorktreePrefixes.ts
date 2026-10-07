@@ -25,9 +25,6 @@ export function useWorktreePrefixes(list: WorktreePrefixList): string[] {
   return parseWorktreePrefixes(useSharedStringSetting(KEYS[list]));
 }
 
-export const useHiddenWorktreePrefixes = () => useWorktreePrefixes("hidden");
-export const useGroupedWorktreePrefixes = () => useWorktreePrefixes("grouped");
-
 // The writer. The whole list is one value, which holds only so much:
 // a list past that is refused out loud rather than cut short. The
 // answer is the list as stored, or null when it was refused.

@@ -54,7 +54,7 @@ import { SidebarList } from "./SidebarList";
 import { RowContent } from "./RowContent";
 import type { RowHandlers } from "./VirtualRow";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
-import { withToggled } from "@/lib/toggleSet";
+import { withMember, withToggled } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
 
 // The app sidebar, one for both shells: the brand header, the forest
@@ -201,9 +201,9 @@ function Forest({
   const [shutOwners, setShutOwners] = useState<Set<string>>(() => new Set());
   // The prefix groups shut inside a project, by group key and prefix.
   // Transient too: every group starts open.
-  const [shutWorktreeGroups, setShutWorktreeGroups] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [shutWorktreeGroups, setShutWorktreeGroups] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const worktreeGroupKey = (groupId: string, prefix: string) =>
     `${groupKeyOf(groupId)}\n${prefix}`;
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -238,11 +238,7 @@ function Forest({
     }
     if (row.kind === "worktree-group" && !row.expanded) {
       const key = worktreeGroupKey(row.groupId, row.prefix);
-      setShutWorktreeGroups((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
+      setShutWorktreeGroups((prev) => withMember(prev, key, false));
       return true;
     }
     if (row.kind === "inbox-shelf" && !row.expanded) {
