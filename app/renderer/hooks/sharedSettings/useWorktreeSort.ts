@@ -3,6 +3,7 @@
 // holds on all of them, like the merged group it orders. Unset, or
 // written by a build with a mode this one doesn't know, reads as the
 // name order.
+import * as Schema from "effect/Schema";
 import { type WorktreeSortMode, WorktreeSortModeSchema } from "@shared/schemas";
 import { sharedSettingKeys } from "@shared/sharedSettings";
 import {
@@ -12,12 +13,10 @@ import {
 
 // Null: no project open, which reads as the name order.
 export function useWorktreeSort(groupKey: string | null): WorktreeSortMode {
-  const parsed = WorktreeSortModeSchema.safeParse(
-    useSharedStringSetting(
-      groupKey === null ? undefined : sharedSettingKeys.worktreeSort(groupKey),
-    ),
+  const stored = useSharedStringSetting(
+    groupKey === null ? undefined : sharedSettingKeys.worktreeSort(groupKey),
   );
-  return parsed.success ? parsed.data : "name";
+  return Schema.is(WorktreeSortModeSchema)(stored) ? stored : "name";
 }
 
 export function useSetWorktreeSort(groupKey: string) {

@@ -3,7 +3,7 @@ import { isSafeRelPath } from "../git/gitPaths";
 import { ProjectScopedPayloadSchema } from "./zodPayloads";
 import { MergeMethodSchema } from "./pullRequest";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
-import { ProjectSortModeSchema, SidebarViewSchema } from "./project";
+import { ProjectSortModeZod, SidebarViewZod } from "./zodBridge";
 
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
@@ -447,13 +447,13 @@ export const ClientConfigSchema = z.object({
   // flat cross-project inbox. A preference of the window rather than
   // of a host, so a hostless client keeps one too. Absent means the
   // tree.
-  sidebarView: SidebarViewSchema.optional(),
+  sidebarView: SidebarViewZod.optional(),
   // How the sidebar orders its projects. A preference of the window,
   // like the view above: the CLI never reads it, and a peer has no say
   // in how this machine lists them. Absent means the manual order
   // (renderer/hooks/projects/useProjectSort.ts is the only reader and
   // writer, and stores the default as nothing).
-  projectsSort: ProjectSortModeSchema.optional(),
+  projectsSort: ProjectSortModeZod.optional(),
   // Whether the sidebar's list of projects is split under a header per
   // owner (the org or user of each project's remote, Project.remote).
   // Kept like the sort above. On by default (absent = on), explicit

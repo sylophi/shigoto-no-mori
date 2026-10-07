@@ -11,11 +11,8 @@ import {
   SyncPullWorktreeResultSchema,
   SyncSendWorktreePayloadSchema,
 } from "@shared/ipc/modules/sync";
-import {
-  CommitHashSchema,
-  GitRefNameSchema,
-  WorktreeIdSchema,
-} from "@shared/schemas";
+import { CommitHashSchema, WorktreeIdSchema } from "@shared/schemas";
+import { GitRefNameZod } from "@shared/schemas/zodBridge";
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
 // remote work"): a worktree kept identical on two devices, every file,
@@ -200,7 +197,7 @@ const MirrorEndpointStateSchema = z.strictObject({
 // The git half of a mirror (host/mirror/gitState.ts): HEAD, the tip and
 // the staged tree, as one document either side can produce and apply.
 const GitHeadSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("branch"), branch: GitRefNameSchema }),
+  z.strictObject({ kind: z.literal("branch"), branch: GitRefNameZod }),
   z.strictObject({ kind: z.literal("detached") }),
 ]);
 

@@ -19,7 +19,7 @@ import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 
 interface NewWorktreeButtonProps {
-  projects: Project[];
+  projects: readonly Project[];
   // Peers' forests, so a project that lives only on another machine
   // (or on this one and others) can be created into from here.
   remote: RemoteForestItem[];

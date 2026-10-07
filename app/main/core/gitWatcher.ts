@@ -152,7 +152,7 @@ function openWatched(projectId: string, gitDir: string): void {
 // together cover every way a project is added, removed or relocated.
 export function reconcileGitWatchers(): void {
   if (deps === null) return;
-  let projects: Project[];
+  let projects: readonly Project[];
   try {
     projects = (deps.projects ?? loadProjects)();
   } catch {

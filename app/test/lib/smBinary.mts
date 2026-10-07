@@ -6,6 +6,7 @@
 // first in a run (and later runs on unchanged sources) skip the build.
 //
 // covers: cli/**
+import * as Schema from "effect/Schema";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -108,5 +109,5 @@ export async function addProject(
   const { docs } = await sm("projects", "add", "--", path);
   const project = docs.findLast((doc) => typeof doc.id === "string");
   assert.ok(project, `projects add emitted no project for ${path}`);
-  return ProjectSchema.parse(project);
+  return Schema.decodeUnknownSync(ProjectSchema)(project);
 }

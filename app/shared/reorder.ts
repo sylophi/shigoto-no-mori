@@ -2,11 +2,11 @@
 // the new order to disk) and the renderer (for the optimistic React
 // Query cache write before the IPC round-trip resolves).
 export function reorderProjects<T extends { id: string }>(
-  items: T[],
+  items: readonly T[],
   draggedId: string,
   targetId: string,
   position: "before" | "after",
-): T[] {
+): readonly T[] {
   if (draggedId === targetId) return items;
 
   const draggedIndex = items.findIndex((p) => p.id === draggedId);

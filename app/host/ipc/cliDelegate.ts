@@ -10,6 +10,7 @@
 // is validated against the shared zod schemas, so drift fails loudly
 // here instead of surfacing as undefined-flavored breakage in the
 // renderer.
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import {
   CarryOverReportSchema,
@@ -556,7 +557,7 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
   // changed under the cache: a project removed and cloned again at the
   // same path within the TTL would otherwise read as the old one.
   forgetRepoIdentity(path);
-  return ProjectSchema.parse(doc);
+  return Schema.decodeUnknownSync(ProjectSchema)(doc);
 }
 
 // The command that runs a package.json script through the CLI
@@ -789,7 +790,7 @@ export async function projectsRelocateViaCli(
   const final = finalOkDoc(result, "sm projects relocate failed", {
     projectId,
   });
-  const project = ProjectSchema.parse(final["project"]);
+  const project = Schema.decodeUnknownSync(ProjectSchema)(final["project"]);
   // Like a registration, the identity cached for the path may be
   // another repo's that once sat there.
   forgetRepoIdentity(project.path);
@@ -957,16 +958,23 @@ export async function listWorktreeIdentitiesViaCli(
   return z.array(WorktreeIdentitySchema).parse(doc);
 }
 
+const decodeProjectRows = Schema.decodeUnknownSync(
+  Schema.Array(ProjectRowSchema),
+);
+const decodeProjectIcon = Schema.decodeUnknownSync(
+  Schema.NullOr(ProjectIconSchema),
+);
+
 // Every registered project, terrier's merged in, decorated for the
 // sidebar. `refreshIcons` re-scans projects the icon cache remembers
 // as icon-less (the first list of a session).
 export async function listProjectsViaCli(
   opts: { refreshIcons?: boolean } = {},
-): Promise<ProjectRow[]> {
+): Promise<readonly ProjectRow[]> {
   const args = ["projects", "list"];
   if (opts.refreshIcons) args.push("--refresh-icons");
   const doc = await readDoc(args, "sm projects list failed");
-  return z.array(ProjectRowSchema).parse(doc);
+  return decodeProjectRows(doc);
 }
 
 // The icon's bytes, or null. --refresh-icons re-scans a remembered
@@ -980,7 +988,7 @@ export async function projectIconViaCli(
     "sm projects icon failed",
     { projectId },
   );
-  return ProjectIconSchema.nullable().parse(doc);
+  return decodeProjectIcon(doc);
 }
 
 // Where a new worktree would land, and under what name: `name` when

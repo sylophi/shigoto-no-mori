@@ -6,9 +6,9 @@ import type { Project, ProjectSortMode } from "@shared/schemas";
 // fields populated by the projects:list handler. Mirrors the package.json
 // scripts sort in sortPackageScripts.ts.
 export function sortProjects(
-  projects: Project[],
+  projects: readonly Project[],
   mode: ProjectSortMode,
-): Project[] {
+): readonly Project[] {
   return sortByProject(projects, mode, (project) => project);
 }
 
@@ -16,10 +16,10 @@ export function sortProjects(
 // can sort its groups (a peer-only project among the local ones) by
 // the one rule.
 export function sortByProject<T>(
-  items: T[],
+  items: readonly T[],
   mode: ProjectSortMode,
   projectOf: (item: T) => Project,
-): T[] {
+): readonly T[] {
   const byName = (a: T, b: T) =>
     projectOf(a).name.localeCompare(projectOf(b).name);
   switch (mode) {

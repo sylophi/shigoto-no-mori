@@ -236,6 +236,16 @@
     "accepts": ["projects", "inbox"],
     "rejects": ["tree"]
   },
+  "CloneFolderNameSchema": {
+    "accepts": ["port-pool-fork"],
+    "normalizes": [
+      {
+        "input": " port-pool-fork ",
+        "output": "port-pool-fork"
+      }
+    ],
+    "rejects": ["   ", "forks/port-pool", "forks\\port-pool", ".", ".."]
+  },
   "CloneProjectPayloadSchema": {
     "accepts": [
       {

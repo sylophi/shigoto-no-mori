@@ -49,11 +49,8 @@ import {
   type ChannelHandle,
 } from "@shared/ipc/socket/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
-import {
-  CommitHashSchema,
-  GitRefNameSchema,
-  type Project,
-} from "@shared/schemas";
+import { CommitHashSchema, type Project } from "@shared/schemas";
+import { GitRefNameZod } from "@shared/schemas/zodBridge";
 import {
   bundleCreateViaCli,
   bundleUnpackViaCli,
@@ -282,7 +279,7 @@ async function openLink(
 const AskSchema = z.discriminatedUnion("ask", [
   z.strictObject({
     ask: z.literal("tip"),
-    branch: GitRefNameSchema.refine(
+    branch: GitRefNameZod.refine(
       (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
     ),
   }),
@@ -315,7 +312,7 @@ const TipAnswerSchema = z.strictObject({
   commit: CommitHashSchema.nullable(),
 });
 const CloneFactsSchema = z.strictObject({
-  branch: GitRefNameSchema,
+  branch: GitRefNameZod,
   remoteUrl: z.string().nullable(),
 });
 type CloneFacts = z.infer<typeof CloneFactsSchema>;

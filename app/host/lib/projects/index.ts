@@ -89,18 +89,18 @@ export async function relocateProject(
 
 // The last-read list, for the sync callers. Empty until the first
 // refresh (main awaits one at boot).
-export function loadProjects(): Project[] {
+export function loadProjects(): readonly Project[] {
   return snapshot.map(toProject);
 }
 
 // A freshly read list, for the flows that act on every project (nuke,
 // the data dir move).
-export async function listProjects(): Promise<Project[]> {
+export async function listProjects(): Promise<readonly Project[]> {
   return (await refreshProjects()).map(toProject);
 }
 
 // The sidebar's list: the rows as ProjectsList serves them.
-export async function listProjectsWithStatus(): Promise<Project[]> {
+export async function listProjectsWithStatus(): Promise<readonly Project[]> {
   const rows = await refreshProjects();
   return rows.map((row) =>
     Object.assign(toProject(row), {
@@ -158,7 +158,7 @@ export async function findProjectByIdentityOrThrow(
 // this test. Takes the caller's already-loaded list so the guard adds
 // no extra read.
 export function findProjectInsideDataDir(
-  projects: Project[],
+  projects: readonly Project[],
 ): Project | undefined {
   const root = dataDir();
   return projects.find((p) => isSameOrInside(toAbsolute(p.path), root));
