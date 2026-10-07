@@ -1,7 +1,7 @@
 import { placeByStack, trunkOf } from "@shared/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
 import { peerProjectKey } from "@shared/schemas/config";
-import { isHiddenByPrefix } from "@shared/sharedSettings";
+import { groupPrefixOf, isHiddenByPrefix } from "@shared/sharedSettings";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
@@ -50,6 +50,13 @@ interface BuildSidebarRowsArgs {
   openShelves: Record<GroupShelf, GroupIdSet>;
   // Worktrees starting with one of these fold away like shelved ones.
   hiddenPrefixes: readonly string[];
+  // Gathers the open project's worktrees starting with one of
+  // `prefixes` under a header per prefix (groupPrefixOf), those `shut`
+  // names drawn as their header alone. Null groups nothing.
+  byPrefix: {
+    prefixes: readonly string[];
+    shut: (groupId: string, prefix: string) => boolean;
+  } | null;
   arrangeMode: boolean;
   // Splits the list of projects under a header per owner (ownerOf),
   // the owners where `order` puts them, the ones in `shut` drawn as
@@ -142,6 +149,7 @@ export function buildSidebarRows({
   worktreeSort,
   openShelves,
   hiddenPrefixes,
+  byPrefix,
   arrangeMode,
   byOwner,
   remote,
@@ -259,8 +267,8 @@ export function buildSidebarRows({
 
   const rows: SidebarRow[] = [];
   let pinned: SidebarRow | undefined;
-  // The toggle each row behind a shut fold stands behind, for
-  // revealKey.
+  // The toggle (or group header) each row behind a shut fold stands
+  // behind, for revealKey.
   const shutFoldRows = new Map<string, string>();
   // Every group is in the order, which was built over a superset of
   // these inputs. The fallback only keeps the comparator total.
@@ -375,7 +383,60 @@ export function buildSidebarRows({
         item.stackRail = rail;
         return item;
       });
-    rows.push(...placed(localVisible, remoteVisible, null));
+    // The open rows a prefix gathers sit under its header, after the
+    // rest, the prefixes in their (sorted) order. Each group places its
+    // own stacks, so a rail never runs across a header.
+    const grouped = new Map<
+      string,
+      { local: Worktree[]; peers: RemoteRow[] }
+    >();
+    const groupOf = (worktree: Worktree) => {
+      const prefix = byPrefix && groupPrefixOf(worktree, byPrefix.prefixes);
+      if (!prefix) return null;
+      let prefixed = grouped.get(prefix);
+      if (!prefixed) {
+        prefixed = { local: [], peers: [] };
+        grouped.set(prefix, prefixed);
+      }
+      return prefixed;
+    };
+    rows.push(
+      ...placed(
+        localVisible.filter((worktree) => {
+          const prefixed = groupOf(worktree);
+          prefixed?.local.push(worktree);
+          return !prefixed;
+        }),
+        remoteVisible.filter((row) => {
+          const prefixed = groupOf(row.worktree);
+          prefixed?.peers.push(row);
+          return !prefixed;
+        }),
+        null,
+      ),
+    );
+    for (const prefix of byPrefix?.prefixes ?? []) {
+      const prefixed = grouped.get(prefix);
+      if (!prefixed) continue;
+      const shut = byPrefix?.shut(groupId, prefix) ?? false;
+      const headerKey = `g:${groupId}:${prefix}`;
+      rows.push({
+        kind: "worktree-group",
+        key: headerKey,
+        groupId,
+        prefix,
+        count: prefixed.local.length + prefixed.peers.length,
+        expanded: !shut,
+      });
+      if (!shut) {
+        rows.push(...placed(prefixed.local, prefixed.peers, null));
+        continue;
+      }
+      for (const worktree of prefixed.local) {
+        shutFoldRows.set(worktreeRowKey(undefined, worktree.id), headerKey);
+      }
+      for (const row of prefixed.peers) shutFoldRows.set(row.key, headerKey);
+    }
     for (const shelf of GROUP_SHELVES) {
       const count = localShelves[shelf].length + remoteShelves[shelf].length;
       if (count === 0) continue;
@@ -419,8 +480,8 @@ export function buildSidebarRows({
     // "no projects", which the shell already has its own answer for.
     emptyMessage: null,
     revealKey: (_projectId, worktreeId, deviceId) => {
-      // A row behind a shut shelved or hidden fold: its toggle
-      // stands in for it.
+      // A row behind a shut shelved or hidden fold, or a shut group:
+      // its toggle or header stands in for it.
       const shown = (key: string) =>
         drawn.some((r) => r.key === key) ? key : shutFoldRows.get(key);
       // A peer's row is device-qualified (remoteWorktreeRows). It

@@ -1,27 +1,51 @@
-// The hidden worktree prefixes: a worktree whose name or branch starts
-// with one of them folds away like a shelved one, behind its project's
-// "N hidden" toggle (and the inbox's Hidden shelf). A shared setting,
-// so it applies the moment it changes (outside the page's Save) and
-// holds on every device.
+// A worktree prefix list. Hidden: a worktree whose name or branch
+// starts with one of them folds away like a shelved one, behind its
+// project's "N hidden" toggle (and the inbox's Hidden shelf). Grouped:
+// it sits under a header for its prefix in its project's tree. Shared
+// settings, so each applies the moment it changes (outside the page's
+// Save) and holds on every device.
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
 import { Input } from "@/components/ui/input";
-import { normalizeHiddenPrefixes } from "@shared/sharedSettings";
+import { normalizeWorktreePrefixes } from "@shared/sharedSettings";
 import { SectionIntro } from "@/components/ui/section-heading";
 import {
-  useHiddenWorktreePrefixes,
-  useSaveHiddenWorktreePrefixes,
-} from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
+  type WorktreePrefixList,
+  useSaveWorktreePrefixes,
+  useWorktreePrefixes,
+} from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useSharedSettingsSettled } from "@/hooks/sharedSettings/useSharedSettings";
 
 const sameList = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((prefix, i) => prefix === b[i]);
 
-export function HiddenWorktreesSection() {
-  const stored = useHiddenWorktreePrefixes();
-  const save = useSaveHiddenWorktreePrefixes();
+const COPY: Record<
+  WorktreePrefixList,
+  { title: string; intro: string; placeholder: string }
+> = {
+  hidden: {
+    title: "Hidden worktrees",
+    intro: "Hide worktrees whose name or branch starts with any of these.",
+    placeholder: "exp/",
+  },
+  grouped: {
+    title: "Grouped worktrees",
+    intro:
+      "Group worktrees whose name or branch starts with one of these under a header for it.",
+    placeholder: "v3/",
+  },
+};
+
+export function WorktreePrefixesSection({
+  list,
+}: {
+  list: WorktreePrefixList;
+}) {
+  const copy = COPY[list];
+  const stored = useWorktreePrefixes(list);
+  const save = useSaveWorktreePrefixes(list);
   // Every edit writes the whole list, so none may be made off a list
   // not read yet: it would replace the stored one everywhere.
   const settled = useSharedSettingsSettled();
@@ -33,7 +57,7 @@ export function HiddenWorktreesSection() {
   const prefixes = draft ?? stored;
 
   const commit = (next: string[]) => {
-    if (sameList(normalizeHiddenPrefixes(next), prefixes)) return true;
+    if (sameList(normalizeWorktreePrefixes(next), prefixes)) return true;
     const saved = save(next);
     if (saved === null) return false;
     setDraft(saved);
@@ -48,11 +72,12 @@ export function HiddenWorktreesSection() {
 
   return (
     <section className="space-y-3">
-      <SectionIntro title="Hidden worktrees">
-        Hide worktrees whose name or branch starts with any of these.
-      </SectionIntro>
+      <SectionIntro title={copy.title}>{copy.intro}</SectionIntro>
       {prefixes.length > 0 && (
-        <ul aria-label="Hidden prefixes" className="flex flex-wrap gap-1.5">
+        <ul
+          aria-label={`${copy.title}: prefixes`}
+          className="flex flex-wrap gap-1.5"
+        >
           {prefixes.map((prefix) => (
             <li key={prefix}>
               <Chip className="py-0.5 pr-1 font-mono">
@@ -78,7 +103,7 @@ export function HiddenWorktreesSection() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="exp/"
+          placeholder={copy.placeholder}
           aria-label="Prefix"
           disabled={!settled}
           className="w-56 px-3 py-1.5 font-mono text-sm"

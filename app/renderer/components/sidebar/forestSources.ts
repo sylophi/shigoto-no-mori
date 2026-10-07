@@ -12,7 +12,10 @@ import {
 } from "@/hooks/projects/useProjectSort";
 import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
-import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
+import {
+  useGroupedWorktreePrefixes,
+  useHiddenWorktreePrefixes,
+} from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { localDeviceId } from "@/lib/queryKeys";
 import { sortProjects } from "@/lib/sortProjects";
@@ -65,6 +68,7 @@ export function useForestSources({
   // the filter hides keeps naming it.
   const deviceBadges = useDeviceBadges();
   const hiddenPrefixes = useHiddenWorktreePrefixes();
+  const groupedPrefixes = useGroupedWorktreePrefixes();
   // The device filter narrows what the builders are handed rather than
   // what they do: one machine's rows only, the local ones or one
   // peer's. The queries above stay subscribed either way, so a pick
@@ -114,6 +118,7 @@ export function useForestSources({
     mirrors,
     deviceBadges,
     hiddenPrefixes,
+    groupedPrefixes,
     filter,
     activeFilter,
   };

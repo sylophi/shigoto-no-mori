@@ -20,7 +20,7 @@ import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullReques
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
-import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
+import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
 import { useNow } from "@/hooks/ui/useNow";
 import { useOverlays } from "@/hooks/ui/useOverlays";

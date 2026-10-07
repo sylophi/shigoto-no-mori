@@ -129,6 +129,17 @@ export type SidebarRow =
       count: number;
       expanded: boolean;
     }
+  // The head of the open project's worktrees gathered by a prefix
+  // (BuildSidebarRowsArgs.byPrefix). Shut, the rows are left out and
+  // `count` stands for them.
+  | {
+      kind: "worktree-group";
+      key: string;
+      groupId: string;
+      prefix: string;
+      count: number;
+      expanded: boolean;
+    }
   | {
       kind: "shelved-toggle";
       key: string;
@@ -188,6 +199,7 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   worktree: 49,
   "worktree-skeleton": 36,
   "worktree-error": 24,
+  "worktree-group": 32,
   "shelved-toggle": 24,
   "inbox-worktree": 66,
   "inbox-shelf": 36,
@@ -232,6 +244,7 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   worktree: WORKTREE_ROW_GAP,
   "worktree-skeleton": "px-2",
   "worktree-error": "px-2",
+  "worktree-group": "px-2",
   "shelved-toggle": "px-2",
   "inbox-worktree": WORKTREE_ROW_GAP,
   "inbox-shelf": "px-2 pb-1",
