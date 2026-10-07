@@ -320,7 +320,9 @@ const identityCache = ttlMapCache(10_000, (projectId: string) =>
 // value-only cache would miss on all of them. identityCache holding the
 // in-flight promise (ttlMapCache coalesces concurrent misses) is what
 // makes it one identity list per project rather than one per row.
-function projectIdentities(projectId: string): Promise<WorktreeIdentity[]> {
+function projectIdentities(
+  projectId: string,
+): Promise<readonly WorktreeIdentity[]> {
   return identityCache.get(projectId);
 }
 

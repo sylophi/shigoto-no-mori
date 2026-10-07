@@ -167,7 +167,7 @@ export function buildSidebarRows({
     // A failed refetch keeps its last data, but the group draws the
     // error row instead of it.
     if (!query || query.error) return;
-    for (const worktree of (query.data ?? []) as Worktree[]) {
+    for (const worktree of (query.data ?? []) as readonly Worktree[]) {
       const shelf = groupShelfOf(worktree, hiddenPrefixes);
       listedLocal.set(worktree.id, {
         groupId: project.id,
@@ -190,7 +190,7 @@ export function buildSidebarRows({
     );
   };
   const localRows = (
-    trees: Worktree[],
+    trees: readonly Worktree[],
     pullRequests: Record<string, PullRequest> | undefined,
     shelf: GroupShelf | null,
   ): LocalRow[] =>
@@ -308,7 +308,7 @@ export function buildSidebarRows({
         ? "worktree-error"
         : null;
     if (query && unlisted === null) {
-      for (const worktree of (query.data ?? []) as Worktree[]) {
+      for (const worktree of (query.data ?? []) as readonly Worktree[]) {
         const shelf = groupShelfOf(worktree, hiddenPrefixes);
         (shelf === null ? localVisible : localShelves[shelf]).push(worktree);
       }
@@ -353,10 +353,10 @@ export function buildSidebarRows({
     // gathered at its first layer's place. The trunk comes off
     // whichever listing the group has.
     const trunk =
-      trunkOf(query?.data as Worktree[] | undefined) ??
+      trunkOf(query?.data as readonly Worktree[] | undefined) ??
       trunkOf(group.remote[0]?.worktrees);
     const placed = (
-      local: Worktree[],
+      local: readonly Worktree[],
       peers: RemoteRow[],
       shelf: GroupShelf | null,
     ): SidebarRow[] =>

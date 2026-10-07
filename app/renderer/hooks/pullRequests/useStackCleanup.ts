@@ -26,7 +26,7 @@ interface StackCleanupDevice {
   isScoped: boolean;
   // That device's checkout of the repo, and its worktrees that go.
   projectId: string;
-  worktrees: Worktree[];
+  worktrees: readonly Worktree[];
   // The one of them the host runs the removal from.
   target: Worktree;
   // The api to ask it through, undefined while it can't be commanded

@@ -45,7 +45,7 @@ function spliceWorktree(
   replacesId?: string,
 ): void {
   const key = keys.worktrees(worktree.projectId);
-  queryClient.setQueryData<Worktree[]>(key, (current) => {
+  queryClient.setQueryData<readonly Worktree[]>(key, (current) => {
     if (!current) return current;
     // In place, so the sidebar row and the sibling order don't shift.
     const at = current.findIndex(
@@ -237,8 +237,10 @@ function forgetDeletedWorktrees(
 ): void {
   if (worktreeIds.length === 0) return;
   const keys = queryKeysFor(deviceId);
-  queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (current) =>
-    current ? current.filter((w) => !worktreeIds.includes(w.id)) : current,
+  queryClient.setQueryData<readonly Worktree[]>(
+    keys.worktrees(projectId),
+    (current) =>
+      current ? current.filter((w) => !worktreeIds.includes(w.id)) : current,
   );
   void queryClient.invalidateQueries({
     queryKey: keys.worktrees(projectId),
@@ -313,7 +315,7 @@ export interface StackCleanupFailure {
 
 export interface StackCleanupOutcome {
   // By device id: the worktree ids that went.
-  removed: Map<string, string[]>;
+  removed: Map<string, readonly string[]>;
   failures: StackCleanupFailure[];
 }
 
@@ -419,7 +421,7 @@ function useSetWorktreeFlag<K extends "shelved" | "autoPull">(
   >({
     mutationFn: (input) => call(api, input),
     onMutate: (vars) => {
-      queryClient.setQueryData<Worktree[]>(
+      queryClient.setQueryData<readonly Worktree[]>(
         keys.worktrees(vars.projectId),
         (current) =>
           current
@@ -430,7 +432,7 @@ function useSetWorktreeFlag<K extends "shelved" | "autoPull">(
       );
     },
     onSuccess: (data, vars) => {
-      queryClient.setQueryData<Worktree[]>(
+      queryClient.setQueryData<readonly Worktree[]>(
         keys.worktrees(vars.projectId),
         (current) => current?.map((w) => (w.id === data.id ? data : w)),
       );

@@ -6,16 +6,14 @@ import { isSafeRelPath } from "@shared/git/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import {
-  CommitHashSchema,
-  CreatePhaseSchema,
-  WorktreeIdSchema,
-  WorktreeSchema,
-} from "@shared/schemas";
+import { WorktreeIdSchema } from "@shared/schemas";
 import {
   CloneFolderNameZod,
+  CommitHashZod,
+  CreatePhaseZod,
   GitRefNameZod,
   ProjectZod,
+  WorktreeZod,
 } from "@shared/schemas/zodBridge";
 
 // Moving a worktree between devices. Commits cross on a SOURCE LINK:
@@ -95,8 +93,8 @@ export const SyncLandingRefSchema = z
 // are not deterministic, their trees are).
 export const SyncCaptureSchema = z.strictObject({
   captured: z.boolean(),
-  commit: CommitHashSchema.optional(),
-  tree: CommitHashSchema.optional(),
+  commit: CommitHashZod.optional(),
+  tree: CommitHashZod.optional(),
 });
 export type SyncCapture = z.infer<typeof SyncCaptureSchema>;
 
@@ -281,12 +279,12 @@ export const SyncPullProgressSchema = z.strictObject({
   step: SyncPullStepSchema,
   bytes: z.number().int().nonnegative().optional(),
   totalBytes: z.number().int().nonnegative().optional(),
-  createPhase: CreatePhaseSchema.optional(),
+  createPhase: CreatePhaseZod.optional(),
 });
 export type SyncPullProgress = z.infer<typeof SyncPullProgressSchema>;
 
 export const SyncPullWorktreeResultSchema = z.strictObject({
-  worktree: WorktreeSchema,
+  worktree: WorktreeZod,
   // captured && !dirtyApplied is the partial-success case: the source
   // had uncommitted changes, the worktree landed, but the apply was
   // refused. The capture stays parked under the local worktree id and
@@ -349,10 +347,10 @@ const SyncOpenSourcePayloadSchema = z.strictObject({
 // the hosts' own facts, never on a caller's say-so.
 const SyncReceiptSchema = z.strictObject({
   branch: GitRefNameZod,
-  branchTip: CommitHashSchema,
+  branchTip: CommitHashZod,
   captured: z.boolean(),
   dirtyApplied: z.boolean(),
-  captureTree: CommitHashSchema.optional(),
+  captureTree: CommitHashZod.optional(),
 });
 export type SyncReceipt = z.infer<typeof SyncReceiptSchema>;
 
@@ -384,13 +382,11 @@ export const SyncReceiveWorktreeResultSchema =
 const SyncReceiveBundlePayloadSchema = z.strictObject({
   projectId: z.string().min(1),
   refs: z.array(SyncBundleRefSchema).min(1).max(64),
-  haves: z.array(CommitHashSchema).max(256),
+  haves: z.array(CommitHashZod).max(256),
   channelId: ChannelIdSchema,
 });
 const SyncFetchedSchema = z.strictObject({
-  fetched: z.array(
-    z.strictObject({ ref: z.string(), commit: CommitHashSchema }),
-  ),
+  fetched: z.array(z.strictObject({ ref: z.string(), commit: CommitHashZod })),
 });
 
 // The teardown's fate. A refused or failed teardown never fails the
@@ -455,11 +451,11 @@ export function isMoveCancelledError(error: unknown): boolean {
 const SYNC_HAS_COMMITS_LIMIT = 64;
 const SyncHasCommitsPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  commits: z.array(CommitHashSchema).min(1).max(SYNC_HAS_COMMITS_LIMIT),
+  commits: z.array(CommitHashZod).min(1).max(SYNC_HAS_COMMITS_LIMIT),
 });
 
 export const SyncHasCommitsResultSchema = z.strictObject({
-  present: z.array(CommitHashSchema),
+  present: z.array(CommitHashZod),
 });
 
 export const syncContract = defineContract("host", {

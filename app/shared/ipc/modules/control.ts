@@ -5,7 +5,8 @@ import {
   SyncCloneIntoSchema,
   SyncPullWorktreeResultSchema,
 } from "@shared/ipc/modules/sync";
-import { WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
+import { WorktreeIdSchema } from "@shared/schemas";
+import { WorktreeZod } from "@shared/schemas/zodBridge";
 
 // What the CLI asks of the running app: the cross-device verbs (`sm
 // worktrees send|bring|mirror|unmirror|mirrors`, `sm devices`). Reaching
@@ -108,7 +109,7 @@ export type ControlTransferResult = z.infer<typeof ControlTransferResultSchema>;
 export const ControlPeerWorktreeSchema = z.strictObject({
   device: z.strictObject({ deviceId: DeviceIdSchema, name: z.string() }),
   projectId: z.string(),
-  worktree: WorktreeSchema,
+  worktree: WorktreeZod,
 });
 export type ControlPeerWorktree = z.infer<typeof ControlPeerWorktreeSchema>;
 

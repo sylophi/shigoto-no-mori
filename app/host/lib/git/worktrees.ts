@@ -29,7 +29,7 @@ export type { WorktreeIdentity };
 const rowLists = createLimiter(2);
 
 // A project's rows, primary first.
-export function listWorktrees(projectId: string): Promise<Worktree[]> {
+export function listWorktrees(projectId: string): Promise<readonly Worktree[]> {
   return rowLists(() => listWorktreesViaCli(projectId));
 }
 
@@ -46,7 +46,7 @@ export function describeWorktree(
 export function listWorktreeIdentities(
   projectId: string,
   opts: { primaryRef?: boolean } = {},
-): Promise<WorktreeIdentity[]> {
+): Promise<readonly WorktreeIdentity[]> {
   return listWorktreeIdentitiesViaCli({ projectId }, opts);
 }
 

@@ -15,6 +15,11 @@ import {
   PullRequestReviewDecisionSchema,
   PullRequestStateSchema,
 } from "./pullRequest";
+import {
+  CommitHashSchema,
+  CreatePhaseSchema,
+  WorktreeSchema,
+} from "./worktree";
 
 // An Effect schema inside a schema still on zod, which cannot hold one
 // directly. It decodes as the Effect schema does, so unknown keys are
@@ -32,15 +37,18 @@ function toZod<S extends Schema.Codec<unknown, unknown>>(
 }
 
 export const CloneFolderNameZod = toZod(CloneFolderNameSchema);
+export const CommitHashZod = toZod(CommitHashSchema);
+export const CreatePhaseZod = toZod(CreatePhaseSchema);
 export const CustomPortZod = toZod(CustomPortSchema);
 export const GitRefNameZod = toZod(GitRefNameSchema);
 export const MergeMethodZod = toZod(MergeMethodSchema);
 export const PortNumberZod = toZod(PortNumberSchema);
-export const ProjectZod = toZod(ProjectSchema);
 export const ProjectSortModeZod = toZod(ProjectSortModeSchema);
+export const ProjectZod = toZod(ProjectSchema);
 export const PullRequestMergeStateZod = toZod(PullRequestMergeStateSchema);
 export const PullRequestReviewDecisionZod = toZod(
   PullRequestReviewDecisionSchema,
 );
 export const PullRequestStateZod = toZod(PullRequestStateSchema);
 export const SidebarViewZod = toZod(SidebarViewSchema);
+export const WorktreeZod = toZod(WorktreeSchema);

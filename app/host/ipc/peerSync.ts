@@ -6,6 +6,7 @@
 // (makeHubHandlers), never a fresh dial: the host keeps exactly one
 // authed socket per deviceId, and a second dial silently supersedes
 // the session every remote-forest query is riding on.
+import * as Schema from "effect/Schema";
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import type { ChannelMux } from "@shared/ipc/socket/channels";
@@ -14,6 +15,8 @@ import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { implSlot } from "@host/lib/util/implSlot";
 import type { Client } from "@shared/ipc/types";
 import { type Worktree, WorktreeSchema } from "@shared/schemas";
+
+const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
 
 // The remote verbs the orchestrations drive, and the byte channels of
 // the same cached session that their source links ride
@@ -103,7 +106,7 @@ export async function peerWorktreeOrUndefined(
   projectId: string,
   worktreeId: string,
 ): Promise<Worktree | undefined> {
-  const worktrees = WorktreeSchema.array().parse(
+  const worktrees = decodeWorktrees(
     await peerWorktreesApiFor(deviceId).list({ projectId }),
   );
   return worktrees.find((worktree) => worktree.id === worktreeId);
