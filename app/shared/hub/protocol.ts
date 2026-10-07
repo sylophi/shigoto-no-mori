@@ -30,7 +30,11 @@
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { fallbackDeviceIcon, isDeviceIcon } from "../account/deviceIcon";
+import {
+  DEVICE_ICONS,
+  fallbackDeviceIcon,
+  isDeviceIcon,
+} from "../account/deviceIcon";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
 // JSON. The device hub carries orchestration only: the connectInfo ask
@@ -243,7 +247,7 @@ export const DeviceInfoSchema = DeviceInfoWireSchema.pipe(
   Schema.decodeTo(
     Schema.Struct({
       ...DeviceInfoWireSchema.fields,
-      icon: Schema.declare(isDeviceIcon),
+      icon: Schema.Literals(DEVICE_ICONS),
     }),
     SchemaTransformation.transform({
       decode: (info) => ({
