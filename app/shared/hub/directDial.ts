@@ -63,14 +63,15 @@
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
 // global WebSocket serves openDevice).
+import * as Schema from "effect/Schema";
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
   MAX_DIRECT_CANDIDATES,
   type DirectCandidate,
   type DirectCandidateKind,
   type DirectConnectInfoInput,
+  DirectConnectInfoSchema,
 } from "@shared/ipc/modules/direct";
-import { DirectConnectInfoZod } from "@shared/schemas/zodBridge";
 import { errorMessageOf } from "@shared/errors";
 import {
   openDevice,
@@ -433,7 +434,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       }
       throw error;
     }
-    const info = DirectConnectInfoZod.parse(answer);
+    const info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(answer);
     if (!info.available) {
       // The peer's listener is down, or it has nothing THIS caller can
       // dial. Unreachable for data RIGHT NOW, which is not the same as

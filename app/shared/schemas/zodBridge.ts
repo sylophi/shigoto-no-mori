@@ -2,8 +2,6 @@ import type * as Schema from "effect/Schema";
 import { z } from "zod";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { DoctorReportSchema } from "@shared/ipc/modules/cli";
-import { DirectConnectInfoSchema } from "@shared/ipc/modules/direct";
 import { safeDecode } from "@shared/ipc/schema";
 import {
   CloneFolderNameSchema,
@@ -38,8 +36,6 @@ function toZod<S extends Schema.Codec<unknown, unknown>>(
 }
 
 export const DeviceIdZod = toZod(DeviceIdSchema);
-export const DirectConnectInfoZod = toZod(DirectConnectInfoSchema);
-export const DoctorReportZod = toZod(DoctorReportSchema);
 export const CloneFolderNameZod = toZod(CloneFolderNameSchema);
 export const CommitHashZod = toZod(CommitHashSchema);
 export const CreatePhaseZod = toZod(CreatePhaseSchema);
