@@ -1,0 +1,838 @@
+{
+  "DeviceIdSchema": {
+    "accepts": [
+      "dev-enroll",
+      "6f1c2a7e-3b9d-4c55-9a1e-2f8b7c6d5e4a",
+      "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    ],
+    "rejects": [
+      "",
+      "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      42,
+      null
+    ]
+  },
+  "ErrorBodySchema": {
+    "accepts": [
+      {
+        "error": "unauthorized"
+      },
+      {
+        "error": "device revoked",
+        "code": "device_revoked"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "error": "not found",
+          "status": 404
+        },
+        "output": {
+          "error": "not found"
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "error": 500
+      },
+      {
+        "error": "x",
+        "code": "other"
+      },
+      {
+        "error": "x",
+        "code": null
+      },
+      "unauthorized"
+    ]
+  },
+  "EnrollRequestSchema": {
+    "accepts": [
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "laptop"
+      },
+      {
+        "deviceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        "platform": "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+        "icon": "toaster"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "deviceId": "dev-enroll",
+          "name": "Test Device",
+          "platform": "darwin",
+          "icon": "laptop",
+          "credential": "c"
+        },
+        "output": {
+          "deviceId": "dev-enroll",
+          "name": "Test Device",
+          "platform": "darwin",
+          "icon": "laptop"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "deviceId": "",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "laptop"
+      },
+      {
+        "deviceId": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "laptop"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "",
+        "platform": "darwin",
+        "icon": "laptop"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        "platform": "darwin",
+        "icon": "laptop"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+        "icon": "laptop"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": ""
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+      }
+    ]
+  },
+  "DevicePatchRequestSchema": {
+    "accepts": [
+      {
+        "name": "Mini"
+      },
+      {
+        "icon": "mini"
+      },
+      {
+        "name": "Mini",
+        "icon": "mini"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "name": "Mini",
+          "deviceId": "dev-icon-2"
+        },
+        "output": {
+          "name": "Mini"
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "deviceId": "dev-icon-2"
+      },
+      {
+        "icon": ""
+      },
+      {
+        "name": ""
+      },
+      {
+        "name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+      },
+      {
+        "icon": "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"
+      },
+      {
+        "name": null
+      }
+    ]
+  },
+  "DeviceInfoSchema": {
+    "accepts": [
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "laptop",
+        "createdAt": 1791391598872,
+        "lastSeenAt": null,
+        "online": false
+      },
+      {
+        "deviceId": "dev-icon-2",
+        "name": "Mini",
+        "platform": "darwin",
+        "icon": "mini",
+        "createdAt": 1791391598872,
+        "lastSeenAt": 1791391600000,
+        "online": true
+      },
+      {
+        "deviceId": "6f1c2a7e-3b9d-4c55-9a1e-2f8b7c6d5e4a",
+        "name": "Helium on macOS",
+        "platform": "web",
+        "icon": "browser",
+        "createdAt": 1791391598872,
+        "lastSeenAt": null,
+        "online": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "deviceId": "dev-icon-newer",
+          "name": "Test Device",
+          "platform": "linux",
+          "icon": "toaster",
+          "createdAt": 1791391598872,
+          "lastSeenAt": null,
+          "online": false
+        },
+        "output": {
+          "deviceId": "dev-icon-newer",
+          "name": "Test Device",
+          "platform": "linux",
+          "icon": "desktop",
+          "createdAt": 1791391598872,
+          "lastSeenAt": null,
+          "online": false
+        }
+      },
+      {
+        "input": {
+          "deviceId": "6f1c2a7e-3b9d-4c55-9a1e-2f8b7c6d5e4a",
+          "name": "Helium on macOS",
+          "platform": "web",
+          "icon": "toaster",
+          "createdAt": 1791391598872,
+          "lastSeenAt": null,
+          "online": false
+        },
+        "output": {
+          "deviceId": "6f1c2a7e-3b9d-4c55-9a1e-2f8b7c6d5e4a",
+          "name": "Helium on macOS",
+          "platform": "web",
+          "icon": "browser",
+          "createdAt": 1791391598872,
+          "lastSeenAt": null,
+          "online": false
+        }
+      },
+      {
+        "input": {
+          "deviceId": "dev-enroll",
+          "name": "Test Device",
+          "platform": "darwin",
+          "icon": "laptop",
+          "createdAt": 1791391598872,
+          "lastSeenAt": null,
+          "online": false,
+          "credential": "c"
+        },
+        "output": {
+          "deviceId": "dev-enroll",
+          "name": "Test Device",
+          "platform": "darwin",
+          "icon": "laptop",
+          "createdAt": 1791391598872,
+          "lastSeenAt": null,
+          "online": false
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "laptop",
+        "createdAt": 1791391598872,
+        "online": false
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "laptop",
+        "createdAt": 1791391598872.5,
+        "lastSeenAt": null,
+        "online": false
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "laptop",
+        "createdAt": 1791391598872,
+        "lastSeenAt": "2026-10-07",
+        "online": false
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "icon": "laptop",
+        "createdAt": 1791391598872,
+        "lastSeenAt": null,
+        "online": "yes"
+      },
+      {
+        "deviceId": "dev-enroll",
+        "name": "Test Device",
+        "platform": "darwin",
+        "createdAt": 1791391598872,
+        "lastSeenAt": null,
+        "online": false
+      }
+    ]
+  },
+  "EnrollResponseSchema": {
+    "accepts": [
+      {
+        "credential": "cred_abc",
+        "device": {
+          "deviceId": "dev-enroll",
+          "name": "Test Device",
+          "platform": "darwin",
+          "icon": "laptop",
+          "createdAt": 1791391598872,
+          "lastSeenAt": null,
+          "online": false
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "credential": "cred_abc",
+          "device": {
+            "deviceId": "dev-icon-newer",
+            "name": "Test Device",
+            "platform": "linux",
+            "icon": "toaster",
+            "createdAt": 1791391598872,
+            "lastSeenAt": null,
+            "online": false
+          }
+        },
+        "output": {
+          "credential": "cred_abc",
+          "device": {
+            "deviceId": "dev-icon-newer",
+            "name": "Test Device",
+            "platform": "linux",
+            "icon": "desktop",
+            "createdAt": 1791391598872,
+            "lastSeenAt": null,
+            "online": false
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "device": {
+          "deviceId": "dev-enroll",
+          "name": "Test Device",
+          "platform": "darwin",
+          "icon": "laptop",
+          "createdAt": 1791391598872,
+          "lastSeenAt": null,
+          "online": false
+        }
+      },
+      {
+        "credential": "cred_abc"
+      }
+    ]
+  },
+  "DeviceListResponseSchema": {
+    "accepts": [
+      {
+        "devices": []
+      },
+      {
+        "devices": [
+          {
+            "deviceId": "dev-enroll",
+            "name": "Test Device",
+            "platform": "darwin",
+            "icon": "laptop",
+            "createdAt": 1791391598872,
+            "lastSeenAt": null,
+            "online": false
+          },
+          {
+            "deviceId": "dev-icon-2",
+            "name": "Mini",
+            "platform": "darwin",
+            "icon": "mini",
+            "createdAt": 1791391598872,
+            "lastSeenAt": 1791391600000,
+            "online": true
+          },
+          {
+            "deviceId": "6f1c2a7e-3b9d-4c55-9a1e-2f8b7c6d5e4a",
+            "name": "Helium on macOS",
+            "platform": "web",
+            "icon": "browser",
+            "createdAt": 1791391598872,
+            "lastSeenAt": null,
+            "online": false
+          }
+        ]
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "devices": [
+            {
+              "deviceId": "dev-icon-2",
+              "name": "Mini",
+              "platform": "darwin",
+              "icon": "mini",
+              "createdAt": 1791391598872,
+              "lastSeenAt": 1791391600000,
+              "online": true
+            },
+            {
+              "deviceId": "dev-icon-newer",
+              "name": "Test Device",
+              "platform": "linux",
+              "icon": "toaster",
+              "createdAt": 1791391598872,
+              "lastSeenAt": null,
+              "online": false
+            }
+          ]
+        },
+        "output": {
+          "devices": [
+            {
+              "deviceId": "dev-icon-2",
+              "name": "Mini",
+              "platform": "darwin",
+              "icon": "mini",
+              "createdAt": 1791391598872,
+              "lastSeenAt": 1791391600000,
+              "online": true
+            },
+            {
+              "deviceId": "dev-icon-newer",
+              "name": "Test Device",
+              "platform": "linux",
+              "icon": "desktop",
+              "createdAt": 1791391598872,
+              "lastSeenAt": null,
+              "online": false
+            }
+          ]
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "devices": [
+          {
+            "deviceId": "dev-enroll"
+          }
+        ]
+      }
+    ]
+  },
+  "TicketResponseSchema": {
+    "accepts": [
+      {
+        "ticket": "t:dev-enroll:1",
+        "expiresInMs": 30000
+      }
+    ],
+    "rejects": [
+      {
+        "ticket": "t:dev-enroll:1"
+      },
+      {
+        "ticket": "t:dev-enroll:1",
+        "expiresInMs": 1.5
+      },
+      {
+        "ticket": 1,
+        "expiresInMs": 30000
+      }
+    ]
+  },
+  "TunnelProvisionRequestSchema": {
+    "accepts": [
+      {
+        "port": 1
+      },
+      {
+        "port": 53712
+      },
+      {
+        "port": 65535
+      }
+    ],
+    "rejects": [
+      {
+        "port": 0
+      },
+      {
+        "port": 65536
+      },
+      {
+        "port": 8080.5
+      },
+      {
+        "port": "8080"
+      },
+      {}
+    ]
+  },
+  "TunnelProvisionResponseSchema": {
+    "accepts": [
+      {
+        "hostname": "dev-enroll.tunnel.example.com",
+        "connectorToken": "eyJh"
+      },
+      {
+        "hostname": "dev-enroll.tunnel.example.com",
+        "connectorToken": "eyJh",
+        "dnsCreated": true
+      },
+      {
+        "hostname": "dev-enroll.tunnel.example.com",
+        "connectorToken": "eyJh",
+        "dnsCreated": false
+      }
+    ],
+    "rejects": [
+      {
+        "hostname": "",
+        "connectorToken": "eyJh"
+      },
+      {
+        "hostname": "dev-enroll.tunnel.example.com",
+        "connectorToken": ""
+      },
+      {
+        "hostname": "dev-enroll.tunnel.example.com",
+        "connectorToken": "eyJh",
+        "dnsCreated": null
+      }
+    ]
+  },
+  "DeviceEnvelopeSchema": {
+    "accepts": [
+      {
+        "t": "relay",
+        "to": "dev-b",
+        "frame": {
+          "type": "connectInfo",
+          "id": 1
+        }
+      },
+      {
+        "t": "relay",
+        "to": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "frame": "opaque"
+      },
+      {
+        "t": "relay",
+        "to": "dev-b",
+        "frame": null
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "t": "relay",
+          "to": "dev-b",
+          "from": "dev-a",
+          "frame": 1
+        },
+        "output": {
+          "t": "relay",
+          "to": "dev-b",
+          "frame": 1
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "t": "relay",
+        "to": "",
+        "frame": 1
+      },
+      {
+        "t": "relay",
+        "to": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "frame": 1
+      },
+      {
+        "t": "presence",
+        "online": []
+      },
+      {
+        "to": "dev-b",
+        "frame": 1
+      },
+      "ping",
+      {
+        "t": "relay",
+        "to": "dev-b"
+      }
+    ]
+  },
+  "ServerEnvelopeSchema": {
+    "accepts": [
+      {
+        "t": "relay",
+        "from": "dev-a",
+        "frame": {
+          "type": "connectInfo",
+          "id": 1
+        }
+      },
+      {
+        "t": "presence",
+        "online": []
+      },
+      {
+        "t": "presence",
+        "online": ["dev-a", "dev-b"]
+      },
+      {
+        "t": "presence",
+        "online": [
+          "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        ]
+      },
+      {
+        "t": "presence",
+        "online": [
+          "dev-0",
+          "dev-1",
+          "dev-2",
+          "dev-3",
+          "dev-4",
+          "dev-5",
+          "dev-6",
+          "dev-7",
+          "dev-8",
+          "dev-9",
+          "dev-10",
+          "dev-11",
+          "dev-12",
+          "dev-13",
+          "dev-14",
+          "dev-15",
+          "dev-16",
+          "dev-17",
+          "dev-18",
+          "dev-19",
+          "dev-20",
+          "dev-21",
+          "dev-22",
+          "dev-23",
+          "dev-24",
+          "dev-25",
+          "dev-26",
+          "dev-27",
+          "dev-28",
+          "dev-29",
+          "dev-30",
+          "dev-31",
+          "dev-32",
+          "dev-33",
+          "dev-34",
+          "dev-35",
+          "dev-36",
+          "dev-37",
+          "dev-38",
+          "dev-39",
+          "dev-40",
+          "dev-41",
+          "dev-42",
+          "dev-43",
+          "dev-44",
+          "dev-45",
+          "dev-46",
+          "dev-47",
+          "dev-48",
+          "dev-49",
+          "dev-50",
+          "dev-51",
+          "dev-52",
+          "dev-53",
+          "dev-54",
+          "dev-55",
+          "dev-56",
+          "dev-57",
+          "dev-58",
+          "dev-59",
+          "dev-60",
+          "dev-61",
+          "dev-62",
+          "dev-63"
+        ]
+      },
+      {
+        "t": "nack",
+        "to": "dev-b",
+        "reason": "offline"
+      },
+      {
+        "t": "nack",
+        "to": "dev-b",
+        "reason": "too-large"
+      }
+    ],
+    "rejects": [
+      {
+        "t": "relay",
+        "from": "",
+        "frame": 1
+      },
+      {
+        "t": "relay",
+        "from": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "frame": 1
+      },
+      {
+        "t": "presence",
+        "online": [
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a",
+          "dev-a"
+        ]
+      },
+      {
+        "t": "presence",
+        "online": [""]
+      },
+      {
+        "t": "presence",
+        "online": [
+          "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        ]
+      },
+      {
+        "t": "nack",
+        "to": "dev-b",
+        "reason": "busy"
+      },
+      {
+        "t": "nack",
+        "to": "",
+        "reason": "offline"
+      },
+      {
+        "t": "relay",
+        "to": "dev-b",
+        "frame": 1
+      },
+      {
+        "t": "pong"
+      },
+      {
+        "t": "relay",
+        "from": "dev-a"
+      }
+    ]
+  }
+}

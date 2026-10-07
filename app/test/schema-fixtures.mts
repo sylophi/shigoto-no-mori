@@ -4,7 +4,8 @@
 // the wire, so a schema's rewrite must keep the JSON it accepts,
 // produces and refuses exactly as it is.
 //
-// Each schema exported from @shared/schemas has an entry:
+// Each schema exported from @shared/schemas or the hub protocol has an
+// entry:
 //   accepts     values that decode to themselves, key order included
 //   normalizes  { input, output } pairs where decoding changes the value
 //               (a default filled in, an unknown key dropped)
@@ -22,6 +23,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
 import type { z } from "zod";
+import * as hubProtocol from "@shared/hub/protocol";
 import * as schemas from "@shared/schemas";
 
 type Fixture = {
@@ -43,8 +45,8 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
   }
 }
 
-const exported = Object.entries(schemas).filter(([name]) =>
-  name.endsWith("Schema"),
+const exported = Object.entries({ ...schemas, ...hubProtocol }).filter(
+  ([name]) => name.endsWith("Schema"),
 ) as [string, z.ZodType | Schema.Codec<unknown, unknown>][];
 
 it("every exported schema has fixtures, and every fixture a schema", () => {
