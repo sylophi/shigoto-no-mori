@@ -1,5 +1,9 @@
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
-import type { Project, ShigomoriConfig } from "@shared/schemas";
+import {
+  PROJECT_CONFIG_DEFAULTS,
+  type Project,
+  type ShigomoriConfig,
+} from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   combineFanOut,
@@ -13,7 +17,10 @@ import { queryKeysFor } from "@/lib/queryKeys";
 export function showPrimaryInInbox(
   config: ShigomoriConfig | null | undefined,
 ): boolean | undefined {
-  return config === undefined ? undefined : config?.showPrimaryInInbox === true;
+  return config === undefined
+    ? undefined
+    : (config?.showPrimaryInInbox ??
+        PROJECT_CONFIG_DEFAULTS.showPrimaryInInbox);
 }
 
 // Scope rule as worktreesQueryOptions: a peer's config caches under its

@@ -656,6 +656,51 @@ func TestProjectConfigWriteMergesNestedAndReplacesArrays(t *testing.T) {
 	}
 }
 
+func mustWrite(t *testing.T, scope configDocScope, data string) {
+	t.Helper()
+	if code, err := runConfigWrite(scope, data); code != 0 || err != nil {
+		t.Fatalf("write %s: %d, %v", data, code, err)
+	}
+}
+
+// A null clears its key whether or not the registry models it, which
+// is how the app turns off a setting this build's CLI doesn't know.
+// Omission alone keeps such a key, so without the null it could be
+// turned on and never back off.
+func TestConfigWriteNullClearsUnregisteredKeys(t *testing.T) {
+	sandboxDataDir(t)
+	scope := globalConfigScope()
+	mustWrite(t, scope, `{"futureSetting": true, "portPool": true}`)
+	mustWrite(t, scope, `{"portPool": true}`)
+	if doc := readDoc(t, scope.path); doc["futureSetting"] != true {
+		t.Fatalf("futureSetting = %v, want kept by the omitting payload", doc["futureSetting"])
+	}
+	mustWrite(t, scope, `{"futureSetting": null, "portPool": null}`)
+	doc := readDoc(t, scope.path)
+	for _, key := range []string{"futureSetting", "portPool"} {
+		if value, ok := doc[key]; ok {
+			t.Errorf("%s = %v, want cleared by the null", key, value)
+		}
+	}
+
+	// Nested the same way, and the emptied parent goes with it.
+	proj := seededProject(t)
+	projectScope := projectConfigScope(proj)
+	seed := `{"defaultBranch": "main", "scripts": {"setup": "old", "futureScript": "x"}}` + "\n"
+	if err := os.WriteFile(projectScope.path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"defaultBranch": "main", "scripts": {"setup": null, "teardown": null, "futureScript": null}}`
+	mustWrite(t, projectScope, data)
+	if scripts, ok := readDoc(t, projectScope.path)["scripts"]; ok {
+		t.Errorf("scripts = %v, want pruned once its fields are cleared", scripts)
+	}
+	// Clearing a required key is still refused.
+	if code, _ := runConfigWrite(projectScope, `{"defaultBranch": null}`); code != 1 {
+		t.Errorf("null defaultBranch accepted: code %d", code)
+	}
+}
+
 // A hand-edited file can hold a scalar where the registry expects an
 // object. The merge still has to land the registry exactly as the
 // payload asks, or the write succeeds and leaves a document the app's

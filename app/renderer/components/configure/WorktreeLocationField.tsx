@@ -5,7 +5,7 @@ import { LAYOUT_OPTIONS } from "@/components/worktreeLocation/layoutOptions";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { managedDriveBaseFor } from "@shared/git/worktreeLayout";
-import type { ShigomoriConfig } from "@shared/schemas";
+import { PROJECT_CONFIG_DEFAULTS, type ShigomoriConfig } from "@shared/schemas";
 
 // Which layout the project's worktrees use, as the saved config has it.
 // The pick itself lives on a subpage: changing it can move worktrees,
@@ -27,7 +27,8 @@ export function WorktreeLocationField({
 }) {
   const { toProjectPage } = useProjectNav();
   const device = useDeviceLayout();
-  const layout = config?.worktreeLayout ?? "managed-root";
+  const layout =
+    config?.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout;
   const option = LAYOUT_OPTIONS.find((o) => o.value === layout);
   // A custom layout has no description. Its folder says more, and so
   // does the one the managed layout keeps on the project's drive.

@@ -9,6 +9,7 @@ import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import {
   isManagedWorktree,
+  PROJECT_CONFIG_DEFAULTS,
   type ShigomoriConfig,
   type Worktree,
   type WorktreeLayout,
@@ -47,7 +48,8 @@ export function LocationForm({
   // immediately after a successful save. Reading the config prop
   // directly would lag while the shigomori query refetches, which
   // briefly re-enables the Move button after a batch completes.
-  const configLayout = config?.worktreeLayout ?? "managed-root";
+  const configLayout =
+    config?.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout;
   const configCustomPath = config?.customWorktreePath ?? "";
   // react-doctor-disable-next-line react-doctor/no-derived-useState -- savedLayout tracks the last-persisted value, not the prop; updated in handleApply and synced from the prop only when no batch is in flight
   const [savedLayout, setSavedLayout] = useState<WorktreeLayout>(configLayout);

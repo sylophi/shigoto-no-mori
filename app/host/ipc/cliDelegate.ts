@@ -27,6 +27,7 @@ import {
   type LauncherEntry,
   type MergeOutcome,
   MergeOutcomeSchema,
+  modeledKeyPaths,
   type MergePullRequestResult,
   type PackageScriptsDoc,
   PackageScriptsDocSchema,
@@ -39,6 +40,7 @@ import {
   type ScriptEvent,
   ScriptEventSchema,
   type ShigomoriConfig,
+  ShigomoriConfigSchema,
   StoredGlobalConfigSchema,
   StoredShigomoriConfigSchema,
   type Worktree,
@@ -592,7 +594,9 @@ export function cliRunScriptSpawn(args: {
 // how a settings save serializes a default by omission), so only
 // UNREGISTERED keys the payload does not carry survive untouched. A
 // caller must therefore hand a COMPLETE base or a registered key it
-// left out is written away. It re-checks the shape so engine drift fails loudly.
+// left out is written away. A null clears any key (mergeConfigDoc in
+// cli/cmd_config.go). It re-checks the shape so engine drift fails
+// loudly.
 // Callers must invalidate the TTL caches themselves: runCli's self-write
 // note suppresses the state watcher for these writes.
 //
@@ -601,7 +605,7 @@ export function cliRunScriptSpawn(args: {
 // half of the merge is what keeps any legacy client keys (theme,
 // doubutsu) in config.json intact when a device-only payload lands.
 export async function globalConfigWriteViaCli(
-  config: GlobalConfig,
+  config: ClearingWrite<GlobalConfig>,
 ): Promise<void> {
   const result = await runner().runCli([
     "config",
@@ -612,10 +616,33 @@ export async function globalConfigWriteViaCli(
   finalOkDoc(result, "sm config write failed");
 }
 
+// A config write payload where null clears the key.
+export type ClearingWrite<T> = { [K in keyof T]?: T[K] | null };
+
+// The renderer hands the whole project document and clears a field by
+// leaving it out, so every field the schema models goes over the wire,
+// nested objects field by field, as null where the document has none.
+// Fields the schema doesn't model stay out, and the merge keeps them.
+const PROJECT_KEY_PATHS = modeledKeyPaths(ShigomoriConfigSchema.shape);
+function withModeledFields(config: ShigomoriConfig): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const path of PROJECT_KEY_PATHS) {
+    let from: unknown = config;
+    let into = payload;
+    path.forEach((key, depth) => {
+      from = (from as Record<string, unknown> | undefined)?.[key];
+      if (depth === path.length - 1) into[key] = from ?? null;
+      else into = (into[key] ??= {}) as Record<string, unknown>;
+    });
+  }
+  return payload;
+}
+
 export async function shigomoriWriteViaCli(
   projectId: string,
   config: ShigomoriConfig,
 ): Promise<void> {
+  const payload = withModeledFields(config);
   const result = await runner().runCli([
     "projects",
     "config",
@@ -623,7 +650,7 @@ export async function shigomoriWriteViaCli(
     "--project-id",
     projectId,
     "--data",
-    JSON.stringify(config),
+    JSON.stringify(payload),
   ]);
   finalOkDoc(result, "sm projects config write failed", { projectId });
 }
