@@ -129,6 +129,7 @@ function treeRows({
     order: projectGroupOrder({ projects: ordered, remote: peers, sortMode }),
     openShelves: noShelves(),
     hiddenPrefixes: [],
+    byPrefix: null,
     arrangeMode: false,
     byOwner: shut ? { shut } : null,
     remote: filter === undefined || filter === PEER ? peers : [],

@@ -28,17 +28,18 @@ import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
   exchangeSharedSettings,
-  hiddenPrefixesValue,
+  groupPrefixOf,
   isHiddenByPrefix,
   leaveOutPresetValue,
   mergeSharedSettings,
   NO_LEAVE_OUT_PRESET,
-  parseHiddenPrefixes,
   parseLeaveOutPreset,
+  parseWorktreePrefixes,
   sharedSettingKeys,
   sharedSettingsAhead,
   sharedStringSetting,
   withSharedSetting,
+  worktreePrefixesValue,
   type LeaveOutPreset,
 } from "@shared/sharedSettings";
 import {
@@ -239,16 +240,16 @@ async function main() {
   await check(
     "hidden worktree prefixes: one value, the same list is the same value, a primary never hides, a detached hash never matches, a list too long for a value is refused",
     () => {
-      assert.deepEqual(parseHiddenPrefixes(undefined), []);
-      assert.deepEqual(parseHiddenPrefixes(" exp/ \n\n tmp-"), [
+      assert.deepEqual(parseWorktreePrefixes(undefined), []);
+      assert.deepEqual(parseWorktreePrefixes(" exp/ \n\n tmp-"), [
         "exp/",
         "tmp-",
       ]);
-      const value = hiddenPrefixesValue(["tmp-", "exp/", "tmp-", " "]);
+      const value = worktreePrefixesValue(["tmp-", "exp/", "tmp-", " "]);
       assert.equal(value, "exp/\ntmp-");
-      assert.equal(hiddenPrefixesValue(["exp/", "tmp-"]), value);
+      assert.equal(worktreePrefixesValue(["exp/", "tmp-"]), value);
 
-      const prefixes = parseHiddenPrefixes(value);
+      const prefixes = parseWorktreePrefixes(value);
       assert.equal(
         isHiddenByPrefix(tree("snug-otter", "exp/x"), prefixes),
         true,
@@ -269,7 +270,35 @@ async function main() {
         false,
       );
 
-      assert.equal(hiddenPrefixesValue(many(40)), null);
+      assert.equal(worktreePrefixesValue(many(40)), null);
+    },
+  );
+
+  await check(
+    "grouped worktree prefixes: the longest match wins, a primary never groups, a detached hash never matches",
+    () => {
+      const prefixes = ["v3/", "v3/ui/", "exp/"];
+      assert.equal(
+        groupPrefixOf(tree("snug-otter", "v3/sync"), prefixes),
+        "v3/",
+      );
+      assert.equal(
+        groupPrefixOf(tree("snug-otter", "v3/ui/sidebar"), prefixes),
+        "v3/ui/",
+      );
+      assert.equal(groupPrefixOf(tree("exp/try", "fix"), prefixes), "exp/");
+      assert.equal(groupPrefixOf(tree("snug-otter", "fix"), prefixes), null);
+      assert.equal(
+        groupPrefixOf(tree("main", "v3/x", { isPrimary: true }), prefixes),
+        null,
+      );
+      assert.equal(
+        groupPrefixOf(
+          tree("snug-otter", "v3/9f2", { detached: true }),
+          prefixes,
+        ),
+        null,
+      );
     },
   );
 
