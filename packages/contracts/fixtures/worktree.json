@@ -1,0 +1,1409 @@
+{
+  "CarryOverReportSchema": {
+    "accepts": [
+      {
+        "applied": 3,
+        "failures": [
+          {
+            "path": ".env.local",
+            "reason": "Source missing in every checkout"
+          }
+        ],
+        "includeFailures": [
+          {
+            "path": ".worktreeinclude",
+            "reason": "line 4: unterminated character class",
+            "source": "/Users/alex/.sm/worktrees/shigoto-no-mori/brave-badger"
+          }
+        ],
+        "sourced": [
+          {
+            "path": "app/.env",
+            "source": "/Users/alex/.sm/worktrees/shigoto-no-mori/brave-badger",
+            "copiedInstead": true
+          },
+          {
+            "path": ".claude/settings.local.json",
+            "source": "/Users/alex/.sm/worktrees/shigoto-no-mori/brave-badger"
+          }
+        ]
+      },
+      {
+        "applied": 0,
+        "failures": []
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "applied": 1,
+          "failures": [
+            {
+              "path": "app/.env",
+              "reason": "Destination already exists",
+              "kind": "copy"
+            }
+          ],
+          "skipped": 0
+        },
+        "output": {
+          "applied": 1,
+          "failures": [
+            {
+              "path": "app/.env",
+              "reason": "Destination already exists"
+            }
+          ]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "applied": -1,
+        "failures": []
+      },
+      {
+        "applied": 1.5,
+        "failures": []
+      },
+      {
+        "applied": 1
+      }
+    ]
+  },
+  "CheckoutBranchPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "branch": "fix-stale-locks"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "branch": "main",
+          "create": false
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "branch": "main"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "branch": ""
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "branch": "--orphan"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "CleanupErrorSchema": {
+    "accepts": [
+      {
+        "phase": "teardown",
+        "exitCode": 1,
+        "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+      },
+      {
+        "phase": "portPoolRelease",
+        "exitCode": null,
+        "runId": "c81d4e2a-07f3-4b9e-9a6c-1e5d3f7b2a90"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "phase": "teardown",
+          "exitCode": 1,
+          "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34",
+          "stderr": "rm: .cache: Permission denied"
+        },
+        "output": {
+          "phase": "teardown",
+          "exitCode": 1,
+          "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "phase": "setup",
+        "exitCode": 1,
+        "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+      },
+      {
+        "phase": "teardown",
+        "exitCode": 1,
+        "runId": ""
+      },
+      {
+        "phase": "teardown",
+        "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+      }
+    ]
+  },
+  "CommitDiffPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "hash": "e7c0a52"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "hash": "7d02b18",
+          "path": "app/shared/schemas/worktree.ts"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "hash": "7d02b18"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "hash": "--output=/tmp/x"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "CommitHashSchema": {
+    "accepts": ["e7c0a52", "4d20b18c9e7a3f1b2d6e8a0c5f7b9d1e3a5c7e9f"],
+    "rejects": ["--output=/tmp/x"]
+  },
+  "CommitSummarySchema": {
+    "accepts": [
+      {
+        "hash": "e7c0a52",
+        "subject": "Badge merged projects with their devices",
+        "author": "Alex Kim",
+        "date": "2026-10-06T14:12:03+02:00",
+        "additions": 84,
+        "deletions": 12
+      },
+      {
+        "hash": "a91f3c7",
+        "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+        "author": "Alex Kim",
+        "date": "2026-10-05T18:02:44+02:00",
+        "additions": 0,
+        "deletions": 0
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "hash": "7d02b18",
+          "subject": "Aggregate worktrees across daemons",
+          "author": "Alex Kim",
+          "date": "2026-10-06T11:40:51+02:00",
+          "additions": 132,
+          "deletions": 57,
+          "email": "alex@example.com"
+        },
+        "output": {
+          "hash": "7d02b18",
+          "subject": "Aggregate worktrees across daemons",
+          "author": "Alex Kim",
+          "date": "2026-10-06T11:40:51+02:00",
+          "additions": 132,
+          "deletions": 57
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "hash": "HEAD",
+        "subject": "Badge merged projects with their devices",
+        "author": "Alex Kim",
+        "date": "2026-10-06T14:12:03+02:00",
+        "additions": 84,
+        "deletions": 12
+      },
+      {
+        "hash": "e7c0a52",
+        "subject": "Badge merged projects with their devices",
+        "author": "Alex Kim",
+        "date": "2026-10-06T14:12:03+02:00",
+        "additions": -1,
+        "deletions": 12
+      },
+      {
+        "hash": "e7c0a52",
+        "subject": "Badge merged projects with their devices",
+        "author": "Alex Kim",
+        "date": "2026-10-06T14:12:03+02:00",
+        "additions": 84,
+        "deletions": 2.5
+      },
+      {
+        "hash": "e7c0a52",
+        "subject": "Badge merged projects with their devices",
+        "author": "Alex Kim",
+        "additions": 84,
+        "deletions": 12
+      }
+    ]
+  },
+  "CreatePhaseSchema": {
+    "accepts": ["carryOver", "setup", "portPoolProvision"],
+    "rejects": ["idle"]
+  },
+  "CreateWorktreePayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeName": "happy-hummingbird",
+        "branchName": "remote-ui-flows",
+        "base": "origin/main",
+        "checkout": false,
+        "cloneFiles": true
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeName": "brave-badger",
+          "remote": "origin"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeName": "brave-badger"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeName": ""
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeName": ".."
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "branchName": "--force"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "base": ""
+      },
+      {}
+    ]
+  },
+  "CreateWorktreeResultSchema": {
+    "accepts": [
+      {
+        "worktree": {
+          "id": "e0f76c6cc80a",
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "name": "happy-hummingbird",
+          "branch": "remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 2,
+          "behind": 1,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": true,
+          "behindPrimary": 3,
+          "unpushedCount": 2,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 3,
+          "lastChangeAt": 1791289923000,
+          "createdAt": 1790944323000,
+          "recentCommits": [
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "Alex Kim",
+              "date": "2026-10-06T14:12:03+02:00",
+              "additions": 84,
+              "deletions": 12
+            },
+            {
+              "hash": "7d02b18",
+              "subject": "Aggregate worktrees across daemons",
+              "author": "Alex Kim",
+              "date": "2026-10-06T11:40:51+02:00",
+              "additions": 132,
+              "deletions": 57
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "title": "Remote UI flows",
+          "description": "Drive the forest's worktrees from another device."
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "worktree": {
+            "id": "cbc5ccb43624",
+            "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+            "name": "shigoto-no-mori",
+            "branch": "main",
+            "path": "/Users/alex/dev/shigoto-no-mori",
+            "ahead": 0,
+            "behind": 0,
+            "hasUpstream": true,
+            "hasRemote": true,
+            "divergedClean": false,
+            "behindPrimary": 0,
+            "unpushedCount": 0,
+            "mergedIntoPrimary": false,
+            "changedCount": 0,
+            "recentCommits": [
+              {
+                "hash": "a91f3c7",
+                "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+                "author": "Alex Kim",
+                "date": "2026-10-05T18:02:44+02:00",
+                "additions": 0,
+                "deletions": 0
+              }
+            ],
+            "isPrimary": true,
+            "isExternal": true,
+            "detached": false,
+            "shelved": false,
+            "autoPull": true
+          },
+          "carryOver": null
+        },
+        "output": {
+          "worktree": {
+            "id": "cbc5ccb43624",
+            "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+            "name": "shigoto-no-mori",
+            "branch": "main",
+            "path": "/Users/alex/dev/shigoto-no-mori",
+            "ahead": 0,
+            "behind": 0,
+            "hasUpstream": true,
+            "hasRemote": true,
+            "divergedClean": false,
+            "behindPrimary": 0,
+            "unpushedCount": 0,
+            "mergedIntoPrimary": false,
+            "changedCount": 0,
+            "recentCommits": [
+              {
+                "hash": "a91f3c7",
+                "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+                "author": "Alex Kim",
+                "date": "2026-10-05T18:02:44+02:00",
+                "additions": 0,
+                "deletions": 0
+              }
+            ],
+            "isPrimary": true,
+            "isExternal": true,
+            "detached": false,
+            "shelved": false,
+            "autoPull": true
+          }
+        }
+      }
+    ],
+    "rejects": [{}]
+  },
+  "DeleteStackPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "force": false,
+        "skipCleanup": true
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "refuseRunningScripts": true
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7"
+      }
+    ]
+  },
+  "DeleteStackResultSchema": {
+    "accepts": [
+      {
+        "ok": true,
+        "removed": ["5780f2399520", "e0f76c6cc80a"]
+      },
+      {
+        "ok": false,
+        "removed": ["5780f2399520"],
+        "cleanupError": {
+          "phase": "teardown",
+          "exitCode": 1,
+          "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "ok": true,
+          "removed": [],
+          "cleanupError": {
+            "phase": "teardown",
+            "exitCode": 1,
+            "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+          }
+        },
+        "output": {
+          "ok": true,
+          "removed": []
+        }
+      },
+      {
+        "input": {
+          "ok": false,
+          "removed": [],
+          "cleanupError": {
+            "phase": "teardown",
+            "exitCode": 1,
+            "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+          },
+          "stack": "remote-ui-flows"
+        },
+        "output": {
+          "ok": false,
+          "removed": [],
+          "cleanupError": {
+            "phase": "teardown",
+            "exitCode": 1,
+            "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "ok": true
+      },
+      {
+        "ok": false,
+        "removed": []
+      }
+    ]
+  },
+  "DeleteWorktreePayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "force": true,
+        "skipCleanup": false,
+        "refuseRunningScripts": true
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "deleteBranch": true
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7"
+      }
+    ]
+  },
+  "DeleteWorktreeResultSchema": {
+    "accepts": [
+      {
+        "ok": true
+      },
+      {
+        "ok": false,
+        "cleanupError": {
+          "phase": "teardown",
+          "exitCode": 1,
+          "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "ok": true,
+          "removed": ["e0f76c6cc80a"]
+        },
+        "output": {
+          "ok": true
+        }
+      },
+      {
+        "input": {
+          "ok": false,
+          "cleanupError": {
+            "phase": "teardown",
+            "exitCode": 1,
+            "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+          },
+          "worktreeId": "e0f76c6cc80a"
+        },
+        "output": {
+          "ok": false,
+          "cleanupError": {
+            "phase": "teardown",
+            "exitCode": 1,
+            "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "ok": false
+      },
+      {
+        "ok": "true"
+      }
+    ]
+  },
+  "ListCommitsPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 0,
+        "count": 50
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 200,
+        "count": 200
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "skip": 50,
+          "count": 50,
+          "branch": "main"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "skip": 50,
+          "count": 50
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": -1,
+        "count": 50
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 1.5,
+        "count": 50
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 0,
+        "count": 0
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 0,
+        "count": 201
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 0,
+        "count": 2.5
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 0
+      }
+    ]
+  },
+  "RelocateWorktreePayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "destinationPath": "/Users/alex/work/happy-hummingbird"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "destinationPath": "/Users/alex/work/happy-hummingbird",
+          "force": true
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "destinationPath": "/Users/alex/work/happy-hummingbird"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "destinationPath": ""
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "RenameBranchPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "newBranch": "alex/remote-ui-flows"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "newBranch": "remote-ui",
+          "oldBranch": "remote-ui-flows"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "newBranch": "remote-ui"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "newBranch": ""
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "newBranch": "-D"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "SetAutoPullPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "autoPull": true
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "cbc5ccb43624",
+          "autoPull": false,
+          "remote": "origin"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "cbc5ccb43624",
+          "autoPull": false
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624"
+      }
+    ]
+  },
+  "SetShelvedPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "shelved": true
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "shelved": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "shelved": true,
+          "at": 1791289923000
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "shelved": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "WorktreeCarryOverCompleteSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "report": {
+          "applied": 2,
+          "failures": []
+        },
+        "removedCarryOverPaths": [".env.local", "app/.env"]
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "report": {
+          "applied": 0,
+          "failures": []
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "report": {
+            "applied": 1,
+            "failures": []
+          },
+          "phase": "carryOver"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "report": {
+            "applied": 1,
+            "failures": []
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "WorktreeIdentitySchema": {
+    "accepts": [
+      {
+        "id": "e0f76c6cc80a",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "happy-hummingbird",
+        "branch": "remote-ui-flows",
+        "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+        "isPrimary": false,
+        "isExternal": false,
+        "detached": false,
+        "shelved": false,
+        "autoPull": false,
+        "primaryRef": "origin/main",
+        "primaryBranch": "main"
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "id": "cbc5ccb43624",
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "name": "shigoto-no-mori",
+          "branch": "main",
+          "path": "/Users/alex/dev/shigoto-no-mori",
+          "ahead": 0,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 0,
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "recentCommits": [
+            {
+              "hash": "a91f3c7",
+              "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+              "author": "Alex Kim",
+              "date": "2026-10-05T18:02:44+02:00",
+              "additions": 0,
+              "deletions": 0
+            }
+          ],
+          "isPrimary": true,
+          "isExternal": true,
+          "detached": false,
+          "shelved": false,
+          "autoPull": true
+        },
+        "output": {
+          "id": "cbc5ccb43624",
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "name": "shigoto-no-mori",
+          "branch": "main",
+          "path": "/Users/alex/dev/shigoto-no-mori",
+          "isPrimary": true,
+          "isExternal": true,
+          "detached": false,
+          "shelved": false,
+          "autoPull": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      }
+    ]
+  },
+  "WorktreeLifecyclePhaseSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "phase": "carryOver"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "phase": "setup"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "phase": "portPoolProvision"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "phase": "idle"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "phase": "setup",
+          "runId": "3f9a1c2e-8b4d-4e71-a0c5-6d2f9e8b1a34"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "phase": "setup"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "phase": "teardown"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "WorktreeRemovalSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "state": "removing"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "state": "removed"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "state": "kept"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "state": "removed",
+          "reason": "mirror stopped"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "state": "removed"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "state": "deleted"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "WorktreeSchema": {
+    "accepts": [
+      {
+        "id": "e0f76c6cc80a",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "happy-hummingbird",
+        "branch": "remote-ui-flows",
+        "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+        "ahead": 2,
+        "behind": 1,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": true,
+        "behindPrimary": 3,
+        "unpushedCount": 2,
+        "primaryRef": "origin/main",
+        "primaryBranch": "main",
+        "mergedIntoPrimary": false,
+        "changedCount": 3,
+        "lastChangeAt": 1791289923000,
+        "createdAt": 1790944323000,
+        "recentCommits": [
+          {
+            "hash": "e7c0a52",
+            "subject": "Badge merged projects with their devices",
+            "author": "Alex Kim",
+            "date": "2026-10-06T14:12:03+02:00",
+            "additions": 84,
+            "deletions": 12
+          },
+          {
+            "hash": "7d02b18",
+            "subject": "Aggregate worktrees across daemons",
+            "author": "Alex Kim",
+            "date": "2026-10-06T11:40:51+02:00",
+            "additions": 132,
+            "deletions": 57
+          }
+        ],
+        "isPrimary": false,
+        "isExternal": false,
+        "detached": false,
+        "shelved": false,
+        "autoPull": false,
+        "title": "Remote UI flows",
+        "description": "Drive the forest's worktrees from another device."
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "ahead": 0,
+        "behind": 0,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "recentCommits": [
+          {
+            "hash": "a91f3c7",
+            "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+            "author": "Alex Kim",
+            "date": "2026-10-05T18:02:44+02:00",
+            "additions": 0,
+            "deletions": 0
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      },
+      {
+        "id": "5780f2399520",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "brave-badger",
+        "branch": "4d20b18",
+        "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/brave-badger",
+        "ahead": 0,
+        "behind": 0,
+        "hasUpstream": false,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "createdAt": 1791203523000,
+        "recentCommits": [],
+        "isPrimary": false,
+        "isExternal": false,
+        "detached": true,
+        "shelved": true,
+        "autoPull": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "id": "cbc5ccb43624",
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "name": "shigoto-no-mori",
+          "branch": "main",
+          "path": "/Users/alex/dev/shigoto-no-mori",
+          "ahead": 0,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 0,
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "recentCommits": [
+            {
+              "hash": "a91f3c7",
+              "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+              "author": "Alex Kim",
+              "date": "2026-10-05T18:02:44+02:00",
+              "additions": 0,
+              "deletions": 0
+            }
+          ],
+          "isPrimary": true,
+          "isExternal": true,
+          "detached": false,
+          "shelved": false,
+          "autoPull": true,
+          "pullRequest": 148
+        },
+        "output": {
+          "id": "cbc5ccb43624",
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "name": "shigoto-no-mori",
+          "branch": "main",
+          "path": "/Users/alex/dev/shigoto-no-mori",
+          "ahead": 0,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 0,
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "recentCommits": [
+            {
+              "hash": "a91f3c7",
+              "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+              "author": "Alex Kim",
+              "date": "2026-10-05T18:02:44+02:00",
+              "additions": 0,
+              "deletions": 0
+            }
+          ],
+          "isPrimary": true,
+          "isExternal": true,
+          "detached": false,
+          "shelved": false,
+          "autoPull": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "ahead": 0,
+        "behind": 0,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "recentCommits": [
+          {
+            "hash": "a91f3c7",
+            "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+            "author": "Alex Kim",
+            "date": "2026-10-05T18:02:44+02:00",
+            "additions": 0,
+            "deletions": 0
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "ahead": -1,
+        "behind": 0,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "recentCommits": [
+          {
+            "hash": "a91f3c7",
+            "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+            "author": "Alex Kim",
+            "date": "2026-10-05T18:02:44+02:00",
+            "additions": 0,
+            "deletions": 0
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "ahead": 0,
+        "behind": 0,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": false,
+        "changedCount": 1.5,
+        "recentCommits": [
+          {
+            "hash": "a91f3c7",
+            "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+            "author": "Alex Kim",
+            "date": "2026-10-05T18:02:44+02:00",
+            "additions": 0,
+            "deletions": 0
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "ahead": 0,
+        "behind": 0,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "recentCommits": [
+          {
+            "hash": "zzz",
+            "subject": "Badge merged projects with their devices",
+            "author": "Alex Kim",
+            "date": "2026-10-06T14:12:03+02:00",
+            "additions": 84,
+            "deletions": 12
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "ahead": 0,
+        "behind": 0,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "recentCommits": [
+          {
+            "hash": "a91f3c7",
+            "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+            "author": "Alex Kim",
+            "date": "2026-10-05T18:02:44+02:00",
+            "additions": 0,
+            "deletions": 0
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false
+      }
+    ]
+  }
+}

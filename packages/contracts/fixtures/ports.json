@@ -1,0 +1,139 @@
+{
+  "PortNumberSchema": {
+    "accepts": [1, 5173, 65535],
+    "rejects": [0, 65536, 3000.5]
+  },
+  "CustomPortSchema": {
+    "accepts": [
+      {
+        "port": 6006,
+        "label": "storybook"
+      },
+      {
+        "port": 8787
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "port": 8787,
+          "label": "  api  "
+        },
+        "output": {
+          "port": 8787,
+          "label": "api"
+        }
+      },
+      {
+        "input": {
+          "port": 8787,
+          "label": "api",
+          "listening": true
+        },
+        "output": {
+          "port": 8787,
+          "label": "api"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "port": 0
+      },
+      {
+        "port": 65536
+      },
+      {
+        "port": 8787.5
+      },
+      {
+        "port": 8787,
+        "label": "   "
+      },
+      {
+        "port": 8787,
+        "label": "the api server the dev script starts"
+      },
+      {
+        "label": "api"
+      }
+    ]
+  },
+  "WorktreePortsResultSchema": {
+    "accepts": [
+      {
+        "ports": [
+          {
+            "port": 5173,
+            "label": "web",
+            "source": "pool",
+            "listening": true
+          },
+          {
+            "port": 6006,
+            "source": "custom",
+            "listening": false
+          }
+        ]
+      },
+      {
+        "ports": []
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "ports": [
+            {
+              "port": 5173,
+              "label": "web",
+              "source": "pool",
+              "listening": true,
+              "pid": 48213
+            }
+          ],
+          "host": "studio"
+        },
+        "output": {
+          "ports": [
+            {
+              "port": 5173,
+              "label": "web",
+              "source": "pool",
+              "listening": true
+            }
+          ]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "ports": [
+          {
+            "port": 5173,
+            "source": "auto",
+            "listening": true
+          }
+        ]
+      },
+      {
+        "ports": [
+          {
+            "port": 0,
+            "source": "pool",
+            "listening": true
+          }
+        ]
+      },
+      {
+        "ports": [
+          {
+            "port": 5173,
+            "source": "pool"
+          }
+        ]
+      },
+      {}
+    ]
+  }
+}
