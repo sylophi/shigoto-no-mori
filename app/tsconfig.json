@@ -48,6 +48,7 @@
     "forge.config.ts",
     "forge.env.d.ts",
     "vite.*.config.ts",
+    "vitest.config.ts",
     "vite.reactCompiler.ts"
   ]
 }

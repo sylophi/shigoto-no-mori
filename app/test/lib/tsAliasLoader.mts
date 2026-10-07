@@ -1,13 +1,14 @@
-// A minimal Node module-resolution hook so a plain check script can
-// import the app's TypeScript directly (Node 22.18+ strips types on
+// A minimal Node module-resolution hook so a plain script can import
+// the app's TypeScript directly (Node 22.18+ strips types on
 // its own, but it does not know the tsconfig path aliases or resolve
 // extensionless specifiers). Two jobs:
 //   1. Map the repo's import aliases (@shared, @host, @) to their dirs.
 //   2. Resolve an extensionless specifier to its .ts/.mts file (or an
 //      index file), the way the bundler does.
 // Registered via test/lib/register-ts-alias.mts. Kept dependency
-// free and used only by checks and dev scripts that run app modules
-// (scripts/fetch-villager-data.mts), never by the app build.
+// free and used only by the scripts that run app modules
+// (scripts/fetch-villager-data.mts, test/bench), never by the app
+// build or the proofs, which vitest resolves.
 import { existsSync, statSync } from "node:fs";
 import type { ResolveHook } from "node:module";
 import { dirname, join, resolve as resolvePath } from "node:path";
@@ -57,18 +58,11 @@ function appSpecifier(
   return null;
 }
 
-// Whether the loader resolves `specifier` itself (an alias or a
-// relative path) rather than leaving it to node.
-export function isAppSpecifier(specifier: string): boolean {
-  return appSpecifier(specifier) !== null;
-}
-
 // The app source file an import names by the two rules above: an
 // alias, or a relative specifier from the importing file at
 // `parentPath`. Null for one left to node and for one that names no
-// file. The proofs' change selection (proofDeps.mts) walks a proof's
-// imports through this too.
-export function resolveSource(
+// file.
+function resolveSource(
   specifier: string,
   parentPath: string | undefined,
 ): string | null {

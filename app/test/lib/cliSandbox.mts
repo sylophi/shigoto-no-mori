@@ -2,8 +2,7 @@
 // sync-transfer.mts) share: one sandbox holding the data dir and the
 // repos, the sm binary built from cli/ (shared across proofs, see
 // smBinary.mts), git wrappers over the scrubbed environment, and the
-// real CLI runner seam. Runs under register-ts-alias so the host
-// imports resolve.
+// real CLI runner seam.
 import { execFile } from "node:child_process";
 import {
   mkdtempSync,
