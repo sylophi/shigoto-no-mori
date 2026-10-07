@@ -57,10 +57,7 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
         slot: lifecycleSlot(script),
         worktree: ctx.worktree,
         project,
-        scriptEnv: {
-          projectBranch: ctx.projectBranch,
-          defaultBranch: ctx.defaultBranch,
-        },
+        scriptEnv: ctx.scriptEnv,
         notify: scriptEventNotifier(handlerCtx),
       });
       return { runId };

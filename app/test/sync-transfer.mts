@@ -968,7 +968,12 @@ async function main() {
       slot: { kind: "package", name: "sleep" },
       worktree: { id: wt5Id, name: "wt5", branch: "feature5", path: wt5Path },
       project: { id: sourceProjectId, path: sourceRepo, name: "source" },
-      scriptEnv: { projectBranch: "main", defaultBranch: "main" },
+      scriptEnv: {
+        projectBranch: "main",
+        defaultBranch: "main",
+        title: "",
+        description: "",
+      },
       notify: () => {},
     });
     try {

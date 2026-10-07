@@ -10,7 +10,8 @@ package main
 // the lifecycle scripts its Scripts panel re-runs by hand, which it
 // still starts itself with the SHIGOMORI_* env of scriptEnv below.
 // Shell selection and the unattended-run env (pager off) match it, so
-// the two runners differ in nothing a script can observe.
+// the two runners differ in nothing a script can observe. Custom
+// launchers (launchCustomCommand) take the same shell and env.
 
 import (
 	"cmp"
@@ -49,6 +50,9 @@ type scriptEnvInputs struct {
 	proj          project
 	projectBranch string
 	defaultBranch string
+	// What `sm describe` set, as stored: no gh call to see whether an
+	// open PR has taken them over, since every run would wait on it.
+	description worktreeDescription
 }
 
 // The user's login shell, run as a login shell (no -i) so .zprofile /
@@ -118,15 +122,17 @@ func passwdShellFor(passwd, uid string) string {
 // (host/lib/util/paths.ts) for why injecting it is the bug.
 func scriptEnv(in scriptEnvInputs) []string {
 	contract := map[string]string{
-		"SHIGOMORI_SCRIPT_NAME":     in.scriptName,
-		"SHIGOMORI_WORKTREE_PATH":   in.worktree.Path,
-		"SHIGOMORI_WORKTREE_NAME":   in.worktree.Name,
-		"SHIGOMORI_WORKTREE_BRANCH": in.worktree.Branch,
-		"SHIGOMORI_WORKTREE_ID":     in.worktree.ID,
-		"SHIGOMORI_PROJECT_PATH":    in.proj.Path,
-		"SHIGOMORI_PROJECT_NAME":    in.proj.Name,
-		"SHIGOMORI_PROJECT_BRANCH":  in.projectBranch,
-		"SHIGOMORI_DEFAULT_BRANCH":  in.defaultBranch,
+		"SHIGOMORI_SCRIPT_NAME":          in.scriptName,
+		"SHIGOMORI_WORKTREE_PATH":        in.worktree.Path,
+		"SHIGOMORI_WORKTREE_NAME":        in.worktree.Name,
+		"SHIGOMORI_WORKTREE_BRANCH":      in.worktree.Branch,
+		"SHIGOMORI_WORKTREE_ID":          in.worktree.ID,
+		"SHIGOMORI_WORKTREE_TITLE":       in.description.Title,
+		"SHIGOMORI_WORKTREE_DESCRIPTION": in.description.Description,
+		"SHIGOMORI_PROJECT_PATH":         in.proj.Path,
+		"SHIGOMORI_PROJECT_NAME":         in.proj.Name,
+		"SHIGOMORI_PROJECT_BRANCH":       in.projectBranch,
+		"SHIGOMORI_DEFAULT_BRANCH":       in.defaultBranch,
 	}
 	var env []string
 	for _, kv := range envWithoutCdFile() {
@@ -136,9 +142,11 @@ func scriptEnv(in scriptEnvInputs) []string {
 		}
 	}
 	// Sorted so a run's environment is reproducible, which the NDJSON
-	// event stream and any diffing of it rely on.
+	// event stream and any diffing of it rely on. NULs go: the
+	// description is free text, and exec refuses an env that holds one,
+	// so one stray byte would keep every script from starting.
 	for _, name := range slices.Sorted(maps.Keys(contract)) {
-		env = append(env, name+"="+contract[name])
+		env = append(env, name+"="+strings.ReplaceAll(contract[name], "\x00", ""))
 	}
 	return env
 }

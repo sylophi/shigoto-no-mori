@@ -76,7 +76,7 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 		}
 	}
 
-	if err := launchEntryFn(*chosen, target.worktree.Path); err != nil {
+	if err := launchEntryFn(*chosen, target); err != nil {
 		return 1, errf("Couldn't open %s: %v", chosen.label, err)
 	}
 	bumpLauncherUse(chosen.id)

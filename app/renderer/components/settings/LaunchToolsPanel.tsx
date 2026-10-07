@@ -6,6 +6,7 @@ import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
+import { ScriptEnvPopover } from "@/components/shared/ScriptEnvPopover";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
@@ -65,7 +66,7 @@ export function LaunchToolsPanel({
       )}
 
       <section className="space-y-3">
-        <SectionIntro title="Custom tools">
+        <SectionIntro title="Custom tools" action={<ScriptEnvPopover />}>
           Custom commands available in every worktree (e.g.{" "}
           <span className="font-mono">claude</span>,{" "}
           <span className="font-mono">tmux new-session</span>,{" "}

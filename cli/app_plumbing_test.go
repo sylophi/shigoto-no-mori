@@ -478,15 +478,22 @@ func TestOpenByExactAddress(t *testing.T) {
 	proj := autoPullSandbox(t)
 	fox := createViaCmd(t, proj, "fox")
 	// A custom launcher labeled like the Finder's full id must not
-	// shadow it.
+	// shadow it. a1 writes back the script env it ran with, the older
+	// SHIGOMORI_WORKSPACE_PATH included.
 	writeFileT(t, configJSONPath(), `{"launchers":[`+
-		`{"id":"a1","label":"Write marker","command":"echo opened > \"$SHIGOMORI_WORKSPACE_PATH/opened.txt\""},`+
+		`{"id":"a1","label":"Write marker","command":"echo \"$SHIGOMORI_SCRIPT_NAME|$SHIGOMORI_WORKTREE_PATH|$SHIGOMORI_WORKTREE_NAME|$SHIGOMORI_PROJECT_NAME|$SHIGOMORI_WORKTREE_TITLE\" > \"$SHIGOMORI_WORKSPACE_PATH/opened.txt\""},`+
 		`{"id":"b2","label":"app:finder","command":"true"}]}`)
 	ctx := cliContext{projects: []project{proj}}
+	if _, err := updateWorktreeDescription(proj.ID, fox.ID, func(d worktreeDescription) worktreeDescription {
+		d.Title = "Fox work"
+		return d
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	var launched []string
-	launchEntryFn = func(entry launcherEntry, path string) error {
-		launched = append(launched, entry.id+" "+path)
+	launchEntryFn = func(entry launcherEntry, target located) error {
+		launched = append(launched, entry.id+" "+target.worktree.Path)
 		return nil
 	}
 	t.Cleanup(func() { launchEntryFn = launchEntry })
@@ -525,7 +532,7 @@ func TestOpenByExactAddress(t *testing.T) {
 	}
 
 	// A launch that fails is the {ok: false, error} document.
-	launchEntryFn = func(launcherEntry, string) error { return errors.New("boom") }
+	launchEntryFn = func(launcherEntry, located) error { return errors.New("boom") }
 	docs := captureJSON(t, func() {
 		code, err := cmdOpen(ctx, []string{"--project-id", proj.ID, "--worktree-id", fox.ID, "--", "custom:a1"})
 		if code != 1 || err == nil {
@@ -539,8 +546,17 @@ func TestOpenByExactAddress(t *testing.T) {
 	}
 
 	// The real launcher, through the entrypoint the app spawns, with the
-	// tool after --.
+	// tool after --. $SHELL is a stand-in that notes how it was called
+	// and hands the command to sh, to show the launch goes through the
+	// user's login shell like a setup script does.
 	launchEntryFn = launchEntry
+	shellNote := filepath.Join(t.TempDir(), "shell-args")
+	stubShell := filepath.Join(t.TempDir(), "stub-shell")
+	writeFileT(t, stubShell, "#!/bin/sh\necho \"$1 $2\" > "+shellQuote(shellNote)+"\nshift\nexec /bin/sh \"$@\"\n")
+	if err := os.Chmod(stubShell, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SHELL", stubShell)
 	savedArgs := os.Args
 	t.Cleanup(func() { os.Args = savedArgs })
 	os.Args = []string{binaryName, "--json", "open", "--project-id", proj.ID, "--worktree-id", fox.ID, "--", "custom:a1"}
@@ -553,15 +569,20 @@ func TestOpenByExactAddress(t *testing.T) {
 		t.Errorf("entrypoint open answered %v", doc)
 	}
 	marker := filepath.Join(fox.Path, "opened.txt")
+	wantMarker := strings.Join([]string{"Write marker", fox.Path, "fox", proj.Name, "Fox work"}, "|")
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if data, err := os.ReadFile(marker); err == nil && strings.TrimSpace(string(data)) == "opened" {
+		if data, err := os.ReadFile(marker); err == nil && strings.TrimSpace(string(data)) == wantMarker {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("the custom launcher never wrote its marker")
+			data, _ := os.ReadFile(marker)
+			t.Fatalf("the custom launcher wrote %q, want %q", data, wantMarker)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if data, err := os.ReadFile(shellNote); err != nil || strings.TrimSpace(string(data)) != "-l -c" {
+		t.Errorf("launcher shell called with %q (%v), want $SHELL -l -c", data, err)
 	}
 }
 

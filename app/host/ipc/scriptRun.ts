@@ -4,23 +4,24 @@
 // needs to set the SHIGOMORI_* env (package.json scripts run through
 // `sm run`, which sets it itself).
 import { unknownWorktreeError } from "@shared/errors";
+import { hasWorktreeData } from "@shared/schemas";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Project, ShigomoriConfig } from "@shared/schemas";
-import { readShigomoriConfig } from "@host/lib/config/project";
+import {
+  readShigomoriConfig,
+  readWorktreeData,
+} from "@host/lib/config/project";
 import {
   listWorktreeIdentities,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
-import type { NotifyScriptEvent } from "@host/lib/scripts";
+import type { NotifyScriptEvent, ScriptEnvValues } from "@host/lib/scripts";
 
 export interface ScriptRunContext {
   config: ShigomoriConfig | null;
   worktree: WorktreeIdentity;
-  // Branch checked out in the primary worktree; "" when there is none.
-  projectBranch: string;
-  // "" when the default branch can't be resolved (no remote, empty repo).
-  defaultBranch: string;
+  scriptEnv: ScriptEnvValues;
 }
 
 export async function prepareScriptRun(
@@ -28,19 +29,35 @@ export async function prepareScriptRun(
   worktreeId: string,
 ): Promise<ScriptRunContext> {
   // One CLI read answers the worktree, the primary's branch and the
-  // project's primary ref alike.
-  const [config, identities] = await Promise.all([
+  // project's primary ref alike. The data file is read alongside it and
+  // dropped below for an external worktree, which keeps none (the
+  // CLI's describedOf). A broken one costs the run its title, not the
+  // run.
+  const [config, identities, data] = await Promise.all([
     readShigomoriConfig(project.id),
     listWorktreeIdentities(project.id, { primaryRef: true }),
+    readWorktreeData(project.id, worktreeId).catch(() => null),
   ]);
   const worktree = identities.find((i) => i.id === worktreeId);
   if (!worktree) throw unknownWorktreeError(worktreeId);
+  const described = hasWorktreeData(worktree) ? data : null;
   return {
     config,
     worktree,
-    projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
-    defaultBranch: worktree.primaryRef ?? "",
+    scriptEnv: {
+      projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
+      defaultBranch: worktree.primaryRef ?? "",
+      title: withoutNul(described?.title),
+      description: withoutNul(described?.description),
+    },
   };
+}
+
+// Free text, and a spawn refuses an env value that holds a NUL, so one
+// stray byte would keep the script from starting (the CLI's scriptEnv
+// drops them too).
+function withoutNul(text: string | undefined): string {
+  return (text ?? "").replaceAll("\0", "");
 }
 
 export function scriptEventNotifier(ctx: HandlerContext): NotifyScriptEvent {

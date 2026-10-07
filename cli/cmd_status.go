@@ -526,9 +526,7 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 		wg       sync.WaitGroup
 	)
 	var desc worktreeDescription
-	if hasWorktreeData(id) {
-		wg.Go(func() { desc = readWorktreeDescription(id.ProjectID, id.ID) })
-	}
+	wg.Go(func() { desc = describedOf(id) })
 	wg.Go(func() { counts = readChangeCounts(id.Path) })
 	wg.Go(func() { stashes = stashCount(id.Path) })
 	wg.Go(func() { commits = listCommits(id.Path, 0, 1) })

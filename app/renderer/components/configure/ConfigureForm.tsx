@@ -19,10 +19,10 @@ import type {
   LauncherCommand,
   ShigomoriConfig,
 } from "@shared/schemas";
-import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { CarryOverSection } from "./CarryOverSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
+import { ScriptEnvPopover } from "@/components/shared/ScriptEnvPopover";
 import { ScriptField } from "./ScriptField";
 import { WorktreeLocationField } from "./WorktreeLocationField";
 import {
@@ -260,22 +260,9 @@ export function ConfigureForm({
           />
 
           <section className="space-y-4">
-            <div>
-              <SectionHeading className="mb-1">Scripts</SectionHeading>
-              <p className="text-xs text-muted-foreground">
-                Run inside the worktree directory. These env vars are available:
-              </p>
-              <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground select-text">
-                {SCRIPT_ENV_DOCS.map((row) => (
-                  <li key={row.name}>
-                    <span className="font-mono text-foreground/80">
-                      {row.name}
-                    </span>
-                    : {row.desc}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <SectionIntro title="Scripts" action={<ScriptEnvPopover />}>
+              Run inside the worktree directory.
+            </SectionIntro>
             <ScriptField
               id="script-setup"
               label="Setup"
@@ -294,7 +281,7 @@ export function ConfigureForm({
             {/* The Settings link opens THIS machine's launch tools, which
                 say nothing about a peer's. A remote project's tools run
                 from the window on that device, so say that instead. */}
-            <SectionIntro title="Custom tools">
+            <SectionIntro title="Custom tools" action={<ScriptEnvPopover />}>
               {remote ? (
                 <>
                   Tools specific to this project, launched from {deviceLabel}
