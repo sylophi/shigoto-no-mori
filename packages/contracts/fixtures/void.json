@@ -1,0 +1,5 @@
+{
+  "VoidSchema": {
+    "rejects": [null, false, 0, "", {}, []]
+  }
+}

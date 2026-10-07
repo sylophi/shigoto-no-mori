@@ -1,16 +1,16 @@
-import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   PathPayloadSchema,
   ShellOpenExternalPayloadSchema,
+  VoidSchema,
 } from "@shared/schemas";
 
 export const shellContract = defineContract("client", {
   openExternal: invoke(
     "shell:openExternal",
     ShellOpenExternalPayloadSchema,
-    Schema.Void,
+    VoidSchema,
   ),
   showItemInFolder: invoke(
     "shell:showItemInFolder",

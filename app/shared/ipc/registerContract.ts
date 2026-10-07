@@ -1,5 +1,5 @@
 import type { CallDef, ContractModule, InvokeDef } from "./contract";
-import { decode } from "./schema";
+import { decode, encode } from "./schema";
 import type { HandlerContext, ServerTransport } from "./transport";
 import type {
   BroadcastKeys,
@@ -65,7 +65,7 @@ function wrapContractCall<Ctx>(
     const result = await handler(input, ctx);
     onSuccess?.(input);
     onMutated?.(ctx);
-    return opts.validateOutputs ? decode(def.output, result) : result;
+    return opts.validateOutputs ? encode(def.output, result) : result;
   };
 }
 

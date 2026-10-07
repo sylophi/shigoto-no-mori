@@ -8,7 +8,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type { z } from "zod";
 
-export type ContractSchema = z.ZodTypeAny | Schema.Decoder<unknown>;
+export type ContractSchema = z.ZodTypeAny | Schema.Codec<unknown, unknown>;
 
 // The wire shape a producer hands over, and the decoded shape a
 // consumer sees.
@@ -45,6 +45,19 @@ export function safeDecode(
   return Result.isSuccess(result)
     ? { success: true, data: result.success }
     : { success: false, error: result.failure };
+}
+
+// A handler's answer checked against the output schema, as the wire
+// will carry it. Effect schemas encode it, since the answer is a
+// decoded value.
+export function encode<S extends ContractSchema>(
+  schema: S,
+  value: Decoded<S>,
+): Encoded<S>;
+export function encode(schema: ContractSchema, value: unknown): unknown {
+  return Schema.isSchema(schema)
+    ? Schema.encodeUnknownSync(schema)(value)
+    : schema.parse(value);
 }
 
 export function decode<S extends ContractSchema>(
