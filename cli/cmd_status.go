@@ -205,14 +205,18 @@ func probePullRequest(projectPath, branch string) prProbe {
 	if json.Unmarshal([]byte(stdout), &found) != nil {
 		return prProbe{reason: "unexpected gh output"}
 	}
-	if len(found) == 0 {
-		return prProbe{}
+	checkedOut := sync.OnceValue(func() int { return checkedOutPullRequest(projectPath, branch) })
+	for _, pr := range found {
+		if pr.IsCrossRepository && pr.Number != checkedOut() {
+			continue
+		}
+		card := &prCard{prSummary: pr.prSummary}
+		if checks := rollupChecks(pr.StatusCheckRollup); checks.Total > 0 {
+			card.Checks = &checks
+		}
+		return prProbe{card: card}
 	}
-	card := &prCard{prSummary: found[0].prSummary}
-	if checks := rollupChecks(found[0].StatusCheckRollup); checks.Total > 0 {
-		card.Checks = &checks
-	}
-	return prProbe{card: card}
+	return prProbe{}
 }
 
 // --- the card document ---

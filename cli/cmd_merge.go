@@ -81,6 +81,8 @@ type prSummary struct {
 	// a party to the merge, and a stack is read off it (stack.go).
 	BaseRefName string `json:"baseRefName"`
 	HeadRefName string `json:"headRefName"`
+	// A PR from a fork's branch, never the branch's own (prLookupArgs).
+	IsCrossRepository bool `json:"isCrossRepository,omitempty"`
 	// GitHub's merge verdict (CLEAN, BLOCKED, BEHIND, DIRTY, ...) and
 	// the auto-merge armed on the PR, if any: what the merge reads to
 	// pick between merging now and arming auto-merge. Only the
@@ -100,7 +102,7 @@ type autoMergeRequest struct {
 func (r *autoMergeRequest) method() string { return strings.ToLower(r.MergeMethod) }
 
 // The gh projection prSummary decodes.
-const prSummaryFields = "number,title,state,isDraft,url,baseRefName,headRefName"
+const prSummaryFields = "number,title,state,isDraft,url,baseRefName,headRefName,isCrossRepository"
 
 // The fields a merge decides on. GitHub computes the verdict per PR,
 // so only the merge paths ask for them (mergeLookupArgs). sm pr, the
@@ -110,13 +112,36 @@ const mergeFields = "mergeStateStatus,autoMergeRequest"
 // How a branch's PR is located: gh's server-side --head filter, any
 // state, newest first. Shared so `merge` and `status` can never end up
 // looking at different pull requests. extraFields is for callers that
-// need more than prSummary carries.
+// need more than prSummary carries. A few, not one: the filter matches
+// the name across every fork, so a stranger's fork PR of the same name
+// may be newer than the branch's own. Every lookup by branch takes the
+// first that isn't a fork's, as the app does, or is the one the branch
+// was checked out from (checkedOutPullRequest). describe takes only the
+// first that isn't a fork's (cmd_describe.go).
 func prLookupArgs(branch string, extraFields ...string) []string {
-	return []string{"pr", "list", "--state", "all", "--head", branch, "--limit", "1", "--json", prFields(extraFields...)}
+	return []string{"pr", "list", "--state", "all", "--head", branch, "--limit", "10", "--json", prFields(extraFields...)}
 }
 
 func mergeLookupArgs(branch string) []string {
 	return prLookupArgs(branch, mergeFields)
+}
+
+// The fork PR the branch was checked out from, 0 for none. The app's
+// PR checkout, like `gh pr checkout`, points branch.<b>.merge at
+// refs/pull/<n>/head, and that PR is the branch's own though it comes
+// from a fork. A git call, so the lookups only make it once gh has
+// returned a fork's PR.
+func checkedOutPullRequest(repoPath, branch string) int {
+	ref, err := runGit(repoPath, "config", "--get", "branch."+branch+".merge")
+	if err != nil {
+		return 0
+	}
+	pull, isPull := strings.CutPrefix(strings.TrimSpace(ref), "refs/pull/")
+	pull, isHead := strings.CutSuffix(pull, "/head")
+	if number, err := strconv.Atoi(pull); isPull && isHead && err == nil {
+		return number
+	}
+	return 0
 }
 
 // The --json projection: the summary, plus what the caller adds.
@@ -159,15 +184,21 @@ func findPullRequestByNumber(projectPath string, number int, extraFields ...stri
 }
 
 func findPullRequest(projectPath, branch string) (*prSummary, error) {
-	return findPullRequestWith(projectPath, prLookupArgs(branch))
+	return findPullRequestWith(projectPath, branch, prLookupArgs(branch))
 }
 
-func findPullRequestWith(projectPath string, args []string) (*prSummary, error) {
+func findPullRequestWith(projectPath, branch string, args []string) (*prSummary, error) {
 	prs, err := ghPrList(projectPath, args...)
-	if err != nil || len(prs) == 0 {
+	if err != nil {
 		return nil, err
 	}
-	return &prs[0], nil
+	checkedOut := sync.OnceValue(func() int { return checkedOutPullRequest(projectPath, branch) })
+	for i := range prs {
+		if !prs[i].IsCrossRepository || prs[i].Number == checkedOut() {
+			return &prs[i], nil
+		}
+	}
+	return nil, nil
 }
 
 // The repo's merge settings on GitHub: the methods its merge button
@@ -233,7 +264,7 @@ func allowedMergeMethods(projectPath string) []string {
 // land. pr is nil when the branch has no PR at all.
 func resolveMergeTarget(projectPath, branch string) (*prSummary, repoMergeSettings, error) {
 	return lookupMergeTarget(projectPath, func() (*prSummary, error) {
-		return findPullRequestWith(projectPath, mergeLookupArgs(branch))
+		return findPullRequestWith(projectPath, branch, mergeLookupArgs(branch))
 	})
 }
 
@@ -358,6 +389,9 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		}
 		if pr == nil {
 			return 1, errf("No pull request #%d", number)
+		}
+		if pr.IsCrossRepository && checkedOutPullRequest(proj.Path, pr.HeadRefName) != number {
+			return 1, codedErrf("fork-pull-request", "PR #%d is from a fork, and its branch here wasn't checked out from it. Merge it on GitHub instead.", number)
 		}
 		if pr.State != "OPEN" {
 			return 1, errf("PR #%d is %s, not open", number, strings.ToLower(pr.State))
