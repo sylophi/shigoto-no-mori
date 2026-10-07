@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { CommitHashZod } from "@shared/schemas/zodBridge";
+import * as Schema from "effect/Schema";
+import { CommitHashSchema, PullRequestSchema } from "@shared/schemas";
 import { run } from "../git/core";
 import { getMergeBaseDiff } from "../git/diff";
 import { hasCommit } from "../git/refs";
@@ -79,11 +79,13 @@ function isDiffTooLarge(err: unknown): boolean {
   return /\btoo_large\b/.test(stderr);
 }
 
-const GhPrCommitsSchema = z.object({
-  url: z.url(),
-  baseRefOid: CommitHashZod,
-  headRefOid: CommitHashZod,
-});
+const decodeGhPrCommits = Schema.decodeUnknownSync(
+  Schema.Struct({
+    url: PullRequestSchema.fields.url,
+    baseRefOid: CommitHashSchema,
+    headRefOid: CommitHashSchema,
+  }),
+);
 
 // The same diff, computed by git from the two commits GitHub has on
 // record for the PR. The head is the pushed one, so a local branch that
@@ -99,7 +101,7 @@ async function getLocalPullRequestDiff(
     ["pr", "view", String(number), "--json", "url,baseRefOid,headRefOid"],
     { cwd, fallback: "gh pr view failed" },
   );
-  const pr = GhPrCommitsSchema.parse(JSON.parse(raw));
+  const pr = decodeGhPrCommits(JSON.parse(raw));
   const oids = [pr.baseRefOid, pr.headRefOid];
   const present = await Promise.all(oids.map((oid) => hasCommit(cwd, oid)));
   const missing = oids.filter((_, i) => !present[i]);

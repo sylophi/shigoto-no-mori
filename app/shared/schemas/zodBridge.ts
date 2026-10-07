@@ -10,11 +10,6 @@ import {
 import { WorktreeIdSchema } from "./config";
 import { PortNumberSchema } from "./ports";
 import {
-  PullRequestMergeStateSchema,
-  PullRequestReviewDecisionSchema,
-  PullRequestStateSchema,
-} from "./pullRequest";
-import {
   CommitHashSchema,
   CreatePhaseSchema,
   WorktreeSchema,
@@ -43,10 +38,5 @@ export const CreatePhaseZod = toZod(CreatePhaseSchema);
 export const GitRefNameZod = toZod(GitRefNameSchema);
 export const PortNumberZod = toZod(PortNumberSchema);
 export const ProjectZod = toZod(ProjectSchema);
-export const PullRequestMergeStateZod = toZod(PullRequestMergeStateSchema);
-export const PullRequestReviewDecisionZod = toZod(
-  PullRequestReviewDecisionSchema,
-);
-export const PullRequestStateZod = toZod(PullRequestStateSchema);
 export const WorktreeIdZod = toZod(WorktreeIdSchema);
 export const WorktreeZod = toZod(WorktreeSchema);

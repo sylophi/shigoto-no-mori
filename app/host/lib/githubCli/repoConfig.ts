@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import type { RepoMergeConfig } from "@shared/schemas";
 import { ttlMapCache } from "../util/ttlCache";
 import { execGh } from "./exec";
@@ -16,16 +16,18 @@ const REPO_MERGE_QUERY =
   "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
   "{ mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed } }";
 
-const GhRepoMergeConfigSchema = z.object({
-  data: z.object({
-    repository: z.object({
-      mergeCommitAllowed: z.boolean(),
-      squashMergeAllowed: z.boolean(),
-      rebaseMergeAllowed: z.boolean(),
-      autoMergeAllowed: z.boolean(),
+const decodeGhRepoMergeConfig = Schema.decodeUnknownSync(
+  Schema.Struct({
+    data: Schema.Struct({
+      repository: Schema.Struct({
+        mergeCommitAllowed: Schema.Boolean,
+        squashMergeAllowed: Schema.Boolean,
+        rebaseMergeAllowed: Schema.Boolean,
+        autoMergeAllowed: Schema.Boolean,
+      }),
     }),
   }),
-});
+);
 
 // The loader throws on gh failure or a malformed response so only
 // successful reads get cached. A transient failure shouldn't pin
@@ -46,9 +48,7 @@ const repoMergeConfigCache = ttlMapCache<string, RepoMergeConfig>(
       ],
       { cwd },
     );
-    const { repository } = GhRepoMergeConfigSchema.parse(
-      JSON.parse(stdout),
-    ).data;
+    const { repository } = decodeGhRepoMergeConfig(JSON.parse(stdout)).data;
     return {
       merge: repository.mergeCommitAllowed,
       squash: repository.squashMergeAllowed,
