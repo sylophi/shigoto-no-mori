@@ -1032,24 +1032,6 @@ func moveWorktreeMarks(from, to string) {
 	}
 }
 
-// Carries one mark from a retired id to the id that replaces it (an
-// adopt moves the checkout, so its id changes with its path). A no-op
-// when `from` is unmarked.
-func moveRegistryMark(key, from, to string) error {
-	return updateRegistryKey(key, func(raw json.RawMessage) (any, error) {
-		m := map[string]bool{}
-		if err := decodeKey(registryPath(), key, raw, &m); err != nil {
-			return nil, err
-		}
-		if !m[from] {
-			return nil, nil
-		}
-		delete(m, from)
-		m[to] = true
-		return m, nil
-	})
-}
-
 // Sets or clears one id in a worktreeMarkKeys map.
 func setRegistryMark(key, worktreeID string, on bool) error {
 	return updateRegistryKey(key, func(raw json.RawMessage) (any, error) {

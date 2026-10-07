@@ -66,10 +66,10 @@ func foldChangeCounts(entries []statusEntry) changeCounts {
 	return counts
 }
 
-// Display probe, like changedCount's caller in buildWorktree: an
-// unreadable status shows as clean rather than failing the card. Goes
-// through gitx's statusEntries so the card and `list` can never read
-// the working tree differently.
+// Display probe, like buildWorktree's change count: an unreadable
+// status shows as clean rather than failing the card. Goes through gitx's
+// statusEntries so the card and `list` can never read the working
+// tree differently.
 func readChangeCounts(worktreePath string) changeCounts {
 	entries, err := statusEntries(worktreePath)
 	if err != nil {

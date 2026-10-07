@@ -115,7 +115,10 @@ function CardBody({
   // The worktree's page offers the console and the dialogs too, so a
   // card that cannot reach its device still leads there.
   return (
-    <article className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
+    <article
+      data-slot="live-card"
+      className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4"
+    >
       {card.worktree ? (
         <WorktreeHeader
           deviceId={card.deviceId}
@@ -277,7 +280,7 @@ function WorktreeHeader({
     </>
   );
   return (
-    <header className="flex min-w-0 items-center gap-1">
+    <div className="flex min-w-0 items-center gap-1">
       {worktree ? (
         <Link
           to={WORKTREE_ROUTE_PATHS.detail}
@@ -294,7 +297,7 @@ function WorktreeHeader({
       ) : (
         <div className="flex min-w-0 flex-1 items-center gap-3">{title}</div>
       )}
-    </header>
+    </div>
   );
 }
 
@@ -436,7 +439,7 @@ function PortText({
 // page rather than a worktree.
 function PortsHeader() {
   return (
-    <header className="flex min-w-0 items-center gap-2.5">
+    <div className="flex min-w-0 items-center gap-2.5">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
         <Cable aria-hidden className="size-4" />
       </span>
@@ -446,6 +449,6 @@ function PortsHeader() {
           Not tied to a worktree
         </span>
       </div>
-    </header>
+    </div>
   );
 }

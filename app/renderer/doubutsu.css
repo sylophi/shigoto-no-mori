@@ -43,6 +43,7 @@
  *      diff-index-row, diff-index-jump   diff/DiffFileIndex.tsx
  *      file-tree                 files/FileTree.tsx
  *      file-view                 files/FileViewer.tsx
+ *      live-card                 live/LiveCard.tsx
  *      accept-commands-panel     remote/AcceptCommandsToggle.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
@@ -726,11 +727,17 @@
    wants the same band to read as its own panel. Keeping it on this
    selector list means the alpha above stays the single knob. On a wide
    viewport it is the app sidebar's list instead (SidebarTakeover), on
-   the mint like the tree it stands in for. */
+   the mint like the tree it stands in for.
+
+   The Live page's cards wear it too. A page of them, each holding
+   blocks of its own, read as hard slabs on the wallpaper, louder than
+   the header over them. Their own title rows are not <header>s, so the
+   band does not stack inside them. */
 .doubutsu [data-doubutsu-zone="main"] :is(header, footer),
 .doubutsu
   :is([data-doubutsu-zone="main"], [data-slot="sheet-content"])
-  :is([data-slot="diff-index"], [data-slot="file-tree"]) {
+  :is([data-slot="diff-index"], [data-slot="file-tree"]),
+.doubutsu [data-doubutsu-zone="main"] [data-slot="live-card"] {
   background-color: color-mix(in oklab, var(--card) 70%, transparent);
 }
 
