@@ -17,6 +17,8 @@ export interface RowHandlers {
   onToggleShelf: (shelf: InboxShelf) => void;
   // An owner's header opened or shut, by owner key (ownerOf).
   onToggleOwner: (ownerKey: string) => void;
+  // A prefix's group in the open project opened or shut.
+  onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
   // The group key of the project the page on screen belongs to.
   currentGroupKey: string | undefined;
   arrangeMode: boolean;
@@ -79,7 +81,11 @@ function projectIdForRow(row: SidebarRow): string | null {
     return null;
   // Remote rows report the group they were merged into, so hovering a
   // peer's worktree keeps its project header's actions alive.
-  if (row.kind === "remote-worktree" || row.kind === "shelved-toggle") {
+  if (
+    row.kind === "remote-worktree" ||
+    row.kind === "shelved-toggle" ||
+    row.kind === "worktree-group"
+  ) {
     return row.groupId;
   }
   return row.projectId;

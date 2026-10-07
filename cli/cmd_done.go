@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"sync"
 )
 
 // The project's primary branch in every form the flows below need:
@@ -151,20 +152,31 @@ func isAncestor(cwd, ancestor, ref string) bool {
 	return err == nil
 }
 
-// True when gh reports a merged PR whose head is the branch. False on
-// any gh failure (not installed, not a GitHub repo): the caller then
-// requires --force rather than guessing.
+// True when gh reports a merged PR from this repository whose head is
+// the branch, or the fork's PR it was checked out from (prLookupArgs). False on any gh
+// failure (not installed, not a GitHub repo): the caller then requires
+// --force rather than guessing.
 func branchHasMergedPR(projectPath, branch string) bool {
 	stdout, err := runGh(projectPath,
-		"pr", "list", "--state", "merged", "--head", branch, "--limit", "1",
-		"--json", "number")
+		"pr", "list", "--state", "merged", "--head", branch, "--limit", "10",
+		"--json", "number,isCrossRepository")
 	if err != nil {
 		return false
 	}
 	var prs []struct {
-		Number int `json:"number"`
+		Number            int  `json:"number"`
+		IsCrossRepository bool `json:"isCrossRepository"`
 	}
-	return json.Unmarshal([]byte(stdout), &prs) == nil && len(prs) > 0
+	if json.Unmarshal([]byte(stdout), &prs) != nil {
+		return false
+	}
+	checkedOut := sync.OnceValue(func() int { return checkedOutPullRequest(projectPath, branch) })
+	for _, pr := range prs {
+		if !pr.IsCrossRepository || pr.Number == checkedOut() {
+			return true
+		}
+	}
+	return false
 }
 
 func deletedBranchField(branch string, deleted bool) any {

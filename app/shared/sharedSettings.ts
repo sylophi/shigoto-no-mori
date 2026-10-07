@@ -42,49 +42,81 @@ export const sharedSettingKeys = {
   worktreeSort: (groupKey: string) => `worktreeSort/${groupKey}`,
   // The worktrees the sidebar hides the way it hides shelved ones, in
   // every project. The value is the prefixes, one per line
-  // (hiddenPrefixesValue).
+  // (worktreePrefixesValue).
   hiddenWorktreePrefixes: "hiddenWorktreePrefixes",
+  // The worktrees a project's tree gathers under a header per prefix,
+  // in every project. The value is the prefixes, one per line, like
+  // the hidden ones.
+  groupedWorktreePrefixes: "groupedWorktreePrefixes",
 };
 
 // The prefixes trimmed, deduped and sorted, so the same list is the
 // same value. Blank ones are nothing to match.
-export function normalizeHiddenPrefixes(prefixes: readonly string[]): string[] {
+export function normalizeWorktreePrefixes(
+  prefixes: readonly string[],
+): string[] {
   const trimmed = prefixes.map((prefix) => prefix.trim()).filter(Boolean);
   return [...new Set(trimmed)].toSorted();
 }
 
-// The hidden-worktree prefixes as their entry holds them.
-export function parseHiddenPrefixes(value: string | undefined): string[] {
-  return value === undefined ? [] : normalizeHiddenPrefixes(value.split("\n"));
+// A worktree prefix list (hidden or grouped) as its entry holds it.
+export function parseWorktreePrefixes(value: string | undefined): string[] {
+  return value === undefined
+    ? []
+    : normalizeWorktreePrefixes(value.split("\n"));
 }
 
 // The prefixes as their entry's value, or null when they outgrow what
 // a value holds.
-export function hiddenPrefixesValue(
+export function worktreePrefixesValue(
   prefixes: readonly string[],
 ): string | null {
-  const value = normalizeHiddenPrefixes(prefixes).join("\n");
+  const value = normalizeWorktreePrefixes(prefixes).join("\n");
   return isSharedSettingValue(value) ? value : null;
 }
 
-// Whether a worktree's name or branch starts with one of the prefixes.
-// A primary is never hidden, the same way it can never be shelved. A
+// What the prefix lists match a worktree by: its name or its branch.
+// A primary is never matched, the same way it can never be shelved. A
 // detached worktree has no branch, only a commit hash in its place.
+type PrefixedWorktree = {
+  name: string;
+  branch: string;
+  isPrimary: boolean;
+  detached: boolean;
+};
+
+function startsWithPrefix(worktree: PrefixedWorktree, prefix: string) {
+  return (
+    worktree.name.startsWith(prefix) ||
+    (!worktree.detached && worktree.branch.startsWith(prefix))
+  );
+}
+
+// Whether a worktree's name or branch starts with one of the prefixes.
 export function isHiddenByPrefix(
-  worktree: {
-    name: string;
-    branch: string;
-    isPrimary: boolean;
-    detached: boolean;
-  },
+  worktree: PrefixedWorktree,
   prefixes: readonly string[],
 ): boolean {
   if (worktree.isPrimary) return false;
-  return prefixes.some(
-    (prefix) =>
-      worktree.name.startsWith(prefix) ||
-      (!worktree.detached && worktree.branch.startsWith(prefix)),
-  );
+  return prefixes.some((prefix) => startsWithPrefix(worktree, prefix));
+}
+
+// The group prefix a worktree files under, or null. The longest match
+// wins, so `v3/` and `v3/ui/` can both be groups.
+export function groupPrefixOf(
+  worktree: PrefixedWorktree,
+  prefixes: readonly string[],
+): string | null {
+  if (worktree.isPrimary) return null;
+  let best: string | null = null;
+  for (const prefix of prefixes) {
+    if (
+      startsWithPrefix(worktree, prefix) &&
+      prefix.length > (best?.length ?? 0)
+    )
+      best = prefix;
+  }
+  return best;
 }
 
 // The preset: the base in force and each base's exceptions as

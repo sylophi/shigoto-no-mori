@@ -1,16 +1,15 @@
 // The remote worktree detail's cross-device actions, the ways to reach
 // work on another machine in one place: its files ("Files", the same
-// button the local footer leads with, on the grant), its ports ("Ports":
-// forward one here, or see what it serves), a live mirror of the
-// worktree here ("Mirror here"), or moving it here and deciding what
-// becomes of the source ("Transplant"). Text buttons, since the footer
-// has room to say what they do. Ports is always there (reading the
-// list needs no grant) and is the same button the local page's footer
-// carries. So is the running mirror's button, on a worktree already
-// part of one (mirror/MirrorAction.tsx), in place of "Mirror here": a
-// worktree holds one mirror, the rule the local footer's "Mirror to…"
-// follows. Those two lead the footer on either page
-// (WorktreeDetailInner.tsx), and this file adds the transfers. The two transfers need command access, a real branch, and
+// button the local footer leads with, on the grant), a live mirror of
+// the worktree here ("Mirror here"), or moving it here and deciding
+// what becomes of the source ("Transplant"). Its ports have a section
+// of the page (ports/PortsSection.tsx). Text buttons, since the footer
+// has room to say what they do. The running mirror's button, on a
+// worktree already part of one (mirror/MirrorAction.tsx), stands in
+// for "Mirror here": a worktree holds one mirror, the rule the local
+// footer's "Mirror to…" follows. Files and that button lead the footer
+// on either page (WorktreeDetailInner.tsx), and this file adds the
+// transfers. The two transfers need command access, a real branch, and
 // a repo identity to match a local project by (the handler re-verifies
 // the match). No local project sharing it is not a stop: the dialogs
 // clone the repo here first. A repo with no identity at all gets a
