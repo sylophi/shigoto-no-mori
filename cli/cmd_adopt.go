@@ -10,11 +10,7 @@ package main
 // setup, port-pool). Externals never got teardown/port-release on the
 // way out, because the app never provisioned them.
 
-import (
-	"errors"
-	"os"
-	"strings"
-)
+import "strings"
 
 func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
@@ -33,8 +29,8 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	}
 	// Adopting wipes the old directory and re-checks-out the branch
 	// tip, so anything uncommitted (or untracked) there is destroyed.
-	// The app's convert flow carries this in its confirmation dialog;
-	// the CLI needs the guard itself.
+	// This guard is the only one: the app's convert flow runs adopt
+	// unforced first and asks before it forces.
 	if err := requireClean(id, parsed.bools["force"], "adopt", "adopting"); err != nil {
 		return 1, err
 	}
@@ -76,16 +72,10 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	// The checkout moved, so its id did too. Auto-pull is the user's
-	// choice for this branch's checkout, not for its old path, so the
-	// mark follows it (like `worktrees move` and `rekey`).
-	if err := moveRegistryMark(autoPullKey, id.ID, worktree.ID); err != nil {
-		vlog("[state] move auto-pull: %v", err)
-	}
-	// So does its data file (the title and description `describe` set,
-	// which a move outside the layout carries along).
-	if err := os.Rename(worktreeDataPath(proj.ID, id.ID), worktreeDataPath(proj.ID, worktree.ID)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		vlog("[state] move worktree data: %v", err)
+	// The checkout moved, so its id did too, and what is keyed by the
+	// id follows it, like after `worktrees move`.
+	if worktree.ID != id.ID {
+		rekeyWorktree(proj, id.ID, worktree.ID)
 	}
 	// The row was built before the mark and the file moved onto its id.
 	worktree.AutoPull = readRegistryMarkSet(autoPullKey)[worktree.ID]

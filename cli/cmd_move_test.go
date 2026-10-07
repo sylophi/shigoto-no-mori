@@ -86,6 +86,40 @@ func TestMoveRekeysEverythingKeyedByID(t *testing.T) {
 	}
 }
 
+// A move out of the layout carries a pending capture to the external
+// id, and adopting the checkout back carries it on to the managed one,
+// where apply still finds it.
+func TestAdoptRekeysAPendingCapture(t *testing.T) {
+	proj := autoPullSandbox(t)
+	wt := createViaCmd(t, proj, "otter")
+	note := filepath.Join(wt.Path, "notes.txt")
+	writeFileT(t, note, "captured\n")
+	if res, err := captureDirtyState(proj.Path, wt.Path, wt.ID); err != nil || !res.captured {
+		t.Fatalf("capture: %+v, %v", res, err)
+	}
+	if err := os.Remove(note); err != nil {
+		t.Fatal(err)
+	}
+	moved, err := moveWorktree(proj, wt, filepath.Join(t.TempDir(), "outside"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := resolveContext(proj.Path, []project{proj})
+	if code, err := cmdAdopt(ctx, []string{moved.Path}); code != 0 || err != nil {
+		t.Fatalf("adopt: %d, %v", code, err)
+	}
+	adopted := identityAt(t, proj, wt.Path)
+	if refExists(proj.Path, dirtyRef(moved.ID)) {
+		t.Error("capture still under the external id")
+	}
+	if _, err := applyDirtyState(proj.Path, adopted.Path, adopted.ID, false); err != nil {
+		t.Fatalf("apply after adopt: %v", err)
+	}
+	if got := readFileT(t, note); got != "captured\n" {
+		t.Fatalf("applied %q", got)
+	}
+}
+
 // What git answers when the destination is on another volume.
 func stubCrossDeviceMove(t *testing.T) {
 	t.Helper()
