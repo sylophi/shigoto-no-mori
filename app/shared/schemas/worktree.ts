@@ -142,6 +142,8 @@ export type Worktree = typeof WorktreeSchema.Type;
 // behind it, so it is the cheap read every worktree-scoped handler
 // opens with. With --primary-ref each one also carries the project's
 // primary ref, resolved once per project the way the rows resolve it.
+// The fields are listed in the order the JSON carries them, which is
+// not the row's order.
 export const WorktreeIdentitySchema = Schema.Struct({
   id: WorktreeSchema.fields.id,
   projectId: WorktreeSchema.fields.projectId,

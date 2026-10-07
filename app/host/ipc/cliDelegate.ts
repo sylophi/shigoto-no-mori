@@ -142,6 +142,8 @@ function worktreeArgv(
 }
 
 const decodeWorktree = Schema.decodeUnknownSync(WorktreeSchema);
+const decodeCarryOverReport = Schema.decodeUnknownSync(CarryOverReportSchema);
+const decodeCleanupError = Schema.decodeUnknownSync(CleanupErrorSchema);
 const decodePhase = Schema.decodeUnknownSync(
   WorktreeLifecyclePhaseSchema.fields.phase,
 );
@@ -265,9 +267,7 @@ function runStreamingCreate(
           notify.notifyCarryOverComplete({
             projectId: project.id,
             worktreeId: created.id,
-            report: Schema.decodeUnknownSync(CarryOverReportSchema)(
-              doc["report"],
-            ),
+            report: decodeCarryOverReport(doc["report"]),
           });
           break;
         }
@@ -452,9 +452,7 @@ async function runRemoval(
   if (final?.["ok"] === false && final["cleanupError"] !== undefined) {
     return {
       ok: false,
-      cleanupError: Schema.decodeUnknownSync(CleanupErrorSchema)(
-        final["cleanupError"],
-      ),
+      cleanupError: decodeCleanupError(final["cleanupError"]),
       final,
     };
   }
