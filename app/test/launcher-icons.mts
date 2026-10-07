@@ -7,6 +7,8 @@
 //   behind by a removed launcher
 //
 // Run: pnpm test launcher-icons.
+//
+// covers: app/renderer/app-icons/** cli/embed/launcher-catalog.json
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
