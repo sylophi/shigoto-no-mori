@@ -86,6 +86,35 @@ Rules that keep both themes cheap to maintain:
   still win (there Ctrl+D would be EOF and end the running program).
   Settings → Appearance does the same with a save option.
 
+## Views and containers: data in, markup out
+
+Every component is one of two things. A **view** takes data and
+callbacks as props and only draws; it imports nothing that needs the
+running app (no queries, atoms, stores, router, `window.api`). A
+**container** binds data to a view and has no markup of its own beyond
+composing views. The marketing site renders the views over fixture
+scenes, and the lab's `scenes` proof renders every view in Node with no
+`window`, so a view that reaches for the runtime fails the commit.
+This is the v3 rule: the split, the proof and the marketing site that
+depend on it land in step 6 (`V3.md`).
+
+- Name the view `<Thing>View`; the container keeps the plain name and
+  the public props the rest of the app already uses.
+- A view may take a slot (a ready-made element) for a part that has
+  its own container, so both still render the same markup.
+- Measuring (how many pills fit, a fitted label) happens in the
+  container, which hands the view the result.
+- Open menus and dialogs render through portals, which produce nothing
+  on a server; a scene uses the view's inline surface, which shares its
+  class constants with the live one.
+- In v3 the theme class, `data-palette` and `data-layout` move from
+  `<html>` (where the theming section above still has them) to the
+  app's root element, and the phone layout moves to container queries,
+  so a view keeps its look and layout wherever it is mounted.
+- Nothing in the renderer touches a global: the host API comes through
+  the runtime, not `window.api`, and a listener on `document` or
+  `window` lives in a hook that owns its lifetime.
+
 ## Sizing: one density in the components, the phone's in phone.css
 
 Components are written once, at desktop density. The web client's
