@@ -124,7 +124,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      # tsc reads sources and types only.
+      # The typecheck reads sources and types only.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 

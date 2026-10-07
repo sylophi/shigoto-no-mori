@@ -18,6 +18,9 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "erasableSyntaxOnly": true,
-    "noEmit": true
+    "noEmit": true,
+    // Effect's diagnostics, which the typecheck scripts run through
+    // @effect/tsgo's build of the compiler.
+    "plugins": [{ "name": "@effect/language-service" }]
   }
 }

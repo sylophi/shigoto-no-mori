@@ -180,6 +180,9 @@ settings:
 
 catalogs:
   default:
+    '@effect/tsgo':
+      specifier: 0.51.1
+      version: 0.51.1
     '@types/node':
       specifier: ^24.13.5
       version: 24.13.5
@@ -336,6 +339,9 @@ importers:
       '@babel/core':
         specifier: ^7.29.7
         version: 7.29.7(supports-color@8.1.1)
+      '@effect/tsgo':
+        specifier: 'catalog:'
+        version: 0.51.1
       '@electron-forge/cli':
         specifier: ^7.11.2
         version: 7.11.2(bluebird@3.7.2)(csso@5.0.5)(encoding@0.1.13)(esbuild@0.28.2)(lightningcss@1.32.0)(postcss@8.5.16)(supports-color@8.1.1)
@@ -424,6 +430,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20260801.0
         version: 5.20260817.1
+      '@effect/tsgo':
+        specifier: 'catalog:'
+        version: 0.51.1
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.5
@@ -439,6 +448,9 @@ importers:
 
   lint:
     devDependencies:
+      '@effect/tsgo':
+        specifier: 'catalog:'
+        version: 0.51.1
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.5
@@ -901,6 +913,45 @@ packages:
     resolution: {integrity: sha512-+MKAJEOfaBe5SmV6t34p80MMKhjvUz0vRrvVJbPT0WElzaOJ/1xs+D+KDv+tD/NE5ujfrChEcshd4fLn0wpiqg==}
     peerDependencies:
       react: '>=16.8.0'
+
+  '@effect/tsgo-darwin-arm64@0.51.1':
+    resolution: {integrity: sha512-Jx+1RB3pz1B2zYs1EmxybwDOq9KRpfdu/rn1XTULNMZmqUJZuvTQU9CRqB0g/ZgIa6MeNBZEYvmAu4Dq2/QVWA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@effect/tsgo-darwin-x64@0.51.1':
+    resolution: {integrity: sha512-eRz7eHOOb2eJPUj66m89Zhzu924vGvNLDAXzcEAIaXVsWc4Zw29RVUsRnp/ozTmCbDVCvMqPSh8i9bkdAmt8mA==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@effect/tsgo-linux-arm64@0.51.1':
+    resolution: {integrity: sha512-LqZKkEEgJcq7dOho+h0esioU/idlB/+VhPuMR7l9B5Y7mk17Eivs8TiJQHtxLVfrh/nizbvZih7O5GujRNG0bw==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@effect/tsgo-linux-arm@0.51.1':
+    resolution: {integrity: sha512-vub6MCJIbczHp+Im1GTEUh5YyS+6YHcvH0ZmBdSjdvqzzBKbRnl5xUbO52tRJlty74f+3ey+uSh0nIO99NnggA==}
+    cpu: [arm]
+    os: [linux]
+
+  '@effect/tsgo-linux-x64@0.51.1':
+    resolution: {integrity: sha512-zyKKcdL2Pr4C//9raggaEuxhsSUR7jT6517vHvPwykbBPjPnnmGtM1Kq7NKEIZnvXWzXcaK+4wAK/0FqSqMOmw==}
+    cpu: [x64]
+    os: [linux]
+
+  '@effect/tsgo-win32-arm64@0.51.1':
+    resolution: {integrity: sha512-yIF88Za3Bs793Mb8OShet8gc3kj/NNty6+ZoTdgiPXWlY6xh84bZZCOETqE7VcCmxXFT3NZSYQuDrU35/CTvRQ==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@effect/tsgo-win32-x64@0.51.1':
+    resolution: {integrity: sha512-5HO1TJkWMlErIXbfKKWEMzg0Jj0MPQAzs0g1k7wA3B1ZxNDoDY9iRu5eGM+G1a4HmKl3zA7hQZd0ch2Dh4MohQ==}
+    cpu: [x64]
+    os: [win32]
+
+  '@effect/tsgo@0.51.1':
+    resolution: {integrity: sha512-i6mA6cNah+0mkPdu8qZILCO3Pnd9kWo03/s82Ju+1DFhdL28HFagi+1PRGxqgq1uMaHziWQ+ciKvOmIoks2RdA==}
+    hasBin: true
 
   '@electron-forge/cli@7.11.2':
     resolution: {integrity: sha512-c+C4ndLfHbxwZuCn9G8iT9wD/woLdaVkoSVjAIbj+0nJhi8UmiVsz/+Gxlj4cvhMRTzBMBxudstLU7RocMikfg==}
@@ -8304,6 +8355,37 @@ snapshots:
     dependencies:
       react: 19.2.7
       tslib: 2.8.1
+
+  '@effect/tsgo-darwin-arm64@0.51.1':
+    optional: true
+
+  '@effect/tsgo-darwin-x64@0.51.1':
+    optional: true
+
+  '@effect/tsgo-linux-arm64@0.51.1':
+    optional: true
+
+  '@effect/tsgo-linux-arm@0.51.1':
+    optional: true
+
+  '@effect/tsgo-linux-x64@0.51.1':
+    optional: true
+
+  '@effect/tsgo-win32-arm64@0.51.1':
+    optional: true
+
+  '@effect/tsgo-win32-x64@0.51.1':
+    optional: true
+
+  '@effect/tsgo@0.51.1':
+    optionalDependencies:
+      '@effect/tsgo-darwin-arm64': 0.51.1
+      '@effect/tsgo-darwin-x64': 0.51.1
+      '@effect/tsgo-linux-arm': 0.51.1
+      '@effect/tsgo-linux-arm64': 0.51.1
+      '@effect/tsgo-linux-x64': 0.51.1
+      '@effect/tsgo-win32-arm64': 0.51.1
+      '@effect/tsgo-win32-x64': 0.51.1
 
   '@electron-forge/cli@7.11.2(bluebird@3.7.2)(csso@5.0.5)(encoding@0.1.13)(esbuild@0.28.2)(lightningcss@1.32.0)(postcss@8.5.16)(supports-color@8.1.1)':
     dependencies:
