@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollText } from "lucide-react";
 import { EditorFooter } from "@/components/shared/EditorFooter";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -10,39 +10,47 @@ import {
   SettingsSaveError,
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
-import { useLocalDevice } from "@/hooks/account/useAccount";
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
-import { THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import {
+  DeviceTabBar,
+  pickHostDevice,
+  useDeviceRoster,
+  useHostDevicePick,
+  type DeviceRosterEntry,
+} from "@/components/shared/DeviceTabs";
+import { UpdateMark } from "@/components/ui/status-dot";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
-import { useStagedUpdates } from "@/hooks/system/useUpdater";
+import {
+  useOutdatedDevices,
+  useStagedUpdates,
+} from "@/hooks/system/useUpdater";
 import { fieldSetter, useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { hasLocalHost } from "@/lib/localHost";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { localDeviceId } from "@/lib/queryKeys";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
 import type { DarkTheme, LightTheme } from "@shared/themes";
-import type { RemoteDevice } from "@/lib/remote/devices";
 import { AppearanceSection } from "./AppearanceSection";
-import { DeviceStatusPill } from "@/components/settings/DeviceStatusPill";
 import { HiddenWorktreesSection } from "./HiddenWorktreesSection";
 import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import { SettingsSectionChips } from "./SettingsSectionChips";
 import { SidebarSection } from "./SidebarSection";
+import { MountOnceVisited, SettingsPanel } from "./SettingsPanel";
 import {
   APPEARANCE_TAB,
-  deviceTab,
-  isSolo,
+  GENERAL_TAB,
+  isHostTab,
   LAUNCH_TAB,
   landOnStagedUpdate,
-  LOCAL_DEVICE_TAB,
   settingsPanelId,
   useActiveSettingsTab,
+  SECTION_LABELS,
+  type SettingsTab,
   VISITORS_TAB,
 } from "./settingsNav";
+import { offersUpdateAll, UpdateAllButton } from "./UpdateAllButton";
 import { VisitorsSection } from "@/components/visitors/VisitorsSection";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import {
@@ -57,25 +65,26 @@ import { PAGE_BODY } from "@/components/shared/PageShell";
 // sidebar (SettingsSidebarNav takes the project tree's place while this
 // page is open).
 //
-// "Visual" is what this window shows (Appearance, Launch tools):
-// controlled on this machine and never offered for another. "Devices"
-// is one section per machine on the account, this one first,
-// and everything in such a section is stored on that machine: its
-// update, its worktree and integration toggles, and the sections that
-// act on its disk (a peer's only while it allows control, and never
-// its danger zone).
+// "Client" is what this window shows (Appearance, Launch tools):
+// controlled on this machine and never offered for another. "Host" is
+// what each machine stores (General, Worktrees, Integrations), shown for
+// the machine picked in the header's device tab bar, this one first:
+// its update, its worktree and integration toggles, and the sections
+// that act on its disk (a peer's only while it allows control, and
+// never its danger zone).
 //
-// One form backs the three local sections (client config and this
-// device's config save together through useSettingsSave), and each
-// peer section seeds its own form from that device's config read.
-// Sections mount on first visit and stay mounted (SettingsPanel), so
-// switching never drops an edit, and the one footer saves and discards
+// One form backs the client sections and this device's host sections
+// (client config and this device's config save together through
+// useSettingsSave), and each peer seeds its own form from that device's
+// config read, which spans its three host sections. Sections mount on
+// first visit and stay mounted (SettingsPanel), so switching section or
+// device never drops an edit, and the one footer saves and discards
 // every form at once.
 //
 // A hostless client (the web shell) has no machine behind the window:
-// Launch tools and this device's section are not offered, so its local
-// form only ever carries appearance, and every device section is a
-// peer's, edited over that peer's direct session exactly as from
+// Launch tools and this device's sections are not offered, so its local
+// form only ever carries appearance, and every device in the tab bar
+// is a peer, edited over that peer's direct session exactly as from
 // another desktop.
 export function SettingsForm({
   initialConfig,
@@ -88,8 +97,14 @@ export function SettingsForm({
   const { setOverride } = useTheme();
   const { setOverride: setPaletteOverride } = usePalette();
   const devices = useHostDevices();
-  const local = useLocalDevice();
-  const { activeTab, peer } = useActiveSettingsTab(devices);
+  const roster = useDeviceRoster();
+  const activeTab = useActiveSettingsTab();
+  const hostTab = isHostTab(activeTab) ? activeTab : undefined;
+  const picked = useHostDevicePick(roster);
+  // The host section a device's panels show: the active one while that
+  // device is picked, none otherwise.
+  const hostTabFor = (deviceId: string) =>
+    picked?.deviceId === deviceId ? hostTab : undefined;
   const villageLife = useVillageLife();
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
@@ -191,7 +206,22 @@ export function SettingsForm({
   const updates = useStagedUpdates();
   useStagedUpdateLanding(updates);
 
-  const heading = headingFor(activeTab, peer, local, isSolo(devices));
+  const heading = headingFor(activeTab);
+  // This device alone means no choice to make: the sections read as
+  // its own, with no tab bar, like Tidy. A peer always gets its tab,
+  // even alone (a hostless client on a one-desktop account), since the
+  // bar is what says which machine the sections edit and whether it is
+  // connected.
+  const tabs =
+    hostTab !== undefined &&
+    picked !== undefined &&
+    roster.some((entry) => !entry.isThisDevice) ? (
+      <HostTabBar
+        roster={roster}
+        picked={picked.deviceId}
+        updates={hostTab === GENERAL_TAB ? updates : undefined}
+      />
+    ) : undefined;
 
   return (
     // The page marker picks the settings wallpaper (doubutsu.css), the
@@ -205,17 +235,17 @@ export function SettingsForm({
         eyebrow={heading.eyebrow}
         title={heading.title}
         watermark={heading.watermark ?? "設定"}
+        tabs={tabs}
       />
       <SettingsSectionChips
-        devices={devices}
         activeTab={activeTab}
-        updates={updates}
+        update={Object.keys(updates).length > 0}
       />
 
       <SettingsEditorRegistryProvider registry={registry}>
         <div className="flex min-h-0 flex-1 flex-col">
           <SettingsPanel
-            id={APPEARANCE_TAB}
+            id={settingsPanelId(APPEARANCE_TAB)}
             active={activeTab === APPEARANCE_TAB}
           >
             <AppearanceSection
@@ -237,22 +267,25 @@ export function SettingsForm({
             />
             <SidebarSection form={form} setForm={setForm} />
             <HiddenWorktreesSection />
-            {/* The desktop states its build in this device's section.
-                A hostless client has no such section, and its build is
-                still worth a line, so it goes with the other setting
-                that is about this window. */}
+            {/* The desktop states its build in this device's General
+                section. A hostless client has no such section, and its
+                build is still worth a line, so it goes with the other
+                setting that is about this window. */}
             {!hasLocalHost && <ClientVersionSection />}
           </SettingsPanel>
 
           {hasLocalHost && (
-            <SettingsPanel id={LAUNCH_TAB} active={activeTab === LAUNCH_TAB}>
+            <SettingsPanel
+              id={settingsPanelId(LAUNCH_TAB)}
+              active={activeTab === LAUNCH_TAB}
+            >
               <LaunchToolsPanel form={form} setForm={setForm} />
             </SettingsPanel>
           )}
 
           {villageLife && (
             <SettingsPanel
-              id={VISITORS_TAB}
+              id={settingsPanelId(VISITORS_TAB)}
               active={activeTab === VISITORS_TAB}
             >
               <VisitorsSection />
@@ -260,32 +293,39 @@ export function SettingsForm({
           )}
 
           {hasLocalHost && (
-            <SettingsPanel
-              id={LOCAL_DEVICE_TAB}
-              active={activeTab === LOCAL_DEVICE_TAB}
-            >
-              <LocalDevicePanel form={form} setForm={setForm} />
-            </SettingsPanel>
+            <LocalDevicePanel
+              active={hostTabFor(localDeviceId)}
+              form={form}
+              setForm={setForm}
+            />
           )}
 
-          {devices.map((device) => {
-            const id = deviceTab(device.deviceId);
-            return (
-              <SettingsPanel
-                key={device.deviceId}
-                id={id}
-                active={activeTab === id}
-              >
-                {/* Keyed by device: a different machine is a different
-                    form, seeded from that device's own config read. */}
-                <PeerDeviceSettings device={device} />
-              </SettingsPanel>
-            );
-          })}
+          {devices.map((device) => (
+            // Keyed by device: a different machine is a different form,
+            // seeded from that device's own config read. Mounted on its
+            // first pick, so opening Settings reads no peer's config.
+            <MountOnceVisited
+              key={device.deviceId}
+              visited={hostTabFor(device.deviceId) !== undefined}
+            >
+              <PeerDeviceSettings
+                device={device}
+                active={hostTabFor(device.deviceId)}
+              />
+            </MountOnceVisited>
+          ))}
+
+          {hostTab !== undefined && picked === undefined && (
+            <div className={PAGE_BODY}>
+              <p className="text-sm text-muted-foreground">
+                No devices on this account yet.
+              </p>
+            </div>
+          )}
         </div>
       </SettingsEditorRegistryProvider>
 
-      {/* The local save spans three sections, so its failure is shown
+      {/* The local save spans several sections, so its failure is shown
           above the footer where every section can see it. Peer saves
           report inside their own section. */}
       {save.error && (
@@ -349,32 +389,56 @@ function ClientVersionSection() {
   );
 }
 
+// The device tab bar leading a host section's header: one tab per
+// machine (useDeviceRoster's order, this one first), picked for every
+// host section and Tidy at once. On the General section, where each
+// device's update button lives (`updates` given), a device holding a
+// staged update carries the sidebar dot's mark, and Update all trails
+// the row: it acts on every tab at once, so it sits with them rather
+// than in any one device's panel.
+function HostTabBar({
+  roster,
+  picked,
+  updates,
+}: {
+  roster: readonly DeviceRosterEntry[];
+  picked: string;
+  // useStagedUpdates' answer, on the General section only.
+  updates: Readonly<Record<string, string>> | undefined;
+}) {
+  const { outdated } = useOutdatedDevices();
+  return (
+    <DeviceTabBar
+      tabs={roster.map((entry) => {
+        const version = updates?.[entry.deviceId];
+        return {
+          ...entry,
+          badge: version !== undefined && <UpdateMark version={version} />,
+        };
+      })}
+      selectedId={picked}
+      onSelect={pickHostDevice}
+      trailing={
+        updates && offersUpdateAll(outdated) ? (
+          <UpdateAllButton outdated={outdated} />
+        ) : undefined
+      }
+    />
+  );
+}
+
 // The header names the section the sidebar picked, the way a
 // sidebar-driven settings window does, so the pane never has to repeat
-// the list. A device's title leads with its glyph and carries its state
-// pill: the one fact about a machine worth showing above its settings.
-// A section that is a room of its own (Visitors) also names the
+// the list. Which machine a host section shows is the tab bar's to
+// say. A section that is a room of its own (Visitors) also names the
 // watermark and the wallpaper (data-doubutsu-page) it wears in place of
 // the settings ones.
-function headingFor(
-  activeTab: string,
-  peer: RemoteDevice | undefined,
-  local: { name: string; icon: DeviceIcon },
-  // One machine on the account: no roster to place it in, so its
-  // title carries neither the device eyebrow nor a presence pill.
-  solo: boolean,
-): {
+function headingFor(activeTab: SettingsTab): {
   eyebrow: string;
-  title: ReactNode;
+  title: string;
   watermark?: string;
   page?: string;
 } {
-  if (activeTab === APPEARANCE_TAB) {
-    return { eyebrow: "Settings", title: "Appearance" };
-  }
-  if (activeTab === LAUNCH_TAB) {
-    return { eyebrow: "Settings", title: "Launch tools" };
-  }
   if (activeTab === VISITORS_TAB) {
     return {
       eyebrow: "Village life",
@@ -383,45 +447,8 @@ function headingFor(
       page: "visitors",
     };
   }
-  if (solo) return { eyebrow: "Settings", title: local.name };
   return {
-    eyebrow: "Device settings",
-    title: (
-      <span className="inline-flex max-w-full items-center gap-2">
-        <DeviceGlyph
-          icon={peer?.icon ?? local.icon}
-          className="size-5 text-muted-foreground"
-        />
-        <span className="truncate">{peer?.label ?? local.name}</span>
-        {peer === undefined ? (
-          <DeviceStatusPill {...THIS_DEVICE_VIEW} />
-        ) : (
-          <DeviceStatusPill {...deviceStatusView(peer.status)} />
-        )}
-      </span>
-    ),
+    eyebrow: "Settings",
+    title: SECTION_LABELS[activeTab],
   };
-}
-
-// One section's body: its own scroll region (so each section keeps its
-// scroll position) around the width-capped settings column. Mounts its
-// content on the first visit and keeps it mounted afterwards (`hidden`
-// parks it), so a form and its scroll position survive a look at
-// another section, while a section never visited costs nothing.
-function SettingsPanel({
-  id,
-  active,
-  children,
-}: {
-  id: string;
-  active: boolean;
-  children: ReactNode;
-}) {
-  const [shown, setShown] = useState(active);
-  if (active && !shown) setShown(true);
-  return (
-    <div id={settingsPanelId(id)} hidden={!active} className={PAGE_BODY}>
-      {shown && <div className="flex flex-col gap-10">{children}</div>}
-    </div>
-  );
 }

@@ -8,8 +8,9 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import {
   DeviceTabBar,
   DeviceTabPanel,
+  pickHostDevice,
   useDeviceTabs,
-  usePickedDevice,
+  useHostDevicePick,
   type DeviceTab,
 } from "@/components/shared/DeviceTabs";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -54,14 +55,17 @@ const IDLE: RowStatus = { kind: "idle" };
 // landed. Scoped to a machine rather than to one project because that
 // is the question being asked. Disk fills up per machine, and the
 // worktree worth removing first is rarely in the repo you happen to
-// have open. One tab per machine on the account (this one first), each
+// have open. One tab per machine on the account (this one first, the
+// pick shared with the Settings host sections beside it), each
 // with its own forest under it: every read and every removal below
 // rides the host scope the tab mounts.
 export function TidyForest() {
   const tabs = useDeviceTabs();
-  // Opens on this device. A hostless client, which has none, opens on
-  // its first peer.
-  const [picked, pick] = usePickedDevice(tabs, localDeviceId);
+  // The device the Settings host sections show, which opens on this
+  // device: one pick for Tidy and those sections, so stepping between
+  // them stays on the same machine. A hostless client, which has no
+  // device of its own, opens on its first peer.
+  const picked = useHostDevicePick(tabs);
   const tabbed = tabs.length > 1 && picked !== undefined;
   // One tree position for the body whether or not the registry has
   // answered yet (a hostless client's list starts empty): this device,
@@ -86,7 +90,7 @@ export function TidyForest() {
             <DeviceTabBar
               tabs={tabs}
               selectedId={picked.deviceId}
-              onSelect={pick}
+              onSelect={pickHostDevice}
             />
           ) : undefined
         }
