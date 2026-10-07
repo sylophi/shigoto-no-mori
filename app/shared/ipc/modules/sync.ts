@@ -4,13 +4,13 @@ import { MIRROR_IGNORES_LIMIT } from "@shared/mirrorIgnores";
 import { isValidWorktreeDirName } from "@shared/git/branches";
 import { isSafeRelPath } from "@shared/git/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { HexId32Schema } from "@shared/ipc/hexId";
 import {
   CloneFolderNameZod,
   CommitHashZod,
   CreatePhaseZod,
   DeviceIdZod,
   GitRefNameZod,
+  HexId32Zod,
   ProjectZod,
   WorktreeIdZod,
   WorktreeZod,
@@ -330,7 +330,7 @@ export const SyncSendWorktreePayloadSchema = z.strictObject({
 
 // The id of a source link's channel, minted by the device that opens
 // it (shared/ipc/socket/channels.ts).
-const ChannelIdSchema = HexId32Schema;
+const ChannelIdSchema = HexId32Zod;
 
 // A pull's source link: the source worktree on this host, which the
 // link captures and whose repo it bundles.

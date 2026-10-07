@@ -55,6 +55,7 @@ import {
   WorktreeSchema,
 } from "@shared/schemas";
 import { type DoctorReport, DoctorReportSchema } from "@shared/ipc/modules/cli";
+import { safeDecode } from "@shared/ipc/schema";
 import {
   convertRefusedError,
   isEntityGoneError,
@@ -1171,7 +1172,7 @@ export async function doctorViaCli(
     readOnly: !fix,
     timeoutMs: fix ? 2 * DOCTOR_TIMEOUT_MS : DOCTOR_TIMEOUT_MS,
   });
-  const report = DoctorReportSchema.safeParse(result.docs.at(-1));
+  const report = safeDecode(DoctorReportSchema, result.docs.at(-1));
   if (report.success) return report.data;
   throw cliFailure(result, "sm doctor failed");
 }

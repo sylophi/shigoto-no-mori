@@ -11,6 +11,8 @@
 // unreliable, so os.userInfo() reads the user database instead.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type {
   ShellHookState,
   ShellIntegrationStatus,
@@ -20,6 +22,10 @@ import { CAPTURE_TIMEOUT_MS, loginShell } from "../core/shellEnv";
 import { cliFailureMessage, runCli } from "./cliRunner";
 
 const execFileP = promisify(execFile);
+
+const decodeShellHookStates = Schema.decodeUnknownOption(
+  Schema.Array(ShellHookStateSchema),
+);
 
 // The CLI resolves rc locations from ZDOTDIR / XDG_CONFIG_HOME, which
 // a Finder-launched app doesn't have (launchd sources no shell
@@ -77,16 +83,17 @@ function loginShellBase(): string | null {
 
 // The `shells` array of the CLI's status document, which install and
 // uninstall also emit. Empty when the run produced none.
-function shellsFromDocs(docs: { [key: string]: unknown }[]): ShellHookState[] {
+function shellsFromDocs(
+  docs: { [key: string]: unknown }[],
+): readonly ShellHookState[] {
   const doc = docs.find((d) => d["ok"] === true && d["shells"] !== undefined);
   if (doc === undefined) return [];
-  const parsed = ShellHookStateSchema.array().safeParse(doc["shells"]);
-  return parsed.success ? parsed.data : [];
+  return Option.getOrElse(decodeShellHookStates(doc["shells"]), () => []);
 }
 
 // `shells` enumerates exactly the kinds the CLI supports, so the login
 // shell is "supported" iff it appears there.
-function statusFrom(shells: ShellHookState[]): ShellIntegrationStatus {
+function statusFrom(shells: readonly ShellHookState[]): ShellIntegrationStatus {
   const base = loginShellBase();
   const supported =
     base !== null && shells.some((s) => s.shell === base) ? base : null;

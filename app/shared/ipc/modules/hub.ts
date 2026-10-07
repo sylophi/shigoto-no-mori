@@ -1,6 +1,7 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { DeviceIdZod } from "@shared/schemas/zodBridge";
+import { VoidSchema } from "@shared/schemas";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
 
 // The renderer's bridge onto the main-process hub socket. The single hub socket lives in main, because the Durable
@@ -15,25 +16,25 @@ import type { SupervisorStatus } from "@shared/remote/supervisor";
 // the bridge validates what crosses the Electron wire. On "connected"
 // the remote identity fields are empty strings: the hub socket has
 // no sm welcome of its own.
-const HubSocketStatusSchema = z.discriminatedUnion("phase", [
-  z.object({ phase: z.literal("idle") }),
-  z.object({ phase: z.literal("connecting") }),
-  z.object({
-    phase: z.literal("connected"),
-    remoteDeviceId: z.string(),
-    remoteAppVersion: z.string(),
+const HubSocketStatusSchema = Schema.Union([
+  Schema.Struct({ phase: Schema.Literal("idle") }),
+  Schema.Struct({ phase: Schema.Literal("connecting") }),
+  Schema.Struct({
+    phase: Schema.Literal("connected"),
+    remoteDeviceId: Schema.String,
+    remoteAppVersion: Schema.String,
   }),
-  z.object({
-    phase: z.literal("backoff"),
-    attempt: z.number().int(),
-    delayMs: z.number(),
+  Schema.Struct({
+    phase: Schema.Literal("backoff"),
+    attempt: Schema.Int,
+    delayMs: Schema.Finite,
   }),
-  z.object({
-    phase: z.literal("blocked"),
-    reason: z.enum(["revoked", "superseded", "refused"]),
-    message: z.string(),
+  Schema.Struct({
+    phase: Schema.Literal("blocked"),
+    reason: Schema.Literals(["revoked", "superseded", "refused"]),
+    message: Schema.String,
   }),
-  z.object({ phase: z.literal("stopped") }),
+  Schema.Struct({ phase: Schema.Literal("stopped") }),
 ]);
 
 // Compile-time pin (Q3): the wire schema must infer exactly the
@@ -43,8 +44,8 @@ const HubSocketStatusSchema = z.discriminatedUnion("phase", [
 // `never` on drift, applied to the exported HubStatus below so it is
 // referenced and its collapse surfaces at build time.
 type SocketStatusMatchesSupervisor =
-  z.infer<typeof HubSocketStatusSchema> extends SupervisorStatus
-    ? SupervisorStatus extends z.infer<typeof HubSocketStatusSchema>
+  typeof HubSocketStatusSchema.Type extends SupervisorStatus
+    ? SupervisorStatus extends typeof HubSocketStatusSchema.Type
       ? unknown
       : never
     : never;
@@ -52,7 +53,7 @@ type SocketStatusMatchesSupervisor =
 // THIS device's tunnel endpoint state vocabulary. The wire schema is the single owner: the cloudflared runner
 // (host/direct/cloudflared.ts) types its state off this so the two
 // sides cannot drift.
-const TunnelStateSchema = z.enum([
+const TunnelStateSchema = Schema.Literals([
   "off",
   "no-binary",
   "unconfigured",
@@ -60,58 +61,58 @@ const TunnelStateSchema = z.enum([
   "up",
   "error",
 ]);
-export type TunnelState = z.infer<typeof TunnelStateSchema>;
+export type TunnelState = typeof TunnelStateSchema.Type;
 
 // Despite the module name, HubStatus is the REMOTE-PLANE snapshot: the
 // hub control plane's socket and roster plus the direct data plane it
 // brokers (sessions, versions, the tunnel endpoint). The device hub
 // itself carries orchestration only, so every
 // per-peer data fact below is about direct sessions.
-const HubStatusSchema = z.object({
+const HubStatusSchema = Schema.Struct({
   socket: HubSocketStatusSchema,
   // The account's online deviceIds from the latest presence broadcast,
   // empty whenever the socket is down. A roster fact only: online
   // means enrolled and connected to the device hub, not data-reachable.
-  onlineDeviceIds: z.array(z.string()),
+  onlineDeviceIds: Schema.Array(Schema.String),
   // The appVersion each ESTABLISHED direct session's welcome
   // confirmed, keyed by deviceId. Absent key means no direct session,
   // so membership here is the whole "direct-connected" surface (the
   // only kind of data session there is) and the
   // renderer reads it instead of polling peerInfo per device.
-  peerAppVersions: z.record(z.string(), z.string()),
+  peerAppVersions: Schema.Record(Schema.String, Schema.String),
   // Whether each of those peers runs THIS device's commands (its
   // command-access switch), keyed the same way: the peer's connectInfo
   // answer at dial time, then its account:commandAccessChanged push.
   // The renderer's read-only notes and the CLI's no-grant standing
   // read it here instead of asking the peer. The peer's dispatch gate
   // is still what enforces it.
-  peerAcceptsCommands: z.record(z.string(), z.boolean()),
+  peerAcceptsCommands: Schema.Record(Schema.String, Schema.Boolean),
   // The tunnel endpoint state, for the account page. Optional because
   // only a serving side with a host half sets it (the web bridge runs
   // no cloudflared). Not a skew concern: hub:status is
   // client-scoped, main answering its own renderer, so both ends are
   // always the same build. Never carries the hostname or any secret.
-  tunnel: TunnelStateSchema.optional(),
+  tunnel: Schema.optional(TunnelStateSchema),
 });
-export type HubStatus = z.infer<typeof HubStatusSchema> &
+export type HubStatus = typeof HubStatusSchema.Type &
   SocketStatusMatchesSupervisor;
 
 // A push frame received from a peer, fanned out to every window. The
 // renderer filters by deviceId and channel, so main forwards every
 // push wholesale and needs no per-channel subscription bookkeeping.
-const HubPeerPushSchema = z.object({
-  deviceId: z.string(),
-  channel: z.string(),
-  payload: z.unknown().optional(),
+const HubPeerPushSchema = Schema.Struct({
+  deviceId: Schema.String,
+  channel: Schema.String,
+  payload: Schema.optional(Schema.Unknown),
 });
-export type HubPeerPush = z.infer<typeof HubPeerPushSchema>;
+export type HubPeerPush = typeof HubPeerPushSchema.Type;
 
 export const hubContract = defineContract("client", {
   // The remote-plane snapshot (HubStatusSchema above): the hub
   // socket's phase and roster plus the direct sessions and tunnel
   // state. Cheap: main reads its in-memory snapshot, nothing touches
   // the network.
-  status: invoke("hub:status", z.void(), HubStatusSchema),
+  status: invoke("hub:status", VoidSchema, HubStatusSchema),
   // Forward one sm invoke to a peer device over its DIRECT session.
   // Sessions are supervised desired state (shared/hub/directKeeper.ts):
   // the owner dials every rostered peer eagerly and redials forever,
@@ -121,14 +122,14 @@ export const hubContract = defineContract("client", {
   // serialization.
   invokePeer: invoke(
     "hub:invokePeer",
-    z.object({
+    Schema.Struct({
       // Routed to a peer session keyed by this id (M6), so it carries the
       // shared device-id bound.
-      deviceId: DeviceIdZod,
-      channel: z.string().min(1),
-      input: z.unknown().optional(),
+      deviceId: DeviceIdSchema,
+      channel: Schema.NonEmptyString,
+      input: Schema.optional(Schema.Unknown),
     }),
-    z.unknown(),
+    Schema.Unknown,
   ),
   // Fan-out on every supervisor or presence transition, carrying the
   // fresh snapshot so listeners never need a follow-up status call.

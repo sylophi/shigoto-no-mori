@@ -1,9 +1,10 @@
 import { CHANNEL_OPEN_TOO_MANY } from "@shared/ipc/socket/channels";
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shared/errors";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { PortNumberZod } from "@shared/schemas/zodBridge";
+import { PortNumberSchema, VoidSchema } from "@shared/schemas";
+import { strict } from "@shared/schemas/strict";
 
 // Port forwarding over byte channels: a
 // forwarded TCP connection crosses the direct websocket as raw binary
@@ -47,13 +48,15 @@ export function isForwardConnectFailedError(error: unknown): boolean {
 // matches (renderer/hooks/remote/usePortForwards.ts).
 export const FORWARD_TOO_MANY_CONNS = CHANNEL_OPEN_TOO_MANY;
 
-const ForwardOpenPayloadSchema = z.strictObject({
-  port: PortNumberZod,
-  channelId: ChannelIdSchema,
-});
+const ForwardOpenPayloadSchema = strict(
+  Schema.Struct({
+    port: PortNumberSchema,
+    channelId: ChannelIdSchema,
+  }),
+);
 
 export const forwardContract = defineContract("host", {
-  open: invoke("forward:open", ForwardOpenPayloadSchema, z.void(), {
+  open: invoke("forward:open", ForwardOpenPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     movesHostState: false,
