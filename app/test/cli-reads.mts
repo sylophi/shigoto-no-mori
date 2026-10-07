@@ -17,7 +17,11 @@
 //   - hygiene:diskUsage measures through `sm disk-usage`, and a file
 //     hard-linked in from outside counts on disk but not as reclaimable.
 //   - projects:reorder, :defaultBranch and :pickWorktreeName, the
-//     config reads, the launcher row and catalog, a launch through
+//     config reads, the CLI's config keys and defaults against the
+//     schemas' (DEVICE_SETTINGS_DEFAULTS, PROJECT_CONFIG_DEFAULTS), a
+//     device setting saved back to its default leaving the file, keys
+//     this build doesn't model surviving a settings save, the
+//     launcher row and catalog, a launch through
 //     `sm open` that counts the use, and the package scripts read.
 //   - a removal that must happen (a nuke, the rollback of a failed
 //     mirror start) runs the teardown through `sm rm`, and a teardown
@@ -89,6 +93,12 @@ const { invalidateProjectConfigCache } =
 const { layoutInputsFor, worktreeBaseFor, worktreePathFor } =
   await import("@shared/git/worktreeLayout");
 const { readRegistry } = await import("./lib/cliSandbox.mts");
+const {
+  DEVICE_SETTINGS_DEFAULTS,
+  modeledKeyPaths,
+  PROJECT_CONFIG_DEFAULTS,
+  ShigomoriConfigSchema,
+} = await import("@shared/schemas/config");
 
 const { check, done, fail } = makeProof("cli-reads proof");
 
@@ -114,6 +124,37 @@ function makeRepo(name: string) {
 }
 
 const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8"));
+
+// A config list's entry (cli/cmd_config.go configListEntry).
+type ConfigListEntry = { key: string; value: unknown; set: boolean };
+const settingsOf = ({ docs }: { docs: Record<string, unknown>[] }) =>
+  (docs.at(-1)?.["settings"] ?? []) as ConfigListEntry[];
+
+// A config list against the app's side: the same keys, each unset and
+// reading as its default (null for a key with none). `skip` names a key
+// the list can't show unset (the required defaultBranch).
+function assertListedDefaults(
+  label: string,
+  entries: ConfigListEntry[],
+  keys: string[],
+  defaults: Record<string, unknown>,
+  skip?: string,
+) {
+  assert.deepEqual(
+    entries.map((entry) => entry.key).toSorted(),
+    keys.toSorted(),
+    `${label}: the CLI's keys and the app's disagree`,
+  );
+  for (const entry of entries) {
+    if (entry.key === skip) continue;
+    assert.equal(entry.set, false, `${label}: ${entry.key} is still stored`);
+    assert.deepEqual(
+      entry.value,
+      defaults[entry.key] ?? null,
+      `${label}: ${entry.key}'s default in the CLI and the app disagree`,
+    );
+  }
+}
 
 // A doctor report's findings for one check id.
 const findingsOf = (report: DoctorReport, id: string) =>
@@ -208,7 +249,8 @@ async function main() {
         });
         // oxlint-disable-next-line no-await-in-loop -- see above
         const planned = await worktreeDestinationViaCli(projectId, "probe");
-        const layout = config.worktreeLayout ?? "managed-root";
+        const layout =
+          config.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout;
         assert.equal(
           worktreePathFor(inputs, "probe"),
           planned.path,
@@ -256,7 +298,7 @@ async function main() {
         projectPath: string,
         dir: string,
         {
-          worktreeLayout = "managed-root",
+          worktreeLayout = PROJECT_CONFIG_DEFAULTS.worktreeLayout,
           onProjectDrive = true,
         }: Pick<ShigomoriConfig, "worktreeLayout"> & {
           onProjectDrive?: boolean;
@@ -544,6 +586,82 @@ async function main() {
         async () => shigomoriHandlers.read({ projectId: "NOPE" }, ctx),
         /Unknown project: NOPE/,
       );
+    },
+  );
+
+  await check(
+    "config keys: sm config and sm projects config list the schemas' keys with their defaults",
+    async (track) => {
+      // The parity below leaves no modeled key the CLI doesn't register,
+      // so clearing one by null is cli/cmd_config_test.go's
+      // TestConfigWriteNullClearsUnregisteredKeys.
+
+      // Everything back to absent, so the lists show each default.
+      const reset = () =>
+        Promise.all([
+          globalConfigWriteViaCli({}).then(invalidateGlobalConfigCache),
+          shigomoriWriteViaCli(projectId, { defaultBranch: "main" }).then(() =>
+            invalidateProjectConfigCache(projectId),
+          ),
+        ]);
+      track(reset);
+      await reset();
+      const [deviceList, projectList] = await Promise.all([
+        sm("config", "list"),
+        sm("projects", "config", "list", "--project-id", projectId),
+      ]);
+
+      // The device settings the form manages are the CLI's registry,
+      // key for key. directConnections and cloudflaredPath are
+      // config-only and stay out of both.
+      assertListedDefaults(
+        "sm config",
+        settingsOf(deviceList),
+        Object.keys(DEVICE_SETTINGS_DEFAULTS),
+        DEVICE_SETTINGS_DEFAULTS,
+      );
+      // Every project setting the schema models is in the registry.
+      assertListedDefaults(
+        "sm projects config",
+        settingsOf(projectList),
+        modeledKeyPaths(ShigomoriConfigSchema.shape).map((path) =>
+          path.join("."),
+        ),
+        PROJECT_CONFIG_DEFAULTS,
+        "defaultBranch",
+      );
+
+      // A registered device setting saved back to its default leaves
+      // the file.
+      const configPath = join(dataDir, "config.json");
+      const save = (patch: { portPool: boolean }) =>
+        globalConfigHandlers.writeDeviceSettings({ patch }, ctx);
+      await save({ portPool: true });
+      assert.equal(readJson(configPath).portPool, true);
+      await save({ portPool: false });
+      assert.equal("portPool" in readJson(configPath), false);
+
+      // Keys this build doesn't model ride through a save untouched, a
+      // null and an object of nulls included: only the managed settings
+      // go in the payload.
+      const before = readFileSync(configPath, "utf8");
+      track(() => {
+        writeFileSync(configPath, before);
+        invalidateGlobalConfigCache();
+      });
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          ...JSON.parse(before),
+          futureKey: null,
+          futureObj: { a: null },
+        }),
+      );
+      await save({ portPool: true });
+      const saved = readJson(configPath);
+      assert.equal(saved.portPool, true);
+      assert.equal(saved.futureKey, null);
+      assert.deepEqual(saved.futureObj, { a: null });
     },
   );
 

@@ -21,7 +21,9 @@ package main
 // same engine, and read hands back the stored document so the app
 // needn't open config.json or project.json itself. Writes merge into
 // the file, so a key only a newer version knows about survives an
-// older build's save. These two are the only whole-document paths.
+// older build's save, and a null in the payload deletes its key
+// whether or not the registry models it. These two are the only
+// whole-document paths.
 
 import (
 	"bytes"
@@ -445,6 +447,11 @@ func configDocLookup(doc map[string]any, name string) (any, bool, error) {
 		if cur, ok = m[part]; !ok {
 			return nil, false, nil
 		}
+		// A null parent clears everything under it, so its fields read
+		// as absent rather than as a wrong-shaped object.
+		if cur == nil && i < len(parts)-1 {
+			return nil, false, nil
+		}
 	}
 	return cur, true, nil
 }
@@ -452,7 +459,8 @@ func configDocLookup(doc map[string]any, name string) (any, bool, error) {
 // Shape check for `write --data` payloads: required keys must be
 // present, and every registry key that is present must carry its
 // schema'd type (elements included), so engine drift fails loudly here
-// instead of surfacing as a document zod later rejects wholesale.
+// instead of surfacing as a document zod later rejects wholesale. A
+// null clears its key, so it passes wherever the key may be absent.
 // Unknown keys pass through untouched (forward compatibility).
 func validateConfigDoc(keys []configKey, doc map[string]any) error {
 	for _, key := range keys {
@@ -460,7 +468,7 @@ func validateConfigDoc(keys []configKey, doc map[string]any) error {
 		if err != nil {
 			return err
 		}
-		if !present {
+		if !present || value == nil {
 			if key.required {
 				return errf("%s is required.", key.name)
 			}
@@ -745,14 +753,15 @@ func runConfigUnset(scope configDocScope, name string) (int, error) {
 	return 0, nil
 }
 
-// The merge a whole-document `write` lands into what's on disk. The
-// payload owns the scope's registry: a key it carries is written, a
-// registry key it omits is deleted (that is how the app clears a
-// setting back to its default, since it serializes defaults by
-// omission). Everything else already in the file is kept, so a key
-// only a newer version models survives an older build's save. The
-// app's zod schemas strip what they don't model, so the payload can't
-// be relied on to carry such a key back on its own.
+// The merge a whole-document `write` lands into what's on disk. A key
+// the payload carries is written. A registry key the payload omits is
+// deleted, and so is any key it sets to null, registered or not. That
+// is how the app clears a setting back to its default, and the null
+// lets it clear one this registry doesn't model. Everything else
+// already in the file is kept, so a key only a newer version models
+// survives an older build's save. The app's zod schemas strip what
+// they don't model, so the payload can't be relied on to carry such a
+// key back on its own.
 // Objects merge field by field for the same reason, which keeps an
 // unknown field sitting beside scripts.setup. Arrays and scalars
 // replace wholesale: element-wise merging would resurrect entries the
@@ -797,15 +806,30 @@ func configDocClear(doc map[string]any, name string) {
 	configDocDelete(doc, name)
 }
 
+// A null deletes its key. An object merges into the file's object
+// field by field. Anything else replaces what is there. An object the
+// payload's nulls empty is dropped, so clearing the last field under
+// scripts leaves no `"scripts": {}` behind. An empty object the payload
+// sends is written as sent.
 func mergeJSONObjects(doc, payload map[string]any) {
 	for name, value := range payload {
-		if child, ok := value.(map[string]any); ok {
-			if existing, isObject := doc[name].(map[string]any); isObject {
-				mergeJSONObjects(existing, child)
-				continue
+		switch value := value.(type) {
+		case nil:
+			delete(doc, name)
+		case map[string]any:
+			existing, isObject := doc[name].(map[string]any)
+			if !isObject {
+				existing = map[string]any{}
 			}
+			mergeJSONObjects(existing, value)
+			if len(existing) == 0 && len(value) != 0 {
+				delete(doc, name)
+			} else {
+				doc[name] = existing
+			}
+		default:
+			doc[name] = value
 		}
-		doc[name] = value
 	}
 }
 

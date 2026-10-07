@@ -3,7 +3,6 @@ import type { Handlers } from "@shared/ipc/types";
 import {
   DEVICE_SETTINGS_DEFAULTS,
   type DeviceSettingsPatch,
-  type GlobalConfig,
 } from "@shared/schemas";
 import {
   invalidateGlobalConfigCache,
@@ -12,7 +11,7 @@ import {
   withGlobalConfigWriteLock,
 } from "@host/lib/config/global";
 import { invalidateTerrierCaches } from "@host/lib/terrier";
-import { globalConfigWriteViaCli } from "../cliDelegate";
+import { type ClearingWrite, globalConfigWriteViaCli } from "../cliDelegate";
 
 // A patched value equal to the key's default is stored by omission, so
 // config.json stays tidy whichever device saved it. Values are plain
@@ -24,6 +23,10 @@ function isDefault(key: keyof DeviceSettingsPatch, value: unknown): boolean {
   );
 }
 
+const MANAGED_KEYS = Object.keys(
+  DEVICE_SETTINGS_DEFAULTS,
+) as (keyof DeviceSettingsPatch)[];
+
 export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
   // config.json as stored, read through the CLI (`sm config read`) and
   // cached for a few seconds (host/lib/config/global.ts).
@@ -31,10 +34,11 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
   // The zod boundary already rejected any key outside the managed set
   // (the patch schema is strict), so by the time this runs the patch can
   // only carry settings the Settings form manages. Patch semantics:
-  // read the stored document as the base, apply only the provided keys
-  // (a value equal to its default deletes the key), and write the whole
-  // document through the CLI. An explicitly-undefined key is skipped
-  // rather than applied, or the write would delete the base's value.
+  // read the stored managed settings as the base, apply only the
+  // provided keys (a value equal to its default deletes the key), and
+  // write those settings through the CLI. An explicitly-undefined key is
+  // skipped rather than applied, or the write would delete the base's
+  // value.
   writeDeviceSettings: async ({ patch }) =>
     // Under the shared config write lock so two saves' read-modify-write
     // windows cannot interleave and lose an update.
@@ -42,12 +46,20 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
       // Cache-bypassing base: the CLI clears every registered key the
       // payload omits, so a base up to the 5s TTL stale would write back
       // a value a CLI `set` just changed. The fresh read is what makes
-      // the base authoritative for those registered keys.
-      const doc: GlobalConfig = { ...(await readGlobalConfigFresh()) };
+      // the base authoritative for those registered keys. Only the
+      // managed settings ride in the payload, so a key this build
+      // doesn't model never does, and the merge keeps it as stored.
+      const stored = await readGlobalConfigFresh();
+      const doc: ClearingWrite<DeviceSettingsPatch> = {};
+      for (const key of MANAGED_KEYS) {
+        if (stored[key] !== undefined)
+          Object.assign(doc, { [key]: stored[key] });
+      }
       for (const [name, value] of Object.entries(patch)) {
         if (value === undefined) continue;
         const key = name as keyof DeviceSettingsPatch;
-        if (isDefault(key, value)) delete doc[key];
+        // Null, not omitted, so the CLI clears it registered or not.
+        if (isDefault(key, value)) doc[key] = null;
         else Object.assign(doc, { [key]: value });
       }
       await globalConfigWriteViaCli(doc);
