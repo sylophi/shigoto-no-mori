@@ -1,6 +1,7 @@
 // A contract's schemas are zod or Effect Schema while app/shared/schemas
-// moves to Schema (V3.md step 1). Everything that reads a contract's
-// schemas goes through here, and this file goes with the last zod one.
+// moves to Schema (V3.md step 1). Everything that reads a schema that
+// may be either kind (a contract's, a JSON file's) goes through here,
+// and this file goes with the last zod one.
 //
 // A converted schema's decoded value serializes to the JSON it decodes
 // from, so the wires keep sending values as they are and only decode.

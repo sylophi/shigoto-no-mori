@@ -12,6 +12,7 @@
 // git itself.
 import { only } from "@shared/util/only";
 import { homedir } from "node:os";
+import * as Schema from "effect/Schema";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
   type ControlDevice,
@@ -924,7 +925,7 @@ async function cloneIntoOn(
     moveCloneParent({
       sourcePath: project.path,
       sourceHome: here,
-      destinationHome: RuntimeInfoSchema.parse(info).homedir,
+      destinationHome: Schema.decodeSync(RuntimeInfoSchema)(info).homedir,
       destinationProjects: ProjectSchema.array().parse(projects),
     }),
     project.path,

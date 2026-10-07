@@ -7,6 +7,7 @@
 // associative and idempotent, so copies may exchange entries in any
 // order, any number of times, over any path, and still agree: there is
 // no sync session to complete and nothing to resume.
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { isSafeRelPath } from "@shared/git/gitPaths";
 import {
@@ -16,6 +17,8 @@ import {
   type SharedSettingValue,
   SharedSettingValueSchema,
 } from "@shared/schemas/sharedSettings";
+
+const isSharedSettingValue = Schema.is(SharedSettingValueSchema);
 
 export const EMPTY_SHARED_SETTINGS: SharedSettingsDoc = { entries: {} };
 
@@ -61,7 +64,7 @@ export function hiddenPrefixesValue(
   prefixes: readonly string[],
 ): string | null {
   const value = normalizeHiddenPrefixes(prefixes).join("\n");
-  return SharedSettingValueSchema.safeParse(value).success ? value : null;
+  return isSharedSettingValue(value) ? value : null;
 }
 
 // Whether a worktree's name or branch starts with one of the prefixes.
@@ -148,7 +151,7 @@ export function leaveOutPresetValue(preset: LeaveOutPreset): string | null {
     });
   return (
     [encode(["leftOut", "brought"]), encode([inForce])].find(
-      (value) => SharedSettingValueSchema.safeParse(value).success,
+      isSharedSettingValue,
     ) ?? null
   );
 }
