@@ -7,17 +7,14 @@
 // the mirror get no tab. No tabs without another side to pick: no
 // mirror, or one known only from a served stream (no project to open).
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test mirror-tabs.
+// Run: pnpm test mirror-tabs.
 import assert from "node:assert/strict";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import {
   mirrorSideTabs,
   type MirrorSideTab,
 } from "@/components/worktreeDetail/mirror/mirrorSides";
-import { makeProof } from "./lib/checkKit.mts";
-
-const proof = makeProof("mirror-tabs proof");
-console.log("mirror-tabs proof\n");
+import { it } from "vitest";
 
 const device = (deviceId: string): DeviceRosterEntry => ({
   deviceId,
@@ -41,59 +38,53 @@ const line = (tabs: MirrorSideTab[] | null) =>
       }`,
   ) ?? null;
 
-try {
-  await proof.check("on the original: it first, then its copy", () => {
-    // The Thinkpad runs the session: it holds the original.
-    const tabs = mirrorSideTabs(
-      [
-        {
-          runnerDeviceId: "thinkpad",
-          otherDeviceId: "mac",
-          otherCopy: onMac,
-        },
-      ],
-      "thinkpad",
-      roster,
-    );
-    assert.deepEqual(line(tabs), ["thinkpad original", "-> mac copy @wt-mac"]);
-  });
+it("on the original: it first, then its copy", () => {
+  // The Thinkpad runs the session: it holds the original.
+  const tabs = mirrorSideTabs(
+    [
+      {
+        runnerDeviceId: "thinkpad",
+        otherDeviceId: "mac",
+        otherCopy: onMac,
+      },
+    ],
+    "thinkpad",
+    roster,
+  );
+  assert.deepEqual(line(tabs), ["thinkpad original", "-> mac copy @wt-mac"]);
+});
 
-  await proof.check("on the copy: the same sides, the same order", () => {
-    // The page's device is not the runner: it holds the copy.
-    const tabs = mirrorSideTabs(
+it("on the copy: the same sides, the same order", () => {
+  // The page's device is not the runner: it holds the copy.
+  const tabs = mirrorSideTabs(
+    [
+      {
+        runnerDeviceId: "thinkpad",
+        otherDeviceId: "thinkpad",
+        otherCopy: onThinkpad,
+      },
+    ],
+    "mac",
+    roster,
+  );
+  assert.deepEqual(line(tabs), ["thinkpad original @wt-tp", "-> mac copy"]);
+});
+
+it("no other side to pick, no tabs", () => {
+  assert.equal(mirrorSideTabs([], "mac", roster), null);
+  // A served stream alone names no project for the other side.
+  assert.equal(
+    mirrorSideTabs(
       [
         {
           runnerDeviceId: "thinkpad",
           otherDeviceId: "thinkpad",
-          otherCopy: onThinkpad,
+          otherCopy: undefined,
         },
       ],
       "mac",
       roster,
-    );
-    assert.deepEqual(line(tabs), ["thinkpad original @wt-tp", "-> mac copy"]);
-  });
-
-  await proof.check("no other side to pick, no tabs", () => {
-    assert.equal(mirrorSideTabs([], "mac", roster), null);
-    // A served stream alone names no project for the other side.
-    assert.equal(
-      mirrorSideTabs(
-        [
-          {
-            runnerDeviceId: "thinkpad",
-            otherDeviceId: "thinkpad",
-            otherCopy: undefined,
-          },
-        ],
-        "mac",
-        roster,
-      ),
-      null,
-    );
-  });
-
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+    ),
+    null,
+  );
+});

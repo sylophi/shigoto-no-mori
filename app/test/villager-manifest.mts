@@ -20,10 +20,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { VillagerManifest } from "@shared/villagers/manifest";
 import { LEGENDARY_VILLAGERS } from "@shared/villagers/rarity";
-import { appRoot, makeProof, repoRoot } from "./lib/checkKit.mts";
-
-const proof = makeProof("villager-manifest proof");
-console.log("villager-manifest proof\n");
+import { appRoot, repoRoot } from "./lib/checkKit.mts";
+import { it } from "vitest";
 
 const readJson = (...path: string[]) =>
   JSON.parse(readFileSync(join(...path), "utf8"));
@@ -55,67 +53,61 @@ const KINDS = [
   "HHD Character Icon",
 ];
 
-try {
-  await proof.check("the pool is every villager with a face", () => {
-    assert.equal(names.length, 499);
-    assert.deepEqual(names, slugs, "the pool and the manifest, in order");
-    assert.deepEqual(slugs, slugs.toSorted(), "the manifest is sorted");
-  });
+it("the pool is every villager with a face", () => {
+  assert.equal(names.length, 499);
+  assert.deepEqual(names, slugs, "the pool and the manifest, in order");
+  assert.deepEqual(slugs, slugs.toSorted(), "the manifest is sorted");
+});
 
-  await proof.check("a character has a face or is missing, not both", () => {
-    const missing = new Set(manifest.missing);
-    assert.equal(missing.size, manifest.missing.length, "missing twice");
-    assert.deepEqual(
-      slugs.filter((slug) => missing.has(slug)),
-      [],
+it("a character has a face or is missing, not both", () => {
+  const missing = new Set(manifest.missing);
+  assert.equal(missing.size, manifest.missing.length, "missing twice");
+  assert.deepEqual(
+    slugs.filter((slug) => missing.has(slug)),
+    [],
+  );
+});
+
+it("every entry is a complete reference", () => {
+  for (const [slug, { page, icon }] of Object.entries(manifest.villagers)) {
+    assert.ok(page.length > 0, `${slug}: page`);
+    assert.ok(
+      KINDS.some((kind) => icon.file.endsWith(` ${kind}.png`)),
+      `${slug}: unknown kind of face file ${icon.file}`,
     );
-  });
-
-  await proof.check("every entry is a complete reference", () => {
-    for (const [slug, { page, icon }] of Object.entries(manifest.villagers)) {
-      assert.ok(page.length > 0, `${slug}: page`);
-      assert.ok(
-        KINDS.some((kind) => icon.file.endsWith(` ${kind}.png`)),
-        `${slug}: unknown kind of face file ${icon.file}`,
-      );
-      assert.ok(icon.file.startsWith("File:"), `${slug}: ${icon.file}`);
-      // The file's own page, which a redirected title (Tom Nook's
-      // villager icon is his character icon) resolves to.
-      assert.match(
-        icon.filePage,
-        /^https:\/\/nookipedia\.com\/wiki\/File:.+\.png$/,
-        `${slug}: file page`,
-      );
-      assert.match(icon.image, /^https:\/\/dodo\.ac\/np\/images\/.+\.png$/);
-      assert.ok(Number.isInteger(icon.bytes) && icon.bytes > 0, slug);
-      assert.match(icon.sha1, /^[0-9a-f]{40}$/, `${slug}: sha1`);
-    }
-    const big = Object.entries(manifest.villagers)
-      .filter(([, { icon }]) => icon.file.endsWith(" NH Question Icon.png"))
-      .map(([slug]) => slug);
-    assert.deepEqual(big, ["kk-slider"]);
-  });
-
-  await proof.check("a shared slug takes the bare-name page", () => {
-    // Carmen the rabbit and Carmen the mouse, Lulu the hippo and Lulu
-    // the anteater.
-    assert.equal(manifest.villagers.carmen?.page, "Carmen");
-    assert.equal(
-      manifest.villagers.carmen?.icon.file,
-      "File:Carmen NH Villager Icon.png",
+    assert.ok(icon.file.startsWith("File:"), `${slug}: ${icon.file}`);
+    // The file's own page, which a redirected title (Tom Nook's
+    // villager icon is his character icon) resolves to.
+    assert.match(
+      icon.filePage,
+      /^https:\/\/nookipedia\.com\/wiki\/File:.+\.png$/,
+      `${slug}: file page`,
     );
-    // Lulu the hippo has no face, and Lulu the anteater's is not hers.
-    assert.ok(manifest.missing.includes("lulu"));
-  });
+    assert.match(icon.image, /^https:\/\/dodo\.ac\/np\/images\/.+\.png$/);
+    assert.ok(Number.isInteger(icon.bytes) && icon.bytes > 0, slug);
+    assert.match(icon.sha1, /^[0-9a-f]{40}$/, `${slug}: sha1`);
+  }
+  const big = Object.entries(manifest.villagers)
+    .filter(([, { icon }]) => icon.file.endsWith(" NH Question Icon.png"))
+    .map(([slug]) => slug);
+  assert.deepEqual(big, ["kk-slider"]);
+});
 
-  await proof.check("every legendary character is in the pool, once", () => {
-    for (const slug of LEGENDARY_VILLAGERS) {
-      assert.ok(names.includes(slug), `${slug} is in the pool`);
-    }
-    assert.equal(new Set(LEGENDARY_VILLAGERS).size, LEGENDARY_VILLAGERS.length);
-  });
+it("a shared slug takes the bare-name page", () => {
+  // Carmen the rabbit and Carmen the mouse, Lulu the hippo and Lulu
+  // the anteater.
+  assert.equal(manifest.villagers.carmen?.page, "Carmen");
+  assert.equal(
+    manifest.villagers.carmen?.icon.file,
+    "File:Carmen NH Villager Icon.png",
+  );
+  // Lulu the hippo has no face, and Lulu the anteater's is not hers.
+  assert.ok(manifest.missing.includes("lulu"));
+});
 
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+it("every legendary character is in the pool, once", () => {
+  for (const slug of LEGENDARY_VILLAGERS) {
+    assert.ok(names.includes(slug), `${slug} is in the pool`);
+  }
+  assert.equal(new Set(LEGENDARY_VILLAGERS).size, LEGENDARY_VILLAGERS.length);
+});

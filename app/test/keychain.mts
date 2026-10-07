@@ -21,9 +21,7 @@ import {
   type ResetIo,
 } from "../main/core/keychain/reset.ts";
 import { deleteGenericPassword } from "../main/core/keychain/security.ts";
-import { makeChecker, report } from "./lib/checkKit.mts";
-
-const { check, failures } = makeChecker();
+import { it } from "vitest";
 
 // An io stub over an in-memory marker and a scripted keychain:
 // `items` copies of the item to delete one by one, or "throws" for a
@@ -50,14 +48,16 @@ function fakeIo({
   return { io, calls, marker: () => marker };
 }
 
-check("names the item the way Electron does", () => {
+// When one fails: the Safe Storage reset (main/core/keychain/) drifted
+// from its contract: fix the module or the check.
+it("names the item the way Electron does", () => {
   assert.deepEqual(safeStorageItemNames("Shigoto no Mori"), {
     service: "Shigoto no Mori Safe Storage",
     account: "Shigoto no Mori Key",
   });
 });
 
-check("first launch deletes until missing, then writes the marker", () => {
+it("first launch deletes until missing, then writes the marker", () => {
   const { io, calls, marker } = fakeIo();
   assert.equal(resetSafeStorageOnce(io), "deleted");
   assert.deepEqual(
@@ -68,40 +68,37 @@ check("first launch deletes until missing, then writes the marker", () => {
   assert.equal(marker(), true);
 });
 
-check("a second copy on the search list goes too", () => {
+it("a second copy on the search list goes too", () => {
   const { io, calls } = fakeIo({ items: 2 });
   assert.equal(resetSafeStorageOnce(io), "deleted");
   assert.deepEqual(calls, ["delete", "delete", "delete", "write"]);
 });
 
-check("a deleter that never reports missing is bounded", () => {
+it("a deleter that never reports missing is bounded", () => {
   const { io, calls } = fakeIo({ items: Infinity });
   assert.equal(resetSafeStorageOnce(io), "deleted");
   assert.ok(calls.length < 20, `unbounded: ${calls.length} calls`);
   assert.equal(calls.at(-1), "write");
 });
 
-check("a missing item still writes the marker", () => {
+it("a missing item still writes the marker", () => {
   const { io, calls } = fakeIo({ items: 0 });
   assert.equal(resetSafeStorageOnce(io), "missing");
   assert.deepEqual(calls, ["delete", "write"]);
 });
 
-check("an owned marker touches nothing", () => {
+it("an owned marker touches nothing", () => {
   const { io, calls } = fakeIo({ marker: true });
   assert.equal(resetSafeStorageOnce(io), "owned");
   assert.deepEqual(calls, []);
 });
 
-check(
-  "a failed deletion throws and writes no marker, so the next launch retries",
-  () => {
-    const { io, calls, marker } = fakeIo({ items: "throws" });
-    assert.throws(() => resetSafeStorageOnce(io), /keychain locked/);
-    assert.deepEqual(calls, ["delete"]);
-    assert.equal(marker(), false);
-  },
-);
+it("a failed deletion throws and writes no marker, so the next launch retries", () => {
+  const { io, calls, marker } = fakeIo({ items: "throws" });
+  assert.throws(() => resetSafeStorageOnce(io), /keychain locked/);
+  assert.deepEqual(calls, ["delete"]);
+  assert.equal(marker(), false);
+});
 
 if (platform() === "darwin") {
   // The probe item: a distinct name so a leak could never be mistaken
@@ -112,7 +109,7 @@ if (platform() === "darwin") {
   );
   // No separate cleanup: the second check deletes whatever the first
   // left behind, and reports it loudly if that was more than nothing.
-  check("deleting a foreign item lands without a dialog", () => {
+  it("deleting a foreign item lands without a dialog", () => {
     execFileSync(
       "/usr/bin/security",
       [
@@ -135,13 +132,7 @@ if (platform() === "darwin") {
       "a deletion that waited on a dialog would not be this fast",
     );
   });
-  check("deleting an absent item reports it missing", () => {
+  it("deleting an absent item reports it missing", () => {
     assert.equal(deleteGenericPassword(service, account), "missing");
   });
 }
-
-report({
-  name: "keychain reset",
-  failures,
-  hint: "The Safe Storage reset (main/core/keychain/) drifted from its contract: fix the module or the check.",
-});

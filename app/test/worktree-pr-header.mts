@@ -3,8 +3,9 @@
 // lib/worktreeTitle.ts), and the merge box's one status
 // (describeMergeVerdict, lib/pullRequest.ts), which says what most
 // stands between the PR and landing instead of a verdict beside its
-// cause. Runs under test/lib/register-ts-alias.mts. See package.json
-// pnpm test worktree-pr-header.
+// cause.
+//
+// Run: pnpm test worktree-pr-header.
 import assert from "node:assert/strict";
 import { describeMergeState, describeMergeVerdict } from "@/lib/pullRequest";
 import { titledByPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
@@ -16,10 +17,7 @@ import {
   type PullRequestMergeState,
   type PullRequestReviews,
 } from "@shared/schemas";
-import { makeProof } from "./lib/checkKit.mts";
-
-const proof = makeProof("worktree-pr-header proof");
-console.log("worktree-pr-header proof\n");
+import { it } from "vitest";
 
 const slim = (over: Partial<PullRequest> = {}): PullRequest => ({
   number: 7,
@@ -76,175 +74,145 @@ const requiredReview: PullRequestReviews = {
   reviewers: [],
 };
 
-try {
-  await proof.check(
-    "an open PR names the page over the worktree's own title",
-    () => {
-      const pr = slim();
-      assert.equal(titledByPullRequest(worktree("Mine"), pr), true);
-      assert.equal(worktreeTitle(worktree("Mine"), pr), "The PR's title");
-    },
-  );
+it("an open PR names the page over the worktree's own title", () => {
+  const pr = slim();
+  assert.equal(titledByPullRequest(worktree("Mine"), pr), true);
+  assert.equal(worktreeTitle(worktree("Mine"), pr), "The PR's title");
+});
 
-  await proof.check(
-    "a merged or closed PR names the page only with no title of its own",
-    () => {
-      for (const state of ["MERGED", "CLOSED"] as const) {
-        const pr = slim({ state });
-        assert.equal(titledByPullRequest(worktree(), pr), true, state);
-        assert.equal(titledByPullRequest(worktree("Mine"), pr), false, state);
-        assert.equal(worktreeTitle(worktree("Mine"), pr), "Mine", state);
-      }
-    },
-  );
+it("a merged or closed PR names the page only with no title of its own", () => {
+  for (const state of ["MERGED", "CLOSED"] as const) {
+    const pr = slim({ state });
+    assert.equal(titledByPullRequest(worktree(), pr), true, state);
+    assert.equal(titledByPullRequest(worktree("Mine"), pr), false, state);
+    assert.equal(worktreeTitle(worktree("Mine"), pr), "Mine", state);
+  }
+});
 
-  await proof.check(
-    "a fork's PR, one on the primary branch, or none never names it",
-    () => {
-      assert.equal(
-        titledByPullRequest(worktree(), slim({ isCrossRepository: true })),
-        false,
-      );
-      assert.equal(
-        titledByPullRequest(
-          { branch: "main", primaryBranch: "main", title: undefined },
-          slim(),
-        ),
-        false,
-      );
-      assert.equal(titledByPullRequest(worktree(), null), false);
-      assert.equal(worktreeTitle(worktree(), undefined), null);
-    },
+it("a fork's PR, one on the primary branch, or none never names it", () => {
+  assert.equal(
+    titledByPullRequest(worktree(), slim({ isCrossRepository: true })),
+    false,
   );
+  assert.equal(
+    titledByPullRequest(
+      { branch: "main", primaryBranch: "main", title: undefined },
+      slim(),
+    ),
+    false,
+  );
+  assert.equal(titledByPullRequest(worktree(), null), false);
+  assert.equal(worktreeTitle(worktree(), undefined), null);
+});
 
-  await proof.check("all clear reads as the merge state", () => {
-    const v = verdict(detail({ buckets: ["passed", "passed"] }));
-    assert.deepEqual(v, {
-      label: "Ready to merge",
-      tone: "emerald",
-      by: "merge",
-    });
+it("all clear reads as the merge state", () => {
+  const v = verdict(detail({ buckets: ["passed", "passed"] }));
+  assert.deepEqual(v, {
+    label: "Ready to merge",
+    tone: "emerald",
+    by: "merge",
   });
+});
 
-  await proof.check(
-    "running or failing checks speak, not the requirement",
-    () => {
-      const pending = verdict(
-        detail({ buckets: ["pending", "passed"], mergeState: "BLOCKED" }),
-      );
-      assert.equal(pending.by, "checks");
-      assert.equal(pending.label, "1 check pending");
-      const failing = verdict(
-        detail({ buckets: ["failing", "pending"], mergeState: "BLOCKED" }),
-      );
-      assert.equal(failing.by, "checks");
-      assert.equal(failing.tone, "rose");
-    },
+it("running or failing checks speak, not the requirement", () => {
+  const pending = verdict(
+    detail({ buckets: ["pending", "passed"], mergeState: "BLOCKED" }),
   );
-
-  await proof.check(
-    "a review the rule wants speaks once the checks are green",
-    () => {
-      const v = verdict(
-        detail({
-          buckets: ["passed"],
-          mergeState: "BLOCKED",
-          reviews: requiredReview,
-        }),
-      );
-      assert.deepEqual(v, {
-        label: "Review required",
-        tone: "amber",
-        by: "reviews",
-      });
-      // Checks still running outrank the review.
-      assert.equal(
-        verdict(
-          detail({
-            buckets: ["pending"],
-            mergeState: "BLOCKED",
-            reviews: requiredReview,
-          }),
-        ).by,
-        "checks",
-      );
-    },
+  assert.equal(pending.by, "checks");
+  assert.equal(pending.label, "1 check pending");
+  const failing = verdict(
+    detail({ buckets: ["failing", "pending"], mergeState: "BLOCKED" }),
   );
+  assert.equal(failing.by, "checks");
+  assert.equal(failing.tone, "rose");
+});
 
-  await proof.check("conflicts and drafts outrank failing checks", () => {
-    const states: [Partial<PullRequestDetail>, string][] = [
-      [{ mergeState: "DIRTY" as PullRequestMergeState }, "Conflicts with base"],
-      [{ isDraft: true, mergeState: "DRAFT" }, "Draft"],
-    ];
-    for (const [over, label] of states) {
-      const v = verdict(detail({ buckets: ["failing"], ...over }));
-      assert.equal(v.label, label);
-      assert.equal(v.by, "merge");
-    }
+it("a review the rule wants speaks once the checks are green", () => {
+  const v = verdict(
+    detail({
+      buckets: ["passed"],
+      mergeState: "BLOCKED",
+      reviews: requiredReview,
+    }),
+  );
+  assert.deepEqual(v, {
+    label: "Review required",
+    tone: "amber",
+    by: "reviews",
   });
-
-  await proof.check(
-    "armed auto-merge keeps its words, the checks their icon",
-    () => {
-      const pr = detail({ buckets: ["pending"], mergeState: "BLOCKED" });
-      const v = describeMergeVerdict(
-        pr,
-        { label: "Will squash and merge when ready", tone: "amber" },
-        true,
-      );
-      assert.deepEqual(v, {
-        label: "Will squash and merge when ready",
-        tone: "amber",
-        by: "checks",
-      });
-    },
+  // Checks still running outrank the review.
+  assert.equal(
+    verdict(
+      detail({
+        buckets: ["pending"],
+        mergeState: "BLOCKED",
+        reviews: requiredReview,
+      }),
+    ).by,
+    "checks",
   );
+});
 
-  await proof.check(
-    "a failing check GitHub doesn't require warns instead of blocking",
-    () => {
-      const unstable = verdict(
-        detail({ buckets: ["failing", "passed"], mergeState: "UNSTABLE" }),
-      );
-      assert.deepEqual(unstable, {
-        label: "1 check failing",
-        tone: "amber",
-        by: "checks",
-      });
-      assert.equal(
-        verdict(detail({ buckets: ["failing"], mergeState: "BLOCKED" })).tone,
-        "rose",
-      );
-    },
+it("conflicts and drafts outrank failing checks", () => {
+  const states: [Partial<PullRequestDetail>, string][] = [
+    [{ mergeState: "DIRTY" as PullRequestMergeState }, "Conflicts with base"],
+    [{ isDraft: true, mergeState: "DRAFT" }, "Draft"],
+  ];
+  for (const [over, label] of states) {
+    const v = verdict(detail({ buckets: ["failing"], ...over }));
+    assert.equal(v.label, label);
+    assert.equal(v.by, "merge");
+  }
+});
+
+it("armed auto-merge keeps its words, the checks their icon", () => {
+  const pr = detail({ buckets: ["pending"], mergeState: "BLOCKED" });
+  const v = describeMergeVerdict(
+    pr,
+    { label: "Will squash and merge when ready", tone: "amber" },
+    true,
   );
+  assert.deepEqual(v, {
+    label: "Will squash and merge when ready",
+    tone: "amber",
+    by: "checks",
+  });
+});
 
-  await proof.check(
-    "armed auto-merge stays said past a review, not past a failing check",
-    () => {
-      const armedStatus = {
-        label: "Will squash and merge when ready",
-        tone: "amber" as const,
-      };
-      const waiting = describeMergeVerdict(
-        detail({
-          buckets: ["passed"],
-          mergeState: "BLOCKED",
-          reviews: requiredReview,
-        }),
-        armedStatus,
-        true,
-      );
-      assert.deepEqual(waiting, { ...armedStatus, by: "merge" });
-      const failing = describeMergeVerdict(
-        detail({ buckets: ["failing"], mergeState: "BLOCKED" }),
-        armedStatus,
-        true,
-      );
-      assert.equal(failing.label, "1 check failing");
-    },
+it("a failing check GitHub doesn't require warns instead of blocking", () => {
+  const unstable = verdict(
+    detail({ buckets: ["failing", "passed"], mergeState: "UNSTABLE" }),
   );
+  assert.deepEqual(unstable, {
+    label: "1 check failing",
+    tone: "amber",
+    by: "checks",
+  });
+  assert.equal(
+    verdict(detail({ buckets: ["failing"], mergeState: "BLOCKED" })).tone,
+    "rose",
+  );
+});
 
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+it("armed auto-merge stays said past a review, not past a failing check", () => {
+  const armedStatus = {
+    label: "Will squash and merge when ready",
+    tone: "amber" as const,
+  };
+  const waiting = describeMergeVerdict(
+    detail({
+      buckets: ["passed"],
+      mergeState: "BLOCKED",
+      reviews: requiredReview,
+    }),
+    armedStatus,
+    true,
+  );
+  assert.deepEqual(waiting, { ...armedStatus, by: "merge" });
+  const failing = describeMergeVerdict(
+    detail({ buckets: ["failing"], mergeState: "BLOCKED" }),
+    armedStatus,
+    true,
+  );
+  assert.equal(failing.label, "1 check failing");
+});

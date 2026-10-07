@@ -22,7 +22,7 @@
 //     admitting what it saved, and one that fails to read or write
 //     never throws.
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test mirror-invites.
+// Run: pnpm test mirror-invites.
 import assert from "node:assert/strict";
 import {
   dropMirrorInvitesWithPeers,
@@ -36,10 +36,7 @@ import {
   reconcileMirrorInvites,
   setMirrorInviteStore,
 } from "@host/mirror/invites";
-import { makeProof } from "./lib/checkKit.mts";
-
-const { check, done, fail } = makeProof("mirror-invites proof");
-console.log("mirror-invites proof\n");
+import { it } from "vitest";
 
 const PEER = "peer-a";
 const OTHER_PEER = "peer-c";
@@ -98,264 +95,226 @@ function recordingStore(seed: MirrorInvite[] = []) {
   };
 }
 
-async function main() {
-  await check("the invited surface is the contracts' invitable calls", () => {
-    const surface = Object.fromEntries(
-      [...invitableChannels()].toSorted(([a], [b]) => a.localeCompare(b)),
+it("the invited surface is the contracts' invitable calls", () => {
+  const surface = Object.fromEntries(
+    [...invitableChannels()].toSorted(([a], [b]) => a.localeCompare(b)),
+  );
+  assert.deepEqual(surface, {
+    [LANDING]: "landing",
+    "mirror:applyGitState": "copy",
+    "mirror:gitState": "copy",
+    "mirror:openStream": "copy",
+    "mirror:release": "copy",
+    "sync:hasCommits": "project",
+    "sync:openSource": "copy",
+    "sync:receiveBundle": "project",
+    "worktreeData:describe": "copy",
+    "worktrees:delete": "copy",
+  });
+});
+
+it("nothing is admitted unasked", () => {
+  setMirrorInviteStore(recordingStore().store);
+  assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), false);
+  for (const channel of [...COPY_CALLS, ...PROJECT_CALLS]) {
+    assert.equal(admits(channel, COPY), false, channel);
+  }
+});
+
+it("pending: the peer's landing of the named original into the named repo and place, and nothing else", () => {
+  setMirrorInviteStore(recordingStore().store);
+  const invite = inviteMirror(ASK);
+  assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), true);
+  assert.equal(
+    admits(LANDING, LANDING_OF(OTHER_ORIGINAL)),
+    false,
+    "another original",
+  );
+  assert.equal(
+    admits(LANDING, { ...LANDING_OF(ORIGINAL), identity: "other-repo" }),
+    false,
+    "another repo",
+  );
+  assert.equal(
+    admits(LANDING, { ...LANDING_OF(ORIGINAL), cloneInto: CLONE_INTO }),
+    false,
+    "a clone place the ask never named",
+  );
+  assert.equal(
+    admits(LANDING, LANDING_OF(ORIGINAL), OTHER_PEER),
+    false,
+    "another peer",
+  );
+  for (const channel of [...COPY_CALLS, ...PROJECT_CALLS]) {
+    assert.equal(admits(channel, COPY), false, `${channel} before landing`);
+  }
+  assert.deepEqual(listMirrorInvites(), [ASK]);
+  invite.withdraw();
+  assert.deepEqual(listMirrorInvites(), [], "withdrawn with the ask");
+  assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), false);
+  // An ask that names a clone place is held to it.
+  const placed = inviteMirror({ ...ASK, cloneInto: CLONE_INTO });
+  assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), false, "no place");
+  assert.equal(
+    admits(LANDING, {
+      ...LANDING_OF(ORIGINAL),
+      cloneInto: { ...CLONE_INTO, name: "elsewhere" },
+    }),
+    false,
+    "another place",
+  );
+  assert.equal(
+    admits(LANDING, { ...LANDING_OF(ORIGINAL), cloneInto: CLONE_INTO }),
+    true,
+  );
+  placed.withdraw();
+});
+
+it("landed: the copy-scoped calls on that copy, the project-scoped ones in its project, and no landing any more", () => {
+  const { store, saved } = recordingStore();
+  setMirrorInviteStore(store);
+  inviteMirror(ASK);
+  // A landing nobody asked for (a plain send, under the switch)
+  // lands nothing, nor does one on a wire that stamps no caller.
+  landInvitedMirror(OTHER_PEER, ORIGINAL, OTHER_COPY);
+  landInvitedMirror(PEER, OTHER_ORIGINAL, OTHER_COPY);
+  landInvitedMirror(undefined, ORIGINAL, OTHER_COPY);
+  assert.equal(saved.length, 0, "nothing landed, nothing saved");
+  landInvitedMirror(PEER, ORIGINAL, COPY);
+  for (const channel of COPY_CALLS) {
+    assert.equal(admits(channel, COPY), true, channel);
+    assert.equal(admits(channel, OTHER_COPY), false, `${channel} elsewhere`);
+    assert.equal(
+      admits(channel, { ...COPY, projectId: "elsewhere" }),
+      false,
+      `${channel} in another project`,
     );
-    assert.deepEqual(surface, {
-      [LANDING]: "landing",
-      "mirror:applyGitState": "copy",
-      "mirror:gitState": "copy",
-      "mirror:openStream": "copy",
-      "mirror:release": "copy",
-      "sync:hasCommits": "project",
-      "sync:openSource": "copy",
-      "sync:receiveBundle": "project",
-      "worktreeData:describe": "copy",
-      "worktrees:delete": "copy",
-    });
+    assert.equal(
+      admits(channel, COPY, OTHER_PEER),
+      false,
+      `${channel} by another peer`,
+    );
+    assert.equal(
+      admits(channel, { worktreeId: COPY.worktreeId }),
+      false,
+      `${channel} with a payload that does not parse`,
+    );
+  }
+  for (const channel of PROJECT_CALLS) {
+    assert.equal(admits(channel, { projectId: COPY.projectId }), true, channel);
+    assert.equal(admits(channel, { projectId: "elsewhere" }), false);
+    assert.equal(
+      admits(channel, "target"),
+      false,
+      "a payload that is no object",
+    );
+  }
+  assert.equal(
+    admits(LANDING, LANDING_OF(ORIGINAL)),
+    false,
+    "the landing is done",
+  );
+  assert.equal(admits("worktrees:create", COPY), false, "an unrelated call");
+  assert.deepEqual(
+    saved.at(-1),
+    [{ ...ASK, copy: COPY }],
+    "the landed invitation is saved",
+  );
+});
+
+it("ended: with the copy, by a failed ask, with a peer that left, and when the boot finds the copy missing", async () => {
+  const { store, saved } = recordingStore();
+  setMirrorInviteStore(store);
+  // With the copy.
+  inviteMirror(ASK);
+  landInvitedMirror(PEER, ORIGINAL, COPY);
+  forgetMirrorInvitesOf(OTHER_COPY.worktreeId);
+  assert.equal(admits(STREAM, COPY), true, "another copy's removal");
+  forgetMirrorInvitesOf(COPY.worktreeId);
+  assert.equal(admits(STREAM, COPY), false);
+  assert.deepEqual(saved.at(-1), [], "the removal is saved");
+  // By a failed ask, after the landing: the peer's rollback
+  // removed the copy under the invitation, then the ask failed.
+  const failed = inviteMirror(ASK);
+  landInvitedMirror(PEER, ORIGINAL, COPY);
+  failed.withdraw();
+  assert.equal(admits(STREAM, COPY), false);
+  assert.deepEqual(listMirrorInvites(), []);
+  failed.withdraw();
+  assert.deepEqual(listMirrorInvites(), [], "a second withdraw is a no-op");
+  // With a peer that left the account.
+  inviteMirror(ASK);
+  landInvitedMirror(PEER, ORIGINAL, COPY);
+  inviteMirror({
+    ...ASK,
+    peerDeviceId: OTHER_PEER,
+    sourceWorktreeId: OTHER_ORIGINAL,
   });
-
-  await check("nothing is admitted unasked", () => {
-    setMirrorInviteStore(recordingStore().store);
-    assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), false);
-    for (const channel of [...COPY_CALLS, ...PROJECT_CALLS]) {
-      assert.equal(admits(channel, COPY), false, channel);
-    }
+  landInvitedMirror(OTHER_PEER, OTHER_ORIGINAL, OTHER_COPY);
+  dropMirrorInvitesWithPeers((deviceId) => deviceId === PEER);
+  assert.equal(admits(STREAM, OTHER_COPY, OTHER_PEER), false);
+  assert.equal(admits(STREAM, COPY), true, "the peer still on stays");
+  // When the boot finds the copy missing: the landed one whose
+  // worktree is gone goes, the other stays, a pending ask is not
+  // asked about.
+  inviteMirror({ ...ASK, sourceWorktreeId: OTHER_ORIGINAL });
+  landInvitedMirror(PEER, OTHER_ORIGINAL, OTHER_COPY);
+  const asked: string[] = [];
+  await reconcileMirrorInvites(async ({ worktreeId }) => {
+    asked.push(worktreeId);
+    return worktreeId === COPY.worktreeId;
   });
-
-  await check(
-    "pending: the peer's landing of the named original into the named repo and place, and nothing else",
-    () => {
-      setMirrorInviteStore(recordingStore().store);
-      const invite = inviteMirror(ASK);
-      assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), true);
-      assert.equal(
-        admits(LANDING, LANDING_OF(OTHER_ORIGINAL)),
-        false,
-        "another original",
-      );
-      assert.equal(
-        admits(LANDING, { ...LANDING_OF(ORIGINAL), identity: "other-repo" }),
-        false,
-        "another repo",
-      );
-      assert.equal(
-        admits(LANDING, { ...LANDING_OF(ORIGINAL), cloneInto: CLONE_INTO }),
-        false,
-        "a clone place the ask never named",
-      );
-      assert.equal(
-        admits(LANDING, LANDING_OF(ORIGINAL), OTHER_PEER),
-        false,
-        "another peer",
-      );
-      for (const channel of [...COPY_CALLS, ...PROJECT_CALLS]) {
-        assert.equal(admits(channel, COPY), false, `${channel} before landing`);
-      }
-      assert.deepEqual(listMirrorInvites(), [ASK]);
-      invite.withdraw();
-      assert.deepEqual(listMirrorInvites(), [], "withdrawn with the ask");
-      assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), false);
-      // An ask that names a clone place is held to it.
-      const placed = inviteMirror({ ...ASK, cloneInto: CLONE_INTO });
-      assert.equal(admits(LANDING, LANDING_OF(ORIGINAL)), false, "no place");
-      assert.equal(
-        admits(LANDING, {
-          ...LANDING_OF(ORIGINAL),
-          cloneInto: { ...CLONE_INTO, name: "elsewhere" },
-        }),
-        false,
-        "another place",
-      );
-      assert.equal(
-        admits(LANDING, { ...LANDING_OF(ORIGINAL), cloneInto: CLONE_INTO }),
-        true,
-      );
-      placed.withdraw();
-    },
+  assert.deepEqual(
+    asked.toSorted(),
+    [COPY.worktreeId, OTHER_COPY.worktreeId].toSorted(),
   );
+  assert.equal(admits(STREAM, COPY), true);
+  assert.equal(admits(STREAM, OTHER_COPY), false, "the missing copy's went");
+  dropMirrorInvitesWithPeers(() => false);
+  assert.deepEqual(listMirrorInvites(), []);
+});
 
-  await check(
-    "landed: the copy-scoped calls on that copy, the project-scoped ones in its project, and no landing any more",
-    () => {
-      const { store, saved } = recordingStore();
-      setMirrorInviteStore(store);
-      inviteMirror(ASK);
-      // A landing nobody asked for (a plain send, under the switch)
-      // lands nothing, nor does one on a wire that stamps no caller.
-      landInvitedMirror(OTHER_PEER, ORIGINAL, OTHER_COPY);
-      landInvitedMirror(PEER, OTHER_ORIGINAL, OTHER_COPY);
-      landInvitedMirror(undefined, ORIGINAL, OTHER_COPY);
-      assert.equal(saved.length, 0, "nothing landed, nothing saved");
-      landInvitedMirror(PEER, ORIGINAL, COPY);
-      for (const channel of COPY_CALLS) {
-        assert.equal(admits(channel, COPY), true, channel);
-        assert.equal(
-          admits(channel, OTHER_COPY),
-          false,
-          `${channel} elsewhere`,
-        );
-        assert.equal(
-          admits(channel, { ...COPY, projectId: "elsewhere" }),
-          false,
-          `${channel} in another project`,
-        );
-        assert.equal(
-          admits(channel, COPY, OTHER_PEER),
-          false,
-          `${channel} by another peer`,
-        );
-        assert.equal(
-          admits(channel, { worktreeId: COPY.worktreeId }),
-          false,
-          `${channel} with a payload that does not parse`,
-        );
-      }
-      for (const channel of PROJECT_CALLS) {
-        assert.equal(
-          admits(channel, { projectId: COPY.projectId }),
-          true,
-          channel,
-        );
-        assert.equal(admits(channel, { projectId: "elsewhere" }), false);
-        assert.equal(
-          admits(channel, "target"),
-          false,
-          "a payload that is no object",
-        );
-      }
-      assert.equal(
-        admits(LANDING, LANDING_OF(ORIGINAL)),
-        false,
-        "the landing is done",
-      );
-      assert.equal(
-        admits("worktrees:create", COPY),
-        false,
-        "an unrelated call",
-      );
-      assert.deepEqual(
-        saved.at(-1),
-        [{ ...ASK, copy: COPY }],
-        "the landed invitation is saved",
-      );
-    },
+it("the store: only landed invitations reach it, a load admits what it saved, and a broken store never throws", () => {
+  const { store, saved } = recordingStore();
+  setMirrorInviteStore(store);
+  inviteMirror(ASK);
+  inviteMirror({
+    ...ASK,
+    peerDeviceId: OTHER_PEER,
+    sourceWorktreeId: OTHER_ORIGINAL,
+  });
+  landInvitedMirror(PEER, ORIGINAL, COPY);
+  assert.equal(saved.length, 1);
+  assert.deepEqual(
+    saved[0]?.map((invite) => invite.peerDeviceId),
+    [PEER],
+    "the pending ask is not saved",
   );
-
-  await check(
-    "ended: with the copy, by a failed ask, with a peer that left, and when the boot finds the copy missing",
-    async () => {
-      const { store, saved } = recordingStore();
-      setMirrorInviteStore(store);
-      // With the copy.
-      inviteMirror(ASK);
-      landInvitedMirror(PEER, ORIGINAL, COPY);
-      forgetMirrorInvitesOf(OTHER_COPY.worktreeId);
-      assert.equal(admits(STREAM, COPY), true, "another copy's removal");
-      forgetMirrorInvitesOf(COPY.worktreeId);
-      assert.equal(admits(STREAM, COPY), false);
-      assert.deepEqual(saved.at(-1), [], "the removal is saved");
-      // By a failed ask, after the landing: the peer's rollback
-      // removed the copy under the invitation, then the ask failed.
-      const failed = inviteMirror(ASK);
-      landInvitedMirror(PEER, ORIGINAL, COPY);
-      failed.withdraw();
-      assert.equal(admits(STREAM, COPY), false);
-      assert.deepEqual(listMirrorInvites(), []);
-      failed.withdraw();
-      assert.deepEqual(listMirrorInvites(), [], "a second withdraw is a no-op");
-      // With a peer that left the account.
-      inviteMirror(ASK);
-      landInvitedMirror(PEER, ORIGINAL, COPY);
-      inviteMirror({
-        ...ASK,
-        peerDeviceId: OTHER_PEER,
-        sourceWorktreeId: OTHER_ORIGINAL,
-      });
-      landInvitedMirror(OTHER_PEER, OTHER_ORIGINAL, OTHER_COPY);
-      dropMirrorInvitesWithPeers((deviceId) => deviceId === PEER);
-      assert.equal(admits(STREAM, OTHER_COPY, OTHER_PEER), false);
-      assert.equal(admits(STREAM, COPY), true, "the peer still on stays");
-      // When the boot finds the copy missing: the landed one whose
-      // worktree is gone goes, the other stays, a pending ask is not
-      // asked about.
-      inviteMirror({ ...ASK, sourceWorktreeId: OTHER_ORIGINAL });
-      landInvitedMirror(PEER, OTHER_ORIGINAL, OTHER_COPY);
-      const asked: string[] = [];
-      await reconcileMirrorInvites(async ({ worktreeId }) => {
-        asked.push(worktreeId);
-        return worktreeId === COPY.worktreeId;
-      });
-      assert.deepEqual(
-        asked.toSorted(),
-        [COPY.worktreeId, OTHER_COPY.worktreeId].toSorted(),
-      );
-      assert.equal(admits(STREAM, COPY), true);
-      assert.equal(
-        admits(STREAM, OTHER_COPY),
-        false,
-        "the missing copy's went",
-      );
-      dropMirrorInvitesWithPeers(() => false);
-      assert.deepEqual(listMirrorInvites(), []);
-    },
+  // A fresh process loads the file: the landed one is back, a
+  // pending one that somehow got there is not.
+  const stale: MirrorInvite = {
+    ...ASK,
+    peerDeviceId: OTHER_PEER,
+    sourceWorktreeId: OTHER_ORIGINAL,
+  };
+  setMirrorInviteStore(recordingStore([...(saved[0] ?? []), stale]).store);
+  assert.equal(admits(STREAM, COPY), true);
+  assert.equal(
+    admits("sync:receiveBundle", { projectId: COPY.projectId }),
+    true,
   );
-
-  await check(
-    "the store: only landed invitations reach it, a load admits what it saved, and a broken store never throws",
-    () => {
-      const { store, saved } = recordingStore();
-      setMirrorInviteStore(store);
-      inviteMirror(ASK);
-      inviteMirror({
-        ...ASK,
-        peerDeviceId: OTHER_PEER,
-        sourceWorktreeId: OTHER_ORIGINAL,
-      });
-      landInvitedMirror(PEER, ORIGINAL, COPY);
-      assert.equal(saved.length, 1);
-      assert.deepEqual(
-        saved[0]?.map((invite) => invite.peerDeviceId),
-        [PEER],
-        "the pending ask is not saved",
-      );
-      // A fresh process loads the file: the landed one is back, a
-      // pending one that somehow got there is not.
-      const stale: MirrorInvite = {
-        ...ASK,
-        peerDeviceId: OTHER_PEER,
-        sourceWorktreeId: OTHER_ORIGINAL,
-      };
-      setMirrorInviteStore(recordingStore([...(saved[0] ?? []), stale]).store);
-      assert.equal(admits(STREAM, COPY), true);
-      assert.equal(
-        admits("sync:receiveBundle", { projectId: COPY.projectId }),
-        true,
-      );
-      assert.equal(
-        admits(LANDING, LANDING_OF(OTHER_ORIGINAL), OTHER_PEER),
-        false,
-        "a pending ask does not survive the process",
-      );
-      // A store that cannot be read starts empty, and one that cannot
-      // be written loses nothing in memory. Neither throws.
-      setMirrorInviteStore({ load: brokenDisk, save: brokenDisk });
-      assert.deepEqual(listMirrorInvites(), []);
-      inviteMirror(ASK);
-      landInvitedMirror(PEER, ORIGINAL, COPY);
-      assert.equal(
-        admits(STREAM, COPY),
-        true,
-        "landed despite the failed save",
-      );
-      setMirrorInviteStore(null);
-      assert.equal(admits(STREAM, COPY), false, "unwired, nothing");
-    },
+  assert.equal(
+    admits(LANDING, LANDING_OF(OTHER_ORIGINAL), OTHER_PEER),
+    false,
+    "a pending ask does not survive the process",
   );
-
-  done();
-}
-
-main().catch(fail);
+  // A store that cannot be read starts empty, and one that cannot
+  // be written loses nothing in memory. Neither throws.
+  setMirrorInviteStore({ load: brokenDisk, save: brokenDisk });
+  assert.deepEqual(listMirrorInvites(), []);
+  inviteMirror(ASK);
+  landInvitedMirror(PEER, ORIGINAL, COPY);
+  assert.equal(admits(STREAM, COPY), true, "landed despite the failed save");
+  setMirrorInviteStore(null);
+  assert.equal(admits(STREAM, COPY), false, "unwired, nothing");
+});

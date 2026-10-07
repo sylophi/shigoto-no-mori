@@ -11,7 +11,7 @@
 // repo counts toward its project, and a pull request counts once
 // however many worktrees carry its branch.
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test project-grid.
+// Run: pnpm test project-grid.
 import assert from "node:assert/strict";
 import {
   projectGroupKey,
@@ -22,10 +22,7 @@ import { buildGrid } from "@/components/home/gridModel";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
-import { makeProof } from "./lib/checkKit.mts";
-
-const proof = makeProof("project-grid proof");
-console.log("project-grid proof\n");
+import { it } from "vitest";
 
 const PEER = "peer-device";
 
@@ -144,66 +141,60 @@ const names = (byOwner: boolean) =>
     section.rows.map((row) => row.project.name),
   ]);
 
-try {
-  await proof.check("an unsplit list is one unnamed section", () => {
-    assert.deepEqual(names(false), [[null, ["forest", "lantern", "kettle"]]]);
-  });
+it("an unsplit list is one unnamed section", () => {
+  assert.deepEqual(names(false), [[null, ["forest", "lantern", "kettle"]]]);
+});
 
-  await proof.check("a split list files each project under its owner", () => {
-    assert.deepEqual(names(true), [
-      ["acme", ["forest", "lantern"]],
-      ["rin", ["kettle"]],
-    ]);
-  });
+it("a split list files each project under its owner", () => {
+  assert.deepEqual(names(true), [
+    ["acme", ["forest", "lantern"]],
+    ["rin", ["kettle"]],
+  ]);
+});
 
-  await proof.check("a tile lands on the worktree visited last", () => {
-    assert.equal(
-      leadOf({ [worktreeRowKey(PEER, "pine")]: 20 }, forest)?.key,
-      worktreeRowKey(PEER, "pine"),
-    );
-    assert.equal(
-      leadOf({ [worktreeRowKey(undefined, "oak")]: 20 }, forest)?.key,
-      worktreeRowKey(undefined, "oak"),
-    );
-  });
+it("a tile lands on the worktree visited last", () => {
+  assert.equal(
+    leadOf({ [worktreeRowKey(PEER, "pine")]: 20 }, forest)?.key,
+    worktreeRowKey(PEER, "pine"),
+  );
+  assert.equal(
+    leadOf({ [worktreeRowKey(undefined, "oak")]: 20 }, forest)?.key,
+    worktreeRowKey(undefined, "oak"),
+  );
+});
 
-  await proof.check("never a shelved or hidden one while another is", () => {
-    const lead = leadOf(
-      {
-        [worktreeRowKey(undefined, "elm")]: 30,
-        [worktreeRowKey(undefined, "wip")]: 40,
-      },
-      forest,
-    );
-    // Neither visit counts: with none left, last activity leads.
-    assert.equal(lead?.key, worktreeRowKey(PEER, "pine"));
-  });
+it("never a shelved or hidden one while another is", () => {
+  const lead = leadOf(
+    {
+      [worktreeRowKey(undefined, "elm")]: 30,
+      [worktreeRowKey(undefined, "wip")]: 40,
+    },
+    forest,
+  );
+  // Neither visit counts: with none left, last activity leads.
+  assert.equal(lead?.key, worktreeRowKey(PEER, "pine"));
+});
 
-  await proof.check("a reachable device's worktree before one asleep", () => {
-    const asleep = grid({}, false, { ...peerForest, reachable: false });
-    // pine (500) is the latest, but its peer is off.
-    assert.equal(
-      asleep.work.get(keyOf(forest))?.lead?.key,
-      worktreeRowKey(undefined, "oak"),
-    );
-  });
+it("a reachable device's worktree before one asleep", () => {
+  const asleep = grid({}, false, { ...peerForest, reachable: false });
+  // pine (500) is the latest, but its peer is off.
+  assert.equal(
+    asleep.work.get(keyOf(forest))?.lead?.key,
+    worktreeRowKey(undefined, "oak"),
+  );
+});
 
-  await proof.check("a project with only shelved work lands on it", () => {
-    assert.equal(leadOf({}, lantern)?.key, worktreeRowKey(undefined, "wick"));
-  });
+it("a project with only shelved work lands on it", () => {
+  assert.equal(leadOf({}, lantern)?.key, worktreeRowKey(undefined, "wick"));
+});
 
-  await proof.check("a pull request counts once, every device's", () => {
-    // #1 on two worktrees, #2 on a shelved one, #3 on the peer.
-    assert.equal(work().get(keyOf(forest))?.openPullRequests, 3);
-    assert.equal(work().get(keyOf(kettle))?.openPullRequests, 0);
-  });
+it("a pull request counts once, every device's", () => {
+  // #1 on two worktrees, #2 on a shelved one, #3 on the peer.
+  assert.equal(work().get(keyOf(forest))?.openPullRequests, 3);
+  assert.equal(work().get(keyOf(kettle))?.openPullRequests, 0);
+});
 
-  await proof.check("last activity leaves hidden work out", () => {
-    // wip (1000) is hidden. elm (900) is shelved, which still counts.
-    assert.equal(work().get(keyOf(forest))?.lastActivity, 900);
-  });
-
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+it("last activity leaves hidden work out", () => {
+  // wip (1000) is hidden. elm (900) is shelved, which still counts.
+  assert.equal(work().get(keyOf(forest))?.lastActivity, 900);
+});

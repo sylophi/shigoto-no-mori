@@ -17,10 +17,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LOG_FORMAT, listCommits, parseLog } from "@host/lib/git/worktrees";
 import type { CommitSummary } from "@shared/schemas";
-import { appRoot, makeProof, scrubProcessGitEnv } from "./lib/checkKit.mts";
-
-const proof = makeProof("git-log proof");
-console.log("git-log proof\n");
+import { afterAll, beforeAll, it } from "vitest";
+import { appRoot, scrubProcessGitEnv } from "./lib/checkKit.mts";
 
 const fixture: {
   format: string;
@@ -38,38 +36,33 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "t@t",
 });
 
-const repo = mkdtempSync(join(tmpdir(), "git-log-"));
-try {
-  await proof.check("the format is the fixture's", () => {
-    assert.equal(LOG_FORMAT, fixture.format);
-    assert.ok(fixture.cases.length > 0, "the fixture has cases");
-  });
-  for (const { name, stdout, commits } of fixture.cases) {
-    // oxlint-disable-next-line no-await-in-loop -- one ok line per case, in order
-    await proof.check(name, () => {
-      assert.deepEqual(parseLog(stdout), commits);
-    });
-  }
-  await proof.check(
-    "a crafted subject in a real repo stays one commit",
-    async () => {
-      const git = (...args: string[]) =>
-        execFileSync("git", args, { cwd: repo, env: process.env });
-      git("init", "-q");
-      git("commit", "-q", "--allow-empty", "-m", "first");
-      const crafted = "evil\x01NOTAHASH\tx\ty\tinjected";
-      git("commit", "-q", "--allow-empty", "-m", crafted);
-      const commits = await listCommits(repo, { skip: 0, count: 10 });
-      assert.deepEqual(
-        commits.map((c) => c.subject),
-        [crafted, "first"],
-      );
-    },
-  );
-
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-} finally {
+let repo: string;
+beforeAll(() => {
+  repo = mkdtempSync(join(tmpdir(), "git-log-"));
+});
+afterAll(() => {
   rmSync(repo, { recursive: true, force: true });
+});
+
+it("the format is the fixture's", () => {
+  assert.equal(LOG_FORMAT, fixture.format);
+  assert.ok(fixture.cases.length > 0, "the fixture has cases");
+});
+for (const { name, stdout, commits } of fixture.cases) {
+  it(name, () => {
+    assert.deepEqual(parseLog(stdout), commits);
+  });
 }
+it("a crafted subject in a real repo stays one commit", async () => {
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: repo, env: process.env });
+  git("init", "-q");
+  git("commit", "-q", "--allow-empty", "-m", "first");
+  const crafted = "evil\x01NOTAHASH\tx\ty\tinjected";
+  git("commit", "-q", "--allow-empty", "-m", crafted);
+  const commits = await listCommits(repo, { skip: 0, count: 10 });
+  assert.deepEqual(
+    commits.map((c) => c.subject),
+    [crafted, "first"],
+  );
+});

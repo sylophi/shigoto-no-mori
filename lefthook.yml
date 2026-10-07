@@ -25,10 +25,15 @@ pre-commit:
           - name: format-all
             glob: "{.oxfmtrc.json,app/renderer/index.css,app/package.json}"
             run: pnpm -C app run format:check
-          # The proofs and hub/'s check the staged files reach
-          # (app/test/README.md).
+          # The proofs the staged files reach: vitest related, plus the
+          # proofs' covers lines (app/test/README.md).
           - name: proofs
             run: pnpm -C app test --changed {staged_files}
+          # hub/'s typecheck and suite, for hub/ and the app files it
+          # imports (hub/README.md).
+          - name: hub
+            glob: "{hub/**,app/shared/hub/protocol.ts,app/shared/ipc/socket/frames.ts,app/shared/ipc/socket/proof.ts,app/shared/account/deviceIcon.ts,app/shared/account/platform.ts,app/shared/util/only.ts}"
+            run: pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check
           - name: go-test
             glob: "{cli/**,app/shared/fixtures/git-log.json}"
             run: go test -C cli ./...

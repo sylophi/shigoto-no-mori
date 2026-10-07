@@ -13,8 +13,7 @@
 // (4102) and superseded (4103) blocked verdicts with no redial, a
 // fresh-ticket redial after a drop, and the per-dial ticket mint.
 //
-// Runs under test/lib/register-ts-alias.mts so the app's TypeScript
-// imports resolve. Run: pnpm test web-hub.
+// Run: pnpm test web-hub.
 import assert from "node:assert/strict";
 import { CLOSE_DEVICE_REVOKED, CLOSE_SUPERSEDED } from "@shared/hub/protocol";
 import {
@@ -23,13 +22,15 @@ import {
   type ServeConnectInfo,
 } from "@shared/hub/link";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
-import { makeProof, type Track } from "./lib/checkKit.mts";
+import { it } from "vitest";
+import { type Track, waitFor } from "./lib/checkKit.mts";
 import {
   bootDevice as bootHost,
   type BootDeviceOpts,
   type BootedDevice,
 } from "./lib/hubBoot.mts";
-import { delay, waitFor } from "./lib/checkKit.mts";
+import { delay } from "./lib/checkKit.mts";
+import { trackTest } from "./lib/vitestKit.mts";
 import { startStubHub, type StubHub } from "./lib/hubStub.mts";
 
 // connectInfo is the only thing the hub wire answers, and the link is
@@ -65,147 +66,111 @@ const seeing = (a: BootedDevice, peer: string) =>
     `${peer} to be online`,
   );
 
-const { check, done, fail } = makeProof("web hub proof");
+it("connect: the browser connection reaches the DO and its status goes connected on the first presence, minting one ticket", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootWeb(stub, "A", trackTest);
+  assert.equal(a.connection.status().socket.phase, "connected");
+  assert.equal(a.mints(), 1, "the first dial did not mint exactly one ticket");
+});
 
-async function main() {
-  console.log("web hub connection proof\n");
+it("ask: the web client asks a host peer for its connect info, with ids correlating concurrent asks", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootWeb(stub, "A", trackTest);
+  await bootHost(stub, "B", { serveConnectInfo: echoServer }, trackTest);
+  await seeing(a, "B");
+  const result = await a.connection.askConnectInfo("B", { hi: 1 }, ASK_MS);
+  assert.deepEqual(result, { hi: 1 });
+  const [first, second] = await Promise.all([
+    a.connection.askConnectInfo("B", "one", ASK_MS),
+    a.connection.askConnectInfo("B", "two", ASK_MS),
+  ]);
+  assert.equal(first, "one");
+  assert.equal(second, "two");
+});
 
-  await check(
-    "connect: the browser connection reaches the DO and its status goes connected on the first presence, minting one ticket",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootWeb(stub, "A", track);
-      assert.equal(a.connection.status().socket.phase, "connected");
-      assert.equal(
-        a.mints(),
-        1,
-        "the first dial did not mint exactly one ticket",
-      );
-    },
+it("serves nobody: a peer asking the web client is refused as serving no direct listener", async () => {
+  const stub = await startStubHub(trackTest);
+  await bootWeb(stub, "A", trackTest);
+  const b = await bootHost(stub, "B", {}, trackTest);
+  await seeing(b, "A");
+  await assert.rejects(
+    () => b.connection.askConnectInfo("A", undefined, ASK_MS),
+    (error) =>
+      error instanceof HubAskRefusedError && error.code === NO_LISTENER_CODE,
   );
+});
 
-  await check(
-    "ask: the web client asks a host peer for its connect info, with ids correlating concurrent asks",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootWeb(stub, "A", track);
-      await bootHost(stub, "B", { serveConnectInfo: echoServer }, track);
-      await seeing(a, "B");
-      const result = await a.connection.askConnectInfo("B", { hi: 1 }, ASK_MS);
-      assert.deepEqual(result, { hi: 1 });
-      const [first, second] = await Promise.all([
-        a.connection.askConnectInfo("B", "one", ASK_MS),
-        a.connection.askConnectInfo("B", "two", ASK_MS),
-      ]);
-      assert.equal(first, "one");
-      assert.equal(second, "two");
-    },
+it("presence: the web client's status learns a peer is online and drops it when the peer leaves", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootWeb(stub, "A", trackTest);
+  const b = await bootHost(
+    stub,
+    "B",
+    { serveConnectInfo: echoServer },
+    trackTest,
   );
-
-  await check(
-    "serves nobody: a peer asking the web client is refused as serving no direct listener",
-    async (track) => {
-      const stub = await startStubHub(track);
-      await bootWeb(stub, "A", track);
-      const b = await bootHost(stub, "B", {}, track);
-      await seeing(b, "A");
-      await assert.rejects(
-        () => b.connection.askConnectInfo("A", undefined, ASK_MS),
-        (error) =>
-          error instanceof HubAskRefusedError &&
-          error.code === NO_LISTENER_CODE,
-      );
-    },
+  await waitFor(
+    () => a.connection.status().onlineDeviceIds.includes("B"),
+    "web A to see B online",
   );
-
-  await check(
-    "presence: the web client's status learns a peer is online and drops it when the peer leaves",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootWeb(stub, "A", track);
-      const b = await bootHost(
-        stub,
-        "B",
-        { serveConnectInfo: echoServer },
-        track,
-      );
-      await waitFor(
-        () => a.connection.status().onlineDeviceIds.includes("B"),
-        "web A to see B online",
-      );
-      // The local device is filtered out of its own roster.
-      assert.equal(
-        a.connection.status().onlineDeviceIds.includes("A"),
-        false,
-        "the web client listed itself as an online peer",
-      );
-      await b.connection.stop();
-      await waitFor(
-        () => !a.connection.status().onlineDeviceIds.includes("B"),
-        "web A to see B leave",
-      );
-    },
+  // The local device is filtered out of its own roster.
+  assert.equal(
+    a.connection.status().onlineDeviceIds.includes("A"),
+    false,
+    "the web client listed itself as an online peer",
   );
-
-  await check(
-    "blocked: a 4102 revoked close blocks with no redial, and a 4103 superseded close blocks with its own message",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootWeb(stub, "A", track);
-      stub.dropSocket("A", CLOSE_DEVICE_REVOKED, "device revoked");
-      await waitFor(
-        () => a.connection.status().socket.phase === "blocked",
-        "the revoked block",
-      );
-      const minted = a.mints();
-      // Longer than the first backoff rung: a redial would have minted by
-      // now.
-      await delay(1_300);
-      const revoked = a.connection.status().socket;
-      assert.equal(revoked.phase, "blocked");
-      assert.equal(a.mints(), minted, "a blocked connection redialed");
-      assert.match(revoked.message, /removed from the account/);
-
-      const c = await bootWeb(stub, "C", track);
-      stub.dropSocket("C", CLOSE_SUPERSEDED, "superseded");
-      await waitFor(
-        () => c.connection.status().socket.phase === "blocked",
-        "the superseded block",
-      );
-      const superseded = c.connection.status().socket;
-      assert(superseded.phase === "blocked");
-      assert.match(superseded.message, /another instance/);
-    },
+  await b.connection.stop();
+  await waitFor(
+    () => !a.connection.status().onlineDeviceIds.includes("B"),
+    "web A to see B leave",
   );
+});
 
-  await check(
-    "reconnect: a dropped socket redials with a fresh minted ticket and asks a peer again",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootWeb(stub, "A", track);
-      await bootHost(stub, "B", { serveConnectInfo: echoServer }, track);
-      assert.equal(a.mints(), 1);
-      stub.dropSocket("A", 1001, "going away");
-      await waitFor(
-        () => a.connection.status().socket.phase === "backoff",
-        "the backoff phase",
-      );
-      await waitFor(
-        () => a.connection.status().socket.phase === "connected",
-        "the redial",
-      );
-      // The per-dial mint injection ran again for the redial, proving the
-      // web connection mints a fresh ticket per attempt.
-      assert.equal(a.mints(), 2, "the redial did not mint a fresh ticket");
-      await seeing(a, "B");
-      assert.equal(
-        await a.connection.askConnectInfo("B", "back", ASK_MS),
-        "back",
-      );
-    },
+it("blocked: a 4102 revoked close blocks with no redial, and a 4103 superseded close blocks with its own message", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootWeb(stub, "A", trackTest);
+  stub.dropSocket("A", CLOSE_DEVICE_REVOKED, "device revoked");
+  await waitFor(
+    () => a.connection.status().socket.phase === "blocked",
+    "the revoked block",
   );
+  const minted = a.mints();
+  // Longer than the first backoff rung: a redial would have minted by
+  // now.
+  await delay(1_300);
+  const revoked = a.connection.status().socket;
+  assert.equal(revoked.phase, "blocked");
+  assert.equal(a.mints(), minted, "a blocked connection redialed");
+  assert.match(revoked.message, /removed from the account/);
 
-  done();
-}
+  const c = await bootWeb(stub, "C", trackTest);
+  stub.dropSocket("C", CLOSE_SUPERSEDED, "superseded");
+  await waitFor(
+    () => c.connection.status().socket.phase === "blocked",
+    "the superseded block",
+  );
+  const superseded = c.connection.status().socket;
+  assert(superseded.phase === "blocked");
+  assert.match(superseded.message, /another instance/);
+});
 
-main().catch(fail);
+it("reconnect: a dropped socket redials with a fresh minted ticket and asks a peer again", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootWeb(stub, "A", trackTest);
+  await bootHost(stub, "B", { serveConnectInfo: echoServer }, trackTest);
+  assert.equal(a.mints(), 1);
+  stub.dropSocket("A", 1001, "going away");
+  await waitFor(
+    () => a.connection.status().socket.phase === "backoff",
+    "the backoff phase",
+  );
+  await waitFor(
+    () => a.connection.status().socket.phase === "connected",
+    "the redial",
+  );
+  // The per-dial mint injection ran again for the redial, proving the
+  // web connection mints a fresh ticket per attempt.
+  assert.equal(a.mints(), 2, "the redial did not mint a fresh ticket");
+  await seeing(a, "B");
+  assert.equal(await a.connection.askConnectInfo("B", "back", ASK_MS), "back");
+});

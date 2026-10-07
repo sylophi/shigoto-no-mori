@@ -10,6 +10,7 @@
 // the same literal: the two implementations cannot drift apart.
 //
 // covers: app/shared/fixtures/repo-identity-*.json
+import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
   mkdirSync,
@@ -29,7 +30,8 @@ import {
   normalizeRemoteUrl,
 } from "../shared/git/repoIdentity.mts";
 import { ProjectRowSchema } from "../shared/schemas/project.ts";
-import { createCliRunner, report, scrubbedGitEnv } from "./lib/checkKit.mts";
+import { it } from "vitest";
+import { createCliRunner, scrubbedGitEnv } from "./lib/checkKit.mts";
 import { builtSm } from "./lib/smBinary.mts";
 
 const execFileP = promisify(execFile);
@@ -68,17 +70,6 @@ async function run(cwd: string, args: string[]): Promise<string> {
 const failures: string[] = [];
 const show = (value: string | null | undefined) =>
   value === null ? "null" : `"${value}"`;
-
-for (const { input, expected } of fixtures(
-  "repo-identity-urls.json",
-) as UrlCase[]) {
-  const got = normalizeRemoteUrl(input);
-  if (got !== expected) {
-    failures.push(
-      `normalize "${input}": got ${show(got)}, want ${show(expected)}`,
-    );
-  }
-}
 
 // Each scenario owns its directory tree, so scenarios (and the checks
 // within one) run concurrently. Only a scenario's repo-build steps are
@@ -163,22 +154,33 @@ async function checkCliIdentities(temp: string) {
   }
 }
 
-// realpath: the CLI registers git's spelling of a path, which resolves
-// the /var -> /private/var symlink the temp dir sits behind.
-const temp = realpathSync(mkdtempSync(join(tmpdir(), "sm-identity-")));
-try {
-  await Promise.all(
-    (fixtures("repo-identity-scenarios.json") as Scenario[]).map((scenario) =>
-      checkScenario(scenario, temp),
-    ),
-  );
-  await checkCliIdentities(temp);
-} finally {
-  rmSync(temp, { recursive: true, force: true });
-}
+// When one fails: either fix shared/git/repoIdentity.mts or
+// cli/repoidentity.go, or update the fixtures in shared/fixtures/.
+it("repo identity", async () => {
+  for (const { input, expected } of fixtures(
+    "repo-identity-urls.json",
+  ) as UrlCase[]) {
+    const got = normalizeRemoteUrl(input);
+    if (got !== expected) {
+      failures.push(
+        `normalize "${input}": got ${show(got)}, want ${show(expected)}`,
+      );
+    }
+  }
 
-report({
-  name: "repo identity",
-  failures,
-  hint: "Either fix shared/git/repoIdentity.mts or cli/repoidentity.go, or update the fixtures in shared/fixtures/.",
+  // realpath: the CLI registers git's spelling of a path, which resolves
+  // the /var -> /private/var symlink the temp dir sits behind.
+  const temp = realpathSync(mkdtempSync(join(tmpdir(), "sm-identity-")));
+  try {
+    await Promise.all(
+      (fixtures("repo-identity-scenarios.json") as Scenario[]).map((scenario) =>
+        checkScenario(scenario, temp),
+      ),
+    );
+    await checkCliIdentities(temp);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+
+  assert.deepEqual(failures, []);
 });

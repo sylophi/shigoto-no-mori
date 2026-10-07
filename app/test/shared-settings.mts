@@ -19,8 +19,7 @@
 // copies that were never all online together converge through pairwise
 // exchanges alone.
 //
-// Runs under test/lib/register-ts-alias.mts so the app's TypeScript
-// imports resolve. Run: pnpm test shared-settings.
+// Run: pnpm test shared-settings.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -52,9 +51,9 @@ import {
   sharedSettingsCopy,
 } from "@host/lib/sharedSettings/store";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
-import { makeProof, memoryStorage, tempDir } from "./lib/checkKit.mts";
-
-const { check, done, fail } = makeProof("shared settings proof");
+import { it } from "vitest";
+import { memoryStorage, tempDir } from "./lib/checkKit.mts";
+import { trackTest } from "./lib/vitestKit.mts";
 
 const KEY = sharedSettingKeys.quickCreateDevice("github.com/acme/widgets");
 const KIWI = "00000000-0000-4000-8000-00000000000a";
@@ -96,348 +95,274 @@ const tree = (
 const exchange = (mine: WebBridge["api"], theirs: WebBridge["api"]) =>
   exchangeSharedSettings(mine.sharedSettings, theirs.sharedSettings);
 
-async function main() {
-  await check(
-    "merge: order-free, idempotent, and the same document back when nothing was learned",
-    () => {
-      const a = withSharedSetting(EMPTY_SHARED_SETTINGS, KEY, KIWI, KIWI, 100);
-      const b = withSharedSetting(
-        EMPTY_SHARED_SETTINGS,
-        KEY,
-        LYCHEE,
-        LYCHEE,
-        200,
-      );
-      const c = withSharedSetting(
-        EMPTY_SHARED_SETTINGS,
-        "other",
-        true,
-        KIWI,
-        50,
-      );
-      const abc = mergeSharedSettings(mergeSharedSettings(a, b), c);
-      const cba = mergeSharedSettings(mergeSharedSettings(c, b), a);
-      assert.deepEqual(abc, cba);
-      assert.equal(sharedStringSetting(abc, KEY), LYCHEE);
-      // Identity, not just equality: callers skip the write and the
-      // announcement off it.
-      assert.equal(mergeSharedSettings(abc, a), abc);
-      assert.equal(mergeSharedSettings(abc, abc), abc);
-      assert.deepEqual(sharedSettingsAhead(abc, abc).entries, {});
-      assert.deepEqual(
-        Object.keys(sharedSettingsAhead(abc, a).entries).toSorted(),
-        [KEY, "other"].toSorted(),
-      );
-      // Equal stamps settle the same way from either side.
-      const tieA = { entries: { [KEY]: { value: KIWI, at: 7, by: KIWI } } };
-      const tieB = { entries: { [KEY]: { value: LYCHEE, at: 7, by: LYCHEE } } };
-      assert.deepEqual(
-        mergeSharedSettings(tieA, tieB),
-        mergeSharedSettings(tieB, tieA),
-      );
-    },
+it("merge: order-free, idempotent, and the same document back when nothing was learned", () => {
+  const a = withSharedSetting(EMPTY_SHARED_SETTINGS, KEY, KIWI, KIWI, 100);
+  const b = withSharedSetting(EMPTY_SHARED_SETTINGS, KEY, LYCHEE, LYCHEE, 200);
+  const c = withSharedSetting(EMPTY_SHARED_SETTINGS, "other", true, KIWI, 50);
+  const abc = mergeSharedSettings(mergeSharedSettings(a, b), c);
+  const cba = mergeSharedSettings(mergeSharedSettings(c, b), a);
+  assert.deepEqual(abc, cba);
+  assert.equal(sharedStringSetting(abc, KEY), LYCHEE);
+  // Identity, not just equality: callers skip the write and the
+  // announcement off it.
+  assert.equal(mergeSharedSettings(abc, a), abc);
+  assert.equal(mergeSharedSettings(abc, abc), abc);
+  assert.deepEqual(sharedSettingsAhead(abc, abc).entries, {});
+  assert.deepEqual(
+    Object.keys(sharedSettingsAhead(abc, a).entries).toSorted(),
+    [KEY, "other"].toSorted(),
   );
-
-  await check(
-    "stamps: a write outranks everything its copy has seen, even from a clock running behind",
-    () => {
-      const ahead = withSharedSetting(
-        EMPTY_SHARED_SETTINGS,
-        KEY,
-        KIWI,
-        KIWI,
-        1_000_000,
-      );
-      // Lychee's clock is far behind, but it has seen Kiwi's write.
-      const behind = withSharedSetting(ahead, KEY, LYCHEE, LYCHEE, 5);
-      assert.equal(behind.entries[KEY]?.at, 1_000_001);
-      assert.equal(
-        sharedStringSetting(mergeSharedSettings(ahead, behind), KEY),
-        LYCHEE,
-      );
-    },
+  // Equal stamps settle the same way from either side.
+  const tieA = { entries: { [KEY]: { value: KIWI, at: 7, by: KIWI } } };
+  const tieB = { entries: { [KEY]: { value: LYCHEE, at: 7, by: LYCHEE } } };
+  assert.deepEqual(
+    mergeSharedSettings(tieA, tieB),
+    mergeSharedSettings(tieB, tieA),
   );
+});
 
-  await check(
-    "clearing: a tombstone outranks a copy still holding the old value",
-    () => {
-      const set = withSharedSetting(EMPTY_SHARED_SETTINGS, KEY, KIWI, KIWI, 10);
-      const cleared = withSharedSetting(set, KEY, null, LYCHEE, 20);
-      const merged = mergeSharedSettings(cleared, set);
-      assert.equal(merged, cleared);
-      assert.equal(sharedStringSetting(merged, KEY), undefined);
-      assert.equal(merged.entries[KEY]?.value, null);
-    },
+it("stamps: a write outranks everything its copy has seen, even from a clock running behind", () => {
+  const ahead = withSharedSetting(
+    EMPTY_SHARED_SETTINGS,
+    KEY,
+    KIWI,
+    KIWI,
+    1_000_000,
   );
+  // Lychee's clock is far behind, but it has seen Kiwi's write.
+  const behind = withSharedSetting(ahead, KEY, LYCHEE, LYCHEE, 5);
+  assert.equal(behind.entries[KEY]?.at, 1_000_001);
+  assert.equal(
+    sharedStringSetting(mergeSharedSettings(ahead, behind), KEY),
+    LYCHEE,
+  );
+});
 
-  await check(
-    "leave-out preset: one entry a repo, nothing left out until picked, unreadable values fall back, a rule too long for a value is refused",
-    () => {
-      const key = sharedSettingKeys.leaveOutPreset("github.com/acme/widgets");
-      const read = (doc: SharedSettingsDoc) =>
-        parseLeaveOutPreset(sharedStringSetting(doc, key));
-      assert.deepEqual(read(EMPTY_SHARED_SETTINGS), NO_LEAVE_OUT_PRESET);
+it("clearing: a tombstone outranks a copy still holding the old value", () => {
+  const set = withSharedSetting(EMPTY_SHARED_SETTINGS, KEY, KIWI, KIWI, 10);
+  const cleared = withSharedSetting(set, KEY, null, LYCHEE, 20);
+  const merged = mergeSharedSettings(cleared, set);
+  assert.equal(merged, cleared);
+  assert.equal(sharedStringSetting(merged, KEY), undefined);
+  assert.equal(merged.entries[KEY]?.value, null);
+});
 
-      const preset: LeaveOutPreset = {
+it("leave-out preset: one entry a repo, nothing left out until picked, unreadable values fall back, a rule too long for a value is refused", () => {
+  const key = sharedSettingKeys.leaveOutPreset("github.com/acme/widgets");
+  const read = (doc: SharedSettingsDoc) =>
+    parseLeaveOutPreset(sharedStringSetting(doc, key));
+  assert.deepEqual(read(EMPTY_SHARED_SETTINGS), NO_LEAVE_OUT_PRESET);
+
+  const preset: LeaveOutPreset = {
+    base: "gitignored",
+    leftOut: [],
+    brought: ["public/icons", ".env.local"],
+  };
+  const value = leaveOutPresetValue(preset);
+  const doc = withSharedSetting(EMPTY_SHARED_SETTINGS, key, value, KIWI, 10);
+  assert.deepEqual(Object.keys(doc.entries), [key]);
+  assert.deepEqual(read(doc), {
+    ...preset,
+    brought: [".env.local", "public/icons"],
+  });
+  // The same rule is the same value, whatever order it was picked
+  // in, so saving it again is not a write.
+  const again = leaveOutPresetValue({
+    ...preset,
+    brought: [".env.local", "public/icons"],
+  });
+  assert.equal(withSharedSetting(doc, key, again, LYCHEE, 20), doc);
+
+  for (const bad of ["not json", "{}", '{"base":"sometimes"}', "3"]) {
+    assert.deepEqual(parseLeaveOutPreset(bad), NO_LEAVE_OUT_PRESET);
+  }
+  // A path the engine would refuse is dropped, the rest holds.
+  assert.deepEqual(
+    parseLeaveOutPreset(
+      JSON.stringify({
         base: "gitignored",
-        leftOut: [],
-        brought: ["public/icons", ".env.local"],
-      };
-      const value = leaveOutPresetValue(preset);
-      const doc = withSharedSetting(
-        EMPTY_SHARED_SETTINGS,
-        key,
-        value,
-        KIWI,
-        10,
-      );
-      assert.deepEqual(Object.keys(doc.entries), [key]);
-      assert.deepEqual(read(doc), {
-        ...preset,
-        brought: [".env.local", "public/icons"],
-      });
-      // The same rule is the same value, whatever order it was picked
-      // in, so saving it again is not a write.
-      const again = leaveOutPresetValue({
-        ...preset,
-        brought: [".env.local", "public/icons"],
-      });
-      assert.equal(withSharedSetting(doc, key, again, LYCHEE, 20), doc);
-
-      for (const bad of ["not json", "{}", '{"base":"sometimes"}', "3"]) {
-        assert.deepEqual(parseLeaveOutPreset(bad), NO_LEAVE_OUT_PRESET);
-      }
-      // A path the engine would refuse is dropped, the rest holds.
-      assert.deepEqual(
-        parseLeaveOutPreset(
-          JSON.stringify({
-            base: "gitignored",
-            brought: ["dist", "../up", "/abs", "two\nlines", "", 7],
-          }),
-        ).brought,
-        ["dist"],
-      );
-
-      // The other base's exceptions are off screen, so they go before
-      // the rule in force is refused. Only that rule outgrowing a value
-      // refuses the save.
-      const crowded = leaveOutPresetValue({
-        base: "gitignored",
-        leftOut: many(8),
-        brought: many(6),
-      });
-      assert.ok(crowded !== null, "the crowded preset was refused");
-      assert.deepEqual(parseLeaveOutPreset(crowded), {
-        base: "gitignored",
-        leftOut: [],
-        brought: many(6).toSorted(),
-      });
-      assert.equal(leaveOutPresetValue({ ...preset, brought: many(40) }), null);
-    },
+        brought: ["dist", "../up", "/abs", "two\nlines", "", 7],
+      }),
+    ).brought,
+    ["dist"],
   );
 
-  await check(
-    "hidden worktree prefixes: one value, the same list is the same value, a primary never hides, a detached hash never matches, a list too long for a value is refused",
-    () => {
-      assert.deepEqual(parseHiddenPrefixes(undefined), []);
-      assert.deepEqual(parseHiddenPrefixes(" exp/ \n\n tmp-"), [
-        "exp/",
-        "tmp-",
-      ]);
-      const value = hiddenPrefixesValue(["tmp-", "exp/", "tmp-", " "]);
-      assert.equal(value, "exp/\ntmp-");
-      assert.equal(hiddenPrefixesValue(["exp/", "tmp-"]), value);
+  // The other base's exceptions are off screen, so they go before
+  // the rule in force is refused. Only that rule outgrowing a value
+  // refuses the save.
+  const crowded = leaveOutPresetValue({
+    base: "gitignored",
+    leftOut: many(8),
+    brought: many(6),
+  });
+  assert.ok(crowded !== null, "the crowded preset was refused");
+  assert.deepEqual(parseLeaveOutPreset(crowded), {
+    base: "gitignored",
+    leftOut: [],
+    brought: many(6).toSorted(),
+  });
+  assert.equal(leaveOutPresetValue({ ...preset, brought: many(40) }), null);
+});
 
-      const prefixes = parseHiddenPrefixes(value);
-      assert.equal(
-        isHiddenByPrefix(tree("snug-otter", "exp/x"), prefixes),
-        true,
-      );
-      assert.equal(isHiddenByPrefix(tree("tmp-1", "fix"), prefixes), true);
-      assert.equal(
-        isHiddenByPrefix(tree("snug-otter", "fix"), prefixes),
-        false,
-      );
-      assert.equal(
-        isHiddenByPrefix(tree("main", "exp/x", { isPrimary: true }), prefixes),
-        false,
-      );
-      assert.equal(
-        isHiddenByPrefix(tree("snug-otter", "tmp-9f2", { detached: true }), [
-          "tmp-9",
-        ]),
-        false,
-      );
+it("hidden worktree prefixes: one value, the same list is the same value, a primary never hides, a detached hash never matches, a list too long for a value is refused", () => {
+  assert.deepEqual(parseHiddenPrefixes(undefined), []);
+  assert.deepEqual(parseHiddenPrefixes(" exp/ \n\n tmp-"), ["exp/", "tmp-"]);
+  const value = hiddenPrefixesValue(["tmp-", "exp/", "tmp-", " "]);
+  assert.equal(value, "exp/\ntmp-");
+  assert.equal(hiddenPrefixesValue(["exp/", "tmp-"]), value);
 
-      assert.equal(hiddenPrefixesValue(many(40)), null);
-    },
+  const prefixes = parseHiddenPrefixes(value);
+  assert.equal(isHiddenByPrefix(tree("snug-otter", "exp/x"), prefixes), true);
+  assert.equal(isHiddenByPrefix(tree("tmp-1", "fix"), prefixes), true);
+  assert.equal(isHiddenByPrefix(tree("snug-otter", "fix"), prefixes), false);
+  assert.equal(
+    isHiddenByPrefix(tree("main", "exp/x", { isPrimary: true }), prefixes),
+    false,
+  );
+  assert.equal(
+    isHiddenByPrefix(tree("snug-otter", "tmp-9f2", { detached: true }), [
+      "tmp-9",
+    ]),
+    false,
   );
 
-  await check(
-    "forward compatibility: a key this build never heard of parses, merges and is offered on",
-    () => {
-      const future = SharedSettingsDocSchema.parse({
-        entries: { "someFutureSetting/x": { value: 3, at: 9, by: LYCHEE } },
-      });
-      const merged = mergeSharedSettings(EMPTY_SHARED_SETTINGS, future);
-      assert.deepEqual(
-        sharedSettingsAhead(merged, EMPTY_SHARED_SETTINGS),
-        future,
-      );
+  assert.equal(hiddenPrefixesValue(many(40)), null);
+});
+
+it("forward compatibility: a key this build never heard of parses, merges and is offered on", () => {
+  const future = SharedSettingsDocSchema.parse({
+    entries: { "someFutureSetting/x": { value: 3, at: 9, by: LYCHEE } },
+  });
+  const merged = mergeSharedSettings(EMPTY_SHARED_SETTINGS, future);
+  assert.deepEqual(sharedSettingsAhead(merged, EMPTY_SHARED_SETTINGS), future);
+});
+
+it("tolerance: an entry this build cannot hold is left out, and the rest of the document still reads", () => {
+  const doc = SharedSettingsDocSchema.parse({
+    entries: {
+      [KEY]: { value: KIWI, at: 3, by: KIWI },
+      tooLong: { value: "x".repeat(10_000), at: 4, by: KIWI },
+      badStamp: { value: true, at: Number.MAX_SAFE_INTEGER, by: KIWI },
+      notAnEntry: 5,
     },
-  );
+  });
+  assert.deepEqual(Object.keys(doc.entries), [KEY]);
+});
 
-  await check(
-    "tolerance: an entry this build cannot hold is left out, and the rest of the document still reads",
-    () => {
-      const doc = SharedSettingsDocSchema.parse({
-        entries: {
-          [KEY]: { value: KIWI, at: 3, by: KIWI },
-          tooLong: { value: "x".repeat(10_000), at: 4, by: KIWI },
-          badStamp: { value: true, at: Number.MAX_SAFE_INTEGER, by: KIWI },
-          notAnEntry: 5,
-        },
-      });
-      assert.deepEqual(Object.keys(doc.entries), [KEY]);
+it("full copy: a new key is refused out loud, while held keys still take writes", () => {
+  const entries: SharedSettingsDoc["entries"] = {};
+  for (let i = 0; i < MAX_SHARED_SETTING_ENTRIES; i += 1) {
+    entries[`filler/${i}`] = { value: i, at: 1, by: KIWI };
+  }
+  let doc: SharedSettingsDoc = { entries };
+  const copy = createSharedSettingsCopy(
+    {
+      read: () => doc,
+      transact: (next) => {
+        doc = next(doc) ?? doc;
+      },
     },
+    { deviceId: () => KIWI, announce: () => {} },
   );
+  assert.throws(() => copy.set(KEY, LYCHEE), /full/);
+  assert.equal(
+    copy.set("filler/0", "moved").entries["filler/0"]?.value,
+    "moved",
+  );
+});
 
-  await check(
-    "full copy: a new key is refused out loud, while held keys still take writes",
-    () => {
-      const entries: SharedSettingsDoc["entries"] = {};
-      for (let i = 0; i < MAX_SHARED_SETTING_ENTRIES; i += 1) {
-        entries[`filler/${i}`] = { value: i, at: 1, by: KIWI };
-      }
-      let doc: SharedSettingsDoc = { entries };
-      const copy = createSharedSettingsCopy(
-        {
-          read: () => doc,
-          transact: (next) => {
-            doc = next(doc) ?? doc;
-          },
-        },
-        { deviceId: () => KIWI, announce: () => {} },
-      );
-      assert.throws(() => copy.set(KEY, LYCHEE), /full/);
-      assert.equal(
-        copy.set("filler/0", "moved").entries["filler/0"]?.value,
-        "moved",
-      );
+it("host copy: lives in registry.json beside the CLI's keys, stamps with this device, announces only real changes", () => {
+  const dir = tempDir("sm-shared-settings-", trackTest);
+  writeFileSync(
+    join(dir, "registry.json"),
+    JSON.stringify({ projects: [{ id: "p1" }], deviceId: KIWI }),
+  );
+  initDataDirAt(dir);
+  const announced: SharedSettingsDoc[] = [];
+  onSharedSettingsChange((doc) => announced.push(doc));
+
+  assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
+  const first = sharedSettingsCopy.set(KEY, LYCHEE);
+  const stamped = first.entries[KEY];
+  assert.ok(stamped !== undefined, "the set wrote an entry");
+  assert.equal(stamped.by, KIWI);
+  assert.equal(announced.length, 1);
+  // The same pick again is not a write: no new stamp to outrank
+  // a different pick made elsewhere meanwhile.
+  assert.deepEqual(sharedSettingsCopy.set(KEY, LYCHEE), first);
+  assert.equal(announced.length, 1);
+  // A merge that learns nothing is silent, one that learns is not.
+  sharedSettingsCopy.merge(first);
+  assert.equal(announced.length, 1);
+  const newer = {
+    entries: {
+      [KEY]: { value: KIWI, at: stamped.at + 1, by: LYCHEE },
     },
+  };
+  assert.equal(sharedStringSetting(sharedSettingsCopy.merge(newer), KEY), KIWI);
+  assert.equal(announced.length, 2);
+
+  const onDisk = JSON.parse(readFileSync(join(dir, "registry.json"), "utf8"));
+  assert.deepEqual(onDisk.projects, [{ id: "p1" }]);
+  assert.equal(onDisk.deviceId, KIWI);
+  assert.deepEqual(onDisk.sharedSettings, newer);
+
+  // A device leaving the account drops its copy, announced like
+  // a change, and an already empty copy clears silently.
+  assert.deepEqual(sharedSettingsCopy.clear(), EMPTY_SHARED_SETTINGS);
+  assert.equal(announced.length, 3);
+  assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
+  sharedSettingsCopy.clear();
+  assert.equal(announced.length, 3);
+  // What comes back from a peer is taken whole again: the clear
+  // wrote no tombstones to outrank it.
+  assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
+  assert.equal(announced.length, 4);
+
+  // Hand-mangled storage reads as empty instead of throwing, and
+  // the next merge fills it back in.
+  writeFileSync(
+    join(dir, "registry.json"),
+    JSON.stringify({ ...onDisk, sharedSettings: { entries: 5 } }),
   );
+  assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
+  assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
+});
 
-  await check(
-    "host copy: lives in registry.json beside the CLI's keys, stamps with this device, announces only real changes",
-    (track) => {
-      const dir = tempDir("sm-shared-settings-", track);
-      writeFileSync(
-        join(dir, "registry.json"),
-        JSON.stringify({ projects: [{ id: "p1" }], deviceId: KIWI }),
-      );
-      initDataDirAt(dir);
-      const announced: SharedSettingsDoc[] = [];
-      onSharedSettingsChange((doc) => announced.push(doc));
+it("browser copy: served off localStorage through the same contract, announcing only real changes", async () => {
+  const bridge = webBridge();
+  const announced: SharedSettingsDoc[] = [];
+  bridge.api.sharedSettings.onChanged((doc) => announced.push(doc));
+  assert.deepEqual(await bridge.api.sharedSettings.read(), {
+    entries: {},
+  });
+  const doc = await bridge.api.sharedSettings.set(KEY, KIWI);
+  assert.equal(doc.entries[KEY]?.by, bridge.api.deviceId);
+  assert.deepEqual(await bridge.api.sharedSettings.read(), doc);
+  await bridge.api.sharedSettings.set(KEY, KIWI);
+  await bridge.api.sharedSettings.merge(doc);
+  assert.equal(announced.length, 1);
+  await bridge.stop();
+});
 
-      assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
-      const first = sharedSettingsCopy.set(KEY, LYCHEE);
-      const stamped = first.entries[KEY];
-      assert.ok(stamped !== undefined, "the set wrote an entry");
-      assert.equal(stamped.by, KIWI);
-      assert.equal(announced.length, 1);
-      // The same pick again is not a write: no new stamp to outrank
-      // a different pick made elsewhere meanwhile.
-      assert.deepEqual(sharedSettingsCopy.set(KEY, LYCHEE), first);
-      assert.equal(announced.length, 1);
-      // A merge that learns nothing is silent, one that learns is not.
-      sharedSettingsCopy.merge(first);
-      assert.equal(announced.length, 1);
-      const newer = {
-        entries: {
-          [KEY]: { value: KIWI, at: stamped.at + 1, by: LYCHEE },
-        },
-      };
-      assert.equal(
-        sharedStringSetting(sharedSettingsCopy.merge(newer), KEY),
-        KIWI,
-      );
-      assert.equal(announced.length, 2);
-
-      const onDisk = JSON.parse(
-        readFileSync(join(dir, "registry.json"), "utf8"),
-      );
-      assert.deepEqual(onDisk.projects, [{ id: "p1" }]);
-      assert.equal(onDisk.deviceId, KIWI);
-      assert.deepEqual(onDisk.sharedSettings, newer);
-
-      // A device leaving the account drops its copy, announced like
-      // a change, and an already empty copy clears silently.
-      assert.deepEqual(sharedSettingsCopy.clear(), EMPTY_SHARED_SETTINGS);
-      assert.equal(announced.length, 3);
-      assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
-      sharedSettingsCopy.clear();
-      assert.equal(announced.length, 3);
-      // What comes back from a peer is taken whole again: the clear
-      // wrote no tombstones to outrank it.
-      assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
-      assert.equal(announced.length, 4);
-
-      // Hand-mangled storage reads as empty instead of throwing, and
-      // the next merge fills it back in.
-      writeFileSync(
-        join(dir, "registry.json"),
-        JSON.stringify({ ...onDisk, sharedSettings: { entries: 5 } }),
-      );
-      assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
-      assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
-    },
+it("convergence: three copies never all online together agree after pairwise exchanges", async () => {
+  const [a, b, c] = [webBridge(), webBridge(), webBridge()];
+  // A picks while alone, then meets B. A leaves, C arrives having
+  // made an older-looking pick of its own for another setting.
+  await a.api.sharedSettings.set(KEY, KIWI);
+  await c.api.sharedSettings.set("other", "from-c");
+  await exchange(b.api, a.api);
+  await exchange(c.api, b.api);
+  // C re-picks after hearing of A's pick, so C's must win everywhere.
+  await c.api.sharedSettings.set(KEY, LYCHEE);
+  await exchange(b.api, c.api);
+  await exchange(a.api, b.api);
+  const docs = await Promise.all(
+    [a, b, c].map((bridge) => bridge.api.sharedSettings.read()),
   );
-
-  await check(
-    "browser copy: served off localStorage through the same contract, announcing only real changes",
-    async () => {
-      const bridge = webBridge();
-      const announced: SharedSettingsDoc[] = [];
-      bridge.api.sharedSettings.onChanged((doc) => announced.push(doc));
-      assert.deepEqual(await bridge.api.sharedSettings.read(), {
-        entries: {},
-      });
-      const doc = await bridge.api.sharedSettings.set(KEY, KIWI);
-      assert.equal(doc.entries[KEY]?.by, bridge.api.deviceId);
-      assert.deepEqual(await bridge.api.sharedSettings.read(), doc);
-      await bridge.api.sharedSettings.set(KEY, KIWI);
-      await bridge.api.sharedSettings.merge(doc);
-      assert.equal(announced.length, 1);
-      await bridge.stop();
-    },
-  );
-
-  await check(
-    "convergence: three copies never all online together agree after pairwise exchanges",
-    async () => {
-      const [a, b, c] = [webBridge(), webBridge(), webBridge()];
-      // A picks while alone, then meets B. A leaves, C arrives having
-      // made an older-looking pick of its own for another setting.
-      await a.api.sharedSettings.set(KEY, KIWI);
-      await c.api.sharedSettings.set("other", "from-c");
-      await exchange(b.api, a.api);
-      await exchange(c.api, b.api);
-      // C re-picks after hearing of A's pick, so C's must win everywhere.
-      await c.api.sharedSettings.set(KEY, LYCHEE);
-      await exchange(b.api, c.api);
-      await exchange(a.api, b.api);
-      const docs = await Promise.all(
-        [a, b, c].map((bridge) => bridge.api.sharedSettings.read()),
-      );
-      assert.deepEqual(docs[0], docs[1]);
-      assert.deepEqual(docs[1], docs[2]);
-      assert.equal(sharedStringSetting(docs[0], KEY), LYCHEE);
-      assert.equal(sharedStringSetting(docs[0], "other"), "from-c");
-      await Promise.all([a, b, c].map((bridge) => bridge.stop()));
-    },
-  );
-
-  done();
-}
-
-main().catch(fail);
+  assert.deepEqual(docs[0], docs[1]);
+  assert.deepEqual(docs[1], docs[2]);
+  assert.equal(sharedStringSetting(docs[0], KEY), LYCHEE);
+  assert.equal(sharedStringSetting(docs[0], "other"), "from-c");
+  await Promise.all([a, b, c].map((bridge) => bridge.stop()));
+});

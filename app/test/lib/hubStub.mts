@@ -3,8 +3,7 @@
 // forwarding, full-roster presence on join and leave, offline and
 // too-large nacks, supersede on a duplicate deviceId). Extracted from
 // hub-link.mts so sync-transfer.mts drives the same stub
-// instead of a second copy. Runs under register-ts-alias so the shared
-// TypeScript imports resolve.
+// instead of a second copy.
 import { WebSocket, WebSocketServer } from "ws";
 import {
   CLOSE_SUPERSEDED,

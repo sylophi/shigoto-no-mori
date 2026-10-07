@@ -13,7 +13,7 @@
 //   plain kebab-case, and a slug two characters share goes to the one
 //   on the bare-name page (Carmen and Lulu)
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test villager-wiki.
+// Run: pnpm test villager-wiki.
 import assert from "node:assert/strict";
 import {
   infobox,
@@ -24,10 +24,7 @@ import {
   wikiPageUrl,
 } from "@shared/villagers/wiki";
 import { VillagerProfileSchema } from "@shared/schemas";
-import { makeProof } from "./lib/checkKit.mts";
-
-const proof = makeProof("villager-wiki proof");
-console.log("villager-wiki proof\n");
+import { it } from "vitest";
 
 const ACE = `{{Villager Header
 |species = bird
@@ -75,118 +72,112 @@ const TIMMY_AND_TOMMY = `{{Infobox Special
 | ja-name = まめきち & つぶきち
 }}`;
 
-try {
-  await proof.check("an infobox reads as plain text", () => {
-    assert.deepEqual(infobox(ACE), {
-      name: "Ace",
-      species: "Bird",
-      personality: "Jock",
-      gender: "Male",
-      birthdaymonth: "August",
-      birthday: "11",
-      sign: "Leo",
-      phrase: "ace",
-      quote: "If you love something, let it go.",
-      "ja-name": "フェザー",
-      "ja-name-r": "Fezā",
-    });
-    assert.equal(
-      infobox(ISABELLE).service,
-      "Town hall secretary; Resident Services",
-    );
-    assert.deepEqual(infobox("No infobox here."), {});
+it("an infobox reads as plain text", () => {
+  assert.deepEqual(infobox(ACE), {
+    name: "Ace",
+    species: "Bird",
+    personality: "Jock",
+    gender: "Male",
+    birthdaymonth: "August",
+    birthday: "11",
+    sign: "Leo",
+    phrase: "ace",
+    quote: "If you love something, let it go.",
+    "ja-name": "フェザー",
+    "ja-name-r": "Fezā",
   });
+  assert.equal(
+    infobox(ISABELLE).service,
+    "Town hall secretary; Resident Services",
+  );
+  assert.deepEqual(infobox("No infobox here."), {});
+});
 
-  await proof.check("a villager's profile takes every field", () => {
-    const profile = villagerProfile("ace", {
-      title: "Ace",
-      wikitext: ACE,
-      categories: ["Category:Villagers"],
-    });
-    assert.deepEqual(profile, {
-      name: "Ace",
-      kind: "villager",
-      species: "Bird",
-      personality: "Jock",
-      gender: "Male",
-      birthday: "08-11",
-      sign: "Leo",
-      catchphrase: "ace",
-      quote: "If you love something, let it go.",
-      japaneseName: "フェザー",
-      japaneseNameRomaji: "Fezā",
-      url: "https://nookipedia.com/wiki/Ace",
-    });
-    assert.ok(VillagerProfileSchema.safeParse(profile).success);
+it("a villager's profile takes every field", () => {
+  const profile = villagerProfile("ace", {
+    title: "Ace",
+    wikitext: ACE,
+    categories: ["Category:Villagers"],
   });
-
-  await proof.check("a field the page lacks is left out", () => {
-    const profile = villagerProfile("isabelle", {
-      title: "Isabelle",
-      wikitext: ISABELLE,
-      categories: ["Category:Special characters"],
-    });
-    assert.deepEqual(profile, {
-      name: "Isabelle",
-      kind: "special",
-      species: "Dog",
-      gender: "Female",
-      sign: "Sagittarius",
-      quote: "A good attitude will always take you further.",
-      japaneseName: "しずえ",
-      url: "https://nookipedia.com/wiki/Isabelle",
-    });
-    assert.ok(!("catchphrase" in profile) && !("birthday" in profile));
-    assert.ok(VillagerProfileSchema.safeParse(profile).success);
-    // A page with no infobox still names the character.
-    assert.deepEqual(
-      villagerProfile("ace", { title: "Ace", wikitext: "", categories: [] }),
-      { name: "Ace", kind: "special", url: "https://nookipedia.com/wiki/Ace" },
-    );
+  assert.deepEqual(profile, {
+    name: "Ace",
+    kind: "villager",
+    species: "Bird",
+    personality: "Jock",
+    gender: "Male",
+    birthday: "08-11",
+    sign: "Leo",
+    catchphrase: "ace",
+    quote: "If you love something, let it go.",
+    japaneseName: "フェザー",
+    japaneseNameRomaji: "Fezā",
+    url: "https://nookipedia.com/wiki/Ace",
   });
+  assert.ok(VillagerProfileSchema.safeParse(profile).success);
+});
 
-  await proof.check("a page two characters share splits between them", () => {
-    const page = {
-      title: "Timmy and Tommy",
-      wikitext: TIMMY_AND_TOMMY,
-      categories: ["Category:Special characters"],
-    };
-    const timmy = villagerProfile("timmy", page);
-    const tommy = villagerProfile("tommy", page);
-    assert.equal(timmy.name, "Timmy");
-    assert.equal(tommy.name, "Tommy");
-    assert.equal(timmy.japaneseName, "まめきち");
-    assert.equal(tommy.japaneseName, "つぶきち");
-    assert.equal(timmy.quote, "Experience is the best teacher.");
-    assert.equal(tommy.quote, "Nothing succeeds like success.");
-    assert.equal(timmy.birthday, "06-07");
-    assert.equal(timmy.url, "https://nookipedia.com/wiki/Timmy_and_Tommy");
+it("a field the page lacks is left out", () => {
+  const profile = villagerProfile("isabelle", {
+    title: "Isabelle",
+    wikitext: ISABELLE,
+    categories: ["Category:Special characters"],
   });
-
-  await proof.check("the names rules, Carmen and Lulu included", () => {
-    assert.deepEqual(namesOnPage("Carmen (mouse)"), ["Carmen"]);
-    assert.deepEqual(namesOnPage("Timmy and Tommy"), ["Timmy", "Tommy"]);
-    assert.equal(slugify("K.K. Slider"), "kk-slider");
-    assert.equal(slugify("Renée"), "renee");
-    assert.equal(slugify("Zipper T. Bunny"), "zipper-t-bunny");
-    assert.equal(
-      wikiPageUrl("Carmen (mouse)"),
-      "https://nookipedia.com/wiki/Carmen_(mouse)",
-    );
-    const characters = [
-      { slug: "carmen", name: "Carmen", page: "Carmen (mouse)" },
-      { slug: "carmen", name: "Carmen", page: "Carmen" },
-      { slug: "lulu", name: "Lulu", page: "Lulu" },
-      { slug: "lulu", name: "Lulu", page: "Lulu (anteater)" },
-      { slug: "ace", name: "Ace", page: "Ace" },
-    ];
-    const bySlug = oneBySlug(characters);
-    assert.deepEqual([...bySlug.keys()], ["carmen", "lulu", "ace"]);
-    assert.equal(bySlug.get("carmen")?.page, "Carmen");
-    assert.equal(bySlug.get("lulu")?.page, "Lulu");
+  assert.deepEqual(profile, {
+    name: "Isabelle",
+    kind: "special",
+    species: "Dog",
+    gender: "Female",
+    sign: "Sagittarius",
+    quote: "A good attitude will always take you further.",
+    japaneseName: "しずえ",
+    url: "https://nookipedia.com/wiki/Isabelle",
   });
+  assert.ok(!("catchphrase" in profile) && !("birthday" in profile));
+  assert.ok(VillagerProfileSchema.safeParse(profile).success);
+  // A page with no infobox still names the character.
+  assert.deepEqual(
+    villagerProfile("ace", { title: "Ace", wikitext: "", categories: [] }),
+    { name: "Ace", kind: "special", url: "https://nookipedia.com/wiki/Ace" },
+  );
+});
 
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+it("a page two characters share splits between them", () => {
+  const page = {
+    title: "Timmy and Tommy",
+    wikitext: TIMMY_AND_TOMMY,
+    categories: ["Category:Special characters"],
+  };
+  const timmy = villagerProfile("timmy", page);
+  const tommy = villagerProfile("tommy", page);
+  assert.equal(timmy.name, "Timmy");
+  assert.equal(tommy.name, "Tommy");
+  assert.equal(timmy.japaneseName, "まめきち");
+  assert.equal(tommy.japaneseName, "つぶきち");
+  assert.equal(timmy.quote, "Experience is the best teacher.");
+  assert.equal(tommy.quote, "Nothing succeeds like success.");
+  assert.equal(timmy.birthday, "06-07");
+  assert.equal(timmy.url, "https://nookipedia.com/wiki/Timmy_and_Tommy");
+});
+
+it("the names rules, Carmen and Lulu included", () => {
+  assert.deepEqual(namesOnPage("Carmen (mouse)"), ["Carmen"]);
+  assert.deepEqual(namesOnPage("Timmy and Tommy"), ["Timmy", "Tommy"]);
+  assert.equal(slugify("K.K. Slider"), "kk-slider");
+  assert.equal(slugify("Renée"), "renee");
+  assert.equal(slugify("Zipper T. Bunny"), "zipper-t-bunny");
+  assert.equal(
+    wikiPageUrl("Carmen (mouse)"),
+    "https://nookipedia.com/wiki/Carmen_(mouse)",
+  );
+  const characters = [
+    { slug: "carmen", name: "Carmen", page: "Carmen (mouse)" },
+    { slug: "carmen", name: "Carmen", page: "Carmen" },
+    { slug: "lulu", name: "Lulu", page: "Lulu" },
+    { slug: "lulu", name: "Lulu", page: "Lulu (anteater)" },
+    { slug: "ace", name: "Ace", page: "Ace" },
+  ];
+  const bySlug = oneBySlug(characters);
+  assert.deepEqual([...bySlug.keys()], ["carmen", "lulu", "ace"]);
+  assert.equal(bySlug.get("carmen")?.page, "Carmen");
+  assert.equal(bySlug.get("lulu")?.page, "Lulu");
+});

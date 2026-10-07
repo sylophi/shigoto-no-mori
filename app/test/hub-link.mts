@@ -21,8 +21,7 @@
 // ask to its sender times out, and malformed inbound frames dropped
 // without killing the process.
 //
-// Runs under test/lib/register-ts-alias.mts so the app's TypeScript
-// imports resolve. Run: pnpm test hub-link.
+// Run: pnpm test hub-link.
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
 import { z } from "zod";
@@ -43,9 +42,11 @@ import {
   HubPeerOfflineError,
   NO_LISTENER_CODE,
 } from "@shared/hub/link";
-import { makeProof, type Track } from "./lib/checkKit.mts";
+import { it } from "vitest";
+import { type Track, waitFor } from "./lib/checkKit.mts";
 import { bootDevice, type BootDeviceOpts } from "./lib/hubBoot.mts";
-import { delay, waitFor } from "./lib/checkKit.mts";
+import { delay } from "./lib/checkKit.mts";
+import { trackTest } from "./lib/vitestKit.mts";
 import { startStubHub, type StubHub } from "./lib/hubStub.mts";
 
 // Larger than MAX_HUB_MESSAGE_BYTES (64 KiB), for the size-guard and
@@ -155,433 +156,365 @@ const askFrame = (id: number, input?: unknown) => ({
   ...(input === undefined ? {} : { input }),
 });
 
-const { check, done, fail } = makeProof("hub-link proof");
+it("ask/answer: one ask is one exchange, ids correlate concurrent asks, and the caller is the device the hub stamped", async () => {
+  const { stub, a } = await bootLinked(trackTest);
+  const before = stub.receivedCount();
+  const result = await a.connection.askConnectInfo("B", { hi: 1 }, ASK_MS);
+  assert.deepEqual(result, { hi: 1 });
+  // One frame each way, no handshake around it.
+  const exchange = stub.received.slice(before);
+  assert.deepEqual(
+    exchange.map((entry) => `${entry.from}>${entry.to}`),
+    ["A>B", "B>A"],
+  );
+  const [askEntry, answerEntry] = exchange;
+  assert.ok(
+    askEntry !== undefined && answerEntry !== undefined,
+    "the ask and its answer were not both received",
+  );
+  const askSent = AskFrameSchema.parse(askEntry.frame);
+  const answerSent = AnswerFrameSchema.parse(answerEntry.frame);
+  assert.equal(askSent.ask, CONNECT_INFO_ASK);
+  assert.equal(answerSent.answer, CONNECT_INFO_ASK);
+  assert.equal(answerSent.id, askSent.id);
+  // Two concurrent asks prove the correlation is per id, not
+  // first-come.
+  const [first, second] = await Promise.all([
+    a.connection.askConnectInfo("B", { n: "one" }, ASK_MS),
+    a.connection.askConnectInfo("B", { n: "two" }, ASK_MS),
+  ]);
+  assert.equal(fields(first).n, "one");
+  assert.equal(fields(second).n, "two");
+  assert.equal(
+    await a.connection.askConnectInfo("B", { mode: "caller" }, ASK_MS),
+    "A",
+  );
+});
 
-async function main() {
-  console.log("hub-link transport proof\n");
+it("framing: a void input and a void result ride as absent fields", async () => {
+  const { stub, a } = await bootLinked(trackTest);
+  const before = stub.receivedCount();
+  const result = await a.connection.askConnectInfo("B", undefined, ASK_MS);
+  assert.equal(result, undefined);
+  const [ask, answer] = stub.received.slice(before);
+  assert.ok(
+    ask !== undefined && answer !== undefined,
+    "the ask and its answer were not both received",
+  );
+  const answerFrame = AnswerFrameSchema.parse(answer.frame);
+  assert.equal("input" in AskFrameSchema.parse(ask.frame), false);
+  assert.equal(answerFrame.ok, true);
+  assert.equal("result" in answerFrame, false);
+});
 
-  await check(
-    "ask/answer: one ask is one exchange, ids correlate concurrent asks, and the caller is the device the hub stamped",
-    async (track) => {
-      const { stub, a } = await bootLinked(track);
-      const before = stub.receivedCount();
-      const result = await a.connection.askConnectInfo("B", { hi: 1 }, ASK_MS);
-      assert.deepEqual(result, { hi: 1 });
-      // One frame each way, no handshake around it.
-      const exchange = stub.received.slice(before);
-      assert.deepEqual(
-        exchange.map((entry) => `${entry.from}>${entry.to}`),
-        ["A>B", "B>A"],
-      );
-      const [askEntry, answerEntry] = exchange;
-      assert.ok(
-        askEntry !== undefined && answerEntry !== undefined,
-        "the ask and its answer were not both received",
-      );
-      const askSent = AskFrameSchema.parse(askEntry.frame);
-      const answerSent = AnswerFrameSchema.parse(answerEntry.frame);
-      assert.equal(askSent.ask, CONNECT_INFO_ASK);
-      assert.equal(answerSent.answer, CONNECT_INFO_ASK);
-      assert.equal(answerSent.id, askSent.id);
-      // Two concurrent asks prove the correlation is per id, not
-      // first-come.
-      const [first, second] = await Promise.all([
-        a.connection.askConnectInfo("B", { n: "one" }, ASK_MS),
-        a.connection.askConnectInfo("B", { n: "two" }, ASK_MS),
-      ]);
-      assert.equal(fields(first).n, "one");
-      assert.equal(fields(second).n, "two");
-      assert.equal(
-        await a.connection.askConnectInfo("B", { mode: "caller" }, ASK_MS),
-        "A",
-      );
-    },
+it("error path: a throwing server answers ok:false with the message only", async () => {
+  const { stub, a } = await bootLinked(trackTest);
+  await assert.rejects(
+    () => a.connection.askConnectInfo("B", { mode: "fail" }, ASK_MS),
+    (error) =>
+      error instanceof HubAskRefusedError &&
+      error.message === "boom" &&
+      error.code === undefined,
+  );
+  const answer = stub.received.find((entry) => {
+    const frame = AnswerFrameSchema.safeParse(entry.frame);
+    return (
+      entry.from === "B" &&
+      frame.success &&
+      !frame.data.ok &&
+      frame.data.message === "boom"
+    );
+  });
+  assert.ok(answer, "the refusal never reached the stub");
+  assert.deepEqual(Object.keys(fields(answer.frame)).toSorted(), [
+    "answer",
+    "id",
+    "message",
+    "ok",
+  ]);
+});
+
+it("one ask only: an unknown ask is refused while connectInfo is answered for the same sender", async () => {
+  const stub = await startStubHub(trackTest);
+  await bootDevice(stub, "B", { serveConnectInfo: testServer }, trackTest);
+  const raw = rawDevice(stub, "C");
+  trackTest(() => raw.close());
+  await raw.opened;
+  await delay(50);
+  raw.send("B", { ...askFrame(1), ask: "invokeAnything", input: "x" });
+  const refused = AnswerFrameSchema.parse((await raw.nextHub()).frame);
+  assert.equal(refused.ok, false);
+  assert.match(refused.message, /unknown ask/);
+  raw.send("B", askFrame(2, "served"));
+  const served = AnswerFrameSchema.parse((await raw.nextHub()).frame);
+  assert.equal(served.ok, true);
+  assert.equal(served.result, "served");
+});
+
+it("no listener: a device with no connectInfo server refuses every ask with the no-listener code", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootDevice(stub, "A", {}, trackTest);
+  await bootDevice(stub, "D", {}, trackTest);
+  await assert.rejects(
+    () => a.connection.askConnectInfo("D", undefined, ASK_MS),
+    (error) =>
+      error instanceof HubAskRefusedError &&
+      error.code === NO_LISTENER_CODE &&
+      /serves no direct listener/.test(error.message),
+  );
+});
+
+it("size guard: an oversize ask fails typed WITHOUT hitting the wire, at the control-frame budget", async () => {
+  const { stub, a } = await bootLinked(trackTest);
+  const before = stub.receivedCount();
+  await assert.rejects(
+    () => a.connection.askConnectInfo("B", OVERSIZE, ASK_MS),
+    (error) => error instanceof HubMessageTooLargeError,
+  );
+  assert.equal(
+    stub.receivedCount(),
+    before,
+    "the oversize frame reached the stub",
+  );
+});
+
+it("oversize answer: a result too large for one envelope is refused at once, not left to time out", async () => {
+  const { a } = await bootLinked(trackTest);
+  const startedAt = Date.now();
+  await assert.rejects(
+    () => a.connection.askConnectInfo("B", { mode: "big" }, ASK_MS),
+    (error) =>
+      error instanceof HubAskRefusedError && /too large/.test(error.message),
+  );
+  assert.ok(Date.now() - startedAt < 1_000, "the refusal waited");
+});
+
+it("offline nack: asking a deviceId with no socket rejects with the offline error", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootDevice(stub, "A", {}, trackTest);
+  await assert.rejects(
+    () => a.connection.askConnectInfo("ghost", undefined, ASK_MS),
+    (error) => error instanceof HubPeerOfflineError,
+  );
+});
+
+it("timeout: a peer that never answers fails the ask typed at its timeout, and the late answer is dropped", async () => {
+  const { a, rawB } = await bootWithRawPeer(trackTest);
+  const pending = a.connection.askConnectInfo("B", "hello?", 200);
+  const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  await assert.rejects(
+    () => pending,
+    (error) => error instanceof HubAskTimeoutError,
+  );
+  // Answering after the timeout finds nothing to resolve and harms
+  // nothing: the link still asks and answers.
+  rawB.send("A", {
+    answer: CONNECT_INFO_ASK,
+    id: ask.id,
+    ok: true,
+    result: "late",
+  });
+  await delay(50);
+  const again = a.connection.askConnectInfo("B", "again", ASK_MS);
+  const second = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  rawB.send("A", {
+    answer: CONNECT_INFO_ASK,
+    id: second.id,
+    ok: true,
+    result: "fresh",
+  });
+  assert.equal(await again, "fresh");
+});
+
+it("presence: a peer leaving the roster fails the ask pending to it typed", async () => {
+  const { a, rawB } = await bootWithRawPeer(trackTest);
+  const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
+  await rawB.nextHub();
+  rawB.close();
+  await assert.rejects(
+    () => pending,
+    (error) => error instanceof HubPeerOfflineError,
+  );
+});
+
+it("teardown: stopping the connection fails pending asks as link-down, and later asks reject at once", async () => {
+  const { a, rawB } = await bootWithRawPeer(trackTest);
+  const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
+  await rawB.nextHub();
+  await a.connection.stop();
+  await assert.rejects(
+    () => pending,
+    (error) => error instanceof HubLinkDownError,
+  );
+  await assert.rejects(
+    () => a.connection.askConnectInfo("B", "after", ASK_MS),
+    (error) => error instanceof HubLinkDownError,
+  );
+});
+
+it("misrouted answer: an answer from a device other than the one asked is dropped", async () => {
+  const { stub, a, rawB } = await bootWithRawPeer(trackTest);
+  const rawC = rawDevice(stub, "C");
+  trackTest(() => rawC.close());
+  await rawC.opened;
+  const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
+  const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  const answer = (result: unknown) => ({
+    answer: CONNECT_INFO_ASK,
+    id: ask.id,
+    ok: true,
+    result,
+  });
+  rawC.send("A", answer("from C"));
+  await delay(50);
+  rawB.send("A", answer("from B"));
+  assert.equal(await pending, "from B");
+});
+
+it("off-roster ask: an ask whose from is not in the presence roster gets no answer", async () => {
+  const stub = await startStubHub(trackTest);
+  await bootDevice(stub, "B", { serveConnectInfo: testServer }, trackTest);
+  // Forge a deliver to B from a device that is not in B's roster (a
+  // hostile hub can set any `from`). B must answer nothing.
+  stub.injectTo("B", { t: "relay", from: "ghost", frame: askFrame(1) });
+  await delay(200);
+  assert.equal(
+    stub.sentTo("B", "ghost"),
+    false,
+    "B answered an off-roster sender",
+  );
+});
+
+it("unknown wire shape: a frame this link does not speak is dropped, so an ask to such a peer times out like any unreachable one and the link keeps serving", async () => {
+  const { a, rawB } = await bootWithRawPeer(trackTest);
+  const pending = a.connection.askConnectInfo("B", "x", 200);
+  const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  // What a build speaking another wire would say: neither an ask
+  // nor an answer, so nothing routes it to the pending ask.
+  rawB.send("A", { epoch: 0, sm: { t: "welcome", deviceId: "B" } });
+  await assert.rejects(
+    () => pending,
+    (error) => error instanceof HubAskTimeoutError,
+  );
+  const again = a.connection.askConnectInfo("B", "again", ASK_MS);
+  const second = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  assert.notEqual(second.id, ask.id);
+  rawB.send("A", {
+    answer: CONNECT_INFO_ASK,
+    id: second.id,
+    ok: true,
+    result: "fresh",
+  });
+  assert.equal(await again, "fresh");
+});
+
+it("reconnect: a dropped socket redials with a fresh ticket and answers again", async () => {
+  const { stub, a } = await bootLinked(trackTest);
+  assert.equal(a.mints(), 1);
+  stub.dropSocket("A", 1001, "going away");
+  await waitFor(
+    () => a.connection.status().socket.phase === "backoff",
+    "the backoff phase",
+  );
+  // The first backoff rung is 1s, so the redial (with its fresh
+  // ticket mint) lands shortly after.
+  await waitFor(
+    () => a.connection.status().socket.phase === "connected",
+    "the redial",
+  );
+  assert.equal(a.mints(), 2, "the redial did not mint a fresh ticket");
+  await waitFor(
+    () => a.connection.status().onlineDeviceIds.includes("B"),
+    "A to see B again",
+  );
+  assert.equal(await a.connection.askConnectInfo("B", "back", ASK_MS), "back");
+});
+
+it("blocked: 4102 revoked blocks with no redial, 4103 superseded blocks with its own message", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootDevice(stub, "A", {}, trackTest);
+  stub.dropSocket("A", CLOSE_DEVICE_REVOKED, "device revoked");
+  await waitFor(
+    () => a.connection.status().socket.phase === "blocked",
+    "the blocked phase",
+  );
+  const minted = a.mints();
+  // Longer than the first backoff rung: a redial would have minted
+  // by now.
+  await delay(1_300);
+  const revoked = a.connection.status().socket;
+  assert.equal(revoked.phase, "blocked");
+  assert.equal(a.mints(), minted, "a blocked supervisor redialed");
+  assert.match(revoked.message, /removed from the account/);
+  // A fresh device for the superseded arm, booted inside the tracked
+  // scope so a failure here still closes the stub.
+  const c = await bootDevice(stub, "C", {}, trackTest);
+  stub.dropSocket("C", CLOSE_SUPERSEDED, "superseded");
+  await waitFor(
+    () => c.connection.status().socket.phase === "blocked",
+    "the superseded block",
+  );
+  const superseded = c.connection.status().socket;
+  assert.equal(superseded.phase, "blocked");
+  assert.match(superseded.message, /another instance/);
+});
+
+it("liveness: a device heartbeats the device hub, and a hub that stops answering (or never answered) is declared dead and redialed with a fresh ticket", async () => {
+  const stub = await startStubHub(trackTest);
+  const heartbeat = { intervalMs: 30, timeoutMs: 120 };
+  const a = await bootDevice(stub, "A", { heartbeat }, trackTest);
+  await waitFor(() => stub.pingsFrom("A") >= 2, "A to heartbeat");
+  assert.equal(
+    a.connection.status().socket.phase,
+    "connected",
+    "an answered heartbeat keeps the socket connected",
+  );
+  assert.equal(a.mints(), 1);
+  // The hub goes silent: its socket is still open at the TCP level,
+  // exactly the shape of a flow a NAT or a sleep killed.
+  stub.setAnswerPings(false);
+  await waitFor(
+    () => a.mints() >= 2,
+    "A to declare the silent hub dead and redial",
+    3_000,
+  );
+  // The redial lands against a hub that answers again, and the
+  // supervisor's ladder started from the bottom (a stable socket
+  // that died resets it), so the connection is back at once.
+  stub.setAnswerPings(true);
+  await waitFor(
+    () => a.connection.status().socket.phase === "connected",
+    "A to reconnect after the heartbeat death",
+    3_000,
   );
 
-  await check(
-    "framing: a void input and a void result ride as absent fields",
-    async (track) => {
-      const { stub, a } = await bootLinked(track);
-      const before = stub.receivedCount();
-      const result = await a.connection.askConnectInfo("B", undefined, ASK_MS);
-      assert.equal(result, undefined);
-      const [ask, answer] = stub.received.slice(before);
-      assert.ok(
-        ask !== undefined && answer !== undefined,
-        "the ask and its answer were not both received",
-      );
-      const answerFrame = AnswerFrameSchema.parse(answer.frame);
-      assert.equal("input" in AskFrameSchema.parse(ask.frame), false);
-      assert.equal(answerFrame.ok, true);
-      assert.equal("result" in answerFrame, false);
-    },
+  // No latch on this side: a hub that NEVER answers (a Worker
+  // predating the pair) is redialed too, so a socket that dies
+  // before its first pong is still found. That is the deploy order
+  // hub/README.md states, and the cost of getting it wrong is a
+  // redial per timeout, not a dead device.
+  stub.setAnswerPings(false);
+  const b = await bootDevice(stub, "B", { heartbeat }, trackTest);
+  await waitFor(
+    () => b.mints() >= 2,
+    "B to redial a hub that never answered",
+    3_000,
   );
+  stub.setAnswerPings(true);
+});
 
-  await check(
-    "error path: a throwing server answers ok:false with the message only",
-    async (track) => {
-      const { stub, a } = await bootLinked(track);
-      await assert.rejects(
-        () => a.connection.askConnectInfo("B", { mode: "fail" }, ASK_MS),
-        (error) =>
-          error instanceof HubAskRefusedError &&
-          error.message === "boom" &&
-          error.code === undefined,
-      );
-      const answer = stub.received.find((entry) => {
-        const frame = AnswerFrameSchema.safeParse(entry.frame);
-        return (
-          entry.from === "B" &&
-          frame.success &&
-          !frame.data.ok &&
-          frame.data.message === "boom"
-        );
-      });
-      assert.ok(answer, "the refusal never reached the stub");
-      assert.deepEqual(Object.keys(fields(answer.frame)).toSorted(), [
-        "answer",
-        "id",
-        "message",
-        "ok",
-      ]);
-    },
+it("malformed inbound: garbage frames are dropped without killing the process", async () => {
+  const { stub, a } = await bootLinked(trackTest);
+  // Non-JSON text, an unparseable envelope, and a valid envelope
+  // whose frame is neither the ask nor the answer.
+  // All must be dropped, not fatal.
+  stub.injectTo("A", "this is not json at all");
+  stub.injectTo("A", JSON.stringify({ t: "totally-unknown" }));
+  stub.injectTo("A", { t: "relay", from: "B", frame: { t: "bogus" } });
+  await delay(150);
+  // The link is still live: a real ask still works.
+  assert.equal(
+    await a.connection.askConnectInfo("B", "alive", ASK_MS),
+    "alive",
   );
-
-  await check(
-    "one ask only: an unknown ask is refused while connectInfo is answered for the same sender",
-    async (track) => {
-      const stub = await startStubHub(track);
-      await bootDevice(stub, "B", { serveConnectInfo: testServer }, track);
-      const raw = rawDevice(stub, "C");
-      track(() => raw.close());
-      await raw.opened;
-      await delay(50);
-      raw.send("B", { ...askFrame(1), ask: "invokeAnything", input: "x" });
-      const refused = AnswerFrameSchema.parse((await raw.nextHub()).frame);
-      assert.equal(refused.ok, false);
-      assert.match(refused.message, /unknown ask/);
-      raw.send("B", askFrame(2, "served"));
-      const served = AnswerFrameSchema.parse((await raw.nextHub()).frame);
-      assert.equal(served.ok, true);
-      assert.equal(served.result, "served");
-    },
-  );
-
-  await check(
-    "no listener: a device with no connectInfo server refuses every ask with the no-listener code",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootDevice(stub, "A", {}, track);
-      await bootDevice(stub, "D", {}, track);
-      await assert.rejects(
-        () => a.connection.askConnectInfo("D", undefined, ASK_MS),
-        (error) =>
-          error instanceof HubAskRefusedError &&
-          error.code === NO_LISTENER_CODE &&
-          /serves no direct listener/.test(error.message),
-      );
-    },
-  );
-
-  await check(
-    "size guard: an oversize ask fails typed WITHOUT hitting the wire, at the control-frame budget",
-    async (track) => {
-      const { stub, a } = await bootLinked(track);
-      const before = stub.receivedCount();
-      await assert.rejects(
-        () => a.connection.askConnectInfo("B", OVERSIZE, ASK_MS),
-        (error) => error instanceof HubMessageTooLargeError,
-      );
-      assert.equal(
-        stub.receivedCount(),
-        before,
-        "the oversize frame reached the stub",
-      );
-    },
-  );
-
-  await check(
-    "oversize answer: a result too large for one envelope is refused at once, not left to time out",
-    async (track) => {
-      const { a } = await bootLinked(track);
-      const startedAt = Date.now();
-      await assert.rejects(
-        () => a.connection.askConnectInfo("B", { mode: "big" }, ASK_MS),
-        (error) =>
-          error instanceof HubAskRefusedError &&
-          /too large/.test(error.message),
-      );
-      assert.ok(Date.now() - startedAt < 1_000, "the refusal waited");
-    },
-  );
-
-  await check(
-    "offline nack: asking a deviceId with no socket rejects with the offline error",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootDevice(stub, "A", {}, track);
-      await assert.rejects(
-        () => a.connection.askConnectInfo("ghost", undefined, ASK_MS),
-        (error) => error instanceof HubPeerOfflineError,
-      );
-    },
-  );
-
-  await check(
-    "timeout: a peer that never answers fails the ask typed at its timeout, and the late answer is dropped",
-    async (track) => {
-      const { a, rawB } = await bootWithRawPeer(track);
-      const pending = a.connection.askConnectInfo("B", "hello?", 200);
-      const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
-      await assert.rejects(
-        () => pending,
-        (error) => error instanceof HubAskTimeoutError,
-      );
-      // Answering after the timeout finds nothing to resolve and harms
-      // nothing: the link still asks and answers.
-      rawB.send("A", {
-        answer: CONNECT_INFO_ASK,
-        id: ask.id,
-        ok: true,
-        result: "late",
-      });
-      await delay(50);
-      const again = a.connection.askConnectInfo("B", "again", ASK_MS);
-      const second = AskFrameSchema.parse((await rawB.nextHub()).frame);
-      rawB.send("A", {
-        answer: CONNECT_INFO_ASK,
-        id: second.id,
-        ok: true,
-        result: "fresh",
-      });
-      assert.equal(await again, "fresh");
-    },
-  );
-
-  await check(
-    "presence: a peer leaving the roster fails the ask pending to it typed",
-    async (track) => {
-      const { a, rawB } = await bootWithRawPeer(track);
-      const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
-      await rawB.nextHub();
-      rawB.close();
-      await assert.rejects(
-        () => pending,
-        (error) => error instanceof HubPeerOfflineError,
-      );
-    },
-  );
-
-  await check(
-    "teardown: stopping the connection fails pending asks as link-down, and later asks reject at once",
-    async (track) => {
-      const { a, rawB } = await bootWithRawPeer(track);
-      const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
-      await rawB.nextHub();
-      await a.connection.stop();
-      await assert.rejects(
-        () => pending,
-        (error) => error instanceof HubLinkDownError,
-      );
-      await assert.rejects(
-        () => a.connection.askConnectInfo("B", "after", ASK_MS),
-        (error) => error instanceof HubLinkDownError,
-      );
-    },
-  );
-
-  await check(
-    "misrouted answer: an answer from a device other than the one asked is dropped",
-    async (track) => {
-      const { stub, a, rawB } = await bootWithRawPeer(track);
-      const rawC = rawDevice(stub, "C");
-      track(() => rawC.close());
-      await rawC.opened;
-      const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
-      const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
-      const answer = (result: unknown) => ({
-        answer: CONNECT_INFO_ASK,
-        id: ask.id,
-        ok: true,
-        result,
-      });
-      rawC.send("A", answer("from C"));
-      await delay(50);
-      rawB.send("A", answer("from B"));
-      assert.equal(await pending, "from B");
-    },
-  );
-
-  await check(
-    "off-roster ask: an ask whose from is not in the presence roster gets no answer",
-    async (track) => {
-      const stub = await startStubHub(track);
-      await bootDevice(stub, "B", { serveConnectInfo: testServer }, track);
-      // Forge a deliver to B from a device that is not in B's roster (a
-      // hostile hub can set any `from`). B must answer nothing.
-      stub.injectTo("B", { t: "relay", from: "ghost", frame: askFrame(1) });
-      await delay(200);
-      assert.equal(
-        stub.sentTo("B", "ghost"),
-        false,
-        "B answered an off-roster sender",
-      );
-    },
-  );
-
-  await check(
-    "unknown wire shape: a frame this link does not speak is dropped, so an ask to such a peer times out like any unreachable one and the link keeps serving",
-    async (track) => {
-      const { a, rawB } = await bootWithRawPeer(track);
-      const pending = a.connection.askConnectInfo("B", "x", 200);
-      const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
-      // What a build speaking another wire would say: neither an ask
-      // nor an answer, so nothing routes it to the pending ask.
-      rawB.send("A", { epoch: 0, sm: { t: "welcome", deviceId: "B" } });
-      await assert.rejects(
-        () => pending,
-        (error) => error instanceof HubAskTimeoutError,
-      );
-      const again = a.connection.askConnectInfo("B", "again", ASK_MS);
-      const second = AskFrameSchema.parse((await rawB.nextHub()).frame);
-      assert.notEqual(second.id, ask.id);
-      rawB.send("A", {
-        answer: CONNECT_INFO_ASK,
-        id: second.id,
-        ok: true,
-        result: "fresh",
-      });
-      assert.equal(await again, "fresh");
-    },
-  );
-
-  await check(
-    "reconnect: a dropped socket redials with a fresh ticket and answers again",
-    async (track) => {
-      const { stub, a } = await bootLinked(track);
-      assert.equal(a.mints(), 1);
-      stub.dropSocket("A", 1001, "going away");
-      await waitFor(
-        () => a.connection.status().socket.phase === "backoff",
-        "the backoff phase",
-      );
-      // The first backoff rung is 1s, so the redial (with its fresh
-      // ticket mint) lands shortly after.
-      await waitFor(
-        () => a.connection.status().socket.phase === "connected",
-        "the redial",
-      );
-      assert.equal(a.mints(), 2, "the redial did not mint a fresh ticket");
-      await waitFor(
-        () => a.connection.status().onlineDeviceIds.includes("B"),
-        "A to see B again",
-      );
-      assert.equal(
-        await a.connection.askConnectInfo("B", "back", ASK_MS),
-        "back",
-      );
-    },
-  );
-
-  await check(
-    "blocked: 4102 revoked blocks with no redial, 4103 superseded blocks with its own message",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootDevice(stub, "A", {}, track);
-      stub.dropSocket("A", CLOSE_DEVICE_REVOKED, "device revoked");
-      await waitFor(
-        () => a.connection.status().socket.phase === "blocked",
-        "the blocked phase",
-      );
-      const minted = a.mints();
-      // Longer than the first backoff rung: a redial would have minted
-      // by now.
-      await delay(1_300);
-      const revoked = a.connection.status().socket;
-      assert.equal(revoked.phase, "blocked");
-      assert.equal(a.mints(), minted, "a blocked supervisor redialed");
-      assert.match(revoked.message, /removed from the account/);
-      // A fresh device for the superseded arm, booted inside the tracked
-      // scope so a failure here still closes the stub.
-      const c = await bootDevice(stub, "C", {}, track);
-      stub.dropSocket("C", CLOSE_SUPERSEDED, "superseded");
-      await waitFor(
-        () => c.connection.status().socket.phase === "blocked",
-        "the superseded block",
-      );
-      const superseded = c.connection.status().socket;
-      assert.equal(superseded.phase, "blocked");
-      assert.match(superseded.message, /another instance/);
-    },
-  );
-
-  await check(
-    "liveness: a device heartbeats the device hub, and a hub that stops answering (or never answered) is declared dead and redialed with a fresh ticket",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const heartbeat = { intervalMs: 30, timeoutMs: 120 };
-      const a = await bootDevice(stub, "A", { heartbeat }, track);
-      await waitFor(() => stub.pingsFrom("A") >= 2, "A to heartbeat");
-      assert.equal(
-        a.connection.status().socket.phase,
-        "connected",
-        "an answered heartbeat keeps the socket connected",
-      );
-      assert.equal(a.mints(), 1);
-      // The hub goes silent: its socket is still open at the TCP level,
-      // exactly the shape of a flow a NAT or a sleep killed.
-      stub.setAnswerPings(false);
-      await waitFor(
-        () => a.mints() >= 2,
-        "A to declare the silent hub dead and redial",
-        3_000,
-      );
-      // The redial lands against a hub that answers again, and the
-      // supervisor's ladder started from the bottom (a stable socket
-      // that died resets it), so the connection is back at once.
-      stub.setAnswerPings(true);
-      await waitFor(
-        () => a.connection.status().socket.phase === "connected",
-        "A to reconnect after the heartbeat death",
-        3_000,
-      );
-
-      // No latch on this side: a hub that NEVER answers (a Worker
-      // predating the pair) is redialed too, so a socket that dies
-      // before its first pong is still found. That is the deploy order
-      // hub/README.md states, and the cost of getting it wrong is a
-      // redial per timeout, not a dead device.
-      stub.setAnswerPings(false);
-      const b = await bootDevice(stub, "B", { heartbeat }, track);
-      await waitFor(
-        () => b.mints() >= 2,
-        "B to redial a hub that never answered",
-        3_000,
-      );
-      stub.setAnswerPings(true);
-    },
-  );
-
-  await check(
-    "malformed inbound: garbage frames are dropped without killing the process",
-    async (track) => {
-      const { stub, a } = await bootLinked(track);
-      // Non-JSON text, an unparseable envelope, and a valid envelope
-      // whose frame is neither the ask nor the answer.
-      // All must be dropped, not fatal.
-      stub.injectTo("A", "this is not json at all");
-      stub.injectTo("A", JSON.stringify({ t: "totally-unknown" }));
-      stub.injectTo("A", { t: "relay", from: "B", frame: { t: "bogus" } });
-      await delay(150);
-      // The link is still live: a real ask still works.
-      assert.equal(
-        await a.connection.askConnectInfo("B", "alive", ASK_MS),
-        "alive",
-      );
-    },
-  );
-
-  done();
-}
-
-main().catch(fail);
+});

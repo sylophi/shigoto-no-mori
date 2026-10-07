@@ -8,14 +8,11 @@
 // with the watching detail, the states that move files read as
 // Syncing, and the first pass reads as Syncing throughout.
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test mirror-status.
+// Run: pnpm test mirror-status.
 import assert from "node:assert/strict";
 import type { MirrorStatus } from "@shared/ipc/modules/mirror";
 import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
-import { makeProof } from "./lib/checkKit.mts";
-
-const proof = makeProof("mirror-status proof");
-console.log("mirror-status proof\n");
+import { it } from "vitest";
 
 const endpoint = {
   connected: true,
@@ -67,32 +64,26 @@ const MOVING: MirrorStatus[] = [
   "transitioning",
 ];
 
-try {
-  await proof.check("a check after the first pass reads as Live", () => {
-    for (const status of CHECKING) {
-      const { label, detail, spinning } = view(status, 3);
-      assert.deepEqual(
-        { label, detail, spinning },
-        { label: "Live", detail: "watching for changes", spinning: false },
-        status,
-      );
-    }
-  });
+it("a check after the first pass reads as Live", () => {
+  for (const status of CHECKING) {
+    const { label, detail, spinning } = view(status, 3);
+    assert.deepEqual(
+      { label, detail, spinning },
+      { label: "Live", detail: "watching for changes", spinning: false },
+      status,
+    );
+  }
+});
 
-  await proof.check("moving files reads as Syncing", () => {
-    for (const status of MOVING) {
-      assert.equal(view(status, 3).label, "Syncing", status);
-    }
-  });
+it("moving files reads as Syncing", () => {
+  for (const status of MOVING) {
+    assert.equal(view(status, 3).label, "Syncing", status);
+  }
+});
 
-  await proof.check("the first pass reads as Syncing", () => {
-    for (const status of [...CHECKING, ...MOVING]) {
-      assert.equal(view(status, 0).label, "Syncing", status);
-    }
-    assert.equal(view("scanning", 0).detail, "looking for changes");
-  });
-
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+it("the first pass reads as Syncing", () => {
+  for (const status of [...CHECKING, ...MOVING]) {
+    assert.equal(view(status, 0).label, "Syncing", status);
+  }
+  assert.equal(view("scanning", 0).detail, "looking for changes");
+});

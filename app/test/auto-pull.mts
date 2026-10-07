@@ -9,15 +9,16 @@
 // through a sandbox registry.json and back out on the identities the
 // sweep reads.
 //
-// Runs under test/lib/register-ts-alias.mts so the app's TypeScript
-// imports resolve, against the sm binary built from cli/
-// (test/lib/smBinary.mts). Run: pnpm test auto-pull.
+// Runs against the sm binary built from cli/ (test/lib/smBinary.mts).
+// Run: pnpm test auto-pull.
 import assert from "node:assert/strict";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { makeProof, sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mts";
+import { afterAll, beforeAll, it } from "vitest";
+import { sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mts";
 import { scrubProcessGitEnv, tempDir, type Track } from "./lib/checkKit.mts";
+import { trackTest } from "./lib/vitestKit.mts";
 import { addProject, wireHostCli } from "./lib/smBinary.mts";
 
 // The pull runs git under this process's environment. The pre-commit
@@ -26,8 +27,15 @@ import { addProject, wireHostCli } from "./lib/smBinary.mts";
 const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
 
-const dataDir = realpathSync(mkdtempSync(join(tmpdir(), "sm-auto-pull-data-")));
-const { sm } = await wireHostCli(dataDir);
+let dataDir: string;
+let sm: Awaited<ReturnType<typeof wireHostCli>>["sm"];
+beforeAll(async () => {
+  dataDir = realpathSync(mkdtempSync(join(tmpdir(), "sm-auto-pull-data-")));
+  ({ sm } = await wireHostCli(dataDir));
+});
+afterAll(() => {
+  rmSync(dataDir, { recursive: true, force: true });
+});
 
 const { autoPullWorktree, sweepAutoPull } =
   await import("../host/lib/worktrees/autoPullSweep.ts");
@@ -37,8 +45,6 @@ const { listWorktreeIdentitiesViaCli, setAutoPullViaCli } =
 const { readRegistry } = await import("./lib/cliSandbox.mts");
 
 const git = sandboxGit(gitEnv);
-
-const { check, done, fail } = makeProof("auto-pull proof");
 
 // The marked ids registry.json holds under the CLI's key.
 function markedInRegistry() {
@@ -75,211 +81,169 @@ function pushCommit(seed: string, name: string) {
 
 const head = (cwd: string) => git(cwd, "rev-parse", "HEAD").trim();
 
-async function main() {
-  console.log("auto-pull proof\n");
-
-  await check(
-    "a clean worktree strictly behind its upstream fast-forwards",
-    async (track) => {
-      const { seed, project } = makeSandbox(track);
-      pushCommit(seed, "one.txt");
-      pushCommit(seed, "two.txt");
-      git(project, "fetch", "-q");
-      const outcome = await autoPullWorktree(
-        { path: project, detached: false },
-        { busy: false },
-      );
-      assert.deepEqual(outcome, { kind: "pulled", commits: 2 });
-      assert.equal(head(project), head(seed));
-      assert.equal(git(project, "status", "--porcelain").trim(), "");
-    },
+it("a clean worktree strictly behind its upstream fast-forwards", async () => {
+  const { seed, project } = makeSandbox(trackTest);
+  pushCommit(seed, "one.txt");
+  pushCommit(seed, "two.txt");
+  git(project, "fetch", "-q");
+  const outcome = await autoPullWorktree(
+    { path: project, detached: false },
+    { busy: false },
   );
+  assert.deepEqual(outcome, { kind: "pulled", commits: 2 });
+  assert.equal(head(project), head(seed));
+  assert.equal(git(project, "status", "--porcelain").trim(), "");
+});
 
-  await check(
-    "a worktree already at its upstream is left alone",
-    async (track) => {
-      const { project } = makeSandbox(track);
-      const outcome = await autoPullWorktree(
-        { path: project, detached: false },
-        { busy: false },
-      );
-      assert.deepEqual(outcome, { kind: "skipped", reason: "synced" });
-    },
+it("a worktree already at its upstream is left alone", async () => {
+  const { project } = makeSandbox(trackTest);
+  const outcome = await autoPullWorktree(
+    { path: project, detached: false },
+    { busy: false },
   );
+  assert.deepEqual(outcome, { kind: "skipped", reason: "synced" });
+});
 
-  await check(
-    "a local commit stops the pull, even with the upstream ahead",
-    async (track) => {
-      const { seed, project } = makeSandbox(track);
-      pushCommit(seed, "remote.txt");
-      writeFileSync(join(project, "local.txt"), "local\n");
-      git(project, "add", ".");
-      git(project, "commit", "-q", "-m", "local");
-      git(project, "fetch", "-q");
-      const before = head(project);
-      const outcome = await autoPullWorktree(
-        { path: project, detached: false },
-        { busy: false },
-      );
-      assert.deepEqual(outcome, { kind: "skipped", reason: "ahead" });
-      assert.equal(head(project), before);
-    },
+it("a local commit stops the pull, even with the upstream ahead", async () => {
+  const { seed, project } = makeSandbox(trackTest);
+  pushCommit(seed, "remote.txt");
+  writeFileSync(join(project, "local.txt"), "local\n");
+  git(project, "add", ".");
+  git(project, "commit", "-q", "-m", "local");
+  git(project, "fetch", "-q");
+  const before = head(project);
+  const outcome = await autoPullWorktree(
+    { path: project, detached: false },
+    { busy: false },
   );
+  assert.deepEqual(outcome, { kind: "skipped", reason: "ahead" });
+  assert.equal(head(project), before);
+});
 
-  await check("a modified tracked file stops the pull", async (track) => {
-    const { seed, project } = makeSandbox(track);
-    pushCommit(seed, "remote.txt");
-    git(project, "fetch", "-q");
-    writeFileSync(join(project, "README.md"), "edited\n");
-    const before = head(project);
-    const outcome = await autoPullWorktree(
-      { path: project, detached: false },
-      { busy: false },
+it("a modified tracked file stops the pull", async () => {
+  const { seed, project } = makeSandbox(trackTest);
+  pushCommit(seed, "remote.txt");
+  git(project, "fetch", "-q");
+  writeFileSync(join(project, "README.md"), "edited\n");
+  const before = head(project);
+  const outcome = await autoPullWorktree(
+    { path: project, detached: false },
+    { busy: false },
+  );
+  assert.deepEqual(outcome, { kind: "skipped", reason: "dirty" });
+  assert.equal(head(project), before);
+});
+
+it("an untracked file stops the pull, whatever the untracked-files setting", async () => {
+  const { seed, project } = makeSandbox(trackTest);
+  pushCommit(seed, "remote.txt");
+  git(project, "fetch", "-q");
+  git(project, "config", "status.showUntrackedFiles", "no");
+  writeFileSync(join(project, "scratch.txt"), "scratch\n");
+  const before = head(project);
+  const outcome = await autoPullWorktree(
+    { path: project, detached: false },
+    { busy: false },
+  );
+  assert.deepEqual(outcome, { kind: "skipped", reason: "dirty" });
+  assert.equal(head(project), before);
+});
+
+it("a detached HEAD and a missing upstream are skipped", async () => {
+  const { seed, project } = makeSandbox(trackTest);
+  pushCommit(seed, "remote.txt");
+  git(project, "fetch", "-q");
+  assert.deepEqual(
+    await autoPullWorktree({ path: project, detached: true }, { busy: false }),
+    { kind: "skipped", reason: "detached" },
+  );
+  git(project, "checkout", "-q", "-b", "unpublished");
+  assert.deepEqual(
+    await autoPullWorktree({ path: project, detached: false }, { busy: false }),
+    { kind: "skipped", reason: "no-upstream" },
+  );
+});
+
+it("a worktree with an app-started script is skipped", async () => {
+  const { seed, project } = makeSandbox(trackTest);
+  pushCommit(seed, "remote.txt");
+  git(project, "fetch", "-q");
+  const before = head(project);
+  const outcome = await autoPullWorktree(
+    { path: project, detached: false },
+    { busy: true },
+  );
+  assert.deepEqual(outcome, { kind: "skipped", reason: "busy" });
+  assert.equal(head(project), before);
+});
+
+it("the mark round-trips through registry.json and drops cleanly", async () => {
+  const { project, root } = makeSandbox(trackTest);
+  const linked = join(root, "linked");
+  git(project, "worktree", "add", "-q", "-b", "feature", linked);
+  const registered = await addProject(sm, project);
+  const ids = async () =>
+    Object.fromEntries(
+      (await listWorktreeIdentitiesViaCli({ projectId: registered.id })).map(
+        (identity) => [identity.path, identity],
+      ),
     );
-    assert.deepEqual(outcome, { kind: "skipped", reason: "dirty" });
-    assert.equal(head(project), before);
+  const before = await ids();
+  const primaryBefore = before[project];
+  const linkedBefore = before[linked];
+  assert.ok(primaryBefore !== undefined, "the primary worktree is listed");
+  assert.ok(linkedBefore !== undefined, "the linked worktree is listed");
+  assert.equal(primaryBefore.autoPull, false);
+  const primaryId = primaryBefore.id;
+  const linkedId = linkedBefore.id;
+  const row = await setAutoPullViaCli(registered, primaryId, true);
+  assert.equal(row.autoPull, true, "the answered row carries the mark");
+  await setAutoPullViaCli(registered, linkedId, true);
+  assert.deepEqual(markedInRegistry(), [linkedId, primaryId].toSorted());
+  assert.equal((await ids())[project]?.autoPull, true);
+  await setAutoPullViaCli(registered, primaryId, false);
+  await setAutoPullViaCli(registered, primaryId, false);
+  assert.deepEqual(markedInRegistry(), [linkedId]);
+  await setAutoPullViaCli(registered, linkedId, false);
+  assert.deepEqual(markedInRegistry(), []);
+});
+
+it("the sweep pulls only the marked worktree of a project and reports the rest untouched", async () => {
+  const { seed, project, root } = makeSandbox(trackTest);
+  // A linked worktree on its own upstream branch, unmarked.
+  const linked = join(root, "linked");
+  git(project, "worktree", "add", "-q", "-b", "feature", linked);
+  git(linked, "push", "-q", "-u", "origin", "feature");
+  pushCommit(seed, "remote.txt");
+  git(seed, "fetch", "-q", "origin");
+  git(seed, "checkout", "-q", "feature");
+  pushCommit(seed, "feature.txt");
+  git(project, "fetch", "-q");
+  git(linked, "fetch", "-q");
+  const linkedBefore = head(linked);
+  const registered = await addProject(sm, project);
+  // Nothing marked: nothing happens.
+  let result = await sweepAutoPull(registered.id, new Set());
+  assert.deepEqual(result, { pulled: [], failed: [] });
+  const [primary] = await listWorktreeIdentitiesViaCli({
+    projectId: registered.id,
   });
-
-  await check(
-    "an untracked file stops the pull, whatever the untracked-files setting",
-    async (track) => {
-      const { seed, project } = makeSandbox(track);
-      pushCommit(seed, "remote.txt");
-      git(project, "fetch", "-q");
-      git(project, "config", "status.showUntrackedFiles", "no");
-      writeFileSync(join(project, "scratch.txt"), "scratch\n");
-      const before = head(project);
-      const outcome = await autoPullWorktree(
-        { path: project, detached: false },
-        { busy: false },
-      );
-      assert.deepEqual(outcome, { kind: "skipped", reason: "dirty" });
-      assert.equal(head(project), before);
-    },
+  assert.ok(primary !== undefined, "the project lists its primary worktree");
+  assert.equal(primary.path, project);
+  await setAutoPullViaCli(registered, primary.id, true);
+  result = await sweepAutoPull(registered.id, new Set());
+  assert.equal(result.failed.length, 0);
+  assert.deepEqual(
+    result.pulled.map((entry) => [entry.worktree.path, entry.commits]),
+    [[project, 1]],
   );
-
-  await check(
-    "a detached HEAD and a missing upstream are skipped",
-    async (track) => {
-      const { seed, project } = makeSandbox(track);
-      pushCommit(seed, "remote.txt");
-      git(project, "fetch", "-q");
-      assert.deepEqual(
-        await autoPullWorktree(
-          { path: project, detached: true },
-          { busy: false },
-        ),
-        { kind: "skipped", reason: "detached" },
-      );
-      git(project, "checkout", "-q", "-b", "unpublished");
-      assert.deepEqual(
-        await autoPullWorktree(
-          { path: project, detached: false },
-          { busy: false },
-        ),
-        { kind: "skipped", reason: "no-upstream" },
-      );
-    },
-  );
-
-  await check(
-    "a worktree with an app-started script is skipped",
-    async (track) => {
-      const { seed, project } = makeSandbox(track);
-      pushCommit(seed, "remote.txt");
-      git(project, "fetch", "-q");
-      const before = head(project);
-      const outcome = await autoPullWorktree(
-        { path: project, detached: false },
-        { busy: true },
-      );
-      assert.deepEqual(outcome, { kind: "skipped", reason: "busy" });
-      assert.equal(head(project), before);
-    },
-  );
-
-  await check(
-    "the mark round-trips through registry.json and drops cleanly",
-    async (track) => {
-      const { project, root } = makeSandbox(track);
-      const linked = join(root, "linked");
-      git(project, "worktree", "add", "-q", "-b", "feature", linked);
-      const registered = await addProject(sm, project);
-      const ids = async () =>
-        Object.fromEntries(
-          (
-            await listWorktreeIdentitiesViaCli({ projectId: registered.id })
-          ).map((identity) => [identity.path, identity]),
-        );
-      const before = await ids();
-      const primaryBefore = before[project];
-      const linkedBefore = before[linked];
-      assert.ok(primaryBefore !== undefined, "the primary worktree is listed");
-      assert.ok(linkedBefore !== undefined, "the linked worktree is listed");
-      assert.equal(primaryBefore.autoPull, false);
-      const primaryId = primaryBefore.id;
-      const linkedId = linkedBefore.id;
-      const row = await setAutoPullViaCli(registered, primaryId, true);
-      assert.equal(row.autoPull, true, "the answered row carries the mark");
-      await setAutoPullViaCli(registered, linkedId, true);
-      assert.deepEqual(markedInRegistry(), [linkedId, primaryId].toSorted());
-      assert.equal((await ids())[project]?.autoPull, true);
-      await setAutoPullViaCli(registered, primaryId, false);
-      await setAutoPullViaCli(registered, primaryId, false);
-      assert.deepEqual(markedInRegistry(), [linkedId]);
-      await setAutoPullViaCli(registered, linkedId, false);
-      assert.deepEqual(markedInRegistry(), []);
-    },
-  );
-
-  await check(
-    "the sweep pulls only the marked worktree of a project and reports the rest untouched",
-    async (track) => {
-      const { seed, project, root } = makeSandbox(track);
-      // A linked worktree on its own upstream branch, unmarked.
-      const linked = join(root, "linked");
-      git(project, "worktree", "add", "-q", "-b", "feature", linked);
-      git(linked, "push", "-q", "-u", "origin", "feature");
-      pushCommit(seed, "remote.txt");
-      git(seed, "fetch", "-q", "origin");
-      git(seed, "checkout", "-q", "feature");
-      pushCommit(seed, "feature.txt");
-      git(project, "fetch", "-q");
-      git(linked, "fetch", "-q");
-      const linkedBefore = head(linked);
-      const registered = await addProject(sm, project);
-      // Nothing marked: nothing happens.
-      let result = await sweepAutoPull(registered.id, new Set());
-      assert.deepEqual(result, { pulled: [], failed: [] });
-      const [primary] = await listWorktreeIdentitiesViaCli({
-        projectId: registered.id,
-      });
-      assert.ok(
-        primary !== undefined,
-        "the project lists its primary worktree",
-      );
-      assert.equal(primary.path, project);
-      await setAutoPullViaCli(registered, primary.id, true);
-      result = await sweepAutoPull(registered.id, new Set());
-      assert.equal(result.failed.length, 0);
-      assert.deepEqual(
-        result.pulled.map((entry) => [entry.worktree.path, entry.commits]),
-        [[project, 1]],
-      );
-      assert.equal(head(project), git(seed, "rev-parse", "main").trim());
-      assert.equal(head(linked), linkedBefore, "the unmarked worktree moved");
-      // Busy worktrees are the caller's to name, and are left alone.
-      pushCommit(seed, "feature-two.txt");
-      git(seed, "checkout", "-q", "main");
-      pushCommit(seed, "main-two.txt");
-      git(project, "fetch", "-q");
-      result = await sweepAutoPull(registered.id, new Set([primary.id]));
-      assert.deepEqual(result, { pulled: [], failed: [] });
-    },
-  );
-
-  rmSync(dataDir, { recursive: true, force: true });
-  done();
-}
-
-main().catch(fail);
+  assert.equal(head(project), git(seed, "rev-parse", "main").trim());
+  assert.equal(head(linked), linkedBefore, "the unmarked worktree moved");
+  // Busy worktrees are the caller's to name, and are left alone.
+  pushCommit(seed, "feature-two.txt");
+  git(seed, "checkout", "-q", "main");
+  pushCommit(seed, "main-two.txt");
+  git(project, "fetch", "-q");
+  result = await sweepAutoPull(registered.id, new Set([primary.id]));
+  assert.deepEqual(result, { pulled: [], failed: [] });
+});

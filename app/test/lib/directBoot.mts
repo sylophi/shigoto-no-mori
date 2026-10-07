@@ -5,8 +5,7 @@
 // (shared/hub/directPlane.ts) a client drives. Extracted from
 // direct-plane.mts so sync-transfer.mts and
 // port-forward.mts move their transfer scenarios onto a real
-// direct connection without a second copy of the plumbing. Runs under
-// register-ts-alias so the shared TypeScript imports resolve.
+// direct connection without a second copy of the plumbing.
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import {

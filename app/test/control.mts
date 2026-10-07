@@ -51,7 +51,7 @@
 // Both "devices" share one node process and one sandboxed data dir
 // holding two projects (source and target, one repo identity), as in
 // test/sync-transfer.mts: what separates them is the direct wire.
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test control.
+// Run: pnpm test control.
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
@@ -121,9 +121,9 @@ import {
 import {
   cliFailureMessage,
   createCliRunner,
-  makeProof,
   makeTracker,
 } from "./lib/checkKit.mts";
+import { afterAll, beforeAll, it } from "vitest";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire } from "./lib/directBoot.mts";
 
@@ -131,8 +131,6 @@ const fixture = cliSandbox("sm-control-check-");
 const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
 const { addWorktree, projectIdOf } = fixture;
 const controlFile = join(dataDir, CONTROL_FILE_NAME);
-
-const { ok, done, fail } = makeProof("control proof");
 
 // The final {ok} document of a run, and its progress events.
 const finalDoc = (result: CliResult) =>
@@ -305,34 +303,50 @@ function fakeMirrorEngine() {
   return { state, impl };
 }
 
-async function main() {
-  console.log("control proof\n");
+const { track, teardown } = makeTracker();
+afterAll(async () => {
+  await teardown();
+  fixture.remove();
+});
 
+let sourceRepo: string;
+let targetRepo: string;
+let sendPath: string;
+let tearPath: string;
+let mirrorPath: string;
+let peerPath: string;
+let inPath: string;
+let targetProjectId: string;
+let sourceProjectId: string;
+let engine: ReturnType<typeof fakeMirrorEngine>;
+let engineA: ReturnType<typeof fakeMirrorEngine>;
+let listener: Awaited<ReturnType<typeof bootDirectWire>>["listener"];
+let peerA: Awaited<ReturnType<typeof bootDirectWire>>["peerA"];
+let connected: string[];
+let peerOwns: string;
+let removalsOf: (
+  worktreeId: string,
+) => (WorktreeRemoval & { endedThen: string[] })[];
+let control: ReturnType<typeof createControlServer>;
+let published: ControlFile;
+let mirrorsCreated: () => MirrorCreateInput[];
+
+beforeAll(async () => {
   await fixture.buildSm();
 
   // Source repo (this device, B) and its clone (the peer, A), one repo
   // identity between them.
-  const sourceRepo = join(sandbox, "source");
+  sourceRepo = join(sandbox, "source");
   await git(sandbox, ["init", "-q", "-b", "main", "source"]);
   await fixture.disableAutoGc(sourceRepo);
   await fixture.commitFile(sourceRepo, "readme.txt", "base\n", "base");
-  const targetRepo = join(sandbox, "target");
+  targetRepo = join(sandbox, "target");
   await git(sandbox, ["clone", "-q", "--", sourceRepo, "target"]);
   await fixture.disableAutoGc(targetRepo);
-  const sendPath = await addWorktree(
-    sourceRepo,
-    "wt-send",
-    "feat-send",
-    "s.txt",
-  );
+  sendPath = await addWorktree(sourceRepo, "wt-send", "feat-send", "s.txt");
   writeFileSync(join(sendPath, "draft.txt"), "uncommitted\n");
-  const tearPath = await addWorktree(
-    sourceRepo,
-    "wt-tear",
-    "feat-tear",
-    "t.txt",
-  );
-  const mirrorPath = await addWorktree(
+  tearPath = await addWorktree(sourceRepo, "wt-tear", "feat-tear", "t.txt");
+  mirrorPath = await addWorktree(
     sourceRepo,
     "wt-mirror",
     "feat-mirror",
@@ -341,22 +355,19 @@ async function main() {
   // What `bring` finds on the peer and lands here. It lives in the
   // source repo because a pull lands in the registry's first identity
   // match (the target): see peerOwns below.
-  const peerPath = await addWorktree(
-    sourceRepo,
-    "wt-peer",
-    "feat-peer",
-    "p.txt",
-  );
+  peerPath = await addWorktree(sourceRepo, "wt-peer", "feat-peer", "p.txt");
   writeFileSync(join(peerPath, "peer-draft.txt"), "peer uncommitted\n");
   // What `mirror --from` copies here.
-  const inPath = await addWorktree(sourceRepo, "wt-in", "feat-in", "i.txt");
+  inPath = await addWorktree(sourceRepo, "wt-in", "feat-in", "i.txt");
 
   fixture.useCli();
   // Target first: the peer's identity scan takes the first registry
   // match, which must be the peer's own checkout.
-  const targetProjectId = await projectIdOf(targetRepo);
-  const sourceProjectId = await projectIdOf(sourceRepo);
+  targetProjectId = await projectIdOf(targetRepo);
+  sourceProjectId = await projectIdOf(sourceRepo);
+});
 
+it("no control.json, a dead pid and a dead port all read as app-not-running", async () => {
   // ---- (1) No app: every way control.json can be wrong reads as
   // "the app isn't running", before any server exists.
   await refused(["devices"], "app-not-running", /isn't running/);
@@ -370,889 +381,865 @@ async function main() {
     JSON.stringify({ pid: process.pid, port: 1, token: "x", appVersion: "1" }),
   );
   await refused(["devices"], "app-not-running");
-  ok("no control.json, a dead pid and a dead port all read as app-not-running");
+});
 
-  const { track, teardown } = makeTracker();
-  try {
-    // Each device's mirror engine. B's is the slot's own. The peer
-    // runs the mirrors whose original it holds (mirror --from), on its
-    // own engine: the slot is process-wide, so a mirror call on A's
-    // wire swaps A's in for its duration. The calls come one at a
-    // time (each CLI run is awaited), B's side idle meanwhile.
-    const engine = fakeMirrorEngine();
-    const engineA = fakeMirrorEngine();
-    engineA.state.git = "synced";
-    setMirrorImpl(engine.impl);
-    const asA =
-      <I, O>(run: (input: I, ctx: HandlerContext) => O | Promise<O>) =>
-      (input: I, ctx: HandlerContext): O | Promise<O> => {
-        setMirrorImpl(engineA.impl);
-        let result: O | Promise<O>;
-        try {
-          result = run(input, ctx);
-        } catch (error) {
-          setMirrorImpl(engine.impl);
-          throw error;
-        }
-        if (!(result instanceof Promise)) {
-          setMirrorImpl(engine.impl);
-          return result;
-        }
-        return result.finally(() => setMirrorImpl(engine.impl));
-      };
-    const mirrorOnA: Handlers<typeof mirrorContract, HandlerContext> = {
-      list: asA(mirrorHandlers.list),
-      startTo: asA(mirrorHandlers.startTo),
-      startFrom: asA(mirrorHandlers.startFrom),
-      stop: asA(mirrorHandlers.stop),
-      release: asA(mirrorHandlers.release),
-      pause: asA(mirrorHandlers.pause),
-      resume: asA(mirrorHandlers.resume),
-      setIgnores: asA(mirrorHandlers.setIgnores),
-      history: asA(mirrorHandlers.history),
-      openStream: asA(mirrorHandlers.openStream),
-      gitState: asA(mirrorHandlers.gitState),
-      applyGitState: asA(mirrorHandlers.applyGitState),
+it("control.json is owner-only, a bad or missing hello is refused, only the control contract is served, and a stale token reads as app-not-running", async () => {
+  // Each device's mirror engine. B's is the slot's own. The peer
+  // runs the mirrors whose original it holds (mirror --from), on its
+  // own engine: the slot is process-wide, so a mirror call on A's
+  // wire swaps A's in for its duration. The calls come one at a
+  // time (each CLI run is awaited), B's side idle meanwhile.
+  engine = fakeMirrorEngine();
+  engineA = fakeMirrorEngine();
+  engineA.state.git = "synced";
+  setMirrorImpl(engine.impl);
+  const asA =
+    <I, O>(run: (input: I, ctx: HandlerContext) => O | Promise<O>) =>
+    (input: I, ctx: HandlerContext): O | Promise<O> => {
+      setMirrorImpl(engineA.impl);
+      let result: O | Promise<O>;
+      try {
+        result = run(input, ctx);
+      } catch (error) {
+        setMirrorImpl(engine.impl);
+        throw error;
+      }
+      if (!(result instanceof Promise)) {
+        setMirrorImpl(engine.impl);
+        return result;
+      }
+      return result.finally(() => setMirrorImpl(engine.impl));
     };
-    const runtimeFacts: Omit<RuntimeInfo, "homedir"> = {
-      dataDir,
-      dataDirSource: "env",
-      atDefaultDataDir: false,
-      canonicalDataDirName: ".smd",
-    };
-    const { listener, peerA } = await bootDirectWire(track, {
-      contracts: [
-        [syncContract, syncHandlers],
-        [worktreesContract, worktreesHandlers],
-        [projectsContract, projectsHandlers],
-        [mirrorContract, mirrorOnA],
-        [shigomoriContract, shigomoriHandlers],
-        // The peer's home, which a send's default clone place reads.
-        // The data-dir facts beside it need a booted data dir, which
-        // the sandbox's seeded one is not, and are not read here.
-        [
-          runtimeContract,
-          {
-            ...runtimeHandlers,
-            info: () => ({
-              ...runtimeFacts,
-              homedir: homedir(),
-            }),
-          },
-        ],
-      ],
-    });
-    setPeerSyncApiImpl({
-      // The sync surface and the session's byte channels, which a
-      // move's source link rides.
-      syncApiFor: () => ({
-        ...buildClient(syncContract, peerA.transport),
-        channels: peerA.channels,
-      }),
-      worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
-      mirrorApiFor: () => buildClient(mirrorContract, peerA.transport),
-      shigomoriApiFor: () => buildClient(shigomoriContract, peerA.transport),
-      thisDeviceId: () => "B",
-    });
-    // The account as the hub would list it: this device, the peer, a
-    // machine that is signed in but away, and a browser.
-    let connected = ["A"];
-    const registry = [
-      registered("B", "Agent Box"),
-      registered("A", "Studio Mac"),
-      registered("C", "Studio Laptop"),
-      registered("W", "Chrome on macOS", "web"),
-    ];
-    // Which of the two projects the peer answers as its checkout of
-    // the repo. Both devices read one registry here, so the peer's
-    // projects:list holds both: a send's copy lands in the target (the
-    // peer's own identity scan), and for the bring the roles swap, the
-    // peer's worktree living in the source and landing in the target.
-    let peerOwns = targetProjectId;
-    const peerTransport: ClientTransport = {
-      ...peerA.transport,
-      invoke: async (channel, input) => {
-        const result = await peerA.transport.invoke(channel, input);
-        return channel === "projects:list"
-          ? // Loose: the host under test gets the peer's rows as sent.
-            z
-              .array(z.looseObject({ id: z.string() }))
-              .parse(result)
-              .toSorted(
-                (a, b) => Number(b.id === peerOwns) - Number(a.id === peerOwns),
-              )
-          : result;
-      },
-    };
-    setControlImpl({
-      listDevices: async () => registry,
-      directPeers: async () =>
-        Object.fromEntries(
-          connected.map((id) => [id, listener.acceptsCommands()]),
-        ),
-      peerTransportFor: () => peerTransport,
-    });
-    // The delete's removal, as main fans it out to every window and
-    // peer. Each record notes which sessions had ended by then: the
-    // copy a stop removes is announced only once its session is gone,
-    // since the delete follows the terminate.
-    const removals: (WorktreeRemoval & { endedThen: string[] })[] = [];
-    setWorktreeRemovalBroadcaster((payload) =>
-      removals.push({
-        ...payload,
-        endedThen: [...engine.state.terminated, ...engineA.state.terminated],
-      }),
-    );
-    const removalsOf = (worktreeId: string) =>
-      removals.filter((entry) => entry.worktreeId === worktreeId);
-
-    const control = createControlServer({
-      appVersion: () => "9.9.9",
-      filePath: () => controlFile,
-      log: () => {},
-    });
-    registerContract(controlContract, controlHandlers, control.transport, {
-      validateOutputs: true,
-    });
-    await control.start();
-    track(() => control.stop());
-
-    // ---- (2) The published file and the hello gate.
-    const published: ControlFile = JSON.parse(
-      readFileSync(controlFile, "utf8"),
-    );
-    assert.equal(published.pid, process.pid);
-    assert.equal(published.appVersion, "9.9.9");
-    assert.equal(
-      statSync(controlFile).mode & 0o077,
-      0,
-      "control.json must be owner-only: it carries the token",
-    );
-    const badHello = await rawExchange(published.port, [
-      { t: "hello", token: "not-the-token" },
-      { t: "req", id: 1, channel: "control:devices", input: {} },
-    ]);
-    assert.deepEqual(
-      badHello.map((frame) => frame.t),
-      ["refused"],
-      "a bad token is refused and its request never answered",
-    );
-    const noHello = await rawExchange(published.port, [
-      { t: "req", id: 1, channel: "control:devices", input: {} },
-    ]);
-    assert.deepEqual(
-      noHello.map((frame) => frame.t),
-      ["refused"],
-      "a request before any hello is refused",
-    );
-    const offSurface = await rawExchange(published.port, [
-      { t: "hello", token: published.token },
-      { t: "req", id: 7, channel: "worktrees:delete", input: {} },
-    ]);
-    const [welcome, answer] = offSurface;
-    assert.equal(welcome?.t, "welcome");
-    assert.ok(answer !== undefined, "the off-surface request is answered");
-    assert.equal(answer.ok, false);
-    assert.match(answer.message ?? "", /No handler registered/);
-    writeFileSync(
-      controlFile,
-      JSON.stringify({ ...published, token: "stale-token" }),
-    );
-    await refused(["devices"], "app-not-running");
-    writeFileSync(controlFile, JSON.stringify(published));
-    ok(
-      "control.json is owner-only, a bad or missing hello is refused, only the control contract is served, and a stale token reads as app-not-running",
-    );
-
-    // ---- (3) devices: standing per device for the repo.
-    const devicesOf = async (...args: string[]) =>
-      devicesDoc(await sm("devices", ...args));
-    const ungranted = await devicesOf("-p", "source");
-    assert.deepEqual(ungranted.thisDevice, {
-      deviceId: "B",
-      name: "Agent Box",
-    });
-    assert.deepEqual(
-      ungranted.devices.map((device) => [device.name, device.block]),
+  const mirrorOnA: Handlers<typeof mirrorContract, HandlerContext> = {
+    list: asA(mirrorHandlers.list),
+    startTo: asA(mirrorHandlers.startTo),
+    startFrom: asA(mirrorHandlers.startFrom),
+    stop: asA(mirrorHandlers.stop),
+    release: asA(mirrorHandlers.release),
+    pause: asA(mirrorHandlers.pause),
+    resume: asA(mirrorHandlers.resume),
+    setIgnores: asA(mirrorHandlers.setIgnores),
+    history: asA(mirrorHandlers.history),
+    openStream: asA(mirrorHandlers.openStream),
+    gitState: asA(mirrorHandlers.gitState),
+    applyGitState: asA(mirrorHandlers.applyGitState),
+  };
+  const runtimeFacts: Omit<RuntimeInfo, "homedir"> = {
+    dataDir,
+    dataDirSource: "env",
+    atDefaultDataDir: false,
+    canonicalDataDirName: ".smd",
+  };
+  ({ listener, peerA } = await bootDirectWire(track, {
+    contracts: [
+      [syncContract, syncHandlers],
+      [worktreesContract, worktreesHandlers],
+      [projectsContract, projectsHandlers],
+      [mirrorContract, mirrorOnA],
+      [shigomoriContract, shigomoriHandlers],
+      // The peer's home, which a send's default clone place reads.
+      // The data-dir facts beside it need a booted data dir, which
+      // the sandbox's seeded one is not, and are not read here.
       [
-        ["Studio Mac", "no-grant"],
-        ["Studio Laptop", "offline"],
+        runtimeContract,
+        {
+          ...runtimeHandlers,
+          info: () => ({
+            ...runtimeFacts,
+            homedir: homedir(),
+          }),
+        },
       ],
-      "the browser is left out, the away machine is offline, the peer is read-only",
-    );
-    await refused(
-      ["worktrees", "send", "wt-send", "-p", "source"],
-      "device-blocked",
-      /"Studio Mac" doesn't accept commands/,
-    );
-    listener.setAccepts(true);
-    const granted = await devicesOf("-p", "source");
-    const [mac] = granted.devices;
-    assert.ok(mac !== undefined, "the peer is listed");
-    assert.equal(mac.block, undefined);
-    assert.equal(mac.projectId, targetProjectId);
-    ok(
-      "devices: names the peers, skips the browser, and reports offline, no-grant and ready for the repo",
-    );
+    ],
+  }));
+  setPeerSyncApiImpl({
+    // The sync surface and the session's byte channels, which a
+    // move's source link rides.
+    syncApiFor: () => ({
+      ...buildClient(syncContract, peerA.transport),
+      channels: peerA.channels,
+    }),
+    worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
+    mirrorApiFor: () => buildClient(mirrorContract, peerA.transport),
+    shigomoriApiFor: () => buildClient(shigomoriContract, peerA.transport),
+    thisDeviceId: () => "B",
+  });
+  // The account as the hub would list it: this device, the peer, a
+  // machine that is signed in but away, and a browser.
+  connected = ["A"];
+  const registry = [
+    registered("B", "Agent Box"),
+    registered("A", "Studio Mac"),
+    registered("C", "Studio Laptop"),
+    registered("W", "Chrome on macOS", "web"),
+  ];
+  // Which of the two projects the peer answers as its checkout of
+  // the repo. Both devices read one registry here, so the peer's
+  // projects:list holds both: a send's copy lands in the target (the
+  // peer's own identity scan), and for the bring the roles swap, the
+  // peer's worktree living in the source and landing in the target.
+  peerOwns = targetProjectId;
+  const peerTransport: ClientTransport = {
+    ...peerA.transport,
+    invoke: async (channel, input) => {
+      const result = await peerA.transport.invoke(channel, input);
+      return channel === "projects:list"
+        ? // Loose: the host under test gets the peer's rows as sent.
+          z
+            .array(z.looseObject({ id: z.string() }))
+            .parse(result)
+            .toSorted(
+              (a, b) => Number(b.id === peerOwns) - Number(a.id === peerOwns),
+            )
+        : result;
+    },
+  };
+  setControlImpl({
+    listDevices: async () => registry,
+    directPeers: async () =>
+      Object.fromEntries(
+        connected.map((id) => [id, listener.acceptsCommands()]),
+      ),
+    peerTransportFor: () => peerTransport,
+  });
+  // The delete's removal, as main fans it out to every window and
+  // peer. Each record notes which sessions had ended by then: the
+  // copy a stop removes is announced only once its session is gone,
+  // since the delete follows the terminate.
+  const removals: (WorktreeRemoval & { endedThen: string[] })[] = [];
+  setWorktreeRemovalBroadcaster((payload) =>
+    removals.push({
+      ...payload,
+      endedThen: [...engine.state.terminated, ...engineA.state.terminated],
+    }),
+  );
+  removalsOf = (worktreeId: string) =>
+    removals.filter((entry) => entry.worktreeId === worktreeId);
 
-    // ---- (4) send: device resolution, then the transplant itself.
-    await refused(
-      ["worktrees", "send", "wt-send", "-p", "source", "--to", "nobody"],
-      "no-device",
-      /No device is named "nobody"/,
-    );
-    await refused(
-      ["worktrees", "send", "wt-send", "-p", "source", "--to", "studio"],
-      "ambiguous-device",
-      /"Studio Mac", "Studio Laptop"/,
-    );
-    await refused(
-      ["worktrees", "send", "wt-send", "-p", "source", "--to", "Studio Laptop"],
-      "device-blocked",
-      /not connected/,
-    );
-    const usage = await runCli([
+  control = createControlServer({
+    appVersion: () => "9.9.9",
+    filePath: () => controlFile,
+    log: () => {},
+  });
+  registerContract(controlContract, controlHandlers, control.transport, {
+    validateOutputs: true,
+  });
+  await control.start();
+  track(() => control.stop());
+
+  // ---- (2) The published file and the hello gate.
+  published = JSON.parse(readFileSync(controlFile, "utf8"));
+  assert.equal(published.pid, process.pid);
+  assert.equal(published.appVersion, "9.9.9");
+  assert.equal(
+    statSync(controlFile).mode & 0o077,
+    0,
+    "control.json must be owner-only: it carries the token",
+  );
+  const badHello = await rawExchange(published.port, [
+    { t: "hello", token: "not-the-token" },
+    { t: "req", id: 1, channel: "control:devices", input: {} },
+  ]);
+  assert.deepEqual(
+    badHello.map((frame) => frame.t),
+    ["refused"],
+    "a bad token is refused and its request never answered",
+  );
+  const noHello = await rawExchange(published.port, [
+    { t: "req", id: 1, channel: "control:devices", input: {} },
+  ]);
+  assert.deepEqual(
+    noHello.map((frame) => frame.t),
+    ["refused"],
+    "a request before any hello is refused",
+  );
+  const offSurface = await rawExchange(published.port, [
+    { t: "hello", token: published.token },
+    { t: "req", id: 7, channel: "worktrees:delete", input: {} },
+  ]);
+  const [welcome, answer] = offSurface;
+  assert.equal(welcome?.t, "welcome");
+  assert.ok(answer !== undefined, "the off-surface request is answered");
+  assert.equal(answer.ok, false);
+  assert.match(answer.message ?? "", /No handler registered/);
+  writeFileSync(
+    controlFile,
+    JSON.stringify({ ...published, token: "stale-token" }),
+  );
+  await refused(["devices"], "app-not-running");
+  writeFileSync(controlFile, JSON.stringify(published));
+});
+
+it("devices: names the peers, skips the browser, and reports offline, no-grant and ready for the repo", async () => {
+  // ---- (3) devices: standing per device for the repo.
+  const devicesOf = async (...args: string[]) =>
+    devicesDoc(await sm("devices", ...args));
+  const ungranted = await devicesOf("-p", "source");
+  assert.deepEqual(ungranted.thisDevice, {
+    deviceId: "B",
+    name: "Agent Box",
+  });
+  assert.deepEqual(
+    ungranted.devices.map((device) => [device.name, device.block]),
+    [
+      ["Studio Mac", "no-grant"],
+      ["Studio Laptop", "offline"],
+    ],
+    "the browser is left out, the away machine is offline, the peer is read-only",
+  );
+  await refused(
+    ["worktrees", "send", "wt-send", "-p", "source"],
+    "device-blocked",
+    /"Studio Mac" doesn't accept commands/,
+  );
+  listener.setAccepts(true);
+  const granted = await devicesOf("-p", "source");
+  const [mac] = granted.devices;
+  assert.ok(mac !== undefined, "the peer is listed");
+  assert.equal(mac.block, undefined);
+  assert.equal(mac.projectId, targetProjectId);
+});
+
+it("send: refuses an unknown, an ambiguous and an offline device by code, lands a dirty worktree on the only ready one with streamed progress, and passes the peer's refusal of a repeat through", async () => {
+  // ---- (4) send: device resolution, then the transplant itself.
+  await refused(
+    ["worktrees", "send", "wt-send", "-p", "source", "--to", "nobody"],
+    "no-device",
+    /No device is named "nobody"/,
+  );
+  await refused(
+    ["worktrees", "send", "wt-send", "-p", "source", "--to", "studio"],
+    "ambiguous-device",
+    /"Studio Mac", "Studio Laptop"/,
+  );
+  await refused(
+    ["worktrees", "send", "wt-send", "-p", "source", "--to", "Studio Laptop"],
+    "device-blocked",
+    /not connected/,
+  );
+  const usage = await runCli([
+    "worktrees",
+    "send",
+    "wt-send",
+    "-p",
+    "source",
+    "--source",
+    "burn",
+  ]);
+  assert.equal(usage.code, 2, "a bad --source is a usage error");
+
+  const sendRun = await sm("worktrees", "send", "wt-send", "-p", "source");
+  const sent = transferDoc(sendRun);
+  assert.equal(
+    sent.device.name,
+    "Studio Mac",
+    "the only ready device is picked",
+  );
+  assert.equal(sent.worktree.branch, "feat-send");
+  assert.equal(sent.captured, true);
+  assert.equal(sent.dirtyApplied, true);
+  assert.deepEqual(sent.source, { fate: "keep", done: true });
+  assert.deepEqual(sent.caveats, []);
+  assert.equal(
+    readFileSync(join(sent.worktree.path, "s.txt"), "utf8"),
+    "feat-send\n",
+  );
+  assert.equal(
+    readFileSync(join(sent.worktree.path, "draft.txt"), "utf8"),
+    "uncommitted\n",
+    "the uncommitted work landed on the peer",
+  );
+  const steps = new Set(progressOf(sendRun).map((doc) => doc.step));
+  for (const step of ["capture", "transfer", "create", "apply"]) {
+    assert.ok(steps.has(step), `progress never reported the ${step} step`);
+  }
+  assert.equal(existsSync(sendPath), true, "--source keep leaves the source");
+  await refused(
+    ["worktrees", "send", "wt-send", "-p", "source", "--to", "Studio Mac"],
+    // The peer's own refusal, passed through in its words, uncoded.
+    undefined,
+    /The other device answered: feat-send is already checked out/,
+  );
+});
+
+it("send --source teardown: the local source is removed once the copy holds it", async () => {
+  // ---- (5) send --source teardown, through the send's own receipt.
+  const torn = transferDoc(
+    await sm(
       "worktrees",
       "send",
-      "wt-send",
+      "wt-tear",
       "-p",
       "source",
+      "--to",
+      "A",
       "--source",
-      "burn",
-    ]);
-    assert.equal(usage.code, 2, "a bad --source is a usage error");
+      "teardown",
+    ),
+  );
+  assert.deepEqual(torn.source, { fate: "teardown", done: true });
+  assert.equal(existsSync(tearPath), false, "the source is removed");
+  assert.equal(existsSync(torn.worktree.path), true, "the copy stays");
+});
 
-    const sendRun = await sm("worktrees", "send", "wt-send", "-p", "source");
-    const sent = transferDoc(sendRun);
-    assert.equal(
-      sent.device.name,
-      "Studio Mac",
-      "the only ready device is picked",
+it("list --remote names the peer's worktrees, and bring: points there when given none, refuses an unknown one by code, lands one by branch with its uncommitted work, exits 3 naming the source fate that didn't hold, and shelves a source the peer will shelve", async () => {
+  // ---- (6) bring: the list, then the pull, shelving the source.
+  peerOwns = sourceProjectId;
+  // list's own shape, an array of worktrees, each saying whose it is.
+  const remoteList = async (...args: string[]) =>
+    RemoteRowsSchema.parse(
+      (await sm("worktrees", "list", "--remote", "-p", "target", ...args))
+        .docs[0],
     );
-    assert.equal(sent.worktree.branch, "feat-send");
-    assert.equal(sent.captured, true);
-    assert.equal(sent.dirtyApplied, true);
-    assert.deepEqual(sent.source, { fate: "keep", done: true });
-    assert.deepEqual(sent.caveats, []);
-    assert.equal(
-      readFileSync(join(sent.worktree.path, "s.txt"), "utf8"),
-      "feat-send\n",
-    );
-    assert.equal(
-      readFileSync(join(sent.worktree.path, "draft.txt"), "utf8"),
-      "uncommitted\n",
-      "the uncommitted work landed on the peer",
-    );
-    const steps = new Set(progressOf(sendRun).map((doc) => doc.step));
-    for (const step of ["capture", "transfer", "create", "apply"]) {
-      assert.ok(steps.has(step), `progress never reported the ${step} step`);
-    }
-    assert.equal(existsSync(sendPath), true, "--source keep leaves the source");
-    await refused(
-      ["worktrees", "send", "wt-send", "-p", "source", "--to", "Studio Mac"],
-      // The peer's own refusal, passed through in its words, uncoded.
-      undefined,
-      /The other device answered: feat-send is already checked out/,
-    );
-    ok(
-      "send: refuses an unknown, an ambiguous and an offline device by code, lands a dirty worktree on the only ready one with streamed progress, and passes the peer's refusal of a repeat through",
-    );
-
-    // ---- (5) send --source teardown, through the send's own receipt.
-    const torn = transferDoc(
-      await sm(
-        "worktrees",
-        "send",
-        "wt-tear",
-        "-p",
-        "source",
-        "--to",
-        "A",
-        "--source",
-        "teardown",
-      ),
-    );
-    assert.deepEqual(torn.source, { fate: "teardown", done: true });
-    assert.equal(existsSync(tearPath), false, "the source is removed");
-    assert.equal(existsSync(torn.worktree.path), true, "the copy stays");
-    ok(
-      "send --source teardown: the local source is removed once the copy holds it",
-    );
-
-    // ---- (6) bring: the list, then the pull, shelving the source.
-    peerOwns = sourceProjectId;
-    // list's own shape, an array of worktrees, each saying whose it is.
-    const remoteList = async (...args: string[]) =>
-      RemoteRowsSchema.parse(
-        (await sm("worktrees", "list", "--remote", "-p", "target", ...args))
-          .docs[0],
-      );
-    const listing = await remoteList();
-    assert.ok(Array.isArray(listing), "list --remote emits list's array");
-    const peerRow = listing.find((wt) => wt.branch === "feat-peer");
-    assert.ok(peerRow, `the remote list: ${listing.map((wt) => wt.branch)}`);
-    assert.equal(peerRow.path, peerPath);
-    assert.ok(listing.every((wt) => wt.device.name === "Studio Mac"));
-    // The peer's primary checkout is listed (a mirror of it lands on
-    // mirror/<branch> here), and a bring of it is refused by name.
-    const primaryRow = listing.find((wt) => wt.isPrimary);
-    assert.ok(primaryRow, "the remote list names the peer's primary checkout");
-    assert.equal(primaryRow.branch, "main");
-    assert.deepEqual(await remoteList("--from", "Studio Mac"), listing);
-    await refused(
-      ["worktrees", "bring", primaryRow.name, "-p", "target"],
-      "no-worktree",
-      /primary checkout, which can be mirrored but not brought/,
-    );
-    // The away machine: said on stderr beside the list, and a refusal
-    // when it is the one asked for.
-    const withAway = await sm("worktrees", "list", "--remote", "-p", "target");
-    assert.match(withAway.stderrTail, /"Studio Laptop" is not connected/);
-    await refused(
-      ["worktrees", "list", "--from", "Studio Laptop", "-p", "target"],
-      "device-blocked",
-      /not connected/,
-    );
-    const bare = await runCli(["worktrees", "bring", "-p", "target"]);
-    assert.equal(bare.code, 2, "bring with no worktree is a usage error");
-    assert.match(
-      RefusalDocSchema.parse(finalDoc(bare)).error,
-      /worktrees list --remote/,
-    );
-    await refused(
-      ["worktrees", "bring", "no-such-branch", "-p", "target"],
-      "no-worktree",
-      /No worktree "no-such-branch"/,
-    );
-    // The fixture worktree was made by plain git, outside the managed
-    // layout, and the peer won't shelve an external worktree. The
-    // bring still stands: it lands, exits 3, and says what didn't hold.
-    const caveated = await runCli([
+  const listing = await remoteList();
+  assert.ok(Array.isArray(listing), "list --remote emits list's array");
+  const peerRow = listing.find((wt) => wt.branch === "feat-peer");
+  assert.ok(peerRow, `the remote list: ${listing.map((wt) => wt.branch)}`);
+  assert.equal(peerRow.path, peerPath);
+  assert.ok(listing.every((wt) => wt.device.name === "Studio Mac"));
+  // The peer's primary checkout is listed (a mirror of it lands on
+  // mirror/<branch> here), and a bring of it is refused by name.
+  const primaryRow = listing.find((wt) => wt.isPrimary);
+  assert.ok(primaryRow, "the remote list names the peer's primary checkout");
+  assert.equal(primaryRow.branch, "main");
+  assert.deepEqual(await remoteList("--from", "Studio Mac"), listing);
+  await refused(
+    ["worktrees", "bring", primaryRow.name, "-p", "target"],
+    "no-worktree",
+    /primary checkout, which can be mirrored but not brought/,
+  );
+  // The away machine: said on stderr beside the list, and a refusal
+  // when it is the one asked for.
+  const withAway = await sm("worktrees", "list", "--remote", "-p", "target");
+  assert.match(withAway.stderrTail, /"Studio Laptop" is not connected/);
+  await refused(
+    ["worktrees", "list", "--from", "Studio Laptop", "-p", "target"],
+    "device-blocked",
+    /not connected/,
+  );
+  const bare = await runCli(["worktrees", "bring", "-p", "target"]);
+  assert.equal(bare.code, 2, "bring with no worktree is a usage error");
+  assert.match(
+    RefusalDocSchema.parse(finalDoc(bare)).error,
+    /worktrees list --remote/,
+  );
+  await refused(
+    ["worktrees", "bring", "no-such-branch", "-p", "target"],
+    "no-worktree",
+    /No worktree "no-such-branch"/,
+  );
+  // The fixture worktree was made by plain git, outside the managed
+  // layout, and the peer won't shelve an external worktree. The
+  // bring still stands: it lands, exits 3, and says what didn't hold.
+  const caveated = await runCli([
+    "worktrees",
+    "bring",
+    "feat-peer",
+    "-p",
+    "target",
+    "--source",
+    "shelve",
+  ]);
+  assert.equal(caveated.code, 3, "a landed bring with a caveat exits 3");
+  const brought = transferDoc(caveated);
+  assert.equal(brought.ok, true);
+  assert.equal(brought.worktree.projectId, targetProjectId);
+  assert.equal(brought.captured, true);
+  assert.equal(brought.dirtyApplied, true);
+  assert.equal(brought.source?.done, false);
+  assert.match(
+    brought.caveats[0] ?? "",
+    /the source was not shelved: External/,
+  );
+  assert.equal(
+    readFileSync(join(brought.worktree.path, "peer-draft.txt"), "utf8"),
+    "peer uncommitted\n",
+  );
+  // A managed worktree on the peer, which it will shelve.
+  const managed = finalDoc(
+    await sm(
+      "create",
+      "-p",
+      "source",
+      "--no-setup",
+      "--no-cd",
+      "-b",
+      "feat-managed",
+      "--",
+      "wt-managed",
+    ),
+  );
+  assert.equal(managed?.ok ?? true, true);
+  const shelved = transferDoc(
+    await sm(
       "worktrees",
       "bring",
-      "feat-peer",
+      "wt-managed",
       "-p",
       "target",
+      "--from",
+      "Studio Mac",
       "--source",
       "shelve",
-    ]);
-    assert.equal(caveated.code, 3, "a landed bring with a caveat exits 3");
-    const brought = transferDoc(caveated);
-    assert.equal(brought.ok, true);
-    assert.equal(brought.worktree.projectId, targetProjectId);
-    assert.equal(brought.captured, true);
-    assert.equal(brought.dirtyApplied, true);
-    assert.equal(brought.source?.done, false);
-    assert.match(
-      brought.caveats[0] ?? "",
-      /the source was not shelved: External/,
-    );
-    assert.equal(
-      readFileSync(join(brought.worktree.path, "peer-draft.txt"), "utf8"),
-      "peer uncommitted\n",
-    );
-    // A managed worktree on the peer, which it will shelve.
-    const managed = finalDoc(
-      await sm(
-        "create",
-        "-p",
-        "source",
-        "--no-setup",
-        "--no-cd",
-        "-b",
-        "feat-managed",
-        "--",
-        "wt-managed",
-      ),
-    );
-    assert.equal(managed?.ok ?? true, true);
-    const shelved = transferDoc(
-      await sm(
-        "worktrees",
-        "bring",
-        "wt-managed",
-        "-p",
-        "target",
-        "--from",
-        "Studio Mac",
-        "--source",
-        "shelve",
-      ),
-    );
-    assert.deepEqual(shelved.source, { fate: "shelve", done: true });
-    assert.deepEqual(shelved.caveats, []);
-    const peerList = await buildClient(worktreesContract, peerA.transport).list(
-      {
-        projectId: sourceProjectId,
-      },
-    );
-    assert.equal(
-      peerList.find((wt) => wt.name === "wt-managed")?.shelved,
-      true,
-      "the source was shelved over the wire",
-    );
-    assert.equal(
-      peerList.find((wt) => wt.id === worktreeIdFromPath(peerPath))?.shelved,
-      false,
-    );
-    ok(
-      "list --remote names the peer's worktrees, and bring: points there when given none, refuses an unknown one by code, lands one by branch with its uncommitted work, exits 3 naming the source fate that didn't hold, and shelves a source the peer will shelve",
-    );
+    ),
+  );
+  assert.deepEqual(shelved.source, { fate: "shelve", done: true });
+  assert.deepEqual(shelved.caveats, []);
+  const peerList = await buildClient(worktreesContract, peerA.transport).list({
+    projectId: sourceProjectId,
+  });
+  assert.equal(
+    peerList.find((wt) => wt.name === "wt-managed")?.shelved,
+    true,
+    "the source was shelved over the wire",
+  );
+  assert.equal(
+    peerList.find((wt) => wt.id === worktreeIdFromPath(peerPath))?.shelved,
+    false,
+  );
+});
 
-    peerOwns = targetProjectId;
+it("mirror: sends the worktree and opens a session whose copy is the peer's, a repeat answers with the running one, and unmirror is refused until synced, then removes only the copy", async () => {
+  peerOwns = targetProjectId;
 
-    // ---- (7) mirror / mirrors / unmirror, against the recording engine.
-    const mirrored = transferDoc(
-      await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
+  // ---- (7) mirror / mirrors / unmirror, against the recording engine.
+  const mirrored = transferDoc(
+    await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
+  );
+  assert.equal(mirrored.device.name, "Studio Mac");
+  assert.ok(typeof mirrored.session === "string");
+  // The transplants above each ran the engine once for their ignored
+  // files (host/mirror/oneShot.ts), under the transfer label.
+  mirrorsCreated = () =>
+    engine.state.created.filter(
+      (input) => !(MIRROR_LABEL_TRANSFER in input.labels),
     );
-    assert.equal(mirrored.device.name, "Studio Mac");
-    assert.ok(typeof mirrored.session === "string");
-    // The transplants above each ran the engine once for their ignored
-    // files (host/mirror/oneShot.ts), under the transfer label.
-    const mirrorsCreated = () =>
-      engine.state.created.filter(
-        (input) => !(MIRROR_LABEL_TRANSFER in input.labels),
-      );
-    const created = only(mirrorsCreated());
-    assert.ok(created !== undefined, "exactly one mirror session is created");
-    assert.equal(
-      created.localRoot,
-      mirrorPath,
-      "the session runs on the original",
-    );
-    assert.equal(created.remoteRoot, mirrored.worktree.path);
-    assert.equal(created.labels[MIRROR_LABEL_COPY_SIDE], "remote");
-    assert.equal(existsSync(join(mirrored.worktree.path, "m.txt")), true);
+  const created = only(mirrorsCreated());
+  assert.ok(created !== undefined, "exactly one mirror session is created");
+  assert.equal(
+    created.localRoot,
+    mirrorPath,
+    "the session runs on the original",
+  );
+  assert.equal(created.remoteRoot, mirrored.worktree.path);
+  assert.equal(created.labels[MIRROR_LABEL_COPY_SIDE], "remote");
+  assert.equal(existsSync(join(mirrored.worktree.path, "m.txt")), true);
 
-    const again = transferDoc(
-      await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
-    );
-    assert.equal(again.alreadyMirrored, true);
-    assert.equal(again.session, mirrored.session);
-    assert.equal(mirrored.copySide, "remote");
-    assert.equal(again.copySide, "remote");
-    assert.equal(mirrorsCreated().length, 1, "no second session is opened");
+  const again = transferDoc(
+    await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
+  );
+  assert.equal(again.alreadyMirrored, true);
+  assert.equal(again.session, mirrored.session);
+  assert.equal(mirrored.copySide, "remote");
+  assert.equal(again.copySide, "remote");
+  assert.equal(mirrorsCreated().length, 1, "no second session is opened");
 
-    const running = mirrorsDoc(await sm("worktrees", "mirrors"));
-    const listed = only(running.mirrors);
-    assert.ok(listed !== undefined, "exactly one mirror is running");
-    assert.equal(listed.copySide, "remote");
-    assert.equal(listed.device.name, "Studio Mac");
-    assert.equal(listed.localRoot, mirrorPath);
+  const running = mirrorsDoc(await sm("worktrees", "mirrors"));
+  const listed = only(running.mirrors);
+  assert.ok(listed !== undefined, "exactly one mirror is running");
+  assert.equal(listed.copySide, "remote");
+  assert.equal(listed.device.name, "Studio Mac");
+  assert.equal(listed.localRoot, mirrorPath);
 
-    await refused(
-      ["worktrees", "unmirror", "wt-mirror", "-p", "source"],
-      "stop-unconfirmed",
-      /pass -f to stop anyway/,
-    );
-    assert.equal(
-      engine.state.terminated.includes(mirrored.session),
-      false,
-      "a refused stop ends nothing",
-    );
-    engine.state.git = "synced";
-    const stopped = stopDoc(
-      await sm("worktrees", "unmirror", "wt-mirror", "-p", "source"),
-    );
-    assert.equal(stopped.mirror.copySide, "remote");
-    assert.equal(engine.state.terminated.includes(mirrored.session), true);
-    assert.equal(
-      existsSync(mirrored.worktree.path),
-      false,
-      "stopping removes the copy on the peer",
-    );
-    assert.equal(existsSync(mirrorPath), true, "and never the original");
-    assert.deepEqual(
-      removalsOf(mirrored.worktree.id).map((entry) => entry.state),
-      ["removing", "removed"],
-      "the peer announces the copy's removal, and that it is gone",
-    );
-    await refused(
-      ["worktrees", "unmirror", "wt-mirror", "-p", "source"],
-      "no-mirror",
-    );
-    ok(
-      "mirror: sends the worktree and opens a session whose copy is the peer's, a repeat answers with the running one, and unmirror is refused until synced, then removes only the copy",
-    );
+  await refused(
+    ["worktrees", "unmirror", "wt-mirror", "-p", "source"],
+    "stop-unconfirmed",
+    /pass -f to stop anyway/,
+  );
+  assert.equal(
+    engine.state.terminated.includes(mirrored.session),
+    false,
+    "a refused stop ends nothing",
+  );
+  engine.state.git = "synced";
+  const stopped = stopDoc(
+    await sm("worktrees", "unmirror", "wt-mirror", "-p", "source"),
+  );
+  assert.equal(stopped.mirror.copySide, "remote");
+  assert.equal(engine.state.terminated.includes(mirrored.session), true);
+  assert.equal(
+    existsSync(mirrored.worktree.path),
+    false,
+    "stopping removes the copy on the peer",
+  );
+  assert.equal(existsSync(mirrorPath), true, "and never the original");
+  assert.deepEqual(
+    removalsOf(mirrored.worktree.id).map((entry) => entry.state),
+    ["removing", "removed"],
+    "the peer announces the copy's removal, and that it is gone",
+  );
+  await refused(
+    ["worktrees", "unmirror", "wt-mirror", "-p", "source"],
+    "no-mirror",
+  );
+});
 
-    // ---- (7a) A copy deleted on the peer outside a stop: the pair can
-    // no longer read as synced, but the peer answers without the copy,
-    // so the unforced unmirror ends the session with nothing to remove.
-    engine.state.git = "following";
-    const gone = transferDoc(
-      await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
-    );
-    const removed = await buildClient(
-      worktreesContract,
-      peerA.transport,
-    ).delete({
-      projectId: gone.worktree.projectId,
-      worktreeId: gone.worktree.id,
-      force: true,
-    });
-    assert.ok(typeof gone.session === "string");
-    assert.equal(removed.ok, true);
-    assert.equal(existsSync(gone.worktree.path), false);
-    stopDoc(await sm("worktrees", "unmirror", "wt-mirror", "-p", "source"));
-    assert.equal(engine.state.terminated.includes(gone.session), true);
-    assert.equal(existsSync(mirrorPath), true, "the original stays");
-    ok(
-      "unmirror of a mirror whose copy was already deleted on the peer ends the session unforced",
-    );
+it("unmirror of a mirror whose copy was already deleted on the peer ends the session unforced", async () => {
+  // ---- (7a) A copy deleted on the peer outside a stop: the pair can
+  // no longer read as synced, but the peer answers without the copy,
+  // so the unforced unmirror ends the session with nothing to remove.
+  engine.state.git = "following";
+  const gone = transferDoc(
+    await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
+  );
+  const removed = await buildClient(worktreesContract, peerA.transport).delete({
+    projectId: gone.worktree.projectId,
+    worktreeId: gone.worktree.id,
+    force: true,
+  });
+  assert.ok(typeof gone.session === "string");
+  assert.equal(removed.ok, true);
+  assert.equal(existsSync(gone.worktree.path), false);
+  stopDoc(await sm("worktrees", "unmirror", "wt-mirror", "-p", "source"));
+  assert.equal(engine.state.terminated.includes(gone.session), true);
+  assert.equal(existsSync(mirrorPath), true, "the original stays");
+});
 
-    // ---- (7b) mirror --from: the peer holds the original, so the peer
-    // runs the mirror (its mirror:startTo, on its own engine) and sends
-    // the copy HERE, which lands through the ask's invitation. unmirror
-    // removes the local copy through the peer and leaves the peer's
-    // original.
-    peerOwns = sourceProjectId;
-    const usageBoth = await runCli([
-      "worktrees",
-      "mirror",
-      "feat-in",
-      "-p",
-      "target",
-      "--to",
-      "A",
-      "--from",
-      "A",
-    ]);
-    assert.equal(usageBoth.code, 2, "--to with --from is a usage error");
-    // An unset shell variable must not turn the bring into a send.
-    const blankFrom = await runCli([
-      "worktrees",
-      "mirror",
-      "feat-in",
-      "-p",
-      "target",
-      "--from",
-      "",
-    ]);
-    assert.equal(blankFrom.code, 2, "a blank --from is a usage error");
-    // This device's own switch is not in the way: the ask invites the
-    // mirror (host/mirror/invites.ts), and the invitation is what the
-    // peer's send lands through. Nothing is invited before the ask,
-    // and an ask the peer cannot land (the branch is taken here)
-    // leaves none behind either.
-    assert.deepEqual(listMirrorInvites(), [], "no invitation before the ask");
-    await git(targetRepo, ["branch", "feat-in"]);
-    const collided = await runCli([
-      "worktrees",
-      "mirror",
-      "feat-in",
-      "-p",
-      "target",
-      "--from",
-      "Studio Mac",
-    ]);
-    assert.notEqual(collided.code, 0, "a landing on a taken branch is refused");
-    assert.equal(engineA.state.created.length, 0, "the peer started nothing");
-    assert.deepEqual(
-      listMirrorInvites(),
-      [],
-      "a failed ask withdraws its invitation",
-    );
-    await git(targetRepo, ["branch", "-D", "feat-in"]);
-    const createdHereBefore = mirrorsCreated().length;
-    const inboundRun = await sm(
-      "worktrees",
-      "mirror",
-      "feat-in",
-      "-p",
-      "target",
-      "--from",
-      "Studio Mac",
-    );
-    const inbound = transferDoc(inboundRun);
-    assert.equal(inbound.worktree.projectId, targetProjectId);
-    assert.equal(inbound.copySide, "local");
-    assert.ok(typeof inbound.session === "string");
-    assert.equal(
-      mirrorsCreated().length,
-      createdHereBefore,
-      "the session runs on the peer, not here",
-    );
-    const inboundInput = engineA.state.created.at(-1);
-    assert.ok(inboundInput);
-    assert.equal(inboundInput.localRoot, inPath, "on the original");
-    assert.equal(inboundInput.deviceId, "B");
-    assert.equal(inboundInput.remoteRoot, inbound.worktree.path);
-    assert.equal(inboundInput.labels[MIRROR_LABEL_COPY_SIDE], "remote");
-    // The ask's invitation, for the peer and its original. It stays
-    // pending here: the landing runs on the one listener both devices
-    // share, stamped with the ASKING device as its caller, so it never
-    // matches. What the landing does with it is mirror-invites.mts's.
-    assert.deepEqual(
-      listMirrorInvites().map(({ peerDeviceId, sourceWorktreeId }) => ({
-        peerDeviceId,
-        sourceWorktreeId,
-      })),
-      [{ peerDeviceId: "A", sourceWorktreeId: inboundInput.localWorktreeId }],
-      "the ask left an invitation for the peer's original",
-    );
-    const inboundSteps = new Set(progressOf(inboundRun).map((doc) => doc.step));
-    for (const step of ["capture", "create", "apply"]) {
-      assert.ok(
-        inboundSteps.has(step),
-        `the peer's progress never relayed the ${step} step`,
-      );
-    }
-    const inboundRow = mirrorsDoc(
-      await sm("worktrees", "mirrors"),
-    ).mirrors.find((mirror) => mirror.session === inbound.session);
-    assert.ok(inboundRow);
-    assert.equal(inboundRow.copySide, "local");
-    assert.equal(inboundRow.device.name, "Studio Mac");
-    // Asked again from either end, the answer is the running mirror
-    // and the copy that is HERE, never a second start.
-    const sessionsBefore = engineA.state.created.length;
-    const repeats = await Promise.all(
-      [
-        ["feat-in", "-p", "target", "--from", "Studio Mac"],
-        [inbound.worktree.path],
-      ].map((repeat) => sm("worktrees", "mirror", ...repeat)),
-    );
-    for (const asked of repeats.map(transferDoc)) {
-      assert.equal(asked.alreadyMirrored, true);
-      assert.equal(asked.session, inbound.session);
-      assert.equal(asked.copySide, "local");
-      assert.equal(asked.worktree.path, inbound.worktree.path);
-    }
-    assert.equal(engineA.state.created.length, sessionsBefore);
-    const inboundStop = stopDoc(
-      await sm("worktrees", "unmirror", inbound.worktree.path),
-    );
-    assert.equal(inboundStop.mirror.copySide, "local");
-    assert.equal(
-      existsSync(inbound.worktree.path),
-      false,
-      "stopping removes the copy here",
-    );
-    assert.equal(existsSync(inPath), true, "and never the peer's original");
-    const inboundRemovals = removalsOf(inbound.worktree.id);
-    assert.deepEqual(
-      inboundRemovals.map((entry) => entry.state),
-      ["removing", "removed"],
-      "the local copy's removal is announced, and that it is gone",
-    );
-    const [removing] = inboundRemovals;
-    assert.ok(removing !== undefined, "the removal is announced");
-    assert.equal(removing.projectId, targetProjectId);
+it("mirror --from: run by the peer on the original with its progress relayed, the copy local and the mirror invited past this device's switch (an ask that fails to land withdraws its invitation), a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only", async () => {
+  // ---- (7b) mirror --from: the peer holds the original, so the peer
+  // runs the mirror (its mirror:startTo, on its own engine) and sends
+  // the copy HERE, which lands through the ask's invitation. unmirror
+  // removes the local copy through the peer and leaves the peer's
+  // original.
+  peerOwns = sourceProjectId;
+  const usageBoth = await runCli([
+    "worktrees",
+    "mirror",
+    "feat-in",
+    "-p",
+    "target",
+    "--to",
+    "A",
+    "--from",
+    "A",
+  ]);
+  assert.equal(usageBoth.code, 2, "--to with --from is a usage error");
+  // An unset shell variable must not turn the bring into a send.
+  const blankFrom = await runCli([
+    "worktrees",
+    "mirror",
+    "feat-in",
+    "-p",
+    "target",
+    "--from",
+    "",
+  ]);
+  assert.equal(blankFrom.code, 2, "a blank --from is a usage error");
+  // This device's own switch is not in the way: the ask invites the
+  // mirror (host/mirror/invites.ts), and the invitation is what the
+  // peer's send lands through. Nothing is invited before the ask,
+  // and an ask the peer cannot land (the branch is taken here)
+  // leaves none behind either.
+  assert.deepEqual(listMirrorInvites(), [], "no invitation before the ask");
+  await git(targetRepo, ["branch", "feat-in"]);
+  const collided = await runCli([
+    "worktrees",
+    "mirror",
+    "feat-in",
+    "-p",
+    "target",
+    "--from",
+    "Studio Mac",
+  ]);
+  assert.notEqual(collided.code, 0, "a landing on a taken branch is refused");
+  assert.equal(engineA.state.created.length, 0, "the peer started nothing");
+  assert.deepEqual(
+    listMirrorInvites(),
+    [],
+    "a failed ask withdraws its invitation",
+  );
+  await git(targetRepo, ["branch", "-D", "feat-in"]);
+  const createdHereBefore = mirrorsCreated().length;
+  const inboundRun = await sm(
+    "worktrees",
+    "mirror",
+    "feat-in",
+    "-p",
+    "target",
+    "--from",
+    "Studio Mac",
+  );
+  const inbound = transferDoc(inboundRun);
+  assert.equal(inbound.worktree.projectId, targetProjectId);
+  assert.equal(inbound.copySide, "local");
+  assert.ok(typeof inbound.session === "string");
+  assert.equal(
+    mirrorsCreated().length,
+    createdHereBefore,
+    "the session runs on the peer, not here",
+  );
+  const inboundInput = engineA.state.created.at(-1);
+  assert.ok(inboundInput);
+  assert.equal(inboundInput.localRoot, inPath, "on the original");
+  assert.equal(inboundInput.deviceId, "B");
+  assert.equal(inboundInput.remoteRoot, inbound.worktree.path);
+  assert.equal(inboundInput.labels[MIRROR_LABEL_COPY_SIDE], "remote");
+  // The ask's invitation, for the peer and its original. It stays
+  // pending here: the landing runs on the one listener both devices
+  // share, stamped with the ASKING device as its caller, so it never
+  // matches. What the landing does with it is mirror-invites.mts's.
+  assert.deepEqual(
+    listMirrorInvites().map(({ peerDeviceId, sourceWorktreeId }) => ({
+      peerDeviceId,
+      sourceWorktreeId,
+    })),
+    [{ peerDeviceId: "A", sourceWorktreeId: inboundInput.localWorktreeId }],
+    "the ask left an invitation for the peer's original",
+  );
+  const inboundSteps = new Set(progressOf(inboundRun).map((doc) => doc.step));
+  for (const step of ["capture", "create", "apply"]) {
     assert.ok(
-      removing.endedThen.includes(inbound.session),
-      "announced after the session ended: the delete follows the terminate",
+      inboundSteps.has(step),
+      `the peer's progress never relayed the ${step} step`,
     );
-    ok(
-      "mirror --from: run by the peer on the original with its progress relayed, the copy local and the mirror invited past this device's switch (an ask that fails to land withdraws its invitation), a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only",
-    );
-
-    // ---- (7c) mirror --from of the peer's primary checkout: the copy
-    // lands as a worktree on mirror/main in a mirror- folder, the
-    // session is labelled for the follower, and the peer's primary
-    // stays. Named by its folder, as list --remote shows it.
-    const primaryMainBefore = await gitOut(sourceRepo, "rev-parse", "HEAD");
-    const fromPrimary = transferDoc(
-      await sm(
-        "worktrees",
-        "mirror",
-        "source",
-        "-p",
-        "target",
-        "--from",
-        "Studio Mac",
-      ),
-    );
-    assert.equal(fromPrimary.worktree.projectId, targetProjectId);
-    assert.equal(fromPrimary.worktree.branch, "mirror/main");
-    assert.equal(fromPrimary.worktree.name, "mirror-source");
-    assert.equal(fromPrimary.worktree.isPrimary, false);
-    assert.equal(fromPrimary.copySide, "local");
-    const fromPrimaryInput = engineA.state.created.at(-1);
-    assert.ok(fromPrimaryInput);
-    assert.equal(fromPrimaryInput.localRoot, sourceRepo);
-    assert.equal(fromPrimaryInput.remoteRoot, fromPrimary.worktree.path);
-    assert.equal(fromPrimaryInput.labels[MIRROR_LABEL_MIRROR_BRANCH], "1");
-    assert.equal(
-      await gitOut(fromPrimary.worktree.path, "rev-parse", "HEAD"),
-      primaryMainBefore,
-    );
-    const fromPrimaryStop = stopDoc(
-      await sm("worktrees", "unmirror", fromPrimary.worktree.path),
-    );
-    assert.equal(fromPrimaryStop.mirror.copySide, "local");
-    assert.equal(existsSync(fromPrimary.worktree.path), false);
-    assert.equal(
-      await gitOut(sourceRepo, "rev-parse", "HEAD"),
-      primaryMainBefore,
-    );
-    assert.equal(
-      await gitOut(sourceRepo, "symbolic-ref", "HEAD"),
-      "refs/heads/main",
-      "the peer's primary must stay on its branch",
-    );
-    peerOwns = targetProjectId;
-    ok(
-      "mirror --from of the peer's primary: lands as a worktree on mirror/main in mirror-<name>, labelled for the follower, and unmirror removes the copy with the peer's primary untouched",
-    );
-
-    // ---- (7d) A peer with no checkout of the repo takes a send: it
-    // clones the repo first, where the dialogs would, and the copy
-    // lands in the clone, while a bring from it is refused. The sending
-    // side needs a registry of its own, where the lone repo is
-    // registered and the peer's (the shared one) has never seen it: a
-    // second data dir behind a second control server, whose ops each
-    // run in an async context the CLI runner seam (process-wide)
-    // switches on.
-    // The peer answers on the direct wire, outside that context.
-    const otherDataDir = join(sandbox, "data-other");
-    mkdirSync(otherDataDir);
-    const otherCli = createCliRunner(fixture.smBinary, {
-      ...fixture.smEnv,
-      SHIGOMORI_DATA_DIR: otherDataDir,
-    });
-    const asOtherDevice = new AsyncLocalStorage<boolean>();
-    setCliRunnerImpl({
-      runCli: (args, onDoc, extraEnv, opts) =>
-        (asOtherDevice.getStore() === true ? otherCli : fixture).runCli(
-          args,
-          onDoc,
-          extraEnv,
-          opts,
-        ),
-      requireCliBinary: () => fixture.smBinary,
-      cliFailureMessage,
-    });
-    const otherControl = createControlServer({
-      appVersion: () => "9.9.9",
-      filePath: () => join(otherDataDir, CONTROL_FILE_NAME),
-      log: () => {},
-    });
-    const asOther =
-      <I, O>(run: (input: I, ctx: HandlerContext) => O) =>
-      (input: I, ctx: HandlerContext) =>
-        asOtherDevice.run(true, () => run(input, ctx));
-    registerContract(
-      controlContract,
-      {
-        devices: asOther(controlHandlers.devices),
-        peerWorktrees: asOther(controlHandlers.peerWorktrees),
-        send: asOther(controlHandlers.send),
-        bring: asOther(controlHandlers.bring),
-        mirrors: asOther(controlHandlers.mirrors),
-        mirrorStop: asOther(controlHandlers.mirrorStop),
-      },
-      otherControl.transport,
-      { validateOutputs: true },
-    );
-    await otherControl.start();
-    track(() => otherControl.stop());
-    // Deep in the sandbox, outside the home folder: the default place
-    // is then where the peer keeps its repos (the sandbox, beside its
-    // two), under the repo's own folder name.
-    const loneRepo = join(sandbox, "lone", "src", "lone-repo");
-    mkdirSync(join(sandbox, "lone", "src"), { recursive: true });
-    await git(join(sandbox, "lone", "src"), [
-      "init",
-      "-q",
-      "-b",
-      "main",
-      "lone-repo",
-    ]);
-    await fixture.disableAutoGc(loneRepo);
-    await fixture.commitFile(loneRepo, "root.txt", "root\n", "root");
-    const loneWtPath = await addWorktree(
-      loneRepo,
-      "lone-wt",
-      "lone-feature",
-      "lone.txt",
-    );
-    writeFileSync(join(loneWtPath, "lone-draft.txt"), "lone draft\n");
-    await otherCli.sm("projects", "add", "--", loneRepo);
-    const otherDoc = async (args: string[]) =>
-      finalDoc(await otherCli.runCli(args));
-    const loneDevices = DevicesDocSchema.parse(
-      await otherDoc(["devices", "-p", "lone-repo"]),
-    );
-    assert.equal(
-      loneDevices.devices.find((device) => device.name === "Studio Mac")?.block,
-      "no-project",
-    );
-    const noBring = RefusalDocSchema.parse(
-      await otherDoc([
-        "worktrees",
-        "bring",
-        "lone-feature",
-        "-p",
-        "lone-repo",
-        "--from",
-        "Studio Mac",
-      ]),
-    );
-    assert.equal(noBring.code, "device-blocked", noBring.error);
-    assert.match(noBring.error, /has no checkout of this repo/);
-    const cloneRun = await otherCli.runCli([
-      "worktrees",
-      "send",
-      "lone-wt",
-      "-p",
-      "lone-repo",
-      "--to",
-      "Studio Mac",
-    ]);
-    assert.equal(
-      cloneRun.code,
-      0,
-      cliFailureMessage(cloneRun, "the send failed"),
-    );
-    const cloneSent = transferDoc(cloneRun);
-    assert.equal(cloneSent.cloned?.path, join(sandbox, "lone-repo"));
-    assert.equal(cloneSent.worktree.projectId, cloneSent.cloned?.id);
-    assert.equal(cloneSent.worktree.branch, "lone-feature");
-    assert.equal(
-      readFileSync(join(cloneSent.worktree.path, "lone-draft.txt"), "utf8"),
-      "lone draft\n",
-      "the uncommitted work landed in the clone's worktree",
-    );
-    assert.ok(
-      progressOf(cloneRun).some((doc) => doc.step === "clone"),
-      "the clone step was never reported",
-    );
-    setCliRunnerImpl({
-      runCli: fixture.runCli,
-      requireCliBinary: () => fixture.smBinary,
-      cliFailureMessage,
-    });
-    ok(
-      "send to a peer with no checkout: devices says it takes a send, a bring from it is refused, and the send clones the repo in the default place first and lands the copy there",
-    );
-
-    // ---- (8) The peer going away mid-life reads as offline, not as a hang.
-    connected = [];
-    await refused(
-      ["worktrees", "send", "wt-mirror", "-p", "source"],
-      "device-blocked",
-      /not connected/,
-    );
-    ok("a peer with no session is reported offline");
-
-    // ---- (9) A data wipe takes control.json with the rest of the data
-    // dir while the app lives on. The wipe's last step puts it back.
-    rmSync(controlFile);
-    control.republish();
-    assert.deepEqual(JSON.parse(readFileSync(controlFile, "utf8")), published);
-    finalDoc(await sm("worktrees", "mirrors"));
-    ok("a control.json removed under the running app is republished");
-
-    // ---- (10) Stop unpublishes, and the CLI reads that as not running.
-    control.stop();
-    assert.equal(existsSync(controlFile), false, "stop removes control.json");
-    await refused(["worktrees", "mirrors"], "app-not-running");
-    ok("stopping the server unpublishes it");
-  } finally {
-    await teardown();
   }
+  const inboundRow = mirrorsDoc(await sm("worktrees", "mirrors")).mirrors.find(
+    (mirror) => mirror.session === inbound.session,
+  );
+  assert.ok(inboundRow);
+  assert.equal(inboundRow.copySide, "local");
+  assert.equal(inboundRow.device.name, "Studio Mac");
+  // Asked again from either end, the answer is the running mirror
+  // and the copy that is HERE, never a second start.
+  const sessionsBefore = engineA.state.created.length;
+  const repeats = await Promise.all(
+    [
+      ["feat-in", "-p", "target", "--from", "Studio Mac"],
+      [inbound.worktree.path],
+    ].map((repeat) => sm("worktrees", "mirror", ...repeat)),
+  );
+  for (const asked of repeats.map(transferDoc)) {
+    assert.equal(asked.alreadyMirrored, true);
+    assert.equal(asked.session, inbound.session);
+    assert.equal(asked.copySide, "local");
+    assert.equal(asked.worktree.path, inbound.worktree.path);
+  }
+  assert.equal(engineA.state.created.length, sessionsBefore);
+  const inboundStop = stopDoc(
+    await sm("worktrees", "unmirror", inbound.worktree.path),
+  );
+  assert.equal(inboundStop.mirror.copySide, "local");
+  assert.equal(
+    existsSync(inbound.worktree.path),
+    false,
+    "stopping removes the copy here",
+  );
+  assert.equal(existsSync(inPath), true, "and never the peer's original");
+  const inboundRemovals = removalsOf(inbound.worktree.id);
+  assert.deepEqual(
+    inboundRemovals.map((entry) => entry.state),
+    ["removing", "removed"],
+    "the local copy's removal is announced, and that it is gone",
+  );
+  const [removing] = inboundRemovals;
+  assert.ok(removing !== undefined, "the removal is announced");
+  assert.equal(removing.projectId, targetProjectId);
+  assert.ok(
+    removing.endedThen.includes(inbound.session),
+    "announced after the session ended: the delete follows the terminate",
+  );
+});
 
-  done();
-}
+it("mirror --from of the peer's primary: lands as a worktree on mirror/main in mirror-<name>, labelled for the follower, and unmirror removes the copy with the peer's primary untouched", async () => {
+  // ---- (7c) mirror --from of the peer's primary checkout: the copy
+  // lands as a worktree on mirror/main in a mirror- folder, the
+  // session is labelled for the follower, and the peer's primary
+  // stays. Named by its folder, as list --remote shows it.
+  const primaryMainBefore = await gitOut(sourceRepo, "rev-parse", "HEAD");
+  const fromPrimary = transferDoc(
+    await sm(
+      "worktrees",
+      "mirror",
+      "source",
+      "-p",
+      "target",
+      "--from",
+      "Studio Mac",
+    ),
+  );
+  assert.equal(fromPrimary.worktree.projectId, targetProjectId);
+  assert.equal(fromPrimary.worktree.branch, "mirror/main");
+  assert.equal(fromPrimary.worktree.name, "mirror-source");
+  assert.equal(fromPrimary.worktree.isPrimary, false);
+  assert.equal(fromPrimary.copySide, "local");
+  const fromPrimaryInput = engineA.state.created.at(-1);
+  assert.ok(fromPrimaryInput);
+  assert.equal(fromPrimaryInput.localRoot, sourceRepo);
+  assert.equal(fromPrimaryInput.remoteRoot, fromPrimary.worktree.path);
+  assert.equal(fromPrimaryInput.labels[MIRROR_LABEL_MIRROR_BRANCH], "1");
+  assert.equal(
+    await gitOut(fromPrimary.worktree.path, "rev-parse", "HEAD"),
+    primaryMainBefore,
+  );
+  const fromPrimaryStop = stopDoc(
+    await sm("worktrees", "unmirror", fromPrimary.worktree.path),
+  );
+  assert.equal(fromPrimaryStop.mirror.copySide, "local");
+  assert.equal(existsSync(fromPrimary.worktree.path), false);
+  assert.equal(
+    await gitOut(sourceRepo, "rev-parse", "HEAD"),
+    primaryMainBefore,
+  );
+  assert.equal(
+    await gitOut(sourceRepo, "symbolic-ref", "HEAD"),
+    "refs/heads/main",
+    "the peer's primary must stay on its branch",
+  );
+  peerOwns = targetProjectId;
+});
 
-main().catch(fail).finally(fixture.remove);
+it("send to a peer with no checkout: devices says it takes a send, a bring from it is refused, and the send clones the repo in the default place first and lands the copy there", async () => {
+  // ---- (7d) A peer with no checkout of the repo takes a send: it
+  // clones the repo first, where the dialogs would, and the copy
+  // lands in the clone, while a bring from it is refused. The sending
+  // side needs a registry of its own, where the lone repo is
+  // registered and the peer's (the shared one) has never seen it: a
+  // second data dir behind a second control server, whose ops each
+  // run in an async context the CLI runner seam (process-wide)
+  // switches on.
+  // The peer answers on the direct wire, outside that context.
+  const otherDataDir = join(sandbox, "data-other");
+  mkdirSync(otherDataDir);
+  const otherCli = createCliRunner(fixture.smBinary, {
+    ...fixture.smEnv,
+    SHIGOMORI_DATA_DIR: otherDataDir,
+  });
+  const asOtherDevice = new AsyncLocalStorage<boolean>();
+  setCliRunnerImpl({
+    runCli: (args, onDoc, extraEnv, opts) =>
+      (asOtherDevice.getStore() === true ? otherCli : fixture).runCli(
+        args,
+        onDoc,
+        extraEnv,
+        opts,
+      ),
+    requireCliBinary: () => fixture.smBinary,
+    cliFailureMessage,
+  });
+  const otherControl = createControlServer({
+    appVersion: () => "9.9.9",
+    filePath: () => join(otherDataDir, CONTROL_FILE_NAME),
+    log: () => {},
+  });
+  const asOther =
+    <I, O>(run: (input: I, ctx: HandlerContext) => O) =>
+    (input: I, ctx: HandlerContext) =>
+      asOtherDevice.run(true, () => run(input, ctx));
+  registerContract(
+    controlContract,
+    {
+      devices: asOther(controlHandlers.devices),
+      peerWorktrees: asOther(controlHandlers.peerWorktrees),
+      send: asOther(controlHandlers.send),
+      bring: asOther(controlHandlers.bring),
+      mirrors: asOther(controlHandlers.mirrors),
+      mirrorStop: asOther(controlHandlers.mirrorStop),
+    },
+    otherControl.transport,
+    { validateOutputs: true },
+  );
+  await otherControl.start();
+  track(() => otherControl.stop());
+  // Deep in the sandbox, outside the home folder: the default place
+  // is then where the peer keeps its repos (the sandbox, beside its
+  // two), under the repo's own folder name.
+  const loneRepo = join(sandbox, "lone", "src", "lone-repo");
+  mkdirSync(join(sandbox, "lone", "src"), { recursive: true });
+  await git(join(sandbox, "lone", "src"), [
+    "init",
+    "-q",
+    "-b",
+    "main",
+    "lone-repo",
+  ]);
+  await fixture.disableAutoGc(loneRepo);
+  await fixture.commitFile(loneRepo, "root.txt", "root\n", "root");
+  const loneWtPath = await addWorktree(
+    loneRepo,
+    "lone-wt",
+    "lone-feature",
+    "lone.txt",
+  );
+  writeFileSync(join(loneWtPath, "lone-draft.txt"), "lone draft\n");
+  await otherCli.sm("projects", "add", "--", loneRepo);
+  const otherDoc = async (args: string[]) =>
+    finalDoc(await otherCli.runCli(args));
+  const loneDevices = DevicesDocSchema.parse(
+    await otherDoc(["devices", "-p", "lone-repo"]),
+  );
+  assert.equal(
+    loneDevices.devices.find((device) => device.name === "Studio Mac")?.block,
+    "no-project",
+  );
+  const noBring = RefusalDocSchema.parse(
+    await otherDoc([
+      "worktrees",
+      "bring",
+      "lone-feature",
+      "-p",
+      "lone-repo",
+      "--from",
+      "Studio Mac",
+    ]),
+  );
+  assert.equal(noBring.code, "device-blocked", noBring.error);
+  assert.match(noBring.error, /has no checkout of this repo/);
+  const cloneRun = await otherCli.runCli([
+    "worktrees",
+    "send",
+    "lone-wt",
+    "-p",
+    "lone-repo",
+    "--to",
+    "Studio Mac",
+  ]);
+  assert.equal(
+    cloneRun.code,
+    0,
+    cliFailureMessage(cloneRun, "the send failed"),
+  );
+  const cloneSent = transferDoc(cloneRun);
+  assert.equal(cloneSent.cloned?.path, join(sandbox, "lone-repo"));
+  assert.equal(cloneSent.worktree.projectId, cloneSent.cloned?.id);
+  assert.equal(cloneSent.worktree.branch, "lone-feature");
+  assert.equal(
+    readFileSync(join(cloneSent.worktree.path, "lone-draft.txt"), "utf8"),
+    "lone draft\n",
+    "the uncommitted work landed in the clone's worktree",
+  );
+  assert.ok(
+    progressOf(cloneRun).some((doc) => doc.step === "clone"),
+    "the clone step was never reported",
+  );
+  setCliRunnerImpl({
+    runCli: fixture.runCli,
+    requireCliBinary: () => fixture.smBinary,
+    cliFailureMessage,
+  });
+});
+
+it("a peer with no session is reported offline", async () => {
+  // ---- (8) The peer going away mid-life reads as offline, not as a hang.
+  connected = [];
+  await refused(
+    ["worktrees", "send", "wt-mirror", "-p", "source"],
+    "device-blocked",
+    /not connected/,
+  );
+});
+
+it("a control.json removed under the running app is republished", async () => {
+  // ---- (9) A data wipe takes control.json with the rest of the data
+  // dir while the app lives on. The wipe's last step puts it back.
+  rmSync(controlFile);
+  control.republish();
+  assert.deepEqual(JSON.parse(readFileSync(controlFile, "utf8")), published);
+  finalDoc(await sm("worktrees", "mirrors"));
+});
+
+it("stopping the server unpublishes it", async () => {
+  // ---- (10) Stop unpublishes, and the CLI reads that as not running.
+  control.stop();
+  assert.equal(existsSync(controlFile), false, "stop removes control.json");
+  await refused(["worktrees", "mirrors"], "app-not-running");
+});

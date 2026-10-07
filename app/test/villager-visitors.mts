@@ -9,14 +9,11 @@
 // - visited come first in the sort's order, the empty slots after
 // - one best friend, the villager met most, and the newest face
 //
-// Runs under test/lib/register-ts-alias.mts. Run: pnpm test villager-visitors.
+// Run: pnpm test villager-visitors.
 import assert from "node:assert/strict";
 import type { VillagerProfiles } from "@shared/schemas";
 import { buildAlbum, sortAlbum, tallyVisits } from "@/lib/villagers/visitors";
-import { makeProof } from "./lib/checkKit.mts";
-
-const proof = makeProof("villager-visitors proof");
-console.log("villager-visitors proof\n");
+import { it } from "vitest";
 
 const profile = (name: string, kind: "villager" | "special" = "villager") => ({
   name,
@@ -42,70 +39,64 @@ const tally = tallyVisits({
   "mac:w7:50": { slug: "ghost", at: 50 },
 });
 
-try {
-  await proof.check("the log tallies by villager", () => {
-    assert.deepEqual(tally.get("raymond"), { count: 3, first: 100, last: 500 });
-    assert.deepEqual(tally.get("ace"), { count: 1, first: 900, last: 900 });
-    assert.equal(tally.size, 4);
-  });
+it("the log tallies by villager", () => {
+  assert.deepEqual(tally.get("raymond"), { count: 3, first: 100, last: 500 });
+  assert.deepEqual(tally.get("ace"), { count: 1, first: 900, last: 900 });
+  assert.equal(tally.size, 4);
+});
 
-  await proof.check("a reset counts only visits made since", () => {
-    const since = tallyVisits(
-      {
-        "mac:w1:100": { slug: "raymond", at: 100 },
-        "mac:w2:500": { slug: "raymond", at: 500 },
-        "mac:w5:900": { slug: "ace", at: 900 },
-        "pad:w4:600": null,
-      },
-      500,
-    );
-    assert.deepEqual(since.get("raymond"), { count: 1, first: 500, last: 500 });
-    assert.equal(since.size, 2);
-  });
+it("a reset counts only visits made since", () => {
+  const since = tallyVisits(
+    {
+      "mac:w1:100": { slug: "raymond", at: 100 },
+      "mac:w2:500": { slug: "raymond", at: 500 },
+      "mac:w5:900": { slug: "ace", at: 900 },
+      "pad:w4:600": null,
+    },
+    500,
+  );
+  assert.deepEqual(since.get("raymond"), { count: 1, first: 500, last: 500 });
+  assert.equal(since.size, 2);
+});
 
-  const album = buildAlbum(profiles, tally);
+const album = buildAlbum(profiles, tally);
 
-  await proof.check("the album has a slot for every character", () => {
-    assert.equal(album.total, 5);
-    assert.deepEqual(
-      album.sections.legendary.map((entry) => entry.slug),
-      ["tom-nook"],
-    );
-    assert.deepEqual(
-      album.sections.rare.map((entry) => entry.slug),
-      ["katrina"],
-    );
-    assert.equal(album.sections.common.length, 3);
-    // ghost has no profile: no slot, and its visits don't count.
-    assert.equal(album.metTotal, 3);
-    assert.equal(album.visits, 5);
-    assert.deepEqual(album.met, { legendary: 1, rare: 0, common: 2 });
-  });
+it("the album has a slot for every character", () => {
+  assert.equal(album.total, 5);
+  assert.deepEqual(
+    album.sections.legendary.map((entry) => entry.slug),
+    ["tom-nook"],
+  );
+  assert.deepEqual(
+    album.sections.rare.map((entry) => entry.slug),
+    ["katrina"],
+  );
+  assert.equal(album.sections.common.length, 3);
+  // ghost has no profile: no slot, and its visits don't count.
+  assert.equal(album.metTotal, 3);
+  assert.equal(album.visits, 5);
+  assert.deepEqual(album.met, { legendary: 1, rare: 0, common: 2 });
+});
 
-  await proof.check("visited come first, in the sort's order", () => {
-    const order = (sort: "visits" | "recent" | "name") =>
-      sortAlbum(album.sections.common, sort).map((entry) => entry.slug);
-    assert.deepEqual(order("visits"), ["raymond", "ace", "bob"]);
-    assert.deepEqual(order("recent"), ["ace", "raymond", "bob"]);
-    assert.deepEqual(order("name"), ["ace", "raymond", "bob"]);
-  });
+it("visited come first, in the sort's order", () => {
+  const order = (sort: "visits" | "recent" | "name") =>
+    sortAlbum(album.sections.common, sort).map((entry) => entry.slug);
+  assert.deepEqual(order("visits"), ["raymond", "ace", "bob"]);
+  assert.deepEqual(order("recent"), ["ace", "raymond", "bob"]);
+  assert.deepEqual(order("name"), ["ace", "raymond", "bob"]);
+});
 
-  await proof.check("one best friend, the villager met most", () => {
-    assert.equal(album.bestFriend?.slug, "raymond");
-    assert.equal(album.newest?.slug, "ace");
-    assert.equal(buildAlbum(profiles, new Map()).bestFriend, null);
-    // Met as often: the one seen last.
-    const tied = buildAlbum(
-      profiles,
-      tallyVisits({
-        a: { slug: "ace", at: 1 },
-        b: { slug: "bob", at: 2 },
-      }),
-    );
-    assert.equal(tied.bestFriend?.slug, "bob");
-  });
-
-  proof.done();
-} catch (error) {
-  proof.fail(error);
-}
+it("one best friend, the villager met most", () => {
+  assert.equal(album.bestFriend?.slug, "raymond");
+  assert.equal(album.newest?.slug, "ace");
+  assert.equal(buildAlbum(profiles, new Map()).bestFriend, null);
+  // Met as often: the one seen last.
+  const tied = buildAlbum(
+    profiles,
+    tallyVisits({
+      a: { slug: "ace", at: 1 },
+      b: { slug: "bob", at: 2 },
+    }),
+  );
+  assert.equal(tied.bestFriend?.slug, "bob");
+});

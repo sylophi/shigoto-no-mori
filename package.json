@@ -23,7 +23,7 @@
     "check:format": "pnpm -C app format:check",
     "check:knip": "pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C marketing install --frozen-lockfile --prefer-offline && app/node_modules/.bin/knip",
     "check:licenses": "pnpm -C app licenses:check",
-    "check:proofs": "pnpm -C app test --all",
+    "check:proofs": "pnpm -C app test",
     "check:hub": "pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check",
     "check:go": "go test -C cli ./... && CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./..."
   }

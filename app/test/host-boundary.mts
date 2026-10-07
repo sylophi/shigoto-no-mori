@@ -35,9 +35,11 @@
 //      when either side drifts.
 //
 // covers: app/host/** app/main/** app/renderer/** app/shared/** app/web/**
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { appRoot, report, stripComments, walk } from "./lib/checkKit.mts";
+import { it } from "vitest";
+import { appRoot, stripComments, walk } from "./lib/checkKit.mts";
 
 const failures: string[] = [];
 
@@ -306,8 +308,9 @@ for (const entry of IPC_RENDERER_ALLOWLIST) {
   }
 }
 
-report({
-  name: "host boundary",
-  failures,
-  hint: "Move the Electron dependency into main/, or route the capability through the contract's transport layer (see shared/ipc/transport.ts and shared/ipc/registerContract.ts).",
+// When one fails: move the Electron dependency into main/, or route the capability
+// through the contract's transport layer (see shared/ipc/transport.ts
+// and shared/ipc/registerContract.ts).
+it("host boundary", () => {
+  assert.deepEqual(failures, []);
 });

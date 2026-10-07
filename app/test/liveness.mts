@@ -11,14 +11,18 @@ import {
   FATAL_RELAUNCH,
   decide,
 } from "../main/core/liveness/rateLimit.ts";
-import { lastOf, makeChecker, report } from "./lib/checkKit.mts";
+import { it } from "vitest";
+import { lastOf } from "./lib/checkKit.mts";
 
-const { check, failures } = makeChecker();
+// When one fails: the renderer crash-loop and fatal-relaunch rate
+// limiters in main/core/liveness/rateLimit.ts changed shape. Re-derive
+// the expected recreate/relaunch decisions or restore the
+// sliding-window semantics.
 
 // Renderer crash-loop guard: a burst up to the ceiling recreates, the
 // one past it gives up, and the persisted list only ever holds the
 // in-window timestamps.
-check("crash loop allows a burst up to the ceiling", () => {
+it("crash loop allows a burst up to the ceiling", () => {
   let recent: number[] = [];
   let now = 1_000;
   for (let i = 0; i < CRASH_LOOP.max; i++) {
@@ -30,7 +34,7 @@ check("crash loop allows a burst up to the ceiling", () => {
   assert.equal(recent.length, CRASH_LOOP.max);
 });
 
-check("crash loop gives up past the ceiling", () => {
+it("crash loop gives up past the ceiling", () => {
   // CRASH_LOOP.max recreations already recorded inside the window.
   const recent = Array.from({ length: CRASH_LOOP.max }, (_, i) => 1_000 + i);
   const decision = decide(recent, 2_000, CRASH_LOOP);
@@ -39,7 +43,7 @@ check("crash loop gives up past the ceiling", () => {
   assert.equal(decision.recent.length, CRASH_LOOP.max);
 });
 
-check("crash loop resets once the window elapses", () => {
+it("crash loop resets once the window elapses", () => {
   const recent = Array.from({ length: CRASH_LOOP.max }, (_, i) => 1_000 + i);
   // A crash well past the window (measured from the LAST timestamp) sees
   // an empty in-window set and proceeds.
@@ -50,7 +54,7 @@ check("crash loop resets once the window elapses", () => {
 });
 
 // Fatal-relaunch guard: the same shape with the long window and low cap.
-check("fatal relaunch allows up to the cap", () => {
+it("fatal relaunch allows up to the cap", () => {
   let recent: number[] = [];
   let now = 5_000;
   for (let i = 0; i < FATAL_RELAUNCH.max; i++) {
@@ -62,7 +66,7 @@ check("fatal relaunch allows up to the cap", () => {
   assert.equal(recent.length, FATAL_RELAUNCH.max);
 });
 
-check("fatal relaunch stops past the cap", () => {
+it("fatal relaunch stops past the cap", () => {
   const recent = Array.from(
     { length: FATAL_RELAUNCH.max },
     (_, i) => 5_000 + i,
@@ -72,7 +76,7 @@ check("fatal relaunch stops past the cap", () => {
   assert.equal(decision.recent.length, FATAL_RELAUNCH.max);
 });
 
-check("fatal relaunch resets once the window elapses", () => {
+it("fatal relaunch resets once the window elapses", () => {
   const recent = Array.from(
     { length: FATAL_RELAUNCH.max },
     (_, i) => 5_000 + i,
@@ -85,13 +89,7 @@ check("fatal relaunch resets once the window elapses", () => {
 
 // A floor so a rename or a botched import cannot leave the check
 // asserting nothing while still printing OK.
-check("the limiter constants are sane", () => {
+it("the limiter constants are sane", () => {
   assert.ok(CRASH_LOOP.max > 0 && CRASH_LOOP.windowMs > 0);
   assert.ok(FATAL_RELAUNCH.max > 0 && FATAL_RELAUNCH.windowMs > 0);
-});
-
-report({
-  name: "liveness",
-  failures,
-  hint: "The renderer crash-loop and fatal-relaunch rate limiters in main/core/liveness/rateLimit.ts changed shape. Re-derive the expected recreate/relaunch decisions or restore the sliding-window semantics.",
 });

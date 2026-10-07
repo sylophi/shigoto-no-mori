@@ -17,7 +17,7 @@
         // scripts by root-relative path, and clerkStub.tsx stands in for
         // Clerk through a Vite alias in vite.base.ts.
         "lab/fake-host/{web-main,villager-icons,clerkStub}.tsx",
-        // Each proof and bench is a script run by test/run.mts or by hand.
+        // The proofs, which vitest runs, and the bench, a script run by hand.
         "test/*.mts",
         "test/bench/*.mts",
         // Run through package.json scripts or by hand (their headers say how).
