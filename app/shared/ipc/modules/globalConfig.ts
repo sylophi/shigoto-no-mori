@@ -1,14 +1,14 @@
-import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   StoredGlobalConfigSchema,
+  VoidSchema,
   WriteDeviceSettingsPayloadSchema,
 } from "@shared/schemas";
 
 export const globalConfigContract = defineContract("host", {
   // The stored document, loose so legacy and newer keys pass through.
   // It carries no secret, so every wire serves it ungated.
-  read: invoke("globalConfig:read", z.void(), StoredGlobalConfigSchema, {
+  read: invoke("globalConfig:read", VoidSchema, StoredGlobalConfigSchema, {
     remote: true,
     gated: false,
   }),
@@ -24,7 +24,7 @@ export const globalConfigContract = defineContract("host", {
   writeDeviceSettings: invoke(
     "globalConfig:writeDeviceSettings",
     WriteDeviceSettingsPayloadSchema,
-    z.void(),
+    VoidSchema,
     { remote: true, gated: true },
   ),
 });

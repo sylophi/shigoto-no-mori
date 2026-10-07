@@ -5,7 +5,6 @@ import { isValidWorktreeDirName } from "@shared/git/branches";
 import { isSafeRelPath } from "@shared/git/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { WorktreeIdSchema } from "@shared/schemas";
 import {
   CloneFolderNameZod,
   CommitHashZod,
@@ -13,6 +12,7 @@ import {
   DeviceIdZod,
   GitRefNameZod,
   ProjectZod,
+  WorktreeIdZod,
   WorktreeZod,
 } from "@shared/schemas/zodBridge";
 
@@ -110,7 +110,7 @@ export type SyncCapture = z.infer<typeof SyncCaptureSchema>;
 // trailing-slash entry.
 const SyncIgnoredPathsPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
 });
 
 // Capped on the wire: a worktree with scattered per-file ignores can
@@ -213,7 +213,7 @@ export type SyncCloneInto = z.infer<typeof SyncCloneIntoSchema>;
 export const SyncPullWorktreePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdZod,
   sourceProjectId: z.string().min(1),
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
   sourceIdentity: z.string().min(1),
   branch: GitRefNameZod.refine(
     (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
@@ -275,7 +275,7 @@ export const SyncPullStepSchema = z.enum([
 export type SyncPullStep = z.infer<typeof SyncPullStepSchema>;
 
 export const SyncPullProgressSchema = z.strictObject({
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
   step: SyncPullStepSchema,
   bytes: z.number().int().nonnegative().optional(),
   totalBytes: z.number().int().nonnegative().optional(),
@@ -321,7 +321,7 @@ export type SyncPullWorktreeResult = z.infer<
 export const SyncSendWorktreePayloadSchema = z.strictObject({
   targetDeviceId: DeviceIdZod,
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
   runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
   ignoreMode: SyncPullWorktreePayloadSchema.shape.ignoreMode,
   ignores: SyncPullWorktreePayloadSchema.shape.ignores,
@@ -336,7 +336,7 @@ const ChannelIdSchema = HexId32Schema;
 // link captures and whose repo it bundles.
 const SyncOpenSourcePayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
   channelId: ChannelIdSchema,
 });
 
@@ -366,7 +366,7 @@ const SyncReceiveWorktreePayloadSchema = z.strictObject({
   branch: SyncPullWorktreePayloadSchema.shape.branch,
   worktreeName: SyncPullWorktreePayloadSchema.shape.worktreeName,
   landBranch: GitRefNameZod.optional(),
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
   runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
   cloneInto: SyncPullWorktreePayloadSchema.shape.cloneInto,
   channelId: ChannelIdSchema,
@@ -412,7 +412,7 @@ const SyncTeardownSourcePayloadSchema = z.strictObject({
   direction: SyncMoveDirectionSchema,
   deviceId: DeviceIdZod,
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
 });
 export type SyncMoveRef = z.infer<typeof SyncTeardownSourcePayloadSchema>;
 
@@ -428,7 +428,7 @@ export type SyncMoveRef = z.infer<typeof SyncTeardownSourcePayloadSchema>;
 // false when nothing by that key is in flight here, which a caller
 // reads as "already over".
 const SyncCancelMovePayloadSchema = z.strictObject({
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
 });
 const SyncCancelMoveResultSchema = z.strictObject({
   cancelled: z.boolean(),

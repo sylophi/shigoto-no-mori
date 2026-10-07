@@ -88,7 +88,7 @@ export async function writeClientConfig(config: ClientConfig): Promise<void> {
     onDisk = {};
   }
   const merged: Record<string, unknown> = { ...onDisk };
-  for (const key of Object.keys(ClientConfigSchema.shape)) {
+  for (const key of Object.keys(ClientConfigSchema.fields)) {
     delete merged[key];
   }
   for (const [key, value] of Object.entries(config)) {

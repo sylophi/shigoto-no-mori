@@ -36,7 +36,7 @@ export interface SettingsFormState {
   villageLife: boolean;
   markTerrierProjects: boolean;
   showDeviceBadges: boolean;
-  launchers: LauncherCommand[];
+  launchers: readonly LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
   deleteBranchOnRemove: boolean;

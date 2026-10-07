@@ -1,5 +1,4 @@
 import * as Schema from "effect/Schema";
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   BranchListSchema,
@@ -98,13 +97,13 @@ export const projectsContract = defineContract("host", {
   carryOverListing: invoke(
     "projects:carryOverListing",
     CarryOverListingPayloadSchema,
-    z.array(CarryOverCandidateSchema),
+    Schema.Array(CarryOverCandidateSchema),
     { remote: true, gated: false },
   ),
   carryOverStats: invoke(
     "projects:carryOverStats",
     CarryOverStatsPayloadSchema,
-    z.record(z.string(), CarryOverStatSchema),
+    Schema.Record(Schema.String, CarryOverStatSchema),
     { remote: true, gated: false },
   ),
   icon: invoke(

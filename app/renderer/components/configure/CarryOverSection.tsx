@@ -15,7 +15,7 @@ import { CarryOverRow } from "./CarryOverRow";
 interface CarryOverSectionProps {
   projectId: string;
   projectPath: string;
-  entries: CarryOverEntry[];
+  entries: readonly CarryOverEntry[];
   useWorktreeInclude: boolean;
   onToggleUseWorktreeInclude: (enabled: boolean) => void;
   onAdd: (entry: CarryOverEntry) => void;

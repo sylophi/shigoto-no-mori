@@ -8,7 +8,7 @@ import { normalizeRelPath } from "@shared/git/gitPaths";
 import type { CarryOverEntry, WorktreeIncludeStatus } from "@shared/schemas";
 
 export function worktreeIncludeExtras(
-  entries: CarryOverEntry[],
+  entries: readonly CarryOverEntry[],
   useWorktreeInclude: boolean,
   status: WorktreeIncludeStatus | null | undefined,
 ): string[] {

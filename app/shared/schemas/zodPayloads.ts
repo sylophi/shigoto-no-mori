@@ -4,7 +4,7 @@ import { z } from "zod";
 // family moves to ./payloads as it converts to Effect Schema, and this
 // file goes with the last one.
 
-export const ProjectScopedPayloadSchema = z.object({
+const ProjectScopedPayloadSchema = z.object({
   projectId: z.string().min(1),
 });
 

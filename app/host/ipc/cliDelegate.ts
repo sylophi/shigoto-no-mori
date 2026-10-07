@@ -646,13 +646,13 @@ export async function globalConfigWriteViaCli(
 }
 
 // A config write payload where null clears the key.
-export type ClearingWrite<T> = { [K in keyof T]?: T[K] | null };
+export type ClearingWrite<T> = { -readonly [K in keyof T]?: T[K] | null };
 
 // The renderer hands the whole project document and clears a field by
 // leaving it out, so every field the schema models goes over the wire,
 // nested objects field by field, as null where the document has none.
 // Fields the schema doesn't model stay out, and the merge keeps them.
-const PROJECT_KEY_PATHS = modeledKeyPaths(ShigomoriConfigSchema.shape);
+const PROJECT_KEY_PATHS = modeledKeyPaths(ShigomoriConfigSchema);
 function withModeledFields(config: ShigomoriConfig): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
   for (const path of PROJECT_KEY_PATHS) {
@@ -1053,12 +1053,20 @@ export async function worktreeDestinationViaCli(
     .parse(doc);
 }
 
+const decodeGlobalConfigDoc = Schema.decodeUnknownSync(
+  Schema.Struct({ config: StoredGlobalConfigSchema }),
+);
+
 // config.json as stored: unknown keys kept, no defaults filled in
 // (callers apply their own, as they always have).
 export async function globalConfigReadViaCli(): Promise<GlobalConfig> {
   const doc = await readDoc(["config", "read"], "sm config read failed");
-  return z.object({ config: StoredGlobalConfigSchema }).parse(doc).config;
+  return decodeGlobalConfigDoc(doc).config;
 }
+
+const decodeProjectConfigDoc = Schema.decodeUnknownSync(
+  Schema.Struct({ config: Schema.NullOr(StoredShigomoriConfigSchema) }),
+);
 
 // project.json as stored, or null when the project has none.
 export async function shigomoriReadViaCli(
@@ -1070,8 +1078,7 @@ export async function shigomoriReadViaCli(
     { projectId },
   );
   if (doc === null) return null;
-  return z.object({ config: StoredShigomoriConfigSchema.nullable() }).parse(doc)
-    .config;
+  return decodeProjectConfigDoc(doc).config;
 }
 
 const decodeDiskUsage = Schema.decodeUnknownSync(
