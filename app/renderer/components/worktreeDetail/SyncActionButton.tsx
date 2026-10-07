@@ -1,13 +1,12 @@
 import { Loader2 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import type { SyncTone } from "@/lib/syncState";
 import { cn } from "@/lib/utils";
-
-export type Tone = "violet" | "emerald" | "sky" | "indigo" | "rose";
 
 // Tone-to-class lookup. Spelled out so Tailwind's JIT keeps the classes
 // in the build instead of pruning the dynamic interpolation.
-const TONE_CLASSES: Record<Tone, string> = {
+const TONE_CLASSES: Record<SyncTone, string> = {
   violet:
     "text-violet-500 hover:bg-violet-500/10 focus-visible:outline-violet-500",
   emerald:
@@ -27,7 +26,7 @@ export const SYNC_PILL_SHAPE =
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 interface SyncActionButtonProps {
-  tone: Tone;
+  tone: SyncTone;
   icon?: IconType;
   label: string;
   tip?: string;

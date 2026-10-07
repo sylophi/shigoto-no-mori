@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import type { SyncMove } from "@/lib/syncState";
 
 interface SyncWorktreeInput {
   projectId: string;
@@ -66,3 +67,17 @@ export const useSyncWithPrimaryWorktree = () =>
     (api, i) => api.worktrees.syncWithPrimary(i),
     "Couldn't sync from primary",
   );
+
+// The safe moves by their key (lib/syncState), for the pill and the
+// palette, which run whichever one the view offers.
+export function useSyncMoveMutations(): Record<
+  SyncMove["key"],
+  ReturnType<typeof useSyncMutation>
+> {
+  return {
+    push: usePushWorktree(),
+    pull: usePullWorktree(),
+    publish: usePublishWorktree(),
+    pullAndPush: usePullAndPushWorktree(),
+  };
+}

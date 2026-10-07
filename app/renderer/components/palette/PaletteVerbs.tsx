@@ -1,9 +1,5 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import {
-  ArrowDown,
-  ArrowDownUp,
-  ArrowUp,
-  CloudUpload,
   Copy,
   FileDiff,
   Folder,
@@ -23,22 +19,12 @@ import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
-import {
-  usePublishWorktree,
-  usePullAndPushWorktree,
-  usePullWorktree,
-  usePushWorktree,
-} from "@/hooks/worktrees/useWorktreeSync";
+import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
 import { rankByScore } from "@/lib/fuzzyMatch";
-import { pluralize } from "@/lib/pluralize";
+import { worktreeSyncView } from "@/lib/syncState";
 import { cn } from "@/lib/utils";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
-import {
-  deriveRemoteSyncState,
-  syncRunsOnDirtyTree,
-  type LauncherEntry,
-  type Worktree,
-} from "@shared/schemas";
+import type { LauncherEntry } from "@shared/schemas";
 import { PaletteGroup, PaletteItem, usePaneHasKeys } from "./PaletteItem";
 import type { PaletteRow } from "./PaletteRows";
 import type { PaletteEntry, PaletteProject } from "./buildPaletteEntries";
@@ -277,48 +263,6 @@ function LauncherVerbs({
   );
 }
 
-// The one git move the header's sync pill would offer, when it is a
-// safe one: push, pull, publish, or the pull-then-push of a branch
-// both sides moved. A split history's overwrites stay on the page,
-// behind their confirm, and a tree with uncommitted changes keeps only
-// the moves that can run beside them (syncRunsOnDirtyTree).
-function safeSyncMove(worktree: Worktree) {
-  const state = deriveRemoteSyncState(worktree);
-  if (worktree.changedCount > 0 && !syncRunsOnDirtyTree(state)) {
-    return undefined;
-  }
-  switch (state.kind) {
-    case "ahead":
-      return {
-        key: "push",
-        label: `Push ${pluralize(state.ahead, "commit")}`,
-        Icon: ArrowUp,
-      } as const;
-    case "behind":
-      return {
-        key: "pull",
-        label: `Pull ${pluralize(state.behind, "commit")}`,
-        Icon: ArrowDown,
-      } as const;
-    case "publish":
-      return state.canPublish
-        ? ({
-            key: "publish",
-            label: "Publish branch",
-            Icon: CloudUpload,
-          } as const)
-        : undefined;
-    case "pullAndPush":
-      return {
-        key: "pullAndPush",
-        label: `Pull and push ↑${state.ahead}↓${state.behind}`,
-        Icon: ArrowDownUp,
-      } as const;
-    default:
-      return undefined;
-  }
-}
-
 function SyncVerbs({
   entry,
   query,
@@ -329,15 +273,11 @@ function SyncVerbs({
   actions: PaletteActions;
 }) {
   const { worktree } = entry;
-  const mutations = {
-    push: usePushWorktree(),
-    pull: usePullWorktree(),
-    publish: usePublishWorktree(),
-    pullAndPush: usePullAndPushWorktree(),
-  };
+  const mutations = useSyncMoveMutations();
   const { canCommand } = useCommandAccess();
-  const move = safeSyncMove(worktree);
-  if (!move) return null;
+  // The pill's safe move, when it can run now (lib/syncState).
+  const { move } = worktreeSyncView(worktree);
+  if (!move || move.disabledReason) return null;
   return (
     <VerbGroup
       heading="Git"
