@@ -5,31 +5,54 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   checksBreakdown,
   describeChecks,
   sortChecksWorstFirst,
 } from "@/lib/pullRequest";
+import { cn } from "@/lib/utils";
 import type { PullRequestDetail } from "@shared/schemas";
 import { CheckEntry } from "./CheckEntry";
 import { ChecksSummaryIcon } from "./ChecksSummaryIcon";
 
 // The PR's CI as one chip beside the merge state, with the run list in
 // a popover so a long list never pushes the merge box down the page.
-export function ChecksPopover({ pr }: { pr: PullRequestDetail }) {
+// `children` stands in for the chip's own words (MergeStatus, which is
+// the merge box's one status with the run list still a click away),
+// and `tip` names the chip on hover when those leave out its words.
+export function ChecksPopover({
+  pr,
+  children,
+  tip = null,
+  className,
+}: {
+  pr: PullRequestDetail;
+  children?: React.ReactNode;
+  tip?: string | null;
+  className?: string;
+}) {
   const summary = describeChecks(pr.checks);
   if (!summary) return null;
   return (
     <Popover>
-      <PopoverTrigger
-        render={
-          <ChipButton>
-            <ChecksSummaryIcon tone={summary.tone} />
-            {summary.label}
-            <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
-          </ChipButton>
-        }
-      />
+      <SimpleTooltip tip={tip}>
+        <PopoverTrigger
+          render={
+            <ChipButton
+              className={cn("max-w-full whitespace-nowrap", className)}
+            >
+              {children ?? (
+                <>
+                  <ChecksSummaryIcon tone={summary.tone} />
+                  {summary.label}
+                </>
+              )}
+              <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
+            </ChipButton>
+          }
+        />
+      </SimpleTooltip>
       <PopoverContent className="flex w-80 flex-col overflow-hidden">
         <p className="shrink-0 px-1.5 pt-1 pb-1.5 text-xs text-muted-foreground">
           {checksBreakdown(pr.checks)}

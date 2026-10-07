@@ -2,6 +2,13 @@ import { useState } from "react";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Button } from "@/components/ui/button";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { Check, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useStackCleanup } from "@/hooks/pullRequests/useStackCleanup";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import {
@@ -14,6 +21,7 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { notifyError } from "@/lib/toast";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shared/schemas";
+import { cn } from "@/lib/utils";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 
 const STACK_ERROR_TITLE = "Couldn't delete the stack's worktrees";
@@ -21,10 +29,12 @@ const STACK_ERROR_TITLE = "Couldn't delete the stack's worktrees";
 // The cleanup after a PR closed: this worktree goes, or, for a stack
 // with landed layers, all of their worktrees together, on every device
 // holding one (each device's host runs `sm rm --stack`, which removes
-// its merged layers as one). The stack button shows only when it would
-// take more than this worktree, since otherwise the two would be the
-// same removal. A device that can't be asked (asleep, or not granting
-// this one) keeps its worktrees, and the box says so.
+// its merged layers as one). One button, and a menu beside it to reach
+// the whole stack only when that would take more than this worktree,
+// since otherwise the two would be the same removal. A failed stack
+// removal offers its way on beside deleting this worktree alone. A
+// device that can't be asked (asleep, or not granting this one) keeps
+// its worktrees, and the box says so.
 export function ClosedPullRequestBox({
   worktree,
   stack,
@@ -45,11 +55,17 @@ export function ClosedPullRequestBox({
     message: string;
     kind: StackCleanupFailure["kind"];
   } | null>(null);
-  const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
-  const { armed: stackArmed, trigger: stackTrigger } =
-    useConfirmTwice(CONFIRM_QUICK_MS);
+  const {
+    armed,
+    trigger: confirm,
+    reset: resetConfirm,
+  } = useConfirmTwice(CONFIRM_QUICK_MS);
+  const [chosenReach, setReach] = useState<"one" | "stack">("one");
   const cleanup = useStackCleanup(worktree, stack);
   const count = cleanup?.count ?? 0;
+  // The stack only while there is one to take: a stack that shrank to
+  // this worktree has no menu left to choose it back from.
+  const reach = count > 1 ? chosenReach : "one";
   const stackPending = stackMutation.isPending;
   const pending = stackPending || deleteMutation.isPending;
 
@@ -92,70 +108,129 @@ export function ClosedPullRequestBox({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap justify-end gap-2">
-        {count > 1 &&
-          (stackError && stackError.kind !== "refused" ? (
-            <>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setStackError(null)}
-              >
-                Cancel
-              </Button>
-              {stackError.kind === "cleanup" ? (
-                <>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={pending}
-                    onClick={() => runStack()}
-                  >
-                    Retry
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    disabled={pending}
-                    onClick={() => runStack({ skipCleanup: true })}
-                  >
-                    Skip cleanup scripts
-                  </Button>
-                </>
-              ) : (
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {count > 1 && stackError && stackError.kind !== "refused" ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setStackError(null)}
+            >
+              Cancel
+            </Button>
+            <ConfirmDestructiveButton
+              armed={armed}
+              pending={deleteMutation.isPending}
+              disabled={stackPending}
+              pendingLabel="Deleting…"
+              idleLabel="Delete worktree"
+              onClick={() => confirm(() => runDelete())}
+              disabledReason={deleteBlockedReason}
+            />
+            {stackError.kind === "cleanup" ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => runStack()}
+                >
+                  Retry
+                </Button>
                 <Button
                   type="button"
                   size="sm"
                   variant="destructive"
                   disabled={pending}
-                  onClick={() => runStack({ force: true })}
+                  onClick={() => runStack({ skipCleanup: true })}
                 >
-                  Delete {count} stack worktrees anyway
+                  Skip cleanup scripts
                 </Button>
-              )}
-            </>
-          ) : (
+              </>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={pending}
+                onClick={() => runStack({ force: true })}
+              >
+                Delete {count} stack worktrees anyway
+              </Button>
+            )}
+          </>
+        ) : (
+          // One button, and with landed layers to take along, a menu
+          // beside it that sets how far it reaches, the way the merge
+          // button's sets its method. This worktree by default: taking
+          // more than the page you are on is the surprise to avoid.
+          <div className="inline-flex items-stretch">
             <ConfirmDestructiveButton
-              armed={stackArmed}
-              pending={stackPending}
-              disabled={deleteMutation.isPending}
-              pendingLabel="Deleting stack…"
-              idleLabel={`Delete ${count} stack worktrees`}
-              onClick={() => stackTrigger(() => runStack())}
+              armed={armed}
+              {...(reach === "stack"
+                ? {
+                    pending: stackPending,
+                    disabled: deleteMutation.isPending,
+                    pendingLabel: "Deleting stack…",
+                    idleLabel: `Delete ${count} stack worktrees`,
+                    onClick: () => confirm(() => runStack()),
+                  }
+                : {
+                    pending: deleteMutation.isPending,
+                    disabled: stackPending,
+                    pendingLabel: "Deleting…",
+                    idleLabel: "Delete worktree",
+                    onClick: () => confirm(() => runDelete()),
+                    disabledReason: deleteBlockedReason,
+                  })}
+              className={cn(count > 1 && "rounded-r-none border-r-0")}
             />
-          ))}
-        <ConfirmDestructiveButton
-          armed={armed}
-          pending={deleteMutation.isPending}
-          disabled={stackPending}
-          pendingLabel="Deleting…"
-          idleLabel="Delete worktree"
-          onClick={() => trigger(() => runDelete())}
-          disabledReason={deleteBlockedReason}
-        />
+            {count > 1 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline-destructive"
+                      disabled={pending}
+                      aria-label="Choose what to delete"
+                      className="rounded-l-none px-1.5"
+                    >
+                      <ChevronDown aria-hidden className="size-3.5" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" sideOffset={4}>
+                  {(
+                    [
+                      ["one", "This worktree"],
+                      ["stack", `All ${count} stack worktrees`],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <DropdownMenuItem
+                      key={value}
+                      onClick={() => {
+                        resetConfirm();
+                        setReach(value);
+                      }}
+                    >
+                      <span className="flex-1">{label}</span>
+                      {reach === value && (
+                        <Check
+                          aria-hidden
+                          className="size-3.5 text-muted-foreground"
+                        />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        )}
       </div>
       {cleanup && cleanup.blocked.length > 0 && (
         <p className="text-right text-xs text-muted-foreground">

@@ -134,6 +134,9 @@ Poses ride the URL:
   `required-partial`, `requested`, `commented`. Absent, it has none
   and no review rule, so the reviews chip stays away. Pairs with
   `?checks=` (`?checks=pending&reviews=required`).
+- `?prState=<pose>`: PR #148 in a state the CI poses don't reach,
+  keys of `FAKE_PR_STATE_POSES`: `draft`, `closed` (without merging),
+  `conflicts`, `behind`. Absent, it is open.
 - Desktop: `?to=/account` navigates the memory router after mount. Web:
   the path itself is the route (`/account`, `/devices/...`).
 - `?villageLife=1`: Village life on in this window's settings (the

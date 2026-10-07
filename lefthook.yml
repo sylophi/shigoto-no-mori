@@ -302,6 +302,11 @@ pre-commit:
           - name: pull-request-stack
             glob: "{app/shared/pullRequestStack.ts,app/shared/schemas/pullRequest.ts,app/shared/schemas/worktree.ts,app/test/pull-request-stack.mts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test pull-request-stack
+          # Which PR names the worktree page, and the merge box's one
+          # status: what most stands between the PR and landing.
+          - name: worktree-pr-header
+            glob: "{app/renderer/lib/worktreeTitle.ts,app/renderer/lib/pullRequest.ts,app/shared/schemas/pullRequest.ts,app/test/worktree-pr-header.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test worktree-pr-header
           # Drives the changelog's read of the GitHub releases
           # (shared/releases.ts): version order, what a device's staged
           # update brings, and the fetch's refusals.

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
 import { DiffButton } from "../DiffButton";
 import { PullRequestStateLabel } from "./PullRequestStateLabel";
-import { openPullRequest } from "./pullRequestShared";
+import { MERGE_VERB, openPullRequest } from "./pullRequestShared";
 
 // Title row carries the PR's identity: title + #num on the left, state
 // pill on the right where the eye expects a status badge. The meta row
@@ -56,6 +56,7 @@ export function PullRequestIdentity({
     <>
       <MetaSentence
         authorLogin={pr.authorLogin}
+        verb={MERGE_VERB[pr.state]}
         baseRefName={pr.baseRefName}
         updatedTip={updatedTip}
         trailing={trailing}
@@ -115,11 +116,13 @@ export function PullRequestIdentity({
 
 function MetaSentence({
   authorLogin,
+  verb,
   baseRefName,
   updatedTip,
   trailing,
 }: {
   authorLogin: string;
+  verb: string;
   baseRefName: string;
   updatedTip: string;
   trailing: string | null;
@@ -127,8 +130,8 @@ function MetaSentence({
   return (
     <SimpleTooltip tip={updatedTip}>
       <p className="text-xs text-muted-foreground select-text">
-        <span className="text-foreground/80">@{authorLogin}</span> is merging
-        into <span className="font-mono text-foreground/80">{baseRefName}</span>
+        <span className="text-foreground/80">@{authorLogin}</span> {verb}{" "}
+        <span className="font-mono text-foreground/80">{baseRefName}</span>
         {trailing}
       </p>
     </SimpleTooltip>
@@ -136,14 +139,18 @@ function MetaSentence({
 }
 
 // The PR's title as the link to it on GitHub. Shared with the stack
-// list, whose rows are the same link one per layer.
+// list, whose rows are the same link one per layer, and the page's PR
+// header, whose number is the link (`children` in place of the title).
 export function PullRequestTitleLink({
   pr,
   className,
+  children,
+  ...props
 }: {
   pr: PullRequest;
   className?: string;
-}) {
+  children?: React.ReactNode;
+} & Omit<React.ComponentProps<"button">, "title" | "onClick">) {
   return (
     <button
       type="button"
@@ -152,8 +159,9 @@ export function PullRequestTitleLink({
         "rounded text-left text-foreground transition-colors select-text hover:text-primary focus-visible:outline-2 focus-visible:outline-ring",
         className,
       )}
+      {...props}
     >
-      {pr.title}
+      {children ?? pr.title}
     </button>
   );
 }

@@ -48,6 +48,8 @@ import { PeerTransferActions } from "./PeerTransferActions";
 import { FilesButton } from "./FilesButton";
 import { PortsButton } from "./ports/PortsButton";
 import { RemoteTransferActions } from "./RemoteWorktreeActions";
+import { PullRequestHeader } from "./pullRequests/PullRequestHeader";
+import { PullRequestLead } from "./pullRequests/PullRequestLead";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
 import {
@@ -98,7 +100,7 @@ export function WorktreeDetailInner({
   const { data: runtime } = useRuntimeInfo();
   const resident = useResident(worktree);
   const mirrorCopies = useMirrorCopies(worktree);
-  const { title, description } = useWorktreeTitle(worktree);
+  const { title, description, pullRequest } = useWorktreeTitle(worktree);
   const {
     deleteMutation,
     needsForce,
@@ -260,24 +262,31 @@ export function WorktreeDetailInner({
           {/* Held at the text line's height: the device chip overhangs
               it, so a peer's header is as tall as a local one. */}
           <span className="flex h-4 shrink-0 items-center gap-1.5 phone:ml-auto">
+            <WorktreeActivityIndicator worktree={worktree} />
             <WorktreeKindIcon worktree={worktree} />
             {/* With the copies' tabs, they name the device. */}
             {!mirrorCopies && <DeviceChip />}
           </span>
         </div>
-        <div className="flex min-w-0 items-start gap-3">
+        {/* The face centered on the lines beside it. */}
+        <div className="flex min-w-0 items-center gap-3">
           <ResidentFace resident={resident} party={party !== null} />
           <div className="min-w-0 flex-1">
-            {title !== null && (
-              <SimpleTooltip whenTruncated tip={title}>
-                <h1 className="mb-0.5 line-clamp-2 text-2xl font-medium tracking-tight wrap-anywhere">
-                  {title}
-                </h1>
-              </SimpleTooltip>
+            {pullRequest ? (
+              <PullRequestHeader worktree={worktree} pr={pullRequest} />
+            ) : (
+              <>
+                {title !== null && (
+                  <SimpleTooltip whenTruncated tip={title}>
+                    <h1 className="mb-0.5 line-clamp-2 text-2xl font-medium tracking-tight wrap-anywhere">
+                      {title}
+                    </h1>
+                  </SimpleTooltip>
+                )}
+                <BranchTitle worktree={worktree} subtitle={title !== null} />
+              </>
             )}
-            <BranchTitle worktree={worktree} subtitle={title !== null} />
           </div>
-          <WorktreeActivityIndicator worktree={worktree} />
         </div>
         <MirrorPill worktree={worktree} />
       </header>
@@ -293,19 +302,24 @@ export function WorktreeDetailInner({
         aria-disabled={locked}
       >
         <div className="flex flex-col gap-10 phone:gap-8">
+          {/* Under a PR's header, what the work is and what to do about
+              the PR lead the page. */}
+          {pullRequest && (
+            <PullRequestLead worktree={worktree} description={description} />
+          )}
+
           <LaunchSection worktree={worktree} />
 
           {/* Under the launchers, so a description that arrives with
               the PR lookup doesn't move the buttons people reach for. */}
-          {description !== null && (
+          {!pullRequest && description !== null && (
             <DescriptionSection
-              // Folded again for another worktree or a new text.
               key={`${worktree.id}:${description}`}
               description={description}
             />
           )}
 
-          <PullRequestSection worktree={worktree} />
+          {!pullRequest && <PullRequestSection worktree={worktree} />}
 
           <CommitsSection worktree={worktree} />
 

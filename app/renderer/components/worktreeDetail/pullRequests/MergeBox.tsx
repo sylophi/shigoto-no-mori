@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown, CircleSlash, Layers2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +12,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import { cn } from "@/lib/utils";
-import { MERGE_METHOD_LABEL } from "@/lib/pullRequest";
+import { describeMergeVerdict, MERGE_METHOD_LABEL } from "@/lib/pullRequest";
 import type {
   MergeMethod,
   PullRequestDetail,
@@ -19,9 +20,8 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import { ChecksPopover } from "./ChecksPopover";
-import { MergeStateIcon } from "./MergeStateIcon";
+import { MergeStatus } from "./MergeStatus";
 import { ReviewsPopover } from "./ReviewsPopover";
-import { TONE_TEXT } from "./pullRequestShared";
 import { STACK_REACH_OPTIONS, useMergeBox } from "./useMergeBox";
 
 export function MergeBox({
@@ -61,28 +61,41 @@ export function MergeBox({
     toggleDraft,
     runDisableAutoMerge,
   } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod, stack });
+  const canMerge = primary !== null && activeMethod !== null;
+  const rowRef = useRef<HTMLDivElement>(null);
+  const verdict = describeMergeVerdict(pr, status, mode === "armed");
+  // The reviews' words would only repeat a status that names them.
+  const reviewsSaid = verdict.by === "reviews";
+  const compact = useCompactChips(rowRef, reviewsSaid, canMerge);
 
-  // The merge verdict (or why there's no merge button) with the reviews
-  // and checks chips beside it, whichever way the box renders.
-  const statusLine = (
-    <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-2">
-      {primary && activeMethod ? (
-        <span className="inline-flex items-center gap-2 text-sm">
-          <MergeStateIcon tone={status.tone} />
-          <span className={TONE_TEXT[status.tone]}>{status.label}</span>
-        </span>
+  // The merge box's one status (or why there's no merge button, with
+  // the checks beside it), then the reviews. Items of the row they sit
+  // in, so a chip that doesn't fit wraps beside the buttons rather than
+  // onto a line of its own.
+  const statusItems = (
+    <>
+      {canMerge ? (
+        <MergeStatus pr={pr} verdict={verdict} compact={compact.status} />
       ) : (
-        <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <CircleSlash aria-hidden className="size-3.5 shrink-0" />
-          No merge methods are enabled for this repo.
-        </p>
+        <>
+          <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <CircleSlash aria-hidden className="size-3.5 shrink-0" />
+            No merge methods are enabled for this repo.
+          </p>
+          <ChecksPopover pr={pr} />
+        </>
       )}
-      <ReviewsPopover pr={pr} />
-      <ChecksPopover pr={pr} />
-    </div>
+      <ReviewsPopover pr={pr} compact={reviewsSaid || compact.reviews} />
+    </>
   );
 
-  if (!primary || !activeMethod) return statusLine;
+  if (!primary || !activeMethod) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {statusItems}
+      </div>
+    );
+  }
 
   // Auto-merge is armed: GitHub merges the PR the moment its
   // requirements are met, so the one thing left to offer is calling
@@ -133,11 +146,12 @@ export function MergeBox({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {statusLine}
-        {/* Wraps on a narrow pane. The merge button and its method menu
-            are one item, so they wrap together. */}
-        <div className="inline-flex flex-wrap items-center gap-2">
+      <div ref={rowRef} className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {statusItems}
+        {/* Wraps on a narrow pane, staying at the row's end. The merge
+            button and its method menu are one item, so they wrap
+            together. */}
+        <div className="ml-auto inline-flex flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             size="sm"
@@ -228,4 +242,70 @@ export function MergeBox({
       )}
     </div>
   );
+}
+
+// Which chips keep their icon alone, their words in the tooltip: when
+// the row can't hold everything on one line with them, the reviews'
+// words go first, then the status's. Each one's width is kept from
+// when it last showed, so the answer doesn't flip back and forth as
+// the words come and go. `reviewsSaid`: the reviews show no words
+// anyway (the status says them), so they make no room. `present`: the
+// row is drawn (the box has a merge button), so there is one to watch.
+function useCompactChips(
+  rowRef: React.RefObject<HTMLElement | null>,
+  reviewsSaid: boolean,
+  present: boolean,
+): { reviews: boolean; status: boolean } {
+  const [level, setLevel] = useState(0);
+  const widths = useRef({ reviews: 0, status: 0 });
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const gapOf = (el: Element) =>
+      parseFloat(getComputedStyle(el).columnGap) || 0;
+    const check = () => {
+      const label = (key: "reviews" | "status") =>
+        row.querySelector<HTMLElement>(`[data-${key}-label]`);
+      for (const key of ["reviews", "status"] as const) {
+        const el = label(key);
+        // The words and the chip's gap before them.
+        if (el?.parentElement) {
+          widths.current[key] = el.scrollWidth + gapOf(el.parentElement);
+        }
+      }
+      const reviews = reviewsSaid ? 0 : widths.current.reviews;
+      const status = widths.current.status;
+      const items = [...row.children] as HTMLElement[];
+      // The row's width as if every word showed.
+      const full =
+        items.reduce((sum, el) => sum + el.offsetWidth, 0) +
+        gapOf(row) * (items.length - 1) +
+        (label("reviews") ? 0 : reviews) +
+        (label("status") ? 0 : status);
+      const room = row.clientWidth;
+      setLevel(full <= room ? 0 : full - reviews <= room ? 1 : 2);
+    };
+    const resize = new ResizeObserver(check);
+    const watch = () => {
+      resize.disconnect();
+      resize.observe(row);
+      for (const child of row.children) resize.observe(child);
+      check();
+    };
+    watch();
+    // A chip that swaps its element (the checks arriving) or its words
+    // resizes nothing already watched, and nor does a font loading.
+    const mutations = new MutationObserver(watch);
+    mutations.observe(row, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    void document.fonts.ready.then(check);
+    return () => {
+      resize.disconnect();
+      mutations.disconnect();
+    };
+  }, [rowRef, reviewsSaid, present]);
+  return { reviews: level >= 1, status: level >= 2 };
 }

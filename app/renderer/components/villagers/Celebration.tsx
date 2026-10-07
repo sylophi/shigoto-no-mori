@@ -137,7 +137,9 @@ export function Balloons() {
           key={right}
           viewBox="0 0 20 44"
           style={{ right, animationDelay: `${delay}, ${sway}` }}
-          className="villager-balloon absolute bottom-0 h-14 w-6"
+          // Dimmed: they rise behind the header's text and controls,
+          // which have to stay readable over them.
+          className="villager-balloon absolute bottom-0 h-14 w-6 opacity-40"
         >
           <path
             d="M10 20Q7 28 11 34T10 44"
