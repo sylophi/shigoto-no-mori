@@ -19,7 +19,7 @@ import {
   type MirrorGitStatus,
   type MirrorIgnoreMode,
   MirrorIgnoreModeSchema,
-  type MirrorSession,
+  type MirrorSessionRaw,
   mirrorEngineBlocker,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
@@ -44,12 +44,9 @@ export const MIRROR_LABEL_LOCAL_WORKTREE = "localWorktreeId";
 // session that predates it, which read as "everything".
 export const MIRROR_LABEL_IGNORE_MODE = "ignoreMode";
 
-// What the daemon reports for one session, before annotation: the
-// daemon's own document shape (file-sync/engine.go mirrorSessionState).
-export type MirrorSessionRaw = Omit<
-  MirrorSession,
-  "localProjectId" | "localWorktreeId" | "ignoreMode" | "git"
->;
+// What the daemon reports for one session, before annotation (shared/
+// ipc/modules/mirror.ts), re-exported for the host's own callers.
+export type { MirrorSessionRaw };
 
 // The create request the daemon takes (file-sync/engine.go
 // mirrorRequest, the create fields).

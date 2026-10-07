@@ -169,9 +169,11 @@ function forgetServing(key: string): void {
   onServingChange?.();
 }
 
-// The daemon's document with the two label-borne ids lifted to fields,
-// validated against the contract so a daemon/app drift fails here
-// with a schema error instead of as undefined in the renderer.
+// The daemon's document with the two label-borne ids lifted to fields.
+// The daemon validates each line on arrival (main/core/mirror/
+// daemon.ts). This checks the annotated whole against the contract, a
+// backstop for what the host attaches and for an impl that is not the
+// daemon (the proofs' fakes).
 function annotateMirrorSession(
   raw: MirrorSessionRaw,
   git?: MirrorGitStatus,
