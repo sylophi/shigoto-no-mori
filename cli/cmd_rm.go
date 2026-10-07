@@ -55,24 +55,27 @@ func removePreflight(id worktreeIdentity, force bool) error {
 // must not pass for clean when the next step destroys the directory.
 // Shared by rm, land and adopt so the semantics can't drift. verb shapes
 // the --force prose; destroys is set when the operation takes the
-// changes with it, which earns the louder message.
+// changes with it, which earns the louder message. The --json codes
+// (uncommitted-changes, status-unreadable) are what the app's convert
+// flow keys on (host/ipc/cliDelegate.ts).
 func requireClean(id worktreeIdentity, force bool, verb, destroys string) error {
 	if force {
 		return nil
 	}
 	changed, err := changedCount(id.Path)
 	if err != nil {
-		return errf("Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to %s anyway.", err, verb)
+		return codedErrf("status-unreadable",
+			"Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to %s anyway.", err, verb)
 	}
 	if changed == 0 {
 		return nil
 	}
 	if destroys != "" {
-		return errf(
+		return codedErrf("uncommitted-changes",
 			"Worktree has %d uncommitted change(s) that %s would destroy. Commit them first, or pass --force.",
 			changed, destroys)
 	}
-	return errf("Worktree has %d uncommitted change(s). Pass --force to %s anyway.", changed, verb)
+	return codedErrf("uncommitted-changes", "Worktree has %d uncommitted change(s). Pass --force to %s anyway.", changed, verb)
 }
 
 // A lifecycle script failed during removal, so the worktree was left
@@ -120,10 +123,12 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 	config := readProjectConfig(proj.ID)
 
 	// Cleanup scripts (skip for externals, since no provision ever ran).
+	cleanupRan := false
 	if !id.IsExternal && !opts.skipCleanup {
 		envInputs := lifecycleEnvInputs(proj, id, config)
 
 		if portPoolActiveFor(global, id) {
+			cleanupRan = true
 			envInputs.scriptName = "port-pool-release"
 			code, runID := runLifecycleScript(
 				portPoolCommand("release", id.Path), envInputs,
@@ -137,6 +142,7 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 			teardown = strings.TrimSpace(config.Scripts.Teardown)
 		}
 		if teardown != "" {
+			cleanupRan = true
 			envInputs.scriptName = "teardown"
 			if code, runID := runLifecycleScript(teardown, envInputs, scriptSlot{Kind: "teardown"}); code != 0 {
 				return "", &cleanupError{phase: "teardown", code: code, runID: runID}
@@ -145,10 +151,21 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 	}
 
 	// An orphaned checkout is git's side done, so the bookkeeping below
-	// still runs and the error follows it out.
+	// still runs and the error follows it out. Unforced, git checks the
+	// tree again at the delete (gitWorktreeRemove), which covers what
+	// changed since the guard above or land's: the merge, the catch-up,
+	// a teardown script writing files. Past the cleanup scripts, plain
+	// --force would run them again, so the advice skips them.
 	removeErr := removeWorktreeDir(proj.Path, id.Path, opts.force)
 	var orphaned *orphanedWorktreeError
 	if removeErr != nil && !errors.As(removeErr, &orphaned) {
+		if !opts.force && strings.Contains(removeErr.Error(), "contains modified or untracked files") {
+			if cleanupRan {
+				return "", errf("Changes appeared in %s while its cleanup scripts ran, so it was kept. "+
+					"Remove them, or pass --force --skip-cleanup to remove it without running the scripts again.", id.Path)
+			}
+			return "", errf("Worktree %s has uncommitted changes. Pass --force to remove anyway.", id.Path)
+		}
 		return "", removeErr
 	}
 	invalidateWorktreeIdentities(proj.ID)

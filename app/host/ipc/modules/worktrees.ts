@@ -110,9 +110,11 @@ export const worktreesHandlers: Handlers<
     return createViaCli(project, input, notifierFor(ctx));
   },
 
-  convertExternal: async ({ projectId, worktreeId }, ctx) => {
+  // A renderer from before the field sends none and expects the force
+  // it always got, so only an explicit false runs unforced.
+  convertExternal: async ({ projectId, worktreeId, force }, ctx) => {
     const project = await findProjectOrThrow(projectId);
-    return adoptViaCli(project, worktreeId, notifierFor(ctx));
+    return adoptViaCli(project, worktreeId, force !== false, notifierFor(ctx));
   },
 
   // `sm worktrees move` moves the checkout and carries what is keyed by

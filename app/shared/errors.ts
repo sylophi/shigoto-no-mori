@@ -62,6 +62,28 @@ export function isNoDirectConnectionError(error: unknown): boolean {
   return errorMessageOf(error).startsWith(NO_DIRECT_CONNECTION_PREFIX);
 }
 
+// An unforced convert that `sm adopt`'s guard refused: uncommitted
+// changes (untracked files included) or a status it couldn't read. The
+// host builds it from the run's --json code (host/ipc/cliDelegate.ts
+// guardRefusal) in the page's words, not the CLI's, and the convert
+// page matches the marker to force on the next click. Same
+// message-text contract.
+export type ConvertRefusal = "uncommitted-changes" | "status-unreadable";
+
+const CONVERT_REFUSED_MARKER = "Convert again to wipe";
+
+export function convertRefusedError(kind: ConvertRefusal): Error {
+  return new Error(
+    kind === "uncommitted-changes"
+      ? `Converting would wipe this worktree's uncommitted changes. ${CONVERT_REFUSED_MARKER} them.`
+      : `This worktree's status couldn't be read, so it may hold changes converting would wipe. ${CONVERT_REFUSED_MARKER} whatever is there.`,
+  );
+}
+
+export function isConvertRefusedError(error: unknown): boolean {
+  return errorMessageOf(error).includes(CONVERT_REFUSED_MARKER);
+}
+
 // A delete or move refused because the worktree's create run
 // (carry-over, setup, port provision) is still working in it. Same
 // message-text contract: the detail page reports it instead of

@@ -26,6 +26,12 @@
 //   - a removal that must happen (a nuke, the rollback of a failed
 //     mirror start) runs the teardown through `sm rm`, and a teardown
 //     that fails still removes the worktree.
+//   - worktrees:convertExternal unforced refuses a worktree whose only
+//     change is an untracked file `status.showUntrackedFiles no` hides
+//     from its row, with the refusal the convert page matches
+//     (isConvertRefusedError), and so one whose status can't be read.
+//     Forced it converts, and so with no force field, as a renderer
+//     from before the field expects.
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test cli-reads.
 import assert from "node:assert/strict";
@@ -93,6 +99,7 @@ const { invalidateProjectConfigCache } =
 const { layoutInputsFor, worktreeBaseFor, worktreePathFor } =
   await import("@shared/git/worktreeLayout");
 const { readRegistry } = await import("./lib/cliSandbox.mts");
+const { isConvertRefusedError } = await import("@shared/errors");
 const {
   DEVICE_SETTINGS_DEFAULTS,
   modeledKeyPaths,
@@ -782,6 +789,81 @@ async function main() {
         ),
         false,
       );
+    },
+  );
+
+  await check(
+    "convert: a worktree whose only change is an untracked file the setting hides is refused unforced and untouched, and so is an unreadable status, and it converts forced or with no force field",
+    async () => {
+      git(repo, "config", "status.showUntrackedFiles", "no");
+      try {
+        // An external checkout whose only change is a file its row
+        // can't count.
+        const external = (name: string) => {
+          const path = join(sandbox, `alpha-${name}`);
+          git(repo, "worktree", "add", "-q", "-b", name, path);
+          writeFileSync(join(path, "notes.txt"), "only copy\n");
+          return { path, worktreeId: worktreeIdFromPath(path) };
+        };
+        const outside = external("outside");
+        const row = (await worktreesHandlers.list({ projectId }, ctx)).find(
+          (w) => w.id === outside.worktreeId,
+        );
+        assert.equal(row?.isExternal, true);
+        assert.equal(row.changedCount, 0, "the row should honor the setting");
+        await assert.rejects(
+          async () =>
+            worktreesHandlers.convertExternal(
+              { projectId, worktreeId: outside.worktreeId, force: false },
+              ctx,
+            ),
+          isConvertRefusedError,
+          "an unforced convert should refuse the untracked file",
+        );
+        assert.equal(
+          readFileSync(join(outside.path, "notes.txt"), "utf8"),
+          "only copy\n",
+        );
+        const forced = await worktreesHandlers.convertExternal(
+          { projectId, worktreeId: outside.worktreeId, force: true },
+          ctx,
+        );
+        assert.equal(forced.worktree.isExternal, false);
+        assert.equal(existsSync(outside.path), false);
+
+        // No field is what a renderer from before it sends: forced.
+        const legacy = external("legacy");
+        const converted = await worktreesHandlers.convertExternal(
+          { projectId, worktreeId: legacy.worktreeId },
+          ctx,
+        );
+        assert.equal(converted.worktree.isExternal, false);
+        assert.equal(existsSync(legacy.path), false);
+
+        // A status that can't be read is refused the same way, so the
+        // page asks instead of leaving the row stuck.
+        const broken = join(sandbox, "alpha-broken");
+        git(repo, "worktree", "add", "-q", "-b", "broken", broken);
+        const pointer = readFileSync(join(broken, ".git"), "utf8");
+        writeFileSync(join(broken, ".git"), "gitdir: /nowhere\n");
+        await assert.rejects(
+          async () =>
+            worktreesHandlers.convertExternal(
+              {
+                projectId,
+                worktreeId: worktreeIdFromPath(broken),
+                force: false,
+              },
+              ctx,
+            ),
+          isConvertRefusedError,
+          "an unreadable status should refuse like a dirty one",
+        );
+        writeFileSync(join(broken, ".git"), pointer);
+        git(repo, "worktree", "remove", "--force", broken);
+      } finally {
+        git(repo, "config", "--unset", "status.showUntrackedFiles");
+      }
     },
   );
 

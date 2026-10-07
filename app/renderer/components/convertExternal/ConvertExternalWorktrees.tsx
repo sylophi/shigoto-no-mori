@@ -16,6 +16,7 @@ import { layoutInputsFor, worktreePathFor } from "@shared/git/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
 import { PAGE_BODY } from "@/components/shared/PageShell";
+import { isConvertRefusedError } from "@shared/errors";
 
 // For detached HEADs `worktree.branch` is a short SHA. Pass it
 // through unchanged so the managed worktree gets a hash-named dir.
@@ -86,9 +87,19 @@ function ConvertExternalBody({ project }: { project: Project }) {
       queue,
       (wt) => wt.id,
       async (wt) => {
+        // Unforced first, whatever the row's count showed: the CLI's
+        // guard also sees what the row can't (an untracked file under
+        // `status.showUntrackedFiles no`, an edit since the list
+        // loaded), and its refusal is the one warning before a wipe.
+        // A row forces only while that refusal is the status it shows,
+        // which the next batch replaces.
+        const shown = status.get(wt.id);
+        const force =
+          shown?.kind === "error" && isConvertRefusedError(shown.message);
         const result = await convert.mutateAsync({
           projectId: project.id,
           worktreeId: wt.id,
+          force,
         });
         converted.push(result.worktree);
       },
