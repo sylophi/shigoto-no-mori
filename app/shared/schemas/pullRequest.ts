@@ -1,10 +1,29 @@
 import * as Schema from "effect/Schema";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 import { ProjectScopedPayloadSchema } from "./payloads";
 
 const PullRequestNumberSchema = Schema.Int.check(Schema.isGreaterThan(0));
 
-const UrlSchema = Schema.String.check(
-  Schema.makeFilter((url: string) => URL.canParse(url) || "Invalid URL"),
+const isUrl = (value: string): boolean => {
+  try {
+    return Boolean(new URL(value));
+  } catch {
+    return false;
+  }
+};
+
+// A URL as GitHub and CI integrations write it: read with the
+// surrounding whitespace, and any tab or newline inside, taken out.
+const UrlSchema = Schema.String.pipe(
+  Schema.decodeTo(
+    Schema.String.check(
+      Schema.makeFilter((url: string) => isUrl(url) || "Invalid URL"),
+    ),
+    SchemaTransformation.transform({
+      decode: (url: string) => url.trim().replace(/[\t\n\r]/g, ""),
+      encode: (url: string) => url,
+    }),
+  ),
 );
 
 export const PullRequestStateSchema = Schema.Literals([

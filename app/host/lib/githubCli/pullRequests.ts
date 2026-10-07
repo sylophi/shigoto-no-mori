@@ -361,13 +361,7 @@ async function fetchReviews(
   }
 }
 
-const isSubmittedReviewState = Schema.is(
-  PullRequestReviewerStateSchema.pick([
-    "APPROVED",
-    "CHANGES_REQUESTED",
-    "COMMENTED",
-  ]),
-);
+const isReviewerState = Schema.is(PullRequestReviewerStateSchema);
 
 // Each reviewer's opinion (an approval or a request for changes),
 // else their comment, then whoever's asked and hasn't answered. The
@@ -383,7 +377,12 @@ function toReviews(pr: GqlReviewsPullRequest): PullRequestReviews {
   ]) {
     const login = review.author?.login ?? "ghost";
     const { state } = review;
-    if (login === author || seen.has(login) || !isSubmittedReviewState(state))
+    if (
+      login === author ||
+      seen.has(login) ||
+      state === "REQUESTED" ||
+      !isReviewerState(state)
+    )
       continue;
     seen.add(login);
     reviewers.push({ login, state });
