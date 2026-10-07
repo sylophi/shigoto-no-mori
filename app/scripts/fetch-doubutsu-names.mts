@@ -98,12 +98,13 @@ async function api<T>(
   schema: Schema.Decoder<T>,
 ): Promise<T> {
   const url = `${WIKI_API}?${new URLSearchParams({ format: "json", formatversion: "2", ...params })}`;
+  const decode = Schema.decodeUnknownResult(schema);
   for (let attempt = 1; ; attempt++) {
     const response = await fetch(url, {
       headers: { "User-Agent": WIKI_USER_AGENT },
     });
     if (response.ok) {
-      const parsed = Schema.decodeUnknownResult(schema)(await response.json());
+      const parsed = decode(await response.json());
       if (Result.isSuccess(parsed)) return parsed.success;
       throw new Error(
         `Unexpected answer for ${url}: ${parsed.failure.message}`,

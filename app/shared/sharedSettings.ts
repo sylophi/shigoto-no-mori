@@ -102,14 +102,12 @@ const isPresetPath = (path: unknown): path is string =>
   path.length > 0 &&
   isSafeRelPath(path) &&
   !/[\r\n]/.test(path);
-const presetPaths = (paths: readonly unknown[]): string[] =>
-  paths.filter(isPresetPath);
 const PresetPathsSchema = Schema.Array(Schema.Unknown).pipe(
   Schema.decodeTo(
     Schema.Array(Schema.String),
     SchemaTransformation.transform<readonly string[], readonly unknown[]>({
-      decode: presetPaths,
-      encode: presetPaths,
+      decode: (paths) => paths.filter(isPresetPath),
+      encode: (paths) => paths,
     }),
   ),
   Schema.withDecodingDefault(Effect.succeed([])),

@@ -72,6 +72,7 @@ const SnapshotSchema = Schema.Struct({
 
 export type PersistedScript = typeof PersistedScriptSchema.Type;
 type Snapshot = typeof SnapshotSchema.Type;
+const decodeSnapshot = Schema.decodeUnknownSync(SnapshotSchema);
 
 function filePath(): string {
   return join(dataDir(), FILE);
@@ -122,7 +123,7 @@ function readSnapshot(): Snapshot | null {
     return null;
   }
   try {
-    return Schema.decodeUnknownSync(SnapshotSchema)(JSON.parse(raw));
+    return decodeSnapshot(JSON.parse(raw));
   } catch (error) {
     console.warn(
       `[scripts] ignoring unusable ${FILE}: ${errorMessageOf(error)}`,
