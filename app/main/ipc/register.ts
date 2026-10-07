@@ -61,8 +61,8 @@ import {
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
 // through the contract's output schema so handler drift (or schemas
-// with .transform / .default / .coerce that turn z.input into something
-// subtly different from z.output) surfaces here instead of as a
+// with transforms or defaults whose encoded shape differs subtly from
+// the decoded one) surfaces here instead of as a
 // confusing failure in the renderer. Packaged builds skip the extra
 // parse to keep IPC latency at the per-handler return cost.
 const VALIDATE_OUTPUTS = !app.isPackaged;

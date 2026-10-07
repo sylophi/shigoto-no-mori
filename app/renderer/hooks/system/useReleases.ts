@@ -14,7 +14,7 @@ import { queryKeys } from "@/lib/queryKeys";
 const HALF_HOUR_MS = 30 * 60 * 1000;
 
 export function useReleases() {
-  return useQuery<Release[]>({
+  return useQuery<readonly Release[]>({
     queryKey: queryKeys.releases(),
     queryFn: () => window.api.releases.list(),
     staleTime: HALF_HOUR_MS,

@@ -1,4 +1,5 @@
 import type { CallDef, ContractModule, InvokeDef } from "./contract";
+import { decode } from "./schema";
 import type { HandlerContext, ServerTransport } from "./transport";
 import type {
   BroadcastKeys,
@@ -8,8 +9,8 @@ import type {
 
 type RegisterContractOpts<Ctx = HandlerContext> = {
   // Gates OUTPUT validation only, never input parsing. Bindings pass a
-  // dev-build flag here so handler drift (or schemas whose z.input and
-  // z.output diverge) surfaces at the registrar instead of as a
+  // dev-build flag here so handler drift (or schemas whose encoded and
+  // decoded shapes diverge) surfaces at the registrar instead of as a
   // confusing failure in the renderer.
   validateOutputs: boolean;
   // Runs after a handler whose def opts in via `tracksProjectUsage`
@@ -60,11 +61,11 @@ function wrapContractCall<Ctx>(
       ? opts.onMutationResolved
       : undefined;
   return async (ctx, raw) => {
-    const input = def.input.parse(raw);
+    const input = decode(def.input, raw);
     const result = await handler(input, ctx);
     onSuccess?.(input);
     onMutated?.(ctx);
-    return opts.validateOutputs ? def.output.parse(result) : result;
+    return opts.validateOutputs ? decode(def.output, result) : result;
   };
 }
 
@@ -135,7 +136,7 @@ export function resolveBroadcast<
   }
   return {
     channel: def.channel,
-    parsed: def.payload.parse(payload),
+    parsed: decode(def.payload, payload),
     remote: def.remote === true,
   };
 }

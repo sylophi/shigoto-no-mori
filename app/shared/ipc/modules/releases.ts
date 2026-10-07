@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { ReleaseSchema } from "@shared/schemas";
 
@@ -7,5 +7,5 @@ import { ReleaseSchema } from "@shared/schemas";
 // for every device, so the window fetches it through its own binding
 // (shared/releases.ts) and measures each device's version against it.
 export const releasesContract = defineContract("client", {
-  list: invoke("releases:list", z.void(), z.array(ReleaseSchema)),
+  list: invoke("releases:list", Schema.Void, Schema.Array(ReleaseSchema)),
 });
