@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
@@ -14,11 +15,12 @@ import {
   CarryOverListingPayloadSchema,
   CarryOverStatSchema,
   CarryOverStatsPayloadSchema,
+  VoidSchema,
   WorktreeIncludeStatusSchema,
 } from "@shared/schemas";
 
 export const projectsContract = defineContract("host", {
-  list: invoke("projects:list", z.void(), z.array(ProjectSchema), {
+  list: invoke("projects:list", VoidSchema, Schema.Array(ProjectSchema), {
     remote: true,
     gated: false,
   }),
@@ -32,7 +34,7 @@ export const projectsContract = defineContract("host", {
     remote: true,
     gated: true,
   }),
-  remove: invoke("projects:remove", RemoveProjectPayloadSchema, z.void(), {
+  remove: invoke("projects:remove", RemoveProjectPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
   }),
@@ -44,10 +46,15 @@ export const projectsContract = defineContract("host", {
     ProjectSchema,
     { remote: true, gated: true },
   ),
-  reorder: invoke("projects:reorder", ReorderProjectsPayloadSchema, z.void(), {
-    remote: true,
-    gated: true,
-  }),
+  reorder: invoke(
+    "projects:reorder",
+    ReorderProjectsPayloadSchema,
+    VoidSchema,
+    {
+      remote: true,
+      gated: true,
+    },
+  ),
   // Emitted after an action bumps a project's usage so the renderer can
   // refresh its usage-sorted sidebar list.
   usageBumped: broadcast("projects:usageBumped", ProjectScopedPayloadSchema, {
@@ -56,7 +63,7 @@ export const projectsContract = defineContract("host", {
   defaultBranch: invoke(
     "projects:defaultBranch",
     ProjectScopedPayloadSchema,
-    z.string(),
+    Schema.String,
     { remote: true, gated: false },
   ),
   // The remote another device would clone to get this repo, or null
@@ -64,7 +71,7 @@ export const projectsContract = defineContract("host", {
   cloneUrl: invoke(
     "projects:cloneUrl",
     ProjectScopedPayloadSchema,
-    z.string().nullable(),
+    Schema.NullOr(Schema.String),
     { remote: true, gated: false },
   ),
   listBranches: invoke(
@@ -76,7 +83,7 @@ export const projectsContract = defineContract("host", {
   pickWorktreeName: invoke(
     "projects:pickWorktreeName",
     ProjectScopedPayloadSchema,
-    z.string(),
+    Schema.String,
     { remote: true, gated: false },
   ),
   worktreeIncludeStatus: invoke(
@@ -103,7 +110,7 @@ export const projectsContract = defineContract("host", {
   icon: invoke(
     "projects:icon",
     ProjectScopedPayloadSchema,
-    ProjectIconSchema.nullable(),
+    Schema.NullOr(ProjectIconSchema),
     { remote: true, gated: false },
   ),
 });

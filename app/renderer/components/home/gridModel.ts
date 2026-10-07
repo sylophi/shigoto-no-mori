@@ -42,7 +42,7 @@ export interface GroupWork {
 export interface GridInput {
   // This machine's projects and their listings, positionally aligned,
   // as the device filter leaves them (forestSources.ts).
-  projects: Project[];
+  projects: readonly Project[];
   worktreeQueries: ProjectWorktreeQueries;
   pullRequestQueries: ProjectPullRequestQueries;
   order: ProjectGroupOrder;

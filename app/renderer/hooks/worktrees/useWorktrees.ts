@@ -99,7 +99,7 @@ export type WorktreeFanOutRefetch = {
 };
 
 export function useAllProjectWorktrees(
-  projects: Project[],
+  projects: readonly Project[],
   refetch: WorktreeFanOutRefetch = {},
 ) {
   const scope = useHostScope();

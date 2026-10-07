@@ -7,14 +7,19 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
-  CloneProjectPayloadSchema,
+  CloneFolderNameSchema,
   CommitHashSchema,
   CreatePhaseSchema,
-  GitRefNameSchema,
-  ProjectSchema,
+  GitRefNameSchema as GitRefName,
+  ProjectSchema as Project,
   WorktreeIdSchema,
   WorktreeSchema,
 } from "@shared/schemas";
+import { toZod } from "@shared/schemas/zodBridge";
+
+// Still on zod: the project schemas it embeds, as zod.
+const GitRefNameSchema = toZod(GitRefName);
+const ProjectSchema = toZod(Project);
 
 // Moving a worktree between devices. Commits cross on a SOURCE LINK:
 // one byte channel (shared/ipc/socket/channels.ts) between the device
@@ -206,7 +211,7 @@ export function pullBringsIgnoredFiles(
 // same pair, CloneProjectPayloadSchema). `~` is expanded by the host.
 export const SyncCloneIntoSchema = z.strictObject({
   parentDir: z.string().min(1),
-  name: CloneProjectPayloadSchema.shape.name.unwrap(),
+  name: toZod(CloneFolderNameSchema),
 });
 export type SyncCloneInto = z.infer<typeof SyncCloneIntoSchema>;
 

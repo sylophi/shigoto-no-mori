@@ -49,7 +49,7 @@ export interface PaletteList {
 }
 
 interface BuildPaletteEntriesArgs {
-  projects: Project[];
+  projects: readonly Project[];
   // Positionally aligned with `projects`.
   worktreeQueries: ProjectWorktreeQueries;
   // Positionally aligned with `projects` too.
@@ -331,7 +331,7 @@ export function createTargets(
   shown: readonly PaletteEntry[],
   entries: readonly PaletteEntry[],
   pageProjectId: string | undefined,
-): Project[] {
+): readonly Project[] {
   const order = [
     pageProjectId,
     ...shown.filter((e) => !e.device).map((e) => e.worktree.projectId),

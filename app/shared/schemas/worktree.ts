@@ -4,7 +4,11 @@ import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,
 } from "./zodPayloads";
-import { GitRefNameSchema, isRealBranch } from "./project";
+import { GitRefNameSchema as GitRefName, isRealBranch } from "./project";
+import { toZod } from "./zodBridge";
+
+// Still on zod: the project schemas it embeds, as zod.
+const GitRefNameSchema = toZod(GitRefName);
 
 // Abbreviated commit hashes are produced by `git log %h` and travel back
 // down into git argv (`git show <hash>`). Pinning them to hex is what

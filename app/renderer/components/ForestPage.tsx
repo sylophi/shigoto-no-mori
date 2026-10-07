@@ -10,6 +10,7 @@
 // the page has nothing to show but a pointer to it. It stays put
 // rather than redirecting: a phone turned to landscape crosses the
 // breakpoint, and turning back should find the forest where it was.
+import * as Schema from "effect/Schema";
 import { useEffect } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { SidebarViewSchema } from "@shared/schemas";
@@ -26,8 +27,8 @@ const route = getRouteApi("/forest/$view");
 export function ForestPage() {
   const phone = usePhoneLayout();
   // A stray param reads as the tree rather than a not-found page.
-  const parsed = SidebarViewSchema.safeParse(route.useParams().view);
-  const view = parsed.success ? parsed.data : "projects";
+  const param = route.useParams().view;
+  const view = Schema.is(SidebarViewSchema)(param) ? param : "projects";
   // Being on a forest tab is what makes it the preferred view, however
   // the page was reached (a tab tap, the index redirect, a deep link),
   // so the tab bar and the back bar over a stacked page agree with the

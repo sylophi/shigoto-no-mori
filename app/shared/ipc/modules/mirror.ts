@@ -13,9 +13,13 @@ import {
 } from "@shared/ipc/modules/sync";
 import {
   CommitHashSchema,
-  GitRefNameSchema,
+  GitRefNameSchema as GitRefName,
   WorktreeIdSchema,
 } from "@shared/schemas";
+import { toZod } from "@shared/schemas/zodBridge";
+
+// Still on zod: the project schemas it embeds, as zod.
+const GitRefNameSchema = toZod(GitRefName);
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
 // remote work"): a worktree kept identical on two devices, every file,

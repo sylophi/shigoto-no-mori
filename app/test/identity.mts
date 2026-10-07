@@ -10,6 +10,8 @@
 // the same literal: the two implementations cannot drift apart.
 //
 // covers: app/shared/fixtures/repo-identity-*.json
+import * as Schema from "effect/Schema";
+import * as Result from "effect/Result";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
@@ -22,7 +24,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { z } from "zod";
 import { errorMessageOf } from "../shared/errors.ts";
 import { resolveDefaultRef } from "../shared/git/defaultBranch.mts";
 import {
@@ -134,12 +135,16 @@ async function checkCliIdentities(temp: string) {
     });
   }
   const { docs } = await sm("projects", "list");
-  const rows = z.array(ProjectRowSchema).safeParse(docs[0]);
-  if (!rows.success) {
-    failures.push(`sm projects list: unexpected doc: ${rows.error.message}`);
+  const rows = Schema.decodeUnknownResult(Schema.Array(ProjectRowSchema))(
+    docs[0],
+  );
+  if (Result.isFailure(rows)) {
+    failures.push(`sm projects list: unexpected doc: ${rows.failure.message}`);
     return;
   }
-  const identityAt = new Map(rows.data.map((row) => [row.path, row.identity]));
+  const identityAt = new Map(
+    rows.success.map((row) => [row.path, row.identity]),
+  );
   for (const { label, path, expected } of cliChecks) {
     if (!identityAt.has(path)) {
       failures.push(`${label}: the CLI lists no project at ${path}`);

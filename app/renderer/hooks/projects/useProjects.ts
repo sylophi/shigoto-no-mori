@@ -27,7 +27,7 @@ export function projectsQueryOptions(
   enabled = true,
 ) {
   const { deviceId, api } = resolveForestScope(scope);
-  return queryOptions<Project[]>({
+  return queryOptions<readonly Project[]>({
     queryKey: queryKeysFor(deviceId).projects(),
     queryFn: () => (api ? api.projects.list() : []),
     // Local: api and id are always present, so this stays always-enabled.
@@ -157,7 +157,7 @@ export function useReorderProjects() {
     void,
     Error,
     { draggedId: string; targetId: string; position: "before" | "after" },
-    { previous?: Project[] }
+    { previous?: readonly Project[] }
   >({
     mutationFn: (input) => api.projects.reorder(input),
     onMutate: ({ draggedId, targetId, position }) => {
@@ -169,8 +169,10 @@ export function useReorderProjects() {
       void queryClient.cancelQueries({
         queryKey: keys.projects(),
       });
-      const previous = queryClient.getQueryData<Project[]>(keys.projects());
-      queryClient.setQueryData<Project[]>(keys.projects(), (current) =>
+      const previous = queryClient.getQueryData<readonly Project[]>(
+        keys.projects(),
+      );
+      queryClient.setQueryData<readonly Project[]>(keys.projects(), (current) =>
         current
           ? reorderProjects(current, draggedId, targetId, position)
           : current,

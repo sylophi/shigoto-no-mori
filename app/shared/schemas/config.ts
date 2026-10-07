@@ -3,7 +3,15 @@ import { isSafeRelPath } from "../git/gitPaths";
 import { ProjectScopedPayloadSchema } from "./zodPayloads";
 import { MergeMethodSchema } from "./pullRequest";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
-import { ProjectSortModeSchema, SidebarViewSchema } from "./project";
+import {
+  ProjectSortModeSchema as ProjectSortMode,
+  SidebarViewSchema as SidebarView,
+} from "./project";
+import { toZod } from "./zodBridge";
+
+// Still on zod: the project schemas it embeds, as zod.
+const ProjectSortModeSchema = toZod(ProjectSortMode);
+const SidebarViewSchema = toZod(SidebarView);
 
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;

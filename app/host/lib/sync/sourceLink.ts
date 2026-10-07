@@ -51,9 +51,10 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
   CommitHashSchema,
-  GitRefNameSchema,
+  GitRefNameSchema as GitRefName,
   type Project,
 } from "@shared/schemas";
+import { toZod } from "@shared/schemas/zodBridge";
 import {
   bundleCreateViaCli,
   bundleUnpackViaCli,
@@ -275,6 +276,9 @@ async function openLink(
   }
   return link;
 }
+
+// Still on zod: the project schemas it embeds, as zod.
+const GitRefNameSchema = toZod(GitRefName);
 
 // ---- The messages, validated at both ends: what a peer sends flows
 // into git argv and into strict progress schemas here.

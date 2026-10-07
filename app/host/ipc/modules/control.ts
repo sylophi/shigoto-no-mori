@@ -926,7 +926,9 @@ async function cloneIntoOn(
       sourcePath: project.path,
       sourceHome: here,
       destinationHome: Schema.decodeSync(RuntimeInfoSchema)(info).homedir,
-      destinationProjects: ProjectSchema.array().parse(projects),
+      destinationProjects: Schema.decodeSync(Schema.Array(ProjectSchema))(
+        projects,
+      ),
     }),
     project.path,
   );

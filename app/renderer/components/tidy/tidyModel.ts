@@ -60,7 +60,7 @@ const VERDICT_RANK: Record<HygieneVerdictKind, number> = {
 };
 
 export function buildTidyEntries(
-  projects: Project[],
+  projects: readonly Project[],
   worktreesByProject: Map<string, Worktree[]>,
   hygieneById: Map<string, WorktreeHygiene>,
   diskById: Map<string, WorktreeDiskUsage>,
