@@ -49,6 +49,9 @@ type scriptEnvInputs struct {
 	proj          project
 	projectBranch string
 	defaultBranch string
+	// What `sm describe` set, as stored: no gh call to see whether an
+	// open PR has taken them over, since every run would wait on it.
+	description worktreeDescription
 }
 
 // The user's login shell, run as a login shell (no -i) so .zprofile /
@@ -118,15 +121,17 @@ func passwdShellFor(passwd, uid string) string {
 // (host/lib/util/paths.ts) for why injecting it is the bug.
 func scriptEnv(in scriptEnvInputs) []string {
 	contract := map[string]string{
-		"SHIGOMORI_SCRIPT_NAME":     in.scriptName,
-		"SHIGOMORI_WORKTREE_PATH":   in.worktree.Path,
-		"SHIGOMORI_WORKTREE_NAME":   in.worktree.Name,
-		"SHIGOMORI_WORKTREE_BRANCH": in.worktree.Branch,
-		"SHIGOMORI_WORKTREE_ID":     in.worktree.ID,
-		"SHIGOMORI_PROJECT_PATH":    in.proj.Path,
-		"SHIGOMORI_PROJECT_NAME":    in.proj.Name,
-		"SHIGOMORI_PROJECT_BRANCH":  in.projectBranch,
-		"SHIGOMORI_DEFAULT_BRANCH":  in.defaultBranch,
+		"SHIGOMORI_SCRIPT_NAME":          in.scriptName,
+		"SHIGOMORI_WORKTREE_PATH":        in.worktree.Path,
+		"SHIGOMORI_WORKTREE_NAME":        in.worktree.Name,
+		"SHIGOMORI_WORKTREE_BRANCH":      in.worktree.Branch,
+		"SHIGOMORI_WORKTREE_ID":          in.worktree.ID,
+		"SHIGOMORI_WORKTREE_TITLE":       in.description.Title,
+		"SHIGOMORI_WORKTREE_DESCRIPTION": in.description.Description,
+		"SHIGOMORI_PROJECT_PATH":         in.proj.Path,
+		"SHIGOMORI_PROJECT_NAME":         in.proj.Name,
+		"SHIGOMORI_PROJECT_BRANCH":       in.projectBranch,
+		"SHIGOMORI_DEFAULT_BRANCH":       in.defaultBranch,
 	}
 	var env []string
 	for _, kv := range envWithoutCdFile() {

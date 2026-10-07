@@ -478,15 +478,22 @@ func TestOpenByExactAddress(t *testing.T) {
 	proj := autoPullSandbox(t)
 	fox := createViaCmd(t, proj, "fox")
 	// A custom launcher labeled like the Finder's full id must not
-	// shadow it.
+	// shadow it. a1 writes back the script env it ran with, the older
+	// SHIGOMORI_WORKSPACE_PATH included.
 	writeFileT(t, configJSONPath(), `{"launchers":[`+
-		`{"id":"a1","label":"Write marker","command":"echo opened > \"$SHIGOMORI_WORKSPACE_PATH/opened.txt\""},`+
+		`{"id":"a1","label":"Write marker","command":"echo \"$SHIGOMORI_SCRIPT_NAME|$SHIGOMORI_WORKTREE_PATH|$SHIGOMORI_WORKTREE_NAME|$SHIGOMORI_PROJECT_NAME|$SHIGOMORI_WORKTREE_TITLE\" > \"$SHIGOMORI_WORKSPACE_PATH/opened.txt\""},`+
 		`{"id":"b2","label":"app:finder","command":"true"}]}`)
 	ctx := cliContext{projects: []project{proj}}
+	if _, err := updateWorktreeDescription(proj.ID, fox.ID, func(d worktreeDescription) worktreeDescription {
+		d.Title = "Fox work"
+		return d
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	var launched []string
-	launchEntryFn = func(entry launcherEntry, path string) error {
-		launched = append(launched, entry.id+" "+path)
+	launchEntryFn = func(entry launcherEntry, target located) error {
+		launched = append(launched, entry.id+" "+target.worktree.Path)
 		return nil
 	}
 	t.Cleanup(func() { launchEntryFn = launchEntry })
@@ -525,7 +532,7 @@ func TestOpenByExactAddress(t *testing.T) {
 	}
 
 	// A launch that fails is the {ok: false, error} document.
-	launchEntryFn = func(launcherEntry, string) error { return errors.New("boom") }
+	launchEntryFn = func(launcherEntry, located) error { return errors.New("boom") }
 	docs := captureJSON(t, func() {
 		code, err := cmdOpen(ctx, []string{"--project-id", proj.ID, "--worktree-id", fox.ID, "--", "custom:a1"})
 		if code != 1 || err == nil {
@@ -553,13 +560,15 @@ func TestOpenByExactAddress(t *testing.T) {
 		t.Errorf("entrypoint open answered %v", doc)
 	}
 	marker := filepath.Join(fox.Path, "opened.txt")
+	wantMarker := strings.Join([]string{"Write marker", fox.Path, "fox", proj.Name, "Fox work"}, "|")
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if data, err := os.ReadFile(marker); err == nil && strings.TrimSpace(string(data)) == "opened" {
+		if data, err := os.ReadFile(marker); err == nil && strings.TrimSpace(string(data)) == wantMarker {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("the custom launcher never wrote its marker")
+			data, _ := os.ReadFile(marker)
+			t.Fatalf("the custom launcher wrote %q, want %q", data, wantMarker)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

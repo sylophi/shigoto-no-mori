@@ -229,24 +229,27 @@ func bumpLauncherUse(id string) {
 	}
 }
 
-func launchEntry(entry launcherEntry, worktreePath string) error {
+func launchEntry(entry launcherEntry, target located) error {
 	switch {
 	case entry.webURL != "":
 		return exec.Command("open", entry.webURL).Run()
 	case entry.custom != nil:
-		return launchCustomCommand(entry.custom.Command, worktreePath)
+		return launchCustomCommand(*entry.custom, target)
 	case entry.app != nil:
-		return launchDetectedApp(*entry.app, worktreePath)
+		return launchDetectedApp(*entry.app, target.worktree.Path)
 	}
 	return errf("Launcher %q has nothing to launch.", entry.label)
 }
 
 // Fire-and-forget through the user's shell, detached so it outlives
-// this process. This is the app's launchCustom.
-func launchCustomCommand(command, worktreePath string) error {
-	cmd := exec.Command("/bin/sh", "-c", command)
-	cmd.Dir = worktreePath
-	cmd.Env = append(envWithoutCdFile(), "SHIGOMORI_WORKSPACE_PATH="+worktreePath)
+// this process. This is the app's launchCustom. The env is the one
+// setup, teardown and `sm run` see (scriptEnv), named for the
+// launcher's label. SHIGOMORI_WORKSPACE_PATH predates that contract
+// and stays for commands written against it.
+func launchCustomCommand(c launcherCommand, target located) error {
+	cmd := exec.Command("/bin/sh", "-c", c.Command)
+	cmd.Dir = target.worktree.Path
+	cmd.Env = append(scriptEnv(runEnvInputs(target, c.Label)), "SHIGOMORI_WORKSPACE_PATH="+target.worktree.Path)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err

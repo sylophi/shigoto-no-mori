@@ -241,9 +241,10 @@ func codeOrNil(code int) any {
 	return code
 }
 
-// $SHIGOMORI_PROJECT_BRANCH + $SHIGOMORI_DEFAULT_BRANCH for scripts.
-// The project branch is the primary checkout's, so it is empty for a
-// bare repo, which has no primary (primaryCheckoutPath).
+// $SHIGOMORI_PROJECT_BRANCH, $SHIGOMORI_DEFAULT_BRANCH and the
+// worktree's title and description for scripts. The project branch is
+// the primary checkout's, so it is empty for a bare repo, which has no
+// primary (primaryCheckoutPath).
 func lifecycleEnvInputs(proj project, id worktreeIdentity, config *projectConfig) scriptEnvInputs {
 	projectBranch := ""
 	if primary, err := primaryOf(proj); err == nil {
@@ -254,6 +255,7 @@ func lifecycleEnvInputs(proj project, id worktreeIdentity, config *projectConfig
 		proj:          proj,
 		projectBranch: projectBranch,
 		defaultBranch: primaryRefFor(proj, config),
+		description:   describedOf(id),
 	}
 }
 
