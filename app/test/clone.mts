@@ -6,6 +6,8 @@
 // nor a missing parent is written over or conjured.
 //
 // Run: pnpm test clone.
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,7 +31,7 @@ const { CloneProjectPayloadSchema } =
 const git = sandboxGit(gitEnv);
 
 const accepts = (input: unknown) =>
-  CloneProjectPayloadSchema.safeParse(input).success;
+  Option.isSome(Schema.decodeUnknownOption(CloneProjectPayloadSchema)(input));
 
 it("a remote URL in any of git's syntaxes is accepted", () => {
   for (const url of [

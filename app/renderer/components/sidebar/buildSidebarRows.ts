@@ -31,7 +31,7 @@ import { sortWorktrees } from "@/lib/sortWorktrees";
 export type GroupIdSet = Pick<ReadonlySet<string>, "has">;
 
 interface BuildSidebarRowsArgs {
-  projects: Project[];
+  projects: readonly Project[];
   // Both positionally aligned with `projects`. The PR maps are what
   // gathers a stack's rows together.
   worktreeQueries: ProjectWorktreeQueries;

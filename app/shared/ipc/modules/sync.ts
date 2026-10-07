@@ -7,14 +7,16 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
-  CloneProjectPayloadSchema,
   CommitHashSchema,
   CreatePhaseSchema,
-  GitRefNameSchema,
-  ProjectSchema,
   WorktreeIdSchema,
   WorktreeSchema,
 } from "@shared/schemas";
+import {
+  CloneFolderNameZod,
+  GitRefNameZod,
+  ProjectZod,
+} from "@shared/schemas/zodBridge";
 
 // Moving a worktree between devices. Commits cross on a SOURCE LINK:
 // one byte channel (shared/ipc/socket/channels.ts) between the device
@@ -206,7 +208,7 @@ export function pullBringsIgnoredFiles(
 // same pair, CloneProjectPayloadSchema). `~` is expanded by the host.
 export const SyncCloneIntoSchema = z.strictObject({
   parentDir: z.string().min(1),
-  name: CloneProjectPayloadSchema.shape.name.unwrap(),
+  name: CloneFolderNameZod,
 });
 export type SyncCloneInto = z.infer<typeof SyncCloneIntoSchema>;
 
@@ -215,7 +217,7 @@ export const SyncPullWorktreePayloadSchema = z.strictObject({
   sourceProjectId: z.string().min(1),
   sourceWorktreeId: WorktreeIdSchema,
   sourceIdentity: z.string().min(1),
-  branch: GitRefNameSchema.refine(
+  branch: GitRefNameZod.refine(
     (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
     { message: "Branch name outside the sync allowlist" },
   ),
@@ -305,7 +307,7 @@ export const SyncPullWorktreeResultSchema = z.strictObject({
   // The project the pull made for the copy to land in (`cloneInto`),
   // as registered. Absent when the copy landed in a checkout this
   // device already had.
-  cloned: ProjectSchema.optional(),
+  cloned: ProjectZod.optional(),
 });
 export type SyncPullWorktreeResult = z.infer<
   typeof SyncPullWorktreeResultSchema
@@ -346,7 +348,7 @@ const SyncOpenSourcePayloadSchema = z.strictObject({
 // kept by the device that ran the move, so the data-loss rule runs on
 // the hosts' own facts, never on a caller's say-so.
 const SyncReceiptSchema = z.strictObject({
-  branch: GitRefNameSchema,
+  branch: GitRefNameZod,
   branchTip: CommitHashSchema,
   captured: z.boolean(),
   dirtyApplied: z.boolean(),
@@ -365,7 +367,7 @@ const SyncReceiveWorktreePayloadSchema = z.strictObject({
   identity: z.string().min(1),
   branch: SyncPullWorktreePayloadSchema.shape.branch,
   worktreeName: SyncPullWorktreePayloadSchema.shape.worktreeName,
-  landBranch: GitRefNameSchema.optional(),
+  landBranch: GitRefNameZod.optional(),
   sourceWorktreeId: WorktreeIdSchema,
   runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
   cloneInto: SyncPullWorktreePayloadSchema.shape.cloneInto,

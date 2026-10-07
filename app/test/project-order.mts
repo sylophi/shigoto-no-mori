@@ -167,7 +167,7 @@ const headers = (sortMode: ProjectSortMode, filter?: string) =>
 function assertFilterKeepsOrder(stored: Project[], peers: RemoteForestItem[]) {
   const narrowed = (mode: ProjectSortMode, filter?: string) =>
     headerRows(mode, filter, stored, peers);
-  for (const mode of ProjectSortModeSchema.options) {
+  for (const mode of ProjectSortModeSchema.literals) {
     const all = narrowed(mode);
     assert.deepEqual(
       narrowed(mode, "local").map((r) => r.project.id),

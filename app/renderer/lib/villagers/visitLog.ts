@@ -105,7 +105,7 @@ function repoOf(
   deviceId: string,
   projectId: string,
 ): string | null {
-  const projects = queryClient.getQueryData<Project[]>(
+  const projects = queryClient.getQueryData<readonly Project[]>(
     queryKeysFor(deviceId).projects(),
   );
   return (

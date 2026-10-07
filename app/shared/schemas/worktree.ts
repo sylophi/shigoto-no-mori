@@ -4,7 +4,8 @@ import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,
 } from "./zodPayloads";
-import { GitRefNameSchema, isRealBranch } from "./project";
+import { isRealBranch } from "./project";
+import { GitRefNameZod } from "./zodBridge";
 
 // Abbreviated commit hashes are produced by `git log %h` and travel back
 // down into git argv (`git show <hash>`). Pinning them to hex is what
@@ -282,8 +283,8 @@ export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
     .optional(),
   // Optional: when omitted, the worktree's auto-picked animal name is
   // used as the branch name too (the quick-create shortcut).
-  branchName: GitRefNameSchema.optional(),
-  base: GitRefNameSchema.optional(),
+  branchName: GitRefNameZod.optional(),
+  base: GitRefNameZod.optional(),
   // When true: check out `base` as the worktree's branch (no -b, no new
   // branch). Requires `base` to be set and not already checked out
   // elsewhere. Ignores `branchName`.
@@ -389,7 +390,7 @@ export const DeleteWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend({
 });
 
 export const RenameBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  newBranch: GitRefNameSchema,
+  newBranch: GitRefNameZod,
 });
 
 export const SetShelvedPayloadSchema = WorktreeScopedPayloadSchema.extend({
@@ -401,7 +402,7 @@ export const SetAutoPullPayloadSchema = WorktreeScopedPayloadSchema.extend({
 });
 
 export const CheckoutBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  branch: GitRefNameSchema,
+  branch: GitRefNameZod,
 });
 
 export const CommitDiffPayloadSchema = WorktreeScopedPayloadSchema.extend({

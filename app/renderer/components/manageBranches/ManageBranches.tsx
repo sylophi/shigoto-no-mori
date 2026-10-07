@@ -89,7 +89,7 @@ function LocalBranchList({
   worktreeByBranch,
 }: {
   projectId: string;
-  names: string[];
+  names: readonly string[];
   worktreeByBranch: Map<string, Worktree>;
 }) {
   const [query, setQuery] = useState("");
@@ -130,7 +130,7 @@ function LocalBranchList({
 
 // Collapsed by default: a big repo can carry hundreds of remote refs, and
 // they're only reference material next to the local list.
-function RemoteBranches({ names }: { names: string[] }) {
+function RemoteBranches({ names }: { names: readonly string[] }) {
   const [expanded, setExpanded] = useState(false);
 
   return (

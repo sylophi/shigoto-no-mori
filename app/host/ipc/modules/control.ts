@@ -122,6 +122,8 @@ async function within<T>(asked: Promise<T>, late: () => T): Promise<T> {
 }
 
 // A device with no name of its own still has to be told apart.
+const decodeProjects = Schema.decodeSync(Schema.Array(ProjectSchema));
+
 const nameOf = (device: DeviceInfo): string =>
   device.name.trim() === "" ? device.deviceId : device.name;
 
@@ -926,7 +928,7 @@ async function cloneIntoOn(
       sourcePath: project.path,
       sourceHome: here,
       destinationHome: Schema.decodeSync(RuntimeInfoSchema)(info).homedir,
-      destinationProjects: ProjectSchema.array().parse(projects),
+      destinationProjects: decodeProjects(projects),
     }),
     project.path,
   );
