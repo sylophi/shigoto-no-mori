@@ -16,6 +16,16 @@ func TestMain(m *testing.M) {
 			os.Unsetenv(key)
 		}
 	}
+	// No background housekeeping in fixture repos: a commit or fetch
+	// spawns a detached `git maintenance run --auto`, which holds
+	// .git/objects/maintenance.lock for a moment and may repack, racing
+	// a test that snapshots the tree or t.TempDir's cleanup. Env config
+	// so it holds under the per-test GIT_CONFIG_GLOBAL as well.
+	os.Setenv("GIT_CONFIG_COUNT", "2")
+	os.Setenv("GIT_CONFIG_KEY_0", "maintenance.auto")
+	os.Setenv("GIT_CONFIG_VALUE_0", "false")
+	os.Setenv("GIT_CONFIG_KEY_1", "gc.auto")
+	os.Setenv("GIT_CONFIG_VALUE_1", "0")
 	// A data dir of the run's own, so a test that writes state without
 	// sandboxDataDir (a clone checkout's verified-files cache) never
 	// reaches the real one.
