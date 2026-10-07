@@ -200,6 +200,50 @@ try {
     },
   );
 
+  await proof.check(
+    "a failing check GitHub doesn't require warns instead of blocking",
+    () => {
+      const unstable = verdict(
+        detail({ buckets: ["failing", "passed"], mergeState: "UNSTABLE" }),
+      );
+      assert.deepEqual(unstable, {
+        label: "1 check failing",
+        tone: "amber",
+        by: "checks",
+      });
+      assert.equal(
+        verdict(detail({ buckets: ["failing"], mergeState: "BLOCKED" })).tone,
+        "rose",
+      );
+    },
+  );
+
+  await proof.check(
+    "armed auto-merge stays said past a review, not past a failing check",
+    () => {
+      const armedStatus = {
+        label: "Will squash and merge when ready",
+        tone: "amber" as const,
+      };
+      const waiting = describeMergeVerdict(
+        detail({
+          buckets: ["passed"],
+          mergeState: "BLOCKED",
+          reviews: requiredReview,
+        }),
+        armedStatus,
+        true,
+      );
+      assert.deepEqual(waiting, { ...armedStatus, by: "merge" });
+      const failing = describeMergeVerdict(
+        detail({ buckets: ["failing"], mergeState: "BLOCKED" }),
+        armedStatus,
+        true,
+      );
+      assert.equal(failing.label, "1 check failing");
+    },
+  );
+
   proof.done();
 } catch (error) {
   proof.fail(error);

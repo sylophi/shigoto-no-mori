@@ -20,7 +20,7 @@ import { ChecksSummaryIcon } from "./ChecksSummaryIcon";
 // a popover so a long list never pushes the merge box down the page.
 // `children` stands in for the chip's own words (MergeStatus, which is
 // the merge box's one status with the run list still a click away),
-// and `tip` names the chip when those leave out its words.
+// and `tip` names the chip on hover when those leave out its words.
 export function ChecksPopover({
   pr,
   children,
@@ -40,7 +40,6 @@ export function ChecksPopover({
         <PopoverTrigger
           render={
             <ChipButton
-              aria-label={tip ?? undefined}
               className={cn("max-w-full whitespace-nowrap", className)}
             >
               {children ?? (

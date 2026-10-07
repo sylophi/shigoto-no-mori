@@ -9,11 +9,12 @@ import { MergeStateIcon } from "./MergeStateIcon";
 import { TONE_TEXT } from "./pullRequestShared";
 
 // The merge box's one status (describeMergeVerdict): its words, with
-// the checks' icon when the checks are what it speaks of, and the run
-// list a click away (ChecksPopover). With no checks to list it is the
-// words alone. One line. `compact` keeps the icon alone, its words in
-// the tooltip, for a row with no room (MergeBox); the words carry
-// data-status-label for that measuring.
+// the checks' spinner while they run and its tone's mark otherwise,
+// and the run list a click away (ChecksPopover). With no checks to
+// list it is the words alone. One line. `compact` keeps the icon alone, its words in
+// the tooltip and for screen readers only, for a row with no room
+// (MergeBox); words that show carry data-status-label for that
+// measuring.
 export function MergeStatus({
   pr,
   verdict,
@@ -27,12 +28,16 @@ export function MergeStatus({
   const tip = compact ? verdict.label : null;
   const content = (
     <>
-      {verdict.by === "checks" && summary ? (
-        <ChecksSummaryIcon tone={summary.tone} />
+      {/* Running checks spin; otherwise the mark takes the status's
+          tone (a failing check GitHub doesn't require warns). */}
+      {verdict.by === "checks" && summary?.tone === "amber" ? (
+        <ChecksSummaryIcon tone="amber" />
       ) : (
         <MergeStateIcon tone={verdict.tone} />
       )}
-      {!compact && (
+      {compact ? (
+        <span className="sr-only">{verdict.label}</span>
+      ) : (
         <span
           data-status-label
           className={cn("min-w-0 truncate", TONE_TEXT[verdict.tone])}
@@ -45,12 +50,7 @@ export function MergeStatus({
   if (!summary) {
     return (
       <SimpleTooltip tip={tip}>
-        <Chip
-          aria-label={tip ?? undefined}
-          className="max-w-full text-sm whitespace-nowrap"
-        >
-          {content}
-        </Chip>
+        <Chip className="max-w-full text-sm whitespace-nowrap">{content}</Chip>
       </SimpleTooltip>
     );
   }

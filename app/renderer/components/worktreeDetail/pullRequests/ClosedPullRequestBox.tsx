@@ -29,10 +29,12 @@ const STACK_ERROR_TITLE = "Couldn't delete the stack's worktrees";
 // The cleanup after a PR closed: this worktree goes, or, for a stack
 // with landed layers, all of their worktrees together, on every device
 // holding one (each device's host runs `sm rm --stack`, which removes
-// its merged layers as one). The stack button shows only when it would
-// take more than this worktree, since otherwise the two would be the
-// same removal. A device that can't be asked (asleep, or not granting
-// this one) keeps its worktrees, and the box says so.
+// its merged layers as one). One button, and a menu beside it to reach
+// the whole stack only when that would take more than this worktree,
+// since otherwise the two would be the same removal. A failed stack
+// removal offers its way on beside deleting this worktree alone. A
+// device that can't be asked (asleep, or not granting this one) keeps
+// its worktrees, and the box says so.
 export function ClosedPullRequestBox({
   worktree,
   stack,
@@ -117,6 +119,15 @@ export function ClosedPullRequestBox({
             >
               Cancel
             </Button>
+            <ConfirmDestructiveButton
+              armed={armed}
+              pending={deleteMutation.isPending}
+              disabled={stackPending}
+              pendingLabel="Deleting…"
+              idleLabel="Delete worktree"
+              onClick={() => confirm(() => runDelete())}
+              disabledReason={deleteBlockedReason}
+            />
             {stackError.kind === "cleanup" ? (
               <>
                 <Button

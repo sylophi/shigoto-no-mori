@@ -28,8 +28,9 @@ const SUMMARY_ICON: Partial<Record<PullRequestTone, typeof UserRound>> = {
 // The PR's reviews as one chip beside the checks, with who stands
 // where in a popover. A required review nobody has been asked for has
 // no list to show, so it reads as a plain chip. `compact` keeps the
-// icon alone, its words in the tooltip, for a row with no room
-// (MergeBox); the label carries data-reviews-label for that measuring.
+// icon alone, its words in the tooltip and for screen readers only,
+// for a row with no room (MergeBox); words that show carry
+// data-reviews-label for that measuring.
 export function ReviewsPopover({
   pr,
   compact = false,
@@ -49,16 +50,15 @@ export function ReviewsPopover({
       className={cn("size-3.5 shrink-0", TONE_TEXT[summary.tone])}
     />
   );
-  const words = compact ? null : (
+  const words = compact ? (
+    <span className="sr-only">{summary.label}</span>
+  ) : (
     <span data-reviews-label>{summary.label}</span>
   );
   if (reviewers.length === 0) {
     return (
       <SimpleTooltip tip={compact ? summary.label : null}>
-        <Chip
-          aria-label={compact ? summary.label : undefined}
-          className="text-muted-foreground/80"
-        >
+        <Chip className="text-muted-foreground/80">
           {icon}
           {words}
         </Chip>
@@ -70,7 +70,7 @@ export function ReviewsPopover({
       <SimpleTooltip tip={compact ? summary.label : null}>
         <PopoverTrigger
           render={
-            <ChipButton aria-label={compact ? summary.label : undefined}>
+            <ChipButton>
               {icon}
               {words}
               <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />

@@ -285,11 +285,27 @@ function useCompactChips(
       const room = row.clientWidth;
       setLevel(full <= room ? 0 : full - reviews <= room ? 1 : 2);
     };
-    check();
-    const observer = new ResizeObserver(check);
-    observer.observe(row);
-    for (const child of row.children) observer.observe(child);
-    return () => observer.disconnect();
+    const resize = new ResizeObserver(check);
+    const watch = () => {
+      resize.disconnect();
+      resize.observe(row);
+      for (const child of row.children) resize.observe(child);
+      check();
+    };
+    watch();
+    // A chip that swaps its element (the checks arriving) or its words
+    // resizes nothing already watched, and nor does a font loading.
+    const mutations = new MutationObserver(watch);
+    mutations.observe(row, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    void document.fonts.ready.then(check);
+    return () => {
+      resize.disconnect();
+      mutations.disconnect();
+    };
   }, [rowRef, reviewsSaid, present]);
   return { reviews: level >= 1, status: level >= 2 };
 }

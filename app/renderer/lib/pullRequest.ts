@@ -204,8 +204,10 @@ export function describeMergeState(
 // The merge box's one status: what most stands between the PR and
 // landing, said once. The merge state alone often only restates its
 // cause ("Waiting on requirements" while checks run), so the cause
-// speaks instead: conflicts, then failing or running checks, then a
-// review the rule wants, then whatever the merge state says. `by`
+// speaks instead: conflicts, then failing checks (amber when GitHub
+// would merge anyway), then running checks, then a review the rule
+// wants, then whatever the merge state says. Armed auto-merge keeps
+// its own words past all but conflicts and failing checks. `by`
 // says where the words came from, so the checks chip draws their
 // icon and the reviews chip can drop words it would repeat.
 export interface MergeVerdict {
@@ -226,10 +228,23 @@ export function describeMergeVerdict(
 ): MergeVerdict {
   if (pr.isDraft || pr.mergeState === "DIRTY") return said(status, "merge");
   const checks = describeChecks(pr.checks);
-  if (checks?.tone === "rose") return said(checks, "checks");
-  // Armed, the merge state already says it waits ("Will squash and
-  // merge when ready"), and the checks' spinner says on what.
-  if (checks?.tone === "amber") return said(armed ? status : checks, "checks");
+  if (checks?.tone === "rose") {
+    // A failing check GitHub doesn't require (it would still merge)
+    // warns rather than blocks.
+    const mergeable =
+      pr.mergeState === "UNSTABLE" ||
+      pr.mergeState === "CLEAN" ||
+      pr.mergeState === "HAS_HOOKS";
+    return said(
+      { label: checks.label, tone: mergeable ? "amber" : "rose" },
+      "checks",
+    );
+  }
+  // Armed, the status already says it waits ("Will squash and merge
+  // when ready") and on what is the checks' spinner and the reviews
+  // chip, so it keeps its words: auto-merge being on is the news.
+  if (armed) return said(status, checks?.tone === "amber" ? "checks" : "merge");
+  if (checks?.tone === "amber") return said(checks, "checks");
   if (pr.mergeState === "BLOCKED" && pr.reviews) {
     const reviews = describeReviews(pr.reviews);
     if (reviews && (reviews.tone === "amber" || reviews.tone === "rose")) {
