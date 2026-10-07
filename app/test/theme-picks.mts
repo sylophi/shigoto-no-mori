@@ -2,6 +2,8 @@
 // two palette picks (shared/themes.ts): the switch defaults on, each
 // pick to its list's default, and a pick keeps while the switch is
 // off so it comes back with it.
+//
+// covers: app/index.html app/web/public/boot-theme.js
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

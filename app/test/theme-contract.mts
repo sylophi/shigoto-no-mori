@@ -15,6 +15,9 @@
 //      scripts/dmg-background.html) must still find the tokens and
 //      the two rules it renders against. It ships as a committed png,
 //      so a stripped hook there is invisible until a release.
+//
+// covers: app/renderer/** app/scripts/dmg-background.html
+// covers: app/pnpm-lock.yaml
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { report, walk } from "./lib/checkKit.mts";
