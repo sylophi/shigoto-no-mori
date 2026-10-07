@@ -1,7 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  // The three pnpm projects are separate installs today, so they are
-  // named here rather than read from a pnpm workspace.
   "workspaces": {
     ".": {
       // The oxlint plugin, loaded by path from .oxlintrc.json.
@@ -26,16 +24,13 @@
       "ignoreDependencies": [
         // Loaded from an inline script in index.html, in dev only.
         "react-grab",
-        // Runs as the git hook its install script writes; knip only sees
-        // it through that hook, which a CI install without scripts lacks.
-        "lefthook",
       ],
     },
     "hub": {
       "ignoreDependencies": [
         // The app's shared modules the hub imports resolve zod from
-        // app/node_modules; this pin keeps the two installs on one zod
-        // (hub/README.md).
+        // app/node_modules, and the hub declares it too so the catalog
+        // keeps both on one zod (hub/README.md).
         "zod",
         // cloudflare:test and cloudflare:workers are workerd's built-in
         // modules, provided by @cloudflare/vitest-pool-workers.

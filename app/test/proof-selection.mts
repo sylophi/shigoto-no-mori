@@ -44,10 +44,7 @@ it("files reached only through covers lines pick their declarers", () => {
     // A fixture read off disk, a directory scan, a lockfile read.
     ["app/shared/fixtures/repo-identity-urls.json", ["app/test/identity.mts"]],
     ["app/renderer/App.tsx", ["app/test/host-boundary.mts"]],
-    [
-      "app/pnpm-lock.yaml",
-      ["app/test/theme-contract.mts", "app/test/dmg-art.mts"],
-    ],
+    ["pnpm-lock.yaml", ["app/test/theme-contract.mts", "app/test/dmg-art.mts"]],
     // The config every proof runs under.
     ["app/vitest.config.ts", ["app/test/lib/checkKit.mts"]],
   ];

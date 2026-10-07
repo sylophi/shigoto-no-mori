@@ -12,8 +12,9 @@ ports. `pnpm test` runs them all, `pnpm test <name>` runs one, and
 flags pass through to vitest (`run.mts`, the runner, has the other
 forms). CI runs every one on each pull request (`pnpm test`, in
 `.github/workflows/checks.yml`). The hub has its own suite in
-`../../hub`, which lefthook runs for a change under `hub/` or to an app
-file the hub imports (the glob in `lefthook.yml`).
+`../../hub`, which lefthook runs for a change under `hub/`, to an app
+file the hub imports, or to the workspace's lockfile or settings (the
+glob in `lefthook.yml`).
 
 On commit, lefthook runs the proofs the staged files reach
 (`pnpm test --changed <path>...`), and `lefthook run pre-commit

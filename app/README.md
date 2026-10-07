@@ -1,9 +1,9 @@
 # The app
 
-The Electron desktop app and the web client, one pnpm project. Paths
-here are relative to this directory. The `sm` CLI (`cli/`) and the
-mirroring engine (`file-sync/`) it bundles, and the device hub
-(`hub/`) it talks to, are siblings one level up.
+The Electron desktop app and the web client, one package of the
+root pnpm workspace. Paths here are relative to this directory. The
+`sm` CLI (`cli/`) and the mirroring engine (`file-sync/`) it bundles,
+and the device hub (`hub/`) it talks to, are siblings one level up.
 
 - `DESIGN.md`: rules for the visual layer.
 - `lab/README.md`: testing by hand on the real UI, driven with weblab:

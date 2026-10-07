@@ -154,6 +154,17 @@
     "copyright": "Copyright (C) 2012-2014 by various contributors (see AUTHORS)"
   },
   {
+    "name": "@babel/parser",
+    "version": "7.29.9",
+    "licenses": "MIT",
+    "repository": "https://github.com/babel/babel",
+    "publisher": "",
+    "url": "",
+    "licenseFile": "@babel/parser/LICENSE",
+    "licenseText": "Copyright (C) 2012-2014 by various contributors (see AUTHORS)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
+    "copyright": "Copyright (C) 2012-2014 by various contributors (see AUTHORS)"
+  },
+  {
     "name": "@babel/runtime",
     "version": "7.29.7",
     "licenses": "MIT",
@@ -189,6 +200,17 @@
   {
     "name": "@babel/types",
     "version": "7.29.7",
+    "licenses": "MIT",
+    "repository": "https://github.com/babel/babel",
+    "publisher": "",
+    "url": "",
+    "licenseFile": "@babel/types/LICENSE",
+    "licenseText": "MIT License\n\nCopyright (c) 2014-present Sebastian McKenzie and other contributors\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE\nLIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION\nWITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+    "copyright": "Copyright (c) 2014-present Sebastian McKenzie and other contributors"
+  },
+  {
+    "name": "@babel/types",
+    "version": "7.29.8",
     "licenses": "MIT",
     "repository": "https://github.com/babel/babel",
     "publisher": "",
@@ -1892,6 +1914,17 @@
     "copyright": ""
   },
   {
+    "name": "@types/hast",
+    "version": "3.0.5",
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped",
+    "publisher": "",
+    "url": "",
+    "licenseFile": "@types/hast/LICENSE",
+    "licenseText": "MIT License\n\n    Copyright (c) Microsoft Corporation.\n\n    Permission is hereby granted, free of charge, to any person obtaining a copy\n    of this software and associated documentation files (the \"Software\"), to deal\n    in the Software without restriction, including without limitation the rights\n    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n    copies of the Software, and to permit persons to whom the Software is\n    furnished to do so, subject to the following conditions:\n\n    The above copyright notice and this permission notice shall be included in all\n    copies or substantial portions of the Software.\n\n    THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n    SOFTWARE",
+    "copyright": ""
+  },
+  {
     "name": "@types/istanbul-lib-coverage",
     "version": "2.0.6",
     "licenses": "MIT",
@@ -1948,7 +1981,7 @@
   },
   {
     "name": "@types/node",
-    "version": "24.13.3",
+    "version": "24.13.5",
     "licenses": "MIT",
     "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped",
     "publisher": "",
@@ -2069,7 +2102,7 @@
   },
   {
     "name": "@ungap/structured-clone",
-    "version": "1.3.2",
+    "version": "1.4.0",
     "licenses": "ISC",
     "repository": "https://github.com/ungap/structured-clone",
     "publisher": "",
@@ -3389,7 +3422,7 @@
   },
   {
     "name": "fast-uri",
-    "version": "3.1.3",
+    "version": "3.1.8",
     "licenses": "BSD-3-Clause",
     "repository": "https://github.com/fastify/fast-uri",
     "publisher": "",
@@ -5171,7 +5204,7 @@
   },
   {
     "name": "picomatch",
-    "version": "4.0.5",
+    "version": "4.0.7",
     "licenses": "MIT",
     "repository": "https://github.com/micromatch/picomatch",
     "publisher": "",
@@ -6469,7 +6502,7 @@
   },
   {
     "name": "zod",
-    "version": "4.4.3",
+    "version": "4.6.5",
     "licenses": "MIT",
     "repository": "https://github.com/colinhacks/zod",
     "publisher": "",

@@ -12,18 +12,22 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 
 | Folder | What it is |
 | --- | --- |
-| `app/` | The Electron desktop app and the web client (one pnpm project) |
+| `app/` | The Electron desktop app and the web client |
+| `hub/` | The device hub, a Cloudflare Worker |
+| `marketing/` | The shigomori.com site, built with Astro |
+| `packages/` | The packages the v3 refactor moves code into (`contracts`, `engine`, `host`, `ui`, `cli`), empty until their step (`V3.md`) |
 | `cli/` | The `sm` CLI, a Go module bundled into the app |
 | `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
-| `hub/` | The device hub, a Cloudflare Worker with its own pnpm project |
 | `skills/` | Agent skills for the `sm` workflow (below) |
 
-Install the app's dependencies with `pnpm -C app install` (the root
-`postinstall` script does the same). The root `package.json` forwards
-the app's everyday scripts, so `pnpm dev` and `pnpm test` work from
-either place. The repo-wide checks (`lefthook.yml`,
-`.oxlintrc.json`, `.oxfmtrc.json`, `knip.jsonc`) stay at the root. `pnpm check`
-runs every check CI runs.
+The JavaScript packages are one pnpm workspace (`pnpm-workspace.yaml`)
+with one lockfile: run `pnpm install` at the root. The workspace file
+holds the supply-chain settings and the catalog that pins the versions
+the packages share. The root scripts run the app's through pnpm filters
+(`pnpm dev`, `pnpm test`), and `pnpm typecheck` runs every package's.
+`pnpm -C <package> …` works too. The repo-wide checks (`lefthook.yml`,
+`.oxlintrc.json`, `.oxfmtrc.json`, `knip.jsonc`) and their tools stay at
+the root. `pnpm check` runs every check CI runs.
 
 Each folder documents itself: [`app/README.md`](app/README.md) is the
 app's layout, [`app/DESIGN.md`](app/DESIGN.md) its visual rules,
