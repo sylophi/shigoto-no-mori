@@ -12,7 +12,6 @@
 // renderer.
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
-import { z } from "zod";
 import {
   CarryOverReportSchema,
   CleanupErrorSchema,
@@ -460,17 +459,21 @@ async function runRemoval(
   throw cliFailure(result, `sm ${args[0]} failed`, { worktreeId });
 }
 
-const RemovedIdSchema = z.object({ id: z.string() });
-const LandDocRemovalsSchema = z.object({
-  removed: RemovedIdSchema.optional(),
-  stack: z.object({ removed: z.array(RemovedIdSchema) }).optional(),
-});
+const RemovedIdSchema = Schema.Struct({ id: Schema.String });
+const decodeLandDocRemovals = Schema.decodeUnknownSync(
+  Schema.Struct({
+    removed: Schema.optional(RemovedIdSchema),
+    stack: Schema.optional(
+      Schema.Struct({ removed: Schema.Array(RemovedIdSchema) }),
+    ),
+  }),
+);
 
 // The worktree ids a stack removal's document says went, the lower
 // layers first and the worktree the command ran in last, the order the
 // CLI removed them.
 function removedIdsOf(doc: CliDoc): string[] {
-  const parsed = LandDocRemovalsSchema.parse(doc);
+  const parsed = decodeLandDocRemovals(doc);
   const ids = (parsed.stack?.removed ?? []).map((entry) => entry.id);
   if (parsed.removed) ids.push(parsed.removed.id);
   return ids;
@@ -618,7 +621,7 @@ export function cliRunScriptSpawn(args: {
 // Whole-document config writes through the CLI's plumbing `write
 // --data` verbs, so both surfaces run one write path (validation,
 // lock+atomic merge, and the in-project exclude side effect for
-// project config). The payloads were already zod-parsed at the
+// project config). The payloads were already parsed at the
 // IPC boundary. The CLI's merge is NOT a plain overlay: for every
 // REGISTERED key the payload omits it CLEARS that key on disk (that is
 // how a settings save serializes a default by omission), so only
@@ -686,11 +689,26 @@ export async function shigomoriWriteViaCli(
 }
 
 // The device-sync verbs. Each shells the CLI and
-// re-validates the crossing document with a zod schema, like every
+// re-validates the crossing document with a schema, like every
 // other Go/TS boundary in this file. The paths handed to bundle
 // create/unpack are ALWAYS app-chosen temp paths (the source link,
 // host/lib/sync/sourceLink.ts, owns them); the CLI writes/reads exactly where told,
 // so path discipline lives on this side of the trust boundary.
+
+// A capture doc carries its commit; a clean worktree omits it. The
+// check makes a captured:true document WITHOUT a commit an engine
+// drift error here, never a silent "clean" report.
+const decodeDirtyCaptured = Schema.decodeUnknownSync(
+  Schema.Struct({
+    captured: Schema.Boolean,
+    commit: Schema.optional(Schema.String),
+  }).check(
+    Schema.makeFilter(
+      (d) =>
+        !d.captured || d.commit !== undefined || "captured without a commit",
+    ),
+  ),
+);
 
 export async function dirtyCaptureViaCli(
   project: Project,
@@ -700,15 +718,7 @@ export async function dirtyCaptureViaCli(
     worktreeArgv(["dirty", "capture"], project, worktreeId),
   );
   const final = finalOkDoc(result, "sm dirty capture failed", { worktreeId });
-  // A capture doc carries its commit; a clean worktree omits it. The
-  // refine makes a captured:true document WITHOUT a commit an engine
-  // drift error here, never a silent "clean" report.
-  const doc = z
-    .object({ captured: z.boolean(), commit: z.string().optional() })
-    .refine((d) => !d.captured || d.commit !== undefined, {
-      message: "captured without a commit",
-    })
-    .parse(final);
+  const doc = decodeDirtyCaptured(final);
   return doc.captured
     ? { captured: true, commit: doc.commit }
     : { captured: false };
@@ -878,6 +888,10 @@ export async function moveViaCli(
   return decodeWorktree(final["worktree"]);
 }
 
+const decodeRekeyed = Schema.decodeUnknownSync(
+  Schema.Struct({ id: Schema.String }),
+);
+
 // The re-key half of a move, for the data folder move, which relocates
 // the checkouts itself (one rename of the whole data dir). Answers
 // with the id the worktree has at `toPath`.
@@ -897,7 +911,7 @@ export async function rekeyViaCli(
     toPath,
   ]);
   const final = finalOkDoc(result, "sm worktrees rekey failed", { projectId });
-  return z.object({ id: z.string() }).parse(final).id;
+  return decodeRekeyed(final).id;
 }
 
 export async function reorderProjectsViaCli(ids: string[]): Promise<void> {
@@ -1037,6 +1051,14 @@ export async function projectIconViaCli(
   return decodeProjectIcon(doc);
 }
 
+const decodeWorktreeDestination = Schema.decodeUnknownSync(
+  Schema.Struct({
+    name: Schema.String,
+    path: Schema.String,
+    taken: Schema.Boolean,
+  }),
+);
+
 // Where a new worktree would land, and under what name: `name` when
 // given (then `taken` says whether a worktree already holds the name
 // or something the path), else a freshly picked free one.
@@ -1049,9 +1071,7 @@ export async function worktreeDestinationViaCli(
   const doc = await readDoc(args, "sm worktrees destination failed", {
     projectId,
   });
-  return z
-    .object({ name: z.string(), path: z.string(), taken: z.boolean() })
-    .parse(doc);
+  return decodeWorktreeDestination(doc);
 }
 
 const decodeGlobalConfigDoc = Schema.decodeUnknownSync(

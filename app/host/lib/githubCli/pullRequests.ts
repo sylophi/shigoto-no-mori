@@ -1,5 +1,7 @@
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { z } from "zod";
 import {
   isFromThisRepository,
   type MergeMethod,
@@ -8,16 +10,15 @@ import {
   type PullRequestCheck,
   type PullRequestCheckBucket,
   type PullRequestDetail,
+  PullRequestMergeStateSchema,
+  PullRequestReviewDecisionSchema,
   PullRequestReviewerStateSchema,
   type PullRequestReviews,
+  PullRequestSchema,
+  PullRequestStateSchema,
   pullRequestsEqual,
   summarizeChecks,
 } from "@shared/schemas";
-import {
-  PullRequestMergeStateZod,
-  PullRequestReviewDecisionZod,
-  PullRequestStateZod,
-} from "@shared/schemas/zodBridge";
 import { execGh } from "./exec";
 import {
   checkedOutPullRequest,
@@ -25,17 +26,22 @@ import {
 } from "./pullRequestCheckout";
 import { ghReadyForRepo } from "./remote";
 
-const GhPrListItemSchema = z.object({
-  number: z.number().int().positive(),
-  url: z.url(),
-  title: z.string(),
-  state: PullRequestStateZod,
-  isDraft: z.boolean(),
-  headRefName: z.string(),
-  baseRefName: z.string(),
-  isCrossRepository: z.boolean().default(false),
+const GhPrListItemSchema = Schema.Struct({
+  number: PullRequestSchema.fields.number,
+  url: PullRequestSchema.fields.url,
+  title: Schema.String,
+  state: PullRequestStateSchema,
+  isDraft: Schema.Boolean,
+  headRefName: Schema.String,
+  baseRefName: Schema.String,
+  isCrossRepository: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
 });
-type GhPrListItem = z.infer<typeof GhPrListItemSchema>;
+type GhPrListItem = typeof GhPrListItemSchema.Type;
+const decodeGhPrList = Schema.decodeUnknownOption(
+  Schema.Array(GhPrListItemSchema),
+);
 
 const PR_CACHE_TTL_MS = 5 * 60_000;
 const PR_LIST_LIMIT = 200;
@@ -46,7 +52,9 @@ const prCache = new Map<
 
 // Runs `gh pr list ...` with the standard JSON projection. Returns the
 // parsed rows on success or null on any failure (gh exit, JSON, schema).
-async function runGhPrList(cwd: string): Promise<GhPrListItem[] | null> {
+async function runGhPrList(
+  cwd: string,
+): Promise<readonly GhPrListItem[] | null> {
   try {
     const { stdout } = await execGh(
       [
@@ -62,8 +70,7 @@ async function runGhPrList(cwd: string): Promise<GhPrListItem[] | null> {
       { cwd },
     );
     const parsed: unknown = JSON.parse(stdout);
-    const validated = z.array(GhPrListItemSchema).safeParse(parsed);
-    return validated.success ? validated.data : null;
+    return Option.getOrNull(decodeGhPrList(parsed));
   } catch {
     return null;
   }
@@ -173,43 +180,57 @@ function cacheAndReturn(
 }
 
 // Each rollup item is either a CheckRun or a StatusContext. We keep the
-// schema permissive (loose object + every field optional) because gh
-// occasionally inlines extra typenames and we'd rather degrade
-// gracefully than reject the whole list.
-const StatusCheckRollupItemSchema = z.looseObject({
-  __typename: z.string().optional(),
-  name: z.string().optional(),
-  context: z.string().optional(),
-  status: z.string().optional(),
-  conclusion: z.string().optional(),
-  state: z.string().optional(),
-  detailsUrl: z.string().optional(),
-  targetUrl: z.string().optional(),
+// schema permissive (unknown keys ignored, every field optional)
+// because gh occasionally inlines extra typenames and we'd rather
+// degrade gracefully than reject the whole list.
+const StatusCheckRollupItemSchema = Schema.Struct({
+  __typename: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.String),
+  conclusion: Schema.optional(Schema.String),
+  state: Schema.optional(Schema.String),
+  detailsUrl: Schema.optional(Schema.String),
+  targetUrl: Schema.optional(Schema.String),
 });
-type StatusCheckRollupItem = z.infer<typeof StatusCheckRollupItemSchema>;
+type StatusCheckRollupItem = typeof StatusCheckRollupItemSchema.Type;
 
-const GhPrDetailSchema = z.object({
-  number: z.number().int().positive(),
-  url: z.url(),
-  title: z.string(),
-  body: z.string().default(""),
-  isCrossRepository: z.boolean().default(false),
-  state: PullRequestStateZod,
-  isDraft: z.boolean(),
-  mergeStateStatus: PullRequestMergeStateZod.catch("UNKNOWN"),
+const GhPrDetailSchema = Schema.Struct({
+  number: PullRequestSchema.fields.number,
+  url: PullRequestSchema.fields.url,
+  title: Schema.String,
+  body: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  isCrossRepository: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
+  state: PullRequestStateSchema,
+  isDraft: Schema.Boolean,
+  mergeStateStatus: PullRequestMergeStateSchema.pipe(
+    Schema.catchDecoding(() => Effect.succeedSome("UNKNOWN" as const)),
+    Schema.withDecodingDefault(Effect.succeed("UNKNOWN" as const)),
+  ),
   // GitHub's record of an armed auto-merge, null when there is none.
-  // Loose: it also carries who armed it and when, which nothing reads.
-  autoMergeRequest: z
-    .looseObject({ mergeMethod: z.string().optional() })
-    .nullish(),
-  baseRefName: z.string(),
-  author: z.looseObject({ login: z.string().optional() }).nullish(),
-  updatedAt: z.string(),
-  additions: z.number().int().nonnegative(),
-  deletions: z.number().int().nonnegative(),
-  changedFiles: z.number().int().nonnegative(),
-  statusCheckRollup: z.array(StatusCheckRollupItemSchema).default([]),
+  // It also carries who armed it and when, which nothing reads.
+  autoMergeRequest: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({ mergeMethod: Schema.optional(Schema.String) }),
+    ),
+  ),
+  baseRefName: Schema.String,
+  author: Schema.optional(
+    Schema.NullOr(Schema.Struct({ login: Schema.optional(Schema.String) })),
+  ),
+  updatedAt: Schema.String,
+  additions: Schema.Natural,
+  deletions: Schema.Natural,
+  changedFiles: Schema.Natural,
+  statusCheckRollup: Schema.Array(StatusCheckRollupItemSchema).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
+const decodeGhPrDetails = Schema.decodeUnknownResult(
+  Schema.Array(GhPrDetailSchema),
+);
 
 const PASSED_CONCLUSIONS = new Set(["SUCCESS"]);
 const NEUTRAL_CONCLUSIONS = new Set(["NEUTRAL"]);
@@ -324,46 +345,57 @@ const REVIEWS_QUERY = `query($owner: String!, $repo: String!, $head: String!) {
   }
 }`;
 
-const GqlReviewSchema = z.object({
-  author: z.object({ login: z.string() }).nullable(),
-  state: z.string(),
+const GqlAuthorSchema = Schema.NullOr(Schema.Struct({ login: Schema.String }));
+
+const GqlReviewSchema = Schema.Struct({
+  author: GqlAuthorSchema,
+  state: Schema.String,
 });
 
-const GqlReviewsPullRequestSchema = z.object({
-  number: z.number().int().positive(),
-  author: z.object({ login: z.string() }).nullable(),
-  reviewDecision: PullRequestReviewDecisionZod.nullable().catch(null),
-  latestOpinionatedReviews: z.object({ nodes: z.array(GqlReviewSchema) }),
-  latestReviews: z.object({ nodes: z.array(GqlReviewSchema) }),
-  reviewRequests: z.object({
-    nodes: z.array(
-      z.object({
-        requestedReviewer: z
-          .object({
-            login: z.string().optional(),
-            combinedSlug: z.string().optional(),
-          })
-          .nullable(),
+const GqlReviewsPullRequestSchema = Schema.Struct({
+  number: PullRequestSchema.fields.number,
+  author: GqlAuthorSchema,
+  reviewDecision: Schema.NullOr(PullRequestReviewDecisionSchema).pipe(
+    Schema.catchDecoding(() => Effect.succeedSome(null)),
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  latestOpinionatedReviews: Schema.Struct({
+    nodes: Schema.Array(GqlReviewSchema),
+  }),
+  latestReviews: Schema.Struct({ nodes: Schema.Array(GqlReviewSchema) }),
+  reviewRequests: Schema.Struct({
+    nodes: Schema.Array(
+      Schema.Struct({
+        requestedReviewer: Schema.NullOr(
+          Schema.Struct({
+            login: Schema.optional(Schema.String),
+            combinedSlug: Schema.optional(Schema.String),
+          }),
+        ),
       }),
     ),
   }),
 });
-type GqlReviewsPullRequest = z.infer<typeof GqlReviewsPullRequestSchema>;
+type GqlReviewsPullRequest = typeof GqlReviewsPullRequestSchema.Type;
 
-const GqlReviewsResponseSchema = z.object({
-  data: z.object({
-    repository: z.object({
-      pullRequests: z.object({ nodes: z.array(GqlReviewsPullRequestSchema) }),
+const decodeGqlReviewsResponse = Schema.decodeUnknownOption(
+  Schema.Struct({
+    data: Schema.Struct({
+      repository: Schema.Struct({
+        pullRequests: Schema.Struct({
+          nodes: Schema.Array(GqlReviewsPullRequestSchema),
+        }),
+      }),
     }),
   }),
-});
+);
 
 // The branch's newest PRs with their reviews, or null on any failure:
 // the PR shows without the reviews chip then.
 async function fetchReviews(
   cwd: string,
   branch: string,
-): Promise<GqlReviewsPullRequest[] | null> {
+): Promise<readonly GqlReviewsPullRequest[] | null> {
   try {
     const { stdout } = await execGh(
       [
@@ -380,10 +412,10 @@ async function fetchReviews(
       ],
       { cwd },
     );
-    const parsed = GqlReviewsResponseSchema.safeParse(JSON.parse(stdout));
-    return parsed.success
-      ? parsed.data.data.repository.pullRequests.nodes
-      : null;
+    return decodeGqlReviewsResponse(JSON.parse(stdout)).pipe(
+      Option.map((response) => response.data.repository.pullRequests.nodes),
+      Option.getOrNull,
+    );
   } catch {
     return null;
   }
@@ -450,13 +482,13 @@ async function runGhPrListDetail(
     checkedOutPullRequest(cwd, branch),
   ]);
   const parsed: unknown = JSON.parse(stdout);
-  const validated = z.array(GhPrDetailSchema).safeParse(parsed);
-  if (!validated.success) {
+  const validated = decodeGhPrDetails(parsed);
+  if (Result.isFailure(validated)) {
     throw new Error(
-      `Unexpected gh pr list output for ${branch}: ${validated.error.message}`,
+      `Unexpected gh pr list output for ${branch}: ${validated.failure.message}`,
     );
   }
-  const first = validated.data.find((pr) => isKept(pr, checkedOut));
+  const first = validated.success.find((pr) => isKept(pr, checkedOut));
   if (!first) return null;
   const checkList: PullRequestCheck[] = first.statusCheckRollup.map((item) => ({
     name: item.name ?? item.context ?? "check",
