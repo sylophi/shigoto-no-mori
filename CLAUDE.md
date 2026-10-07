@@ -13,9 +13,9 @@ item works like this. Remove this section when `v3` merges into
    `app/DESIGN.md` for any UI change. `node_modules/effect` for any
    API on an unstable module; never write such a pattern from memory.
 2. **Take a worktree on the branch.** `sm worktrees create --base v3`,
-   then name it (`/sm-name-worktree`): a descriptive branch name, a
-   title written like a PR title, and a description that says which
-   `V3.md` item it closes.
+   then name it (`/sm-name-worktree`): a branch name starting with
+   `v3-`, a title written like a PR title and starting with `V3: `,
+   and a description that says which `V3.md` item it closes.
 3. **Keep to the item.** The PR targets `v3`, with an ordinary title
    and the `easy-pr` body style. A neighboring improvement goes in
    the report, not the PR, unless the brief says otherwise. A
