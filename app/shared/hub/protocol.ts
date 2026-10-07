@@ -35,6 +35,7 @@ import {
   fallbackDeviceIcon,
   isDeviceIcon,
 } from "../account/deviceIcon";
+import { PortNumberSchema } from "../schemas/ports";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
 // JSON. The device hub carries orchestration only: the connectInfo ask
@@ -294,7 +295,7 @@ export type TicketResponse = typeof TicketResponseSchema.Type;
 // port the tunnel ingress should front. Re-provisioning with a new
 // port only rewrites the ingress config.
 export const TunnelProvisionRequestSchema = Schema.Struct({
-  port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
+  port: PortNumberSchema,
 });
 
 // POST /tunnel response. `hostname` is the public tunnel hostname
