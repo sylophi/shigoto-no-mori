@@ -46,7 +46,7 @@ import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorCopyTabs, useMirrorCopies } from "./mirror/MirrorCopyTabs";
 import { PeerTransferActions } from "./PeerTransferActions";
 import { FilesButton } from "./FilesButton";
-import { PortsButton } from "./ports/PortsButton";
+import { PortsSection } from "./ports/PortsSection";
 import { RemoteTransferActions } from "./RemoteWorktreeActions";
 import { PullRequestHeader } from "./pullRequests/PullRequestHeader";
 import { PullRequestLead } from "./pullRequests/PullRequestLead";
@@ -323,6 +323,9 @@ export function WorktreeDetailInner({
 
           <CommitsSection worktree={worktree} />
 
+          {/* Keyed so an open add or edit form stays with its worktree. */}
+          <PortsSection key={worktree.id} worktree={worktree} />
+
           <section className="space-y-3">
             <SectionHeading>Scripts</SectionHeading>
             <ScriptsSection worktree={worktree} />
@@ -337,13 +340,12 @@ export function WorktreeDetailInner({
         canMutate={granted}
         leading={
           <>
-            {/* The same leading verbs on either page: Ports and the
+            {/* The same leading verbs on either page: Files and the
                 running mirror's button, then the transfers. This
                 device's own worktree footer verbs (PeerTransferActions)
-                sit in the spots the remote footer gives its Ports,
-                Mirror and Transplant buttons. */}
+                sit in the spots the remote footer gives its Mirror and
+                Transplant buttons. */}
             <FilesButton worktree={worktree} />
-            <PortsButton worktree={worktree} />
             <MirrorAction worktree={worktree} />
             {remote ? (
               <RemoteTransferActions worktree={worktree} project={project} />

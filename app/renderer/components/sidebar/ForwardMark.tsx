@@ -1,5 +1,5 @@
 // The mark a peer's worktree wears while this machine forwards its
-// ports (switched on from its Ports dialog): the Ports glyph in the
+// ports (switched on from its port list): the Ports glyph in the
 // live tone, the mappings in the tooltip. Worn in the tree's rows and
 // the inbox's, beside the device and mirror marks.
 import { Cable } from "lucide-react";

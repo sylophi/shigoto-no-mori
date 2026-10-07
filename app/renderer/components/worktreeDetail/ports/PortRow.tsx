@@ -4,7 +4,9 @@
 // and Remove. Under a remote scope a second band carries the forward:
 // the `from -> localhost:port` form on the left and the switch on the
 // right (ForwardControl). Locally there is nothing to forward, so the
-// header is the whole card.
+// header is the whole card. `plain` drops the card's border and fill,
+// for a page section whose neighbors are plain rows, and sets the band
+// in under the label instead.
 import { useState } from "react";
 import { Pencil, X } from "lucide-react";
 import type { PortForwardWorktree } from "@shared/ipc/modules/portForward";
@@ -33,6 +35,7 @@ export function PortRow({
   granted,
   onUpdate,
   onRemove,
+  plain = false,
 }: {
   entry: WorktreePort;
   // Every listed port, for the edit form's duplicate check.
@@ -45,6 +48,7 @@ export function PortRow({
   // viewer holds command access on the host).
   onUpdate?: (next: CustomPort) => Promise<unknown>;
   onRemove?: () => void;
+  plain?: boolean;
 }) {
   const { port, label, source, listening } = entry;
   const [editing, setEditing] = useState(false);
@@ -56,7 +60,12 @@ export function PortRow({
   const where = remote ? "on that device" : "here";
 
   return (
-    <li className="overflow-hidden rounded-lg border border-border bg-card">
+    <li
+      className={cn(
+        "overflow-hidden",
+        plain ? "-mx-3" : "rounded-lg border border-border bg-card",
+      )}
+    >
       {editing && onUpdate !== undefined ? (
         <PortForm
           initial={{ port, label }}
@@ -135,6 +144,12 @@ export function PortRow({
           worktree={worktree}
           listening={listening}
           granted={granted}
+          className={
+            plain
+              ? // The header's px-3, the dot and its gap-x-3: under the label.
+                "pr-3 pb-1.5 pl-7.5"
+              : "border-t border-border bg-muted/40 px-3 py-1.5"
+          }
         />
       )}
     </li>

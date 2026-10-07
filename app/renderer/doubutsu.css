@@ -29,6 +29,7 @@
  *      button (+ data-variant)   ui/button.tsx
  *      input, textarea           ui/input.tsx, ui/textarea.tsx
  *      checkbox (+ data-variant) ui/checkbox.tsx
+ *      switch                    ui/switch.tsx
  *      chip                      ui/chip-button.tsx
  *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup   shared/BranchCombobox.tsx
@@ -593,6 +594,17 @@
   ) {
   background-color: var(--input);
 }
+/* A field under the pointer deepens its tray, where v1 tints its
+   border (ui/input.tsx). Not once focused: the focus ring says more. */
+@media (hover: hover) {
+  .doubutsu
+    :is([data-slot="input"], [data-slot="textarea"]):hover:not(
+      :focus,
+      :disabled
+    ) {
+    background-color: color-mix(in oklab, var(--input), var(--foreground) 12%);
+  }
+}
 
 /* --- Search strips and popup footers, without rules ---
    v1 rules a search strip off from the list under it, and a popup's
@@ -1048,6 +1060,8 @@
    already has, no markup changes required.
 
    Coverage comes in two kinds. Pointer things: buttons, links,
+   switches and checkboxes (but one in a label, which stripes as the
+   label),
    radio/checkbox option cards, the file-picker rows. They stripe under
    a hovering pointer and while held. Composite widgets (Base UI
    menus/comboboxes, cmdk lists) move a highlight themselves instead of
@@ -1085,6 +1099,7 @@
       [role="button"],
       a[href],
       li[data-row-idx].cursor-pointer,
+      :is([data-slot="switch"], [data-slot="checkbox"]):not(label *),
       [data-slot="diff-index-row"],
       [data-slot="sidebar-project-row"]
     ):not(:disabled, [aria-disabled="true"], [data-disabled]),
