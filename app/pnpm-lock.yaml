@@ -228,6 +228,9 @@ importers:
       dompurify:
         specifier: ^3.4.15
         version: 3.4.15
+      electron-log:
+        specifier: 5.4.4
+        version: 5.4.4
       electron-store:
         specifier: 8.2.0
         version: 8.2.0
@@ -3158,6 +3161,10 @@ packages:
     resolution: {integrity: sha512-qOa1aAQdX57C+vzhDk3549dd/PRlNL4F8y736MTD1a43qptD+PvHY97Bo9gSf+OZ8iUWE7BrYSpk/FgLUe40EA==}
     engines: {node: '>= 16'}
     hasBin: true
+
+  electron-log@5.4.4:
+    resolution: {integrity: sha512-istWgaXjBfURBSS8LWVW9C3jsc6+ac+tY1lXrQEOTp0lVj+a4OlO1Tmqb36GgnEUDv92DGC9VI1HNXwJinWpgA==}
+    engines: {node: '>= 14'}
 
   electron-store@8.2.0:
     resolution: {integrity: sha512-ukLL5Bevdil6oieAOXz3CMy+OgaItMiVBg701MNlG6W5RaC0AHN7rvlqTCmeb6O7jP0Qa1KKYTE0xV0xbhF4Hw==}
@@ -8813,6 +8820,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
     optional: true
+
+  electron-log@5.4.4: {}
 
   electron-store@8.2.0:
     dependencies:
