@@ -298,6 +298,25 @@ export const MirrorSessionSchema = z.strictObject({
 });
 export type MirrorSession = z.infer<typeof MirrorSessionSchema>;
 
+// One session as the daemon's state line carries it (file-sync/
+// engine.go mirrorSessionState), before the host lifts the label-borne
+// ids out and attaches what it knows of its own. An unknown top-level
+// key is stripped rather than refused, so a field a newer engine adds
+// to the session cannot freeze the state stream. A missing or mistyped
+// one still fails, and the nested shapes (endpoint, staging, conflict,
+// problem, change) stay strict, shared with the contract above, so a
+// field added inside them still fails the session.
+export const MirrorSessionRawSchema = z.object(
+  MirrorSessionSchema.omit({
+    localProjectId: true,
+    localWorktreeId: true,
+    ignoreMode: true,
+    git: true,
+    stopping: true,
+  }).shape,
+);
+export type MirrorSessionRaw = z.infer<typeof MirrorSessionRawSchema>;
+
 // One stream this device SERVES: a peer is mirroring the named worktree
 // from here, on the channel the peer minted with openStream. Known
 // from the open until the channel is gone.

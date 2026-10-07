@@ -55,6 +55,7 @@ import {
 } from "@shared/schemas";
 import { type DoctorReport, DoctorReportSchema } from "@shared/ipc/modules/cli";
 import {
+  convertRefusedError,
   isEntityGoneError,
   unknownProjectError,
   unknownWorktreeError,
@@ -158,6 +159,18 @@ function cliFailure(
     return unknownWorktreeError(ids.worktreeId);
   }
   return new Error(runner().cliFailureMessage(result, fallback));
+}
+
+// An unforced `sm adopt` stopped by its guard (cli/cmd_rm.go
+// requireClean), the only run on the streaming runner that sends these
+// codes. Electron's IPC keeps only an error's message, so the code
+// becomes shared/errors' convert refusal here.
+function guardRefusal(result: CliResult): Error | null {
+  const code = result.docs.find(isErrorDoc)?.["code"];
+  if (code === "uncommitted-changes" || code === "status-unreadable") {
+    return convertRefusedError(code);
+  }
+  return null;
 }
 
 // A read's document can be an array or null, not only an object.
@@ -282,7 +295,10 @@ function runStreamingCreate(
         (result) => {
           scripts.end();
           if (created === null) {
-            reject(cliFailure(result, failureLabel, { worktreeId }));
+            reject(
+              guardRefusal(result) ??
+                cliFailure(result, failureLabel, { worktreeId }),
+            );
             return;
           }
           // Before resolving, so a caller sequencing work after the
@@ -340,15 +356,19 @@ export function createViaCli(
   );
 }
 
+// force only once the user has seen the changes the convert wipes.
+// Unforced, `sm adopt` refuses a dirty worktree, untracked files
+// included, with the convert refusal guardRefusal maps.
 export function adoptViaCli(
   project: Project,
   worktreeId: string,
+  force: boolean,
   notify: WorktreeOperationNotifiers,
 ): Promise<CreateWorktreeResult> {
-  // --force: the app's convert flow already confirmed the wipe in its
-  // dialog.
+  const args = worktreeArgv(["adopt"], project, worktreeId);
+  if (force) args.push("--force");
   return runStreamingCreate(
-    [...worktreeArgv(["adopt"], project, worktreeId), "--force"],
+    args,
     project,
     worktreeId,
     notify,

@@ -14,6 +14,7 @@ interface RowContentProps {
   onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   onToggleOwner: (ownerKey: string) => void;
+  onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
   currentGroupKey: string | undefined;
   arrangeMode: boolean;
   isHovered: boolean;
@@ -25,6 +26,7 @@ export function RowContent({
   onToggleShelved,
   onToggleShelf,
   onToggleOwner,
+  onToggleWorktreeGroup,
   currentGroupKey,
   arrangeMode,
   isHovered,
@@ -53,6 +55,15 @@ export function RowContent({
           count={row.count}
           expanded={row.expanded}
           onToggle={() => onToggleOwner(row.ownerKey)}
+        />
+      );
+    case "worktree-group":
+      return (
+        <FoldHeader
+          label={row.prefix}
+          count={row.count}
+          expanded={row.expanded}
+          onToggle={() => onToggleWorktreeGroup(row.groupId, row.prefix)}
         />
       );
     case "worktree":

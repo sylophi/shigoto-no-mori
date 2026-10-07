@@ -15,7 +15,7 @@ function Switch({
       className={cn(
         // The track height rides the spacing scale (1.15rem at the default
         // step) so it grows with the size-4 thumb where the scale does.
-        "peer inline-flex h-[calc(var(--spacing)*4.6)] w-8 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-input dark:data-[unchecked]:bg-input/80",
+        "peer inline-flex h-[calc(var(--spacing)*4.6)] w-8 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none not-in-[label]:hover:ring-[3px] not-in-[label]:hover:ring-ring/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-input dark:data-[unchecked]:bg-input/80",
         className,
       )}
       {...props}

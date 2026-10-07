@@ -16,7 +16,7 @@ import {
 } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { pullRequestMutationKey } from "@/hooks/projects/useProjectPullRequests";
-import { mergeStateSettling } from "@/lib/pullRequest";
+import { mergeStateSettling, ownBranchPullRequest } from "@/lib/pullRequest";
 
 // How often, and for how long, to re-ask while GitHub is still
 // computing the merge state. Some PRs sit at UNKNOWN until something
@@ -59,10 +59,9 @@ export function useWorktreePullRequest(
   return useQuery<PullRequestDetail | null>({
     queryKey: keys.worktreePullRequest(projectId, branch),
     queryFn: async () => {
-      const pr = await api.githubCli.worktreePullRequest({
-        projectId,
-        branch,
-      });
+      const pr = ownBranchPullRequest(
+        await api.githubCli.worktreePullRequest({ projectId, branch }),
+      );
       // Without this, the sidebar dot waits up to a full sweep tick to
       // catch a PR merging on GitHub even after the user opened the
       // worktree. The IPC throws on transient gh failure, so we only

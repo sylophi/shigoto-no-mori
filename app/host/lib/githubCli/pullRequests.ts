@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  isFromThisRepository,
   type MergeMethod,
   MergeMethodSchema,
   type PullRequest,
@@ -15,6 +16,10 @@ import {
   summarizeChecks,
 } from "@shared/schemas";
 import { execGh } from "./exec";
+import {
+  checkedOutPullRequest,
+  checkedOutPullRequests,
+} from "./pullRequestCheckout";
 import { ghReadyForRepo } from "./remote";
 
 const GhPrListItemSchema = z.object({
@@ -70,7 +75,26 @@ function toPullRequest(item: GhPrListItem): PullRequest {
     isDraft: item.isDraft,
     baseRefName: item.baseRefName,
     isCrossRepository: item.isCrossRepository,
+    ...checkedOutMark(item),
   };
+}
+
+// What the lookups by branch keep: a PR from this repository, or the
+// fork's PR the branch it's filed under was checked out from
+// (checkedOutPullRequest).
+function isKept(
+  pr: { number: number; isCrossRepository: boolean },
+  checkedOut: number | null | undefined,
+): boolean {
+  return isFromThisRepository(pr) || pr.number === checkedOut;
+}
+
+// Kept fork PRs are always checked-out ones, marked so the renderer
+// keeps them too (isBranchsPullRequest).
+function checkedOutMark(pr: {
+  isCrossRepository: boolean;
+}): Pick<PullRequest, "checkedOutFrom"> {
+  return isFromThisRepository(pr) ? {} : { checkedOutFrom: true };
 }
 
 // Indexed by head branch name. The cache is repopulated by the background
@@ -91,7 +115,10 @@ export async function refreshProjectPullRequests(
   cwd: string,
 ): Promise<Map<string, PullRequest>> {
   if (!(await ghReadyForRepo(cwd))) return cacheAndReturn(cwd, new Map());
-  const rows = await runGhPrList(cwd);
+  const [rows, checkedOut] = await Promise.all([
+    runGhPrList(cwd),
+    checkedOutPullRequests(cwd),
+  ]);
   if (rows === null) {
     // Transient gh / network failure. Preserve the previous map so the
     // sidebar dots don't blink out on a single bad sweep. Fall through
@@ -100,10 +127,11 @@ export async function refreshProjectPullRequests(
     return previous ?? cacheAndReturn(cwd, new Map());
   }
   // gh returns PRs newest-first; first hit per branch wins so we surface
-  // the freshest PR when a branch has been reused.
+  // the freshest PR when a branch has been reused, of those isKept.
   const map = new Map<string, PullRequest>();
   for (const item of rows) {
     if (map.has(item.headRefName)) continue;
+    if (!isKept(item, checkedOut.get(item.headRefName))) continue;
     map.set(item.headRefName, toPullRequest(item));
   }
   return cacheAndReturn(cwd, map);
@@ -271,7 +299,7 @@ export async function getWorktreePullRequest(
 // token can lack) costs only the reviews chip, not the PR.
 const REVIEWS_QUERY = `query($owner: String!, $repo: String!, $head: String!) {
   repository(owner: $owner, name: $repo) {
-    pullRequests(headRefName: $head, first: 5, orderBy: {field: CREATED_AT, direction: DESC}) {
+    pullRequests(headRefName: $head, first: 10, orderBy: {field: CREATED_AT, direction: DESC}) {
       nodes {
         number
         author { login }
@@ -390,26 +418,30 @@ function toReviews(pr: GqlReviewsPullRequest): PullRequestReviews {
 // Server-side filtering + minimal fields keeps this cheap even on
 // huge-PR repos. Returns null when there's no PR for the branch;
 // throws on gh / JSON / schema failure so the renderer can
-// distinguish "no PR" from "couldn't load."
+// distinguish "no PR" from "couldn't load." Ten, so a newer fork's PR
+// can't hide the branch's own (isKept).
 async function runGhPrListDetail(
   cwd: string,
   branch: string,
 ): Promise<PullRequestDetail | null> {
-  const { stdout } = await execGh(
-    [
-      "pr",
-      "list",
-      "--state",
-      "all",
-      "--head",
-      branch,
-      "--limit",
-      "1",
-      "--json",
-      "number,url,title,body,state,isDraft,isCrossRepository,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
-    ],
-    { cwd },
-  );
+  const [{ stdout }, checkedOut] = await Promise.all([
+    execGh(
+      [
+        "pr",
+        "list",
+        "--state",
+        "all",
+        "--head",
+        branch,
+        "--limit",
+        "10",
+        "--json",
+        "number,url,title,body,state,isDraft,isCrossRepository,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
+      ],
+      { cwd },
+    ),
+    checkedOutPullRequest(cwd, branch),
+  ]);
   const parsed: unknown = JSON.parse(stdout);
   const validated = z.array(GhPrDetailSchema).safeParse(parsed);
   if (!validated.success) {
@@ -417,7 +449,7 @@ async function runGhPrListDetail(
       `Unexpected gh pr list output for ${branch}: ${validated.error.message}`,
     );
   }
-  const first = validated.data[0];
+  const first = validated.data.find((pr) => isKept(pr, checkedOut));
   if (!first) return null;
   const checkList: PullRequestCheck[] = first.statusCheckRollup.map((item) => ({
     name: item.name ?? item.context ?? "check",
@@ -430,6 +462,7 @@ async function runGhPrListDetail(
     title: first.title,
     body: first.body,
     isCrossRepository: first.isCrossRepository,
+    ...checkedOutMark(first),
     state: first.state,
     isDraft: first.isDraft,
     mergeState: first.mergeStateStatus,

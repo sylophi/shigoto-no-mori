@@ -31,10 +31,11 @@ export function ForwardControl({
   listening,
   worktree,
   granted,
+  className,
 }: {
   deviceId: string;
   remotePort: number;
-  // The worktree whose Ports dialog this is, recorded on the forward.
+  // The worktree whose port list this is, recorded on the forward.
   worktree: PortForwardWorktree;
   // Whether a server is behind the port over there right now.
   listening: boolean;
@@ -42,6 +43,8 @@ export function ForwardControl({
   // always be switched off (that is a local act), but switching one on
   // opens a grant-gated conn over there.
   granted: boolean;
+  // The band's frame and inset, which the row decides (PortRow).
+  className?: string;
 }) {
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const { forward, apply, isPending, error, clearError } =
@@ -107,7 +110,9 @@ export function ForwardControl({
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border bg-muted/40 px-3 py-1.5">
+    <div
+      className={cn("flex flex-wrap items-center gap-x-4 gap-y-1.5", className)}
+    >
       <div className="tabular flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
         <span>
           {deviceLabel}:{remotePort}

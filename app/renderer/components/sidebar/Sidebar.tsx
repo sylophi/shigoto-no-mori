@@ -54,7 +54,7 @@ import { SidebarList } from "./SidebarList";
 import { RowContent } from "./RowContent";
 import type { RowHandlers } from "./VirtualRow";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
-import { withToggled } from "@/lib/toggleSet";
+import { withMember, withToggled } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
 
 // The app sidebar, one for both shells: the brand header, the forest
@@ -160,6 +160,7 @@ function Forest({
     mirrors,
     deviceBadges,
     hiddenPrefixes,
+    groupedPrefixes,
     filter,
     activeFilter,
   } = useForestSources({ arrangeMode, inboxFacts: inbox });
@@ -198,6 +199,13 @@ function Forest({
   // The owners shut on the list of projects split by owner, by owner
   // key (ownerOf). Transient like the shelves: every owner starts open.
   const [shutOwners, setShutOwners] = useState<Set<string>>(() => new Set());
+  // The prefix groups shut inside a project, by group key and prefix.
+  // Transient too: every group starts open.
+  const [shutWorktreeGroups, setShutWorktreeGroups] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const worktreeGroupKey = (groupId: string, prefix: string) =>
+    `${groupKeyOf(groupId)}\n${prefix}`;
   const [activeId, setActiveId] = useState<string | null>(null);
   // Stepped aside for a page's list (SidebarTakeover).
   const takenOver = useSidebarTakenOver();
@@ -226,6 +234,11 @@ function Forest({
         ...prev,
         [row.shelf]: new Set(prev[row.shelf]).add(key),
       }));
+      return true;
+    }
+    if (row.kind === "worktree-group" && !row.expanded) {
+      const key = worktreeGroupKey(row.groupId, row.prefix);
+      setShutWorktreeGroups((prev) => withMember(prev, key, false));
       return true;
     }
     if (row.kind === "inbox-shelf" && !row.expanded) {
@@ -265,6 +278,11 @@ function Forest({
         order,
         openShelves: groupShelvesOpen,
         hiddenPrefixes,
+        byPrefix: {
+          prefixes: groupedPrefixes,
+          shut: (groupId, prefix) =>
+            shutWorktreeGroups.has(worktreeGroupKey(groupId, prefix)),
+        },
         arrangeMode,
         byOwner: groupByOwner ? { shut: shutOwners } : null,
         remote: shownRemote,
@@ -359,6 +377,8 @@ function Forest({
     onToggleShelved: toggleShelved,
     onToggleShelf: toggleShelf,
     onToggleOwner: (ownerKey) => setShutOwners(withToggled(ownerKey)),
+    onToggleWorktreeGroup: (groupId, prefix) =>
+      setShutWorktreeGroups(withToggled(worktreeGroupKey(groupId, prefix))),
     currentGroupKey: onScreenKey,
     arrangeMode,
   };

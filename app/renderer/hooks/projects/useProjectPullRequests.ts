@@ -24,6 +24,7 @@ import {
   type HostForestScope,
 } from "@/hooks/worktrees/useWorktrees";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { ownBranchPullRequests } from "@/lib/pullRequest";
 
 // Cascading invalidator: the shared key prefix knocks out both the
 // sidebar map and any open per-branch detail in one call, so PR
@@ -110,7 +111,10 @@ export function projectPullRequestsQueryOptions(
     queryFn:
       api === undefined || deviceId === ""
         ? skipToken
-        : () => api.githubCli.projectPullRequests(projectId),
+        : async () =>
+            ownBranchPullRequests(
+              await api.githubCli.projectPullRequests(projectId),
+            ),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnMount: false,

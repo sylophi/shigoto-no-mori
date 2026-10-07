@@ -5,7 +5,7 @@
   "description": "Cloudflare Worker hub for Shigoto no Mori (v2 step 4): forwards opaque frames between an account's devices, no sm logic.",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --env dev",
+    "dev": "wrangler d1 migrations apply shigomori-hub-dev --local --env dev < /dev/null && wrangler dev --env dev --port 8787 --var TICKET_SIGNING_KEY:local-dev-only-not-a-secret",
     "deploy": "wrangler deploy --env dev",
     "deploy:prod": "wrangler deploy --env \"\"",
     "typecheck": "$(effect-tsgo get-exe-path)",
