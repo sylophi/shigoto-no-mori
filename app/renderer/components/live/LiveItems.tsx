@@ -402,7 +402,7 @@ export function LiveBlock({
   detail?: React.ReactNode;
 }) {
   return (
-    <li className="flex flex-col gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-sm">
+    <li className="flex flex-col gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-sm">
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="flex size-4 shrink-0 items-center justify-center">
           {mark}
