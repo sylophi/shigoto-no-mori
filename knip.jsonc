@@ -35,11 +35,6 @@
     },
     "marketing": {},
   },
-  "ignoreDependencies": [
-    // The plugin name tsconfig.base.json gives Effect's diagnostics. It is
-    // built into @effect/tsgo's compiler, not a package of its own.
-    "@effect/language-service",
-  ],
   "ignoreBinaries": [
     // System tools and the owner's own port-pool, not npm packages.
     "go",
