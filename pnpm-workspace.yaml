@@ -25,6 +25,11 @@ blockExoticSubdeps: false
 # newly published versions by 7 days (minutes), and refuse updates
 # whose trust signals (provenance, signatures) weaken.
 minimumReleaseAge: 10080
+# Effect ships 4.0.x patches every few days, so the owner exempted it on
+# 2026-10-07 to pin the newest release. The cooldown holds for the rest.
+minimumReleaseAgeExclude:
+  - effect
+  - "@effect/*"
 trustPolicy: no-downgrade
 # trustPolicy waivers: transitive pins published before their projects
 # adopted npm provenance. Every integrity hash was verified against the
