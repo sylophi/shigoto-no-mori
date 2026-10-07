@@ -24,7 +24,12 @@ import {
 } from "@/components/sidebar/buildSidebarRows";
 import type { SidebarRow } from "@/components/sidebar/sidebarRow";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import type { Project, Worktree, WorktreeSortMode } from "@shared/schemas";
+import type {
+  Project,
+  PullRequest,
+  Worktree,
+  WorktreeSortMode,
+} from "@shared/schemas";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { makeProof } from "./lib/checkKit.mts";
 
@@ -52,6 +57,15 @@ const worktree = (
     path: `/src/${p.name}-${name}`,
     ...marks,
   });
+
+const pr = (number: number, baseRefName: string): PullRequest => ({
+  number,
+  url: `https://example.com/pull/${number}`,
+  title: `PR ${number}`,
+  state: "OPEN",
+  isDraft: false,
+  baseRefName,
+});
 
 const lichen = project("lichen");
 const portPool = project("port-pool");
@@ -87,7 +101,12 @@ const remote: RemoteForestItem[] = [
   },
 ];
 
-const build = (open: Project | null, worktreeSort: WorktreeSortMode = "name") =>
+const build = (
+  open: Project | null,
+  worktreeSort: WorktreeSortMode = "name",
+  byPrefix: Parameters<typeof buildSidebarRows>[0]["byPrefix"] = null,
+  pullRequests: Record<string, PullRequest> = {},
+) =>
   buildSidebarRows({
     projects,
     worktreeQueries: [
@@ -106,7 +125,7 @@ const build = (open: Project | null, worktreeSort: WorktreeSortMode = "name") =>
       listed(undefined),
     ],
     pullRequestQueries: projects.map(() => ({
-      data: {},
+      data: pullRequests,
       isLoading: false,
       isPending: false,
       error: null,
@@ -116,6 +135,7 @@ const build = (open: Project | null, worktreeSort: WorktreeSortMode = "name") =>
     worktreeSort,
     openShelves: { shelved: new Set(), hidden: new Set() },
     hiddenPrefixes: ["exp/"],
+    byPrefix,
     arrangeMode: false,
     byOwner: null,
     remote,
@@ -135,6 +155,9 @@ const line = (row: SidebarRow) => {
   }
   if (row.kind === "worktree" || row.kind === "remote-worktree") {
     return row.worktree.name;
+  }
+  if (row.kind === "worktree-group") {
+    return `${row.expanded ? "v" : ">"} ${row.prefix} ${row.count}`;
   }
   return row.kind;
 };
@@ -210,6 +233,82 @@ try {
       build(portPool).revealKey(portPool.id, peers, PEER),
       remoteWorktreeKey(PEER, peers),
     );
+  });
+
+  await proof.check(
+    "inside a project: a prefix's rows under its header",
+    () => {
+      const grouped = (shut: string[] = []) =>
+        build(portPool, "name", {
+          prefixes: ["lease-", "quiet-"],
+          shut: (groupId, prefix) =>
+            groupId === portPool.id && shut.includes(prefix),
+        });
+      // The rest first, then a header per prefix in the list's order,
+      // every device's rows together, a mirrored pair once.
+      assert.deepEqual(grouped().rows.map(line), [
+        "main",
+        "main",
+        "zebra",
+        "v lease- 1",
+        "lease-ttl",
+        "v quiet- 1",
+        "quiet-quail",
+      ]);
+      // Shut, the header stands in for its rows, and reveals them.
+      const shut = grouped(["quiet-"]);
+      assert.deepEqual(shut.rows.map(line).slice(-2), [
+        "lease-ttl",
+        "> quiet- 1",
+      ]);
+      assert.equal(
+        shut.revealKey(portPool.id, "port-pool-quiet-quail", PEER),
+        `g:${portPool.id}:quiet-`,
+      );
+      // The list's count is unchanged: grouped rows are still listed.
+      const list = build(null, "name", {
+        prefixes: ["lease-"],
+        shut: () => true,
+      });
+      assert.deepEqual(list.rows.map(line), drawn(null));
+      // A hidden prefix outranks a group: exp/try stays behind its fold.
+      const lichenRows = build(lichen, "name", {
+        prefixes: ["exp/"],
+        shut: () => false,
+      }).rows.map(line);
+      assert.equal(lichenRows.includes("v exp/ 1"), false);
+      assert.equal(lichenRows.at(-1), "shelved-toggle");
+    },
+  );
+
+  await proof.check("a stack goes whole where its lowest layer files", () => {
+    // zebra is stacked on lease-ttl.
+    const stacked = { "lease-ttl": pr(1, "main"), zebra: pr(2, "lease-ttl") };
+    const grouped = (prefixes: string[]) =>
+      build(
+        portPool,
+        "name",
+        { prefixes, shut: () => false },
+        stacked,
+      ).rows.map(line);
+    // zebra follows its bottom layer under lease-, top layer first.
+    assert.deepEqual(grouped(["lease-"]), [
+      "main",
+      "main",
+      "quiet-quail",
+      "v lease- 2",
+      "zebra",
+      "lease-ttl",
+    ]);
+    // A prefix only the top layer matches leaves the stack where its
+    // bottom layer sits.
+    assert.deepEqual(grouped(["zebra"]), [
+      "main",
+      "main",
+      "zebra",
+      "lease-ttl",
+      "quiet-quail",
+    ]);
   });
 
   proof.done();
