@@ -1,5 +1,5 @@
-// The remote Ports dialog's bulk actions: forward every listed port in
-// one go, and stop every forward the dialog lists. A port with nothing
+// A peer's port list's bulk actions: forward every listed port in one
+// go, and stop every forward the list shows. A port with nothing
 // listening yet is started too: the engine binds the forward anyway and
 // it reaches the server once one comes up. Each start lands on the
 // local port the row remembers (preferredLocalPort), so the bulk action

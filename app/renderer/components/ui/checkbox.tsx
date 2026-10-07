@@ -38,7 +38,7 @@ export function Checkbox({
       data-slot="checkbox"
       data-variant={variant}
       className={cn(
-        "peer size-4 shrink-0 rounded-[4px] border border-input bg-background transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+        "peer size-4 shrink-0 rounded-[4px] border border-input bg-background transition-colors outline-none not-in-[label]:hover:ring-[3px] not-in-[label]:hover:ring-ring/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
         destructive
           ? "border-destructive/30 data-[checked]:border-destructive data-[checked]:bg-destructive data-[indeterminate]:border-destructive data-[indeterminate]:bg-destructive"
           : "data-[checked]:border-primary data-[checked]:bg-primary data-[indeterminate]:border-primary data-[indeterminate]:bg-primary",

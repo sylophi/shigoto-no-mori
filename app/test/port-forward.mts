@@ -405,7 +405,7 @@ async function main() {
       remotePort: echo.port,
     });
     assert.match(started.forwardId, /^[0-9a-f]{32}$/);
-    // The duplicate comes from a worktree's Ports dialog, which claims
+    // The duplicate comes from a worktree's port list, which claims
     // the untagged forward for that worktree.
     const fromWorktree = { projectId: "p1", worktreeId: "w1" };
     assert.equal(engine.listForwards()[0]?.worktree, undefined);

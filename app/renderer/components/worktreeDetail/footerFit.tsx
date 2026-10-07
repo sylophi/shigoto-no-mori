@@ -22,12 +22,11 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 export const LABEL_RANK = {
   transplant: 1,
   mirrorTo: 2,
-  ports: 3,
-  files: 4,
-  mirror: 5,
-  shelve: 6,
-  autoPull: 7,
-  delete: 8,
+  files: 3,
+  mirror: 4,
+  shelve: 5,
+  autoPull: 6,
+  delete: 7,
 } as const;
 
 const rankOf = (label: HTMLElement) => Number(label.dataset.labelRank);

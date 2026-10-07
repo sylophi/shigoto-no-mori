@@ -1,40 +1,15 @@
-// The worktree's ports, behind the footer's Ports button (PortsButton)
-// on both the local and the remote worktree page, in the frame the
-// mirror and transplant dialogs use so the footer's verbs look like
-// one family. The rows are what port-pool allocated plus whatever the
-// user added, each with a live dot for "something is listening there
-// right now". Locally each row opens in the browser. Under a remote
-// scope each row is also a forward switch: bring that port to this
-// machine's localhost over the device connection, at a local port of
-// the user's choosing (app-only, since a browser cannot bind a
-// listener, and the web client sees the rows read-only).
-//
-// Adding is for a worktree with a data file and a viewer with command
-// access. External worktrees have no data file, so they only show
-// port-pool rows.
-import { useState } from "react";
-import { Cable, Plus } from "lucide-react";
-import {
-  hasWorktreeData,
-  MAX_CUSTOM_PORTS,
-  type Worktree,
-} from "@shared/schemas";
+// A worktree's ports in a dialog, for the Live page, which shows many
+// worktrees and has no room for every list. The worktree page shows the
+// same list in its Ports section (PortsSection). In the frame the
+// mirror and transplant dialogs use.
+import { Cable } from "lucide-react";
+import type { Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { Skeleton } from "@/components/ui/skeleton";
 import { TONE_PILL } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useCustomPortsWrite } from "@/hooks/ports/useCustomPorts";
-import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
-import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { useHostScope } from "@/hooks/remote/useHostScope";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
-import { useWorktreeData } from "@/hooks/worktrees/useWorktreeData";
 import { FlowHeader, FlowBody, FlowFooter } from "../flow/FlowChrome";
-import { ForwardAllButton } from "./ForwardAllButton";
-import { PortForm } from "./PortForm";
-import { PortRow } from "./PortRow";
+import { PortActions, PortList, usePortList } from "./PortList";
 
 export function PortsDialog({
   worktree,
@@ -43,32 +18,8 @@ export function PortsDialog({
   worktree: Worktree;
   onClose: () => void;
 }) {
-  const { deviceId, remote } = useHostScope();
-  // canCommand: granted, or the verdict still in flight, so the dialog
-  // does not open read-only and turn editable a moment later (the
-  // page's own rule).
-  const { canCommand: granted } = useCommandAccess();
-  const deviceLabel = useRemoteDeviceLabel(deviceId);
-  const canEdit = granted && hasWorktreeData(worktree);
-  const portsQuery = useWorktreePorts(worktree);
-  const customPorts = useCustomPortsWrite(worktree);
-  const [adding, setAdding] = useState(false);
-  const ports = portsQuery.data?.ports ?? [];
-  const forwardFrom = {
-    projectId: worktree.projectId,
-    worktreeId: worktree.id,
-  };
-  // The cap is on the stored list, which the merged one under-counts:
-  // a custom entry on a number port-pool later allocated is shadowed
-  // by the pool row and shows nowhere, but still occupies a slot.
-  const storedQuery = useWorktreeData(
-    canEdit ? worktree.projectId : null,
-    canEdit ? worktree.id : null,
-  );
-  const atCap = (storedQuery.data?.ports?.length ?? 0) >= MAX_CUSTOM_PORTS;
-  // The form checks duplicates against the list and the cap against
-  // the stored one, so it waits for both reads.
-  const canAdd = canEdit && !portsQuery.isPending && !storedQuery.isPending;
+  const state = usePortList(worktree);
+  const { remote, deviceLabel } = state;
 
   return (
     <ModalShell onClose={onClose} popoverClassName="max-w-2xl">
@@ -87,80 +38,10 @@ export function PortsDialog({
         </p>
       </FlowHeader>
       <FlowBody>
-        <div className="space-y-3">
-          {portsQuery.isPending ? (
-            <Skeleton className="h-10 w-full rounded-lg" />
-          ) : ports.length > 0 ? (
-            <ul className="flex flex-col gap-1.5">
-              {ports.map((entry) => (
-                <PortRow
-                  key={entry.port}
-                  entry={entry}
-                  taken={ports}
-                  deviceId={deviceId}
-                  worktree={forwardFrom}
-                  remote={remote}
-                  granted={granted}
-                  onUpdate={
-                    entry.source === "custom" && canEdit
-                      ? (next) => customPorts.update(entry.port, next)
-                      : undefined
-                  }
-                  onRemove={
-                    entry.source === "custom" && canEdit
-                      ? () => customPorts.remove(entry.port)
-                      : undefined
-                  }
-                />
-              ))}
-            </ul>
-          ) : (
-            !adding && (
-              <p className="text-sm text-muted-foreground">
-                {portsQuery.isError
-                  ? `Couldn't read this worktree's ports${remote ? ` from ${deviceLabel}` : ""}.`
-                  : "No ports yet."}
-              </p>
-            )
-          )}
-          {adding && (
-            <PortForm
-              taken={ports}
-              onSubmit={(entry) => customPorts.add(entry)}
-              onDone={() => setAdding(false)}
-              className="rounded-lg border border-dashed border-border bg-card px-3 py-2"
-            />
-          )}
-        </div>
+        <PortList state={state} />
       </FlowBody>
       <FlowFooter>
-        {remote && canForwardPorts && (
-          <ForwardAllButton
-            deviceId={deviceId}
-            worktree={forwardFrom}
-            ports={ports}
-            granted={granted}
-          />
-        )}
-        {canEdit && !adding && (
-          <SimpleTooltip
-            tip={
-              atCap
-                ? `Up to ${MAX_CUSTOM_PORTS} custom ports per worktree`
-                : undefined
-            }
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={atCap || !canAdd}
-              onClick={() => setAdding(true)}
-            >
-              <Plus />
-              Add port
-            </Button>
-          </SimpleTooltip>
-        )}
+        <PortActions state={state} />
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>

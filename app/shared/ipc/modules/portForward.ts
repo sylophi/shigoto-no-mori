@@ -19,13 +19,13 @@ import { PortNumberSchema, WorktreeScopedPayloadSchema } from "@shared/schemas";
 // a forward it was told about.
 const ForwardIdSchema = HexId32Schema;
 
-// The peer's worktree a forward was switched on from (its Ports
-// dialog), so the sidebar and the Ports button can say that worktree is
-// being forwarded without reading every peer worktree's port list.
-// Absent for a forward started from the account page. A label only: the
-// engine forwards by (device, port) either way, and the dialog's
-// switches match by port, so a forward another worktree (or the devices
-// page) started shows on in the dialog but marks only its own worktree.
+// The peer's worktree a forward was switched on from (its port list),
+// so the sidebar can say that worktree is being forwarded without
+// reading every peer worktree's port list. Absent for a forward started
+// from the account page. A label only: the engine forwards by (device,
+// port) either way, and the list's switches match by port, so a forward
+// another worktree (or the devices page) started shows on in the list
+// but marks only its own worktree.
 const PortForwardWorktreeSchema = WorktreeScopedPayloadSchema;
 
 export type PortForwardWorktree = z.infer<typeof PortForwardWorktreeSchema>;
