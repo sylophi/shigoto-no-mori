@@ -467,7 +467,7 @@ export function resolveMergeMethod(
     rebase: true,
     autoMerge: false,
   };
-  const allowed = MergeMethodSchema.options.filter((m) => allowedMap[m]);
+  const allowed = MergeMethodSchema.literals.filter((m) => allowedMap[m]);
   const [fallback] = allowed;
   if (fallback === undefined) return { primary: null, allowed: [] };
   const primary =

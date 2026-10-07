@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   DisablePullRequestAutoMergePayloadSchema,
@@ -15,23 +15,29 @@ import {
   RepoMergeConfigSchema,
   ResolvePullRequestCheckoutPayloadSchema,
   SetPullRequestDraftPayloadSchema,
+  VoidSchema,
 } from "@shared/schemas";
 
 export const githubCliContract = defineContract("host", {
-  readiness: invoke("githubCli:readiness", z.void(), GithubCliReadinessSchema, {
-    remote: true,
-    gated: false,
-  }),
+  readiness: invoke(
+    "githubCli:readiness",
+    VoidSchema,
+    GithubCliReadinessSchema,
+    {
+      remote: true,
+      gated: false,
+    },
+  ),
   projectPullRequests: invoke(
     "githubCli:projectPullRequests",
     ProjectScopedPayloadSchema,
-    z.record(z.string(), PullRequestSchema),
+    Schema.Record(Schema.String, PullRequestSchema),
     { remote: true, gated: false },
   ),
   worktreePullRequest: invoke(
     "githubCli:worktreePullRequest",
     GithubCliWorktreePullRequestPayloadSchema,
-    PullRequestDetailSchema.nullable(),
+    Schema.NullOr(PullRequestDetailSchema),
     { remote: true, gated: false },
   ),
   // Open PRs offered as a source in the new-worktree form. Uncached and
@@ -55,7 +61,7 @@ export const githubCliContract = defineContract("host", {
   repoMergeConfig: invoke(
     "githubCli:repoMergeConfig",
     ProjectScopedPayloadSchema,
-    RepoMergeConfigSchema.nullable(),
+    Schema.NullOr(RepoMergeConfigSchema),
     { remote: true, gated: false },
   ),
   // The repo's About text, for the home grid's tiles. Null when it has
@@ -64,7 +70,7 @@ export const githubCliContract = defineContract("host", {
   repoDescription: invoke(
     "githubCli:repoDescription",
     ProjectScopedPayloadSchema,
-    z.string().nullable(),
+    Schema.NullOr(Schema.String),
     { remote: true, gated: false },
   ),
   mergePullRequest: invoke(
@@ -76,20 +82,20 @@ export const githubCliContract = defineContract("host", {
   pullRequestDiff: invoke(
     "githubCli:pullRequestDiff",
     GithubCliPullRequestDiffPayloadSchema,
-    z.string(),
+    Schema.String,
     { remote: true, gated: false },
   ),
   setPullRequestDraft: invoke(
     "githubCli:setPullRequestDraft",
     SetPullRequestDraftPayloadSchema,
-    z.void(),
+    VoidSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   // Turns an armed auto-merge off, so the PR waits for a person again.
   disablePullRequestAutoMerge: invoke(
     "githubCli:disablePullRequestAutoMerge",
     DisablePullRequestAutoMergePayloadSchema,
-    z.void(),
+    VoidSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   projectPullRequestsRefreshed: broadcast(
