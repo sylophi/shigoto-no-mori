@@ -8,9 +8,10 @@ import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { ClosedPullRequestBox } from "./ClosedPullRequestBox";
 import { MergedPrimaryBranchBox } from "./MergedPrimaryBranchBox";
 import { MergeBox } from "./MergeBox";
-import { PullRequestIdentity } from "./PullRequestIdentity";
-import { StackList } from "./StackList";
 
+// What to do about the PR: merge it, or clean up after it. What the
+// PR is comes before it, from whoever places it (PullRequestSection,
+// or the page's PR header above PullRequestLead).
 export function PullRequestBody({
   worktree,
   pr,
@@ -27,8 +28,6 @@ export function PullRequestBody({
 
   return (
     <div className="space-y-4">
-      <PullRequestIdentity worktree={worktree} pr={pr} />
-      {stack && <StackList worktree={worktree} stack={stack} />}
       {isOpen && (
         <MergeBox
           worktree={worktree}
@@ -39,7 +38,12 @@ export function PullRequestBody({
         />
       )}
       {!isOpen && !worktree.isPrimary && (
-        <ClosedPullRequestBox worktree={worktree} stack={stack} />
+        <ClosedPullRequestBox
+          // Its reach chosen afresh on another worktree's page.
+          key={worktree.id}
+          worktree={worktree}
+          stack={stack}
+        />
       )}
       {pr.state === "MERGED" && worktree.isPrimary && (
         <MergedPrimaryBranchBox worktree={worktree} />

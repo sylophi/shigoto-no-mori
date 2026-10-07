@@ -4,18 +4,23 @@ import {
   isOwnPullRequest,
   mappedPullRequest,
   pullRequestOwnsTitle,
+  titledByPullRequest,
   worktreeTitle,
 } from "@/lib/worktreeTitle";
-import type { Worktree } from "@shared/schemas";
+import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
 
 // The open worktree's title and description, its open PR's while it
 // has one (worktreeTitle). The project map knows a PR's title before
 // the page's own lookup answers, but only that lookup brings the body,
 // so a worktree with an open PR shows no description until it does
 // rather than flash the local one it is about to replace.
+//
+// `pullRequest` is the PR when the title is its title, so the page can
+// lead with the PR itself instead of naming it twice.
 export function useWorktreeTitle(worktree: Worktree): {
   title: string | null;
   description: string | null;
+  pullRequest: PullRequest | PullRequestDetail | null;
 } {
   const { data: detail } = useWorktreePullRequest(
     worktree.projectId,
@@ -33,6 +38,7 @@ export function useWorktreeTitle(worktree: Worktree): {
       ? body
       : (shownText(worktree.description) ??
         (isOwnPullRequest(worktree, pr) ? body : null)),
+    pullRequest: titledByPullRequest(worktree, pr) ? pr : null,
   };
 }
 

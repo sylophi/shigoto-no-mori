@@ -18,6 +18,8 @@ interface ConfirmDestructiveButtonProps {
   icon?: React.ReactNode;
   // A hint that leaves the button live, where disabledReason would not.
   tip?: string;
+  // For a split button's half (ClosedPullRequestBox).
+  className?: string;
 }
 
 const BIN = <Trash2 aria-hidden className="size-3.5" />;
@@ -36,6 +38,7 @@ export function ConfirmDestructiveButton({
   disabledReason,
   icon = BIN,
   tip,
+  className,
 }: ConfirmDestructiveButtonProps) {
   return (
     <SimpleTooltip tip={disabledReason ?? tip}>
@@ -46,6 +49,7 @@ export function ConfirmDestructiveButton({
         disabled={pending || disabled || disabledReason !== undefined}
         aria-pressed={armed}
         onClick={onClick}
+        className={className}
       >
         {pending ? (
           <>

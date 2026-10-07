@@ -32,6 +32,19 @@ export function pullRequestOwnsTitle(
   return isOwnPullRequest(worktree, pr) && pr?.state === "OPEN";
 }
 
+// Whether the worktree is called by its PR's title (worktreeTitle):
+// an open PR's always, a merged or closed one's while the worktree has
+// no title of its own.
+export function titledByPullRequest<P extends TitlePullRequest>(
+  worktree: TitledWorktree,
+  pr: P | null | undefined,
+): pr is P {
+  return (
+    pullRequestOwnsTitle(worktree, pr) ||
+    (worktree.title === undefined && isOwnPullRequest(worktree, pr))
+  );
+}
+
 // What a worktree's work is called: its open PR's title, else its own
 // (`sm describe`), else a merged or closed PR's. Null when there is
 // none, and the branch names it instead.
@@ -39,9 +52,9 @@ export function worktreeTitle(
   worktree: TitledWorktree,
   pr: TitlePullRequest | null | undefined,
 ): string | null {
-  if (pullRequestOwnsTitle(worktree, pr)) return pr?.title ?? null;
-  const fallback = isOwnPullRequest(worktree, pr) ? (pr?.title ?? null) : null;
-  return worktree.title ?? fallback;
+  return titledByPullRequest(worktree, pr)
+    ? pr.title
+    : (worktree.title ?? null);
 }
 
 // The worktree's PR in a project's map (keyed by head branch), none
