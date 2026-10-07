@@ -13,8 +13,9 @@ import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 // heading of each section that takes one (SectionIntro's action)
 // rather than spelled out on the page. A plain
 // button, not a chip with a chevron, since it shows a reference and
-// picks nothing. Copying a row copies it as a shell reference, since
-// every one of those fields is a shell command.
+// picks nothing. Copying a row copies it as a quoted shell reference,
+// since every one of those fields is a shell command and the values
+// are paths and free text.
 export function ScriptEnvPopover() {
   return (
     <Popover>
@@ -42,7 +43,7 @@ export function ScriptEnvPopover() {
                 </div>
                 <div className="text-xs text-muted-foreground">{row.desc}</div>
               </div>
-              <CopyButton value={`$${row.name}`} label={`Copy ${row.name}`} />
+              <CopyButton value={`"$${row.name}"`} label={`Copy ${row.name}`} />
             </li>
           ))}
         </ul>

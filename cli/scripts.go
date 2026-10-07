@@ -141,9 +141,11 @@ func scriptEnv(in scriptEnvInputs) []string {
 		}
 	}
 	// Sorted so a run's environment is reproducible, which the NDJSON
-	// event stream and any diffing of it rely on.
+	// event stream and any diffing of it rely on. NULs go: the
+	// description is free text, and exec refuses an env that holds one,
+	// so one stray byte would keep every script from starting.
 	for _, name := range slices.Sorted(maps.Keys(contract)) {
-		env = append(env, name+"="+contract[name])
+		env = append(env, name+"="+strings.ReplaceAll(contract[name], "\x00", ""))
 	}
 	return env
 }

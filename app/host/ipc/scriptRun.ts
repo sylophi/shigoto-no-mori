@@ -47,10 +47,17 @@ export async function prepareScriptRun(
     scriptEnv: {
       projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
       defaultBranch: worktree.primaryRef ?? "",
-      title: described?.title ?? "",
-      description: described?.description ?? "",
+      title: withoutNul(described?.title),
+      description: withoutNul(described?.description),
     },
   };
+}
+
+// Free text, and a spawn refuses an env value that holds a NUL, so one
+// stray byte would keep the script from starting (the CLI's scriptEnv
+// drops them too).
+function withoutNul(text: string | undefined): string {
+  return (text ?? "").replaceAll("\0", "");
 }
 
 export function scriptEventNotifier(ctx: HandlerContext): NotifyScriptEvent {

@@ -20,7 +20,8 @@ export function SectionHeading({ children, className }: SectionHeadingProps) {
 
 // A settings-style section's heading with the paragraph that explains
 // the section right under it. `action` sits at the right, centered on
-// the heading and paragraph together.
+// the heading and paragraph together, and wraps under them once the
+// paragraph would be squeezed narrower than 16rem.
 export function SectionIntro({
   title,
   action,
@@ -31,8 +32,8 @@ export function SectionIntro({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="min-w-0 flex-1">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="min-w-0 flex-[1_1_16rem]">
         <SectionHeading className="mb-1">{title}</SectionHeading>
         <p className="text-xs text-muted-foreground">{children}</p>
       </div>
