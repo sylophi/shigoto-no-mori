@@ -10,7 +10,8 @@ package main
 // the lifecycle scripts its Scripts panel re-runs by hand, which it
 // still starts itself with the SHIGOMORI_* env of scriptEnv below.
 // Shell selection and the unattended-run env (pager off) match it, so
-// the two runners differ in nothing a script can observe.
+// the two runners differ in nothing a script can observe. Custom
+// launchers (launchCustomCommand) take the same shell and env.
 
 import (
 	"cmp"

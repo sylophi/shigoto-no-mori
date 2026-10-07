@@ -241,13 +241,15 @@ func launchEntry(entry launcherEntry, target located) error {
 	return errf("Launcher %q has nothing to launch.", entry.label)
 }
 
-// Fire-and-forget through the user's shell, detached so it outlives
-// this process. This is the app's launchCustom. The env is the one
-// setup, teardown and `sm run` see (scriptEnv), named for the
-// launcher's label. SHIGOMORI_WORKSPACE_PATH predates that contract
-// and stays for commands written against it.
+// Fire-and-forget through the user's login shell, detached so it
+// outlives this process. This is the app's launchCustom. The shell and
+// the env are the ones setup and teardown get (resolveShell,
+// scriptEnv), so a command reads the same in either field. The env is
+// named for the launcher's label. SHIGOMORI_WORKSPACE_PATH predates
+// that contract and stays for commands written against it.
 func launchCustomCommand(c launcherCommand, target located) error {
-	cmd := exec.Command("/bin/sh", "-c", c.Command)
+	shell, shellArgs := resolveShell()
+	cmd := exec.Command(shell, append(shellArgs, c.Command)...)
 	cmd.Dir = target.worktree.Path
 	cmd.Env = append(scriptEnv(runEnvInputs(target, c.Label)), "SHIGOMORI_WORKSPACE_PATH="+target.worktree.Path)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}

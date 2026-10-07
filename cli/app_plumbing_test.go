@@ -546,8 +546,17 @@ func TestOpenByExactAddress(t *testing.T) {
 	}
 
 	// The real launcher, through the entrypoint the app spawns, with the
-	// tool after --.
+	// tool after --. $SHELL is a stand-in that notes how it was called
+	// and hands the command to sh, to show the launch goes through the
+	// user's login shell like a setup script does.
 	launchEntryFn = launchEntry
+	shellNote := filepath.Join(t.TempDir(), "shell-args")
+	stubShell := filepath.Join(t.TempDir(), "stub-shell")
+	writeFileT(t, stubShell, "#!/bin/sh\necho \"$1 $2\" > "+shellQuote(shellNote)+"\nshift\nexec /bin/sh \"$@\"\n")
+	if err := os.Chmod(stubShell, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SHELL", stubShell)
 	savedArgs := os.Args
 	t.Cleanup(func() { os.Args = savedArgs })
 	os.Args = []string{binaryName, "--json", "open", "--project-id", proj.ID, "--worktree-id", fox.ID, "--", "custom:a1"}
@@ -571,6 +580,9 @@ func TestOpenByExactAddress(t *testing.T) {
 			t.Fatalf("the custom launcher wrote %q, want %q", data, wantMarker)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if data, err := os.ReadFile(shellNote); err != nil || strings.TrimSpace(string(data)) != "-l -c" {
+		t.Errorf("launcher shell called with %q (%v), want $SHELL -l -c", data, err)
 	}
 }
 
