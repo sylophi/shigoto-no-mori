@@ -1,0 +1,84 @@
+{
+  "PathPayloadSchema": {
+    "accepts": [
+      {
+        "path": "/Users/alex/dev/shigoto-no-mori"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "path": "/Users/alex/dev",
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7"
+        },
+        "output": {
+          "path": "/Users/alex/dev"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "path": ""
+      },
+      {}
+    ]
+  },
+  "ProjectScopedPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": ""
+      },
+      {}
+    ]
+  },
+  "WorktreeScopedPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "path": "app/package.json"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "worktreeId": "e0f76c6cc80a"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": ""
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7"
+      }
+    ]
+  }
+}

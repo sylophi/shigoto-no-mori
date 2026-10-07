@@ -1,0 +1,83 @@
+{
+  "ReadWorktreeFilePayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "path": "app/shared/schemas/files.ts"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "path": "README.md",
+          "untracked": false
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "e0f76c6cc80a",
+          "path": "README.md"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "path": ""
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "path": "../../.ssh/id_ed25519"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      }
+    ]
+  },
+  "WorktreeFileSchema": {
+    "accepts": [
+      {
+        "kind": "text",
+        "contents": "# Shigoto no Mori\n\nA forest of worktrees.\n",
+        "size": 42
+      },
+      {
+        "kind": "binary",
+        "size": 18734
+      },
+      {
+        "kind": "tooLarge",
+        "size": 4718592
+      },
+      {
+        "kind": "missing"
+      }
+    ],
+    "rejects": [
+      {
+        "kind": "missing",
+        "size": 0
+      },
+      {
+        "kind": "symlink"
+      },
+      {
+        "kind": "binary",
+        "size": -1
+      },
+      {
+        "kind": "binary",
+        "size": 1.5
+      },
+      {
+        "kind": "text",
+        "size": 42
+      }
+    ]
+  }
+}

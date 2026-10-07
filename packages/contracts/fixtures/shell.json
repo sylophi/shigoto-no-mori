@@ -1,0 +1,38 @@
+{
+  "ShellOpenExternalPayloadSchema": {
+    "accepts": [
+      {
+        "url": "https://github.com/alex/notes/pull/42/checks"
+      },
+      {
+        "url": "http://localhost:5173/"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "url": "https://github.com/alex/notes",
+          "newWindow": true
+        },
+        "output": {
+          "url": "https://github.com/alex/notes"
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "url": "not a url"
+      },
+      {
+        "url": "file:///Users/alex/.ssh/id_ed25519"
+      },
+      {
+        "url": "javascript:alert(1)"
+      },
+      {
+        "url": "vscode://file/Users/alex/dev/notes"
+      }
+    ]
+  }
+}

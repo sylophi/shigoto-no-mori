@@ -1,0 +1,47 @@
+{
+  "ReleaseSchema": {
+    "accepts": [
+      {
+        "version": "2.0.3",
+        "notes": "**Toasts that match the theme** ([#422](https://github.com/sylophi/shigoto-no-mori/pull/422))\nEach one is tinted by its tone, with the theme's buttons and font.\n\n### Under the hood\n\n- The web client and UI lab dev servers get their own ports per worktree. ([#426](https://github.com/sylophi/shigoto-no-mori/pull/426))",
+        "publishedAt": "2026-10-04T09:12:44Z",
+        "prerelease": false,
+        "url": "https://github.com/sylophi/shigoto-no-mori/releases/tag/v2.0.3"
+      },
+      {
+        "version": "2.1.0-beta.1",
+        "notes": "A first look at the new ⌘K pane.",
+        "publishedAt": null,
+        "prerelease": true,
+        "url": "https://github.com/sylophi/shigoto-no-mori/releases/tag/v2.1.0-beta.1"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "version": "2.0.2",
+          "notes": "- Village news cards dismiss with a click anywhere on them. ([#420](https://github.com/sylophi/shigoto-no-mori/pull/420))",
+          "publishedAt": "2026-10-02T17:30:05Z",
+          "prerelease": false,
+          "url": "https://github.com/sylophi/shigoto-no-mori/releases/tag/v2.0.2",
+          "draft": false
+        },
+        "output": {
+          "version": "2.0.2",
+          "notes": "- Village news cards dismiss with a click anywhere on them. ([#420](https://github.com/sylophi/shigoto-no-mori/pull/420))",
+          "publishedAt": "2026-10-02T17:30:05Z",
+          "prerelease": false,
+          "url": "https://github.com/sylophi/shigoto-no-mori/releases/tag/v2.0.2"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "version": "2.0.1",
+        "notes": "",
+        "prerelease": false,
+        "url": "https://github.com/sylophi/shigoto-no-mori/releases/tag/v2.0.1"
+      }
+    ]
+  }
+}

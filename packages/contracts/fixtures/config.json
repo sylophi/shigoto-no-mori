@@ -1,0 +1,1273 @@
+{
+  "ShigomoriConfigSchema": {
+    "accepts": [
+      {
+        "scripts": {
+          "setup": "pnpm install",
+          "teardown": "pnpm run clean"
+        },
+        "launchers": [
+          {
+            "id": "claude",
+            "label": "Claude Code",
+            "command": "claude"
+          }
+        ],
+        "portBase": 5730,
+        "defaultBranch": "main",
+        "carryOver": [
+          {
+            "path": ".env.local",
+            "mode": "copy"
+          },
+          {
+            "path": ".claude/settings.local.json",
+            "mode": "symlink"
+          }
+        ],
+        "useWorktreeInclude": false,
+        "worktreeLayout": "custom",
+        "customWorktreePath": "/Users/alex/worktrees",
+        "lastMergeMethod": "squash",
+        "showPrimaryInInbox": true
+      },
+      {
+        "defaultBranch": "main"
+      },
+      {
+        "defaultBranch": "develop",
+        "worktreeLayout": "in-project",
+        "lastMergeMethod": "merge"
+      },
+      {
+        "scripts": {},
+        "defaultBranch": "main",
+        "worktreeLayout": "managed-root",
+        "lastMergeMethod": "rebase"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "defaultBranch": "main",
+          "customLayoutNote": "from a newer build"
+        },
+        "output": {
+          "defaultBranch": "main"
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "defaultBranch": ""
+      },
+      {
+        "defaultBranch": "main",
+        "portBase": 0
+      },
+      {
+        "defaultBranch": "main",
+        "portBase": 5730.5
+      },
+      {
+        "defaultBranch": "main",
+        "launchers": [
+          {
+            "id": "",
+            "label": "Claude Code",
+            "command": "claude"
+          }
+        ]
+      },
+      {
+        "defaultBranch": "main",
+        "launchers": [
+          {
+            "id": "claude",
+            "label": "",
+            "command": "claude"
+          }
+        ]
+      },
+      {
+        "defaultBranch": "main",
+        "launchers": [
+          {
+            "id": "claude",
+            "label": "Claude Code",
+            "command": ""
+          }
+        ]
+      },
+      {
+        "defaultBranch": "main",
+        "carryOver": [
+          {
+            "path": "",
+            "mode": "copy"
+          }
+        ]
+      },
+      {
+        "defaultBranch": "main",
+        "carryOver": [
+          {
+            "path": "../secrets/.env",
+            "mode": "copy"
+          }
+        ]
+      },
+      {
+        "defaultBranch": "main",
+        "carryOver": [
+          {
+            "path": ".env.local",
+            "mode": "hardlink"
+          }
+        ]
+      },
+      {
+        "defaultBranch": "main",
+        "worktreeLayout": "sibling"
+      },
+      {
+        "defaultBranch": "main",
+        "lastMergeMethod": "fast-forward"
+      }
+    ]
+  },
+  "StoredShigomoriConfigSchema": {
+    "accepts": [
+      {
+        "scripts": {
+          "setup": "pnpm install",
+          "teardown": "pnpm run clean"
+        },
+        "launchers": [
+          {
+            "id": "claude",
+            "label": "Claude Code",
+            "command": "claude"
+          }
+        ],
+        "portBase": 5730,
+        "defaultBranch": "main",
+        "carryOver": [
+          {
+            "path": ".env.local",
+            "mode": "copy"
+          },
+          {
+            "path": ".claude/settings.local.json",
+            "mode": "symlink"
+          }
+        ],
+        "useWorktreeInclude": false,
+        "worktreeLayout": "custom",
+        "customWorktreePath": "/Users/alex/worktrees",
+        "lastMergeMethod": "squash",
+        "showPrimaryInInbox": true
+      },
+      {
+        "defaultBranch": "main"
+      },
+      {
+        "defaultBranch": "main",
+        "worktreeLayout": "in-project",
+        "futureSetting": {
+          "enabled": true
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "defaultBranch": "main",
+        "worktreeLayout": "sibling"
+      }
+    ]
+  },
+  "WorktreeIncludeStatusSchema": {
+    "accepts": [
+      {
+        "fileExists": true,
+        "matchedPaths": [".env.local", "node_modules/"]
+      },
+      {
+        "fileExists": false,
+        "matchedPaths": []
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "fileExists": false,
+          "matchedPaths": [],
+          "patterns": []
+        },
+        "output": {
+          "fileExists": false,
+          "matchedPaths": []
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "fileExists": true
+      }
+    ]
+  },
+  "CarryOverListingPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "shigoto-no-mori",
+        "relative": "",
+        "ruleIgnored": true
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "relative": "app/.next"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "relative": "",
+          "worktreeId": "a1b2c3d4e5f6"
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "relative": ""
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "relative": ""
+      },
+      {
+        "projectId": "",
+        "relative": ""
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "relative": "/Users/alex"
+      }
+    ]
+  },
+  "CarryOverCandidateSchema": {
+    "accepts": [
+      {
+        "name": ".env.local",
+        "isDirectory": false,
+        "ignored": true,
+        "inPrimary": true,
+        "worktrees": []
+      },
+      {
+        "name": "node_modules",
+        "isDirectory": true,
+        "ignored": true,
+        "inPrimary": false,
+        "worktrees": ["happy-hummingbird"]
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "name": ".env.local",
+          "isDirectory": false,
+          "ignored": true,
+          "inPrimary": true,
+          "worktrees": [],
+          "size": 412
+        },
+        "output": {
+          "name": ".env.local",
+          "isDirectory": false,
+          "ignored": true,
+          "inPrimary": true,
+          "worktrees": []
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "name": ".env.local",
+        "isDirectory": false,
+        "ignored": true,
+        "inPrimary": true
+      }
+    ]
+  },
+  "CarryOverStatsPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "shigoto-no-mori",
+        "paths": [".env.local", ".claude/settings.local.json"]
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "paths": [],
+          "worktreeId": "a1b2c3d4e5f6"
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "paths": []
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "paths": []
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "paths": [""]
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "paths": ["../.env"]
+      }
+    ]
+  },
+  "CarryOverStatSchema": {
+    "accepts": [
+      {
+        "isDirectory": false,
+        "inPrimary": true,
+        "worktrees": ["happy-hummingbird", "brave-badger"]
+      },
+      {
+        "isDirectory": true,
+        "inPrimary": false,
+        "worktrees": []
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "isDirectory": false,
+          "inPrimary": true,
+          "worktrees": [],
+          "size": 412
+        },
+        "output": {
+          "isDirectory": false,
+          "inPrimary": true,
+          "worktrees": []
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "isDirectory": false,
+        "inPrimary": true
+      }
+    ]
+  },
+  "ShigomoriWorktreeDataSchema": {
+    "accepts": [
+      {
+        "title": "Worktree titles",
+        "description": "Names the work\nbefore the PR.",
+        "describedAt": 1759834800000,
+        "ports": [
+          {
+            "port": 8787,
+            "label": "api"
+          },
+          {
+            "port": 5555
+          }
+        ]
+      },
+      {}
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "ports": [
+            {
+              "port": 6006,
+              "label": "  storybook  "
+            }
+          ]
+        },
+        "output": {
+          "ports": [
+            {
+              "port": 6006,
+              "label": "storybook"
+            }
+          ]
+        }
+      },
+      {
+        "input": {
+          "ports": [
+            {
+              "name": "api",
+              "port": 4000
+            }
+          ]
+        },
+        "output": {
+          "ports": [
+            {
+              "port": 4000
+            }
+          ]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "describedAt": 1759834800000.5
+      },
+      {
+        "describedAt": -1
+      },
+      {
+        "ports": [
+          {
+            "port": 0
+          }
+        ]
+      },
+      {
+        "ports": [
+          {
+            "port": 65536
+          }
+        ]
+      },
+      {
+        "ports": [
+          {
+            "port": 5173.5
+          }
+        ]
+      },
+      {
+        "ports": [
+          {
+            "port": 5173,
+            "label": "   "
+          }
+        ]
+      },
+      {
+        "ports": [
+          {
+            "port": 5173,
+            "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        ]
+      },
+      {
+        "ports": [
+          {
+            "port": 5100
+          },
+          {
+            "port": 5101
+          },
+          {
+            "port": 5102
+          },
+          {
+            "port": 5103
+          },
+          {
+            "port": 5104
+          },
+          {
+            "port": 5105
+          },
+          {
+            "port": 5106
+          },
+          {
+            "port": 5107
+          },
+          {
+            "port": 5108
+          },
+          {
+            "port": 5109
+          },
+          {
+            "port": 5110
+          },
+          {
+            "port": 5111
+          },
+          {
+            "port": 5112
+          },
+          {
+            "port": 5113
+          },
+          {
+            "port": 5114
+          },
+          {
+            "port": 5115
+          },
+          {
+            "port": 5116
+          }
+        ]
+      }
+    ]
+  },
+  "StoredGlobalConfigSchema": {
+    "accepts": [
+      {
+        "launchers": [
+          {
+            "id": "tmux",
+            "label": "tmux",
+            "command": "tmux new -A -s main"
+          }
+        ],
+        "hiddenLaunchers": ["app:cursor", "web:github"],
+        "launchScripts": false,
+        "deleteBranchOnRemove": false,
+        "autoPopulateInstall": true,
+        "autoPullNew": true,
+        "autoPullPrimaryOnly": true,
+        "doubutsuNames": true,
+        "codexWorktreeNames": true,
+        "managedOnProjectDrive": true,
+        "portPool": true,
+        "terrier": true,
+        "githubCli": false,
+        "directConnections": false,
+        "cloudflaredPath": "/opt/homebrew/bin/cloudflared"
+      },
+      {},
+      {
+        "launchScripts": true,
+        "theme": "dark",
+        "doubutsu": true
+      }
+    ],
+    "rejects": [
+      {
+        "launchers": [
+          {
+            "id": "tmux",
+            "label": "tmux",
+            "command": ""
+          }
+        ]
+      },
+      {
+        "githubCli": "yes"
+      }
+    ]
+  },
+  "DeviceSettingsPatchSchema": {
+    "accepts": [
+      {
+        "launchers": [
+          {
+            "id": "tmux",
+            "label": "tmux",
+            "command": "tmux new -A -s main"
+          }
+        ],
+        "hiddenLaunchers": ["app:cursor", "web:github"],
+        "launchScripts": false,
+        "deleteBranchOnRemove": false,
+        "autoPopulateInstall": true,
+        "autoPullNew": true,
+        "autoPullPrimaryOnly": true,
+        "doubutsuNames": true,
+        "codexWorktreeNames": true,
+        "managedOnProjectDrive": true,
+        "portPool": true,
+        "terrier": true,
+        "githubCli": false
+      },
+      {}
+    ],
+    "rejects": [
+      {
+        "directConnections": false
+      },
+      {
+        "launchers": [
+          {
+            "id": "",
+            "label": "tmux",
+            "command": "tmux"
+          }
+        ]
+      },
+      {
+        "launchers": [
+          {
+            "id": "tmux",
+            "label": "",
+            "command": "tmux"
+          }
+        ]
+      },
+      {
+        "launchers": [
+          {
+            "id": "tmux",
+            "label": "tmux",
+            "command": ""
+          }
+        ]
+      }
+    ]
+  },
+  "WriteDeviceSettingsPayloadSchema": {
+    "accepts": [
+      {
+        "patch": {
+          "launchers": [
+            {
+              "id": "tmux",
+              "label": "tmux",
+              "command": "tmux new -A -s main"
+            }
+          ],
+          "hiddenLaunchers": ["app:cursor", "web:github"],
+          "launchScripts": false,
+          "deleteBranchOnRemove": false,
+          "autoPopulateInstall": true,
+          "autoPullNew": true,
+          "autoPullPrimaryOnly": true,
+          "doubutsuNames": true,
+          "codexWorktreeNames": true,
+          "managedOnProjectDrive": true,
+          "portPool": true,
+          "terrier": true,
+          "githubCli": false
+        }
+      },
+      {
+        "patch": {}
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "patch": {
+            "terrier": true
+          },
+          "deviceId": "dev_1c94b0da"
+        },
+        "output": {
+          "patch": {
+            "terrier": true
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "patch": {
+          "cloudflaredPath": "/opt/homebrew/bin/cloudflared"
+        }
+      }
+    ]
+  },
+  "ClientConfigSchema": {
+    "accepts": [
+      {
+        "theme": "dark",
+        "doubutsu": true,
+        "lightTheme": "latte-sage",
+        "darkTheme": "yozakura",
+        "villageLife": true,
+        "markTerrierProjects": true,
+        "showDeviceBadges": false,
+        "pauseAnimationsOnBattery": false,
+        "keepReachable": false,
+        "forwardLocalPorts": {
+          "dev_1c94b0da:5173": 15173
+        },
+        "quickCreateDevices": {
+          "remote:github.com/alex/notes": "dev_1c94b0da"
+        },
+        "sidebarView": "inbox",
+        "projectsSort": "recent",
+        "groupProjectsByOwner": false,
+        "collapsedProjects": ["remote:github.com/alex/notes"]
+      },
+      {},
+      {
+        "theme": "light",
+        "lightTheme": "snow",
+        "darkTheme": "charcoal",
+        "sidebarView": "projects",
+        "projectsSort": "alphabetical"
+      },
+      {
+        "theme": "system",
+        "lightTheme": "meadow",
+        "darkTheme": "forest",
+        "projectsSort": "frequent"
+      },
+      {
+        "theme": "light",
+        "lightTheme": "cream",
+        "darkTheme": "wood",
+        "projectsSort": "manual"
+      },
+      {
+        "theme": "system",
+        "lightTheme": "latte",
+        "darkTheme": "cocoa"
+      },
+      {
+        "theme": "light",
+        "lightTheme": "latte-mocha",
+        "darkTheme": "midnight"
+      },
+      {
+        "theme": "system",
+        "lightTheme": "sky"
+      },
+      {
+        "theme": "light",
+        "lightTheme": "sakura"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "theme": "light",
+          "windowBounds": {
+            "width": 1280,
+            "height": 800
+          }
+        },
+        "output": {
+          "theme": "light"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "theme": "sepia"
+      },
+      {
+        "lightTheme": "charcoal"
+      },
+      {
+        "darkTheme": "cream"
+      },
+      {
+        "sidebarView": "grid"
+      },
+      {
+        "projectsSort": "size"
+      },
+      {
+        "forwardLocalPorts": {
+          "dev_1c94b0da:5173": 0
+        }
+      },
+      {
+        "forwardLocalPorts": {
+          "dev_1c94b0da:5173": 65536
+        }
+      },
+      {
+        "forwardLocalPorts": {
+          "dev_1c94b0da:5173": 5173.5
+        }
+      }
+    ]
+  },
+  "StoredClientConfigSchema": {
+    "accepts": [
+      {
+        "theme": "dark",
+        "doubutsu": true,
+        "lightTheme": "latte-sage",
+        "darkTheme": "yozakura",
+        "villageLife": true,
+        "markTerrierProjects": true,
+        "showDeviceBadges": false,
+        "pauseAnimationsOnBattery": false,
+        "keepReachable": false,
+        "forwardLocalPorts": {
+          "dev_1c94b0da:5173": 15173
+        },
+        "quickCreateDevices": {
+          "remote:github.com/alex/notes": "dev_1c94b0da"
+        },
+        "sidebarView": "inbox",
+        "projectsSort": "recent",
+        "groupProjectsByOwner": false,
+        "collapsedProjects": ["remote:github.com/alex/notes"]
+      },
+      {},
+      {
+        "theme": "system",
+        "windowBounds": {
+          "width": 1280,
+          "height": 800
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "theme": "sepia"
+      }
+    ]
+  },
+  "WriteClientConfigPayloadSchema": {
+    "accepts": [
+      {
+        "config": {
+          "theme": "dark",
+          "doubutsu": true,
+          "lightTheme": "latte-sage",
+          "darkTheme": "yozakura",
+          "villageLife": true,
+          "markTerrierProjects": true,
+          "showDeviceBadges": false,
+          "pauseAnimationsOnBattery": false,
+          "keepReachable": false,
+          "forwardLocalPorts": {
+            "dev_1c94b0da:5173": 15173
+          },
+          "quickCreateDevices": {
+            "remote:github.com/alex/notes": "dev_1c94b0da"
+          },
+          "sidebarView": "inbox",
+          "projectsSort": "recent",
+          "groupProjectsByOwner": false,
+          "collapsedProjects": ["remote:github.com/alex/notes"]
+        }
+      },
+      {
+        "config": {}
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "config": {
+            "theme": "dark",
+            "windowBounds": {
+              "width": 1280,
+              "height": 800
+            }
+          }
+        },
+        "output": {
+          "config": {
+            "theme": "dark"
+          }
+        }
+      },
+      {
+        "input": {
+          "config": {},
+          "origin": "settings"
+        },
+        "output": {
+          "config": {}
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "config": {
+          "theme": "sepia"
+        }
+      }
+    ]
+  },
+  "WriteShigomoriPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "shigoto-no-mori",
+        "config": {
+          "scripts": {
+            "setup": "pnpm install",
+            "teardown": "pnpm run clean"
+          },
+          "launchers": [
+            {
+              "id": "claude",
+              "label": "Claude Code",
+              "command": "claude"
+            }
+          ],
+          "portBase": 5730,
+          "defaultBranch": "main",
+          "carryOver": [
+            {
+              "path": ".env.local",
+              "mode": "copy"
+            },
+            {
+              "path": ".claude/settings.local.json",
+              "mode": "symlink"
+            }
+          ],
+          "useWorktreeInclude": false,
+          "worktreeLayout": "custom",
+          "customWorktreePath": "/Users/alex/worktrees",
+          "lastMergeMethod": "squash",
+          "showPrimaryInInbox": true
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "config": {
+          "defaultBranch": "main"
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "config": {
+            "defaultBranch": "main",
+            "futureSetting": true
+          }
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "config": {
+            "defaultBranch": "main"
+          }
+        }
+      },
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "config": {
+            "defaultBranch": "main"
+          },
+          "worktreeId": "a1b2c3d4e5f6"
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "config": {
+            "defaultBranch": "main"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "config": {
+          "defaultBranch": "main"
+        }
+      },
+      {
+        "projectId": "",
+        "config": {
+          "defaultBranch": "main"
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori"
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "config": {}
+      }
+    ]
+  },
+  "WorktreeIdSchema": {
+    "accepts": ["a1b2c3d4e5f6"],
+    "rejects": ["A1B2C3D4E5F6", "a1b2c3d4e5f", "../../../etc"]
+  },
+  "ReadWorktreeDataPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "deviceId": "dev_8f3ac2e1"
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "worktreeId": "a1b2c3d4e5f6"
+      },
+      {
+        "projectId": "",
+        "worktreeId": "a1b2c3d4e5f6"
+      },
+      {
+        "projectId": "shigoto-no-mori"
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "wt_sm_badger"
+      }
+    ]
+  },
+  "WriteWorktreeDataPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "data": {
+          "ports": [
+            {
+              "port": 8787,
+              "label": "api"
+            },
+            {
+              "port": 5555
+            }
+          ]
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "data": {}
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "data": {
+            "title": "Worktree titles",
+            "ports": []
+          }
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "data": {
+            "ports": []
+          }
+        }
+      },
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "data": {
+            "ports": [
+              {
+                "port": 6006,
+                "label": " storybook "
+              }
+            ]
+          }
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "data": {
+            "ports": [
+              {
+                "port": 6006,
+                "label": "storybook"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6"
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "wt_sm_badger",
+        "data": {}
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "data": {
+          "ports": [
+            {
+              "port": 70000
+            }
+          ]
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "data": {
+          "ports": [
+            {
+              "port": 5100
+            },
+            {
+              "port": 5101
+            },
+            {
+              "port": 5102
+            },
+            {
+              "port": 5103
+            },
+            {
+              "port": 5104
+            },
+            {
+              "port": 5105
+            },
+            {
+              "port": 5106
+            },
+            {
+              "port": 5107
+            },
+            {
+              "port": 5108
+            },
+            {
+              "port": 5109
+            },
+            {
+              "port": 5110
+            },
+            {
+              "port": 5111
+            },
+            {
+              "port": 5112
+            },
+            {
+              "port": 5113
+            },
+            {
+              "port": 5114
+            },
+            {
+              "port": 5115
+            },
+            {
+              "port": 5116
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "WriteWorktreeDescriptionPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "description": {
+          "title": "Worktree titles",
+          "description": "Names the work\nbefore the PR.",
+          "describedAt": 1759834800000
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "description": {}
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "description": {
+            "title": "Ports",
+            "ports": []
+          }
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "description": {
+            "title": "Ports"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6"
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "description": {
+          "describedAt": -5
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "description": {
+          "describedAt": 1.5
+        }
+      }
+    ]
+  },
+  "PreviewThemePayloadSchema": {
+    "accepts": [
+      {
+        "theme": "light"
+      },
+      {
+        "theme": "dark"
+      },
+      {
+        "theme": "system"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "theme": "dark",
+          "lightTheme": "sakura"
+        },
+        "output": {
+          "theme": "dark"
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "theme": "sepia"
+      }
+    ]
+  }
+}

@@ -1,0 +1,1086 @@
+{
+  "ChangedFileSchema": {
+    "accepts": [
+      {
+        "path": "renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
+        "kind": "renamed",
+        "counts": {
+          "additions": 2,
+          "deletions": 2
+        },
+        "prevPath": "renderer/components/worktreeDetail/commits/useSyncState.ts",
+        "staged": "partial",
+        "conflicted": true
+      },
+      {
+        "path": "renderer/lib/toast.tsx",
+        "kind": "modified",
+        "counts": {
+          "additions": 4,
+          "deletions": 1
+        },
+        "staged": "none"
+      },
+      {
+        "path": "renderer/components/sidebar/DeviceBadge.tsx",
+        "kind": "added",
+        "counts": {
+          "additions": 7,
+          "deletions": 0
+        },
+        "staged": "all"
+      },
+      {
+        "path": "assets/icons/leaf.png",
+        "kind": "deleted",
+        "staged": "none"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "path": "README.md",
+          "kind": "modified",
+          "counts": {
+            "additions": 3,
+            "deletions": 0
+          },
+          "staged": "none",
+          "status": " M"
+        },
+        "output": {
+          "path": "README.md",
+          "kind": "modified",
+          "counts": {
+            "additions": 3,
+            "deletions": 0
+          },
+          "staged": "none"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "kind": "modified",
+        "staged": "none"
+      },
+      {
+        "path": "",
+        "kind": "modified",
+        "staged": "none"
+      },
+      {
+        "path": "README.md",
+        "kind": "copied",
+        "staged": "none"
+      },
+      {
+        "path": "README.md",
+        "kind": "modified",
+        "staged": "some"
+      },
+      {
+        "path": "README.md",
+        "kind": "modified",
+        "staged": "none",
+        "conflicted": false
+      },
+      {
+        "path": "README.md",
+        "kind": "modified",
+        "counts": {
+          "additions": -3,
+          "deletions": 0
+        },
+        "staged": "none"
+      }
+    ]
+  },
+  "RepoRelPathSchema": {
+    "accepts": ["renderer/lib/toast.tsx", "README.md"],
+    "rejects": [
+      "",
+      "/Users/alex/.ssh/id_ed25519",
+      "../port-pool/README.md",
+      "renderer/lib\u0000.ts"
+    ]
+  },
+  "FileDiffPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": [
+          "renderer/components/worktreeDetail/commits/useSyncState.ts",
+          "renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts"
+        ],
+        "untracked": false
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["renderer/components/sidebar/DeviceBadge.tsx"],
+        "untracked": true
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "paths": ["README.md"],
+          "untracked": false,
+          "staged": true
+        },
+        "output": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "paths": ["README.md"],
+          "untracked": false
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": [],
+        "untracked": false
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["../secrets.env"],
+        "untracked": false
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["README.md"]
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "",
+        "paths": ["README.md"],
+        "untracked": false
+      }
+    ]
+  },
+  "SetStagedPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["renderer/lib/toast.tsx", "README.md"],
+        "staged": true
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["README.md"],
+        "staged": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "paths": ["README.md"],
+          "staged": true,
+          "hunks": [0]
+        },
+        "output": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "paths": ["README.md"],
+          "staged": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": [],
+        "staged": true
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["/etc/hosts"],
+        "staged": true
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["README.md"]
+      }
+    ]
+  },
+  "CommitChangesPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "summary": "Show which device a worktree lives on",
+        "description": "The sidebar badges each row with its machine, so two checkouts of one branch read apart.",
+        "stagePaths": [
+          "renderer/components/sidebar/DeviceBadge.tsx",
+          "renderer/lib/toast.tsx"
+        ],
+        "amend": true
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "summary": "Fix the toast's tone on light mode"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "summary": "  Fix the toast's tone on light mode\n",
+          "amend": false
+        },
+        "output": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "summary": "Fix the toast's tone on light mode",
+          "amend": false
+        }
+      },
+      {
+        "input": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "summary": "Fix the toast's tone on light mode",
+          "signoff": true
+        },
+        "output": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "summary": "Fix the toast's tone on light mode"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "summary": ""
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "summary": "   \n"
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "summary": "Fix the toast",
+        "stagePaths": ["../other/README.md"]
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "description": "No summary"
+      }
+    ]
+  },
+  "CommitMessageSchema": {
+    "accepts": [
+      {
+        "summary": "Show which device a worktree lives on",
+        "description": "The sidebar badges each row with its machine."
+      },
+      {
+        "summary": "",
+        "description": ""
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "summary": "Fix the toast",
+          "description": "",
+          "trailers": []
+        },
+        "output": {
+          "summary": "Fix the toast",
+          "description": ""
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "summary": "Fix the toast"
+      }
+    ]
+  },
+  "ResetSoftPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "target": "e7c0a52",
+        "expectHead": "7d02b18"
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "target": "7d02b18c4e91a03f5b6d2c8e1a4f7b9d0c3e5a21"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "target": "e7c0a52",
+          "hard": true
+        },
+        "output": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "target": "e7c0a52"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "target": "HEAD~1"
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "target": "e7c"
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "target": "e7c0a52",
+        "expectHead": "--output=/tmp/x"
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum"
+      }
+    ]
+  },
+  "ResetSoftResultSchema": {
+    "accepts": [
+      {
+        "previousHead": "b3e91d4",
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "title": "Remote UI flows"
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "previousHead": "b3e91d4",
+          "worktree": {
+            "id": "wt_sm_hum",
+            "projectId": "p_sm",
+            "name": "happy-hummingbird",
+            "branch": "v2-exp/remote-ui-flows",
+            "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+            "ahead": 3,
+            "behind": 0,
+            "hasUpstream": true,
+            "hasRemote": true,
+            "divergedClean": false,
+            "behindPrimary": 0,
+            "unpushedCount": 3,
+            "primaryRef": "origin/main",
+            "primaryBranch": "main",
+            "mergedIntoPrimary": false,
+            "changedCount": 0,
+            "createdAt": 1791027600000,
+            "recentCommits": [
+              {
+                "hash": "b3e91d4",
+                "subject": "Show which device a worktree lives on",
+                "author": "sylophi",
+                "date": "2026-10-07T12:41:00.000Z",
+                "additions": 38,
+                "deletions": 14
+              },
+              {
+                "hash": "e7c0a52",
+                "subject": "Badge merged projects with their devices",
+                "author": "sylophi",
+                "date": "2026-10-07T12:06:00.000Z",
+                "additions": 84,
+                "deletions": 12
+              }
+            ],
+            "isPrimary": false,
+            "isExternal": false,
+            "detached": false,
+            "shelved": false,
+            "autoPull": false,
+            "title": "Remote UI flows"
+          },
+          "undone": 1
+        },
+        "output": {
+          "previousHead": "b3e91d4",
+          "worktree": {
+            "id": "wt_sm_hum",
+            "projectId": "p_sm",
+            "name": "happy-hummingbird",
+            "branch": "v2-exp/remote-ui-flows",
+            "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+            "ahead": 3,
+            "behind": 0,
+            "hasUpstream": true,
+            "hasRemote": true,
+            "divergedClean": false,
+            "behindPrimary": 0,
+            "unpushedCount": 3,
+            "primaryRef": "origin/main",
+            "primaryBranch": "main",
+            "mergedIntoPrimary": false,
+            "changedCount": 0,
+            "createdAt": 1791027600000,
+            "recentCommits": [
+              {
+                "hash": "b3e91d4",
+                "subject": "Show which device a worktree lives on",
+                "author": "sylophi",
+                "date": "2026-10-07T12:41:00.000Z",
+                "additions": 38,
+                "deletions": 14
+              },
+              {
+                "hash": "e7c0a52",
+                "subject": "Badge merged projects with their devices",
+                "author": "sylophi",
+                "date": "2026-10-07T12:06:00.000Z",
+                "additions": 84,
+                "deletions": 12
+              }
+            ],
+            "isPrimary": false,
+            "isExternal": false,
+            "detached": false,
+            "shelved": false,
+            "autoPull": false,
+            "title": "Remote UI flows"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "previousHead": "B3E91D4",
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "title": "Remote UI flows"
+        }
+      },
+      {
+        "previousHead": "b3e91d4"
+      }
+    ]
+  },
+  "CommitChangesResultSchema": {
+    "accepts": [
+      {
+        "hash": "b3e91d4",
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "title": "Remote UI flows"
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "hash": "b3e91d4",
+          "worktree": {
+            "id": "wt_sm_hum",
+            "projectId": "p_sm",
+            "name": "happy-hummingbird",
+            "branch": "v2-exp/remote-ui-flows",
+            "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+            "ahead": 3,
+            "behind": 0,
+            "hasUpstream": true,
+            "hasRemote": true,
+            "divergedClean": false,
+            "behindPrimary": 0,
+            "unpushedCount": 3,
+            "primaryRef": "origin/main",
+            "primaryBranch": "main",
+            "mergedIntoPrimary": false,
+            "changedCount": 0,
+            "createdAt": 1791027600000,
+            "recentCommits": [
+              {
+                "hash": "b3e91d4",
+                "subject": "Show which device a worktree lives on",
+                "author": "sylophi",
+                "date": "2026-10-07T12:41:00.000Z",
+                "additions": 38,
+                "deletions": 14
+              },
+              {
+                "hash": "e7c0a52",
+                "subject": "Badge merged projects with their devices",
+                "author": "sylophi",
+                "date": "2026-10-07T12:06:00.000Z",
+                "additions": 84,
+                "deletions": 12
+              }
+            ],
+            "isPrimary": false,
+            "isExternal": false,
+            "detached": false,
+            "shelved": false,
+            "autoPull": false,
+            "title": "Remote UI flows"
+          },
+          "summary": "Show which device a worktree lives on"
+        },
+        "output": {
+          "hash": "b3e91d4",
+          "worktree": {
+            "id": "wt_sm_hum",
+            "projectId": "p_sm",
+            "name": "happy-hummingbird",
+            "branch": "v2-exp/remote-ui-flows",
+            "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+            "ahead": 3,
+            "behind": 0,
+            "hasUpstream": true,
+            "hasRemote": true,
+            "divergedClean": false,
+            "behindPrimary": 0,
+            "unpushedCount": 3,
+            "primaryRef": "origin/main",
+            "primaryBranch": "main",
+            "mergedIntoPrimary": false,
+            "changedCount": 0,
+            "createdAt": 1791027600000,
+            "recentCommits": [
+              {
+                "hash": "b3e91d4",
+                "subject": "Show which device a worktree lives on",
+                "author": "sylophi",
+                "date": "2026-10-07T12:41:00.000Z",
+                "additions": 38,
+                "deletions": 14
+              },
+              {
+                "hash": "e7c0a52",
+                "subject": "Badge merged projects with their devices",
+                "author": "sylophi",
+                "date": "2026-10-07T12:06:00.000Z",
+                "additions": 84,
+                "deletions": 12
+              }
+            ],
+            "isPrimary": false,
+            "isExternal": false,
+            "detached": false,
+            "shelved": false,
+            "autoPull": false,
+            "title": "Remote UI flows"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "hash": "main",
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "title": "Remote UI flows"
+        }
+      },
+      {
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "title": "Remote UI flows"
+        }
+      }
+    ]
+  },
+  "DiscardChangesPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["renderer/lib/toast.tsx", "README.md"]
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "paths": ["README.md"],
+          "untracked": false
+        },
+        "output": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "paths": ["README.md"]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": []
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "paths": ["../../.zshrc"]
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum"
+      }
+    ]
+  },
+  "DiscardChangesResultSchema": {
+    "accepts": [
+      {
+        "snapshot": "5c1e0f9a2b7d",
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "title": "Remote UI flows"
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "snapshot": "5c1e0f9a2b7d",
+          "worktree": {
+            "id": "wt_sm_hum",
+            "projectId": "p_sm",
+            "name": "happy-hummingbird",
+            "branch": "v2-exp/remote-ui-flows",
+            "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+            "ahead": 3,
+            "behind": 0,
+            "hasUpstream": true,
+            "hasRemote": true,
+            "divergedClean": false,
+            "behindPrimary": 0,
+            "unpushedCount": 3,
+            "primaryRef": "origin/main",
+            "primaryBranch": "main",
+            "mergedIntoPrimary": false,
+            "changedCount": 0,
+            "createdAt": 1791027600000,
+            "recentCommits": [
+              {
+                "hash": "b3e91d4",
+                "subject": "Show which device a worktree lives on",
+                "author": "sylophi",
+                "date": "2026-10-07T12:41:00.000Z",
+                "additions": 38,
+                "deletions": 14
+              },
+              {
+                "hash": "e7c0a52",
+                "subject": "Badge merged projects with their devices",
+                "author": "sylophi",
+                "date": "2026-10-07T12:06:00.000Z",
+                "additions": 84,
+                "deletions": 12
+              }
+            ],
+            "isPrimary": false,
+            "isExternal": false,
+            "detached": false,
+            "shelved": false,
+            "autoPull": false,
+            "title": "Remote UI flows"
+          },
+          "ref": "refs/shigomori/discards/5c1e0f9a2b7d"
+        },
+        "output": {
+          "snapshot": "5c1e0f9a2b7d",
+          "worktree": {
+            "id": "wt_sm_hum",
+            "projectId": "p_sm",
+            "name": "happy-hummingbird",
+            "branch": "v2-exp/remote-ui-flows",
+            "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+            "ahead": 3,
+            "behind": 0,
+            "hasUpstream": true,
+            "hasRemote": true,
+            "divergedClean": false,
+            "behindPrimary": 0,
+            "unpushedCount": 3,
+            "primaryRef": "origin/main",
+            "primaryBranch": "main",
+            "mergedIntoPrimary": false,
+            "changedCount": 0,
+            "createdAt": 1791027600000,
+            "recentCommits": [
+              {
+                "hash": "b3e91d4",
+                "subject": "Show which device a worktree lives on",
+                "author": "sylophi",
+                "date": "2026-10-07T12:41:00.000Z",
+                "additions": 38,
+                "deletions": 14
+              },
+              {
+                "hash": "e7c0a52",
+                "subject": "Badge merged projects with their devices",
+                "author": "sylophi",
+                "date": "2026-10-07T12:06:00.000Z",
+                "additions": 84,
+                "deletions": 12
+              }
+            ],
+            "isPrimary": false,
+            "isExternal": false,
+            "detached": false,
+            "shelved": false,
+            "autoPull": false,
+            "title": "Remote UI flows"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "snapshot": "refs/shigomori/discards/5c1e0f9a2b7d",
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "title": "Remote UI flows"
+        }
+      },
+      {
+        "snapshot": "5c1e0f9a2b7d"
+      }
+    ]
+  },
+  "RestoreDiscardPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "snapshot": "5c1e0f9a2b7d"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "snapshot": "5c1e0f9a2b7d",
+          "paths": ["README.md"]
+        },
+        "output": {
+          "projectId": "p_sm",
+          "worktreeId": "wt_sm_hum",
+          "snapshot": "5c1e0f9a2b7d"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum",
+        "snapshot": "not-a-hash"
+      },
+      {
+        "projectId": "p_sm",
+        "worktreeId": "wt_sm_hum"
+      }
+    ]
+  }
+}

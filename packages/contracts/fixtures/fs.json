@@ -1,0 +1,97 @@
+{
+  "DirectoryListingSchema": {
+    "accepts": [
+      {
+        "path": "/Users/alex/dev",
+        "entries": [
+          {
+            "name": "port-pool",
+            "isGitRepo": true
+          },
+          {
+            "name": "scratch",
+            "isGitRepo": false
+          }
+        ]
+      },
+      {
+        "path": "/Users/alex/dev/empty",
+        "entries": []
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "path": "/Users/alex/dev",
+          "entries": [
+            {
+              "name": "t3code",
+              "isGitRepo": true,
+              "isHidden": false
+            }
+          ],
+          "parent": "/Users/alex"
+        },
+        "output": {
+          "path": "/Users/alex/dev",
+          "entries": [
+            {
+              "name": "t3code",
+              "isGitRepo": true
+            }
+          ]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "path": "/Users/alex/dev"
+      },
+      {
+        "path": "/Users/alex/dev",
+        "entries": [
+          {
+            "name": "scratch"
+          }
+        ]
+      }
+    ]
+  },
+  "PickFolderPayloadSchema": {
+    "accepts": [
+      {
+        "title": "Move worktree",
+        "buttonLabel": "Move here",
+        "message": "Choose where happy-hummingbird should live.",
+        "defaultPath": "/Users/alex/dev"
+      },
+      {}
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "buttonLabel": "Add",
+          "icon": "folder"
+        },
+        "output": {
+          "buttonLabel": "Add"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "title": ""
+      },
+      {
+        "buttonLabel": ""
+      },
+      {
+        "message": ""
+      },
+      {
+        "defaultPath": ""
+      },
+      null
+    ]
+  }
+}

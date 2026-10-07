@@ -1,0 +1,987 @@
+{
+  "PullRequestStateSchema": {
+    "accepts": ["OPEN", "CLOSED", "MERGED"],
+    "rejects": ["open", "DRAFT"]
+  },
+  "PullRequestSchema": {
+    "accepts": [
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main"
+      },
+      {
+        "number": 151,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/151",
+        "title": "Watch the terrier registry for edits",
+        "state": "MERGED",
+        "isDraft": true,
+        "baseRefName": "fix-stale-locks",
+        "isCrossRepository": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "number": 150,
+          "url": "https://github.com/sylophi/shigoto-no-mori/pull/150",
+          "title": "Refuse a lock file older than the daemon",
+          "state": "CLOSED",
+          "isDraft": false,
+          "baseRefName": "main",
+          "isCrossRepository": true,
+          "headRefName": "fix-stale-locks"
+        },
+        "output": {
+          "number": 150,
+          "url": "https://github.com/sylophi/shigoto-no-mori/pull/150",
+          "title": "Refuse a lock file older than the daemon",
+          "state": "CLOSED",
+          "isDraft": false,
+          "baseRefName": "main",
+          "isCrossRepository": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main"
+      },
+      {
+        "number": 0,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main"
+      },
+      {
+        "number": 148.5,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main"
+      },
+      {
+        "number": 148,
+        "url": "sylophi/shigoto-no-mori#148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main"
+      },
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "DRAFT",
+        "isDraft": false,
+        "baseRefName": "main"
+      }
+    ]
+  },
+  "PullRequestMergeStateSchema": {
+    "accepts": [
+      "CLEAN",
+      "BLOCKED",
+      "BEHIND",
+      "DIRTY",
+      "DRAFT",
+      "HAS_HOOKS",
+      "UNKNOWN",
+      "UNSTABLE"
+    ],
+    "rejects": ["MERGEABLE"]
+  },
+  "PullRequestReviewDecisionSchema": {
+    "accepts": ["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"],
+    "rejects": ["COMMENTED"]
+  },
+  "PullRequestReviewerStateSchema": {
+    "accepts": ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "REQUESTED"],
+    "rejects": ["DISMISSED"]
+  },
+  "MergeMethodSchema": {
+    "accepts": ["merge", "squash", "rebase"],
+    "rejects": ["fast-forward"]
+  },
+  "PullRequestDetailSchema": {
+    "accepts": [
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "isCrossRepository": false,
+        "body": "Lists every device's worktrees in one sidebar, each badged with the machine it lives on.\n\n- The daemons' lists merge by repo identity.\n- A peer that drops off keeps its last rows, faded.",
+        "mergeState": "BLOCKED",
+        "autoMerge": "squash",
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-07T11:20:00.000Z",
+        "additions": 412,
+        "deletions": 96,
+        "changedFiles": 14,
+        "checks": {
+          "total": 6,
+          "passed": 2,
+          "failing": 1,
+          "pending": 1,
+          "neutral": 1,
+          "skipped": 1
+        },
+        "checkList": [
+          {
+            "name": "typecheck",
+            "bucket": "passed",
+            "url": "https://github.com/sylophi/shigoto-no-mori/actions/runs/9120#typecheck"
+          },
+          {
+            "name": "lint",
+            "bucket": "failing",
+            "url": "https://github.com/sylophi/shigoto-no-mori/actions/runs/9120#lint"
+          },
+          {
+            "name": "test (macos-latest)",
+            "bucket": "pending",
+            "url": "https://github.com/sylophi/shigoto-no-mori/actions/runs/9120#test%20(macos-latest)"
+          },
+          {
+            "name": "CodeQL",
+            "bucket": "neutral",
+            "url": "https://github.com/sylophi/shigoto-no-mori/actions/runs/9120#CodeQL"
+          },
+          {
+            "name": "release-mac",
+            "bucket": "skipped",
+            "url": "https://github.com/sylophi/shigoto-no-mori/actions/runs/9120#release-mac"
+          },
+          {
+            "name": "Vercel",
+            "bucket": "passed"
+          }
+        ],
+        "reviews": {
+          "decision": "CHANGES_REQUESTED",
+          "reviewers": [
+            {
+              "login": "tanuki",
+              "state": "APPROVED"
+            },
+            {
+              "login": "blathers",
+              "state": "CHANGES_REQUESTED"
+            }
+          ]
+        }
+      },
+      {
+        "number": 152,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/152",
+        "title": "Retry the pool lease before giving up",
+        "state": "OPEN",
+        "isDraft": true,
+        "baseRefName": "exp/terrier-sync",
+        "mergeState": "DRAFT",
+        "autoMerge": null,
+        "authorLogin": "tanuki",
+        "updatedAt": "2026-10-06T09:05:12.000Z",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0,
+        "checks": {
+          "total": 0,
+          "passed": 0,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": []
+      },
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "body": "",
+        "mergeState": "CLEAN",
+        "autoMerge": null,
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-07T11:20:00.000Z",
+        "additions": 412,
+        "deletions": 96,
+        "changedFiles": 14,
+        "checks": {
+          "total": 1,
+          "passed": 1,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": [
+          {
+            "name": "battery",
+            "bucket": "passed"
+          }
+        ],
+        "reviews": {
+          "decision": null,
+          "reviewers": [
+            {
+              "login": "tanuki",
+              "state": "REQUESTED"
+            }
+          ]
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "number": 148,
+          "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+          "title": "Aggregate worktrees across devices",
+          "state": "OPEN",
+          "isDraft": false,
+          "baseRefName": "main",
+          "mergeState": "CLEAN",
+          "autoMerge": null,
+          "authorLogin": "sylophi",
+          "updatedAt": "2026-10-07T11:20:00.000Z",
+          "additions": 412,
+          "deletions": 96,
+          "changedFiles": 14,
+          "checks": {
+            "total": 1,
+            "passed": 1,
+            "failing": 0,
+            "pending": 0,
+            "neutral": 0,
+            "skipped": 0
+          },
+          "checkList": [
+            {
+              "name": "battery",
+              "bucket": "passed",
+              "workflow": "CI"
+            }
+          ],
+          "reviews": {
+            "decision": "APPROVED",
+            "reviewers": [
+              {
+                "login": "tanuki",
+                "state": "APPROVED",
+                "submittedAt": "2026-10-07T10:02:00.000Z"
+              }
+            ],
+            "requiredApprovals": 1
+          },
+          "headRefName": "v2-exp/remote-ui-flows"
+        },
+        "output": {
+          "number": 148,
+          "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+          "title": "Aggregate worktrees across devices",
+          "state": "OPEN",
+          "isDraft": false,
+          "baseRefName": "main",
+          "mergeState": "CLEAN",
+          "autoMerge": null,
+          "authorLogin": "sylophi",
+          "updatedAt": "2026-10-07T11:20:00.000Z",
+          "additions": 412,
+          "deletions": 96,
+          "changedFiles": 14,
+          "checks": {
+            "total": 1,
+            "passed": 1,
+            "failing": 0,
+            "pending": 0,
+            "neutral": 0,
+            "skipped": 0
+          },
+          "checkList": [
+            {
+              "name": "battery",
+              "bucket": "passed"
+            }
+          ],
+          "reviews": {
+            "decision": "APPROVED",
+            "reviewers": [
+              {
+                "login": "tanuki",
+                "state": "APPROVED"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "autoMerge": null,
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-07T11:20:00.000Z",
+        "additions": 412,
+        "deletions": 96,
+        "changedFiles": 14,
+        "checks": {
+          "total": 0,
+          "passed": 0,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": []
+      },
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "mergeState": "CLEAN",
+        "autoMerge": null,
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-07T11:20:00.000Z",
+        "additions": -1,
+        "deletions": 96,
+        "changedFiles": 14,
+        "checks": {
+          "total": 0,
+          "passed": 0,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": []
+      },
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "mergeState": "CLEAN",
+        "autoMerge": "fast-forward",
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-07T11:20:00.000Z",
+        "additions": 412,
+        "deletions": 96,
+        "changedFiles": 14,
+        "checks": {
+          "total": 0,
+          "passed": 0,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": []
+      },
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "mergeState": "CLEAN",
+        "autoMerge": null,
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-07T11:20:00.000Z",
+        "additions": 412,
+        "deletions": 96,
+        "changedFiles": 14,
+        "checks": {
+          "total": 1,
+          "passed": 0,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": [
+          {
+            "name": "battery",
+            "bucket": "cancelled"
+          }
+        ]
+      },
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "mergeState": "CLEAN",
+        "autoMerge": null,
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-07T11:20:00.000Z",
+        "additions": 412,
+        "deletions": 96,
+        "changedFiles": 14,
+        "checks": {
+          "total": 1,
+          "passed": 1,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": [
+          {
+            "name": "battery",
+            "bucket": "passed",
+            "url": "actions/runs/9120"
+          }
+        ]
+      },
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "OPEN",
+        "isDraft": false,
+        "baseRefName": "main",
+        "mergeState": "CLEAN",
+        "autoMerge": null,
+        "authorLogin": "sylophi",
+        "updatedAt": "2026-10-07T11:20:00.000Z",
+        "additions": 412,
+        "deletions": 96,
+        "changedFiles": 14,
+        "checks": {
+          "total": 0,
+          "passed": 0,
+          "failing": 0,
+          "pending": 0,
+          "neutral": 0,
+          "skipped": 0
+        },
+        "checkList": [],
+        "reviews": {
+          "decision": "APPROVED",
+          "reviewers": [
+            {
+              "login": "tanuki",
+              "state": "DISMISSED"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "RepoMergeConfigSchema": {
+    "accepts": [
+      {
+        "merge": true,
+        "squash": true,
+        "rebase": true,
+        "autoMerge": true
+      },
+      {
+        "merge": false,
+        "squash": true,
+        "rebase": false,
+        "autoMerge": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "merge": true,
+          "squash": true,
+          "rebase": false,
+          "autoMerge": true,
+          "deleteBranchOnMerge": true
+        },
+        "output": {
+          "merge": true,
+          "squash": true,
+          "rebase": false,
+          "autoMerge": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "merge": true,
+        "squash": true,
+        "rebase": true
+      }
+    ]
+  },
+  "MergeOutcomeSchema": {
+    "accepts": ["merged", "queued", "auto-merge"],
+    "rejects": ["closed"]
+  },
+  "MergePullRequestResultSchema": {
+    "accepts": [
+      {
+        "outcome": "merged"
+      },
+      {
+        "outcome": "queued"
+      },
+      {
+        "outcome": "auto-merge"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "outcome": "merged",
+          "number": 148
+        },
+        "output": {
+          "outcome": "merged"
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "outcome": "closed"
+      }
+    ]
+  },
+  "GithubCliReadinessSchema": {
+    "accepts": [
+      {
+        "installed": true,
+        "authed": true
+      },
+      {
+        "installed": false,
+        "authed": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "installed": true,
+          "authed": true,
+          "version": "2.62.0"
+        },
+        "output": {
+          "installed": true,
+          "authed": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "installed": true
+      }
+    ]
+  },
+  "PullRequestCandidateListSchema": {
+    "accepts": [
+      {
+        "status": "ok",
+        "pullRequests": [
+          {
+            "number": 148,
+            "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+            "title": "Aggregate worktrees across devices",
+            "isDraft": false,
+            "headRefName": "v2-exp/remote-ui-flows",
+            "authorLogin": "sylophi",
+            "fromFork": false,
+            "headRepo": null,
+            "updatedAt": "2026-10-07T11:20:00.000Z"
+          },
+          {
+            "number": 153,
+            "url": "https://github.com/sylophi/shigoto-no-mori/pull/153",
+            "title": "Spell out the pool lease error",
+            "isDraft": true,
+            "headRefName": "lease-error-copy",
+            "authorLogin": "tanuki",
+            "fromFork": true,
+            "headRepo": "tanuki/shigoto-no-mori",
+            "updatedAt": "2026-10-05T16:42:31.000Z"
+          }
+        ]
+      },
+      {
+        "status": "ok",
+        "pullRequests": []
+      },
+      {
+        "status": "unavailable",
+        "reason": "integration-off"
+      },
+      {
+        "status": "unavailable",
+        "reason": "gh-missing"
+      },
+      {
+        "status": "unavailable",
+        "reason": "gh-signed-out"
+      },
+      {
+        "status": "unavailable",
+        "reason": "no-github-remote"
+      },
+      {
+        "status": "unavailable",
+        "reason": "gh-failed"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "status": "ok",
+          "pullRequests": [
+            {
+              "number": 148,
+              "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+              "title": "Aggregate worktrees across devices",
+              "isDraft": false,
+              "headRefName": "v2-exp/remote-ui-flows",
+              "authorLogin": "sylophi",
+              "fromFork": false,
+              "headRepo": null,
+              "updatedAt": "2026-10-07T11:20:00.000Z",
+              "baseRefName": "main"
+            }
+          ],
+          "fetchedAt": 1791372000000
+        },
+        "output": {
+          "status": "ok",
+          "pullRequests": [
+            {
+              "number": 148,
+              "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+              "title": "Aggregate worktrees across devices",
+              "isDraft": false,
+              "headRefName": "v2-exp/remote-ui-flows",
+              "authorLogin": "sylophi",
+              "fromFork": false,
+              "headRepo": null,
+              "updatedAt": "2026-10-07T11:20:00.000Z"
+            }
+          ]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "status": "error",
+        "reason": "gh-failed"
+      },
+      {
+        "status": "unavailable",
+        "reason": "rate-limited"
+      },
+      {
+        "status": "unavailable"
+      },
+      {
+        "status": "ok",
+        "pullRequests": [
+          {
+            "number": 148,
+            "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+            "title": "Aggregate worktrees across devices",
+            "isDraft": false,
+            "headRefName": "",
+            "authorLogin": "sylophi",
+            "fromFork": false,
+            "headRepo": null,
+            "updatedAt": "2026-10-07T11:20:00.000Z"
+          }
+        ]
+      }
+    ]
+  },
+  "ResolvePullRequestCheckoutPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "number": 153
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "number": 153,
+          "worktreeId": "wt_sm_main"
+        },
+        "output": {
+          "projectId": "p_sm",
+          "number": 153
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "number": 153
+      },
+      {
+        "projectId": "p_sm",
+        "number": -1
+      },
+      {
+        "projectId": "p_sm"
+      }
+    ]
+  },
+  "PullRequestCheckoutRefSchema": {
+    "accepts": [
+      {
+        "branch": "lease-error-copy"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "branch": "pr/153",
+          "remote": "tanuki"
+        },
+        "output": {
+          "branch": "pr/153"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "branch": ""
+      },
+      {}
+    ]
+  },
+  "GithubCliWorktreePullRequestPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "branch": "v2-exp/remote-ui-flows"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "branch": "v2-exp/remote-ui-flows",
+          "worktreeId": "wt_sm_hum"
+        },
+        "output": {
+          "projectId": "p_sm",
+          "branch": "v2-exp/remote-ui-flows"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "branch": ""
+      },
+      {
+        "projectId": "",
+        "branch": "v2-exp/remote-ui-flows"
+      }
+    ]
+  },
+  "GithubCliPullRequestDiffPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "number": 148
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "number": 148,
+          "file": "README.md"
+        },
+        "output": {
+          "projectId": "p_sm",
+          "number": 148
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "number": 0
+      },
+      {
+        "projectId": "p_sm",
+        "number": 1.5
+      },
+      {
+        "projectId": "",
+        "number": 148
+      }
+    ]
+  },
+  "MergePullRequestPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "number": 152,
+        "method": "squash",
+        "stack": true
+      },
+      {
+        "projectId": "p_sm",
+        "number": 148,
+        "method": "merge"
+      },
+      {
+        "projectId": "p_sm",
+        "number": 148,
+        "method": "rebase",
+        "stack": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "number": 148,
+          "method": "squash",
+          "deleteBranch": true
+        },
+        "output": {
+          "projectId": "p_sm",
+          "number": 148,
+          "method": "squash"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "number": 148,
+        "method": "fast-forward"
+      },
+      {
+        "projectId": "p_sm",
+        "number": 0,
+        "method": "squash"
+      },
+      {
+        "projectId": "",
+        "number": 148,
+        "method": "squash"
+      },
+      {
+        "projectId": "p_sm",
+        "number": 148
+      }
+    ]
+  },
+  "SetPullRequestDraftPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "number": 148,
+        "draft": true
+      },
+      {
+        "projectId": "p_sm",
+        "number": 152,
+        "draft": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "number": 148,
+          "draft": true,
+          "reason": "wip"
+        },
+        "output": {
+          "projectId": "p_sm",
+          "number": 148,
+          "draft": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "number": 148
+      },
+      {
+        "projectId": "p_sm",
+        "number": 0,
+        "draft": true
+      },
+      {
+        "projectId": "",
+        "number": 148,
+        "draft": true
+      }
+    ]
+  },
+  "DisablePullRequestAutoMergePayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "number": 148
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "number": 148,
+          "method": "squash"
+        },
+        "output": {
+          "projectId": "p_sm",
+          "number": 148
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "number": -148
+      },
+      {
+        "projectId": "",
+        "number": 148
+      },
+      {
+        "projectId": "p_sm"
+      }
+    ]
+  }
+}

@@ -1,0 +1,366 @@
+{
+  "RuntimeInfoSchema": {
+    "accepts": [
+      {
+        "dataDir": "/Users/alex/.sm",
+        "dataDirSource": "default",
+        "atDefaultDataDir": true,
+        "canonicalDataDirName": ".sm",
+        "homedir": "/Users/alex"
+      },
+      {
+        "dataDir": "/Volumes/Work/.sm",
+        "dataDirSource": "pointer",
+        "atDefaultDataDir": false,
+        "canonicalDataDirName": ".sm",
+        "homedir": "/Users/alex"
+      },
+      {
+        "dataDir": "/tmp/sm-lab/.smd",
+        "dataDirSource": "env",
+        "atDefaultDataDir": false,
+        "canonicalDataDirName": ".smd",
+        "homedir": "/Users/alex"
+      },
+      {
+        "dataDir": "/Users/alex/.shigoto-no-mori",
+        "dataDirSource": "legacy",
+        "atDefaultDataDir": false,
+        "canonicalDataDirName": ".sm",
+        "homedir": "/Users/alex"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "dataDir": "/Users/alex/.sm",
+          "dataDirSource": "default",
+          "atDefaultDataDir": true,
+          "canonicalDataDirName": ".sm",
+          "homedir": "/Users/alex",
+          "flavor": "release"
+        },
+        "output": {
+          "dataDir": "/Users/alex/.sm",
+          "dataDirSource": "default",
+          "atDefaultDataDir": true,
+          "canonicalDataDirName": ".sm",
+          "homedir": "/Users/alex"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "dataDir": "",
+        "dataDirSource": "default",
+        "atDefaultDataDir": true,
+        "canonicalDataDirName": ".sm",
+        "homedir": "/Users/alex"
+      },
+      {
+        "dataDir": "/Users/alex/.sm",
+        "dataDirSource": "config",
+        "atDefaultDataDir": true,
+        "canonicalDataDirName": ".sm",
+        "homedir": "/Users/alex"
+      },
+      {
+        "dataDir": "/Users/alex/.sm",
+        "dataDirSource": "default",
+        "atDefaultDataDir": true,
+        "canonicalDataDirName": "",
+        "homedir": "/Users/alex"
+      },
+      {
+        "dataDir": "/Users/alex/.sm",
+        "dataDirSource": "default",
+        "atDefaultDataDir": true,
+        "canonicalDataDirName": ".sm",
+        "homedir": ""
+      },
+      {
+        "dataDir": "/Users/alex/.sm",
+        "dataDirSource": "default",
+        "canonicalDataDirName": ".sm",
+        "homedir": "/Users/alex"
+      }
+    ]
+  },
+  "MoveDataDirPayloadSchema": {
+    "accepts": [
+      {
+        "parentDir": "/Volumes/Work"
+      },
+      {}
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "parentDir": "/Volumes/Work",
+          "name": ".sm"
+        },
+        "output": {
+          "parentDir": "/Volumes/Work"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "parentDir": ""
+      }
+    ]
+  },
+  "NukeProgressSchema": {
+    "accepts": [
+      {
+        "phase": "scripts"
+      },
+      {
+        "phase": "worktrees",
+        "done": 3,
+        "total": 12
+      },
+      {
+        "phase": "wipe"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "phase": "worktrees",
+          "done": 3,
+          "total": 12,
+          "current": "badger"
+        },
+        "output": {
+          "phase": "worktrees",
+          "done": 3,
+          "total": 12
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "phase": "done"
+      },
+      {
+        "phase": "worktrees",
+        "done": 3
+      },
+      {
+        "phase": "worktrees",
+        "done": -1,
+        "total": 12
+      },
+      {
+        "phase": "worktrees",
+        "done": 1.5,
+        "total": 12
+      }
+    ]
+  },
+  "UpdaterStateSchema": {
+    "accepts": [
+      {
+        "kind": "unsupported"
+      },
+      {
+        "kind": "idle"
+      },
+      {
+        "kind": "checking"
+      },
+      {
+        "kind": "downloading",
+        "version": "3.2.0"
+      },
+      {
+        "kind": "downloading"
+      },
+      {
+        "kind": "ready",
+        "version": "3.2.0",
+        "notes": "Show ports on the worktree page.",
+        "releaseDate": "2026-10-06T14:12:05Z"
+      },
+      {
+        "kind": "ready",
+        "version": "3.2.0",
+        "releaseDate": null
+      },
+      {
+        "kind": "error",
+        "message": "Couldn't reach the release feed"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "kind": "downloading",
+          "version": "3.2.0",
+          "percent": 40
+        },
+        "output": {
+          "kind": "downloading",
+          "version": "3.2.0"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "kind": "installing"
+      },
+      {
+        "kind": "ready",
+        "version": "3.2.0"
+      }
+    ]
+  },
+  "UpdateRequestSchema": {
+    "accepts": [
+      {
+        "action": "install",
+        "requestedAt": 1791380000000
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "action": "install",
+          "requestedAt": 1791380000000,
+          "pid": 48213
+        },
+        "output": {
+          "action": "install",
+          "requestedAt": 1791380000000
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "action": "check",
+        "requestedAt": 1791380000000
+      },
+      {
+        "action": "install"
+      }
+    ]
+  },
+  "StagedManifestSchema": {
+    "accepts": [
+      {
+        "version": "3.2.0",
+        "bundleName": "Shigoto no Mori.app",
+        "notes": "Show ports on the worktree page.",
+        "releaseDate": "2026-10-06T14:12:05Z"
+      },
+      {
+        "version": "3.2.0",
+        "bundleName": "Shigoto no Mori.app"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "version": "3.2.0",
+          "bundleName": "Shigoto no Mori.app",
+          "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        },
+        "output": {
+          "version": "3.2.0",
+          "bundleName": "Shigoto no Mori.app"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "version": "",
+        "bundleName": "Shigoto no Mori.app"
+      },
+      {
+        "version": "3.2.0",
+        "bundleName": ""
+      },
+      {
+        "version": "3.2.0"
+      }
+    ]
+  },
+  "UpdateStageEventSchema": {
+    "accepts": [
+      {
+        "event": "downloading",
+        "version": "3.2.0"
+      },
+      {
+        "event": "verifying"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "event": "verifying",
+          "version": "3.2.0",
+          "ok": true
+        },
+        "output": {
+          "event": "verifying",
+          "version": "3.2.0"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "event": "extracting"
+      }
+    ]
+  },
+  "UpdateStageResultSchema": {
+    "accepts": [
+      {
+        "status": "up-to-date",
+        "version": "3.1.4"
+      },
+      {
+        "status": "staged",
+        "version": "3.2.0",
+        "installed": "3.1.4",
+        "notes": "Show ports on the worktree page.",
+        "releaseDate": "2026-10-06T14:12:05Z"
+      },
+      {
+        "status": "staged",
+        "version": "3.2.0",
+        "installed": "3.1.4"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "ok": true,
+          "status": "up-to-date",
+          "version": "3.1.4"
+        },
+        "output": {
+          "status": "up-to-date",
+          "version": "3.1.4"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "status": "failed",
+        "version": "3.1.4"
+      },
+      {
+        "status": "staged",
+        "version": "",
+        "installed": "3.1.4"
+      },
+      {
+        "status": "staged",
+        "version": "3.2.0"
+      }
+    ]
+  }
+}

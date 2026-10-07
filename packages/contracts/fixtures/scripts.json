@@ -1,0 +1,911 @@
+{
+  "RunScriptPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "script": "setup"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "script": "teardown"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "script": "port-pool-provision"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "script": "port-pool-release"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "worktreeId": "a1b2c3d4e5f6",
+          "script": "setup",
+          "force": true
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "worktreeId": "a1b2c3d4e5f6",
+          "script": "setup"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "worktreeId": "a1b2c3d4e5f6",
+        "script": "setup"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "",
+        "script": "setup"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "script": "build"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6"
+      }
+    ]
+  },
+  "PackageScriptsResultSchema": {
+    "accepts": [
+      {
+        "scripts": {
+          "dev": "vite",
+          "build": "vite build",
+          "test": "vitest run"
+        },
+        "packageManager": "pnpm",
+        "usage": {
+          "dev": {
+            "lastUsed": 1791380000000,
+            "recentCount": 12
+          },
+          "build": {
+            "lastUsed": 0,
+            "recentCount": 0
+          },
+          "test": {
+            "lastUsed": 1791120000000,
+            "recentCount": 3
+          }
+        },
+        "launchRow": ["dev", "test"]
+      },
+      {
+        "scripts": {},
+        "packageManager": "bun",
+        "usage": {},
+        "launchRow": []
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "scripts": {
+            "dev": "vite"
+          },
+          "packageManager": "yarn",
+          "usage": {
+            "dev": {
+              "lastUsed": 1791380000000,
+              "recentCount": 12,
+              "runs": 40
+            }
+          },
+          "launchRow": ["dev"],
+          "sort": "manual"
+        },
+        "output": {
+          "scripts": {
+            "dev": "vite"
+          },
+          "packageManager": "yarn",
+          "usage": {
+            "dev": {
+              "lastUsed": 1791380000000,
+              "recentCount": 12
+            }
+          },
+          "launchRow": ["dev"]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "scripts": {},
+        "packageManager": "deno",
+        "usage": {},
+        "launchRow": []
+      },
+      {
+        "scripts": {
+          "dev": "vite"
+        },
+        "packageManager": "npm",
+        "usage": {
+          "dev": {
+            "lastUsed": -1,
+            "recentCount": 0
+          }
+        },
+        "launchRow": []
+      },
+      {
+        "scripts": {
+          "dev": "vite"
+        },
+        "packageManager": "npm",
+        "usage": {
+          "dev": {
+            "lastUsed": 0,
+            "recentCount": 1.5
+          }
+        },
+        "launchRow": []
+      },
+      {
+        "scripts": {},
+        "packageManager": "npm",
+        "usage": {}
+      }
+    ]
+  },
+  "PackageScriptSortModeSchema": {
+    "accepts": ["manifest", "alphabetical", "recent", "frequent", "manual"],
+    "rejects": ["created"]
+  },
+  "PackageScriptsDocSchema": {
+    "accepts": [
+      {
+        "packageManager": "npm",
+        "scripts": [
+          {
+            "name": "dev",
+            "command": "vite"
+          },
+          {
+            "name": "build",
+            "command": "vite build"
+          }
+        ],
+        "usage": {
+          "dev": {
+            "lastUsed": 1791380000000,
+            "recentCount": 12
+          }
+        },
+        "sort": "manual",
+        "order": ["build", "dev"]
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "packageManager": "pnpm",
+          "scripts": [
+            {
+              "name": "dev",
+              "command": "vite",
+              "description": "Start the dev server"
+            }
+          ],
+          "usage": {},
+          "sort": "manifest",
+          "order": [],
+          "launchRow": ["dev"]
+        },
+        "output": {
+          "packageManager": "pnpm",
+          "scripts": [
+            {
+              "name": "dev",
+              "command": "vite"
+            }
+          ],
+          "usage": {},
+          "sort": "manifest",
+          "order": []
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "packageManager": "pnpm",
+        "scripts": [],
+        "usage": {},
+        "sort": "custom",
+        "order": []
+      },
+      {
+        "packageManager": "pnpm",
+        "scripts": [],
+        "usage": {},
+        "sort": "manifest"
+      }
+    ]
+  },
+  "RunPackageScriptPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "scriptName": "dev"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "worktreeId": "a1b2c3d4e5f6",
+          "scriptName": "dev",
+          "args": ["--port", "5173"]
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "worktreeId": "a1b2c3d4e5f6",
+          "scriptName": "dev"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "worktreeId": "a1b2c3d4e5f6",
+        "scriptName": "dev"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "",
+        "scriptName": "dev"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "scriptName": ""
+      }
+    ]
+  },
+  "SetPackageScriptSortPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "mode": "frequent"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "mode": "recent",
+          "worktreeId": "a1b2c3d4e5f6"
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "mode": "recent"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "mode": "frequent"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "mode": "created"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+      }
+    ]
+  },
+  "GetPackageScriptSortPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "knowsManual": true
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "worktreeId": "a1b2c3d4e5f6"
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": ""
+      },
+      {}
+    ]
+  },
+  "PackageScriptOrderSchema": {
+    "accepts": [["dev", "build", "test"], []],
+    "rejects": [["dev", ""]]
+  },
+  "SetPackageScriptOrderPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "arranged": ["test", "dev", "build"]
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "arranged": ["test", "dev"],
+          "worktreeId": "a1b2c3d4e5f6"
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "arranged": ["test", "dev"]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "arranged": ["dev"]
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "arranged": [""]
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+      }
+    ]
+  },
+  "SetPackageScriptLaunchRowPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "scriptName": "dev",
+        "onRow": true
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "scriptName": "storybook",
+        "onRow": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "scriptName": "dev",
+          "onRow": true,
+          "worktreeId": "a1b2c3d4e5f6"
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "scriptName": "dev",
+          "onRow": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "scriptName": "dev",
+        "onRow": true
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "scriptName": "",
+        "onRow": true
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "scriptName": "dev"
+      }
+    ]
+  },
+  "CancelScriptPayloadSchema": {
+    "accepts": [
+      {
+        "runId": "run-sm-badger-dev"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "runId": "run-sm-badger-dev",
+          "signal": "SIGTERM"
+        },
+        "output": {
+          "runId": "run-sm-badger-dev"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "runId": ""
+      },
+      {}
+    ]
+  },
+  "WriteScriptPayloadSchema": {
+    "accepts": [
+      {
+        "runId": "run-sm-badger-dev",
+        "data": "\u001b[A\r"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "runId": "run-sm-badger-dev",
+          "data": "q",
+          "seq": 4
+        },
+        "output": {
+          "runId": "run-sm-badger-dev",
+          "data": "q"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "runId": "",
+        "data": "q"
+      },
+      {
+        "runId": "run-sm-badger-dev"
+      }
+    ]
+  },
+  "ResizeScriptPayloadSchema": {
+    "accepts": [
+      {
+        "runId": "run-sm-badger-dev",
+        "cols": 120,
+        "rows": 32
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "runId": "run-sm-badger-dev",
+          "cols": 120,
+          "rows": 32,
+          "pixelWidth": 960
+        },
+        "output": {
+          "runId": "run-sm-badger-dev",
+          "cols": 120,
+          "rows": 32
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "runId": "",
+        "cols": 120,
+        "rows": 32
+      },
+      {
+        "runId": "run-sm-badger-dev",
+        "cols": 0,
+        "rows": 32
+      },
+      {
+        "runId": "run-sm-badger-dev",
+        "cols": 120,
+        "rows": 32.5
+      },
+      {
+        "runId": "run-sm-badger-dev",
+        "cols": 120
+      }
+    ]
+  },
+  "ScriptEventSchema": {
+    "accepts": [
+      {
+        "runId": "run-sm-badger-dev",
+        "kind": "data",
+        "data": "\u001b[32m  VITE v7.1.3\u001b[39m  ready in 412 ms\r\n"
+      },
+      {
+        "runId": "run-sm-badger-dev",
+        "kind": "exit",
+        "code": 0
+      },
+      {
+        "runId": "run-sm-badger-dev",
+        "kind": "exit",
+        "code": null
+      },
+      {
+        "runId": "run-sm-badger-dev",
+        "kind": "error",
+        "data": "spawn pnpm ENOENT"
+      },
+      {
+        "runId": "run-tp-panda-setup",
+        "kind": "started",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "pid": 48213,
+        "slot": {
+          "kind": "setup"
+        }
+      },
+      {
+        "runId": "run-tp-panda-teardown",
+        "kind": "started",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "slot": {
+          "kind": "teardown"
+        }
+      },
+      {
+        "runId": "run-tp-panda-ports",
+        "kind": "started",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "pid": 48214,
+        "slot": {
+          "kind": "portPool",
+          "phase": "provision"
+        }
+      },
+      {
+        "runId": "run-tp-panda-ports-release",
+        "kind": "started",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "pid": 48215,
+        "slot": {
+          "kind": "portPool",
+          "phase": "release"
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "runId": "run-sm-badger-dev",
+          "kind": "exit",
+          "code": 1,
+          "signal": null
+        },
+        "output": {
+          "runId": "run-sm-badger-dev",
+          "kind": "exit",
+          "code": 1
+        }
+      },
+      {
+        "input": {
+          "runId": "run-tp-panda-setup",
+          "kind": "started",
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "worktreeId": "a1b2c3d4e5f6",
+          "pid": 48213,
+          "slot": {
+            "kind": "setup",
+            "phase": "provision"
+          }
+        },
+        "output": {
+          "runId": "run-tp-panda-setup",
+          "kind": "started",
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "worktreeId": "a1b2c3d4e5f6",
+          "pid": 48213,
+          "slot": {
+            "kind": "setup"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "runId": "run-sm-badger-dev",
+        "kind": "stdout",
+        "data": "hello"
+      },
+      {
+        "kind": "data",
+        "data": "hello"
+      },
+      {
+        "runId": "run-tp-panda-setup",
+        "kind": "started",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "pid": 0,
+        "slot": {
+          "kind": "setup"
+        }
+      },
+      {
+        "runId": "run-tp-panda-setup",
+        "kind": "started",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "pid": 48213.5,
+        "slot": {
+          "kind": "setup"
+        }
+      },
+      {
+        "runId": "run-tp-panda-setup",
+        "kind": "started",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "slot": {
+          "kind": "package",
+          "name": "dev"
+        }
+      },
+      {
+        "runId": "run-tp-panda-ports",
+        "kind": "started",
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "worktreeId": "a1b2c3d4e5f6",
+        "slot": {
+          "kind": "portPool",
+          "phase": "renew"
+        }
+      }
+    ]
+  },
+  "RunningScriptsSchema": {
+    "accepts": [
+      {
+        "runs": [
+          {
+            "runId": "run-sm-badger-dev",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "wt_sm_badger",
+            "slot": {
+              "kind": "package",
+              "name": "dev"
+            },
+            "startedAt": 1791380000000,
+            "interactive": true
+          },
+          {
+            "runId": "run-tp-panda-setup",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "a1b2c3d4e5f6",
+            "slot": {
+              "kind": "setup"
+            },
+            "startedAt": 1791380012000,
+            "interactive": false
+          },
+          {
+            "runId": "run-tp-panda-teardown",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "a1b2c3d4e5f6",
+            "slot": {
+              "kind": "teardown"
+            },
+            "startedAt": 1791380013000,
+            "interactive": false
+          },
+          {
+            "runId": "run-tp-panda-ports",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "a1b2c3d4e5f6",
+            "slot": {
+              "kind": "portPool",
+              "phase": "provision"
+            },
+            "startedAt": 1791380014000,
+            "interactive": false
+          },
+          {
+            "runId": "run-tp-panda-ports-release",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "a1b2c3d4e5f6",
+            "slot": {
+              "kind": "portPool",
+              "phase": "release"
+            },
+            "startedAt": 1791380015000,
+            "interactive": false
+          }
+        ]
+      },
+      {
+        "runs": []
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "runs": [
+            {
+              "runId": "run-sm-badger-dev",
+              "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+              "worktreeId": "wt_sm_badger",
+              "slot": {
+                "kind": "package",
+                "name": "dev",
+                "command": "vite"
+              },
+              "startedAt": 1791380000000,
+              "interactive": true,
+              "pid": 48213
+            }
+          ],
+          "host": "studio"
+        },
+        "output": {
+          "runs": [
+            {
+              "runId": "run-sm-badger-dev",
+              "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+              "worktreeId": "wt_sm_badger",
+              "slot": {
+                "kind": "package",
+                "name": "dev"
+              },
+              "startedAt": 1791380000000,
+              "interactive": true
+            }
+          ]
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "runs": [
+          {
+            "runId": "run-sm-badger-dev",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "wt_sm_badger",
+            "slot": {
+              "kind": "build"
+            },
+            "startedAt": 1791380000000,
+            "interactive": true
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "runId": "run-sm-badger-dev",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "wt_sm_badger",
+            "slot": {
+              "kind": "package",
+              "name": "dev"
+            },
+            "startedAt": -1,
+            "interactive": true
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "runId": "run-sm-badger-dev",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "wt_sm_badger",
+            "slot": {
+              "kind": "package",
+              "name": "dev"
+            },
+            "startedAt": 1791380000000.5,
+            "interactive": true
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "runId": "run-sm-badger-dev",
+            "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+            "worktreeId": "wt_sm_badger",
+            "slot": {
+              "kind": "package",
+              "name": "dev"
+            },
+            "startedAt": 1791380000000
+          }
+        ]
+      },
+      {}
+    ]
+  },
+  "RemovedWorktreeScriptsSchema": {
+    "accepts": [
+      {
+        "worktreeId": "wt_sm_badger",
+        "worktreeName": "badger",
+        "scriptCount": 2
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "worktreeId": "wt_sm_badger",
+          "worktreeName": "badger",
+          "scriptCount": 1,
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+        },
+        "output": {
+          "worktreeId": "wt_sm_badger",
+          "worktreeName": "badger",
+          "scriptCount": 1
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "worktreeId": "wt_sm_badger",
+        "worktreeName": "badger",
+        "scriptCount": 0
+      },
+      {
+        "worktreeId": "wt_sm_badger",
+        "worktreeName": "badger",
+        "scriptCount": 1.5
+      },
+      {
+        "worktreeId": "wt_sm_badger",
+        "scriptCount": 1
+      }
+    ]
+  },
+  "OrphanScriptReportSchema": {
+    "accepts": [
+      {
+        "stopped": 2
+      },
+      {
+        "stopped": 0
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "stopped": 1,
+          "pids": [48213]
+        },
+        "output": {
+          "stopped": 1
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "stopped": -1
+      },
+      {
+        "stopped": 1.5
+      },
+      {}
+    ]
+  }
+}
