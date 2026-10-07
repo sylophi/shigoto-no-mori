@@ -13,15 +13,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Each job runs one piece of the root `pnpm check` (package.json), by
+# its script name, so CI and a local run mean the same thing.
 jobs:
   lint-and-format:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # oxlint and oxfmt are app/ dev dependencies, and their scripts run
     # from the repo root over every package (app, hub, marketing, cli).
-    defaults:
-      run:
-        working-directory: app
     steps:
       # Pinned to commit digests like release.yml, so a retagged action
       # cannot change what runs here.
@@ -40,13 +39,13 @@ jobs:
       # Only the two binaries are needed, so no install scripts: that
       # skips the Electron download and the app's own postinstall.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: pnpm -C app install --frozen-lockfile --ignore-scripts
 
       - name: Lint
-        run: pnpm run lint
+        run: pnpm run check:lint
 
       - name: Format
-        run: pnpm run format:check
+        run: pnpm run check:format
 
   # The release build regenerates the third-party notices, so stale
   # committed copies make every shipped build report a "-dirty" commit.
@@ -56,9 +55,6 @@ jobs:
   licenses:
     runs-on: macos-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: app
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -84,10 +80,10 @@ jobs:
       # license-checker only reads package metadata, so no install
       # scripts.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: pnpm -C app install --frozen-lockfile --ignore-scripts
 
       - name: Third-party notices are up to date
-        run: pnpm run licenses:check
+        run: pnpm run check:licenses
 
   # The rest of what lefthook runs on commit. The hook runs only what a
   # change touches, and a commit can skip it, so nothing below has run
@@ -95,9 +91,6 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: app
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -113,14 +106,15 @@ jobs:
 
       # tsc reads sources and types only.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: pnpm -C app install --frozen-lockfile --ignore-scripts
 
       - name: Typecheck
-        run: pnpm run typecheck
+        run: pnpm run check:typecheck
 
   # The hub Worker's typecheck and its vitest suite inside workerd, with
-  # app/ installed too (hub/README.md has why). The hub's install runs
-  # the esbuild and workerd builds its pnpm-workspace.yaml allows.
+  # app/ installed too (hub/README.md has why). check:hub installs hub/
+  # itself, running the esbuild and workerd builds its
+  # pnpm-workspace.yaml allows.
   hub:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -140,12 +134,10 @@ jobs:
             hub/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: |
-          pnpm -C app install --frozen-lockfile --ignore-scripts
-          pnpm -C hub install --frozen-lockfile
+        run: pnpm -C app install --frozen-lockfile --ignore-scripts
 
       - name: Hub checks
-        run: pnpm -C hub run check
+        run: pnpm run check:hub
 
   # The Go modules' tests, on macOS, the one platform sm and the
   # file-sync engine ship for: cli/ has darwin-only halves (clonefile
@@ -156,6 +148,11 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
+      # Only to run the root script: nothing is installed.
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          package_json_file: app/package.json
+
       # file-sync/go.mod asks for the newer Go of the two modules.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -164,11 +161,8 @@ jobs:
             cli/go.sum
             file-sync/go.sum
 
-      - name: CLI tests
-        run: go test -C cli ./...
-
-      - name: File-sync tests
-        run: CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./...
+      - name: Go tests
+        run: pnpm run check:go
 
   # Every proof in app/test, on macOS like the app they prove: they
   # drive the real sm and file-sync binaries (built from cli/ and
@@ -177,9 +171,6 @@ jobs:
   proofs:
     runs-on: macos-latest
     timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: app
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -206,8 +197,8 @@ jobs:
       # start scripts need node-pty's spawn-helper made executable.
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile --ignore-scripts
-          pnpm run postinstall
+          pnpm -C app install --frozen-lockfile --ignore-scripts
+          pnpm -C app run postinstall
 
       - name: Proofs
-        run: pnpm test --all
+        run: pnpm run check:proofs
