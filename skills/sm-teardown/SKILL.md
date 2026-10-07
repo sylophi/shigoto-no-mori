@@ -12,7 +12,9 @@ sm worktrees rm <name>
 - releases the port-pool port
 - runs the project's teardown script
 - `git worktree remove`
-- force-deletes the branch, unmerged commits included
+- force-deletes the local branch, unmerged commits included, unless
+  `--keep-branch` is passed, the `deleteBranchOnRemove` setting is off, or
+  the worktree is external
 - drops the app's record of the worktree
 
 Note: you do not need to provide a worktree name if you are in the one you
@@ -28,7 +30,8 @@ one, then:
 git push origin --delete <branch>
 ```
 
-This closes any open PR on it.
+This closes any open PR on it. If the local branch was kept,
+`git branch -D <branch>` discards it too.
 
 ## Failure cases
 
