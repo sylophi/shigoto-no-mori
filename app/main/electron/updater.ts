@@ -21,6 +21,8 @@
 // updateEndpoints.ts moves both out of our environment and into flags
 // on the check's own CLI child.
 import { join } from "node:path";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { app } from "electron";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import type { StagedManifest, UpdaterState } from "@shared/schemas";
@@ -88,6 +90,9 @@ function setState(next: UpdaterState): void {
 function getUpdaterState(): UpdaterState {
   return state;
 }
+
+const decodeStageEvent = Schema.decodeUnknownOption(UpdateStageEventSchema);
+const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
 
 // Mirrors cli/updater.go stagedDir()/stagedManifestPath().
 const stagedDir = () => join(dataDir(), "updates", "staged");
@@ -160,9 +165,13 @@ async function runCheck(): Promise<void> {
           // "verifying" arrives too, and the renderer's machine
           // collapses everything between "found one" and "staged" into
           // downloading, which names the release from the first event.
-          const event = UpdateStageEventSchema.safeParse(doc);
-          if (shown === null && event.success && state.kind !== "downloading") {
-            setState({ kind: "downloading", version: event.data.version });
+          const event = decodeStageEvent(doc);
+          if (
+            shown === null &&
+            Option.isSome(event) &&
+            state.kind !== "downloading"
+          ) {
+            setState({ kind: "downloading", version: event.value.version });
           }
         },
         undefined,
@@ -172,14 +181,12 @@ async function runCheck(): Promise<void> {
         (doc) => typeof doc["ok"] === "boolean",
       );
       const parsed =
-        final?.["ok"] === true
-          ? UpdateStageResultSchema.safeParse(final)
-          : null;
-      if (parsed?.success === true && parsed.data.status === "staged") {
-        next = readyStateFrom(parsed.data);
+        final?.["ok"] === true ? decodeStageResult(final) : Option.none();
+      if (Option.isSome(parsed) && parsed.value.status === "staged") {
+        next = readyStateFrom(parsed.value);
       } else if (
-        parsed?.success === true &&
-        parsed.data.status === "up-to-date"
+        Option.isSome(parsed) &&
+        parsed.value.status === "up-to-date"
       ) {
         next = { kind: "idle" };
       } else if (final?.["code"] === "update-in-progress") {

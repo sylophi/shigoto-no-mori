@@ -10,6 +10,8 @@
 // computed from is read under the registry lock and two writers (this
 // window's pick, a peer's push) can never overwrite each other's
 // entries.
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shared/errors";
 import {
   createSharedSettingsCopy,
@@ -25,9 +27,15 @@ import { registryStore, SHARED_SETTINGS_KEY } from "../config/store";
 // registry.json is hand-editable, so the stored value is parsed rather
 // than trusted. A mangled one reads as empty, and the next merge from
 // any peer fills it back in.
+const decodeSharedSettings = Schema.decodeUnknownOption(
+  SharedSettingsDocSchema,
+);
+
 function parse(stored: unknown): SharedSettingsDoc {
-  const parsed = SharedSettingsDocSchema.safeParse(stored);
-  return parsed.success ? parsed.data : EMPTY_SHARED_SETTINGS;
+  return Option.getOrElse(
+    decodeSharedSettings(stored),
+    () => EMPTY_SHARED_SETTINGS,
+  );
 }
 
 type ChangeListener = (doc: SharedSettingsDoc) => void;

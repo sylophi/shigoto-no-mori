@@ -23,6 +23,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { isValidWorktreeDirName } from "../shared/git/branches.ts";
 import { VillagerSlugSchema } from "../shared/schemas/villagers.ts";
@@ -168,10 +169,7 @@ const characters = [...villagers, ...specials].toSorted(
 // Each name can become a folder and a branch, so fail before writing
 // anything that isn't plain kebab-case or that the app would refuse.
 for (const { slug } of characters) {
-  if (
-    !VillagerSlugSchema.safeParse(slug).success ||
-    !isValidWorktreeDirName(slug)
-  )
+  if (!Schema.is(VillagerSlugSchema)(slug) || !isValidWorktreeDirName(slug))
     throw new Error(`Bad slug: ${slug}`);
 }
 

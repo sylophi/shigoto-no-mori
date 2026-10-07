@@ -23,6 +23,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
@@ -42,6 +43,7 @@ import {
 } from "@shared/sharedSettings";
 import {
   MAX_SHARED_SETTING_ENTRIES,
+  type SharedSettingEntry,
   SharedSettingsDocSchema,
   type SharedSettingsDoc,
 } from "@shared/schemas/sharedSettings";
@@ -230,7 +232,7 @@ it("hidden worktree prefixes: one value, the same list is the same value, a prim
 });
 
 it("forward compatibility: a key this build never heard of parses, merges and is offered on", () => {
-  const future = SharedSettingsDocSchema.parse({
+  const future = Schema.decodeSync(SharedSettingsDocSchema)({
     entries: { "someFutureSetting/x": { value: 3, at: 9, by: LYCHEE } },
   });
   const merged = mergeSharedSettings(EMPTY_SHARED_SETTINGS, future);
@@ -238,7 +240,7 @@ it("forward compatibility: a key this build never heard of parses, merges and is
 });
 
 it("tolerance: an entry this build cannot hold is left out, and the rest of the document still reads", () => {
-  const doc = SharedSettingsDocSchema.parse({
+  const doc = Schema.decodeSync(SharedSettingsDocSchema)({
     entries: {
       [KEY]: { value: KIWI, at: 3, by: KIWI },
       tooLong: { value: "x".repeat(10_000), at: 4, by: KIWI },
@@ -250,7 +252,7 @@ it("tolerance: an entry this build cannot hold is left out, and the rest of the 
 });
 
 it("full copy: a new key is refused out loud, while held keys still take writes", () => {
-  const entries: SharedSettingsDoc["entries"] = {};
+  const entries: Record<string, SharedSettingEntry> = {};
   for (let i = 0; i < MAX_SHARED_SETTING_ENTRIES; i += 1) {
     entries[`filler/${i}`] = { value: i, at: 1, by: KIWI };
   }

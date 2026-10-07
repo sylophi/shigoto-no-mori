@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { UpdaterStateSchema } from "@shared/schemas";
+import { UpdaterStateSchema, VoidSchema } from "@shared/schemas";
 
 // The app updater, as a HOST module: the update is a fact about the
 // machine the app runs on, and the Settings page shows every device
@@ -11,7 +11,7 @@ import { UpdaterStateSchema } from "@shared/schemas";
 // state a viewer caches (the state rides its own broadcast), so they
 // opt out of the resolved-mutation cache ping.
 export const updaterContract = defineContract("host", {
-  get: invoke("updater:get", z.void(), UpdaterStateSchema, {
+  get: invoke("updater:get", VoidSchema, UpdaterStateSchema, {
     remote: true,
     gated: false,
   }),

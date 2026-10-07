@@ -42,8 +42,10 @@ import {
 import { join } from "node:path";
 import { z } from "zod";
 import { errorMessageOf } from "@shared/errors";
+import { type ContractSchema, type Decoded } from "@shared/ipc/schema";
 import {
   type VillagerDataStatus,
+  type VillagerProfile,
   type VillagerProfiles,
   VillagerProfilesSchema,
 } from "@shared/schemas";
@@ -267,7 +269,7 @@ export function createVillagerData({
       if (data.continue === undefined) break;
       cont = data.continue;
     }
-    const profiles: VillagerProfiles = {};
+    const profiles: Record<string, VillagerProfile> = {};
     for (const [slug, { page: title }] of batch) {
       profiles[slug] = villagerProfile(slug, { title, ...pageOf(title) });
     }
@@ -493,7 +495,10 @@ async function readStored(folder: string): Promise<Stored | null> {
 // A file of ours, or null when it's missing or damaged (cut short, or
 // written by a build with another shape): either way it is fetched
 // again rather than left to block the data behind it.
-function readIfValid<T>(path: string, schema: z.ZodType<T>): Promise<T | null> {
+function readIfValid<S extends ContractSchema>(
+  path: string,
+  schema: S,
+): Promise<Decoded<S> | null> {
   return readJsonOrNull(path, schema).catch(() => null);
 }
 

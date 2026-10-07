@@ -1,9 +1,9 @@
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   MergeSharedSettingsPayloadSchema,
   SetSharedSettingPayloadSchema,
   SharedSettingsDocSchema,
+  VoidSchema,
 } from "@shared/schemas";
 
 // One device's copy of the shared settings
@@ -15,7 +15,7 @@ export const sharedSettingsContract = defineContract("host", {
   // Served to any account peer: a copy is only useful if the others
   // can read it, and it holds nothing a project list does not already
   // say.
-  read: invoke("sharedSettings:read", z.void(), SharedSettingsDocSchema, {
+  read: invoke("sharedSettings:read", VoidSchema, SharedSettingsDocSchema, {
     remote: true,
     gated: false,
   }),

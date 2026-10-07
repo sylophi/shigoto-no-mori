@@ -4,6 +4,7 @@ import {
   MoveDataDirPayloadSchema,
   NukeProgressSchema,
   RuntimeInfoSchema,
+  VoidSchema,
 } from "@shared/schemas";
 
 // Host lifecycle of the shigomori data dir. The client-side calls
@@ -20,7 +21,7 @@ import {
 // data dir, which a peer this host has not granted control to has no
 // use for). It moves no state, so it never pings viewers.
 export const runtimeContract = defineContract("host", {
-  info: invoke("runtime:info", z.void(), RuntimeInfoSchema, {
+  info: invoke("runtime:info", VoidSchema, RuntimeInfoSchema, {
     remote: true,
     gated: true,
     movesHostState: false,
@@ -29,7 +30,7 @@ export const runtimeContract = defineContract("host", {
   moveDataDir: invoke(
     "runtime:moveDataDir",
     MoveDataDirPayloadSchema,
-    z.void(),
+    VoidSchema,
     // The host restarts right after, and the session that comes back
     // refetches everything, so the viewer ping would only race the
     // quit.

@@ -6,6 +6,11 @@
 // persists reads storage through an injected KeyValueStorage rather
 // than touching a browser global at module scope, which is what lets
 // the check import these modules under node.
+import {
+  type ContractSchema,
+  type Decoded,
+  safeDecode,
+} from "@shared/ipc/schema";
 
 export type KeyValueStorage = {
   getItem(key: string): string | null;
@@ -27,18 +32,16 @@ export function readKey(storage: KeyValueStorage, key: string): string | null {
 // A stored JSON document read against its schema. Absent, unparseable
 // and wrong-shaped all read as `fallback`: corrupt storage reads as
 // defaults, and the next write heals it.
-export function readJsonKey<T>(
+export function readJsonKey<S extends ContractSchema>(
   storage: KeyValueStorage,
   key: string,
-  schema: {
-    safeParse(value: unknown): { success: true; data: T } | { success: false };
-  },
-  fallback: T,
-): T {
+  schema: S,
+  fallback: Decoded<S>,
+): Decoded<S> {
   const raw = readKey(storage, key);
   if (raw === null) return fallback;
   try {
-    const parsed = schema.safeParse(JSON.parse(raw));
+    const parsed = safeDecode(schema, JSON.parse(raw));
     return parsed.success ? parsed.data : fallback;
   } catch {
     return fallback;
