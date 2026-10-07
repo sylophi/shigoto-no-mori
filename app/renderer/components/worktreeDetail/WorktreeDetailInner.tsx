@@ -323,7 +323,8 @@ export function WorktreeDetailInner({
 
           <CommitsSection worktree={worktree} />
 
-          <PortsSection worktree={worktree} />
+          {/* Keyed so an open add or edit form stays with its worktree. */}
+          <PortsSection key={worktree.id} worktree={worktree} />
 
           <section className="space-y-3">
             <SectionHeading>Scripts</SectionHeading>

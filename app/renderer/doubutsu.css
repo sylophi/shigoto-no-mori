@@ -29,6 +29,7 @@
  *      button (+ data-variant)   ui/button.tsx
  *      input, textarea           ui/input.tsx, ui/textarea.tsx
  *      checkbox (+ data-variant) ui/checkbox.tsx
+ *      switch                    ui/switch.tsx
  *      chip                      ui/chip-button.tsx
  *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup   shared/BranchCombobox.tsx

@@ -30,6 +30,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeData } from "@/hooks/worktrees/useWorktreeData";
+import { cn } from "@/lib/utils";
 import { ForwardAllButton } from "./ForwardAllButton";
 import { PortForm } from "./PortForm";
 import { PortRow } from "./PortRow";
@@ -76,7 +77,8 @@ export function usePortList(worktree: Worktree) {
   };
 }
 
-// `plain`: rows without the cards' borders and fills (PortRow).
+// `plain`: rows without the cards' borders and fills (PortRow), and an
+// add form without its fill, set out as far as the rows.
 export function PortList({
   state,
   plain = false,
@@ -141,7 +143,10 @@ export function PortList({
           taken={ports}
           onSubmit={(entry) => customPorts.add(entry)}
           onDone={() => setAdding(false)}
-          className="rounded-lg border border-dashed border-border bg-card px-3 py-2"
+          className={cn(
+            "rounded-lg border border-dashed border-border px-3 py-2",
+            plain ? "-mx-3" : "bg-card",
+          )}
         />
       )}
     </div>
