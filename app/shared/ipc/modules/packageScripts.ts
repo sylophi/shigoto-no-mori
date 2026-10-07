@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   GetPackageScriptSortPayloadSchema,
@@ -10,6 +10,7 @@ import {
   SetPackageScriptLaunchRowPayloadSchema,
   SetPackageScriptOrderPayloadSchema,
   SetPackageScriptSortPayloadSchema,
+  VoidSchema,
   WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
 
@@ -17,13 +18,13 @@ export const packageScriptsContract = defineContract("host", {
   list: invoke(
     "packageScripts:list",
     WorktreeScopedPayloadSchema,
-    PackageScriptsResultSchema.nullable(),
+    Schema.NullOr(PackageScriptsResultSchema),
     { remote: true, gated: false },
   ),
   run: invoke(
     "packageScripts:run",
     RunPackageScriptPayloadSchema,
-    z.object({ runId: z.string() }),
+    Schema.Struct({ runId: Schema.String }),
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   getSort: invoke(
@@ -35,7 +36,7 @@ export const packageScriptsContract = defineContract("host", {
   setSort: invoke(
     "packageScripts:setSort",
     SetPackageScriptSortPayloadSchema,
-    z.void(),
+    VoidSchema,
     { remote: true, gated: true },
   ),
   getOrder: invoke(
@@ -47,13 +48,13 @@ export const packageScriptsContract = defineContract("host", {
   setOrder: invoke(
     "packageScripts:setOrder",
     SetPackageScriptOrderPayloadSchema,
-    z.void(),
+    VoidSchema,
     { remote: true, gated: true },
   ),
   setLaunchRow: invoke(
     "packageScripts:setLaunchRow",
     SetPackageScriptLaunchRowPayloadSchema,
-    z.void(),
+    VoidSchema,
     { remote: true, gated: true },
   ),
 });

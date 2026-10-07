@@ -7,7 +7,7 @@
 // and a terminal run the exact same engine and nothing drifts. Each
 // function translates the CLI's NDJSON into the shapes the IPC
 // handlers already serve. Every document crossing the Go/TS boundary
-// is validated against the shared zod schemas, so drift fails loudly
+// is validated against the shared schemas, so drift fails loudly
 // here instead of surfacing as undefined-flavored breakage in the
 // renderer.
 import * as Schema from "effect/Schema";
@@ -127,7 +127,7 @@ interface WorktreeOperationNotifiers {
 // event tag itself is the stream's, not the payload's).
 function scriptEventOf(doc: CliDoc): ScriptEvent {
   const { event: _event, ...scriptEvent } = doc;
-  return ScriptEventSchema.parse(scriptEvent);
+  return Schema.decodeUnknownSync(ScriptEventSchema)(scriptEvent);
 }
 
 // The argv of a verb that acts on one worktree of one project.
@@ -1045,26 +1045,31 @@ export async function diskUsageViaCli(
 
 // The project's launcher row: installed tools, the GitHub entry and
 // custom commands, hidden ones left out, most used first.
-export async function launchersViaCli(
-  projectId: string,
-): Promise<{ entries: LauncherEntry[]; hiddenCount: number }> {
+export async function launchersViaCli(projectId: string): Promise<{
+  readonly entries: readonly LauncherEntry[];
+  readonly hiddenCount: number;
+}> {
   const doc = await readDoc(
     ["launchers", "--project-id", projectId],
     "sm launchers failed",
     { projectId },
   );
-  return z
-    .object({
-      entries: z.array(LauncherEntrySchema),
-      hiddenCount: z.number().int().nonnegative(),
-    })
-    .parse(doc);
+  return Schema.decodeUnknownSync(
+    Schema.Struct({
+      entries: Schema.Array(LauncherEntrySchema),
+      hiddenCount: Schema.Natural,
+    }),
+  )(doc);
 }
 
 // Every tool the catalog knows, installed or not, by label.
-export async function launcherCatalogViaCli(): Promise<DetectedLauncher[]> {
+export async function launcherCatalogViaCli(): Promise<
+  readonly DetectedLauncher[]
+> {
   const doc = await readDoc(["launchers", "--catalog"], "sm launchers failed");
-  return z.object({ apps: z.array(DetectedLauncherSchema) }).parse(doc).apps;
+  return Schema.decodeUnknownSync(
+    Schema.Struct({ apps: Schema.Array(DetectedLauncherSchema) }),
+  )(doc).apps;
 }
 
 // The worktree's package.json scripts (`sm run` with no script), or
@@ -1086,7 +1091,7 @@ export async function packageScriptsViaCli(
     if (isEntityGoneError(error)) throw error;
     return null;
   }
-  return PackageScriptsDocSchema.parse(doc);
+  return Schema.decodeUnknownSync(PackageScriptsDocSchema)(doc);
 }
 
 // A wedged git or gh probe must not leave Settings' health check
