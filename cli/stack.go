@@ -39,16 +39,17 @@ const maxStackDepth = 64
 
 // The chain from the bottom of the stack up to and including `number`,
 // or just that PR when nothing sits under it. Newest PR wins a reused
-// head branch, like the app's map. Any state along the way: a stack
-// whose bottom already landed, with the next PR still based on the
-// landed branch, is still that stack, and the trunk is still the
-// bottom PR's base.
+// head branch, like the app's map, and a fork's PR never does: a base
+// branch lives in this repository, so it is never a fork PR's head
+// (prLookupArgs). Any state along the way: a stack whose bottom
+// already landed, with the next PR still based on the landed branch,
+// is still that stack, and the trunk is still the bottom PR's base.
 func stackBelow(prs []prSummary, number int, trunk string) []prSummary {
 	byHead := map[string]prSummary{}
 	var own *prSummary
 	for i := range prs {
 		pr := prs[i]
-		if _, seen := byHead[pr.HeadRefName]; !seen {
+		if _, seen := byHead[pr.HeadRefName]; !seen && !pr.IsCrossRepository {
 			byHead[pr.HeadRefName] = pr
 		}
 		if pr.Number == number && own == nil {
@@ -330,6 +331,11 @@ func stackChain(proj project, number int, lk stackLookups) ([]prSummary, error) 
 			return nil, errf("No pull request #%d", number)
 		}
 		chain = []prSummary{*own}
+	}
+	// Asked for by number (the app's merge), so it could be a stranger's
+	// fork PR. The layers under it never are (stackBelow).
+	if top := chain[len(chain)-1]; top.IsCrossRepository && checkedOutPullRequest(proj.Path, top.HeadRefName) != number {
+		return nil, codedErrf("fork-pull-request", "PR #%d is from a fork, and its branch here wasn't checked out from it. Merge it on GitHub instead.", number)
 	}
 	return extendBelow(chain, lk.trunk, func(branch string) (*prSummary, error) {
 		return findPullRequest(proj.Path, branch)

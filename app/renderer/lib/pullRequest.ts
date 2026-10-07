@@ -8,6 +8,7 @@ import type { ComponentType, SVGProps } from "react";
 import { forkBranchCandidates } from "@shared/git/branches";
 import { pluralize } from "./pluralize";
 import {
+  isBranchsPullRequest,
   MergeMethodSchema,
   type MergeMethod,
   type PullRequest,
@@ -252,6 +253,28 @@ export function describeMergeVerdict(
     }
   }
   return said(status, "merge");
+}
+
+// The PR a worktree page's lookup answered, or none when it isn't the
+// branch's own (isBranchsPullRequest). A peer's host on an older build
+// still answers with a stranger's fork PR, and the page merges and
+// drafts by its number.
+export function ownBranchPullRequest(
+  pr: PullRequestDetail | null,
+): PullRequestDetail | null {
+  return pr !== null && isBranchsPullRequest(pr) ? pr : null;
+}
+
+// A device's branch to PR map, without the PRs that aren't their
+// branch's own, which a peer's host on an older build still lists.
+// Every reader of the map (sidebar, inbox, stacks, palette) gets it
+// through here.
+export function ownBranchPullRequests(
+  prs: Record<string, PullRequest>,
+): Record<string, PullRequest> {
+  return Object.fromEntries(
+    Object.entries(prs).filter(([, pr]) => isBranchsPullRequest(pr)),
+  );
 }
 
 // GitHub computes mergeStateStatus in the background, so right after a
