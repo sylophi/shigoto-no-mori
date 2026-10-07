@@ -1,0 +1,45 @@
+{
+  "TerrierReadinessSchema": {
+    "accepts": [
+      {
+        "installed": true,
+        "compatible": true,
+        "version": "0.4.2"
+      },
+      {
+        "installed": true,
+        "compatible": false,
+        "version": "1.0.0"
+      },
+      {
+        "installed": false,
+        "compatible": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "installed": true,
+          "compatible": true,
+          "version": "0.4.2",
+          "path": "/opt/homebrew/bin/terrier"
+        },
+        "output": {
+          "installed": true,
+          "compatible": true,
+          "version": "0.4.2"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "installed": true,
+        "version": "0.4.2"
+      },
+      {
+        "installed": "yes",
+        "compatible": false
+      }
+    ]
+  }
+}

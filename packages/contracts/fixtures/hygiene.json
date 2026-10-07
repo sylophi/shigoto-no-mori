@@ -1,0 +1,141 @@
+{
+  "WorktreeDiskUsageSchema": {
+    "accepts": [
+      {
+        "worktreeId": "e0f76c6cc80a",
+        "bytes": 1288490188,
+        "reclaimableBytes": 73400320,
+        "lastActivityAt": 1791289923000,
+        "partial": false
+      },
+      {
+        "worktreeId": "5780f2399520",
+        "bytes": 524288,
+        "reclaimableBytes": 524288,
+        "lastActivityAt": null,
+        "partial": true
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "worktreeId": "e0f76c6cc80a",
+          "bytes": 4096,
+          "reclaimableBytes": 4096,
+          "lastActivityAt": null,
+          "partial": false,
+          "files": 1
+        },
+        "output": {
+          "worktreeId": "e0f76c6cc80a",
+          "bytes": 4096,
+          "reclaimableBytes": 4096,
+          "lastActivityAt": null,
+          "partial": false
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "worktreeId": "e0f76c6cc80a",
+        "bytes": -1,
+        "reclaimableBytes": 0,
+        "lastActivityAt": null,
+        "partial": false
+      },
+      {
+        "worktreeId": "e0f76c6cc80a",
+        "bytes": 4096,
+        "reclaimableBytes": 2048.5,
+        "lastActivityAt": null,
+        "partial": false
+      },
+      {
+        "worktreeId": "e0f76c6cc80a",
+        "bytes": 4096,
+        "reclaimableBytes": 4096,
+        "partial": false
+      }
+    ]
+  },
+  "WorktreeHygieneSchema": {
+    "accepts": [
+      {
+        "worktreeId": "5780f2399520",
+        "lastCommitAt": 1791117123000,
+        "headHash": "4d20b18",
+        "uniqueCommits": 0,
+        "contentAlreadyInPrimary": false,
+        "primaryRef": "origin/main",
+        "holdsPrimaryBranch": false,
+        "untracked": false
+      },
+      {
+        "worktreeId": "e0f76c6cc80a",
+        "lastCommitAt": null,
+        "headHash": null,
+        "uniqueCommits": null,
+        "contentAlreadyInPrimary": false,
+        "primaryRef": null,
+        "holdsPrimaryBranch": true,
+        "untracked": true
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "worktreeId": "cbc5ccb43624",
+          "lastCommitAt": 1791289923000,
+          "headHash": "e7c0a52",
+          "uniqueCommits": 2,
+          "contentAlreadyInPrimary": true,
+          "primaryRef": "main",
+          "holdsPrimaryBranch": false,
+          "untracked": false,
+          "verdict": "absorbed"
+        },
+        "output": {
+          "worktreeId": "cbc5ccb43624",
+          "lastCommitAt": 1791289923000,
+          "headHash": "e7c0a52",
+          "uniqueCommits": 2,
+          "contentAlreadyInPrimary": true,
+          "primaryRef": "main",
+          "holdsPrimaryBranch": false,
+          "untracked": false
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "worktreeId": "5780f2399520",
+        "lastCommitAt": -1,
+        "headHash": "4d20b18",
+        "uniqueCommits": 0,
+        "contentAlreadyInPrimary": false,
+        "primaryRef": "main",
+        "holdsPrimaryBranch": false,
+        "untracked": false
+      },
+      {
+        "worktreeId": "5780f2399520",
+        "lastCommitAt": 1791117123000,
+        "headHash": "4d20b18",
+        "uniqueCommits": 1.5,
+        "contentAlreadyInPrimary": false,
+        "primaryRef": "main",
+        "holdsPrimaryBranch": false,
+        "untracked": false
+      },
+      {
+        "worktreeId": "5780f2399520",
+        "lastCommitAt": 1791117123000,
+        "headHash": "4d20b18",
+        "uniqueCommits": 0,
+        "contentAlreadyInPrimary": false,
+        "primaryRef": "main",
+        "holdsPrimaryBranch": false
+      }
+    ]
+  }
+}

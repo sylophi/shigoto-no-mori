@@ -1,0 +1,206 @@
+{
+  "DetectedLauncherSchema": {
+    "accepts": [
+      {
+        "kind": "detected",
+        "id": "vscode",
+        "label": "VS Code",
+        "available": true
+      },
+      {
+        "kind": "detected",
+        "id": "cursor",
+        "label": "Cursor",
+        "available": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "kind": "detected",
+          "id": "finder",
+          "label": "Finder",
+          "available": true,
+          "icon": "finder.png"
+        },
+        "output": {
+          "kind": "detected",
+          "id": "finder",
+          "label": "Finder",
+          "available": true
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "kind": "custom",
+        "id": "vscode",
+        "label": "VS Code",
+        "available": true
+      },
+      {
+        "kind": "detected",
+        "id": "vscode",
+        "label": "VS Code"
+      }
+    ]
+  },
+  "LauncherEntrySchema": {
+    "accepts": [
+      {
+        "kind": "detected",
+        "id": "vscode",
+        "label": "VS Code",
+        "available": true
+      },
+      {
+        "kind": "custom",
+        "id": "claude",
+        "label": "Claude Code"
+      },
+      {
+        "kind": "web",
+        "id": "web:github",
+        "label": "GitHub"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "kind": "custom",
+          "id": "claude",
+          "label": "Claude Code",
+          "command": "claude"
+        },
+        "output": {
+          "kind": "custom",
+          "id": "claude",
+          "label": "Claude Code"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "kind": "app",
+        "id": "cursor",
+        "label": "Cursor"
+      },
+      {
+        "kind": "web",
+        "id": "web:github"
+      }
+    ]
+  },
+  "LaunchPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "launcherId": "app:vscode"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "launcherId": "custom:claude",
+          "deviceId": "dev_8f3ac2e1"
+        },
+        "output": {
+          "projectId": "shigoto-no-mori",
+          "worktreeId": "a1b2c3d4e5f6",
+          "launcherId": "custom:claude"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "worktreeId": "a1b2c3d4e5f6",
+        "launcherId": "app:vscode"
+      },
+      {
+        "projectId": "",
+        "worktreeId": "a1b2c3d4e5f6",
+        "launcherId": "app:vscode"
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "",
+        "launcherId": "app:vscode"
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "worktreeId": "a1b2c3d4e5f6",
+        "launcherId": ""
+      }
+    ]
+  },
+  "SetLaunchToolsEnabledPayloadSchema": {
+    "accepts": [
+      {
+        "enabled": true,
+        "entries": [
+          {
+            "id": "app:vscode",
+            "label": "VS Code"
+          },
+          {
+            "id": "custom:claude",
+            "label": "Claude Code"
+          },
+          {
+            "id": "web:github",
+            "label": "GitHub"
+          }
+        ]
+      },
+      {
+        "enabled": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "enabled": false,
+          "reason": "settings"
+        },
+        "output": {
+          "enabled": false
+        }
+      },
+      {
+        "input": {
+          "enabled": true,
+          "entries": [
+            {
+              "id": "app:vscode",
+              "label": "VS Code",
+              "kind": "detected"
+            }
+          ]
+        },
+        "output": {
+          "enabled": true,
+          "entries": [
+            {
+              "id": "app:vscode",
+              "label": "VS Code"
+            }
+          ]
+        }
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "enabled": true,
+        "entries": [
+          {
+            "id": "app:vscode"
+          }
+        ]
+      }
+    ]
+  }
+}

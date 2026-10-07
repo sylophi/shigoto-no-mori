@@ -1,0 +1,231 @@
+{
+  "VillagerSlugSchema": {
+    "accepts": ["marshal", "kid-cat", "agent-s"],
+    "rejects": [
+      "Marshal",
+      "kid--cat",
+      "-marshal",
+      "kid cat",
+      "",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+  },
+  "VillagerDataStatusSchema": {
+    "accepts": [
+      {
+        "kind": "absent",
+        "villagers": 499
+      },
+      {
+        "kind": "downloading",
+        "done": 212,
+        "villagers": 499
+      },
+      {
+        "kind": "ready",
+        "downloadedAt": "2026-09-25T20:47:55.610Z",
+        "villagers": 499
+      },
+      {
+        "kind": "failed",
+        "done": 212,
+        "villagers": 499,
+        "message": "Couldn't reach Nookipedia."
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "kind": "downloading",
+          "done": 212,
+          "villagers": 499,
+          "bytes": 1650000
+        },
+        "output": {
+          "kind": "downloading",
+          "done": 212,
+          "villagers": 499
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "kind": "paused",
+        "villagers": 499
+      },
+      {
+        "kind": "downloading",
+        "done": -1,
+        "villagers": 499
+      },
+      {
+        "kind": "downloading",
+        "done": 212.5,
+        "villagers": 499
+      },
+      {
+        "kind": "failed",
+        "done": 212,
+        "villagers": 499
+      }
+    ]
+  },
+  "VillagerProfileSchema": {
+    "accepts": [
+      {
+        "name": "Marshal",
+        "kind": "villager",
+        "species": "Squirrel",
+        "personality": "Smug",
+        "gender": "Male",
+        "birthday": "09-29",
+        "sign": "Libra",
+        "catchphrase": "sulky",
+        "quote": "Seize the day.",
+        "japaneseName": "ジュン",
+        "japaneseNameRomaji": "Jun",
+        "url": "https://nookipedia.com/wiki/Marshal"
+      },
+      {
+        "name": "Beppe",
+        "kind": "special",
+        "species": "Bird",
+        "gender": "Male",
+        "birthday": "07-18",
+        "sign": "Cancer",
+        "japaneseName": "ピンちゃん",
+        "url": "https://nookipedia.com/wiki/Beppe"
+      },
+      {
+        "name": "Pascal",
+        "kind": "special",
+        "url": "https://nookipedia.com/wiki/Pascal"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "name": "Pascal",
+          "kind": "special",
+          "url": "https://nookipedia.com/wiki/Pascal",
+          "icon": "faces/pascal.png"
+        },
+        "output": {
+          "name": "Pascal",
+          "kind": "special",
+          "url": "https://nookipedia.com/wiki/Pascal"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "name": "",
+        "kind": "special",
+        "url": "https://nookipedia.com/wiki/Pascal"
+      },
+      {
+        "name": "Pascal",
+        "kind": "npc",
+        "url": "https://nookipedia.com/wiki/Pascal"
+      },
+      {
+        "name": "Marshal",
+        "kind": "villager",
+        "species": "Squirrel",
+        "personality": "Smug",
+        "gender": "Male",
+        "birthday": "September 29",
+        "sign": "Libra",
+        "catchphrase": "sulky",
+        "quote": "Seize the day.",
+        "japaneseName": "ジュン",
+        "japaneseNameRomaji": "Jun",
+        "url": "https://nookipedia.com/wiki/Marshal"
+      },
+      {
+        "name": "Pascal",
+        "kind": "special"
+      }
+    ]
+  },
+  "VillagerProfilesSchema": {
+    "accepts": [
+      {
+        "marshal": {
+          "name": "Marshal",
+          "kind": "villager",
+          "species": "Squirrel",
+          "personality": "Smug",
+          "gender": "Male",
+          "birthday": "09-29",
+          "sign": "Libra",
+          "catchphrase": "sulky",
+          "quote": "Seize the day.",
+          "japaneseName": "ジュン",
+          "japaneseNameRomaji": "Jun",
+          "url": "https://nookipedia.com/wiki/Marshal"
+        },
+        "beppe": {
+          "name": "Beppe",
+          "kind": "special",
+          "species": "Bird",
+          "gender": "Male",
+          "birthday": "07-18",
+          "sign": "Cancer",
+          "japaneseName": "ピンちゃん",
+          "url": "https://nookipedia.com/wiki/Beppe"
+        }
+      },
+      {}
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "pascal": {
+            "name": "Pascal",
+            "kind": "special",
+            "url": "https://nookipedia.com/wiki/Pascal",
+            "icon": "faces/pascal.png"
+          }
+        },
+        "output": {
+          "pascal": {
+            "name": "Pascal",
+            "kind": "special",
+            "url": "https://nookipedia.com/wiki/Pascal"
+          }
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "Marshal": {
+          "name": "Marshal",
+          "kind": "villager",
+          "species": "Squirrel",
+          "personality": "Smug",
+          "gender": "Male",
+          "birthday": "09-29",
+          "sign": "Libra",
+          "catchphrase": "sulky",
+          "quote": "Seize the day.",
+          "japaneseName": "ジュン",
+          "japaneseNameRomaji": "Jun",
+          "url": "https://nookipedia.com/wiki/Marshal"
+        }
+      },
+      {
+        "beppe": {
+          "name": "Beppe",
+          "kind": "special",
+          "species": "Bird",
+          "gender": "Male",
+          "birthday": "7-18",
+          "sign": "Cancer",
+          "japaneseName": "ピンちゃん",
+          "url": "https://nookipedia.com/wiki/Beppe"
+        }
+      }
+    ]
+  }
+}

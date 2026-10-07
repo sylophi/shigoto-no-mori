@@ -1,0 +1,596 @@
+{
+  "GitRefNameSchema": {
+    "accepts": ["main", "feature/badger-sidebar"],
+    "rejects": ["", "-D"]
+  },
+  "ProjectSchema": {
+    "accepts": [
+      {
+        "id": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "port-pool",
+        "path": "/Users/alex/dev/port-pool",
+        "pathExists": true,
+        "identity": "root:9a71b3c05e46f812",
+        "remote": "github.com/sylophi/port-pool",
+        "lastUsed": 1791380000000,
+        "recentCount": 7,
+        "source": "terrier"
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "pathExists": false,
+        "identity": null,
+        "remote": null,
+        "lastUsed": 0,
+        "recentCount": 0
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "name": "t3code",
+          "path": "/Users/alex/dev/t3code",
+          "icon": null
+        },
+        "output": {
+          "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "name": "t3code",
+          "path": "/Users/alex/dev/t3code"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code"
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "source": "registry"
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "lastUsed": -1
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "recentCount": 1.5
+      }
+    ]
+  },
+  "ProjectRowSchema": {
+    "accepts": [
+      {
+        "id": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "port-pool",
+        "path": "/Users/alex/dev/port-pool",
+        "pathExists": true,
+        "identity": "root:9a71b3c05e46f812",
+        "remote": "github.com/sylophi/port-pool",
+        "lastUsed": 1791380000000,
+        "recentCount": 7,
+        "source": "terrier",
+        "icon": {
+          "path": "/Users/alex/dev/port-pool/public/favicon.svg",
+          "mime": "image/svg+xml"
+        },
+        "hue": 152.4
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "pathExists": false,
+        "identity": null,
+        "remote": null,
+        "lastUsed": 0,
+        "recentCount": 0,
+        "icon": null,
+        "hue": null
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "name": "t3code",
+          "path": "/Users/alex/dev/t3code",
+          "pathExists": true,
+          "identity": null,
+          "remote": null,
+          "lastUsed": 0,
+          "recentCount": 0,
+          "icon": null,
+          "hue": null,
+          "order": 2
+        },
+        "output": {
+          "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "name": "t3code",
+          "path": "/Users/alex/dev/t3code",
+          "pathExists": true,
+          "identity": null,
+          "remote": null,
+          "lastUsed": 0,
+          "recentCount": 0,
+          "icon": null,
+          "hue": null
+        }
+      },
+      {
+        "input": {
+          "id": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "name": "port-pool",
+          "path": "/Users/alex/dev/port-pool",
+          "pathExists": true,
+          "identity": "root:9a71b3c05e46f812",
+          "remote": "github.com/sylophi/port-pool",
+          "lastUsed": 1791380000000,
+          "recentCount": 7,
+          "icon": {
+            "path": "/Users/alex/dev/port-pool/public/favicon.svg",
+            "mime": "image/svg+xml",
+            "size": 1832
+          },
+          "hue": 152.4
+        },
+        "output": {
+          "id": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "name": "port-pool",
+          "path": "/Users/alex/dev/port-pool",
+          "pathExists": true,
+          "identity": "root:9a71b3c05e46f812",
+          "remote": "github.com/sylophi/port-pool",
+          "lastUsed": 1791380000000,
+          "recentCount": 7,
+          "icon": {
+            "path": "/Users/alex/dev/port-pool/public/favicon.svg",
+            "mime": "image/svg+xml"
+          },
+          "hue": 152.4
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code"
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "pathExists": true,
+        "identity": null,
+        "remote": null,
+        "lastUsed": 0,
+        "recentCount": 0,
+        "source": "registry",
+        "icon": null,
+        "hue": null
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "pathExists": true,
+        "identity": null,
+        "remote": null,
+        "lastUsed": -1,
+        "recentCount": 0,
+        "icon": null,
+        "hue": null
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "pathExists": true,
+        "identity": null,
+        "remote": null,
+        "lastUsed": 0,
+        "recentCount": 1.5,
+        "icon": null,
+        "hue": null
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "name": "t3code",
+        "path": "/Users/alex/dev/t3code",
+        "pathExists": true,
+        "identity": null,
+        "remote": null,
+        "lastUsed": 0,
+        "recentCount": 0,
+        "icon": {
+          "path": "/Users/alex/dev/t3code/icon.png"
+        },
+        "hue": null
+      }
+    ]
+  },
+  "ProjectSortModeSchema": {
+    "accepts": ["alphabetical", "recent", "frequent", "manual"],
+    "rejects": ["manifest"]
+  },
+  "WorktreeSortModeSchema": {
+    "accepts": ["name", "recent", "created"],
+    "rejects": ["frequent"]
+  },
+  "SidebarViewSchema": {
+    "accepts": ["projects", "inbox"],
+    "rejects": ["tree"]
+  },
+  "CloneProjectPayloadSchema": {
+    "accepts": [
+      {
+        "url": "https://github.com/sylophi/port-pool.git",
+        "parentDir": "/Users/alex/dev",
+        "name": "port-pool-fork"
+      },
+      {
+        "url": "git@github.com:sylophi/port-pool.git",
+        "parentDir": "/Users/alex/dev"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "url": "  https://github.com/sylophi/port-pool.git\n",
+          "parentDir": "/Users/alex/dev",
+          "name": " port-pool-fork "
+        },
+        "output": {
+          "url": "https://github.com/sylophi/port-pool.git",
+          "parentDir": "/Users/alex/dev",
+          "name": "port-pool-fork"
+        }
+      },
+      {
+        "input": {
+          "url": "https://github.com/sylophi/port-pool.git",
+          "parentDir": "/Users/alex/dev",
+          "depth": 1
+        },
+        "output": {
+          "url": "https://github.com/sylophi/port-pool.git",
+          "parentDir": "/Users/alex/dev"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "parentDir": "/Users/alex/dev"
+      },
+      {
+        "url": "/Users/alex/dev/port-pool",
+        "parentDir": "/Users/alex/dev"
+      },
+      {
+        "url": "https://github.com/sylophi/port-pool.git",
+        "parentDir": ""
+      },
+      {
+        "url": "https://github.com/sylophi/port-pool.git",
+        "parentDir": "/Users/alex/dev",
+        "name": "   "
+      },
+      {
+        "url": "https://github.com/sylophi/port-pool.git",
+        "parentDir": "/Users/alex/dev",
+        "name": "forks/port-pool"
+      }
+    ]
+  },
+  "RemoveProjectPayloadSchema": {
+    "accepts": [
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "path": "/Users/alex/dev/t3code"
+        },
+        "output": {
+          "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "id": ""
+      },
+      {}
+    ]
+  },
+  "RelocateProjectPayloadSchema": {
+    "accepts": [
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "path": "/Users/alex/code/t3code"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "path": "/Users/alex/code/t3code",
+          "from": "/Users/alex/dev/t3code"
+        },
+        "output": {
+          "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "path": "/Users/alex/code/t3code"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "id": "",
+        "path": "/Users/alex/code/t3code"
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "path": ""
+      },
+      {
+        "id": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB"
+      }
+    ]
+  },
+  "ReorderProjectsPayloadSchema": {
+    "accepts": [
+      {
+        "draggedId": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "targetId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "position": "before"
+      },
+      {
+        "draggedId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "targetId": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "position": "after"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "draggedId": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "targetId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "position": "before",
+          "index": 0
+        },
+        "output": {
+          "draggedId": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+          "targetId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "position": "before"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "draggedId": "",
+        "targetId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "position": "before"
+      },
+      {
+        "draggedId": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "targetId": "",
+        "position": "before"
+      },
+      {
+        "draggedId": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "targetId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "position": "inside"
+      },
+      {
+        "draggedId": "8C1D4E2F-5A6B-4C7D-8E9F-0123456789AB",
+        "targetId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+      }
+    ]
+  },
+  "ProjectIconSchema": {
+    "accepts": [
+      {
+        "mime": "image/svg+xml",
+        "base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiIvPg=="
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "mime": "image/png",
+          "base64": "iVBORw0KGgo=",
+          "path": "/Users/alex/dev/t3code/icon.png"
+        },
+        "output": {
+          "mime": "image/png",
+          "base64": "iVBORw0KGgo="
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "mime": "image/png"
+      }
+    ]
+  },
+  "BranchListSchema": {
+    "accepts": [
+      {
+        "local": ["main", "feature/badger-sidebar"],
+        "remote": [
+          "origin/main",
+          "origin/feature/badger-sidebar",
+          "origin/release/3.2"
+        ]
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "local": ["main"],
+          "remote": [],
+          "current": "main"
+        },
+        "output": {
+          "local": ["main"],
+          "remote": []
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "local": ["main"]
+      }
+    ]
+  },
+  "CreateBranchPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "feature/badger-sidebar",
+        "base": "origin/main"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "fix/port-leak"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "name": "fix/port-leak",
+          "checkout": true
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "name": "fix/port-leak"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "name": "fix/port-leak"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": ""
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "--track"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "fix/port-leak",
+        "base": "-D"
+      }
+    ]
+  },
+  "RenameAnyBranchPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "oldName": "fix/port-leak",
+        "newName": "fix/port-pool-leak"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "oldName": "fix/port-leak",
+          "newName": "fix/port-pool-leak",
+          "remote": false
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "oldName": "fix/port-leak",
+          "newName": "fix/port-pool-leak"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "oldName": "fix/port-leak",
+        "newName": "fix/port-pool-leak"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "oldName": "",
+        "newName": "fix/port-pool-leak"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "oldName": "fix/port-leak",
+        "newName": "-m"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "oldName": "fix/port-leak"
+      }
+    ]
+  },
+  "DeleteBranchPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "fix/port-leak",
+        "force": true
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "fix/port-leak"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "name": "fix/port-leak",
+          "remote": true
+        },
+        "output": {
+          "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+          "name": "fix/port-leak"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "",
+        "name": "fix/port-leak"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F"
+      },
+      {
+        "projectId": "3F2A9C1E-7B04-4D58-9E61-0A2B3C4D5E6F",
+        "name": "-D"
+      }
+    ]
+  }
+}
