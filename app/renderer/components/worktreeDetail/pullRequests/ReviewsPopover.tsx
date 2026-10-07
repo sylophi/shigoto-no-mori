@@ -29,7 +29,7 @@ const SUMMARY_ICON: Partial<Record<PullRequestTone, typeof UserRound>> = {
 // where in a popover. A required review nobody has been asked for has
 // no list to show, so it reads as a plain chip. `compact` keeps the
 // icon alone, its words in the tooltip and for screen readers only,
-// for a row with no room (MergeBox); words that show carry
+// for a row with no room (MergeBox). Words that show carry
 // data-reviews-label for that measuring.
 export function ReviewsPopover({
   pr,

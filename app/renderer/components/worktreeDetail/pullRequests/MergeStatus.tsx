@@ -13,7 +13,7 @@ import { TONE_TEXT } from "./pullRequestShared";
 // and the run list a click away (ChecksPopover). With no checks to
 // list it is the words alone. One line. `compact` keeps the icon alone, its words in
 // the tooltip and for screen readers only, for a row with no room
-// (MergeBox); words that show carry data-status-label for that
+// (MergeBox). Words that show carry data-status-label for that
 // measuring.
 export function MergeStatus({
   pr,
@@ -28,7 +28,7 @@ export function MergeStatus({
   const tip = compact ? verdict.label : null;
   const content = (
     <>
-      {/* Running checks spin; otherwise the mark takes the status's
+      {/* Running checks spin. Otherwise the mark takes the status's
           tone (a failing check GitHub doesn't require warns). */}
       {verdict.by === "checks" && summary?.tone === "amber" ? (
         <ChecksSummaryIcon tone="amber" />
