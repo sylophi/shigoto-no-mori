@@ -141,10 +141,10 @@ export function useAllPortForwards(): PortForwardSummary[] {
 
 const NO_FORWARDS: PortForwardSummary[] = [];
 
-// What the marks on a peer's worktree (the sidebar row, the Ports
-// button) say while this machine forwards its ports, matched on the
-// worktree each forward was switched on from (the note on the
-// contract's worktree field). Undefined while nothing is forwarded.
+// What the mark on a peer's worktree's sidebar row says while this
+// machine forwards its ports, matched on the worktree each forward was
+// switched on from (the note on the contract's worktree field).
+// Undefined while nothing is forwarded.
 export function useWorktreeForwardTip(
   deviceId: string,
   worktree: { projectId: string; id: string },

@@ -21,8 +21,10 @@ To land a worktree other than the one you are in, pass its name
 If there is no PR, `sm worktrees land` stops. Do not merge by other means: tell
 the user the branch needs a PR first.
 
-**Auto-merge.** If the repo has auto-merge enabled, the PR will not merge
-when CI fails.
+**Auto-merge.** On a repo that allows auto-merge, a PR still waiting on
+checks or a review gets auto-merge armed and land stops with nothing
+removed. Run it again once GitHub has merged it. If a check failed, fix it
+first: GitHub won't merge it until it passes.
 
 **Stacks.** To land a PR stack, run `sm worktrees land --stack` from the
 top layer's worktree. It lands every PR in the stack and removes their

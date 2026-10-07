@@ -119,7 +119,7 @@ func fakeGhAutoMerge(t *testing.T) (log string) {
 	script := `#!/bin/sh
 echo "$*" >> "$GH_LOG"
 case "$*" in
-  "pr list --state all --head fox --limit 1 --json "*) echo '[{"number":5,"title":"Fox","state":"'"${GH_FOX_STATE:-OPEN}"'","isDraft":false,"url":"u5","baseRefName":"main","headRefName":"fox","mergeStateStatus":"BLOCKED","autoMergeRequest":'"${GH_FOX_AUTO:-null}"'}]';;
+  "pr list --state all --head fox --limit 10 --json "*) echo '[{"number":5,"title":"Fox","state":"'"${GH_FOX_STATE:-OPEN}"'","isDraft":false,"url":"u5","baseRefName":"main","headRefName":"fox","mergeStateStatus":"BLOCKED","autoMergeRequest":'"${GH_FOX_AUTO:-null}"'}]';;
   "api graphql -F number=5 "*) echo '{"data":{"repository":{"pullRequest":{"state":"'"${GH_FOX_AFTER:-OPEN}"'","isInMergeQueue":false,"autoMergeRequest":{"mergeMethod":"SQUASH"}}}}}';;
   "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":true}}}';;
   "pr merge 5 --auto --squash") ;;

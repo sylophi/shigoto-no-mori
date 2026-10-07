@@ -15,7 +15,7 @@
 // environment holds the key of ITS Clerk instance (development for
 // dev, production for prod). TICKET_SIGNING_KEY is the other required
 // secret, any random string, keying the signature on connection
-// tickets (src/ticket.ts).
+// tickets (src/ticket.ts). `pnpm run dev` passes a fixed local one.
 //
 // Plain vars the owner may set (via `vars`, which `env.dev` must then
 // repeat since vars are not inherited, or the dashboard):

@@ -9,6 +9,7 @@ import {
   CommitDiffPayloadSchema,
   CommitMessageSchema,
   CommitSummarySchema,
+  ConvertExternalPayloadSchema,
   CreateWorktreePayloadSchema,
   CreateWorktreeResultSchema,
   DeleteStackPayloadSchema,
@@ -61,7 +62,7 @@ export const worktreesContract = defineContract("host", {
   ),
   convertExternal: invoke(
     "worktrees:convertExternal",
-    WorktreeScopedPayloadSchema,
+    ConvertExternalPayloadSchema,
     CreateWorktreeResultSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),

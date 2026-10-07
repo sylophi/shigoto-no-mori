@@ -379,6 +379,17 @@ export const RelocateWorktreePayloadSchema = Schema.Struct({
   destinationPath: Schema.NonEmptyString,
 });
 
+// force false: run `sm adopt` unforced, so it refuses a worktree with
+// uncommitted changes or untracked files (convertRefusedError), which
+// the row's count can miss (it honors `status.showUntrackedFiles no`).
+// The convert page always sends it. Missing means forced, what a
+// renderer from before the field expects, and an older host strips it
+// and forces too.
+export const ConvertExternalPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  force: Schema.optional(Schema.Boolean),
+});
+
 export const DeleteWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   force: Schema.optional(Schema.Boolean),

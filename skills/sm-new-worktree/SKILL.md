@@ -4,8 +4,10 @@ description: Create a Shigoto no Mori worktree for new work. Use when starting a
 ---
 
 ```sh
-sm worktrees create
+sm worktrees create --no-cd
 ```
+
+`--no-cd` keeps it from opening a subshell in the new worktree and waiting there.
 
 Use --base <ref-name> to create a branch from a non-primary ref.
 
@@ -16,7 +18,7 @@ title and description, then keep them current as the work moves. Use `/sm-name-w
 ## Notes:
 
 - This runs carry-over and the project's setup script (progress streams to
-stderr) and prints the path.
-- Exit 3 means the worktree exists but its setup
-script failed, and the `cd` never ran so you are still in the primary
-checkout: read the output, fix the cause, then retry.
+stderr) and prints the path. `cd` to it.
+- Exit 3 means the worktree exists but a step after the create (usually the
+setup script) failed. Read the output, fix the cause, then re-run the setup
+with `sm worktrees setup <name>` rather than creating it again.
