@@ -49,12 +49,8 @@ import {
   type ChannelHandle,
 } from "@shared/ipc/socket/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
-import {
-  CommitHashSchema,
-  GitRefNameSchema as GitRefName,
-  type Project,
-} from "@shared/schemas";
-import { toZod } from "@shared/schemas/zodBridge";
+import { CommitHashSchema, type Project } from "@shared/schemas";
+import { GitRefNameZod } from "@shared/schemas/zodBridge";
 import {
   bundleCreateViaCli,
   bundleUnpackViaCli,
@@ -277,16 +273,13 @@ async function openLink(
   return link;
 }
 
-// Still on zod: the project schemas it embeds, as zod.
-const GitRefNameSchema = toZod(GitRefName);
-
 // ---- The messages, validated at both ends: what a peer sends flows
 // into git argv and into strict progress schemas here.
 
 const AskSchema = z.discriminatedUnion("ask", [
   z.strictObject({
     ask: z.literal("tip"),
-    branch: GitRefNameSchema.refine(
+    branch: GitRefNameZod.refine(
       (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
     ),
   }),
@@ -319,7 +312,7 @@ const TipAnswerSchema = z.strictObject({
   commit: CommitHashSchema.nullable(),
 });
 const CloneFactsSchema = z.strictObject({
-  branch: GitRefNameSchema,
+  branch: GitRefNameZod,
   remoteUrl: z.string().nullable(),
 });
 type CloneFacts = z.infer<typeof CloneFactsSchema>;

@@ -958,6 +958,13 @@ export async function listWorktreeIdentitiesViaCli(
   return z.array(WorktreeIdentitySchema).parse(doc);
 }
 
+const decodeProjectRows = Schema.decodeUnknownSync(
+  Schema.Array(ProjectRowSchema),
+);
+const decodeProjectIcon = Schema.decodeUnknownSync(
+  Schema.NullOr(ProjectIconSchema),
+);
+
 // Every registered project, terrier's merged in, decorated for the
 // sidebar. `refreshIcons` re-scans projects the icon cache remembers
 // as icon-less (the first list of a session).
@@ -967,7 +974,7 @@ export async function listProjectsViaCli(
   const args = ["projects", "list"];
   if (opts.refreshIcons) args.push("--refresh-icons");
   const doc = await readDoc(args, "sm projects list failed");
-  return Schema.decodeUnknownSync(Schema.Array(ProjectRowSchema))(doc);
+  return decodeProjectRows(doc);
 }
 
 // The icon's bytes, or null. --refresh-icons re-scans a remembered
@@ -981,7 +988,7 @@ export async function projectIconViaCli(
     "sm projects icon failed",
     { projectId },
   );
-  return Schema.decodeUnknownSync(Schema.NullOr(ProjectIconSchema))(doc);
+  return decodeProjectIcon(doc);
 }
 
 // Where a new worktree would land, and under what name: `name` when
