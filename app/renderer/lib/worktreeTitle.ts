@@ -1,4 +1,8 @@
-import type { PullRequest, Worktree } from "@shared/schemas";
+import {
+  isFromThisRepository,
+  type PullRequest,
+  type Worktree,
+} from "@shared/schemas";
 
 type TitledWorktree = Pick<Worktree, "title" | "branch" | "primaryBranch">;
 type TitlePullRequest = Pick<
@@ -7,16 +11,17 @@ type TitlePullRequest = Pick<
 >;
 
 // Whether a PR found by the worktree's branch name is the worktree's
-// own. The name is matched across every fork, so a fork's PR may be a
-// stranger's branch of the same name, and one on the primary branch is
-// never the checkout's own. Neither counts.
+// own: one from this repository (isFromThisRepository), and not on the
+// primary branch, which is never the checkout's own. A fork's PR the
+// branch was checked out from doesn't count either, as for `sm
+// describe` (#487).
 export function isOwnPullRequest(
   worktree: TitledWorktree,
   pr: Pick<PullRequest, "isCrossRepository"> | null | undefined,
 ): pr is Pick<PullRequest, "isCrossRepository"> {
   return (
     pr != null &&
-    pr.isCrossRepository !== true &&
+    isFromThisRepository(pr) &&
     worktree.branch !== worktree.primaryBranch
   );
 }

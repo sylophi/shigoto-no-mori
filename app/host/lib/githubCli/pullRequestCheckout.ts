@@ -280,6 +280,48 @@ async function pickForkBranchName(
   );
 }
 
+// The fork's PR a branch was checked out from, by number: what
+// resolveForkHead (and `gh pr checkout`) points branch.<b>.merge at.
+// That PR is the branch's own though it comes from a fork. Null for
+// any other branch.
+export async function checkedOutPullRequest(
+  cwd: string,
+  branch: string,
+): Promise<number | null> {
+  return pullRequestOfMergeRef(await readBranchMerge(cwd, branch));
+}
+
+// The same for every branch of the repo at once, in one git call:
+// branch to the number of the fork PR it was checked out from.
+export async function checkedOutPullRequests(
+  cwd: string,
+): Promise<Map<string, number>> {
+  const numbers = new Map<string, number>();
+  let stdout: string;
+  try {
+    stdout = await run(cwd, [
+      "config",
+      "--get-regexp",
+      String.raw`^branch\..*\.merge$`,
+    ]);
+  } catch {
+    // Exit 1: no branch has a merge ref.
+    return numbers;
+  }
+  for (const line of stdout.split("\n")) {
+    const [key = "", ref = null] = line.split(" ");
+    const branch = key.match(/^branch\.(.+)\.merge$/)?.[1];
+    const number = pullRequestOfMergeRef(ref);
+    if (branch && number !== null) numbers.set(branch, number);
+  }
+  return numbers;
+}
+
+function pullRequestOfMergeRef(ref: string | null): number | null {
+  const match = ref?.trim().match(/^refs\/pull\/(\d+)\/head$/);
+  return match?.[1] ? Number(match[1]) : null;
+}
+
 async function readBranchMerge(
   cwd: string,
   branch: string,
