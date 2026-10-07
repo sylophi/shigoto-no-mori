@@ -40,40 +40,69 @@ function withResolvedExtension(base: string): string | null {
   return null;
 }
 
-export const resolve: ResolveHook = async (specifier, context, nextResolve) => {
+// How the loader reads a specifier it resolves itself: the directory
+// it is rooted at (an alias's, or null for the importing file's) and
+// the path under it. Null for one left to node (a package, a builtin).
+function appSpecifier(
+  specifier: string,
+): { dir: string | null; rest: string } | null {
   for (const [prefix, dir] of ALIASES) {
     if (specifier.startsWith(prefix)) {
-      const base = resolvePath(appRoot, dir, specifier.slice(prefix.length));
-      const file = withResolvedExtension(base);
-      if (file !== null) {
-        return { url: pathToFileURL(file).href, shortCircuit: true };
-      }
+      return { dir: join(appRoot, dir), rest: specifier.slice(prefix.length) };
     }
   }
-  // Extensionless relative imports inside the TS graph (./contract).
-  if (
-    (specifier.startsWith("./") || specifier.startsWith("../")) &&
-    context.parentURL !== undefined &&
-    context.parentURL.startsWith("file:")
-  ) {
-    const base = resolvePath(
-      dirname(fileURLToPath(context.parentURL)),
-      specifier,
-    );
+  if (specifier.startsWith("./") || specifier.startsWith("../")) {
+    return { dir: null, rest: specifier };
+  }
+  return null;
+}
+
+// Whether the loader resolves `specifier` itself (an alias or a
+// relative path) rather than leaving it to node.
+export function isAppSpecifier(specifier: string): boolean {
+  return appSpecifier(specifier) !== null;
+}
+
+// The app source file an import names by the two rules above: an
+// alias, or a relative specifier from the importing file at
+// `parentPath`. Null for one left to node and for one that names no
+// file. The proofs' change selection (proofDeps.mts) walks a proof's
+// imports through this too.
+export function resolveSource(
+  specifier: string,
+  parentPath: string | undefined,
+): string | null {
+  const app = appSpecifier(specifier);
+  if (app === null) return null;
+  const dir =
+    app.dir ?? (parentPath === undefined ? null : dirname(parentPath));
+  return dir === null
+    ? null
+    : withResolvedExtension(resolvePath(dir, app.rest));
+}
+
+export const resolve: ResolveHook = async (specifier, context, nextResolve) => {
+  const parentPath = context.parentURL?.startsWith("file:")
+    ? fileURLToPath(context.parentURL)
+    : undefined;
+  const file = resolveSource(specifier, parentPath);
+  if (file !== null) {
     // A bundler-style JSON import (host/lib/worktrees/names.ts): the
     // TS graph writes it bare, but Node's ESM loader refuses JSON
     // without the `type: "json"` attribute, so supply it here.
-    if (base.endsWith(".json") && existsSync(base)) {
+    if (file.endsWith(".json")) {
       return {
-        url: pathToFileURL(base).href,
+        url: pathToFileURL(file).href,
         importAttributes: { type: "json" },
         shortCircuit: true,
       };
     }
-    const file = withResolvedExtension(base);
-    if (file !== null && file !== base) {
-      return { url: pathToFileURL(file).href, shortCircuit: true };
-    }
+    // A relative specifier that already names its file is left to node.
+    const named =
+      specifier.startsWith(".") &&
+      parentPath !== undefined &&
+      file === resolvePath(dirname(parentPath), specifier);
+    if (!named) return { url: pathToFileURL(file).href, shortCircuit: true };
   }
   return nextResolve(specifier, context);
 };

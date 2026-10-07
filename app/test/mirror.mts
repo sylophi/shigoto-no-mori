@@ -54,6 +54,8 @@
 // SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
 // which is exactly the surface this proof pins. Runs under
 // test/lib/register-ts-alias.mts. Run: pnpm test mirror.
+//
+// covers: file-sync/**
 import assert from "node:assert/strict";
 import { type ChildProcess, execFile } from "node:child_process";
 import {

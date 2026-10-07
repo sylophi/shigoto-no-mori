@@ -4,6 +4,8 @@
 // drives the real binary too. Built once per state of cli/'s sources
 // into the temp dir, keyed by a hash of them, so the proofs after the
 // first in a run (and later runs on unchanged sources) skip the build.
+//
+// covers: cli/**
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {

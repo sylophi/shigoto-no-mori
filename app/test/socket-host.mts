@@ -33,6 +33,8 @@
 //
 // Runs under test/lib/register-ts-alias.mts so the app's TypeScript
 // imports resolve. Run: pnpm test socket-host.
+//
+// covers: app/test/read-surface.golden.json app/main/ipc/register.ts
 import assert from "node:assert/strict";
 import { deflateRawSync } from "node:zlib";
 import { readFileSync, writeFileSync } from "node:fs";
