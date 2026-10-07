@@ -1189,7 +1189,7 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
     accountContract.calls;
   assert.equal(accountContract.scope, "client");
   assert.equal(commandAccessChanged.remote, true);
-  assert.equal(commandAccessChanged.payload.safeParse(true).success, true);
+  assert.equal(safeDecode(commandAccessChanged.payload, true).success, true);
   assert.notEqual(acceptsCommands.remote, true);
   assert.notEqual(setAcceptsCommands.remote, true);
   // The device-settings write, the only settings write: a command,

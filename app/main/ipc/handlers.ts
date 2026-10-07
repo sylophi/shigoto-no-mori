@@ -710,7 +710,9 @@ export function registerIpcHandlers(): void {
   // stored credential and the peer reach is peerTransportFor above,
   // the one cached session per peer everything else rides.
   setControlImpl({
-    listDevices: async () => accountHandlers.listDevices(undefined, undefined),
+    listDevices: async () => [
+      ...(await accountHandlers.listDevices(undefined, undefined)),
+    ],
     directPeers: async () =>
       (await hubHandlers.status(undefined, undefined)).peerAcceptsCommands,
     peerTransportFor,

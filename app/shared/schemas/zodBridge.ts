@@ -1,6 +1,7 @@
 import type * as Schema from "effect/Schema";
 import { z } from "zod";
-import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
+import { DeviceIdSchema } from "@shared/hub/protocol";
+import { HexId32Schema } from "@shared/ipc/hexId";
 import { safeDecode } from "@shared/ipc/schema";
 import {
   CloneFolderNameSchema,
@@ -8,7 +9,6 @@ import {
   ProjectSchema,
 } from "./project";
 import { WorktreeIdSchema } from "./config";
-import { PortNumberSchema } from "./ports";
 import {
   CommitHashSchema,
   CreatePhaseSchema,
@@ -31,12 +31,11 @@ function toZod<S extends Schema.Codec<unknown, unknown>>(
 }
 
 export const DeviceIdZod = toZod(DeviceIdSchema);
-export const DeviceInfoZod = toZod(DeviceInfoSchema);
 export const CloneFolderNameZod = toZod(CloneFolderNameSchema);
 export const CommitHashZod = toZod(CommitHashSchema);
 export const CreatePhaseZod = toZod(CreatePhaseSchema);
 export const GitRefNameZod = toZod(GitRefNameSchema);
-export const PortNumberZod = toZod(PortNumberSchema);
+export const HexId32Zod = toZod(HexId32Schema);
 export const ProjectZod = toZod(ProjectSchema);
 export const WorktreeIdZod = toZod(WorktreeIdSchema);
 export const WorktreeZod = toZod(WorktreeSchema);
