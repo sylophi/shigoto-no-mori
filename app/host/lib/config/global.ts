@@ -42,9 +42,9 @@ export async function readGlobalConfig(): Promise<GlobalConfig> {
 // Cache-bypassing read for a read-modify-write base. Drops the TTL entry
 // and reads through the CLI again, then refreshes the cache with it.
 // INVARIANT: the device-settings patch write MUST base itself on this,
-// never on the 5s-TTL readGlobalConfig, because it hands the CLI a whole
-// document and the CLI clears every registered key the payload omits
-// (see globalConfigWriteViaCli). A base up to the TTL stale would write
+// never on the 5s-TTL readGlobalConfig, because it hands the CLI every
+// managed setting and the CLI clears every registered key the payload
+// omits (see globalConfigWriteViaCli). A base up to the TTL stale would write
 // back a value a CLI `set` just changed, as authoritative. Unlike
 // invalidateGlobalConfigCache this fires no change listeners: it is a
 // read, not a config change.

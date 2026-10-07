@@ -104,6 +104,32 @@ export const ShigomoriConfigSchema = z.object({
 });
 export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
 
+// In a module of its own, which the layout math can import without zod.
+export { PROJECT_CONFIG_DEFAULTS } from "./projectConfigDefaults";
+
+// The object shape a schema field holds under its wrappers (optional,
+// nullable, default and the like), or null for a field that isn't an
+// object.
+function objectShapeOf(field: z.ZodType): Record<string, z.ZodType> | null {
+  let inner = field;
+  while ("innerType" in inner.def) inner = inner.def.innerType as z.ZodType;
+  return inner instanceof z.ZodObject ? inner.shape : null;
+}
+
+// Every field a schema models, as the keys down to it, nested objects
+// field by field (["scripts", "setup"]). The host's project write and
+// the cli-reads key check both walk it.
+export function modeledKeyPaths(
+  shape: Record<string, z.ZodType>,
+  prefix: string[] = [],
+): string[][] {
+  return Object.entries(shape).flatMap(([name, field]) => {
+    const path = prefix.concat(name);
+    const nested = objectShapeOf(field);
+    return nested ? modeledKeyPaths(nested, path) : [path];
+  });
+}
+
 // The same document as read from disk, where a newer version may have
 // left keys this build doesn't model. Loose so the app doesn't strip
 // them out from under the user. They never have to ride back out in a
@@ -331,7 +357,8 @@ export const WriteDeviceSettingsPayloadSchema = z.object({
 // renderer/hooks/config/useSettingsSave.ts), and the host's patch
 // handler stores a key equal to its default by deleting it, so the file
 // stays tidy whichever device saved it. The CLI's key registry
-// (cli/cmd_config.go globalConfigKeys) mirrors these defaults.
+// (cli/cmd_config.go globalConfigKeys) mirrors these keys and
+// defaults, and the cli-reads proof holds the two together.
 export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   launchers: [],
   hiddenLaunchers: [],

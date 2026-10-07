@@ -14,10 +14,11 @@ import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { notifyError } from "@/lib/toast";
-import type {
-  CarryOverEntry,
-  LauncherCommand,
-  ShigomoriConfig,
+import {
+  type CarryOverEntry,
+  type LauncherCommand,
+  PROJECT_CONFIG_DEFAULTS,
+  type ShigomoriConfig,
 } from "@shared/schemas";
 import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { ToggleRow } from "@/components/shared/ToggleRow";
@@ -49,12 +50,17 @@ function fromConfig(
     defaultBranch: config?.defaultBranch ?? resolvedDefaultBranch,
     setup: config?.scripts?.setup ?? "",
     teardown: config?.scripts?.teardown ?? "",
-    launchers: config?.launchers ?? [],
-    carryOver: config?.carryOver ?? [],
-    useWorktreeInclude: config?.useWorktreeInclude !== false,
-    showPrimaryInInbox: config?.showPrimaryInInbox ?? false,
+    launchers: config?.launchers ?? PROJECT_CONFIG_DEFAULTS.launchers,
+    carryOver: config?.carryOver ?? PROJECT_CONFIG_DEFAULTS.carryOver,
+    useWorktreeInclude:
+      config?.useWorktreeInclude ?? PROJECT_CONFIG_DEFAULTS.useWorktreeInclude,
+    showPrimaryInInbox:
+      config?.showPrimaryInInbox ?? PROJECT_CONFIG_DEFAULTS.showPrimaryInInbox,
   };
 }
+
+const unlessDefault = <T,>(value: T, fallback: T): T | undefined =>
+  value === fallback ? undefined : value;
 
 function toConfig(
   original: ShigomoriConfig | null,
@@ -74,10 +80,15 @@ function toConfig(
     scripts: Object.keys(scripts).length > 0 ? scripts : undefined,
     launchers: validLaunchers.length > 0 ? validLaunchers : undefined,
     carryOver: state.carryOver.length > 0 ? state.carryOver : undefined,
-    // Enabled is the default; only persist the opt-out.
-    useWorktreeInclude: state.useWorktreeInclude ? undefined : false,
-    // Hidden is the default, so only the opt-in is persisted.
-    showPrimaryInInbox: state.showPrimaryInInbox ? true : undefined,
+    // Defaults are stored by omission.
+    useWorktreeInclude: unlessDefault(
+      state.useWorktreeInclude,
+      PROJECT_CONFIG_DEFAULTS.useWorktreeInclude,
+    ),
+    showPrimaryInInbox: unlessDefault(
+      state.showPrimaryInInbox,
+      PROJECT_CONFIG_DEFAULTS.showPrimaryInInbox,
+    ),
   };
 }
 
