@@ -189,6 +189,9 @@ catalogs:
     '@types/react-dom':
       specifier: ^19.2.3
       version: 19.2.3
+    oxlint:
+      specifier: 1.73.0
+      version: 1.73.0
     react:
       specifier: ~19.2.7
       version: 19.2.7
@@ -225,7 +228,7 @@ importers:
         specifier: 0.58.0
         version: 0.58.0
       oxlint:
-        specifier: 1.73.0
+        specifier: 'catalog:'
         version: 1.73.0
 
   app:
@@ -433,6 +436,21 @@ importers:
       wrangler:
         specifier: ^4.120.0
         version: 4.123.0(@cloudflare/workers-types@5.20260817.1)(@types/node@24.13.5)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+
+  lint:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.5
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.73.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@24.13.5)(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1))
 
   marketing:
     dependencies:
@@ -11035,6 +11053,14 @@ snapshots:
     optionalDependencies:
       vite: 8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
 
+  '@vitest/mocker@4.1.11(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1))':
+    dependencies:
+      '@vitest/spy': 4.1.11
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1)
+
   '@vitest/pretty-format@4.1.11':
     dependencies:
       tinyrainbow: 3.1.1
@@ -15071,6 +15097,33 @@ snapshots:
       tinyglobby: 0.2.17
       tinyrainbow: 3.2.0
       vite: 8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 24.13.5
+    transitivePeerDependencies:
+      - msw
+
+  vitest@4.1.11(@types/node@24.13.5)(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1)):
+    dependencies:
+      '@vitest/expect': 4.1.11
+      '@vitest/mocker': 4.1.11(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1))
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/runner': 4.1.11
+      '@vitest/snapshot': 4.1.11
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
+      es-module-lexer: 2.3.0
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.2.1
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.3.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.2.0
+      vite: 8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.13.5

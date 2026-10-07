@@ -61,9 +61,6 @@ export function usePaletteVariantHotkey(enabled: boolean): void {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // mutate is a fresh closure per render (the patch hook rebuilds it),
-    // and the handler reads the pick from the cache, so re-subscribing
-    // on every render would be churn for nothing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mutate is a fresh closure per render, and the handler reads the pick from the cache, so re-subscribing each render would be churn.
   }, [listening, queryClient]);
 }

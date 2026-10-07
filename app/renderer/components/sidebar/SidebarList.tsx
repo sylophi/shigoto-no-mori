@@ -123,9 +123,7 @@ export function SidebarList({
       (row) => row.kind === "project" && row.groupKey === shown.left,
     );
     if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
-    // Keyed on the level alone: the rows and the virtualizer are new
-    // every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the level alone: the rows and the virtualizer are new every render.
   }, [level]);
 
   // Reveal the selection when navigation comes from outside the sidebar

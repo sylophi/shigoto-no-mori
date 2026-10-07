@@ -1,10 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
-    ".": {
-      // The oxlint plugin, loaded by path from .oxlintrc.json.
-      "entry": ["lint/*.mts"],
-    },
     "app": {
       "entry": [
         // forge.config.ts names main's entry to Vite as a string.
