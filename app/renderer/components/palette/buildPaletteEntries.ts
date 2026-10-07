@@ -86,7 +86,7 @@ export function buildPaletteEntries({
   const folds = new Map<string, string>();
 
   projects.forEach((project, i) => {
-    const trees = (worktreeQueries[i]?.data ?? []) as Worktree[];
+    const trees = (worktreeQueries[i]?.data ?? []) as readonly Worktree[];
     const pullRequests = pullRequestQueries[i]?.data;
     for (const worktree of trees) {
       localIds.add(worktree.id);

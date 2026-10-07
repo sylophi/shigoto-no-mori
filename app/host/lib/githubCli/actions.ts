@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CommitHashSchema } from "@shared/schemas";
+import { CommitHashZod } from "@shared/schemas/zodBridge";
 import { run } from "../git/core";
 import { getMergeBaseDiff } from "../git/diff";
 import { hasCommit } from "../git/refs";
@@ -81,8 +81,8 @@ function isDiffTooLarge(err: unknown): boolean {
 
 const GhPrCommitsSchema = z.object({
   url: z.url(),
-  baseRefOid: CommitHashSchema,
-  headRefOid: CommitHashSchema,
+  baseRefOid: CommitHashZod,
+  headRefOid: CommitHashZod,
 });
 
 // The same diff, computed by git from the two commits GitHub has on

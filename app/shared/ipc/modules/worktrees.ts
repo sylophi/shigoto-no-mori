@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
@@ -50,7 +51,7 @@ export const worktreesContract = defineContract("host", {
   list: invoke(
     "worktrees:list",
     ProjectScopedPayloadSchema,
-    z.array(WorktreeSchema),
+    Schema.Array(WorktreeSchema),
     { remote: true, gated: false },
   ),
   create: invoke(
@@ -178,7 +179,7 @@ export const worktreesContract = defineContract("host", {
   commitDiff: invoke(
     "worktrees:commitDiff",
     CommitDiffPayloadSchema,
-    z.string(),
+    Schema.String,
     {
       remote: true,
       gated: false,
@@ -187,7 +188,7 @@ export const worktreesContract = defineContract("host", {
   listCommits: invoke(
     "worktrees:listCommits",
     ListCommitsPayloadSchema,
-    z.array(CommitSummarySchema),
+    Schema.Array(CommitSummarySchema),
     { remote: true, gated: false },
   ),
   push: worktreeMutation("worktrees:push"),

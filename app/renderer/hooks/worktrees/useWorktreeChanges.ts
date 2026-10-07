@@ -112,8 +112,9 @@ function invalidateWorkingTree(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
   worktree: Worktree,
 ): void {
-  queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (list) =>
-    list?.map((w) => (w.id === worktree.id ? worktree : w)),
+  queryClient.setQueryData<readonly Worktree[]>(
+    keys.worktrees(projectId),
+    (list) => list?.map((w) => (w.id === worktree.id ? worktree : w)),
   );
   void queryClient.invalidateQueries({
     queryKey: keys.worktreeDiff(projectId, worktreeId),

@@ -5,6 +5,8 @@
 // tombstone protocol (host/lib/scripts/index.ts withDeleteInflight)
 // can stop a worktree's mirrors without importing that module (which
 // reaches sync, which reaches worktrees).
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
 import {
@@ -565,6 +567,8 @@ export async function endMirrorsWithPeers(
 export const COPY_GONE_DETAIL =
   "The copy on the other device was deleted or moved";
 
+const decodeRemoval = Schema.decodeUnknownOption(WorktreeRemovalSchema);
+
 // A peer's announcement that one of its worktrees is gone
 // (worktrees:removal). A mirror runs on the device holding the
 // original, so a copy deleted on its own device leaves its session
@@ -573,14 +577,14 @@ export function endMirrorsOnPeerRemoval(
   deviceId: string,
   payload: unknown,
 ): Promise<void> {
-  const removal = WorktreeRemovalSchema.safeParse(payload);
-  if (!removal.success || removal.data.state !== "removed") {
+  const removal = decodeRemoval(payload);
+  if (Option.isNone(removal) || removal.value.state !== "removed") {
     return Promise.resolve();
   }
   return endMirrorsIntoGoneCopy(
     deviceId,
-    removal.data.projectId,
-    removal.data.worktreeId,
+    removal.value.projectId,
+    removal.value.worktreeId,
   );
 }
 

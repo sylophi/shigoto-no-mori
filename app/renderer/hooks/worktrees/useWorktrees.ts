@@ -40,7 +40,7 @@ export function worktreesQueryOptions(
   scope: HostForestScope = {},
 ) {
   const { deviceId, api } = resolveForestScope(scope);
-  return queryOptions<Worktree[]>({
+  return queryOptions<readonly Worktree[]>({
     queryKey: queryKeysFor(deviceId).worktrees(projectId),
     queryFn: () => {
       if (!projectId || !api) return [];

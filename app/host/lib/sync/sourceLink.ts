@@ -49,8 +49,8 @@ import {
   type ChannelHandle,
 } from "@shared/ipc/socket/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { CommitHashSchema, type Project } from "@shared/schemas";
-import { GitRefNameZod } from "@shared/schemas/zodBridge";
+import type { Project } from "@shared/schemas";
+import { CommitHashZod, GitRefNameZod } from "@shared/schemas/zodBridge";
 import {
   bundleCreateViaCli,
   bundleUnpackViaCli,
@@ -288,7 +288,7 @@ const AskSchema = z.discriminatedUnion("ask", [
   z.strictObject({
     ask: z.literal("bundle"),
     refs: z.array(SyncBundleRefSchema).min(1).max(64),
-    haves: z.array(CommitHashSchema).max(256),
+    haves: z.array(CommitHashZod).max(256),
   }),
 ]);
 const ProgressFrameSchema = SyncPullProgressSchema.omit({
@@ -309,7 +309,7 @@ const AnswerSchema = z.union([
   BundleAnswerSchema,
 ]);
 const TipAnswerSchema = z.strictObject({
-  commit: CommitHashSchema.nullable(),
+  commit: CommitHashZod.nullable(),
 });
 const CloneFactsSchema = z.strictObject({
   branch: GitRefNameZod,

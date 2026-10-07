@@ -20,7 +20,7 @@ type TimelineStop = SyncPullStep | CreatePhase;
 const createAt = SyncPullStepSchema.options.indexOf("create") + 1;
 const TIMELINE: TimelineStop[] = [
   ...SyncPullStepSchema.options.slice(0, createAt),
-  ...CreatePhaseSchema.options,
+  ...CreatePhaseSchema.literals,
   ...SyncPullStepSchema.options.slice(createAt),
 ];
 export function stepPosition(stop: TimelineStop): number {

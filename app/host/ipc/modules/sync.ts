@@ -8,6 +8,7 @@
 // the files step (the mirror engine run once, from the device holding
 // the grant) and the teardown (the source's delete, on its own device
 // or over the peer's grant).
+import * as Schema from "effect/Schema";
 import type { z } from "zod";
 import {
   pullBringsIgnoredFiles,
@@ -379,7 +380,7 @@ async function tearDown(
     // transplants because git refuses non-forced removal of them.
     // refuseRunningScripts is the app-side guard the local
     // kill-then-delete path deliberately lacks.
-    const removed = DeleteWorktreeResultSchema.parse(
+    const removed = Schema.decodeUnknownSync(DeleteWorktreeResultSchema)(
       await remove(moved.captured),
     );
     if (removed.ok) return { sourceRemoved: true };

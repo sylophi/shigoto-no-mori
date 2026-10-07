@@ -124,7 +124,7 @@ function TidyBody() {
   // a Remove button would promise back disk that tidying can't return.
   // Filtered once here, so the stats, the disk walks and the rows all
   // describe the same set.
-  const worktreesByProject = new Map<string, Worktree[]>(
+  const worktreesByProject = new Map<string, readonly Worktree[]>(
     projects.map((project, index) => [
       project.id,
       (worktreeQueries[index]?.data ?? []).filter(
