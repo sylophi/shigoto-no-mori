@@ -4,10 +4,11 @@
 // through `sm projects list`); what the app keeps is the readiness
 // probe behind the Settings toggle: is terrier installed, and does its
 // version speak the registry-read contract this build understands.
+import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { TerrierReadiness } from "@shigomori/contracts/schemas";
 import * as Processes from "./util/processes";
 import * as PromiseAdapter from "./util/promiseAdapter";
@@ -33,7 +34,7 @@ const TERRIER_SPAWN_TIMEOUT_MS = 10_000;
 const TERRIER_SUPPORTED_MAJOR = 0;
 const TERRIER_SUPPORTED_MINOR = 1;
 
-const READINESS_TTL = "30 seconds";
+const READINESS_TTL = Duration.seconds(30);
 
 // One spawn answers both questions: a missing binary is "not
 // installed", any output is the version to run the minor handshake
@@ -67,15 +68,22 @@ function versionCompatible(version: string): boolean {
   );
 }
 
+// One entry, keyed by nothing: a Cache rather than a cached effect
+// because invalidating it also drops a probe under way, which may have
+// started before terrier was installed.
 const make = Effect.gen(function* () {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const [cached, invalidate] = yield* readiness.pipe(
-    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-    Effect.cachedInvalidateWithTTL(READINESS_TTL),
-  );
+  const cache = yield* Cache.make({
+    lookup: (_: void) => readiness,
+    capacity: 1,
+    timeToLive: READINESS_TTL,
+  });
   return Terrier.of({
-    readiness: cached.pipe(Effect.withSpan("Terrier.readiness")),
-    invalidate,
+    readiness: Cache.get(cache, undefined).pipe(
+      Effect.withSpan("Terrier.readiness"),
+    ),
+    invalidate: Cache.invalidateAll(cache).pipe(
+      Effect.withSpan("Terrier.invalidate"),
+    ),
   });
 });
 
@@ -87,5 +95,6 @@ export const adapter = promiseAdapter.layer;
 
 export const terrierReadiness = () =>
   promiseAdapter.call((terrier) => terrier.readiness);
+// Settles at once when the graph is not up, with nothing cached.
 export const invalidateTerrierReadiness = () =>
-  promiseAdapter.call((terrier) => terrier.invalidate);
+  promiseAdapter.runIfOpen(Effect.flatMap(Terrier, (t) => t.invalidate));

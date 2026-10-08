@@ -1,5 +1,8 @@
 // Git remotes read as GitHub repos: host, owner and name from a URL,
 // and back from a repo to the remote that points at it.
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { envSetting } from "@shared/config";
 import { listRemoteEntries } from "../git/remotes";
 
 export interface GithubRepoInfo {
@@ -11,6 +14,17 @@ export interface GithubRepoInfo {
   port: string;
   owner: string;
   repo: string;
+}
+
+// Mirrors gh's own config-dir precedence: GH_CONFIG_DIR beats
+// XDG_CONFIG_HOME beats ~/.config/gh. Diverging from gh here would make
+// GHE hosts silently unrecognized for users who set either variable.
+export function ghHostsPath(): string {
+  const override = envSetting("GH_CONFIG_DIR");
+  if (override) return join(override, "hosts.yml");
+  const xdg = envSetting("XDG_CONFIG_HOME");
+  if (xdg) return join(xdg, "gh", "hosts.yml");
+  return join(homedir(), ".config", "gh", "hosts.yml");
 }
 
 // GitHub publishes ssh.github.com as an SSH-over-443 alias for users

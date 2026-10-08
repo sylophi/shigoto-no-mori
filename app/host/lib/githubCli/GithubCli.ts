@@ -14,17 +14,15 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { envSetting } from "@shared/config";
 import { readGlobalConfig } from "../config/global";
 import { listRemoteEntries } from "../git/remotes";
 import { answersFor } from "../util/cacheTtl";
 import * as Processes from "../util/processes";
 import * as PromiseAdapter from "../util/promiseAdapter";
 import { gh } from "./exec";
-import { type GithubRepoInfo, parseRemoteUrl } from "./remote";
+import { ghHostsPath, type GithubRepoInfo, parseRemoteUrl } from "./remote";
 
 // gh installed but not usable, for a read that would rather fail than
 // answer blank.
@@ -103,7 +101,6 @@ const decodeRepoMergeConfig = Schema.decodeUnknownEffect(
 
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const withSpawner = Effect.provideService(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -123,23 +120,12 @@ const make = Effect.gen(function* () {
     return { installed, authed };
   }).pipe(withSpawner, Effect.cachedWithTTL(READINESS_TTL));
 
-  // Mirrors gh's own config-dir precedence: GH_CONFIG_DIR beats
-  // XDG_CONFIG_HOME beats ~/.config/gh. Diverging from gh here would
-  // make GHE hosts silently unrecognized for users who set either.
-  const hostsPath = () => {
-    const override = envSetting("GH_CONFIG_DIR");
-    if (override) return path.join(override, "hosts.yml");
-    const xdg = envSetting("XDG_CONFIG_HOME");
-    if (xdg) return path.join(xdg, "gh", "hosts.yml");
-    return path.join(envSetting("HOME") ?? "", ".config", "gh", "hosts.yml");
-  };
-
   // gh keeps its logged-in hosts as the keys of a top-level YAML map,
   // which a regex over "<host>:" lines reads without a YAML parser.
   // github.com always counts, with the file missing (most users, a
   // fresh install) or unreadable.
   const knownHosts = yield* Effect.suspend(() =>
-    fs.readFileString(hostsPath()),
+    fs.readFileString(ghHostsPath()),
   ).pipe(
     Effect.map((content) => {
       const hosts = new Set<string>(["github.com"]);

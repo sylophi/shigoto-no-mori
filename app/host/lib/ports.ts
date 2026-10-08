@@ -10,6 +10,7 @@
 // binary is on PATH, and the config file parses as JSON with a
 // schemaVersion field. Richer validation is left to port-pool itself.
 import type { WorktreePort } from "@shigomori/contracts/schemas";
+import { homedir } from "node:os";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -178,7 +179,7 @@ const make = Effect.gen(function* () {
   const statePath = () =>
     path.join(
       envSetting("XDG_DATA_HOME")?.trim() ||
-        path.join(envSetting("HOME") ?? "", ".local", "share"),
+        path.join(homedir(), ".local", "share"),
       "port-pool",
       "state.json",
     );
@@ -188,9 +189,7 @@ const make = Effect.gen(function* () {
   );
 
   // The toggle first, before anything forks git: off is the default.
-  const active = Effect.fn("Ports.portPoolActive")(function* (
-    worktree: Worktree,
-  ) {
+  const active = Effect.fn("Ports.active")(function* (worktree: Worktree) {
     if (!(yield* portPoolEnabled)) return null;
     const dir = yield* pathOf(worktree);
     const [isInstalled, isConfigured] = yield* Effect.all(
@@ -232,8 +231,9 @@ const make = Effect.gen(function* () {
     portPoolInstalled: installed.pipe(
       Effect.withSpan("Ports.portPoolInstalled"),
     ),
-    portPoolActive: (worktree) =>
-      Effect.map(active(worktree), (dir) => dir !== null),
+    portPoolActive: Effect.fn("Ports.portPoolActive")(function* (worktree) {
+      return (yield* active(worktree)) !== null;
+    }),
     poolPorts,
   });
 });
