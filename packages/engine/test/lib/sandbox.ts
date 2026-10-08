@@ -23,6 +23,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as CarryOver from "../../src/CarryOver.ts";
+import * as CloneCheckout from "../../src/CloneCheckout.ts";
 import * as Config from "../../src/Config.ts";
 import * as Darwin from "../../src/Darwin.ts";
 import * as Git from "../../src/Git.ts";
@@ -174,7 +175,7 @@ const copyAll = (from: string, to: string, names: ReadonlyArray<string>) => {
 // sources, for the Darwin service.
 let macfsBuilt: string | undefined;
 
-function macfs(): string {
+export function macfs(): string {
   macfsBuilt ??= buildGo(
     join(cliDir, "..", "macfs"),
     "macfs",
@@ -254,6 +255,7 @@ export function sandbox(): Sandbox {
             GitHub.layer,
             Lifecycle.layer,
             CarryOver.layer,
+            CloneCheckout.layer,
           ),
         ),
         Layer.provideMerge(Terrier.layer),

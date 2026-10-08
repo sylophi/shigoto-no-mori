@@ -1,16 +1,17 @@
 //go:build darwin
 
 // macfs: the macOS filesystem calls Node has no binding for, for the
-// engine's Darwin service. Five verbs:
+// engine's Darwin service. Six verbs:
 //
 //	macfs clone [-stdin] <src> <dst>   clonefile(2) a tree, mode and mtime kept
 //	macfs flags [-stdin] [-clear] <root>   st_flags, the owner's cleared but compression and tracking
 //	macfs xattrs [-stdin] [-strip] <root>  xattr names, stripped but provenance
 //	macfs privsize [-stdin] <root>     APFS private size, null where unknown
 //	macfs fstype [-stdin] <root>       the filesystem's type name
+//	macfs lstat [-stdin] <root>        lstat(2): what git's index records, and the flags
 //
 // Without -stdin, clone and fstype answer for the root itself and the
-// other three walk the whole tree under it (the root included, no
+// other four walk the whole tree under it (the root included, no
 // symlink followed). With -stdin they answer for the NUL-separated
 // paths on stdin, each relative to the root (clone: under both roots).
 // A clone's destination must not exist, and its parent must.
@@ -67,6 +68,23 @@ type attributed struct {
 type sized struct {
 	Path  string `json:"path"`
 	Bytes *int64 `json:"bytes"`
+}
+
+// An entry's lstat(2), each time to the nanosecond: the fields git's
+// index records and compares, and the file flags.
+type statted struct {
+	Path      string `json:"path"`
+	Dev       uint64 `json:"dev"`
+	Ino       uint64 `json:"ino"`
+	Mode      uint32 `json:"mode"`
+	UID       uint32 `json:"uid"`
+	GID       uint32 `json:"gid"`
+	Size      int64  `json:"size"`
+	CtimeSec  int64  `json:"ctimeSec"`
+	CtimeNsec int64  `json:"ctimeNsec"`
+	MtimeSec  int64  `json:"mtimeSec"`
+	MtimeNsec int64  `json:"mtimeNsec"`
+	Flags     uint32 `json:"flags"`
 }
 
 type typed struct {
@@ -140,6 +158,21 @@ var verbs = map[string]verb{
 			return out, err
 		}
 	}},
+	"lstat": {roots: 1, walks: true, op: func(*flag.FlagSet) op {
+		return func(roots []string, rel string) (any, error) {
+			var st unix.Stat_t
+			if err := unix.Lstat(filepath.Join(roots[0], rel), &st); err != nil {
+				return nil, err
+			}
+			return statted{
+				Path: rel, Dev: uint64(st.Dev), Ino: st.Ino, Mode: uint32(st.Mode),
+				UID: st.Uid, GID: st.Gid, Size: st.Size,
+				CtimeSec: st.Ctim.Sec, CtimeNsec: st.Ctim.Nsec,
+				MtimeSec: st.Mtim.Sec, MtimeNsec: st.Mtim.Nsec,
+				Flags: st.Flags,
+			}, nil
+		}
+	}},
 	"fstype": {roots: 1, op: func(*flag.FlagSet) op {
 		return func(roots []string, rel string) (any, error) {
 			name, err := fsType(filepath.Join(roots[0], rel))
@@ -148,7 +181,7 @@ var verbs = map[string]verb{
 	}},
 }
 
-const usage = "usage: macfs clone|flags|xattrs|privsize|fstype [-stdin] [-clear|-strip] <root> [<dst>]"
+const usage = "usage: macfs clone|flags|xattrs|privsize|fstype|lstat [-stdin] [-clear|-strip] <root> [<dst>]"
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
