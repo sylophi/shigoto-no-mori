@@ -14,7 +14,6 @@ import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -34,6 +33,7 @@ import {
 } from "./config/project";
 import { isLoopbackPortListening } from "./net";
 import { findProjectOrThrow, findWorktreePathOrThrow } from "./projects";
+import { answersFor } from "./util/cacheTtl";
 import * as Processes from "./util/processes";
 import * as PromiseAdapter from "./util/promiseAdapter";
 
@@ -46,13 +46,11 @@ export class Ports extends Context.Service<
   Ports,
   {
     readonly list: (worktree: Worktree) => Effect.Effect<WorktreePort[]>;
-    // The global toggle alone, which the Settings row reads.
-    readonly portPoolEnabled: Effect.Effect<boolean>;
     readonly portPoolInstalled: Effect.Effect<boolean>;
     // The toggle, the binary and the worktree's config: the one
     // decision both the preflight and the list read, so the toggle
     // governs every integration point. A stale worktree id reads false
-    // with the toggle off, the default, before anything forks git.
+    // with the toggle off.
     readonly portPoolActive: (worktree: Worktree) => Effect.Effect<boolean>;
     // port-pool's allocation for a directory, in the project's declared
     // order. Empty when it has none or port-pool has never run.
@@ -171,7 +169,7 @@ const make = Effect.gen(function* () {
       Effect.promise(() => findWorktreePathOrThrow(parseWorktreeKey(key))),
     {
       capacity: Infinity,
-      timeToLive: (exit) => (Exit.isSuccess(exit) ? PATH_TTL : Duration.zero),
+      timeToLive: answersFor(PATH_TTL),
     },
   );
   const pathOf = (worktree: Worktree) =>
@@ -189,15 +187,18 @@ const make = Effect.gen(function* () {
     Effect.map((config) => config.portPool === true),
   );
 
-  const activeAt = (dir: string) =>
-    Effect.gen(function* () {
-      if (!(yield* portPoolEnabled)) return false;
-      const [isInstalled, isConfigured] = yield* Effect.all(
-        [installed, Cache.get(configured, dir)],
-        { concurrency: 2 },
-      );
-      return isInstalled && isConfigured;
-    });
+  // The toggle first, before anything forks git: off is the default.
+  const active = Effect.fn("Ports.portPoolActive")(function* (
+    worktree: Worktree,
+  ) {
+    if (!(yield* portPoolEnabled)) return null;
+    const dir = yield* pathOf(worktree);
+    const [isInstalled, isConfigured] = yield* Effect.all(
+      [installed, Cache.get(configured, dir)],
+      { concurrency: 2 },
+    );
+    return isInstalled && isConfigured ? dir : null;
+  });
 
   const poolPorts = Effect.fn("Ports.poolPorts")(function* (dir: string) {
     const byDir = yield* Cache.get(allocations, statePath());
@@ -210,12 +211,8 @@ const make = Effect.gen(function* () {
       yield* Effect.promise(() => findProjectOrThrow(worktree.projectId));
       const [pool, data] = yield* Effect.all(
         [
-          pathOf(worktree).pipe(
-            Effect.flatMap((dir) =>
-              Effect.flatMap(activeAt(dir), (active) =>
-                active ? poolPorts(dir) : Effect.succeed([]),
-              ),
-            ),
+          Effect.flatMap(active(worktree), (dir) =>
+            dir === null ? Effect.succeed([]) : poolPorts(dir),
           ),
           Effect.promise(() =>
             readWorktreeData(worktree.projectId, worktree.worktreeId),
@@ -232,16 +229,11 @@ const make = Effect.gen(function* () {
         { concurrency: "unbounded" },
       );
     }),
-    portPoolEnabled: portPoolEnabled.pipe(
-      Effect.withSpan("Ports.portPoolEnabled"),
-    ),
     portPoolInstalled: installed.pipe(
       Effect.withSpan("Ports.portPoolInstalled"),
     ),
-    portPoolActive: Effect.fn("Ports.portPoolActive")(function* (worktree) {
-      if (!(yield* portPoolEnabled)) return false;
-      return yield* activeAt(yield* pathOf(worktree));
-    }),
+    portPoolActive: (worktree) =>
+      Effect.map(active(worktree), (dir) => dir !== null),
     poolPorts,
   });
 });
@@ -249,12 +241,6 @@ const make = Effect.gen(function* () {
 export const layer = Layer.effect(Ports, make);
 
 // The Promise face, for the ports and port-pool handlers.
-const promiseAdapter = PromiseAdapter.make<Ports>("The ports");
+const promiseAdapter = PromiseAdapter.forService(Ports, "The ports");
 export const adapter = promiseAdapter.layer;
-
-export const onPorts = <A>(f: (ports: Ports["Service"]) => Effect.Effect<A>) =>
-  promiseAdapter.run(
-    Effect.gen(function* () {
-      return yield* f(yield* Ports);
-    }),
-  );
+export const onPorts = promiseAdapter.call;

@@ -4,10 +4,10 @@
 // through `sm projects list`); what the app keeps is the readiness
 // probe behind the Settings toggle: is terrier installed, and does its
 // version speak the registry-read contract this build understands.
-import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { TerrierReadiness } from "@shigomori/contracts/schemas";
 import * as Processes from "./util/processes";
 import * as PromiseAdapter from "./util/promiseAdapter";
@@ -67,34 +67,25 @@ function versionCompatible(version: string): boolean {
   );
 }
 
-// One entry, keyed by nothing: the cache is for its TTL and for
-// invalidating a probe still under way.
 const make = Effect.gen(function* () {
-  const cache = yield* Cache.make({
-    lookup: (_: void) => readiness,
-    capacity: 1,
-    timeToLive: READINESS_TTL,
-  });
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const [cached, invalidate] = yield* readiness.pipe(
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    Effect.cachedInvalidateWithTTL(READINESS_TTL),
+  );
   return Terrier.of({
-    readiness: Cache.get(cache, undefined).pipe(
-      Effect.withSpan("Terrier.readiness"),
-    ),
-    invalidate: Cache.invalidateAll(cache),
+    readiness: cached.pipe(Effect.withSpan("Terrier.readiness")),
+    invalidate,
   });
 });
 
 export const layer = Layer.effect(Terrier, make);
 
 // The Promise face, for the terrier and global-config handlers.
-const promiseAdapter = PromiseAdapter.make<Terrier>("terrier");
+const promiseAdapter = PromiseAdapter.forService(Terrier, "terrier");
 export const adapter = promiseAdapter.layer;
 
-const onTerrier = <A>(f: (terrier: Terrier["Service"]) => Effect.Effect<A>) =>
-  promiseAdapter.run(
-    Effect.gen(function* () {
-      return yield* f(yield* Terrier);
-    }),
-  );
-
-export const terrierReadiness = () => onTerrier((t) => t.readiness);
-export const invalidateTerrierReadiness = () => onTerrier((t) => t.invalidate);
+export const terrierReadiness = () =>
+  promiseAdapter.call((terrier) => terrier.readiness);
+export const invalidateTerrierReadiness = () =>
+  promiseAdapter.call((terrier) => terrier.invalidate);

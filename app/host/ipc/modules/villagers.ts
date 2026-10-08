@@ -1,14 +1,6 @@
-import * as Effect from "effect/Effect";
 import { villagersContract } from "@shigomori/contracts/modules/villagers";
 import type { Handlers } from "@shigomori/contracts/types";
-import { run, VillagerData } from "@host/lib/villagers";
-
-const onData = <A>(f: (data: VillagerData["Service"]) => Effect.Effect<A>) =>
-  run(
-    Effect.gen(function* () {
-      return yield* f(yield* VillagerData);
-    }),
-  );
+import { call as onData } from "@host/lib/villagers";
 
 export const villagersHandlers: Handlers<typeof villagersContract> = {
   status: () => onData((data) => data.status),

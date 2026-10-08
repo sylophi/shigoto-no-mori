@@ -12,7 +12,6 @@ import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -21,6 +20,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { envSetting } from "@shared/config";
 import { readGlobalConfig } from "../config/global";
 import { listRemoteEntries } from "../git/remotes";
+import { answersFor } from "../util/cacheTtl";
 import * as Processes from "../util/processes";
 import * as PromiseAdapter from "../util/promiseAdapter";
 import { gh } from "./exec";
@@ -77,13 +77,6 @@ const KNOWN_HOSTS_TTL = Duration.hours(1);
 const REPO_TTL = Duration.minutes(5);
 // Merge-button settings barely change within a session.
 const MERGE_CONFIG_TTL = Duration.hours(1);
-
-// Only answers are kept: a failed read is asked again next time, so a
-// transient failure can't pin a blank for the whole TTL.
-const successFor =
-  (ttl: Duration.Duration) =>
-  <A, E>(exit: Exit.Exit<A, E>): Duration.Duration =>
-    Exit.isSuccess(exit) ? ttl : Duration.zero;
 
 // One GraphQL read: `gh repo view --json` has the three method flags
 // but not autoMergeAllowed. gh fills {owner} and {repo} from the
@@ -173,7 +166,7 @@ const make = Effect.gen(function* () {
         }
         return null;
       }),
-    { capacity: Infinity, timeToLive: successFor(REPO_TTL) },
+    { capacity: Infinity, timeToLive: answersFor(REPO_TTL) },
   );
 
   const mergeConfigs = yield* Cache.makeWith(
@@ -202,7 +195,7 @@ const make = Effect.gen(function* () {
         ),
         withSpawner,
       ),
-    { capacity: Infinity, timeToLive: successFor(MERGE_CONFIG_TTL) },
+    { capacity: Infinity, timeToLive: answersFor(MERGE_CONFIG_TTL) },
   );
 
   // Read once per launch and keyed by the repo (host/owner/repo), so
@@ -220,7 +213,7 @@ const make = Effect.gen(function* () {
         Effect.map(({ stdout }) => stdout.trim() || null),
         withSpawner,
       ),
-    { capacity: Infinity, timeToLive: successFor(Duration.infinity) },
+    { capacity: Infinity, timeToLive: answersFor(Duration.infinity) },
   );
 
   const unavailableReason = Effect.gen(function* () {
@@ -236,17 +229,20 @@ const make = Effect.gen(function* () {
     Cache.get(repos, cwd),
   );
 
+  const readyForRepo = Effect.fn("GithubCli.readyForRepo")(function* (
+    cwd: string,
+  ) {
+    if ((yield* unavailableReason) !== null) return false;
+    return (yield* repo(cwd)) !== null;
+  });
+
   return GithubCli.of({
     readiness: readiness.pipe(Effect.withSpan("GithubCli.readiness")),
     unavailableReason,
     repo,
-    readyForRepo: Effect.fn("GithubCli.readyForRepo")(function* (cwd) {
-      if ((yield* unavailableReason) !== null) return false;
-      return (yield* repo(cwd)) !== null;
-    }),
+    readyForRepo,
     mergeConfig: Effect.fn("GithubCli.mergeConfig")(function* (cwd) {
-      if ((yield* unavailableReason) !== null) return null;
-      if ((yield* repo(cwd)) === null) return null;
+      if (!(yield* readyForRepo(cwd))) return null;
       return yield* Cache.get(mergeConfigs, cwd).pipe(
         Effect.orElseSucceed(() => null),
       );
@@ -270,27 +266,17 @@ const make = Effect.gen(function* () {
 export const layer = Layer.effect(GithubCli, make);
 
 // The Promise face, for the githubCli handlers and the PR code.
-const promiseAdapter = PromiseAdapter.make<GithubCli>("gh");
+const promiseAdapter = PromiseAdapter.forService(GithubCli, "gh");
 export const adapter = promiseAdapter.layer;
+const { call } = promiseAdapter;
 
-const onGithubCli = <A, E>(
-  f: (cli: GithubCli["Service"]) => Effect.Effect<A, E>,
-): Promise<A> =>
-  promiseAdapter.run(
-    Effect.gen(function* () {
-      return yield* f(yield* GithubCli);
-    }),
-  );
-
-export const getGithubCliReadiness = () => onGithubCli((cli) => cli.readiness);
-export const ghUnavailableReason = () =>
-  onGithubCli((cli) => cli.unavailableReason);
+export const getGithubCliReadiness = () => call((cli) => cli.readiness);
+export const ghUnavailableReason = () => call((cli) => cli.unavailableReason);
 export const ghReady = async () => (await ghUnavailableReason()) === null;
-export const getGithubRepoInfo = (cwd: string) =>
-  onGithubCli((cli) => cli.repo(cwd));
+export const getGithubRepoInfo = (cwd: string) => call((cli) => cli.repo(cwd));
 export const ghReadyForRepo = (cwd: string) =>
-  onGithubCli((cli) => cli.readyForRepo(cwd));
+  call((cli) => cli.readyForRepo(cwd));
 export const getRepoMergeConfig = (cwd: string) =>
-  onGithubCli((cli) => cli.mergeConfig(cwd));
+  call((cli) => cli.mergeConfig(cwd));
 export const getRepoDescription = (cwd: string) =>
-  onGithubCli((cli) => cli.description(cwd));
+  call((cli) => cli.description(cwd));

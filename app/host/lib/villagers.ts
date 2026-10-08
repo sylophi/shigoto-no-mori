@@ -527,8 +527,10 @@ export const deviceLayer = layer({
 
 // For the IPC handlers (ipc/modules/villagers.ts), which are not Effect
 // yet.
-export const { layer: adapter, run } =
-  PromiseAdapter.make<VillagerData>("The villager data");
+export const { layer: adapter, call } = PromiseAdapter.forService(
+  VillagerData,
+  "The villager data",
+);
 
 // What a folder holds so far, or null when there is no such folder.
 async function readStored(folder: string): Promise<Stored | null> {
