@@ -1,20 +1,12 @@
 // Where a project's worktrees live, as path math: the managed root
 // under the data dir, the in-project folder, a custom base, and the
-// project's own external drive. Worktree ids are a hash of the path, an
-// on-disk format fixed for good.
-import { createHash } from "node:crypto";
+// project's own external drive.
 import { basename, join } from "node:path";
-
-export const worktreeIdFromPath = (path: string) =>
-  createHash("sha256").update(path).digest("hex").slice(0, 12);
 
 // The settings the layout reads: the project's and the device's.
 export type LayoutSettings = {
-  readonly worktreeLayout?:
-    | "managed-root"
-    | "in-project"
-    | "custom"
-    | undefined;
+  // A name this build doesn't know reads as the plain managed root.
+  readonly worktreeLayout?: string | undefined;
   readonly customWorktreePath?: string | undefined;
   readonly managedOnProjectDrive: boolean;
 };
@@ -119,5 +111,7 @@ export function worktreeBase(
         ? drive
         : managedRoot;
     }
+    default:
+      return managedRoot;
   }
 }

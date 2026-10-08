@@ -6,16 +6,11 @@ import {
   managedBases,
   projectDriveBase,
   worktreeBase,
-  worktreeIdFromPath,
 } from "../src/worktreeLayout.ts";
 
 const external = "/Volumes/Ext/code/repo";
 const driveBase = "/Volumes/Ext/.sm/worktrees/repo";
 const place = (dataDir: string) => ({ dataDir, dataDirName: ".sm" });
-
-it("hashes a path to the id the Go sm gives it", () => {
-  assert.equal(worktreeIdFromPath("/Users/me/code/repo"), "af61e6e2212f");
-});
 
 it("finds the external drive a path sits on", () => {
   for (const [path, want] of [
@@ -84,6 +79,10 @@ it("moves only the managed root onto the project's drive, and only when asked", 
     managedRoot,
   );
   assert.equal(worktreeBase("/Users/me/code/repo", on, at), managedRoot);
+  assert.equal(
+    worktreeBase(external, { ...on, worktreeLayout: "fromNewerBuild" }, at),
+    managedRoot,
+  );
 });
 
 it("counts the drive base as managed wherever the data dir is", () => {

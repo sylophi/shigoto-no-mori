@@ -5,8 +5,6 @@ import * as Config from "./Config.ts";
 import * as layout from "./worktreeLayout.ts";
 import * as Paths from "./Paths.ts";
 
-const LAYOUTS = ["managed-root", "in-project", "custom"] as const;
-
 // A registered project, as the layout needs it.
 type ProjectPlace = { readonly id: string; readonly path: string };
 
@@ -29,8 +27,8 @@ const make = Effect.gen(function* () {
   const place = { dataDir, dataDirName };
 
   // The project's layout settings, which count only once the project is
-  // configured (it has a default branch), and the device's drive setting.
-  const settings = Effect.fn(function* (project: ProjectPlace) {
+  // configured (it has a default branch).
+  const projectSettings = Effect.fn(function* (project: ProjectPlace) {
     const stored = yield* config.read({
       kind: "project",
       projectId: project.id,
@@ -40,27 +38,40 @@ const make = Effect.gen(function* () {
       stored.defaultBranch.trim() !== "";
     const text = (value: unknown) =>
       configured && typeof value === "string" ? value : undefined;
-    const onDrive = yield* config
-      .get({ kind: "device" }, "managedOnProjectDrive")
-      .pipe(Effect.orDie);
-    const layoutName = text(stored?.worktreeLayout);
     return {
-      worktreeLayout: LAYOUTS.find((name) => name === layoutName),
+      worktreeLayout: text(stored?.worktreeLayout),
       customWorktreePath: text(stored?.customWorktreePath),
-      managedOnProjectDrive: onDrive.value === true,
     };
   });
 
   const worktreeBase = Effect.fn("Layout.worktreeBase")(function* (
     project: ProjectPlace,
   ) {
-    return layout.worktreeBase(project.path, yield* settings(project), place);
+    const settings = yield* projectSettings(project);
+    // The device's drive setting matters only for a managed root a
+    // project's own drive could hold.
+    const onDrive =
+      (settings.worktreeLayout ?? "managed-root") === "managed-root" &&
+      layout.projectDriveBase(project.path, place) !== undefined
+        ? (yield* config
+            .get({ kind: "device" }, "managedOnProjectDrive")
+            .pipe(Effect.orDie)).value === true
+        : false;
+    return layout.worktreeBase(
+      project.path,
+      { ...settings, managedOnProjectDrive: onDrive },
+      place,
+    );
   });
 
   const managedBases = Effect.fn("Layout.managedBases")(function* (
     project: ProjectPlace,
   ) {
-    return layout.managedBases(project.path, yield* settings(project), place);
+    return layout.managedBases(
+      project.path,
+      yield* projectSettings(project),
+      place,
+    );
   });
 
   return Layout.of({ worktreeBase, managedBases });

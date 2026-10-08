@@ -16,10 +16,11 @@ export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
 // scripts in manifest order, the manager its lockfile picks, each
 // script's use stats, and the project's sort and manual order.
 export type PackageScriptsList = {
-  readonly packageManager: PackageManager | "";
+  readonly packageManager: PackageManager;
   readonly scripts: ReadonlyArray<PackageScript>;
   readonly usage: Readonly<Record<string, Usage.UseStat>>;
-  readonly sort: PackageScriptSortMode;
+  // A PackageScriptSortMode, or a mode a newer build stored.
+  readonly sort: string;
   readonly order: ReadonlyArray<string>;
 };
 
@@ -33,12 +34,20 @@ export class NoPackageJson extends Schema.TaggedError<NoPackageJson>()(
   }
 }
 
+// A package.json that can't be read (permissions, a directory), or that
+// isn't a JSON object.
 export class UnreadablePackageJson extends Schema.TaggedError<UnreadablePackageJson>()(
   "UnreadablePackageJson",
-  { path: Schema.String, cause: Schema.Defect() },
+  {
+    path: Schema.String,
+    stage: Schema.Literals(["read", "parse"]),
+    cause: Schema.Defect(),
+  },
 ) {
   override get message(): string {
-    return `${this.path} could not be read as JSON.`;
+    return this.stage === "read"
+      ? `${this.path} could not be read.`
+      : `${this.path} is not a JSON object.`;
   }
 }
 
@@ -125,13 +134,16 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => false),
     );
 
-  const packageManager = Effect.fn(function* (dir: string) {
-    if (!(yield* present(path.join(dir, "package.json")))) return "" as const;
-    for (const [file, manager] of LOCKFILES) {
-      if (yield* present(path.join(dir, file))) return manager;
-    }
-    return "npm" as const;
-  });
+  // The manager a package.json's lockfile picks, npm without one.
+  const packageManager = (dir: string) =>
+    Effect.forEach(LOCKFILES, ([file]) => present(path.join(dir, file)), {
+      concurrency: "unbounded",
+    }).pipe(
+      Effect.map(
+        (found) =>
+          LOCKFILES.find((_, index) => found[index])?.[1] ?? ("npm" as const),
+      ),
+    );
 
   const storedList = (projectId: string, listName: "order" | "launchRow") =>
     sql<{ name: string }>`SELECT name FROM script_lists
@@ -165,26 +177,34 @@ const make = Effect.gen(function* () {
     readonly worktreePath: string;
   }) {
     const manifest = path.join(input.worktreePath, "package.json");
-    const text = yield* fs
-      .readFileString(manifest)
-      .pipe(
-        Effect.mapError((cause) =>
-          Predicate.isTagged(cause.reason, "NotFound")
-            ? new NoPackageJson({ dir: input.worktreePath })
-            : new UnreadablePackageJson({ path: manifest, cause }),
-        ),
-      );
+    const text = yield* fs.readFileString(manifest).pipe(
+      Effect.mapError((cause) =>
+        Predicate.isTagged(cause.reason, "NotFound")
+          ? new NoPackageJson({ dir: input.worktreePath })
+          : new UnreadablePackageJson({
+              path: manifest,
+              stage: "read",
+              cause,
+            }),
+      ),
+    );
     const scripts = yield* Effect.try({
       try: () => packageScripts(text),
-      catch: (cause) => new UnreadablePackageJson({ path: manifest, cause }),
+      catch: (cause) =>
+        new UnreadablePackageJson({ path: manifest, stage: "parse", cause }),
     });
-    const stats = yield* usage.stats("script", input.projectId);
-    const [sorted] = yield* Effect.orDie(
-      sql<{ mode: PackageScriptSortMode }>`SELECT mode FROM script_sort
-        WHERE project_id = ${input.projectId}`,
-    );
+    const { manager, stats, sorted, order } = yield* Effect.all(
+      {
+        manager: packageManager(input.worktreePath),
+        stats: usage.stats("script", input.projectId),
+        sorted: sql<{ mode: string }>`SELECT mode FROM script_sort
+          WHERE project_id = ${input.projectId}`,
+        order: storedList(input.projectId, "order"),
+      },
+      { concurrency: "unbounded" },
+    ).pipe(Effect.catchTags({ SqlError: Effect.die }));
     return {
-      packageManager: yield* packageManager(input.worktreePath),
+      packageManager: manager,
       scripts,
       usage: Object.fromEntries(
         scripts.map(({ name }) => [
@@ -192,8 +212,10 @@ const make = Effect.gen(function* () {
           stats.get(name) ?? { lastUsed: 0, recentCount: 0 },
         ]),
       ),
-      sort: sorted?.mode ?? IMPLICIT_SORT,
-      order: yield* Effect.orDie(storedList(input.projectId, "order")),
+      // A mode a newer build stored is passed on, and an empty one is
+      // the default.
+      sort: sorted[0]?.mode || IMPLICIT_SORT,
+      order,
     };
   });
 

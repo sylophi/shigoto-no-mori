@@ -42,7 +42,6 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const { home } = yield* Paths.Paths;
-  const searchPath = yield* Config.String("PATH").pipe(Config.withDefault(""));
   const appFolders = [
     "/Applications",
     path.join(home, "Applications"),
@@ -53,8 +52,13 @@ const make = Effect.gen(function* () {
     fs.exists(file).pipe(Effect.orElseSucceed(() => false));
 
   // Whether `name` is an executable file in a PATH directory.
+  // Read on each ask, since the host outlives a tool's install.
   const onPath = (name: string) =>
     Effect.gen(function* () {
+      const searchPath = yield* Config.String("PATH").pipe(
+        Config.withDefault(""),
+        Effect.orElseSucceed(() => ""),
+      );
       for (const dir of searchPath.split(":")) {
         if (dir === "") continue;
         const executable = yield* fs.stat(path.join(dir, name)).pipe(
