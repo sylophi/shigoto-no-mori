@@ -3,7 +3,8 @@ import type { PublishRepoPayload } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // The accounts a new repository can go under, signed-in user first.
-// Asked only once publishing is on the table.
+// Asked only once publishing is on the table. Quiet when it fails: the
+// publish goes under gh's own user without it.
 export function useGithubOwners(enabled: boolean) {
   const { api, keys } = useHostScope();
   return useQuery<string[]>({
@@ -11,7 +12,7 @@ export function useGithubOwners(enabled: boolean) {
     queryFn: () => api.githubCli.owners(),
     enabled,
     staleTime: Infinity,
-    meta: { errorTitle: "Couldn't list your GitHub accounts" },
+    meta: { silentError: true },
   });
 }
 
@@ -32,5 +33,7 @@ export function usePublishRepo() {
           keys.repoMergeConfig(projectId),
         ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
       ),
+    // The caller says what failed: the project exists either way.
+    meta: { silentError: true },
   });
 }

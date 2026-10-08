@@ -38,7 +38,7 @@ export function ActionInputRow({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key !== "Enter") return;
+          if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
           e.preventDefault();
           if (canSubmit) onSubmit();
         }}
@@ -46,16 +46,14 @@ export function ActionInputRow({
         aria-label={placeholder}
         className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
       />
-      <SimpleTooltip tip={`${label} (↩)`}>
-        <KeyedButton
-          icon={icon}
-          label={label}
-          keys="↩"
-          onClick={onSubmit}
-          disabled={!canSubmit}
-          aria-label={`${label} (↩)`}
-        />
-      </SimpleTooltip>
+      <KeyedButton
+        icon={icon}
+        label={label}
+        keys="↩"
+        onClick={onSubmit}
+        disabled={!canSubmit}
+        aria-label={`${label} (↩)`}
+      />
     </div>
   );
 }
@@ -158,9 +156,11 @@ export function ProgressPanel({
     <div className="flex flex-col">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         {icon}
-        <span className="min-w-0 flex-1 truncate font-mono text-sm">
-          {title}
-        </span>
+        <SimpleTooltip whenTruncated tip={title}>
+          <span className="min-w-0 flex-1 truncate font-mono text-sm">
+            {title}
+          </span>
+        </SimpleTooltip>
       </div>
       <div className="flex flex-col items-center gap-3 px-4 py-14 text-sm text-muted-foreground">
         <Loader2 className="size-5 animate-spin text-muted-foreground/60" />

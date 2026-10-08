@@ -40,7 +40,7 @@ const VISIBILITY_OPTIONS = [
 
 // Starts a new repository on the scoped device, publishes it to GitHub
 // if asked, and opens it as a project.
-// react-doctor-disable-next-line react-doctor/no-giant-component -- one form and its two stages; the parts that stand alone are in DialogParts
+// react-doctor-disable-next-line react-doctor/no-giant-component -- one form and its two stages, with the parts that stand alone in DialogParts and useNewCheckout
 export function CreateView({
   name,
   setName,
@@ -170,11 +170,13 @@ export function CreateView({
           </SimpleTooltip>
           {publish && (
             <div className="ml-auto flex items-center gap-2">
-              <OwnerMenu
-                owners={owners}
-                owner={owner}
-                onChange={setPickedOwner}
-              />
+              {owners && owner && (
+                <OwnerMenu
+                  owners={owners}
+                  owner={owner}
+                  onChange={setPickedOwner}
+                />
+              )}
               <SegmentedControl
                 value={visibility}
                 onChange={setVisibility}
@@ -203,19 +205,17 @@ function OwnerMenu({
   owner,
   onChange,
 }: {
-  // Undefined while the list loads, or if it never came.
-  owners: readonly string[] | undefined;
-  owner: string | undefined;
+  owners: readonly string[];
+  owner: string;
   onChange: (owner: string) => void;
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Owner"
-        disabled={owners === undefined}
-        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed data-popup-open:bg-accent data-popup-open:text-foreground"
+        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 data-popup-open:bg-accent data-popup-open:text-foreground"
       >
-        <span className="max-w-40 truncate">{owner ?? "…"}</span>
+        <span className="max-w-40 truncate">{owner}</span>
         <ChevronDown aria-hidden className="size-3" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={4} className="min-w-40">
@@ -223,7 +223,7 @@ function OwnerMenu({
           value={owner}
           onValueChange={(value) => onChange(value as string)}
         >
-          {owners?.map((entry) => (
+          {owners.map((entry) => (
             <DropdownMenuRadioItem key={entry} value={entry}>
               {entry}
             </DropdownMenuRadioItem>

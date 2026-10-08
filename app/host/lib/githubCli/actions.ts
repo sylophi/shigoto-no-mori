@@ -8,7 +8,7 @@ import { isENOENT } from "../util/paths";
 import { execGh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
 import { ghReady } from "./readiness";
-import { remoteNameForUrl } from "./remote";
+import { evictGithubRepoInfo, remoteNameForUrl } from "./remote";
 
 // Every action here shares one policy: gate on readiness, then rethrow
 // gh failures with a trimmed message the renderer can show inline.
@@ -202,4 +202,7 @@ export async function publishRepo(opts: {
     // read does.
     { cwd: opts.cwd, fallback: "Couldn't publish to GitHub", timeout: 300_000 },
   );
+  // A read since the create cached the repo as not on GitHub.
+  evictGithubRepoInfo(opts.cwd);
+  evictProjectPullRequests(opts.cwd);
 }

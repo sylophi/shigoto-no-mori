@@ -18,7 +18,15 @@ export async function createRepo(
       await runLenient(dest, ["config", "--get", "init.defaultBranch"])
     ).trim();
     await run(dest, ["init", `--initial-branch=${configured || "main"}`]);
-    await run(dest, ["commit", "--allow-empty", "-m", "Initial commit"]);
+    // No hooks: the user's global ones have nothing to check in an
+    // empty commit, and one that rejects it would refuse the repo.
+    await run(dest, [
+      "commit",
+      "--allow-empty",
+      "--no-verify",
+      "-m",
+      "Initial commit",
+    ]);
   } catch (error) {
     // The folder holds only what was just made, so a failed start
     // leaves nothing behind and a retry finds the name free (a commit

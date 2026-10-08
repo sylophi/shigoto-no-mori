@@ -17,8 +17,8 @@ import {
 } from "@shared/projectPaths";
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
-import { FileManagerIcon } from "@/components/ui/file-manager";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { FileManagerIcon } from "@/components/ui/file-manager";
 import {
   BrowseKeyHints,
   BrowseUpItem,
@@ -336,25 +336,23 @@ export function AddExistingView({
           placeholder="Folder path"
           className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
         />
-        <SimpleTooltip tip={`${submitLabel} (${submitKbd})`}>
-          <KeyedButton
-            icon={
-              targetIsGitRepo ? (
-                <FolderGit2 className="size-3.5" />
-              ) : (
-                <FolderSearch className="size-3.5" />
-              )
-            }
-            label={
-              addProject.isPending && targetIsGitRepo ? "Adding…" : submitLabel
-            }
-            keys={submitKbd}
-            onMouseDown={keepFocusInInput}
-            onClick={() => void primaryAction()}
-            disabled={!canPrimary || addProject.isPending}
-            aria-label={`${submitLabel} (${submitKbd})`}
-          />
-        </SimpleTooltip>
+        <KeyedButton
+          icon={
+            targetIsGitRepo ? (
+              <FolderGit2 className="size-3.5" />
+            ) : (
+              <FolderSearch className="size-3.5" />
+            )
+          }
+          label={
+            addProject.isPending && targetIsGitRepo ? "Adding…" : submitLabel
+          }
+          keys={submitKbd}
+          onMouseDown={keepFocusInInput}
+          onClick={() => void primaryAction()}
+          disabled={!canPrimary || addProject.isPending}
+          aria-label={`${submitLabel} (${submitKbd})`}
+        />
       </div>
 
       <Command.List
