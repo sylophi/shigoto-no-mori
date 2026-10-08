@@ -328,6 +328,42 @@ const probeSchedule = (
     }),
   );
 
+// What the runner knows across its attempts.
+interface Memory {
+  // The port the owner currently wants fronted, null when stopped.
+  readonly wantedPort: number | null;
+  // The last successful provision, held in memory only (the token is a
+  // bearer secret: it goes into a child's env and never anywhere
+  // observable), so a crash restart re-spawns without a Worker round
+  // trip while the port is unchanged. Reuse requires the PREVIOUS
+  // child to have reached probed readiness (`ready`): a child that died
+  // without ever becoming routable may be holding a dead token, so its
+  // successor re-provisions.
+  readonly provision: {
+    readonly port: number;
+    readonly hostname: string;
+    readonly connectorToken: string;
+    readonly dnsCreated: boolean;
+    readonly ready: boolean;
+  } | null;
+  // The Worker answering "no tunnel env" is a deployment fact, kept for
+  // the process lifetime: reconciles cannot change it, so they must not
+  // keep paying the provision round trip to re-learn it.
+  readonly unconfigured: boolean;
+  // A provision was DENIED (4xx: revoked credential, older Worker
+  // deploy). Nothing retries it. The next reconcile trigger re-enters
+  // instead, because only changed inputs (a re-sign-in, a redeploy) can
+  // change the answer.
+  readonly denied: boolean;
+}
+
+const stopped: Memory = {
+  wantedPort: null,
+  provision: null,
+  unconfigured: false,
+  denied: false,
+};
+
 const make = (options: Options) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -341,38 +377,9 @@ const make = (options: Options) =>
       state: "off",
       hostname: null,
     });
-    // The port the owner currently wants fronted, null when stopped.
-    let wantedPort: number | null = null;
-    // The last successful provision, held in memory only (the token is a
-    // bearer secret: it goes into a child's env and never anywhere
-    // observable), so a crash restart re-spawns without a Worker round
-    // trip while the port is unchanged. Reuse requires the PREVIOUS
-    // child to have reached probed readiness (lastChildReady below): a
-    // child that died without ever becoming routable may be holding a
-    // dead token, so its successor re-provisions. The cache dies with
-    // a stop.
-    let lastProvision: {
-      port: number;
-      hostname: string;
-      connectorToken: string;
-      dnsCreated: boolean;
-    } | null = null;
-    // Whether the most recently spawned child passed the readiness
-    // probe, so it always describes the child whose crash a restart is
-    // recovering from.
-    let lastChildReady = false;
-    // The Worker answering "no tunnel env" is a deployment fact, cached
-    // for the process lifetime: reconciles cannot change it, so they
-    // must not keep paying the provision round trip to re-learn it.
-    let workerUnconfigured = false;
-    // Set when a provision was DENIED (4xx: revoked credential, older
-    // Worker deploy). No retry timer runs. The next reconcile trigger
-    // re-enters instead, because only changed inputs (a re-sign-in, a
-    // redeploy) can change the answer.
-    let provisionDenied = false;
-    // A previous app instance's recorded child is reaped once per
-    // process, before the first spawn.
-    let stalePidReaped = false;
+    const memory = yield* Ref.make<Memory>(stopped);
+    const remember = (change: Partial<Memory>) =>
+      Ref.update(memory, (current) => ({ ...current, ...change }));
 
     const setStatus = (next: TunnelStatus) =>
       Ref.getAndSet(status, next).pipe(
@@ -398,9 +405,7 @@ const make = (options: Options) =>
     // takes out an innocent process. Residual exposure, accepted: when the
     // app is SIGKILLed and never launched again, the orphan connector
     // keeps running until the machine reboots or the user kills it.
-    const reapStaleOnce = Effect.gen(function* () {
-      if (stalePidReaped) return;
-      stalePidReaped = true;
+    const reapStale = Effect.gen(function* () {
       const path = yield* pidFile;
       if (path === null) return;
       const raw = yield* fs.readFileString(path).pipe(Effect.option);
@@ -426,6 +431,7 @@ const make = (options: Options) =>
       }
       yield* fs.remove(path, { force: true }).pipe(Effect.ignore);
     }).pipe(withSpawner);
+    const reapStaleOnce = yield* Effect.cached(reapStale);
 
     // The readiness probe chain for a freshly spawned child: attempts on
     // the probe ladder until routable, then advertise. A child that is
@@ -433,7 +439,7 @@ const make = (options: Options) =>
     // up to the deadline. Deliberately NOT re-run after "up": the child
     // process exiting is the down signal, and a liveness poll against
     // the edge would spend a request per interval to learn what the
-    // exit handler already tells us.
+    // child's exit already says.
     const probe = (hostname: string, fresh: boolean, spawnedAt: number) => {
       const deadlineMs = fresh
         ? TUNNEL_PROBE_DEADLINE_FRESH_MS
@@ -463,6 +469,14 @@ const make = (options: Options) =>
       );
     };
 
+    // An attempt that ends on the retry rails, with no healthy run to
+    // count.
+    const failAttempt = (detail: string) =>
+      setStatus({ state: "error", hostname: null }).pipe(
+        Effect.andThen(Effect.logWarning(`[tunnel] ${detail}, retrying`)),
+        Effect.as(0),
+      );
+
     // Nothing to do until the next reconcile, which interrupts it.
     const park = Effect.never;
 
@@ -475,8 +489,8 @@ const make = (options: Options) =>
         // and "starting" (which reads as tunnelUrl() null) must never
         // advertise a dead child.
         yield* setStatus({ state: "starting", hostname: null });
-        provisionDenied = false;
-        if (workerUnconfigured) {
+        yield* remember({ denied: false });
+        if ((yield* Ref.get(memory)).unconfigured) {
           yield* setStatus({ state: "unconfigured", hostname: null });
           return yield* park;
         }
@@ -489,12 +503,10 @@ const make = (options: Options) =>
           yield* setStatus({ state: "no-binary", hostname: null });
           return yield* park;
         }
-        yield* reapStaleOnce;
+        const cached = (yield* Ref.get(memory)).provision;
         let provision =
-          lastProvision !== null &&
-          lastProvision.port === port &&
-          lastChildReady
-            ? lastProvision
+          cached !== null && cached.port === port && cached.ready
+            ? cached
             : null;
         if (provision === null) {
           const provisioned = yield* Effect.result(options.provision(port));
@@ -503,7 +515,7 @@ const make = (options: Options) =>
             if (error instanceof TunnelUnconfiguredError) {
               // A deployment fact, not a failure: cached so no later
               // reconcile retries it either.
-              workerUnconfigured = true;
+              yield* remember({ unconfigured: true });
               yield* setStatus({ state: "unconfigured", hostname: null });
               return yield* park;
             }
@@ -513,25 +525,24 @@ const make = (options: Options) =>
               // Worker deploy's 404): a timed retry re-presents the
               // same request, so park until the next reconcile, which
               // is exactly when the inputs can have changed.
-              provisionDenied = true;
+              yield* remember({ denied: true });
               yield* Effect.logWarning(
                 `[tunnel] provisioning denied (${errorMessageOf(error)}), ` +
                   "waiting for the next account or config change",
               );
               return yield* park;
             }
-            yield* Effect.logWarning(
-              `[tunnel] tunnel start failed: ${errorMessageOf(error)}, retrying`,
+            return yield* failAttempt(
+              `tunnel start failed: ${errorMessageOf(error)}`,
             );
-            return 0;
           }
           provision = {
             port,
             hostname: provisioned.success.hostname,
             connectorToken: provisioned.success.connectorToken,
             dnsCreated: provisioned.success.dnsCreated === true,
+            ready: false,
           };
-          lastProvision = provision;
         }
         const { hostname, connectorToken, dnsCreated } = provision;
         return yield* Effect.scoped(
@@ -553,15 +564,13 @@ const make = (options: Options) =>
               )
               .pipe(Effect.result);
             if (Result.isFailure(spawned)) {
-              yield* setStatus({ state: "error", hostname: null });
-              yield* Effect.logWarning(
-                `[tunnel] cloudflared failed to spawn: ${spawned.failure.message}, retrying`,
+              return yield* failAttempt(
+                `cloudflared failed to spawn: ${spawned.failure.message}`,
               );
-              return 0;
             }
             const child = spawned.success;
             const spawnedAt = yield* Clock.currentTimeMillis;
-            lastChildReady = false;
+            yield* remember({ provision: { ...provision, ready: false } });
             yield* setStatus({ state: "starting", hostname });
             const path = yield* pidFile;
             if (path !== null) {
@@ -586,13 +595,16 @@ const make = (options: Options) =>
                 Effect.flatMap((routable) =>
                   routable
                     ? Effect.gen(function* () {
-                        lastChildReady = true;
                         // The hostname resolves now, so a later child of
                         // the same provision is held to the short
                         // deadline.
-                        if (lastProvision !== null) {
-                          lastProvision.dnsCreated = false;
-                        }
+                        yield* remember({
+                          provision: {
+                            ...provision,
+                            dnsCreated: false,
+                            ready: true,
+                          },
+                        });
                         yield* setStatus({ state: "up", hostname });
                         yield* Effect.logInfo(`[tunnel] up at ${hostname}`);
                         return yield* exited;
@@ -601,14 +613,12 @@ const make = (options: Options) =>
                 ),
               ),
             );
-            yield* setStatus({ state: "error", hostname: null });
             if (outcome === null) {
-              yield* Effect.logWarning(
-                `[tunnel] tunnel at ${hostname} never became routable, retrying`,
+              return yield* failAttempt(
+                `tunnel at ${hostname} never became routable`,
               );
-              return 0;
             }
-            yield* Effect.logWarning(`[tunnel] ${outcome}, retrying`);
+            yield* failAttempt(outcome);
             return (yield* Clock.currentTimeMillis) - spawnedAt;
           }),
         );
@@ -616,14 +626,7 @@ const make = (options: Options) =>
         // Anything else this attempt did not expect goes onto the
         // retry rails like a provision failure.
         Effect.catchDefect((defect) =>
-          setStatus({ state: "error", hostname: null }).pipe(
-            Effect.andThen(
-              Effect.logWarning(
-                `[tunnel] tunnel start failed: ${errorMessageOf(defect)}, retrying`,
-              ),
-            ),
-            Effect.as(0),
-          ),
+          failAttempt(`tunnel start failed: ${errorMessageOf(defect)}`),
         ),
       );
 
@@ -634,10 +637,10 @@ const make = (options: Options) =>
     // possibly different account must never front stale credentials.
     const stopNow = Effect.gen(function* () {
       yield* FiberHandle.clear(supervisor);
-      wantedPort = null;
-      provisionDenied = false;
-      lastProvision = null;
-      lastChildReady = false;
+      yield* Ref.update(memory, (current) => ({
+        ...stopped,
+        unconfigured: current.unconfigured,
+      }));
       yield* setStatus({ state: "off", hostname: null });
     });
     yield* Effect.addFinalizer(() => stopNow);
@@ -653,27 +656,27 @@ const make = (options: Options) =>
             yield* reapStaleOnce;
             if (wanted === null) return yield* stopNow;
             const current = yield* Ref.get(status);
+            const known = yield* Ref.get(memory);
             // No-op whenever the port is unchanged and the runner is not
             // "off": a live child, a scheduled retry and the cached
             // unconfigured verdict are all already the right response to
-            // this port, and re-entering a start here is what used to
-            // reset a failing runner's backoff to rung 0 on every
-            // unrelated config write. Two states do re-enter: "no-binary"
-            // (a config write may have just named a usable
+            // this port, so an unrelated config write leaves a failing
+            // runner's ladder where it is. Two states do re-enter:
+            // "no-binary" (a config write may have just named a usable
             // cloudflaredPath, and re-resolving is a probe with no Worker
             // round trip and no ladder to disturb) and a provision-denied
             // park, whose ONLY recovery path is the next reconcile
             // trigger.
             if (
-              wanted.port === wantedPort &&
+              wanted.port === known.wantedPort &&
               current.state !== "off" &&
               current.state !== "no-binary" &&
-              !provisionDenied
+              !known.denied
             ) {
               return;
             }
             yield* FiberHandle.clear(supervisor);
-            wantedPort = wanted.port;
+            yield* remember({ wantedPort: wanted.port });
             yield* FiberHandle.run(
               supervisor,
               runOnce(wanted.port).pipe(
