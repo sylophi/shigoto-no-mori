@@ -15,10 +15,7 @@ export function BranchBar({ worktree }: { worktree: Worktree }) {
   const { detached } = worktree;
   const Icon = detached ? TriangleAlert : GitBranch;
   return (
-    <div
-      data-slot="branch-bar"
-      className="flex min-h-8 items-center gap-2 px-3 py-0.5"
-    >
+    <div data-slot="branch-bar" className="flex h-7 items-center gap-2 px-3">
       <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
         <Icon
           aria-hidden

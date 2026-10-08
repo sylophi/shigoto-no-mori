@@ -33,7 +33,7 @@ export function LastCommitStrip({
   return (
     <div
       data-slot="last-commit-strip"
-      className="flex min-h-7 items-center gap-1.5 px-3"
+      className="flex h-7 items-center gap-2 px-3"
     >
       <GitCommitHorizontal
         aria-hidden

@@ -21,8 +21,8 @@ import { TimelineRow } from "./TimelineRow";
 
 // A stash made on this branch: work set aside, so it sits on the
 // timeline just under the working tree it came from. The row opens it
-// beside the changes on the Git page, and Restore puts it back and
-// drops it once it applied cleanly.
+// on the Git page's Stashes tab, and Restore puts it back and drops it
+// once it applied cleanly.
 export function StashNode({
   worktree,
   stash,
@@ -68,7 +68,7 @@ export function StashNode({
         <button
           type="button"
           onClick={() =>
-            nav.toDiff(worktree.projectId, worktree.id, { stash: stash.hash })
+            nav.toStash(worktree.projectId, worktree.id, stash.hash)
           }
           className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring @md/timeline:flex-row @md/timeline:items-center @md/timeline:gap-3"
         >

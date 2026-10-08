@@ -9,15 +9,19 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { StashEntry, Worktree } from "@shared/schemas";
 
-// Under a stash's title beside the changes: put it back (and drop it,
-// or keep it), or drop it. Either way there is nothing left to show, so
-// the pane goes back to the changes.
+// Under a stash's title on the Stashes tab: put it back (and drop it,
+// or keep it), or drop it. A restore lands on the changes it went back
+// into. A drop moves on to the next stash, or to the changes once none
+// is left.
 export function StashMoves({
   worktree,
   stash,
+  next,
 }: {
   worktree: Worktree;
   stash: StashEntry;
+  // The stash to show once this one is dropped.
+  next: string | undefined;
 }) {
   const nav = useWorktreeNav();
   const apply = useApplyStash();
@@ -66,7 +70,11 @@ export function StashMoves({
             { ...scope, hash: stash.hash },
             {
               onSuccess: () => {
-                toChanges();
+                if (next) {
+                  nav.toStash(worktree.projectId, worktree.id, next, true);
+                } else {
+                  toChanges();
+                }
                 toast("Dropped the stash", {
                   duration: UNDO_TOAST_MS,
                   action: {

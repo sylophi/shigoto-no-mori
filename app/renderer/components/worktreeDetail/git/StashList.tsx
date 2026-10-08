@@ -5,9 +5,8 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
 import type { Worktree } from "@shared/schemas";
 
-// The stashes made on the branch, at the foot of the Git page's Changes
-// tab above the commit box, as GitHub Desktop keeps its stashed
-// changes. Picking one shows what it holds beside the changes, with its
+// The Git page's Stashes tab: the stashes made on the branch, newest
+// first. Picking one shows what it holds beside the list, with its
 // moves there.
 export function StashList({
   worktree,
@@ -18,9 +17,8 @@ export function StashList({
 }) {
   const nav = useWorktreeNav();
   const { data: stashes = [] } = useWorktreeStashes(worktree);
-  if (stashes.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-0.5 px-1.5 pt-1">
+    <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pb-3">
       {stashes.map((stash) => {
         const picked = stash.hash === selected;
         return (
@@ -29,24 +27,27 @@ export function StashList({
               type="button"
               aria-current={picked || undefined}
               onClick={() =>
-                nav.toDiff(worktree.projectId, worktree.id, {
-                  stash: stash.hash,
-                  replace: true,
-                })
+                nav.toStash(worktree.projectId, worktree.id, stash.hash, true)
               }
               className={cn(
-                "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                "flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring",
                 picked
                   ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  : "hover:bg-accent/50",
               )}
             >
-              <Archive aria-hidden className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">
-                {stash.named ? stash.message : "Stashed changes"}
-              </span>
-              <span className="shrink-0 text-2xs text-muted-foreground">
-                <RelativeDate date={stash.date} />
+              <Archive
+                aria-hidden
+                className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">
+                  {stash.named ? stash.message : "Stashed changes"}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {!stash.named && `On top of ${stash.message} · `}
+                  <RelativeDate date={stash.date} />
+                </span>
               </span>
             </button>
           </li>

@@ -121,7 +121,7 @@ export function CommitComposer({
   return (
     <div
       data-slot="commit-composer"
-      className="flex flex-col gap-1.5 px-3 pb-2.5"
+      className="flex flex-col gap-1.5 px-3 pt-1.5"
       // The description folds back once focus leaves the box, not when
       // it leaves the field: a click on Commit takes focus to the
       // button, and the box shrinking under the pointer mid-click would

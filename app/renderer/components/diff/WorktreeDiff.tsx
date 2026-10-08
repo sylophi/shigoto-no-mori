@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { useFileDiff, useStashDiff } from "@/hooks/worktrees/useWorktreeDiff";
+import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
   useCommitChanges,
   useDiscardChanges,
@@ -19,7 +19,6 @@ import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
 import {
   useResolveConflict,
   useStashChanges,
-  useWorktreeStashes,
 } from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
@@ -31,18 +30,13 @@ import { worktreeSyncView } from "@/lib/syncState";
 import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
 import { Kbd } from "@/components/ui/kbd";
 import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
-import { RelativeDate } from "@/components/ui/relative-date";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
-import { StashList } from "@/components/worktreeDetail/git/StashList";
-import { StashMoves } from "@/components/worktreeDetail/git/StashMoves";
-import { changeEntries } from "@/lib/patchFiles";
 import { BranchBar } from "./BranchBar";
 import {
   changedFilePaths,
   includedFiles,
   type DiffChangesControls,
 } from "./changesControls";
-import { DiffFileIndex } from "./DiffFileIndex";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
@@ -52,10 +46,7 @@ export function WorktreeDiff() {
   const { projectId, worktreeId, nav, worktree, goBack, missing } =
     useRouteWorktree();
   // Read non-strictly like the params, which the worktree pages share.
-  const { amend, stash } = useSearch({ strict: false }) as {
-    amend?: true;
-    stash?: string;
-  };
+  const { amend } = useSearch({ strict: false }) as { amend?: true };
   // Amend mode lives in the route's search param, so the page and the
   // row menu that opens it agree on one source of truth.
   const setAmending = (on: boolean) =>
@@ -71,7 +62,6 @@ export function WorktreeDiff() {
       onBack={goBack}
       amendRequested={amend === true}
       setAmending={setAmending}
-      stashHash={stash}
     />
   );
 }
@@ -85,14 +75,11 @@ function ChangesView({
   onBack,
   amendRequested,
   setAmending,
-  stashHash,
 }: {
   worktree: Worktree;
   onBack: () => void;
   amendRequested: boolean;
   setAmending: (on: boolean) => void;
-  // A stash picked from the list's foot, shown beside the changes.
-  stashHash: string | undefined;
 }) {
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
@@ -297,11 +284,11 @@ function ChangesView({
     <div
       data-slot="changes-footer"
       className={cn(
-        "flex flex-col border-t border-border",
-        !showComposer && "pb-1.5",
+        // One rhythm down the foot: rows of one height at one inset,
+        // and the commit box a field's gap under them.
+        "flex flex-col border-t border-border pt-1 pb-2.5",
       )}
     >
-      <StashList worktree={worktree} selected={stashHash} />
       <BranchBar worktree={worktree} />
       {lastCommit && rewrite.canAmend && (
         <LastCommitStrip
@@ -337,34 +324,6 @@ function ChangesView({
     </div>
   );
 
-  // A stash picked at the list's foot takes the pane. The list stays
-  // the changes', with no file picked, and a file picked from it takes
-  // the pane back.
-  if (stashHash) {
-    return (
-      <StashView
-        worktree={worktree}
-        hash={stashHash}
-        onBack={onBack}
-        changesList={
-          <DiffFileIndex
-            entries={changeEntries(list)}
-            activeKey={null}
-            collapsedKeys={NO_KEYS}
-            allCollapsed={false}
-            onSelect={(key) => {
-              setPickedKey(key);
-              nav.toDiff(projectId, worktreeId, { replace: true });
-            }}
-            changes={controls}
-            footer={footer}
-            className="min-h-0 flex-1"
-          />
-        }
-      />
-    );
-  }
-
   return (
     <DiffView
       diff={diff}
@@ -391,52 +350,6 @@ function ChangesView({
         <GitPageSidebar worktree={worktree} tab="changes" changes={fileList} />
       )}
       footer={footer}
-    />
-  );
-}
-
-const NO_KEYS: ReadonlySet<string> = new Set();
-
-// A stash beside the changes: what it holds, and its moves.
-function StashView({
-  worktree,
-  hash,
-  onBack,
-  changesList,
-}: {
-  worktree: Worktree;
-  hash: string;
-  onBack: () => void;
-  changesList: ReactNode;
-}) {
-  const diff = useStashDiff(worktree.projectId, worktree.id, hash);
-  const { data: stashes } = useWorktreeStashes(worktree);
-  const stash = stashes?.find((s) => s.hash === hash);
-  return (
-    <DiffView
-      diff={diff}
-      onBack={onBack}
-      worktree={worktree}
-      title={
-        stash ? (stash.named ? stash.message : "Stashed changes") : "Stash"
-      }
-      subtitle={
-        stash && (
-          <>
-            {!stash.named && `On top of ${stash.message} · `}
-            Stashed <RelativeDate date={stash.date} />
-          </>
-        )
-      }
-      details={stash && <StashMoves worktree={worktree} stash={stash} />}
-      renderSidebar={() => (
-        <GitPageSidebar
-          worktree={worktree}
-          tab="changes"
-          changes={changesList}
-        />
-      )}
-      emptyMessage="This stash holds no file changes."
     />
   );
 }

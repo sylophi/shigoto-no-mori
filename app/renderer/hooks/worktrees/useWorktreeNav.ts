@@ -72,20 +72,29 @@ export function useWorktreeNav() {
     },
 
     // `amend` opens the changes page already set to rewrite the last
-    // commit, and `stash` with that stash shown beside the changes; both
-    // live in the route's search so the page and what opens it agree on
-    // one source of truth.
+    // commit; it lives in the route's search so the page and the row
+    // menu that opens it agree on one source of truth.
     toDiff(
       projectId: string,
       worktreeId: string,
-      opts: { amend?: boolean; stash?: string; replace?: boolean } = {},
+      opts: { amend?: boolean; replace?: boolean } = {},
     ) {
       go(
         "diff",
         { projectId, worktreeId },
         opts.replace ?? false,
-        opts.amend ? { amend: true } : opts.stash ? { stash: opts.stash } : {},
+        opts.amend ? { amend: true } : {},
       );
+    },
+
+    // One stash, on the Git page's Stashes tab.
+    toStash(
+      projectId: string,
+      worktreeId: string,
+      hash: string,
+      replace = false,
+    ) {
+      go("stash", { projectId, worktreeId, hash }, replace);
     },
 
     // `replace` for a step between commits on a commit's page, so Back

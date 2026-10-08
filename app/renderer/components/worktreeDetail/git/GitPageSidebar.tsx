@@ -1,18 +1,24 @@
 import type { ReactNode } from "react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shared/schemas";
 import { GitTimeline } from "./GitTimeline";
+import { StashList } from "./StashList";
 
-export type GitTab = "changes" | "history";
+export type GitTab = "changes" | "history" | "stashes";
+
+const counted = (label: string, count: number) =>
+  count > 0 ? `${label} ${count}` : label;
 
 // The Git page's sidebar, as GitHub Desktop splits its left column: the
 // Changes tab (the working tree's files, ticked into the next commit,
-// with the stashes and the commit box at its foot) and the History tab
-// (the branch's commits as the Git timeline draws them, with the
-// remote's and the primary branch's markers). Each tab is the page's
-// routes for it, the changes or a commit (or the branch's whole diff),
-// and a switch replaces the page's entry, so Back still leaves.
+// with the branch and the commit box at its foot), the History tab (the
+// branch's commits as the Git timeline draws them, with the remote's
+// and the primary branch's markers) and the Stashes tab (the work set
+// aside). Each tab is the page's routes for it, and a switch replaces
+// the page's entry, so Back still leaves. History opens on the newest
+// commit and Stashes on the newest stash, and each is off without one.
 export function GitPageSidebar({
   worktree,
   tab,
@@ -21,42 +27,51 @@ export function GitPageSidebar({
 }: {
   worktree: Worktree;
   tab: GitTab;
-  // On the History tab: `branch` or `commit:<hash>`.
+  // On History, `branch` or `commit:<hash>`. On Stashes, the stash.
   selected?: string;
   // The Changes tab's content: the file list and its footer.
   changes?: ReactNode;
 }) {
   const nav = useWorktreeNav();
+  const { projectId, id: worktreeId } = worktree;
   const head = worktree.recentCommits[0]?.hash;
+  const { data: stashes = [] } = useWorktreeStashes(worktree);
+  const newestStash = stashes[0]?.hash;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="px-2 pt-1 pb-2">
+      <div className="px-2 pb-1.5">
         <SegmentedControl
           aria-label="Git view"
           className="w-full"
-          optionClassName="flex-1 px-2 py-1 text-xs"
+          optionClassName="flex-1 justify-center px-1 py-0.5 text-xs"
           value={tab}
           onChange={(next) => {
             if (next === "changes") {
-              nav.toDiff(worktree.projectId, worktree.id, { replace: true });
-            } else if (head) {
-              nav.toCommit(worktree.projectId, worktree.id, head, true);
+              nav.toDiff(projectId, worktreeId, { replace: true });
+            } else if (next === "history" && head) {
+              nav.toCommit(projectId, worktreeId, head, true);
+            } else if (next === "stashes" && newestStash) {
+              nav.toStash(projectId, worktreeId, newestStash, true);
             }
           }}
           options={[
             {
               value: "changes",
-              label:
-                worktree.changedCount > 0
-                  ? `Changes ${worktree.changedCount}`
-                  : "Changes",
+              label: counted("Changes", worktree.changedCount),
             },
             { value: "history", label: "History", disabled: !head },
+            {
+              value: "stashes",
+              label: counted("Stashes", stashes.length),
+              disabled: !newestStash,
+            },
           ]}
         />
       </div>
       {tab === "changes" ? (
         changes
+      ) : tab === "stashes" ? (
+        <StashList worktree={worktree} selected={selected} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           <GitTimeline
