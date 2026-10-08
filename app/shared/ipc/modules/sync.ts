@@ -418,13 +418,12 @@ const SyncReceiveWorktreePayloadSchema = strict(
     channelId: ChannelIdSchema,
   }),
 );
-const pullResultFields = SyncPullWorktreeResultSchema.struct.fields;
+// A receive answers with the pull result, less the files step.
+const { files: _files, ...receiveResultFields } =
+  SyncPullWorktreeResultSchema.struct.fields;
 export const SyncReceiveWorktreeResultSchema = strict(
   Schema.Struct({
-    worktree: pullResultFields.worktree,
-    captured: pullResultFields.captured,
-    dirtyApplied: pullResultFields.dirtyApplied,
-    cloned: pullResultFields.cloned,
+    ...receiveResultFields,
     receipt: SyncReceiptSchema,
   }),
 );
