@@ -43,5 +43,11 @@ export const make = <I>(name: string) => {
     orElse: () => A,
   ): A =>
     current === undefined ? orElse() : Effect.runSyncWith(current)(effect);
-  return { layer, run, runSyncOr };
+  // For a caller with nothing to do while the layer is not up: settles
+  // at once then, and never refuses.
+  const runIfOpen = (effect: Effect.Effect<void, never, I>): Promise<void> =>
+    current === undefined
+      ? Promise.resolve()
+      : Effect.runPromiseWith(current)(effect).catch(() => {});
+  return { layer, run, runSyncOr, runIfOpen };
 };
