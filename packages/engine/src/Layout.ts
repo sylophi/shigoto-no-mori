@@ -32,6 +32,7 @@ const make = Effect.gen(function* () {
     const stored = yield* config.read({
       kind: "project",
       projectId: project.id,
+      path: project.path,
     });
     const configured =
       typeof stored?.defaultBranch === "string" &&

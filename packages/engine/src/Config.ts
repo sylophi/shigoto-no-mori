@@ -8,6 +8,7 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -24,13 +25,19 @@ import {
   mergeConfigDoc,
   settingKeys,
 } from "./configDoc.ts";
+import * as Git from "./Git.ts";
 import * as Paths from "./Paths.ts";
 
 // Which settings document a call reads or writes: the device's, or a
 // project's.
 export type ConfigScope =
   | { readonly kind: "device" }
-  | { readonly kind: "project"; readonly projectId: string };
+  | {
+      readonly kind: "project";
+      readonly projectId: string;
+      // The primary checkout, which a write asks git about.
+      readonly path: string;
+    };
 
 // One row of a settings listing: the key's effective value, and whether
 // the document sets it (a key it doesn't takes its default, or null).
@@ -285,6 +292,7 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const { home } = yield* Paths.Paths;
   const path = yield* Path.Path;
+  const git = yield* Git.Git;
 
   const load = (scope: ConfigScope) =>
     (scope.kind === "device"
@@ -330,9 +338,13 @@ const make = Effect.gen(function* () {
 
   // A read-modify-write of the scope's document in one transaction. A
   // project's document must keep its default branch.
+  // A read-modify-write of the scope's document in one transaction. A
+  // project's document keeps its default branch, from git when the
+  // write would leave it out, and one on the in-project layout hides
+  // `.shigomori/` from the primary's git status.
   const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) =>
-    sql
-      .withTransaction(
+    Effect.gen(function* () {
+      const written = yield* sql.withTransaction(
         Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
           const next = structuredClone(before);
@@ -340,15 +352,23 @@ const make = Effect.gen(function* () {
           if (scope.kind === "project") {
             const [branch] = docGet(next, "defaultBranch");
             if (typeof branch !== "string" || branch.trim() === "") {
-              return yield* new MissingDefaultBranch({
-                projectId: scope.projectId,
-              });
+              const found = yield* git.resolveDefaultBranch(scope.path);
+              if (Option.isNone(found)) {
+                return yield* new MissingDefaultBranch({
+                  projectId: scope.projectId,
+                });
+              }
+              docSet(next, "defaultBranch", found.value);
             }
           }
           yield* store(scope, before, next);
+          return next;
         }),
-      )
-      .pipe(Effect.catchTags({ SqlError: Effect.die }));
+      );
+      if (scope.kind === "project" && written.worktreeLayout === "in-project") {
+        yield* git.appendExcludes(scope.path, [".shigomori"]);
+      }
+    }).pipe(Effect.catchTags({ SqlError: Effect.die }));
 
   // A `~/` path, joined to the home directory and cleaned as Go's
   // filepath.Join cleans it.

@@ -29,6 +29,7 @@ import {
   anchorRule,
   branchListOf,
   type BranchRefs,
+  escapeGitignorePattern,
   ignoreRulesOf,
   LOG_FORMAT,
   parseBranchRefs,
@@ -243,6 +244,13 @@ export class Git extends Context.Service<
     }) => Effect.Effect<void, GitError>;
     // Drops admin entries whose checkout directory is gone.
     readonly pruneWorktrees: (repo: string) => Effect.Effect<void, GitError>;
+    // Hides each path (relative to the repository's root) from git
+    // status through the repository's info/exclude, skipping one already
+    // there. Best effort: the file holds the user's own lines too.
+    readonly appendExcludes: (
+      repo: string,
+      paths: ReadonlyArray<string>,
+    ) => Effect.Effect<void>;
 
     // --- the working tree ---
     // Every changed file. `untracked: "normal"` sees untracked files
@@ -1213,6 +1221,36 @@ const make = Effect.gen(function* () {
       return Option.some({ refs: refs.value, picked });
     });
 
+  const appendExcludes = Effect.fn("Git.appendExcludes")(
+    function* (repo: string, paths: ReadonlyArray<string>) {
+      if (paths.length === 0) return;
+      const excludeFile = yield* run(repo, [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-path",
+        "info/exclude",
+      ]).pipe(Effect.map((stdout) => stdout.trim()));
+      const existing = yield* fs
+        .readFileString(excludeFile)
+        .pipe(Effect.orElseSucceed(() => ""));
+      const lines = new Set(existing.split("\n"));
+      const added = paths
+        .map((entry) => `/${escapeGitignorePattern(entry)}`)
+        .filter((line) => !lines.has(line));
+      if (added.length === 0) return;
+      const leading = existing !== "" && !existing.endsWith("\n") ? "\n" : "";
+      // Through a temporary file, since the file is the user's.
+      const temporary = `${excludeFile}.shigomori-tmp`;
+      yield* fs.makeDirectory(path.dirname(excludeFile), { recursive: true });
+      yield* fs.writeFileString(
+        temporary,
+        `${existing}${leading}${added.join("\n")}\n`,
+      );
+      yield* fs.rename(temporary, excludeFile);
+    },
+    (effect) => Effect.ignore(effect),
+  );
+
   const resolveDefaultBranch = Effect.fn("Git.resolveDefaultBranch")(function* (
     repo: string,
     override?: string,
@@ -1806,6 +1844,7 @@ const make = Effect.gen(function* () {
     checkoutWorktree,
     removeWorktree,
     pruneWorktrees,
+    appendExcludes,
     status,
     changes,
     workingTreeChanges,

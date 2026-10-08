@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   DeviceSettingsPatchSchema,
   modeledKeyPaths,
@@ -32,7 +34,7 @@ it("models exactly the schemas' keys", async () => {
     Object.keys(DeviceSettingsPatchSchema.struct.fields).toSorted(),
   );
   assert.deepEqual(
-    await listed({ kind: "project", projectId: "P" }),
+    await listed({ kind: "project", projectId: "P", path: "/nowhere" }),
     modeledKeyPaths(ShigomoriConfigSchema)
       .map((path) => path.join("."))
       .toSorted(),
@@ -55,7 +57,11 @@ it("points a list key at its own verbs, or at the file and the app", async () =>
 });
 
 it("keeps a project's default branch through every write", async () => {
-  const project = { kind: "project", projectId: "P" } as const;
+  const project = {
+    kind: "project",
+    projectId: "P",
+    path: "/nowhere",
+  } as const;
   assert.deepEqual(
     await box.engine(
       config.pipe(Effect.flatMap((c) => c.set(project, "portBase", "4000"))),
@@ -70,7 +76,11 @@ it("keeps a project's default branch through every write", async () => {
 
 it("takes an absolute custom path, home-expanded and cleaned, and refuses a relative one", async () => {
   box.write("projects/P/project.json", { defaultBranch: "main" });
-  const project = { kind: "project", projectId: "P" } as const;
+  const project = {
+    kind: "project",
+    projectId: "P",
+    path: "/nowhere",
+  } as const;
   const set = (raw: string) =>
     box.engine(
       config.pipe(
@@ -82,4 +92,28 @@ it("takes an absolute custom path, home-expanded and cleaned, and refuses a rela
     ok: false,
     error: "customWorktreePath must be an absolute path.",
   });
+});
+
+it("hides .shigomori from the primary's git status on the in-project layout", async () => {
+  const repo = box.repo("repo");
+  const project = { kind: "project", projectId: "P", path: repo } as const;
+  assert.equal(
+    await box.engine(
+      config.pipe(
+        Effect.flatMap((c) => c.set(project, "worktreeLayout", "in-project")),
+      ),
+    ),
+    "in-project",
+  );
+  const set = (await box.engine(
+    config.pipe(Effect.flatMap((c) => c.read(project))),
+  )) as Record<string, unknown>;
+  assert.deepEqual(set, {
+    defaultBranch: "main",
+    worktreeLayout: "in-project",
+  });
+  assert.match(
+    readFileSync(join(repo, ".git", "info", "exclude"), "utf8"),
+    /^\/\.shigomori$/m,
+  );
 });

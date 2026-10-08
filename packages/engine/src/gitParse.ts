@@ -406,3 +406,12 @@ export function anchorRule(rule: string, folder: string): string {
     : `/${folder}/**/${body}`;
   return negated ? `!${anchored}` : anchored;
 }
+
+// A path as a gitignore pattern that matches that name and nothing
+// else: backslashes and the pattern characters escaped, and trailing
+// spaces, which git would strip, kept.
+export function escapeGitignorePattern(path: string): string {
+  const escaped = path.replaceAll("\\", "\\\\").replace(/([*?[\]#!])/g, "\\$1");
+  const trimmed = escaped.replace(/ +$/, "");
+  return trimmed + "\\ ".repeat(escaped.length - trimmed.length);
+}
