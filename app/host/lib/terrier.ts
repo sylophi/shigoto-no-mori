@@ -4,10 +4,23 @@
 // through `sm projects list`); what the app keeps is the readiness
 // probe behind the Settings toggle: is terrier installed, and does its
 // version speak the registry-read contract this build understands.
+import * as Cache from "effect/Cache";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { TerrierReadiness } from "@shigomori/contracts/schemas";
 import * as Processes from "./util/processes";
-import { ttlValueCache } from "./util/ttlCache";
+import * as PromiseAdapter from "./util/promiseAdapter";
+
+export class Terrier extends Context.Service<
+  Terrier,
+  {
+    readonly readiness: Effect.Effect<TerrierReadiness>;
+    // For the global-config write flipping the toggle: the next read
+    // re-asks instead of serving up to a TTL of the pre-write world.
+    readonly invalidate: Effect.Effect<void>;
+  }
+>()("sm/host/Terrier") {}
 
 // A wedged terrier must not hang the Settings panel waiting on it.
 const TERRIER_SPAWN_TIMEOUT_MS = 10_000;
@@ -20,7 +33,7 @@ const TERRIER_SPAWN_TIMEOUT_MS = 10_000;
 const TERRIER_SUPPORTED_MAJOR = 0;
 const TERRIER_SUPPORTED_MINOR = 1;
 
-const READINESS_CACHE_TTL_MS = 30_000;
+const READINESS_TTL = "30 seconds";
 
 // One spawn answers both questions: a missing binary is "not
 // installed", any output is the version to run the minor handshake
@@ -45,11 +58,6 @@ const readiness = Processes.exec("terrier", ["version"], {
   }),
 );
 
-const readinessCache = ttlValueCache<TerrierReadiness>(
-  READINESS_CACHE_TTL_MS,
-  () => Processes.run(readiness),
-);
-
 function versionCompatible(version: string): boolean {
   const match = /^v(\d+)\.(\d+)/.exec(version);
   if (!match) return false;
@@ -59,12 +67,34 @@ function versionCompatible(version: string): boolean {
   );
 }
 
-export function terrierReadiness(): Promise<TerrierReadiness> {
-  return readinessCache.get();
-}
+// One entry, keyed by nothing: the cache is for its TTL and for
+// invalidating a probe still under way.
+const make = Effect.gen(function* () {
+  const cache = yield* Cache.make({
+    lookup: (_: void) => readiness,
+    capacity: 1,
+    timeToLive: READINESS_TTL,
+  });
+  return Terrier.of({
+    readiness: Cache.get(cache, undefined).pipe(
+      Effect.withSpan("Terrier.readiness"),
+    ),
+    invalidate: Cache.invalidateAll(cache),
+  });
+});
 
-// For the global-config write flipping the toggle: the next read
-// re-asks instead of serving up to a TTL of the pre-write world.
-export function invalidateTerrierCaches(): void {
-  readinessCache.expire();
-}
+export const layer = Layer.effect(Terrier, make);
+
+// The Promise face, for the terrier and global-config handlers.
+const promiseAdapter = PromiseAdapter.make<Terrier>("terrier");
+export const adapter = promiseAdapter.layer;
+
+const onTerrier = <A>(f: (terrier: Terrier["Service"]) => Effect.Effect<A>) =>
+  promiseAdapter.run(
+    Effect.gen(function* () {
+      return yield* f(yield* Terrier);
+    }),
+  );
+
+export const terrierReadiness = () => onTerrier((t) => t.readiness);
+export const invalidateTerrierReadiness = () => onTerrier((t) => t.invalidate);
