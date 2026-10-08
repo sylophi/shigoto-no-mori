@@ -339,23 +339,40 @@ try {
   });
 
   await proof.check("by owner: one name on two hosts shows its hosts", () => {
-    const rows = treeRows({
-      sortMode: "manual",
-      stored: [
-        ...ownedLocal,
-        owned(project("elm", "repo/elm", 0, 0), "gitlab.com/Acme/elm"),
-      ],
-      peers: ownedRemote,
-      shut: new Set(),
-    });
-    assert.deepEqual(outline(rows), [
+    // acme on GitLab too, through abies at the peer, which leads the
+    // alphabetical sort of projects. The headers go by what they read,
+    // and narrowed to this machine, its acme keeps its host.
+    const peers = [
+      ...ownedRemote,
+      onPeer(
+        owned(project("abies", "repo/abies", 0, 0), "gitlab.com/Acme/abies"),
+      ),
+    ];
+    const twoHosts = (filter?: string) =>
+      outline(
+        treeRows({
+          sortMode: "alphabetical",
+          filter,
+          stored: ownedLocal,
+          peers,
+          shut: new Set(),
+        }),
+      );
+    assert.deepEqual(twoHosts(), [
       "# github.com/acme",
       "alder",
       "birch",
       "# gitlab.com/Acme",
-      "elm",
+      "abies",
       "# zed",
       "dogwood",
+      "# No remote",
+      "cedar",
+    ]);
+    assert.deepEqual(twoHosts("local"), [
+      "# github.com/acme",
+      "alder",
+      "birch",
       "# No remote",
       "cedar",
     ]);

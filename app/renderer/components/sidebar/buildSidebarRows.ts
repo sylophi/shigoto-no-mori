@@ -594,43 +594,25 @@ export function ownerOf(project: Project): Owner | null {
 }
 
 // The list of projects' rows under a header per owner, the owners in
-// `order`. Projects with no owner trail the rest under a header of
-// their own, as the order leaves them out. A header is the owner's
-// name, with its host only when the name is an owner on another host
-// too. All of one owner (or none), there is nothing to tell apart, so
-// the list stays one run with no header.
+// `order` and labeled as it says. Projects with no owner trail the rest
+// under a header of their own, as the order leaves them out. All of one
+// owner (or none), there is nothing to tell apart, so the list stays
+// one run with no header.
 function ownerSections(
   rows: SidebarRow[],
-  order: ReadonlyMap<string, number>,
+  order: ProjectGroupOrder["owners"],
   shut: ReadonlySet<string>,
 ): SidebarRow[] {
-  const sections = new Map<
-    string,
-    { owner: Owner | null; rows: SidebarRow[] }
-  >();
+  const sections = new Map<string, SidebarRow[]>();
   for (const row of rows) {
     const owner = row.kind === "project" ? ownerOf(row.project) : null;
     const key = owner?.key ?? NO_OWNER_KEY;
     const section = sections.get(key);
-    if (section) section.rows.push(row);
-    else sections.set(key, { owner, rows: [row] });
+    if (section) section.push(row);
+    else sections.set(key, [row]);
   }
   if (sections.size < 2) return rows;
-  const seen = new Set<string>();
-  const onTwoHosts = new Set<string>();
-  for (const { owner } of sections.values()) {
-    if (!owner) continue;
-    const name = owner.name.toLowerCase();
-    if (seen.has(name)) onTwoHosts.add(name);
-    seen.add(name);
-  }
-  const labelOf = (owner: Owner | null) => {
-    if (!owner) return "No remote";
-    return onTwoHosts.has(owner.name.toLowerCase())
-      ? `${owner.host}/${owner.name}`
-      : owner.name;
-  };
-  const rankOf = (key: string) => order.get(key) ?? order.size;
+  const rankOf = (key: string) => order.get(key)?.rank ?? order.size;
   const drawn: SidebarRow[] = [];
   for (const [ownerKey, section] of [...sections].toSorted(
     ([a], [b]) => rankOf(a) - rankOf(b),
@@ -640,11 +622,11 @@ function ownerSections(
       kind: "owner-header",
       key: `o:${ownerKey}`,
       ownerKey,
-      label: labelOf(section.owner),
-      count: section.rows.length,
+      label: order.get(ownerKey)?.label ?? "No remote",
+      count: section.length,
       expanded,
     });
-    if (expanded) drawn.push(...section.rows);
+    if (expanded) drawn.push(...section);
   }
   return drawn;
 }
@@ -717,10 +699,11 @@ function claimRemote(
 // Group rank by group id. A repo this machine holds is also ranked
 // under the peer-only id it would have, so narrowed to a peer that
 // holds it too, the peer's group keeps the local project's place. And
-// owner rank by owner key (ownerOf), for the list split by owner.
+// owner rank and header label by owner key (ownerOf), for the list
+// split by owner.
 export interface ProjectGroupOrder {
   groups: ReadonlyMap<string, number>;
-  owners: ReadonlyMap<string, number>;
+  owners: ReadonlyMap<string, { rank: number; label: string }>;
 }
 
 // Where each group sits in the tree, decided over every device's
@@ -732,7 +715,9 @@ export interface ProjectGroupOrder {
 // trail it in the order they were merged. An owner sits where its
 // best-ranked project does, so a usage sort puts the owner of the
 // project worked on most first, except under the alphabetical sort,
-// where the owners go by name.
+// where the owners go by label. A label is the owner's name, with its
+// host only when the name is an owner on another host too, decided
+// over every device too so picking one never relabels a header.
 export function projectGroupOrder({
   projects,
   remote,
@@ -760,24 +745,38 @@ export function projectGroupOrder({
     });
   }
   const groups = new Map<string, number>();
-  // Owner names by key, in the order their projects lead them in.
-  const owners = new Map<string, string>();
+  // Owners by key, in the order their projects lead them in.
+  const owners = new Map<string, Owner>();
   sortByProject(entries, sortMode, (entry) => entry.project).forEach(
     (entry, rank) => {
       // A repo registered twice here keeps its first project's place.
       for (const id of entry.groupIds)
         if (!groups.has(id)) groups.set(id, rank);
       const owner = ownerOf(entry.project);
-      if (owner && !owners.has(owner.key)) owners.set(owner.key, owner.name);
+      if (owner && !owners.has(owner.key)) owners.set(owner.key, owner);
     },
+  );
+  const seen = new Set<string>();
+  const onTwoHosts = new Set<string>();
+  for (const { name } of owners.values()) {
+    const folded = name.toLowerCase();
+    if (seen.has(folded)) onTwoHosts.add(folded);
+    seen.add(folded);
+  }
+  const labeled = [...owners].map(
+    ([key, { host, name }]) =>
+      [
+        key,
+        onTwoHosts.has(name.toLowerCase()) ? `${host}/${name}` : name,
+      ] as const,
   );
   const ranked =
     sortMode === "alphabetical"
-      ? [...owners].toSorted(([, a], [, b]) => a.localeCompare(b))
-      : [...owners];
+      ? labeled.toSorted(([, a], [, b]) => a.localeCompare(b))
+      : labeled;
   return {
     groups,
-    owners: new Map(ranked.map(([key], rank) => [key, rank])),
+    owners: new Map(ranked.map(([key, label], rank) => [key, { rank, label }])),
   };
 }
 
