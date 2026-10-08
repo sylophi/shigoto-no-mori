@@ -2,10 +2,11 @@
 // registry of repo paths, merged into the project list when the global
 // `terrier` toggle is on. The merge is the CLI's (cli/terrier.go, read
 // through `sm projects list`); what the app keeps is the readiness
-// probe behind the Settings toggle: is terrier installed, and does its
-// version speak the registry-read contract this build understands.
+// probe behind the Settings toggle: is terrier installed, and does
+// `terrier ls --json` still answer in the shape the CLI reads.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { z } from "zod";
 import type { TerrierReadiness } from "@shared/schemas";
 import { ttlValueCache } from "./util/ttlCache";
 
@@ -21,45 +22,39 @@ function execTerrier(args: string[]): Promise<{ stdout: string }> {
   });
 }
 
-// The registry-read contract the bundled CLI understands
-// (terrierSupported* in cli/terrier.go, which decides whether the merge
-// runs). Terrier's README says a tool checks the minor version and
-// nothing else, so the toggle reports an unknown minor as incompatible
-// rather than guessing.
-const TERRIER_SUPPORTED_MAJOR = 0;
-const TERRIER_SUPPORTED_MINOR = 1;
+// What the bundled CLI reads out of `terrier ls --json`
+// (parseTerrierListings in cli/terrier.go), so Settings calls the
+// integration ready exactly when the merge would run.
+const TerrierListingSchema = z.object({
+  projects: z.array(z.object({ path: z.string() })),
+});
 
 const READINESS_CACHE_TTL_MS = 30_000;
 
-// One spawn answers both questions: ENOENT is "not installed", any
-// output is the version to run the minor handshake against.
+// One spawn answers both questions: ENOENT is "not installed", and the
+// output either parses as a listing or doesn't.
 const readinessCache = ttlValueCache<TerrierReadiness>(
   READINESS_CACHE_TTL_MS,
   async () => {
-    let version: string;
+    let stdout: string;
     try {
-      ({ stdout: version } = await execTerrier(["version"]));
+      ({ stdout } = await execTerrier(["ls", "--json"]));
     } catch (error) {
       const installed = (error as NodeJS.ErrnoException).code !== "ENOENT";
-      return { installed, compatible: false };
+      return { installed, readable: false };
     }
-    version = version.trim();
+    let listing: unknown;
+    try {
+      listing = JSON.parse(stdout);
+    } catch {
+      return { installed: true, readable: false };
+    }
     return {
       installed: true,
-      compatible: versionCompatible(version),
-      version: version || undefined,
+      readable: TerrierListingSchema.safeParse(listing).success,
     };
   },
 );
-
-function versionCompatible(version: string): boolean {
-  const match = /^v(\d+)\.(\d+)/.exec(version);
-  if (!match) return false;
-  return (
-    Number(match[1]) === TERRIER_SUPPORTED_MAJOR &&
-    Number(match[2]) === TERRIER_SUPPORTED_MINOR
-  );
-}
 
 export function terrierReadiness(): Promise<TerrierReadiness> {
   return readinessCache.get();
