@@ -4,8 +4,9 @@
 // exactly HEAD plus the ticked ones, insertions, deletions and a
 // missing final newline among them, a discard that takes one change
 // out of the file and the index and comes back through its snapshot,
-// and the refusals (an index holding what the file doesn't, a pick
-// the file no longer has).
+// a CRLF checkout keeping its line endings through a discard, and the
+// refusals (an index holding what the file doesn't, a pick the file no
+// longer has).
 //
 // Run: pnpm test git-hunks.
 import assert from "node:assert/strict";
@@ -39,6 +40,7 @@ console.log("git-hunks proof\n");
 
 const lines = (n: number) =>
   Array.from({ length: n }, (_, i) => `line ${i + 1}\n`).join("");
+const crlf = (text: string) => text.replaceAll("\n", "\r\n");
 const read = (repo: string) => readFileSync(join(repo, "f.txt"), "utf8");
 const staged = (repo: string) => git(repo, "show", ":f.txt");
 
@@ -136,6 +138,27 @@ async function main() {
         setHunksStaged(repo, "f.txt", [{ ...edit, newCount: 9 }], true),
         /changed since/,
       );
+    },
+  );
+
+  await check(
+    "in a CRLF checkout a discard keeps every line's ending",
+    async (track) => {
+      const repo = tempDir("sm-hunks-crlf-", track);
+      git(repo, "init", "-q", "-b", "main");
+      git(repo, "config", "core.autocrlf", "true");
+      writeFileSync(join(repo, "f.txt"), crlf(lines(20)));
+      git(repo, "add", ".");
+      git(repo, "commit", "-q", "-m", "init");
+      writeFileSync(
+        join(repo, "f.txt"),
+        crlf(lines(20).replace("line 2\n", "two\n").replace("line 18\n", "")),
+      );
+      const { changes } = await readHunkStates(repo, "f.txt");
+      const [, removal] = changes;
+      assert.ok(removal && changes.length === 2);
+      await discardHunks(repo, "f.txt", [removal]);
+      assert.equal(read(repo), crlf(lines(20).replace("line 2\n", "two\n")));
     },
   );
 

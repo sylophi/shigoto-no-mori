@@ -226,9 +226,15 @@ export function discardHunks(
     const picked = resolvePicks(state, picks);
     const snapshot = await snapshotPaths(worktreePath, [path]);
     const kept = state.changes.filter((c) => !picked.includes(c));
+    // HEAD's lines as a checkout writes them (line endings and other
+    // smudge filters), since these go into the working tree beside the
+    // file's own.
+    const checkedOut = splitLines(
+      await run(worktreePath, ["cat-file", "--filters", `HEAD:${path}`]),
+    );
     await writeFile(
       join(worktreePath, path),
-      applyChanges(state.head, state.tree, kept),
+      applyChanges(checkedOut, state.tree, kept),
     );
     if (state.editable && picked.some((c) => c.staged)) {
       await writeIndexEntry(
