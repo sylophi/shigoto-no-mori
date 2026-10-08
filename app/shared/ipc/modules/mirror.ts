@@ -1,21 +1,23 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { broughtPaths } from "@shared/mirrorIgnores";
-import type { MirrorIgnoreMode } from "@shared/ipc/modules/sync";
 import {
-  CommitHashZod,
-  DeviceIdZod,
-  GitRefNameZod,
-  HexId32Zod,
-  MirrorIgnoreModeZod,
-  MirrorIgnoresZod,
-  ProjectZod,
-  SyncCloneIntoZod,
-  SyncLandingRefZod,
-  SyncPullFilesZod,
-  WorktreeIdZod,
-  WorktreeZod,
-} from "@shared/schemas/zodBridge";
+  type MirrorIgnoreMode,
+  MirrorIgnoreModeSchema,
+  MirrorIgnoresSchema,
+  SyncLandingRefSchema,
+  SyncPullWorktreePayloadSchema,
+  SyncPullWorktreeResultSchema,
+  SyncSendWorktreePayloadSchema,
+} from "@shared/ipc/modules/sync";
+import {
+  CommitHashSchema,
+  GitRefNameSchema,
+  VoidSchema,
+  WorktreeIdSchema,
+} from "@shared/schemas";
+import { HexId32Schema } from "@shared/ipc/hexId";
+import { strict } from "@shared/schemas/strict";
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
 // remote work"): a worktree kept identical on two devices, every file,
@@ -46,15 +48,14 @@ import {
 
 // Mutagen mints session identifiers ("sync_" plus a base62 body). The
 // daemon echoes them verbatim, so the shape is pinned only loosely.
-const MirrorSessionIdSchema = z.string().min(1).max(128);
+const MirrorSessionIdSchema = Schema.String.check(
+  Schema.isBetweenLength(1, 128),
+);
 
 // The leave-out rule and its patterns are defined with the pull
 // (shared/ipc/modules/sync.ts), which carries them too. Re-exported so
 // the mirror surfaces keep one import path.
-export {
-  type MirrorIgnoreMode,
-  MirrorIgnoreModeSchema,
-} from "@shared/ipc/modules/sync";
+export { type MirrorIgnoreMode, MirrorIgnoreModeSchema };
 export {
   anchorIgnoredPath,
   BRING_PATHS_LIMIT,
@@ -142,7 +143,7 @@ export function summarizeIgnores(
   );
 }
 // The daemon's stable status codes (file-sync/engine.go mirrorStatusCode).
-const MirrorStatusSchema = z.enum([
+const MirrorStatusSchema = Schema.Literals([
   "disconnected",
   "halted-on-root-emptied",
   "halted-on-root-deletion",
@@ -159,85 +160,116 @@ const MirrorStatusSchema = z.enum([
   "saving",
   "unknown",
 ]);
-export type MirrorStatus = z.infer<typeof MirrorStatusSchema>;
+export type MirrorStatus = typeof MirrorStatusSchema.Type;
 
-const MirrorProblemSchema = z.strictObject({
-  path: z.string(),
-  error: z.string(),
-});
+const MirrorProblemSchema = strict(
+  Schema.Struct({
+    path: Schema.String,
+    error: Schema.String,
+  }),
+);
 
-const MirrorChangeSchema = z.strictObject({
-  path: z.string(),
-  kind: z.enum(["created", "deleted", "modified"]),
-});
+const MirrorChangeSchema = strict(
+  Schema.Struct({
+    path: Schema.String,
+    kind: Schema.Literals(["created", "deleted", "modified"]),
+  }),
+);
 
-const MirrorConflictSchema = z.strictObject({
-  root: z.string(),
-  localChanges: z.array(MirrorChangeSchema),
-  remoteChanges: z.array(MirrorChangeSchema),
-});
+const MirrorConflictSchema = strict(
+  Schema.Struct({
+    root: Schema.String,
+    localChanges: Schema.Array(MirrorChangeSchema),
+    remoteChanges: Schema.Array(MirrorChangeSchema),
+  }),
+);
 
-const MirrorStagingSchema = z.strictObject({
-  path: z.string(),
-  receivedFiles: z.number().int().nonnegative(),
-  expectedFiles: z.number().int().nonnegative(),
-  receivedSize: z.number().int().nonnegative(),
-  expectedSize: z.number().int().nonnegative(),
-});
+const MirrorStagingSchema = strict(
+  Schema.Struct({
+    path: Schema.String,
+    receivedFiles: Schema.Natural,
+    expectedFiles: Schema.Natural,
+    receivedSize: Schema.Natural,
+    expectedSize: Schema.Natural,
+  }),
+);
 
-const MirrorEndpointStateSchema = z.strictObject({
-  connected: z.boolean(),
-  scanned: z.boolean(),
-  directories: z.number().int().nonnegative(),
-  files: z.number().int().nonnegative(),
-  symbolicLinks: z.number().int().nonnegative(),
-  totalFileSize: z.number().int().nonnegative(),
-  problems: z.array(MirrorProblemSchema),
-  excludedProblems: z.number().int().nonnegative(),
-  staging: MirrorStagingSchema.optional(),
-});
+const MirrorEndpointStateSchema = strict(
+  Schema.Struct({
+    connected: Schema.Boolean,
+    scanned: Schema.Boolean,
+    directories: Schema.Natural,
+    files: Schema.Natural,
+    symbolicLinks: Schema.Natural,
+    totalFileSize: Schema.Natural,
+    problems: Schema.Array(MirrorProblemSchema),
+    excludedProblems: Schema.Natural,
+    staging: Schema.optional(MirrorStagingSchema),
+  }),
+);
 
 // The git half of a mirror (host/mirror/gitState.ts): HEAD, the tip and
 // the staged tree, as one document either side can produce and apply.
-const GitHeadSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("branch"), branch: GitRefNameZod }),
-  z.strictObject({ kind: z.literal("detached") }),
+const GitHeadSchema = Schema.Union([
+  strict(
+    Schema.Struct({ kind: Schema.Literal("branch"), branch: GitRefNameSchema }),
+  ),
+  strict(Schema.Struct({ kind: Schema.Literal("detached") })),
 ]);
 
-const TreeHashSchema = z.string().regex(/^[0-9a-f]{40,64}$/);
+const TreeHashSchema = Schema.String.check(
+  Schema.isPattern(/^[0-9a-f]{40,64}$/),
+);
 
-export const GitStateCoreSchema = z.strictObject({
-  head: GitHeadSchema,
-  tip: CommitHashZod,
-  indexTree: TreeHashSchema,
-});
-
-export const GitStateSchema = GitStateCoreSchema.extend({
-  // The carrier commit for a staged index (refs/shigomori/index/<id>
-  // on the reporting device), or null when nothing is staged.
-  indexCommit: CommitHashZod.nullable(),
-});
-
-export const MirrorWorktreePayloadSchema = z.strictObject({
-  projectId: z.string().min(1),
-  worktreeId: WorktreeIdZod,
-});
-
-const MirrorApplyGitStatePayloadSchema = MirrorWorktreePayloadSchema.extend({
-  expect: z.strictObject({
-    tip: CommitHashZod,
+export const GitStateCoreSchema = strict(
+  Schema.Struct({
+    head: GitHeadSchema,
+    tip: CommitHashSchema,
     indexTree: TreeHashSchema,
   }),
-  state: GitStateCoreSchema,
-  // Landing refs the applier may sweep afterwards: the app's
-  // namespace only.
-  sweep: z.array(SyncLandingRefZod).max(8).optional(),
-});
+);
 
-export const MirrorApplyGitStateResultSchema = z.strictObject({
-  applied: z.boolean(),
-  reason: z.string().optional(),
-});
+export const GitStateSchema = strict(
+  Schema.Struct({
+    ...GitStateCoreSchema.struct.fields,
+    // The carrier commit for a staged index (refs/shigomori/index/<id>
+    // on the reporting device), or null when nothing is staged.
+    indexCommit: Schema.NullOr(CommitHashSchema),
+  }),
+);
+
+export const MirrorWorktreePayloadSchema = strict(
+  Schema.Struct({
+    projectId: Schema.NonEmptyString,
+    worktreeId: WorktreeIdSchema,
+  }),
+);
+export type MirrorWorktreePayload = typeof MirrorWorktreePayloadSchema.Type;
+
+const MirrorApplyGitStatePayloadSchema = strict(
+  Schema.Struct({
+    ...MirrorWorktreePayloadSchema.struct.fields,
+    expect: strict(
+      Schema.Struct({
+        tip: CommitHashSchema,
+        indexTree: TreeHashSchema,
+      }),
+    ),
+    state: GitStateCoreSchema,
+    // Landing refs the applier may sweep afterwards: the app's
+    // namespace only.
+    sweep: Schema.optional(
+      Schema.Array(SyncLandingRefSchema).check(Schema.isMaxLength(8)),
+    ),
+  }),
+);
+
+export const MirrorApplyGitStateResultSchema = strict(
+  Schema.Struct({
+    applied: Schema.Boolean,
+    reason: Schema.optional(Schema.String),
+  }),
+);
 
 // The git follower's verdict on one session (host/mirror/gitFollow.ts),
 // attached to the session by the host. synced: both sides agree.
@@ -246,60 +278,64 @@ export const MirrorApplyGitStateResultSchema = z.strictObject({
 // other side's state cannot land here (a branch collision, an unborn
 // worktree), with the reason. error: the last attempt failed. off: not
 // followed (paused, or the daemon has not reported the session yet).
-const MirrorGitStatusSchema = z.strictObject({
-  status: z.enum([
-    "synced",
-    "following",
-    "diverged",
-    "blocked",
-    "error",
-    "off",
-  ]),
-  detail: z.string(),
-});
-export type MirrorGitStatus = z.infer<typeof MirrorGitStatusSchema>;
+const MirrorGitStatusSchema = strict(
+  Schema.Struct({
+    status: Schema.Literals([
+      "synced",
+      "following",
+      "diverged",
+      "blocked",
+      "error",
+      "off",
+    ]),
+    detail: Schema.String,
+  }),
+);
+export type MirrorGitStatus = typeof MirrorGitStatusSchema.Type;
 
 // One session this device runs, as the daemon reports it. The local
 // side is always this device (alpha in Mutagen's terms) and holds the
 // original. The remote side is the copy, on the peer named by
 // deviceId, at remoteRoot, which is its worktree projectId/worktreeId. localProjectId/localWorktreeId
 // are lifted out of the labels the start orchestration wrote.
-export const MirrorSessionSchema = z.strictObject({
-  session: MirrorSessionIdSchema,
-  name: z.string(),
-  labels: z.record(z.string(), z.string()),
-  localRoot: z.string(),
-  localProjectId: z.string(),
-  localWorktreeId: z.string(),
-  deviceId: z.string(),
-  projectId: z.string(),
-  worktreeId: z.string(),
-  remoteRoot: z.string(),
-  paused: z.boolean(),
-  // The engine's ignore list for this session (the .git pointer left
-  // out: it is never the user's choice) and the rule it came from.
-  ignores: z.array(z.string()),
-  ignoreMode: MirrorIgnoreModeZod,
-  // When the session was created, epoch milliseconds, so the page can
-  // say how long the mirror has been running.
-  createdAt: z.number().int().nonnegative(),
-  status: MirrorStatusSchema,
-  statusText: z.string(),
-  lastError: z.string().optional(),
-  successfulCycles: z.number().int().nonnegative(),
-  conflicts: z.array(MirrorConflictSchema),
-  excludedConflicts: z.number().int().nonnegative(),
-  local: MirrorEndpointStateSchema,
-  remote: MirrorEndpointStateSchema,
-  // Attached by the host from the git follower. Absent when the host
-  // has no follower for it yet.
-  git: MirrorGitStatusSchema.optional(),
-  // Set while a stop is under way: the engine has ended the session
-  // and the copy is being removed. The list keeps the session until
-  // the copy is gone, so the pair reads as one worktree throughout.
-  stopping: z.boolean().optional(),
-});
-export type MirrorSession = z.infer<typeof MirrorSessionSchema>;
+export const MirrorSessionSchema = strict(
+  Schema.Struct({
+    session: MirrorSessionIdSchema,
+    name: Schema.String,
+    labels: Schema.Record(Schema.String, Schema.String),
+    localRoot: Schema.String,
+    localProjectId: Schema.String,
+    localWorktreeId: Schema.String,
+    deviceId: Schema.String,
+    projectId: Schema.String,
+    worktreeId: Schema.String,
+    remoteRoot: Schema.String,
+    paused: Schema.Boolean,
+    // The engine's ignore list for this session (the .git pointer left
+    // out: it is never the user's choice) and the rule it came from.
+    ignores: Schema.Array(Schema.String),
+    ignoreMode: MirrorIgnoreModeSchema,
+    // When the session was created, epoch milliseconds, so the page can
+    // say how long the mirror has been running.
+    createdAt: Schema.Natural,
+    status: MirrorStatusSchema,
+    statusText: Schema.String,
+    lastError: Schema.optional(Schema.String),
+    successfulCycles: Schema.Natural,
+    conflicts: Schema.Array(MirrorConflictSchema),
+    excludedConflicts: Schema.Natural,
+    local: MirrorEndpointStateSchema,
+    remote: MirrorEndpointStateSchema,
+    // Attached by the host from the git follower. Absent when the host
+    // has no follower for it yet.
+    git: Schema.optional(MirrorGitStatusSchema),
+    // Set while a stop is under way: the engine has ended the session
+    // and the copy is being removed. The list keeps the session until
+    // the copy is gone, so the pair reads as one worktree throughout.
+    stopping: Schema.optional(Schema.Boolean),
+  }),
+);
+export type MirrorSession = typeof MirrorSessionSchema.Type;
 
 // One session as the daemon's state line carries it (file-sync/
 // engine.go mirrorSessionState), before the host lifts the label-borne
@@ -309,41 +345,43 @@ export type MirrorSession = z.infer<typeof MirrorSessionSchema>;
 // one still fails, and the nested shapes (endpoint, staging, conflict,
 // problem, change) stay strict, shared with the contract above, so a
 // field added inside them still fails the session.
-export const MirrorSessionRawSchema = z.object(
-  MirrorSessionSchema.omit({
-    localProjectId: true,
-    localWorktreeId: true,
-    ignoreMode: true,
-    git: true,
-    stopping: true,
-  }).shape,
-);
-export type MirrorSessionRaw = z.infer<typeof MirrorSessionRawSchema>;
+const {
+  localProjectId: _localProjectId,
+  localWorktreeId: _localWorktreeId,
+  ignoreMode: _ignoreMode,
+  git: _git,
+  stopping: _stopping,
+  ...rawSessionFields
+} = MirrorSessionSchema.struct.fields;
+export const MirrorSessionRawSchema = Schema.Struct(rawSessionFields);
+export type MirrorSessionRaw = typeof MirrorSessionRawSchema.Type;
 
 // One stream this device SERVES: a peer is mirroring the named worktree
 // from here, on the channel the peer minted with openStream. Known
 // from the open until the channel is gone.
-const MirrorServingSchema = z.strictObject({
-  channelId: HexId32Zod,
-  projectId: z.string(),
-  worktreeId: WorktreeIdZod,
-  // The calling device, or "" on a wire that stamps no caller.
-  peerDeviceId: z.string(),
-  // The peer's own worktree for this stream (its local copy), when the
-  // peer named it: what lets this device's sidebar fold the peer's row
-  // into the served worktree's. Absent on a peer that predates it.
-  peerWorktreeId: WorktreeIdZod.optional(),
-  since: z.number().int().nonnegative(),
-});
-export type MirrorServing = z.infer<typeof MirrorServingSchema>;
+const MirrorServingSchema = strict(
+  Schema.Struct({
+    channelId: HexId32Schema,
+    projectId: Schema.String,
+    worktreeId: WorktreeIdSchema,
+    // The calling device, or "" on a wire that stamps no caller.
+    peerDeviceId: Schema.String,
+    // The peer's own worktree for this stream (its local copy), when the
+    // peer named it: what lets this device's sidebar fold the peer's row
+    // into the served worktree's. Absent on a peer that predates it.
+    peerWorktreeId: Schema.optional(WorktreeIdSchema),
+    since: Schema.Natural,
+  }),
+);
+export type MirrorServing = typeof MirrorServingSchema.Type;
 
-const MirrorDaemonStatusSchema = z.enum([
+const MirrorDaemonStatusSchema = Schema.Literals([
   "stopped",
   "starting",
   "running",
   "unavailable",
 ]);
-export type MirrorDaemonStatus = z.infer<typeof MirrorDaemonStatusSchema>;
+export type MirrorDaemonStatus = typeof MirrorDaemonStatusSchema.Type;
 
 // Why a device's daemon can't take a mirror start, or undefined when
 // it can: the host's refusal (requireRunningEngine) and the start
@@ -365,12 +403,14 @@ export function mirrorEngineBlocker(
   }
 }
 
-const MirrorListResultSchema = z.strictObject({
-  daemon: MirrorDaemonStatusSchema,
-  sessions: z.array(MirrorSessionSchema),
-  serving: z.array(MirrorServingSchema),
-});
-export type MirrorListResult = z.infer<typeof MirrorListResultSchema>;
+const MirrorListResultSchema = strict(
+  Schema.Struct({
+    daemon: MirrorDaemonStatusSchema,
+    sessions: Schema.Array(MirrorSessionSchema),
+    serving: Schema.Array(MirrorServingSchema),
+  }),
+);
+export type MirrorListResult = typeof MirrorListResultSchema.Type;
 
 // The mirror start, built on the send: one of THIS device's
 // worktrees, copied to a peer (cloning the repo there first when the
@@ -379,16 +419,14 @@ export type MirrorListResult = z.infer<typeof MirrorListResultSchema>;
 // reaches the peer through the peer's grant, which the send already
 // needed. Invoked by the peer itself when the mirror is asked for from
 // the copy's side, the target being the caller.
-export const MirrorStartToPayloadSchema = z.strictObject({
-  targetDeviceId: DeviceIdZod,
-  projectId: z.string().min(1),
-  worktreeId: WorktreeIdZod,
-  runSetup: z.boolean().optional(),
-  ignoreMode: MirrorIgnoreModeZod,
-  ignores: MirrorIgnoresZod,
-  cloneInto: SyncCloneIntoZod.optional(),
-});
-export type MirrorStartToPayload = z.infer<typeof MirrorStartToPayloadSchema>;
+const MirrorStartToPayloadSchema = strict(
+  Schema.Struct({
+    ...SyncSendWorktreePayloadSchema.struct.fields,
+    ignoreMode: MirrorIgnoreModeSchema,
+    ignores: MirrorIgnoresSchema,
+  }),
+);
+export type MirrorStartToPayload = typeof MirrorStartToPayloadSchema.Type;
 
 // The mirror asked for from the copy's side: a peer's worktree, named
 // the way a pull names its source, kept in step with a copy landed
@@ -400,33 +438,34 @@ export type MirrorStartToPayload = z.infer<typeof MirrorStartToPayloadSchema>;
 // target, and the peer's send and session reach the copy through that
 // invitation (host/mirror/invites.ts), so this device's switch is not
 // in the way.
-const MirrorStartFromPayloadSchema = z.strictObject({
-  sourceDeviceId: DeviceIdZod,
-  sourceProjectId: z.string().min(1),
-  sourceWorktreeId: WorktreeIdZod,
-  sourceIdentity: z.string().min(1),
-  runSetup: z.boolean().optional(),
-  cloneInto: SyncCloneIntoZod.optional(),
-  ignoreMode: MirrorIgnoreModeZod,
-  ignores: MirrorIgnoresZod,
-});
-export type MirrorStartFromPayload = z.infer<
-  typeof MirrorStartFromPayloadSchema
->;
+const pullFields = SyncPullWorktreePayloadSchema.struct.fields;
+const MirrorStartFromPayloadSchema = strict(
+  Schema.Struct({
+    sourceDeviceId: pullFields.sourceDeviceId,
+    sourceProjectId: pullFields.sourceProjectId,
+    sourceWorktreeId: pullFields.sourceWorktreeId,
+    sourceIdentity: pullFields.sourceIdentity,
+    runSetup: pullFields.runSetup,
+    cloneInto: pullFields.cloneInto,
+    ignoreMode: MirrorIgnoreModeSchema,
+    ignores: MirrorIgnoresSchema,
+  }),
+);
+export type MirrorStartFromPayload = typeof MirrorStartFromPayloadSchema.Type;
 
 // The send's result (the copy as the peer landed it) and the session.
-export const MirrorStartToResultSchema = z.strictObject({
-  worktree: WorktreeZod,
-  captured: z.boolean(),
-  dirtyApplied: z.boolean(),
-  files: SyncPullFilesZod.optional(),
-  cloned: ProjectZod.optional(),
-  session: MirrorSessionIdSchema,
-});
+export const MirrorStartToResultSchema = strict(
+  Schema.Struct({
+    ...SyncPullWorktreeResultSchema.struct.fields,
+    session: MirrorSessionIdSchema,
+  }),
+);
 
-const MirrorSessionPayloadSchema = z.strictObject({
-  session: MirrorSessionIdSchema,
-});
+const MirrorSessionPayloadSchema = strict(
+  Schema.Struct({
+    session: MirrorSessionIdSchema,
+  }),
+);
 
 // Stopping removes the copy (on the peer), so it is refused unless
 // the copy is known to hold nothing the original lacks: the git
@@ -435,9 +474,12 @@ const MirrorSessionPayloadSchema = z.strictObject({
 // session, an unreachable peer, a conflict held still or one too young
 // to have reconciled all fail that. `force` is the user overriding it
 // after being told.
-const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
-  force: z.boolean().optional(),
-});
+const MirrorStopPayloadSchema = strict(
+  Schema.Struct({
+    ...MirrorSessionPayloadSchema.struct.fields,
+    force: Schema.optional(Schema.Boolean),
+  }),
+);
 
 // The file half of the stop's safety (mirrorStopBlocker has both): the engine idle on a pair it has brought in step at
 // least once, both sides connected and nothing held still. Anything
@@ -508,9 +550,9 @@ export function mirrorStopBlocker(
 // its own because the original was gone (the copy is then the only one
 // there is). A runner that predates the answer sends nothing, which
 // reads as removed, all it ever did.
-const MirrorStopResultSchema = z
-  .strictObject({ removedCopy: z.boolean() })
-  .optional();
+const MirrorStopResultSchema = Schema.UndefinedOr(
+  strict(Schema.Struct({ removedCopy: Schema.Boolean })),
+);
 
 // The refusal's leading text, which the renderer matches to offer
 // discard-and-stop. Text rather than a code because Electron's IPC
@@ -555,25 +597,31 @@ export function isMirrorCopyStayed(error: unknown): boolean {
 // channel under this id on the calling connection (shared/ipc/socket/
 // channels.ts), and the host attaches a fresh `file-sync serve` for
 // the named worktree as the far end before answering.
-const MirrorOpenStreamPayloadSchema = MirrorWorktreePayloadSchema.extend({
-  channelId: HexId32Zod,
-  // See MirrorServingSchema.peerWorktreeId.
-  peerWorktreeId: WorktreeIdZod.optional(),
-});
+const MirrorOpenStreamPayloadSchema = strict(
+  Schema.Struct({
+    ...MirrorWorktreePayloadSchema.struct.fields,
+    channelId: HexId32Schema,
+    // See MirrorServingSchema.peerWorktreeId.
+    peerWorktreeId: Schema.optional(WorktreeIdSchema),
+  }),
+);
 
 // Changing what a mirror leaves out: the engine cannot re-configure a
 // live session, so the host ends it and opens a fresh one on the same
 // pair. The new session id comes back.
-const MirrorSetIgnoresPayloadSchema = MirrorSessionPayloadSchema.extend({
-  ignoreMode: MirrorIgnoreModeZod,
-  ignores: MirrorIgnoresZod,
-});
+const MirrorSetIgnoresPayloadSchema = strict(
+  Schema.Struct({
+    ...MirrorSessionPayloadSchema.struct.fields,
+    ignoreMode: MirrorIgnoreModeSchema,
+    ignores: MirrorIgnoresSchema,
+  }),
+);
 
 // What happened to a mirror over time, kept by the device that runs
 // it, keyed by its local worktree so a re-opened session (an ignore
 // change) keeps the thread. Bounded per worktree (main/core/mirror/
 // history.ts), so the list is a recent window, not an archive.
-const MirrorEventKindSchema = z.enum([
+const MirrorEventKindSchema = Schema.Literals([
   "started",
   "stopped",
   "paused",
@@ -590,23 +638,31 @@ const MirrorEventKindSchema = z.enum([
   "git-error",
   "git-synced",
 ]);
-export type MirrorEventKind = z.infer<typeof MirrorEventKindSchema>;
-export const MirrorEventSchema = z.strictObject({
-  at: z.number().int().nonnegative(),
-  kind: MirrorEventKindSchema,
-  detail: z.string(),
-});
-export type MirrorEvent = z.infer<typeof MirrorEventSchema>;
+export type MirrorEventKind = typeof MirrorEventKindSchema.Type;
+export const MirrorEventSchema = strict(
+  Schema.Struct({
+    at: Schema.Natural,
+    kind: MirrorEventKindSchema,
+    detail: Schema.String,
+  }),
+);
+export type MirrorEvent = typeof MirrorEventSchema.Type;
 export const MIRROR_HISTORY_LIMIT = 100;
-const MirrorHistoryPayloadSchema = z.strictObject({
-  localWorktreeId: WorktreeIdZod,
-});
-const MirrorHistoryResultSchema = z.strictObject({
-  events: z.array(MirrorEventSchema).max(MIRROR_HISTORY_LIMIT),
-});
+const MirrorHistoryPayloadSchema = strict(
+  Schema.Struct({
+    localWorktreeId: WorktreeIdSchema,
+  }),
+);
+const MirrorHistoryResultSchema = strict(
+  Schema.Struct({
+    events: Schema.Array(MirrorEventSchema).check(
+      Schema.isMaxLength(MIRROR_HISTORY_LIMIT),
+    ),
+  }),
+);
 
 export const mirrorContract = defineContract("host", {
-  list: invoke("mirror:list", z.void(), MirrorListResultSchema, {
+  list: invoke("mirror:list", VoidSchema, MirrorListResultSchema, {
     remote: true,
     gated: false,
   }),
@@ -642,24 +698,24 @@ export const mirrorContract = defineContract("host", {
   // kept it): the invitation this device left for that peer goes, so
   // the peer's calls on the worktree need the grant again. Invitable,
   // since an invited mirror's runner is exactly who says so.
-  release: invoke("mirror:release", MirrorWorktreePayloadSchema, z.void(), {
+  release: invoke("mirror:release", MirrorWorktreePayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     movesHostState: false,
     invitable: "copy",
   }),
-  pause: invoke("mirror:pause", MirrorSessionPayloadSchema, z.void(), {
+  pause: invoke("mirror:pause", MirrorSessionPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
   }),
-  resume: invoke("mirror:resume", MirrorSessionPayloadSchema, z.void(), {
+  resume: invoke("mirror:resume", MirrorSessionPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
   }),
   setIgnores: invoke(
     "mirror:setIgnores",
     MirrorSetIgnoresPayloadSchema,
-    z.strictObject({ session: MirrorSessionIdSchema }),
+    strict(Schema.Struct({ session: MirrorSessionIdSchema })),
     { remote: true, gated: true },
   ),
   // Host-scoped like list: a peer viewing this device's mirror reads
@@ -675,7 +731,7 @@ export const mirrorContract = defineContract("host", {
   openStream: invoke(
     "mirror:openStream",
     MirrorOpenStreamPayloadSchema,
-    z.void(),
+    VoidSchema,
     { remote: true, gated: true, movesHostState: false, invitable: "copy" },
   ),
   // The git half, served to the device mirroring FROM here: read a
@@ -704,9 +760,13 @@ export const mirrorContract = defineContract("host", {
   // Optional because the host may have none to send (no daemon yet, or
   // a list that failed to build or to validate): it then announces the
   // change bare, and a reader re-asks.
-  changed: broadcast("mirror:changed", MirrorListResultSchema.optional(), {
-    remote: true,
-  }),
+  changed: broadcast(
+    "mirror:changed",
+    Schema.UndefinedOr(MirrorListResultSchema),
+    {
+      remote: true,
+    },
+  ),
   // A served worktree's index was rewritten (something staged or
   // unstaged there). Refs and HEAD already ping through
   // git:projectChanged. The index is the one git fact that watcher

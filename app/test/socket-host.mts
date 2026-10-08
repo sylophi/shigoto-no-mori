@@ -58,7 +58,7 @@ import {
   type ConnectDeviceOptions,
 } from "@shared/ipc/socket/wsClientTransport";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
-import { z } from "zod";
+import { VoidSchema } from "@shared/schemas";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { safeDecode } from "@shared/ipc/schema";
 import { registerContract } from "@shared/ipc/registerContract";
@@ -923,21 +923,21 @@ it("registrar: onMutationResolved fires after a mutating invoke resolves, never 
     broadcastAll: () => {},
   };
   const pingContract = defineContract("host", {
-    mutate: invoke("pingtest:mutate", z.void(), z.void(), {
+    mutate: invoke("pingtest:mutate", VoidSchema, VoidSchema, {
       remote: true,
       gated: true,
     }),
-    read: invoke("pingtest:read", z.void(), z.void(), {
+    read: invoke("pingtest:read", VoidSchema, VoidSchema, {
       remote: true,
       gated: false,
     }),
-    failMutate: invoke("pingtest:failMutate", z.void(), z.void(), {
+    failMutate: invoke("pingtest:failMutate", VoidSchema, VoidSchema, {
       remote: true,
       gated: true,
     }),
     // A command whose effects are invisible to remote viewers, the
     // forward-verb shape: still grant-gated, never pinged.
-    shuttle: invoke("pingtest:shuttle", z.void(), z.void(), {
+    shuttle: invoke("pingtest:shuttle", VoidSchema, VoidSchema, {
       remote: true,
       gated: true,
       movesHostState: false,

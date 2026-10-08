@@ -321,7 +321,7 @@ export type SyncPullProgress = typeof SyncPullProgressSchema.Type;
 // The "files" step's outcome. crossed:false with the reason means the
 // ignored files are still only on the source. conflicts counts the
 // paths both sides held differently, which keep this side's version.
-export const SyncPullFilesSchema = strict(
+const SyncPullFilesSchema = strict(
   Schema.Struct({
     crossed: Schema.Boolean,
     conflicts: Schema.Natural,

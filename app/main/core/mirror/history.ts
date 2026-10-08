@@ -49,8 +49,8 @@ function gitTroubled(
 }
 
 export type MirrorHistoryStore = {
-  load: () => Record<string, MirrorEvent[]>;
-  save: (events: Record<string, MirrorEvent[]>) => void;
+  load: () => Record<string, readonly MirrorEvent[]>;
+  save: (events: Record<string, readonly MirrorEvent[]>) => void;
 };
 
 export function createMirrorHistory(deps: {
@@ -59,7 +59,7 @@ export function createMirrorHistory(deps: {
   onChange?: () => void;
 }) {
   const now = deps.now ?? Date.now;
-  let events: Record<string, MirrorEvent[]> | null = null;
+  let events: Record<string, readonly MirrorEvent[]> | null = null;
   const seen = new Map<string, Seen>();
   // Writes are coalesced to one per turn: an observe pass can note
   // several events off one snapshot, and the save rewrites the file.
@@ -79,7 +79,7 @@ export function createMirrorHistory(deps: {
     });
   }
 
-  function all(): Record<string, MirrorEvent[]> {
+  function all(): Record<string, readonly MirrorEvent[]> {
     if (events === null) {
       try {
         events = deps.store.load();
@@ -114,8 +114,10 @@ export function createMirrorHistory(deps: {
     }
     // Newest first, so the page reads top-down and the cap drops the
     // oldest.
-    thread.unshift({ at: now(), kind, detail });
-    store[localWorktreeId] = thread.slice(0, MIRROR_HISTORY_LIMIT);
+    store[localWorktreeId] = [{ at: now(), kind, detail }, ...thread].slice(
+      0,
+      MIRROR_HISTORY_LIMIT,
+    );
     queueFlush();
   }
 
@@ -231,7 +233,7 @@ export function createMirrorHistory(deps: {
     forget,
     move,
     observe,
-    eventsFor: (localWorktreeId: string): MirrorEvent[] =>
+    eventsFor: (localWorktreeId: string): readonly MirrorEvent[] =>
       all()[localWorktreeId] ?? [],
   };
 }
