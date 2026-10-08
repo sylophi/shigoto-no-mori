@@ -16,6 +16,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Darwin from "./Darwin.ts";
+import { entryExists } from "./entries.ts";
 import * as Git from "./Git.ts";
 
 export type CarryOverEntry = {
@@ -106,7 +107,7 @@ const overlap = (a: string, b: string) =>
 
 // The project's entries win over included ones that collide or overlap
 // with them.
-export const mergeCarryOver = (
+const mergeCarryOver = (
   manual: ReadonlyArray<CarryOverEntry>,
   include: ReadonlyArray<CarryOverEntry>,
 ): ReadonlyArray<CarryOverEntry> => {
@@ -137,7 +138,7 @@ const ignoreMatcher = (paths: ReadonlyArray<string>) => {
 // Where entries are looked up, in order: the checkout on the base
 // branch (its ignored files are the ones a branch from it expects), the
 // primary, then the rest by name. The destination is never a source.
-export const orderSources = (
+const orderSources = (
   checkouts: ReadonlyArray<Source>,
   destination: string,
   baseBranch: string,
@@ -163,12 +164,7 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-  const exists = (file: string) =>
-    fs.readLink(file).pipe(
-      Effect.as(true),
-      Effect.catch(() => fs.exists(file)),
-      Effect.orElseSucceed(() => false),
-    );
+  const exists = (file: string) => entryExists(fs, file);
 
   // What a checkout's .worktreeinclude names among its gitignored files,
   // always copied. None when the file isn't there.
@@ -235,21 +231,12 @@ const make = Effect.gen(function* () {
       yield* fs
         .remove(to, { recursive: true, force: true })
         .pipe(Effect.mapError((error) => error.message));
-      const handle = yield* spawner
-        .spawn(ChildProcess.make("cp", ["-R", "-P", from, to]))
+      yield* spawner
+        .string(ChildProcess.make("cp", ["-R", "-P", from, to]), {
+          includeStderr: true,
+        })
         .pipe(Effect.mapError((error) => error.message));
-      const said = yield* handle.all.pipe(
-        Stream.decodeText(),
-        Stream.mkString,
-        Effect.orElseSucceed(() => ""),
-      );
-      const code = yield* handle.exitCode.pipe(
-        Effect.mapError((error) => error.message),
-      );
-      if (code !== 0) {
-        return yield* Effect.fail(said.trim() || `cp exited with ${code}`);
-      }
-    }).pipe(Effect.scoped);
+    });
 
   // The entry from the first source that has it. Answers the failure,
   // the path to hide from git (a directory symlink), and the source.

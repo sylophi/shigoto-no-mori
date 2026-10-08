@@ -421,15 +421,12 @@ const make = Effect.gen(function* () {
             WHERE id = ${projectId}`;
           // In the project's own place, and only there: the new path may
           // already hold one (kept for a terrier row, say).
-          const stored = yield* order;
-          if (stored.includes(project.path)) {
-            const next = stored.flatMap((entry) =>
-              entry === project.path ? [path] : entry === path ? [] : [entry],
-            );
-            yield* sql`DELETE FROM project_order`;
-            yield* sql`INSERT INTO project_order ${sql.insert(
-              next.map((entry, position) => ({ path: entry, position })),
-            )}`;
+          const [placed] = yield* sql`
+            SELECT 1 FROM project_order WHERE path = ${project.path}`;
+          if (placed) {
+            yield* sql`DELETE FROM project_order WHERE path = ${path}`;
+            yield* sql`UPDATE project_order SET path = ${path}
+              WHERE path = ${project.path}`;
           }
           yield* sql`DELETE FROM icon_cache WHERE project_path = ${project.path}`;
           return { id: projectId, name, path };

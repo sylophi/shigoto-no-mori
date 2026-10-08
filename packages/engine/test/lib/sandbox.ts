@@ -75,37 +75,46 @@ const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
 let built: string | undefined;
 
 export function goSm(): string {
-  built ??= buildGoSm();
+  built ??= buildGo(
+    cliDir,
+    "sm",
+    (file) =>
+      file.startsWith("embed/") ||
+      file === "go.mod" ||
+      file === "go.sum" ||
+      (file.endsWith(".go") &&
+        !file.endsWith("_test.go") &&
+        !file.includes("/")),
+  );
   return built;
 }
 
-function buildGoSm(): string {
+// A Go program built from `dir` into a folder named for the hash of its
+// sources (the files `include` takes), so a build is reused until they
+// change.
+function buildGo(
+  dir: string,
+  name: string,
+  include: (file: string) => boolean,
+): string {
   const hash = createHash("sha256");
-  for (const rel of readdirSync(cliDir, { recursive: true })
+  for (const rel of readdirSync(dir, { recursive: true })
     .map(String)
-    .filter(
-      (file) =>
-        file.startsWith("embed/") ||
-        file === "go.mod" ||
-        file === "go.sum" ||
-        (file.endsWith(".go") &&
-          !file.endsWith("_test.go") &&
-          !file.includes("/")),
-    )
+    .filter(include)
     .toSorted()) {
     hash.update(`${rel}\0`);
-    hash.update(readFileSync(join(cliDir, rel)));
+    hash.update(readFileSync(join(dir, rel)));
   }
   const binary = join(
     tmpdir(),
-    `sm-parity-${hash.digest("hex").slice(0, 16)}`,
-    "sm",
+    `${name}-parity-${hash.digest("hex").slice(0, 16)}`,
+    name,
   );
   if (existsSync(binary)) return binary;
   mkdirSync(dirname(binary), { recursive: true });
   const partial = `${binary}.${process.pid}`;
   execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
-    cwd: cliDir,
+    cwd: dir,
     env: childEnv(),
     stdio: ["ignore", "ignore", "inherit"],
   });
@@ -140,47 +149,34 @@ const messageOf = (error: unknown) =>
       ? error.message
       : String(error);
 
+// Copies `names` from one folder to another as they are, links and
+// times included: worktrees name their repo by absolute path.
+const copyAll = (from: string, to: string, names: ReadonlyArray<string>) => {
+  for (const name of names) {
+    cpSync(join(from, name), join(to, name), {
+      recursive: true,
+      verbatimSymlinks: true,
+      preserveTimestamps: true,
+    });
+  }
+};
+
 // The darwin helper as macfs/ is now, built once per state of its
 // sources, for the Darwin service.
 let macfsBuilt: string | undefined;
 
 function macfs(): string {
-  macfsBuilt ??= buildFrom(
+  macfsBuilt ??= buildGo(
     join(cliDir, "..", "macfs"),
     "macfs",
     (file) =>
       file === "go.mod" ||
       file === "go.sum" ||
-      (file.endsWith(".go") && !file.endsWith("_test.go")),
+      (file.endsWith(".go") &&
+        !file.endsWith("_test.go") &&
+        !file.includes("/")),
   );
   return macfsBuilt;
-}
-
-function buildFrom(
-  dir: string,
-  name: string,
-  include: (file: string) => boolean,
-): string {
-  const hash = createHash("sha256");
-  for (const rel of readdirSync(dir).filter(include).toSorted()) {
-    hash.update(`${rel}\0`);
-    hash.update(readFileSync(join(dir, rel)));
-  }
-  const binary = join(
-    tmpdir(),
-    `${name}-parity-${hash.digest("hex").slice(0, 16)}`,
-    name,
-  );
-  if (existsSync(binary)) return binary;
-  mkdirSync(dirname(binary), { recursive: true });
-  const partial = `${binary}.${process.pid}`;
-  execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
-    cwd: dir,
-    env: childEnv(),
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-  renameSync(partial, binary);
-  return binary;
 }
 
 export type Sandbox = {
@@ -320,24 +316,12 @@ export function sandbox(): Sandbox {
     changeBoth: async (goSide, engineSide) => {
       rmSync(before, { recursive: true, force: true });
       mkdirSync(before);
-      for (const name of shared()) {
-        cpSync(join(root, name), join(before, name), {
-          recursive: true,
-          verbatimSymlinks: true,
-          preserveTimestamps: true,
-        });
-      }
+      copyAll(root, before, shared());
       const go = await goSide();
       for (const name of shared()) {
         rmSync(join(root, name), { recursive: true, force: true });
       }
-      for (const name of readdirSync(before)) {
-        cpSync(join(before, name), join(root, name), {
-          recursive: true,
-          verbatimSymlinks: true,
-          preserveTimestamps: true,
-        });
-      }
+      copyAll(before, root, readdirSync(before));
       return [go, await engineSide()];
     },
     git: (cwd, ...args) =>

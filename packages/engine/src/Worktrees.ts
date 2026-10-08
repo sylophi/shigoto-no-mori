@@ -37,6 +37,7 @@ import { splitRemoteRef } from "./gitParse.ts";
 import * as Layout from "./Layout.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import { shellQuote } from "./Lifecycle.ts";
+import { entryExists } from "./entries.ts";
 import { pickWorktreeName } from "./names.ts";
 import * as Paths from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
@@ -795,6 +796,16 @@ const nonEmpty = <K extends string, V extends string | number>(
   (value === "" || value === 0 ? {} : { [key]: value }) as {
     readonly [P in K]?: V;
   };
+
+// A project's setup or teardown script, empty when it has none.
+const scriptOf = (
+  settings: Readonly<Record<string, unknown>> | null,
+  key: "setup" | "teardown",
+) => {
+  const scripts = settings?.["scripts"];
+  const value = Predicate.isObject(scripts) ? scripts[key] : undefined;
+  return typeof value === "string" ? value.trim() : "";
+};
 
 const NO_CHANGES = {
   staged: 0,
@@ -1831,13 +1842,7 @@ const make = Effect.gen(function* () {
           )
         : Effect.void;
 
-  // Whether anything is at the path, a dangling symlink included.
-  const occupied = (file: string) =>
-    fs.readLink(file).pipe(
-      Effect.as(true),
-      Effect.catch(() => fs.exists(file)),
-      Effect.orElseSucceed(() => false),
-    );
+  const occupied = (file: string) => entryExists(fs, file);
 
   const destination = Effect.fn("Worktrees.destination")(function* (
     project: RegisteredProject,
@@ -1854,14 +1859,20 @@ const make = Effect.gen(function* () {
   });
 
   // What a script is told about the worktree it runs in.
+  // `found` is the project's checkouts, when the caller has them.
   const scriptContext = (
     project: RegisteredProject,
     worktree: WorktreeIdentity,
+    found?: ReadonlyArray<WorktreeIdentity>,
   ) =>
     Effect.gen(function* () {
-      const [found, primary, described] = yield* Effect.all(
+      const [listed, primary, described] = yield* Effect.all(
         [
-          identities(project).pipe(Effect.orElseSucceed(() => [])),
+          found === undefined
+            ? identities(project).pipe(
+                Effect.orElseSucceed((): ReadonlyArray<WorktreeIdentity> => []),
+              )
+            : Effect.succeed(found),
           primaryRefOf(project),
           descriptionOf(worktree),
         ],
@@ -1870,11 +1881,44 @@ const make = Effect.gen(function* () {
       return {
         project,
         worktree,
-        projectBranch: found.find((id) => id.isPrimary)?.branch ?? "",
+        projectBranch: listed.find((id) => id.isPrimary)?.branch ?? "",
         defaultBranch: primary.primaryRef,
         title: described.title,
         description: described.description,
       };
+    });
+
+  const runScript = (
+    context: Lifecycle.ScriptContext,
+    reporter: Reporter,
+    command: string,
+    slot: LifecycleSlot,
+  ) =>
+    lifecycle.run({
+      command,
+      slot,
+      context,
+      color: reporter.color,
+      report: reporter.report,
+    });
+
+  // Whether port-pool provisions and releases this worktree: the device
+  // setting is on, port-pool is installed, the worktree is configured for
+  // it, and the app made the worktree (no provision ever ran for an
+  // external one, so none is released either).
+  const portPoolActive = (worktree: WorktreeIdentity) =>
+    Effect.gen(function* () {
+      if (worktree.isExternal || !(yield* deviceFlag("portPool"))) return false;
+      const installed = yield* findExecutable("port-pool").pipe(
+        Effect.map(Option.isSome),
+        Effect.provideContext(platform),
+      );
+      return (
+        installed &&
+        parsePortPoolConfig(
+          yield* readOptional(path.join(worktree.path, PORT_POOL_CONFIG)),
+        ).configured
+      );
     });
 
   // The setup script, then port-pool's provision (never for an external
@@ -1886,20 +1930,15 @@ const make = Effect.gen(function* () {
     settings: Readonly<Record<string, unknown>> | null,
     skipSetup: boolean,
     reporter: Reporter,
+    found?: ReadonlyArray<WorktreeIdentity>,
   ) =>
     Effect.gen(function* () {
       const failures: Lifecycle.ScriptFailure[] = [];
       const ran: string[] = [];
-      const scripts = settings?.["scripts"];
-      const setup =
-        skipSetup ||
-        !Predicate.isObject(scripts) ||
-        typeof scripts["setup"] !== "string"
-          ? ""
-          : scripts["setup"].trim();
-      const pool = yield* lifecycle.portPoolActive(worktree);
+      const setup = skipSetup ? "" : scriptOf(settings, "setup");
+      const pool = yield* portPoolActive(worktree);
       if (setup === "" && !pool) return { failures, ran };
-      const context = yield* scriptContext(project, worktree);
+      const context = yield* scriptContext(project, worktree, found);
       const step = (
         name: string,
         phase: Lifecycle.Phase,
@@ -1909,13 +1948,7 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           yield* reporter.report({ event: "phase", phase });
           ran.push(name);
-          const { code } = yield* lifecycle.run({
-            command,
-            slot,
-            context,
-            color: reporter.color,
-            report: reporter.report,
-          });
+          const { code } = yield* runScript(context, reporter, command, slot);
           if (code !== 0) failures.push({ step: name, exitCode: code });
         });
       if (setup !== "") yield* step("setup", "setup", setup, { kind: "setup" });
@@ -1936,15 +1969,13 @@ const make = Effect.gen(function* () {
   const createLifecycle = (
     project: RegisteredProject,
     worktree: WorktreeIdentity,
+    checkouts: ReadonlyArray<WorktreeIdentity>,
     base: string,
     skipSetup: boolean,
     reporter: Reporter,
   ) =>
     Effect.gen(function* () {
       const { settings } = yield* projectSettings(project);
-      const checkouts = yield* identities(project).pipe(
-        Effect.orElseSucceed(() => []),
-      );
       const carried = yield* carryOver.apply({
         repo: project.path,
         settings,
@@ -1962,6 +1993,7 @@ const make = Effect.gen(function* () {
         settings,
         skipSetup,
         reporter,
+        checkouts,
       );
       yield* reporter.report({ event: "phase", phase: "idle" });
       return failures;
@@ -1981,6 +2013,12 @@ const make = Effect.gen(function* () {
     },
   ) =>
     Effect.gen(function* () {
+      if (input.checkout && input.base === "") {
+        return yield* new WorktreeRefused({
+          reason: "checkout-needs-base",
+          subject: "",
+        });
+      }
       const used = namesUsed(yield* identities(project));
       if (input.name !== "" && used.has(input.name.toLowerCase())) {
         return yield* new WorktreeRefused({
@@ -2017,12 +2055,6 @@ const make = Effect.gen(function* () {
       yield* fs
         .makeDirectory(path.dirname(place), { recursive: true })
         .pipe(Effect.orDie);
-      if (input.checkout && input.base === "") {
-        return yield* new WorktreeRefused({
-          reason: "checkout-needs-base",
-          subject: "",
-        });
-      }
       if (input.checkout) {
         yield* git.checkoutWorktree({
           repo: project.path,
@@ -2038,14 +2070,15 @@ const make = Effect.gen(function* () {
           base: input.base === "" ? undefined : input.base,
         });
       }
-      const made = (yield* identities(project)).find((id) => id.path === place);
+      const found = yield* identities(project);
+      const made = found.find((id) => id.path === place);
       if (!made) {
         return yield* new WorktreeRefused({
           reason: "vanished",
           subject: place,
         });
       }
-      return made;
+      return { made, found };
     });
 
   const create = Effect.fn("Worktrees.create")(function* (
@@ -2062,7 +2095,7 @@ const make = Effect.gen(function* () {
   ) {
     const name = input.name ?? "";
     yield* checkName(name);
-    const made = yield* addWorktree(project, {
+    const { made, found } = yield* addWorktree(project, {
       name,
       branch: input.branch ?? "",
       base: input.base ?? "",
@@ -2084,6 +2117,7 @@ const make = Effect.gen(function* () {
     const failures = yield* createLifecycle(
       project,
       made,
+      found,
       input.base ?? "",
       input.skipSetup ?? false,
       reporter,
@@ -2103,28 +2137,19 @@ const make = Effect.gen(function* () {
     force
       ? Effect.void
       : git.changedCount(worktree.path).pipe(
-          Effect.catchTags({
-            GitCommandError: (cause) =>
-              Effect.fail(
-                new DirtyWorktree({
-                  reason: "unreadable",
-                  count: 0,
-                  verb,
-                  destroys,
-                  cause: new Error(Git.stderrOf(cause)),
-                }),
-              ),
-            GitOutputTooLargeError: (cause) =>
-              Effect.fail(
-                new DirtyWorktree({
-                  reason: "unreadable",
-                  count: 0,
-                  verb,
-                  destroys,
-                  cause,
-                }),
-              ),
-          }),
+          Effect.mapError(
+            (cause) =>
+              new DirtyWorktree({
+                reason: "unreadable",
+                count: 0,
+                verb,
+                destroys,
+                cause:
+                  cause instanceof Git.GitCommandError
+                    ? new Error(Git.stderrOf(cause))
+                    : cause,
+              }),
+          ),
           Effect.flatMap((count) =>
             count === 0
               ? Effect.void
@@ -2276,12 +2301,8 @@ const make = Effect.gen(function* () {
     let cleanupRan = false;
     if (!worktree.isExternal && !options.skipCleanup) {
       const { settings } = yield* projectSettings(project);
-      const scripts = settings?.["scripts"];
-      const teardown =
-        Predicate.isObject(scripts) && typeof scripts["teardown"] === "string"
-          ? scripts["teardown"].trim()
-          : "";
-      const pool = yield* lifecycle.portPoolActive(worktree);
+      const teardown = scriptOf(settings, "teardown");
+      const pool = yield* portPoolActive(worktree);
       if (pool || teardown !== "") {
         const context = yield* scriptContext(project, worktree);
         const cleanup = (
@@ -2289,23 +2310,15 @@ const make = Effect.gen(function* () {
           command: string,
           slot: LifecycleSlot,
         ) =>
-          lifecycle
-            .run({
-              command,
-              slot,
-              context,
-              color: reporter.color,
-              report: reporter.report,
-            })
-            .pipe(
-              Effect.flatMap(({ code, runId }) =>
-                code === 0
-                  ? Effect.void
-                  : Effect.fail(
-                      new CleanupFailed({ phase, exitCode: code, runId }),
-                    ),
-              ),
-            );
+          runScript(context, reporter, command, slot).pipe(
+            Effect.flatMap(({ code, runId }) =>
+              code === 0
+                ? Effect.void
+                : Effect.fail(
+                    new CleanupFailed({ phase, exitCode: code, runId }),
+                  ),
+            ),
+          );
         cleanupRan = true;
         if (pool) {
           yield* cleanup(
@@ -2541,7 +2554,7 @@ const make = Effect.gen(function* () {
     yield* removeCheckout(project.path, worktree.path, true);
     yield* registry.setMark("shelved", worktree.id, false);
     yield* registry.setMark("agentWorking", worktree.id, false);
-    const made = yield* addWorktree(project, {
+    const { made, found } = yield* addWorktree(project, {
       name,
       branch: "",
       base: worktree.branch,
@@ -2553,7 +2566,14 @@ const make = Effect.gen(function* () {
     }
     const adopted = yield* row({ project, worktree: made });
     yield* reporter.report({ event: "created", worktree: adopted });
-    const failures = yield* createLifecycle(project, made, "", false, reporter);
+    const failures = yield* createLifecycle(
+      project,
+      made,
+      found,
+      "",
+      false,
+      reporter,
+    );
     return { worktree: adopted, failures };
   });
 
@@ -2629,12 +2649,20 @@ const make = Effect.gen(function* () {
       yield* git
         .run(project.path, ["worktree", "repair", "--", ...moved.values()])
         .pipe(Effect.ignore);
+      const found = yield* identities(project).pipe(
+        Effect.orElseSucceed((): ReadonlyArray<WorktreeIdentity> => []),
+      );
       for (const [oldPath, newPath] of moved) {
-        const now = yield* findMoved(project, newPath).pipe(Effect.option);
-        if (Option.isNone(now)) continue;
+        const resolved = yield* fs
+          .realPath(newPath)
+          .pipe(Effect.orElseSucceed(() => ""));
+        const now = found.find(
+          (id) =>
+            id.path === newPath || (resolved !== "" && id.path === resolved),
+        );
+        if (now === undefined) continue;
         const from = worktreeIdFromPath(oldPath);
-        if (from !== now.value.id)
-          yield* rekeyWorktree(project, from, now.value.id);
+        if (from !== now.id) yield* rekeyWorktree(project, from, now.id);
       }
     });
 

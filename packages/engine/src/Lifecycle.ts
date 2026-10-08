@@ -13,17 +13,11 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as ConfigService from "./Config.ts";
-import { findExecutable } from "./executables.ts";
-import { parsePortPoolConfig, PORT_POOL_CONFIG } from "./ports.ts";
 
 // Where a lifecycle step stands, as `sm --json` reports it.
 export type Phase = "carryOver" | "setup" | "portPoolProvision" | "idle";
@@ -66,13 +60,21 @@ export type ScriptContext = {
   readonly description: string;
 };
 
+// One script to run in a worktree. `color` asks for truecolor output,
+// for a run the app's console shows.
+type RunInput = {
+  readonly command: string;
+  readonly slot: LifecycleSlot;
+  readonly context: ScriptContext;
+  readonly color: boolean;
+  readonly report: Report;
+};
+
 export class Lifecycle extends Context.Service<
   Lifecycle,
   {
     // Runs one script to its end, reporting it, and answers its exit
     // code (null when it never ran or died to a signal) and its run id.
-    // `color` asks for truecolor output, for a run the app's console
-    // shows.
     readonly run: (input: {
       readonly command: string;
       readonly slot: LifecycleSlot;
@@ -83,14 +85,6 @@ export class Lifecycle extends Context.Service<
       readonly code: number | null;
       readonly runId: string;
     }>;
-    // Whether port-pool provisions and releases this worktree: the device
-    // setting is on, port-pool is installed, the worktree is configured
-    // for it, and the app made the worktree (no provision ever ran for an
-    // external one, so none is released either).
-    readonly portPoolActive: (worktree: {
-      readonly path: string;
-      readonly isExternal: boolean;
-    }) => Effect.Effect<boolean>;
   }
 >()("sm/engine/Lifecycle") {}
 
@@ -123,10 +117,6 @@ const decoder = new TextDecoder();
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const crypto = yield* Crypto.Crypto;
-  const config = yield* ConfigService.Config;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
   // The user's login shell, run as one (no -i) so .zprofile sets PATH up
   // without zsh's interactive init. $SHELL first, then the account
@@ -155,13 +145,7 @@ const make = Effect.gen(function* () {
     }),
   );
 
-  const run = Effect.fn("Lifecycle.run")(function* (input: {
-    readonly command: string;
-    readonly slot: LifecycleSlot;
-    readonly context: ScriptContext;
-    readonly color: boolean;
-    readonly report: Report;
-  }) {
+  const run = Effect.fn("Lifecycle.run")(function* (input: RunInput) {
     const { context, slot, report } = input;
     const runId = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
     const script = (event: ScriptEvent) =>
@@ -250,32 +234,7 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const portPoolActive = Effect.fn("Lifecycle.portPoolActive")(
-    function* (worktree: {
-      readonly path: string;
-      readonly isExternal: boolean;
-    }) {
-      if (worktree.isExternal) return false;
-      const enabled = yield* config.get({ kind: "device" }, "portPool").pipe(
-        Effect.map((setting) => setting.value === true),
-        Effect.orElseSucceed(() => false),
-      );
-      if (!enabled) return false;
-      const installed = yield* findExecutable("port-pool").pipe(
-        Effect.map(Option.isSome),
-        Effect.provideContext(platform),
-      );
-      if (!installed) return false;
-      return yield* fs
-        .readFileString(path.join(worktree.path, PORT_POOL_CONFIG))
-        .pipe(
-          Effect.map((text) => parsePortPoolConfig(text).configured),
-          Effect.orElseSucceed(() => false),
-        );
-    },
-  );
-
-  return Lifecycle.of({ run, portPoolActive });
+  return Lifecycle.of({ run });
 });
 
 export const layer = Layer.effect(Lifecycle, make);
