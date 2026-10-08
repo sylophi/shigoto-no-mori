@@ -17,7 +17,7 @@ export function BranchBar({ worktree }: { worktree: Worktree }) {
   return (
     <div
       data-slot="branch-bar"
-      className="flex min-h-9 items-center gap-2 px-3 py-1"
+      className="flex min-h-8 items-center gap-2 px-3 py-0.5"
     >
       <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
         <Icon

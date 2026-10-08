@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { GitCommitHorizontal, Loader2, PencilLine, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -48,6 +48,9 @@ export function CommitComposer({
   onCommit: () => void;
 }) {
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  // The description sits one line tall, as tall as what it holds, until
+  // it is being written in: the sidebar's height goes to the files.
+  const [writing, setWriting] = useState(false);
   const included = includedFiles(files).length;
   const conflicted = files.filter((file) => file.conflicted).length;
   const summary = draft.summary.trim();
@@ -116,7 +119,17 @@ export function CommitComposer({
   const overLimit = left < 0;
 
   return (
-    <div data-slot="commit-composer" className="flex flex-col gap-2 px-3 pb-3">
+    <div
+      data-slot="commit-composer"
+      className="flex flex-col gap-1.5 px-3 pb-2.5"
+      // The description folds back once focus leaves the box, not when
+      // it leaves the field: a click on Commit takes focus to the
+      // button, and the box shrinking under the pointer mid-click would
+      // move the button out from under it.
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setWriting(false);
+      }}
+    >
       {amend && (
         <div className="flex items-center gap-1.5 rounded-md bg-amber-500/10 py-1 pr-1 pl-2 text-xs">
           <PencilLine
@@ -178,11 +191,15 @@ export function CommitComposer({
           onDraftChange({ ...draft, description: e.target.value })
         }
         onKeyDown={onKeyDown}
+        onFocus={() => setWriting(true)}
         placeholder="Description"
         aria-label="Commit description"
-        rows={3}
+        rows={1}
         disabled={pending}
-        className="[field-sizing:content] max-h-48 min-h-16 w-full resize-none px-2.5 py-1.5 text-xs"
+        className={cn(
+          "[field-sizing:content] max-h-48 w-full resize-none px-2.5 py-1.5 text-xs transition-[min-height]",
+          writing ? "min-h-20" : "min-h-0",
+        )}
       />
       {conflicted > 0 && (
         <p className="text-xs text-amber-500">

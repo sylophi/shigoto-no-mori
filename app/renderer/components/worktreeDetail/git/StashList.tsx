@@ -20,7 +20,7 @@ export function StashList({
   const { data: stashes = [] } = useWorktreeStashes(worktree);
   if (stashes.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-0.5 px-1.5 py-1.5">
+    <ul className="flex flex-col gap-0.5 px-1.5 pt-1">
       {stashes.map((stash) => {
         const picked = stash.hash === selected;
         return (
