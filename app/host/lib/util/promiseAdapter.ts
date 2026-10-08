@@ -17,7 +17,12 @@ export const make = <I>(name: string) => {
   const layer = Layer.effectDiscard(
     Effect.acquireRelease(
       Effect.context<I>().pipe(
-        Effect.tap((ctx) => Effect.sync(() => open(ctx))),
+        Effect.tap((ctx) =>
+          Effect.sync(() => {
+            open(ctx);
+            context = Promise.resolve(ctx);
+          }),
+        ),
       ),
       () =>
         Effect.sync(() => {

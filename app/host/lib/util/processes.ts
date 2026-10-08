@@ -44,8 +44,9 @@ export class CommandError extends Schema.TaggedError<CommandError>()(
 export const isCommandError = Schema.is(CommandError);
 
 // What the command wrote to stderr, for a caller that relays it.
+// Only a command that exited carries it.
 export const stderrOf = (error: CommandError): string =>
-  error.cause instanceof Error && error.reason === "failed"
+  error.exitCode !== null && error.cause instanceof Error
     ? error.cause.message
     : "";
 

@@ -208,6 +208,19 @@ if (existsSync(ZSH)) {
     );
   });
 
+  it("a shell that exits early is a failed capture, whoever holds stdout", async () => {
+    // The startup file leaves a child holding stdout, then ends the
+    // shell before env runs: no END will come, and no EOF either.
+    rc(["(sleep 2 &)", "exit 3"]);
+    started = Date.now();
+    const early = await capture(base);
+    assert.equal(early, null);
+    assert.ok(
+      Date.now() - started < 1500,
+      "the capture waited for the orphan's stdout instead of the shell's exit",
+    );
+  });
+
   it("a hanging startup file is a failed capture, on time", async () => {
     // A startup file that hangs. Interactive zsh ignores SIGTERM, so
     // this is also the proof the timeout really ends the shell.

@@ -83,6 +83,9 @@ const MAX_OUTPUT = 4 * 1024 * 1024;
 // Past it the app runs on the Finder-launch environment.
 export const CAPTURE_TIMEOUT_MS = 5000;
 
+// How long output may trail the shell's exit.
+const EXIT_GRACE_MS = 250;
+
 // The user's login shell, from the user database first: $SHELL is
 // whatever the launcher had.
 export function loginShell(launchEnv: NodeJS.ProcessEnv): string | null {
@@ -167,7 +170,7 @@ export const captureShellEnv = (
         },
       ),
     );
-    const output = yield* handle.stdout.pipe(
+    const read = handle.stdout.pipe(
       Stream.decodeText(),
       Stream.scan(
         () => "",
@@ -178,6 +181,15 @@ export const captureShellEnv = (
       ),
       Stream.runLast,
     );
+    // A shell that exits without END may have left a child holding the
+    // pipe open, so its exit settles the capture, after a moment for
+    // the last of its output.
+    const exited = handle.exitCode.pipe(
+      Effect.ignore,
+      Effect.andThen(Effect.sleep(EXIT_GRACE_MS)),
+      Effect.as(Option.none<string>()),
+    );
+    const output = yield* Effect.raceFirst(read, exited);
     return Option.getOrElse(output, () => "");
   }).pipe(
     Effect.scoped,
