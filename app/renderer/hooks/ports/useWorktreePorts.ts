@@ -21,7 +21,11 @@ export function useWorktreePorts(worktree: { projectId: string; id: string }) {
   const { api, keys } = useHostScope();
   return useQuery<WorktreePortsResult>({
     queryKey: keys.worktreePorts(worktree.projectId, worktree.id),
-    queryFn: () => api.ports.list(worktree.projectId, worktree.id),
+    queryFn: () =>
+      api.ports.list({
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+      }),
     refetchInterval: (query) =>
       query.state.data?.ports.length ? PORTS_POLL_MS : EMPTY_POLL_MS,
     // An unreachable peer fails every poll: retrying three times per

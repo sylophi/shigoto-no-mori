@@ -49,7 +49,7 @@ export function DataLocationSection() {
   const moveTo = async (parent?: string) => {
     setMoving(true);
     try {
-      await api.runtime.moveDataDir(parent);
+      await api.runtime.moveDataDir({ parentDir: parent });
       if (remote) {
         toast.success(`Data folder moved. The app${there} is restarting.`);
         setMovedFrom(root);
@@ -107,7 +107,7 @@ export function DataLocationSection() {
             onClick={() => {
               if (root) {
                 window.api.shell
-                  .showItemInFolder(root)
+                  .showItemInFolder({ path: root })
                   .catch((err) => notifyError("Couldn't reveal folder", err));
               }
             }}

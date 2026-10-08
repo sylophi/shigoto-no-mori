@@ -363,7 +363,7 @@ export function createSharedSettingsCopy(
 // The two calls an exchange needs of a copy, local or a peer's.
 export type SharedSettingsEndpoint = {
   read(): Promise<SharedSettingsDoc>;
-  merge(doc: SharedSettingsDoc): Promise<SharedSettingsDoc>;
+  merge(input: { doc: SharedSettingsDoc }): Promise<SharedSettingsDoc>;
 };
 
 // One exchange with a peer: take what it holds, then offer back what
@@ -374,7 +374,7 @@ export async function exchangeSharedSettings(
   theirs: SharedSettingsEndpoint,
 ): Promise<void> {
   const held = await theirs.read();
-  const merged = await mine.merge(held);
+  const merged = await mine.merge({ doc: held });
   const ahead = sharedSettingsAhead(merged, held);
-  if (Object.keys(ahead.entries).length > 0) await theirs.merge(ahead);
+  if (Object.keys(ahead.entries).length > 0) await theirs.merge({ doc: ahead });
 }

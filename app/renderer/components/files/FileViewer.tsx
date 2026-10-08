@@ -62,7 +62,7 @@ export function FileViewer({
           <IconButton
             onClick={() => {
               window.api.shell
-                .showItemInFolder(`${revealRoot}/${path}`)
+                .showItemInFolder({ path: `${revealRoot}/${path}` })
                 .catch((err: unknown) =>
                   notifyError("Couldn't reveal the file", err),
                 );

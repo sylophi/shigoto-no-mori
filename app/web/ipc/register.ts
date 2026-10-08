@@ -20,7 +20,7 @@
 import { logFailure } from "@shigomori/contracts/errors";
 import { singleFlight } from "@shared/util/singleFlight";
 import { createAccountService } from "@shared/account/service";
-import { buildApi } from "@shared/ipc/client";
+import { buildApi, type RendererContractApi } from "@shared/ipc/client";
 import {
   accountContract,
   type AccountStatus,
@@ -92,7 +92,7 @@ export type WebBridge = {
     clerkPublishableKey: string;
     isDev: boolean;
     isElectron: boolean;
-  } & ReturnType<typeof buildApi>;
+  } & RendererContractApi;
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so

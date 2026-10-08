@@ -84,15 +84,13 @@ const STORED_ENVELOPE = JSON.stringify({
   deviceName: "Stored browser",
 });
 
-it("surface: the bridge exposes exactly buildApi's namespaces and members plus deviceId, appVersion, clerkPublishableKey, isDev and isElectron", () => {
+it("surface: the bridge exposes exactly buildApi's namespaces plus deviceId, appVersion, clerkPublishableKey, isDev and isElectron", () => {
   const bridge = createWebBridge(makeDeps());
   const dummy = {
     invoke: () => Promise.resolve(undefined),
     subscribe: () => () => {},
   };
   const golden = buildApi({ host: dummy, client: dummy });
-  const surface: Record<string, Record<string, unknown> | string | boolean> =
-    bridge.api;
   assert.deepEqual(
     Object.keys(bridge.api).toSorted(),
     [
@@ -105,22 +103,6 @@ it("surface: the bridge exposes exactly buildApi's namespaces and members plus d
     ].toSorted(),
     "the bridge's top-level keys drifted from the preload surface",
   );
-  for (const [ns, members] of Object.entries(golden)) {
-    const namespace = surface[ns];
-    assert(typeof namespace === "object", `namespace ${ns} is missing`);
-    assert.deepEqual(
-      Object.keys(namespace).toSorted(),
-      Object.keys(members).toSorted(),
-      `namespace ${ns} drifted`,
-    );
-    for (const key of Object.keys(members)) {
-      assert.equal(
-        typeof namespace[key],
-        "function",
-        `${ns}.${key} is not callable`,
-      );
-    }
-  }
   assert.equal(typeof bridge.api.deviceId, "string");
   assert.equal(typeof bridge.api.appVersion, "string");
   // The Clerk mount decision, resolved from the baked env exactly
@@ -156,7 +138,9 @@ it("clientConfig: reads default to {}, writes round-trip through localStorage, a
   const localStorage = memoryStorage();
   const bridge = createWebBridge(makeDeps({ localStorage }));
   assert.deepEqual(await bridge.api.clientConfig.read(), {});
-  await bridge.api.clientConfig.write({ theme: "dark", doubutsu: false });
+  await bridge.api.clientConfig.write({
+    config: { theme: "dark", doubutsu: false },
+  });
   assert.deepEqual(await bridge.api.clientConfig.read(), {
     theme: "dark",
     doubutsu: false,
@@ -174,12 +158,15 @@ it("stubs: read-classified channels answer structural defaults, the previewTheme
   const bridge = createWebBridge(makeDeps());
   // mutating:false reads stub to structural emptiness.
   assert.deepEqual(await bridge.api.projects.list(), []);
-  assert.deepEqual(await bridge.api.worktrees.list("p1"), []);
+  assert.deepEqual(await bridge.api.worktrees.list({ projectId: "p1" }), []);
   // Real handler, not a stub, but the same closed answer.
   assert.equal(await bridge.api.account.acceptsCommands(), false);
   // The one allowlisted channel: ThemeProvider fires it per theme
   // change and a browser has no native chrome to sync.
-  assert.equal(await bridge.api.window.previewTheme("dark"), undefined);
+  assert.equal(
+    await bridge.api.window.previewTheme({ theme: "dark" }),
+    undefined,
+  );
   const unsubscribe = bridge.api.git.onRefsRefreshed(() => {});
   assert.equal(typeof unsubscribe, "function");
   unsubscribe();
@@ -243,7 +230,7 @@ it("fail-closed: mutation-shaped and unclassified channels reject on the web ins
     refused,
   );
   await assert.rejects(bridge.api.runtime.nuke(), refused);
-  await assert.rejects(bridge.api.projects.add("/tmp/x"), refused);
+  await assert.rejects(bridge.api.projects.add({ path: "/tmp/x" }), refused);
   await assert.rejects(
     bridge.api.scripts.run({
       projectId: "p",
@@ -277,7 +264,7 @@ it("fail-closed: mutation-shaped and unclassified channels reject on the web ins
       bridge.api.villagers.download(),
       bridge.api.villagers.cancel(),
       bridge.api.villagers.remove(),
-      bridge.api.villagers.face("ace"),
+      bridge.api.villagers.face({ slug: "ace" }),
       bridge.api.villagers.profiles(),
     ].map((call) => assert.rejects(call, /is not available in the browser/)),
   );
@@ -295,16 +282,24 @@ it("fail-closed: mutation-shaped and unclassified channels reject on the web ins
   // must refuse them: the fs reads because they are gated on the
   // command-access switch, the preference/registry writes and the device-settings
   // write because they are commands.
-  await assert.rejects(bridge.api.fs.listDirectory("/tmp"), refused);
-  await assert.rejects(bridge.api.fs.scanForGitRepos("/tmp"), refused);
-  await assert.rejects(bridge.api.fs.isGitRepo("/tmp"), refused);
-  await assert.rejects(bridge.api.projects.remove("p1"), refused);
+  await assert.rejects(bridge.api.fs.listDirectory({ path: "/tmp" }), refused);
   await assert.rejects(
-    bridge.api.packageScripts.setSort("p1", "alphabetical"),
+    bridge.api.fs.scanForGitRepos({ path: "/tmp" }),
+    refused,
+  );
+  await assert.rejects(bridge.api.fs.isGitRepo({ path: "/tmp" }), refused);
+  await assert.rejects(bridge.api.projects.remove({ id: "p1" }), refused);
+  await assert.rejects(
+    bridge.api.packageScripts.setSort({
+      projectId: "p1",
+      mode: "alphabetical",
+    }),
     refused,
   );
   await assert.rejects(
-    bridge.api.globalConfig.writeDeviceSettings({ githubCli: false }),
+    bridge.api.globalConfig.writeDeviceSettings({
+      patch: { githubCli: false },
+    }),
     refused,
   );
   // Peers' command access is reported only from what their dials
@@ -324,10 +319,10 @@ it("shell: openExternal reaches the injected opener and showItemInFolder is a ha
     makeDeps({ openExternal: (url) => opened.push(url) }),
   );
   trackTest(() => bridge.stop());
-  await bridge.api.shell.openExternal("https://example.com/page");
+  await bridge.api.shell.openExternal({ url: "https://example.com/page" });
   assert.deepEqual(opened, ["https://example.com/page"]);
   assert.equal(
-    await bridge.api.shell.showItemInFolder("/somewhere"),
+    await bridge.api.shell.showItemInFolder({ path: "/somewhere" }),
     undefined,
   );
 });

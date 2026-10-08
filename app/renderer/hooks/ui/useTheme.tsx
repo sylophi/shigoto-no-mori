@@ -72,7 +72,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // the applied theme (including unsaved previews). Non-persisting: the
   // saved value lands through the clientConfig write instead.
   useEffect(() => {
-    void window.api.window.previewTheme(applied);
+    void window.api.window.previewTheme({ theme: applied });
   }, [applied]);
 
   // Mirror the saved value into localStorage so the next launch can paint

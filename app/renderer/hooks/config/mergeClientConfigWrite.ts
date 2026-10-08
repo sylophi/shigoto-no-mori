@@ -22,6 +22,6 @@ export async function mergeClientConfigWrite(
   const current =
     queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig()) ?? {};
   const config: ClientConfig = { ...current, ...patch };
-  await window.api.clientConfig.write(config);
+  await window.api.clientConfig.write({ config });
   return config;
 }

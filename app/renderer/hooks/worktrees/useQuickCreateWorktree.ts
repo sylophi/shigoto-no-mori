@@ -32,7 +32,7 @@ export function useQuickCreateWorktree() {
     if (create.isPending) return false;
     let defaultBranch: string;
     try {
-      defaultBranch = await api.projects.defaultBranch(projectId);
+      defaultBranch = await api.projects.defaultBranch({ projectId });
     } catch (err) {
       notifyError("Couldn't resolve default branch", err);
       return false;

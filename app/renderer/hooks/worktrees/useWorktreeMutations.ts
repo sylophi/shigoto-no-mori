@@ -470,7 +470,8 @@ export function useSetAutoPull() {
     (api, input) => api.worktrees.setAutoPull(input),
     "Couldn't update auto-pull",
     (api, input) => {
-      if (input.autoPull) void api.git.refreshProject(input.projectId);
+      if (input.autoPull)
+        void api.git.refreshProject({ projectId: input.projectId });
     },
   );
 }

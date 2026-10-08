@@ -16,7 +16,7 @@ function repoDescriptionQueryOptions(
     queryFn:
       api === undefined
         ? skipToken
-        : () => api.githubCli.repoDescription(projectId),
+        : () => api.githubCli.repoDescription({ projectId }),
     retry: false,
     staleTime: Infinity,
     gcTime: Infinity,

@@ -15,9 +15,14 @@ export function buildClient<M extends ContractModule>(
   const out: Record<string, unknown> = {};
   for (const call of callsOf(module)) {
     const channel = channelOf(call);
-    out[keyOf(call)] = isBroadcast(call)
-      ? (handler: (p: unknown) => void) => transport.subscribe(channel, handler)
-      : (input: unknown) => transport.invoke(channel, input);
+    const key = keyOf(call);
+    if (isBroadcast(call)) {
+      out[`on${key.charAt(0).toUpperCase()}${key.slice(1)}`] = (
+        handler: (p: unknown) => void,
+      ) => transport.subscribe(channel, handler);
+    } else {
+      out[key] = (input: unknown) => transport.invoke(channel, input);
+    }
   }
   return out as Client<M>;
 }

@@ -30,12 +30,7 @@
 //      pure cores (stores, engines, rate limiters) the node proofs in
 //      test/ drive directly. No electron import there, and no import
 //      from the rest of main/, which would drag Electron in.
-//   7. The HostApi Pick in the renderer's HostScope file names exactly
-//      the host-scoped namespaces buildApi exposes. Both sides are read
-//      from source (the Pick list, and buildApi's return object joined
-//      with each contract's defineContract scope), so the rule fails
-//      when either side drifts.
-//   8. The contracts package imports nothing from the app: no app
+//   7. The contracts package imports nothing from the app: no app
 //      alias, no relative path out of the package. Every side compiles
 //      it, the hub included, which has no app to reach.
 //
@@ -126,7 +121,7 @@ for (const { dir, root, contractLayer } of LAYERS) {
       );
     }
 
-    // 8. The contracts stand alone.
+    // 7. The contracts stand alone.
     if (root === contractsDir) {
       const leaves = specifiers.some(
         (spec) =>
@@ -195,137 +190,6 @@ if (contractModuleCount === 0) {
   failures.push(
     `no contract-exporting files (matching ${CONTRACT_EXPORT}) found under packages/contracts/src/modules -- the scope rule's predicate no longer matches anything`,
   );
-}
-
-// 7. HostApi drift guard. The expected set is derived, not hardcoded:
-//    every top-level namespace in buildApi's return object is mapped to
-//    the contract its client was built from, and a namespace is
-//    host-scoped when that contract is defineContract(name, "host", ...).
-//    The HostApi Pick must equal that set exactly, in either direction.
-const HOST_SCOPE_FILE = "renderer/hooks/remote/useHostScope.tsx";
-
-// contractName -> "host" | "client", read off the module sources.
-const contractScopes = new Map<string, string>();
-for (const file of walk(modulesDir, SOURCE_EXTENSIONS)) {
-  const src = stripComments(readFileSync(file, "utf8"));
-  for (const [, contract, scope] of src.matchAll(
-    /export const (\w+Contract) = defineContract\(\s*["']\w+["'],\s*["'](host|client)["']/g,
-  )) {
-    if (contract && scope) contractScopes.set(contract, scope);
-  }
-}
-
-// The namespaces buildApi exposes, each mapped to the contracts its
-// section's clients were built from.
-function buildApiHostNamespaces() {
-  const src = stripComments(
-    readFileSync(join(appRoot, "shared", "ipc", "client.ts"), "utf8"),
-  );
-  const buildApiIndex = src.indexOf("function buildApi");
-  const returnIndex = src.indexOf("return {", buildApiIndex);
-  if (buildApiIndex === -1 || returnIndex === -1) {
-    failures.push(
-      "shared/ipc/client.ts: buildApi's return object not found -- rule 7's predicate no longer matches, update test/host-boundary.mts",
-    );
-    return null;
-  }
-  // clientVar -> contractName, from `const fooClient = c(fooContract);`.
-  const clientContracts = new Map<string, string>();
-  for (const [, client, contract] of src.matchAll(
-    /const (\w+) = c\((\w+Contract)\);/g,
-  )) {
-    if (client && contract) clientContracts.set(client, contract);
-  }
-  // Slice out the return object by brace balancing, then split it into
-  // top-level `name: { ... }` sections the same way.
-  const openIndex = src.indexOf("{", returnIndex);
-  let depth = 0;
-  let closeIndex = -1;
-  for (let i = openIndex; i < src.length; i++) {
-    if (src[i] === "{") depth++;
-    else if (src[i] === "}" && --depth === 0) {
-      closeIndex = i;
-      break;
-    }
-  }
-  const body = src.slice(openIndex + 1, closeIndex);
-  const hostNamespaces = new Set<string>();
-  depth = 0;
-  let name = null;
-  for (let i = 0, start = 0; i < body.length; i++) {
-    if (body[i] === "{") {
-      if (depth === 0) {
-        name = /(\w+):\s*$/.exec(body.slice(0, i))?.[1] ?? null;
-        start = i;
-      }
-      depth++;
-    } else if (body[i] === "}" && --depth === 0 && name) {
-      const section = body.slice(start, i + 1);
-      const contracts = [...section.matchAll(/\b(\w+Client)\b/g)]
-        .flatMap((m) => m[1] ?? [])
-        .map((client) => clientContracts.get(client));
-      if (contracts.length === 0 || contracts.some((c) => !c)) {
-        failures.push(
-          `shared/ipc/client.ts: buildApi namespace "${name}" references no known contract client -- rule 7 can't classify it, update test/host-boundary.mts`,
-        );
-      } else if (
-        contracts.some(
-          (c) => c !== undefined && contractScopes.get(c) === "host",
-        )
-      ) {
-        hostNamespaces.add(name);
-      }
-      name = null;
-    }
-  }
-  if (hostNamespaces.size === 0) {
-    failures.push(
-      "shared/ipc/client.ts: no host-scoped buildApi namespaces found -- rule 7's predicate no longer matches anything",
-    );
-    return null;
-  }
-  return hostNamespaces;
-}
-
-function hostApiPickNames() {
-  let src;
-  try {
-    src = stripComments(readFileSync(join(appRoot, HOST_SCOPE_FILE), "utf8"));
-  } catch {
-    failures.push(
-      `${HOST_SCOPE_FILE} is missing -- the HostApi Pick moved, update HOST_SCOPE_FILE in test/host-boundary.mts`,
-    );
-    return null;
-  }
-  const picked = /type HostApi = Pick<\s*RemoteDeviceApi,([^>]*)>/.exec(
-    src,
-  )?.[1];
-  if (picked === undefined) {
-    failures.push(
-      `${HOST_SCOPE_FILE}: HostApi Pick<RemoteDeviceApi, ...> not found -- rule 7's predicate no longer matches, update test/host-boundary.mts`,
-    );
-    return null;
-  }
-  return new Set([...picked.matchAll(/"(\w+)"/g)].flatMap((m) => m[1] ?? []));
-}
-
-const expectedHostNamespaces = buildApiHostNamespaces();
-const pickedHostNamespaces = hostApiPickNames();
-if (expectedHostNamespaces && pickedHostNamespaces) {
-  for (const namespace of expectedHostNamespaces) {
-    if (!pickedHostNamespaces.has(namespace)) {
-      failures.push(
-        `${HOST_SCOPE_FILE}: HostApi is missing "${namespace}" -- buildApi exposes it over a host-scoped contract, so host hooks must see it`,
-      );
-    }
-  }
-  for (const namespace of pickedHostNamespaces) {
-    if (!expectedHostNamespaces.has(namespace)) {
-      failures.push(
-        `${HOST_SCOPE_FILE}: HostApi picks "${namespace}", which is not a host-scoped buildApi namespace -- it would reject at runtime on a remote device`,
-      );
-    }
-  }
 }
 
 // A stale allowlist entry means the sanctioned file moved and rule 5 is

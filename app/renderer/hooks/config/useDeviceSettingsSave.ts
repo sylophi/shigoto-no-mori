@@ -26,7 +26,9 @@ export function useDeviceSettingsSave() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (state: SettingsFormState) =>
-      api.globalConfig.writeDeviceSettings(toDeviceSettingsPatch(state)),
+      api.globalConfig.writeDeviceSettings({
+        patch: toDeviceSettingsPatch(state),
+      }),
     // Read before the write lands, while the cached config is still
     // the one the form was seeded from.
     onMutate: (state) => ({

@@ -12,7 +12,7 @@ export function useShigomoriWrite() {
   const { api, keys } = useHostScope();
   return useMutation({
     mutationFn: async ({ projectId, config }: WriteVariables) => {
-      await api.shigomori.write(projectId, config);
+      await api.shigomori.write({ projectId, config });
       return { projectId };
     },
     onSuccess: ({ projectId }) => {

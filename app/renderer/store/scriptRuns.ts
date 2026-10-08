@@ -244,7 +244,7 @@ export class ScriptRunsStore {
     if (held?.status === "starting") return true;
     this.attaching.add(run.runId);
     try {
-      const joined = await this.api.attach(run.runId);
+      const joined = await this.api.attach({ runId: run.runId });
       if (joined === null) return true;
       // This connection heard the run already (another window on it
       // attached, or this one started it before a reload), so what it
@@ -284,7 +284,7 @@ export class ScriptRunsStore {
   async stopRun(run: RunningScript): Promise<boolean> {
     const key = scriptKey(run.projectId, run.worktreeId, run.slot);
     if (this.states.get(key)?.runId === run.runId) return this.cancel(key);
-    return (await this.api.cancel(run.runId)).cancelled;
+    return (await this.api.cancel({ runId: run.runId })).cancelled;
   }
 
   // Resolves whether the host stopped the run.
@@ -304,7 +304,7 @@ export class ScriptRunsStore {
     // for good.
     let cancelled = false;
     try {
-      ({ cancelled } = await this.api.cancel(state.runId));
+      ({ cancelled } = await this.api.cancel({ runId: state.runId }));
     } catch {}
     if (!cancelled) {
       this.setStateWithActivity(key, (s) =>
@@ -322,13 +322,13 @@ export class ScriptRunsStore {
   write(key: ScriptKey, data: string): void {
     const runId = this.liveInteractiveRunId(key);
     if (!runId) return;
-    void this.api.write(runId, data).catch(() => {});
+    void this.api.write({ runId, data }).catch(() => {});
   }
 
   resize(key: ScriptKey, cols: number, rows: number): void {
     const runId = this.liveInteractiveRunId(key);
     if (!runId) return;
-    void this.api.resize(runId, cols, rows).catch(() => {});
+    void this.api.resize({ runId, cols, rows }).catch(() => {});
   }
 
   private liveInteractiveRunId(key: ScriptKey): string | null {

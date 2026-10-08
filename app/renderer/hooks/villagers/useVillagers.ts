@@ -36,7 +36,7 @@ export function useVillagerProfiles(): VillagerProfiles | undefined {
 export function villagerFaceQueryOptions(slug: string) {
   return queryOptions({
     queryKey: queryKeys.villagerFace(slug),
-    queryFn: () => window.api.villagers.face(slug),
+    queryFn: () => window.api.villagers.face({ slug }),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
     meta: { silentError: true },

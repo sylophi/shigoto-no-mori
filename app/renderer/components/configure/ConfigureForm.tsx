@@ -204,7 +204,7 @@ export function ConfigureForm({
                 size="sm"
                 onClick={() => {
                   window.api.shell
-                    .showItemInFolder(projectPath)
+                    .showItemInFolder({ path: projectPath })
                     .catch((err) => notifyError("Couldn't reveal folder", err));
                 }}
               >

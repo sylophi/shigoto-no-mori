@@ -11,14 +11,14 @@
 // main); it is the renderer's wiring around it, so it stays out of the
 // headless proof.
 import { createExternalStore } from "@/store/externalStore";
-import type { buildApi } from "@shared/ipc/client";
+import type { RendererContractApi } from "@shared/ipc/client";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
-// The per-device api buildApi returns. Same shape as window.api's
+// The api over one device's transports. Same shape as window.api's
 // contract methods, minus the bridge-only extras (deviceId, appVersion).
-export type RemoteDeviceApi = ReturnType<typeof buildApi>;
+export type RemoteDeviceApi = RendererContractApi;
 
 // A remote device's derived status: the supervisor vocabulary the
 // hub socket reports, plus the one renderer-local phase the direct

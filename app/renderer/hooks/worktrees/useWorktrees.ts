@@ -44,7 +44,7 @@ export function worktreesQueryOptions(
     queryKey: queryKeysFor(deviceId).worktrees(projectId),
     queryFn: () => {
       if (!projectId || !api) return [];
-      return api.worktrees.list(projectId);
+      return api.worktrees.list({ projectId });
     },
     // Local: api and id are always present, so this is projectId !== null,
     // unchanged. Remote: an unconnected device (no api, empty id) never

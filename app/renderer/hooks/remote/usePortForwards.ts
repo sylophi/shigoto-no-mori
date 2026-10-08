@@ -98,7 +98,8 @@ export function describeForwardError(
 // local act, whatever the peer.
 export function usePortForwardStop() {
   return useMutation({
-    mutationFn: (forwardId: string) => window.api.portForward.stop(forwardId),
+    mutationFn: (forwardId: string) =>
+      window.api.portForward.stop({ forwardId }),
     meta: { errorTitle: "Couldn't stop forwarding" },
   });
 }
@@ -194,7 +195,7 @@ export function usePortForwardControl(
           worktree,
         });
       } else if (forward !== undefined) {
-        await window.api.portForward.stop(forward.forwardId);
+        await window.api.portForward.stop({ forwardId: forward.forwardId });
       }
     },
     meta: { silentError: true },

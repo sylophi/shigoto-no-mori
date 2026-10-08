@@ -53,7 +53,7 @@ function offerToPeers(doc: SharedSettingsDoc): void {
   if (Object.keys(doc.entries).length === 0) return;
   for (const device of remoteDeviceStore.getSnapshot()) {
     if (!deviceStatusView(device.status).reachable) continue;
-    device.api?.sharedSettings.merge(doc).catch(() => undefined);
+    device.api?.sharedSettings.merge({ doc }).catch(() => undefined);
   }
 }
 
@@ -64,7 +64,7 @@ export async function writeSharedSetting(
   key: string,
   value: SharedSettingValue,
 ): Promise<SharedSettingsDoc> {
-  const doc = await window.api.sharedSettings.set(key, value);
+  const doc = await window.api.sharedSettings.set({ key, value });
   const entry = doc.entries[key];
   if (entry !== undefined) offerToPeers({ entries: { [key]: entry } });
   return doc;
@@ -81,7 +81,7 @@ function mergePeerSharedSettings(payload: unknown): void {
     payload,
   );
   if (!parsed.success) return;
-  window.api.sharedSettings.merge(parsed.data).catch(() => undefined);
+  window.api.sharedSettings.merge({ doc: parsed.data }).catch(() => undefined);
 }
 
 // The one writer of the cached local copy. Merged in rather than set,
@@ -120,7 +120,7 @@ async function migrateQuickCreateDevices(
       by: window.api.deviceId,
     };
   }
-  await window.api.sharedSettings.merge({ entries });
+  await window.api.sharedSettings.merge({ doc: { entries } });
   // Offered like any pick: a browser's copy reaches its peers no other
   // way, and the sessions may have landed while this was reading.
   offerToPeers({ entries });
