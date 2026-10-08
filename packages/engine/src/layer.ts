@@ -27,11 +27,14 @@ import * as WorktreeData from "./WorktreeData.ts";
 import * as Worktrees from "./Worktrees.ts";
 import * as Layer from "effect/Layer";
 
-export const engineLayer = (options: {
+type EngineOptions = {
   readonly flavor: Flavor;
   readonly store: ReturnType<typeof Store.layer>;
   readonly macfs: string;
-}) =>
+};
+
+// Every service but Paths, which is built once beside them.
+const services = (options: EngineOptions) =>
   Layer.mergeAll(Landing.layer, Projects.layer, Doctor.layer).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
@@ -55,5 +58,16 @@ export const engineLayer = (options: {
     ),
     Layer.provideMerge(Git.layer),
     Layer.provideMerge(options.store),
+  );
+
+export const engineLayer = (options: EngineOptions) =>
+  services(options).pipe(Layer.provideMerge(Paths.layer(options.flavor)));
+
+// The terminal's `sm doctor`, which answers when the store can't open:
+// the engine is built inside each run (`Doctor.standalone`). Paths comes
+// along for the checklist's header.
+export const doctorLayer = (options: EngineOptions) =>
+  Doctor.standalone(services(options)).pipe(
+    Layer.provide(Layer.merge(Git.layer, Darwin.layer(options.macfs))),
     Layer.provideMerge(Paths.layer(options.flavor)),
   );

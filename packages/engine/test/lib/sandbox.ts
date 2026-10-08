@@ -35,7 +35,7 @@ import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Terrier from "../../src/Terrier.ts";
 import * as Usage from "../../src/Usage.ts";
-import { engineLayer } from "../../src/layer.ts";
+import { doctorLayer, engineLayer } from "../../src/layer.ts";
 import { nodeStore } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 
@@ -203,6 +203,9 @@ export type Sandbox = {
   // git in `cwd` with the sandbox's identity, answering its stdout.
   readonly git: (cwd: string, ...args: string[]) => string;
   readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
+  // A run of the doctor as the terminal builds it, which opens the
+  // store inside the run.
+  readonly doctor: (input: Doctor.RunInput) => Promise<Doctor.DoctorDocument>;
   // A command on PATH for this sandbox's life, as a shell script.
   readonly fakeBin: (name: string, script: string) => void;
   readonly remove: () => Promise<void>;
@@ -224,24 +227,30 @@ export function sandbox(): Sandbox {
     return dir;
   };
 
+  // The platform under the engine's side, its data dir seeded first.
+  const platform = () =>
+    Layer.merge(
+      NodeServices.layer,
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({
+          env: {
+            HOME: root,
+            PATH: process.env.PATH ?? "",
+            SHIGOMORI_DATA_DIR: sideDir("engine"),
+          },
+        }),
+      ),
+    );
+  const options = () => ({
+    flavor: "dev" as const,
+    store: nodeStore,
+    macfs: macfs(),
+  });
+
   let runtime: ManagedRuntime.ManagedRuntime<Engine, unknown> | undefined;
   const engineRuntime = () => {
-    const dataDir = sideDir("engine");
     runtime ??= ManagedRuntime.make(
-      engineLayer({ flavor: "dev", store: nodeStore, macfs: macfs() }).pipe(
-        Layer.provide(NodeServices.layer),
-        Layer.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: {
-                HOME: root,
-                PATH: process.env.PATH ?? "",
-                SHIGOMORI_DATA_DIR: dataDir,
-              },
-            }),
-          ),
-        ),
-      ),
+      engineLayer(options()).pipe(Layer.provide(platform())),
     );
     return runtime;
   };
@@ -375,6 +384,16 @@ export function sandbox(): Sandbox {
               ...errorDocument(error),
             }),
           }),
+        ),
+      ),
+    doctor: (input) =>
+      Effect.runPromise(
+        Effect.flatMap(Effect.service(Doctor.Doctor), (doctor) =>
+          doctor.run(input),
+        ).pipe(
+          Effect.provide(
+            doctorLayer(options()).pipe(Layer.provide(platform())),
+          ),
         ),
       ),
     fakeBin: (name, script) => {

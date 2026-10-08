@@ -58,6 +58,7 @@ const run = (
   options: {
     readonly fix?: boolean;
     readonly approve?: (repair: Doctor.Repair) => boolean;
+    readonly failed?: (line: string) => void;
   } = {},
 ) =>
   box.engine(
@@ -71,6 +72,8 @@ const run = (
               fix: {
                 approve: (repair: Doctor.Repair) =>
                   Effect.succeed(options.approve?.(repair) ?? true),
+                failed: (line: string) =>
+                  Effect.sync(() => options.failed?.(line)),
               },
             }
           : {}),
@@ -491,8 +494,22 @@ describe("a project", () => {
     chmodSync(join(admin, "gitdir"), 0o444);
     chmodSync(admin, 0o555);
     try {
-      const fixed = await run({ fix: true });
+      const heard: string[] = [];
+      const fixed = await run({
+        fix: true,
+        approve: (repair) => {
+          heard.push(`asked: ${repair.label}`);
+          return true;
+        },
+        failed: (line) => heard.push(line),
+      });
       assert.deepEqual(fixed.repaired, []);
+      // Each failure is heard as it happens, between the questions.
+      assert.deepEqual(heard, [
+        fixed.repairFailed[0],
+        "asked: pruned git's worktree metadata for alpha",
+        fixed.repairFailed[1],
+      ]);
       assert.equal(fixed.repairFailed.length, 2);
       assert.equal(
         fixed.repairFailed[1],
@@ -692,6 +709,30 @@ describe("the run", () => {
       doc.checks.length,
     );
     assert.equal(doc.summary.fail, 1);
+  });
+});
+
+describe("a store that can't open", () => {
+  it("names the project whose settings it refused, and skips what needs it", async () => {
+    alpha();
+    writeFileSync(
+      join(box.home, "seed", "projects", "A1", "project.json"),
+      "{not json",
+    );
+    const doc = await box.doctor({
+      version: "dev",
+      executable: "",
+      terminal: false,
+    });
+    only(doc, "registry", "ok");
+    const [refused] = findingsFor(doc, "project-config");
+    assert.equal(refused?.title, "alpha");
+    assert.equal(refused?.status, "fail");
+    assert.deepEqual(
+      doc.checks.filter(({ group }) => group === "Projects"),
+      [refused],
+    );
+    assert.ok(doc.checks.every(({ fix }) => fix !== ""));
   });
 });
 

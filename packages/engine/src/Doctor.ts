@@ -13,6 +13,11 @@
 // worktree, `git worktree prune`. Anything with a judgment call in it is
 // reported with a suggested fix and never touched. The document keeps
 // the shape `sm doctor --json` prints, field for field.
+//
+// The terminal's `sm doctor` must answer when the store can't open
+// (`standalone`): the checks that read only files and programs still
+// run, and the file the store refused is named as Go names it.
+import { RegistryFileSchema } from "@shigomori/contracts/schemas/dataDir";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -63,7 +68,8 @@ import * as Git from "./Git.ts";
 import { appFoldersOf, decodedLaunchers } from "./Launchers.ts";
 import * as Layout from "./Layout.ts";
 import * as Paths from "./Paths.ts";
-import { errnoText, isNotFound } from "./platformErrors.ts";
+import type { StoreImportError } from "./migrations/importJson.ts";
+import { errnoText, isAbsent, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
 import {
   acquireStagingLock,
@@ -76,6 +82,7 @@ import {
 import type { ListedProject, RegisteredProject } from "./Registry.ts";
 import * as Terrier from "./Terrier.ts";
 import { terrierProjects } from "./Terrier.ts";
+import { StoreOpenError } from "./Store.ts";
 import * as WorktreeData from "./WorktreeData.ts";
 import { worktreeIdFromPath } from "./worktreeLayout.ts";
 import * as Worktrees from "./Worktrees.ts";
@@ -87,6 +94,13 @@ export type Status = "ok" | "warn" | "fail";
 
 // The groups in the order they print: broadest blast radius first.
 export type Group = "Environment" | "Data dir" | "Processes" | "Projects";
+
+const GROUPS: ReadonlyArray<Group> = [
+  "Environment",
+  "Data dir",
+  "Processes",
+  "Projects",
+];
 
 // One line of the checklist. `detail` explains it, `fix` suggests what
 // to do (absent when there is nothing to suggest), and `repairable` says
@@ -137,8 +151,11 @@ export type RunInput = {
   // isn't active in this session worth a word.
   readonly terminal: boolean;
   // Apply the repairs, a destructive one only once `approve` says yes.
+  // `failed` hears each "couldn't <label>: <why>" line as it happens,
+  // in checklist order.
   readonly fix?: {
     readonly approve: (repair: Repair) => Effect.Effect<boolean>;
+    readonly failed: (line: string) => Effect.Effect<void>;
   };
 };
 
@@ -173,46 +190,57 @@ export class Doctor extends Context.Service<
 
 // --- helpers --------------------------------------------------------------
 
-type Entry = Finding & {
+// What the checks that read the store need.
+type StoreServices =
+  | CloneCheckout.CloneCheckout
+  | Config.Config
+  | Layout.Layout
+  | Registry.Registry
+  | Terrier.Terrier
+  | Worktrees.Worktrees
+  | WorktreeData.WorktreeData;
+
+type StoreFailure = StoreOpenError | StoreImportError;
+
+// A finding and its repair, which may need the store's services (`R`).
+type Entry<R = never> = Finding & {
   readonly repair?: Repair & {
-    readonly apply: Effect.Effect<void, RepairError>;
+    readonly apply: Effect.Effect<void, RepairError, R>;
   };
 };
 
-// One check's lines, by its group, id and title.
-const check = (group: Group, id: string, title: string) => ({
-  ok: (detail: string): Entry => ({ group, id, title, status: "ok", detail }),
-  warn: (detail: string, fix: string): Entry => ({
+// One check's lines, by its group, id and title. An empty fix is left
+// out, as Go's omitempty does.
+const check = (group: Group, id: string, title: string) => {
+  const line = (status: Status, detail: string, fix: string): Entry => ({
     group,
     id,
     title,
-    status: "warn",
+    status,
     detail,
-    fix,
-  }),
-  fail: (detail: string, fix: string): Entry => ({
-    group,
-    id,
-    title,
-    status: "fail",
-    detail,
-    fix,
-  }),
-});
+    ...(fix === "" ? {} : { fix }),
+  });
+  return {
+    ok: (detail: string) => line("ok", detail, ""),
+    warn: (detail: string, fix: string) => line("warn", detail, fix),
+    fail: (detail: string, fix: string) => line("fail", detail, fix),
+  };
+};
 
-const repairable = (
+const repairable = <R = never>(
   finding: Entry,
-  repair: NonNullable<Entry["repair"]>,
-): Entry => ({ ...finding, repairable: true, repair });
+  repair: NonNullable<Entry<R>["repair"]>,
+): Entry<R> => ({ ...finding, repairable: true, repair });
 
-const counts = (entries: ReadonlyArray<Entry>) => ({
+const counts = (entries: ReadonlyArray<Entry<unknown>>) => ({
   ok: entries.filter(({ status }) => status === "ok").length,
   warn: entries.filter(({ status }) => status === "warn").length,
   fail: entries.filter(({ status }) => status === "fail").length,
 });
 
 // The finding as the document prints it, without its repair.
-const findingOf = ({ repair: _, ...finding }: Entry): Finding => finding;
+const findingOf = ({ repair: _, ...finding }: Entry<unknown>): Finding =>
+  finding;
 
 // What a failure says, git's own words for a git that failed.
 const errorText = (error: { readonly message: string }) =>
@@ -264,6 +292,22 @@ const RunningScripts = Schema.fromJsonString(
   }),
 );
 
+// A JSON file the store imports, read as an object.
+const JsonObjectText = Schema.fromJsonString(
+  Schema.Record(Schema.String, Schema.Unknown),
+);
+
+// A JSON file as Go reads it: absent, unreadable, not a JSON object, or
+// the object.
+type JsonFile =
+  | { readonly state: "absent" }
+  | { readonly state: "unreadable"; readonly why: string }
+  | { readonly state: "invalid" }
+  | { readonly state: "parsed"; readonly doc: ConfigDoc };
+
+// The registry's projects as the store imports them.
+const RegistryProjects = Schema.UndefinedOr(RegistryFileSchema.fields.projects);
+
 // The update stager's manifest of what it staged.
 const StagedManifest = Schema.fromJsonString(
   Schema.Struct({ version: Schema.optional(Schema.String) }),
@@ -292,7 +336,7 @@ const launcherCommands = (doc: ConfigDoc | null) =>
 // What a project's checks found, and its checkouts when they could be
 // listed, which the bookkeeping line reads again.
 type ProjectChecked = {
-  readonly entries: ReadonlyArray<Entry>;
+  readonly entries: ReadonlyArray<Entry<StoreServices>>;
   readonly identities: Option.Option<ReadonlyArray<WorktreeIdentity>>;
 };
 
@@ -303,6 +347,23 @@ type Hook =
   | { readonly state: "modified" }
   | { readonly state: "installed"; readonly current: boolean };
 
+// The registry's projects, then terrier's, as every command sees them.
+// A terrier listing that failed leaves the list short, so the checks
+// that read "nothing claims this" as a leftover stand down.
+const listProjects = (listing: Terrier.TerrierListing) =>
+  Effect.gen(function* () {
+    const registry = yield* Registry.Registry;
+    const registered = yield* registry.projects;
+    const extras = terrierProjects(
+      new Set(registered.map(({ path: at }) => at)),
+      listing.paths,
+    );
+    return {
+      projects: [...registered, ...extras] as ReadonlyArray<ListedProject>,
+      complete: Option.isNone(listing.trouble),
+    };
+  });
+
 // --- the service ----------------------------------------------------------
 
 const make = Effect.gen(function* () {
@@ -310,14 +371,7 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const paths = yield* Paths.Paths;
-  const config = yield* Config.Config;
   const git = yield* Git.Git;
-  const layout = yield* Layout.Layout;
-  const registry = yield* Registry.Registry;
-  const terrier = yield* Terrier.Terrier;
-  const worktrees = yield* Worktrees.Worktrees;
-  const data = yield* WorktreeData.WorktreeData;
-  const cloneCheckout = yield* CloneCheckout.CloneCheckout;
   const darwin = yield* Darwin.Darwin;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
@@ -897,21 +951,32 @@ const make = Effect.gen(function* () {
     return line.ok(`valid, ${keys} key${plural(keys)}`);
   };
 
-  const checkRegistry = Effect.gen(function* () {
-    const line = check("Data dir", "registry", "registry.json");
-    const projects = yield* registry.projects;
+  const registryLine = check("Data dir", "registry", "registry.json");
+
+  // The registry's line, by its projects.
+  const registeredLine = (
+    projects: ReadonlyArray<{
+      readonly id?: string | undefined;
+      readonly path?: string | undefined;
+    }>,
+  ) => {
     const malformed = projects.filter(
-      (project) => project.id === "" || project.path === "",
+      ({ id, path: at }) => (id ?? "") === "" || (at ?? "") === "",
     ).length;
     if (malformed > 0) {
-      return line.warn(
+      return registryLine.warn(
         `${malformed} registry ${pluralize(malformed, "entry is", "entries are")} missing an id or path`,
         `Remove the incomplete entries from ${collapseHome(registryFile)}.`,
       );
     }
-    return line.ok(
+    return registryLine.ok(
       `valid, ${projects.length} project${plural(projects.length)} registered`,
     );
+  };
+
+  const checkRegistry = Effect.gen(function* () {
+    const registry = yield* Registry.Registry;
+    return registeredLine(yield* registry.projects);
   });
 
   // Lock files under the data dir older than a write can take: the
@@ -1182,6 +1247,8 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       if (!complete) return [];
+      const config = yield* Config.Config;
+      const data = yield* WorktreeData.WorktreeData;
       const stored = new Set([
         ...(yield* config.storedProjectIds),
         ...kept.map(({ projectId }) => projectId),
@@ -1241,6 +1308,8 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       if (!complete) return [];
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
       const known = new Set<string>();
       const idsOf = new Map<string, ReadonlySet<string>>();
       for (const project of projects) {
@@ -1394,6 +1463,7 @@ const make = Effect.gen(function* () {
   // check needs: its common dir when it is, what is wrong when it isn't.
   const checkProjectRepo = (project: ListedProject) =>
     Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
       const info = yield* fs.stat(project.path).pipe(Effect.result);
       if (Result.isFailure(info) && isNotFound(info.failure)) {
         const line = check("Projects", "project-path", project.name);
@@ -1555,6 +1625,7 @@ const make = Effect.gen(function* () {
     moved: ReadonlyMap<string, string>,
   ) =>
     Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
       const repaired = yield* git
         .run(project.path, ["worktree", "repair", "--", ...moved.values()])
         .pipe(Effect.result);
@@ -1585,6 +1656,11 @@ const make = Effect.gen(function* () {
   // pending dirty capture, which may hold the only copy of some work.
   const prune = (project: ListedProject) =>
     Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const layout = yield* Layout.Layout;
+      const registry = yield* Registry.Registry;
+      const data = yield* WorktreeData.WorktreeData;
+      const cloneCheckout = yield* CloneCheckout.CloneCheckout;
       const drift = yield* findDrift(
         project,
         yield* worktrees.identities(project),
@@ -1616,7 +1692,7 @@ const make = Effect.gen(function* () {
         ];
       }
       const drift = yield* findDrift(project, identities.success, bases);
-      const entries: Entry[] = [];
+      const entries: Entry<StoreServices>[] = [];
       if (drift.moved.size > 0) {
         const n = drift.moved.size;
         const shown = [...drift.moved]
@@ -1856,6 +1932,9 @@ const make = Effect.gen(function* () {
           identities: Option.none(),
         } satisfies ProjectChecked;
       }
+      const config = yield* Config.Config;
+      const worktrees = yield* Worktrees.Worktrees;
+      const layout = yield* Layout.Layout;
       const stored = yield* config.read({
         kind: "project",
         projectId: project.id,
@@ -1866,7 +1945,7 @@ const make = Effect.gen(function* () {
         .identities(project)
         .pipe(Effect.result);
       const bases = yield* layout.managedBases(project);
-      const entries: Entry[] = [];
+      const entries: Entry<StoreServices>[] = [];
       // The app and every command read a stored document with no default
       // branch as none, so its scripts and layout stop applying.
       if (stored !== null && settings === null) {
@@ -1942,37 +2021,33 @@ const make = Effect.gen(function* () {
 
   // --- the run ---
 
-  // The registry's projects, then terrier's, as every command sees them.
-  // A terrier listing that failed leaves the list short, so the checks
-  // that read "nothing claims this" as a leftover stand down.
-  const listProjects = (listing: Terrier.TerrierListing) =>
+  const checkEnvironment = (input: RunInput) =>
     Effect.gen(function* () {
-      const registered = yield* registry.projects;
-      const extras = terrierProjects(
-        new Set(registered.map(({ path: at }) => at)),
-        listing.paths,
-      );
-      return {
-        projects: [...registered, ...extras] as ReadonlyArray<ListedProject>,
-        complete: Option.isNone(listing.trouble),
-      };
-    });
-
-  const checkAll = (input: RunInput) =>
-    Effect.gen(function* () {
-      // Read once a pass, and handed to each check that asks.
-      const listing = yield* terrier.listing;
-      const { projects, complete } = yield* listProjects(listing);
-      const device = (yield* config.read({ kind: "device" })) ?? {};
-      const holder = yield* stagingHolder(stagingLock);
-      const kept = yield* data.kept;
-      const environment = [
+      return [
         yield* checkGit,
         yield* checkGh,
         yield* checkApp(input),
         yield* checkPath,
         yield* checkShellHook(input.terminal),
       ];
+    });
+
+  const checkProcesses = Effect.gen(function* () {
+    return [...(yield* checkOrphanTunnel), ...(yield* checkOrphanScripts)];
+  });
+
+  const checkAll = (input: RunInput) =>
+    Effect.gen(function* () {
+      const terrier = yield* Terrier.Terrier;
+      const config = yield* Config.Config;
+      const data = yield* WorktreeData.WorktreeData;
+      // Read once a pass, and handed to each check that asks.
+      const listing = yield* terrier.listing;
+      const { projects, complete } = yield* listProjects(listing);
+      const device = (yield* config.read({ kind: "device" })) ?? {};
+      const holder = yield* stagingHolder(stagingLock);
+      const kept = yield* data.kept;
+      const environment = yield* checkEnvironment(input);
       const dir = yield* checkDataDir;
       const dataDirGroup = dir.usable
         ? [
@@ -1993,10 +2068,7 @@ const make = Effect.gen(function* () {
             ...(yield* checkDormantState(projects, complete, kept)),
           ]
         : [dir.entry];
-      const processes = [
-        ...(yield* checkOrphanTunnel),
-        ...(yield* checkOrphanScripts),
-      ];
+      const processes = yield* checkProcesses;
       const checked = yield* checkProjects(projects);
       // Last of the data dir's lines, once the projects' checkouts are
       // listed.
@@ -2023,42 +2095,310 @@ const make = Effect.gen(function* () {
       ];
     }).pipe(Effect.provideContext(platform));
 
-  const run = Effect.fn("Doctor.run")(function* (input: RunInput) {
-    let entries = yield* checkAll(input);
-    const repaired: string[] = [];
-    const repairFailed: string[] = [];
-    if (input.fix !== undefined) {
-      for (const { repair } of entries) {
-        if (repair === undefined) continue;
-        const { apply, ...asked } = repair;
-        if (repair.destructive && !(yield* input.fix.approve(asked))) continue;
-        const outcome = yield* Effect.result(apply);
-        if (Result.isFailure(outcome)) {
-          repairFailed.push(
-            `couldn't ${repair.label}: ${errorText(outcome.failure)}`,
-          );
-        } else {
-          repaired.push(repair.label);
-        }
+  // --- without the store ---
+
+  const stateFile = path.join(dataDir, "state.json");
+
+  // A JSON file the store imports, read as Go reads it.
+  const readJsonFile = (file: string) =>
+    Effect.gen(function* () {
+      const text = yield* Effect.result(fs.readFileString(file));
+      if (Result.isFailure(text)) {
+        return isAbsent(text.failure)
+          ? ({ state: "absent" } satisfies JsonFile)
+          : ({
+              state: "unreadable",
+              why: `open ${file}: ${errnoText(text.failure)}`,
+            } satisfies JsonFile);
       }
-      // The document describes the world after the repairs.
-      if (repaired.length > 0) entries = yield* checkAll(input);
+      return Option.match(Schema.decodeOption(JsonObjectText)(text.success), {
+        onNone: (): JsonFile => ({ state: "invalid" }),
+        onSome: (doc): JsonFile => ({ state: "parsed", doc }),
+      });
+    });
+
+  // config.json's line, read from the file, and the settings it holds.
+  const configFromFile = Effect.gen(function* () {
+    const line = check("Data dir", "config", "config.json");
+    const found: JsonFile = yield* readJsonFile(configFile);
+    switch (found.state) {
+      case "absent":
+        return { entry: line.ok("absent, so defaults apply"), device: {} };
+      case "unreadable":
+        return {
+          entry: line.fail(
+            `unreadable: ${found.why}`,
+            `Fix the permissions on ${collapseHome(configFile)}.`,
+          ),
+          device: {},
+        };
+      case "invalid":
+        return {
+          entry: line.fail(
+            "isn't valid JSON, so every global preference is silently ignored",
+            `Repair the JSON in ${collapseHome(configFile)}, or delete it to fall back to defaults.`,
+          ),
+          device: {},
+        };
+      case "parsed":
+        return {
+          entry:
+            Object.keys(found.doc).length === 0
+              ? line.ok("valid, 0 keys")
+              : checkGlobalConfig(found.doc),
+          device: found.doc,
+        };
     }
-    const summary = counts(entries);
-    return {
-      ok: summary.fail === 0,
-      dataDir,
-      flavor,
-      version: input.version,
-      binary: binaryName,
-      summary,
-      repaired,
-      repairFailed,
-      checks: entries.map(findingOf),
-    };
   });
 
-  return Doctor.of({ run });
+  // registry.json's line, read from the file, and its projects. Until
+  // registry.json first existed, the projects lived in state.json, which
+  // the store then reads as strictly.
+  const registryFromFile = (failure: Option.Option<StoreFailure>) =>
+    Effect.gen(function* () {
+      const found: JsonFile = yield* readJsonFile(registryFile);
+      switch (found.state) {
+        case "absent": {
+          const split = Option.filter(
+            failure,
+            (error) => error.path === stateFile,
+          );
+          return {
+            entry: Option.isSome(split)
+              ? registryLine.fail(
+                  `can't be split out of state.json: ${split.value.message}`,
+                  `Fix the permissions on ${collapseHome(dataDir)}.`,
+                )
+              : registryLine.ok("absent, so no projects are registered yet"),
+            projects: [],
+          };
+        }
+        case "unreadable":
+          return {
+            entry: registryLine.fail(
+              `unreadable: ${found.why}`,
+              `Fix the permissions on ${collapseHome(registryFile)}.`,
+            ),
+            projects: [],
+          };
+        case "invalid":
+          return {
+            entry: registryLine.fail(
+              "isn't valid JSON, so every registered project is invisible to sm and the app",
+              `Repair the JSON in ${collapseHome(registryFile)} (it holds the project registry).`,
+            ),
+            projects: [],
+          };
+        case "parsed": {
+          const projects = Schema.decodeUnknownOption(RegistryProjects)(
+            found.doc["projects"],
+          );
+          if (Option.isNone(projects)) {
+            return {
+              entry: registryLine.fail(
+                "the projects list has the wrong shape, so no project resolves",
+                `Repair the projects array in ${collapseHome(registryFile)}.`,
+              ),
+              projects: [],
+            };
+          }
+          const listed = projects.value ?? [];
+          return { entry: registeredLine(listed), projects: listed };
+        }
+      }
+    });
+
+  // The store's failure, when the config and registry lines don't
+  // already name it.
+  const storeFailureLines = (
+    failure: StoreFailure,
+    projects: ReadonlyArray<{
+      readonly id?: string | undefined;
+      readonly name?: string | undefined;
+    }>,
+    dir: Entry,
+  ) => {
+    const storeLine = check("Data dir", "store", "store");
+    if (failure instanceof StoreOpenError) {
+      // An unwritable data dir is the data dir's line already.
+      return dir.status === "fail"
+        ? []
+        : [
+            storeLine.fail(
+              `${collapseHome(failure.path)} can't be opened, so no command can run`,
+              `Check the permissions on ${collapseHome(dataDir)}.`,
+            ),
+          ];
+    }
+    if ([registryFile, stateFile, configFile].includes(failure.path)) return [];
+    const projectDir = path.dirname(failure.path);
+    if (
+      path.basename(failure.path) === "project.json" &&
+      path.dirname(projectDir) === path.join(dataDir, "projects")
+    ) {
+      const id = path.basename(projectDir);
+      return [
+        check(
+          "Projects",
+          "project-config",
+          projects.find((project) => project.id === id)?.name ?? id,
+        ).fail(
+          "project.json exists but is invalid (bad JSON), so the store can't import it and no command can run",
+          `Repair the JSON in ${collapseHome(failure.path)}.`,
+        ),
+      ];
+    }
+    return [
+      storeLine.fail(
+        `${collapseHome(failure.path)} can't be read into the store, so no command can run`,
+        "Fix its permissions, or move it aside.",
+      ),
+    ];
+  };
+
+  // The checks that need no store, for a data dir it can't open or that
+  // isn't there yet: the environment, the files the store would import,
+  // read as Go reads them, and what a crash left behind.
+  const checkWithoutStore = (
+    input: RunInput,
+    failure: Option.Option<StoreFailure>,
+  ) =>
+    Effect.gen(function* () {
+      const environment = yield* checkEnvironment(input);
+      const dir = yield* checkDataDir;
+      const processes = yield* checkProcesses;
+      if (!dir.usable) return [...environment, dir.entry, ...processes];
+      const holder = yield* stagingHolder(stagingLock);
+      const config = yield* configFromFile;
+      const registered = yield* registryFromFile(failure);
+      const entries = [
+        ...environment,
+        dir.entry,
+        config.entry,
+        registered.entry,
+        ...Option.match(failure, {
+          onNone: () => [],
+          onSome: (error) =>
+            storeFailureLines(error, registered.projects, dir.entry),
+        }),
+        yield* checkStaleLocks,
+        ...checkStagingLock(holder),
+        ...(yield* checkUpdateLeftovers(input.version, holder)),
+        ...(yield* checkPortAllocations(config.device)),
+        ...(yield* launcherFindings(
+          check("Data dir", "launchers", "launchers"),
+          config.device,
+          "config launcher rm",
+          "",
+        )),
+        ...processes,
+      ];
+      // In the order the checklist prints, stable within a group.
+      return entries.toSorted(
+        (a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group),
+      );
+    }).pipe(Effect.provideContext(platform));
+
+  // --- the run ---
+
+  // The checks, then with `fix` the repairs they offer in checklist order
+  // and the checks again, so the document describes the world after
+  // them.
+  const finish = <R>(
+    input: RunInput,
+    checks: Effect.Effect<ReadonlyArray<Entry<R>>, never, R>,
+  ) =>
+    Effect.gen(function* () {
+      let entries = yield* checks;
+      const repaired: string[] = [];
+      const repairFailed: string[] = [];
+      if (input.fix !== undefined) {
+        const { approve, failed } = input.fix;
+        for (const { repair } of entries) {
+          if (repair === undefined) continue;
+          const { apply, ...asked } = repair;
+          if (repair.destructive && !(yield* approve(asked))) continue;
+          const outcome = yield* Effect.result(apply);
+          if (Result.isFailure(outcome)) {
+            const line = `couldn't ${repair.label}: ${errorText(outcome.failure)}`;
+            yield* failed(line);
+            repairFailed.push(line);
+          } else {
+            repaired.push(repair.label);
+          }
+        }
+        if (repaired.length > 0) entries = yield* checks;
+      }
+      const summary = counts(entries);
+      return {
+        ok: summary.fail === 0,
+        dataDir,
+        flavor,
+        version: input.version,
+        binary: binaryName,
+        summary,
+        repaired,
+        repairFailed,
+        checks: entries.map(findingOf),
+      } satisfies DoctorDocument;
+    });
+
+  return {
+    // Every check, given the store's services.
+    run: (input: RunInput) => finish(input, checkAll(input)),
+    // Only the checks that need no store, with what kept it from opening.
+    withoutStore: (input: RunInput, failure: Option.Option<StoreFailure>) =>
+      finish(input, checkWithoutStore(input, failure)),
+    // Whether there is a data dir the store could open in.
+    dataDirUsable: Effect.map(checkDataDir, ({ usable }) => usable),
+  };
 });
 
-export const layer = Layer.effect(Doctor, make);
+export const layer = Layer.effect(
+  Doctor,
+  Effect.gen(function* () {
+    const checks = yield* make;
+    const store = yield* Effect.context<StoreServices>();
+    return Doctor.of({
+      run: Effect.fn("Doctor.run")(function* (input: RunInput) {
+        return yield* Effect.provideContext(checks.run(input), store);
+      }),
+    });
+  }),
+);
+
+// The doctor for a data dir the store may not open, as `sm doctor`
+// needs it. `engine` provides the store's services and is built inside
+// each run. When it fails, or there is no data dir to open it in (which
+// building it would create), the checks that need it are skipped and
+// the failure is a finding.
+export const standalone = <R>(
+  engine: Layer.Layer<StoreServices, StoreFailure, R>,
+) =>
+  Layer.effect(
+    Doctor,
+    Effect.gen(function* () {
+      const checks = yield* make;
+      const context = yield* Effect.context<R>();
+      return Doctor.of({
+        run: Effect.fn("Doctor.run")(function* (input: RunInput) {
+          if (!(yield* checks.dataDirUsable)) {
+            return yield* checks.withoutStore(input, Option.none());
+          }
+          return yield* Layer.build(engine).pipe(
+            Effect.flatMap((store) =>
+              Effect.provideContext(checks.run(input), store),
+            ),
+            Effect.catchTags({
+              StoreOpenError: (error) =>
+                checks.withoutStore(input, Option.some(error)),
+              StoreImportError: (error) =>
+                checks.withoutStore(input, Option.some(error)),
+            }),
+            Effect.scoped,
+            Effect.provideContext(context),
+          );
+        }),
+      });
+    }),
+  );
