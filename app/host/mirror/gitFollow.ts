@@ -35,7 +35,6 @@ import {
   MIRROR_LABEL_REPLACES,
   type MirrorGitStatus,
   mirrorOnMirrorBranch,
-  type MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
 import { findProjectOrThrow } from "@host/lib/projects";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
@@ -46,7 +45,7 @@ import {
 import {
   CHANGED_LOCALLY,
   core,
-  decide,
+  type FollowableSession,
   describeDivergence,
   MIRROR_NAMES,
   OFF_MIRROR_BRANCH,
@@ -55,7 +54,7 @@ import {
   sameHead,
   sameState,
 } from "./followPlan";
-import { byAncestry, pull, push } from "./followTransfer";
+import { chooseDirection, pull, push } from "./followTransfer";
 import {
   type GitState,
   type GitStateCore,
@@ -65,29 +64,11 @@ import {
 } from "./gitState";
 import { log } from "@shared/log";
 
-// The slice of a daemon session the follower reads. `status` is the
-// file-sync engine's own (watching is idle, everything else is a cycle
-// under way, a connection being made or a halt).
-export type FollowableSession = {
-  session: string;
-  paused: boolean;
-  status: MirrorStatus;
-  deviceId: string;
-  projectId: string;
-  worktreeId: string;
-  localRoot: string;
-  labels: Record<string, string>;
-};
-
 // Where the agreed states live between runs: one entry per session id.
 export type AgreedStore = {
   load(): Record<string, GitStateCore>;
   save(entries: Record<string, GitStateCore>): void;
 };
-
-// The label keys mirror:startTo writes.
-const LABEL_LOCAL_PROJECT = MIRROR_LABEL_LOCAL_PROJECT;
-const LABEL_LOCAL_WORKTREE = MIRROR_LABEL_LOCAL_WORKTREE;
 
 type FollowRecord = {
   session: FollowableSession;
@@ -292,8 +273,8 @@ export function createGitFollower(deps: {
     // snapshot triggers this again (syncSessions).
     if (record.waitingForFiles && !filesSettled(record)) return;
     record.waitingForFiles = false;
-    const localProjectId = session.labels[LABEL_LOCAL_PROJECT] ?? "";
-    const localWorktreeId = session.labels[LABEL_LOCAL_WORKTREE] ?? "";
+    const localProjectId = session.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "";
+    const localWorktreeId = session.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "";
     let project: Project;
     try {
       project = await findProjectOrThrow(localProjectId);
@@ -384,11 +365,12 @@ export function createGitFollower(deps: {
         return;
       }
 
-      const planned = decide(record.agreed, local, peer);
-      const direction =
-        planned === "ancestry"
-          ? await byAncestry(project.path, local.tip, peer.tip)
-          : planned;
+      const direction = await chooseDirection(
+        project.path,
+        record.agreed,
+        local,
+        peer,
+      );
       if (direction === "diverged") {
         setStatus(record, {
           status: "diverged",
@@ -411,27 +393,19 @@ export function createGitFollower(deps: {
             : "to the other device",
       });
 
+      const round = {
+        project,
+        localWorktree,
+        session,
+        peerSync,
+        peerMirror,
+        local,
+        peer,
+      };
       const outcome =
         direction === "pull"
-          ? await pull(
-              project,
-              localWorktree,
-              session,
-              peerSync,
-              local,
-              peer,
-              peerAsIs.head,
-              record.agreed?.tip ?? null,
-            )
-          : await push(
-              project,
-              session,
-              peerSync,
-              peerMirror,
-              local,
-              peer,
-              headThere,
-            );
+          ? await pull(round, peerAsIs.head, record.agreed?.tip ?? null)
+          : await push(round, headThere);
       if (outcome.applied) {
         setAgreed(record, direction === "pull" ? core(peer) : core(local));
         setStatus(record, { status: "synced", detail: "" });
@@ -596,7 +570,7 @@ export function createGitFollower(deps: {
     },
     onLocalProjectChanged(projectId: string): void {
       syncSessions();
-      triggerWhere((s) => s.labels[LABEL_LOCAL_PROJECT] === projectId);
+      triggerWhere((s) => s.labels[MIRROR_LABEL_LOCAL_PROJECT] === projectId);
     },
     onPeerProjectChanged(deviceId: string, projectId: string): void {
       triggerWhere((s) => s.deviceId === deviceId && s.projectId === projectId);

@@ -34,8 +34,8 @@
 // (shared/git/branches.ts). The original is here, so the follower
 // reads the peer's state with the mirror/ prefix taken off and sends
 // this side's with it put on, and everything else here (agreement,
-// divergence, the apply) works on one name per side. The transfers
-// still name each side's own branch.
+// divergence, the apply) works on one name per side.
+import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import { mirrorBranchFor, originalBranchOf } from "@shared/git/branches";
 import {
   type GitHead,
@@ -44,12 +44,26 @@ import {
   operationInRefusal,
 } from "./gitState";
 
+// The slice of a daemon session the follower reads. `status` is the
+// file-sync engine's own (watching is idle, everything else is a cycle
+// under way, a connection being made or a halt).
+export type FollowableSession = {
+  session: string;
+  paused: boolean;
+  status: MirrorStatus;
+  deviceId: string;
+  projectId: string;
+  worktreeId: string;
+  localRoot: string;
+  labels: Record<string, string>;
+};
+
 // How a session's branch names translate between its two sides: the
 // original's branch here is the copy's mirror branch there, and back.
 // Identity for a session with no mirror branch. Null when the copy's
 // branch has no mirror/ prefix, which the follower reports rather
 // than follows.
-export type BranchNames = {
+type BranchNames = {
   toLocal: (head: GitHead) => GitHead | null;
   toPeer: (head: GitHead) => GitHead | null;
 };

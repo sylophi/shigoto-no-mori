@@ -2,39 +2,60 @@
 // state to the other, commits first through a bundle, then a
 // compare-and-set apply on the side being written. And the one read the
 // planner cannot do itself: ancestry, for two sides that never agreed.
+//
+// A mirror-branch session's state is judged in this side's names
+// (followPlan.ts), but the transfers name each side's own branch: a
+// pull asks for the peer's own head, a push lands this side's.
 import type { Project } from "@shigomori/contracts/schemas";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { offerSource, withPeerSource } from "@host/lib/sync/sourceLink";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
-import { MIRROR_LABEL_LOCAL_WORKTREE } from "@host/ipc/modules/mirror";
 import {
   CHANGED_LOCALLY,
   core,
+  decide,
   describeRefusal,
   type Direction,
+  type FollowableSession,
   type Outcome,
   refsToCarry,
 } from "./followPlan";
-import type { FollowableSession } from "./gitFollow";
 import {
   applyGitState,
   type GitHead,
   type GitState,
+  type GitStateCore,
   indexRefFor,
 } from "./gitState";
 
-// Which side is the reference for two sides that never agreed and sit
-// on different tips. The peer's tip is here only if it ever landed
-// here: an unknown or unrelated tip is two histories.
-export async function byAncestry(
+// Which way git follows this round (followPlan.ts decide), looking at
+// the histories for two sides that never agreed and sit on different
+// tips. The peer's tip is here only if it ever landed here: an unknown
+// or unrelated tip is two histories.
+export async function chooseDirection(
   projectPath: string,
-  localTip: string,
-  peerTip: string,
+  agreed: GitStateCore | null,
+  local: GitState,
+  peer: GitState,
 ): Promise<Direction> {
-  if (!(await hasCommit(projectPath, peerTip))) return "diverged";
-  if (await isAncestor(projectPath, localTip, peerTip)) return "pull";
-  if (await isAncestor(projectPath, peerTip, localTip)) return "push";
+  const planned = decide(agreed, local, peer);
+  if (planned !== "ancestry") return planned;
+  if (!(await hasCommit(projectPath, peer.tip))) return "diverged";
+  if (await isAncestor(projectPath, local.tip, peer.tip)) return "pull";
+  if (await isAncestor(projectPath, peer.tip, local.tip)) return "push";
   return "diverged";
+}
+
+// One reconcile's view: the session, its two sides' APIs, and the
+// state each side read. `peer` is in this side's branch names.
+export interface Round {
+  readonly project: Project;
+  readonly localWorktree: { id: string; path: string };
+  readonly session: FollowableSession;
+  readonly peerSync: PeerSyncApi;
+  readonly peerMirror: PeerMirrorApi;
+  readonly local: GitState;
+  readonly peer: GitState;
 }
 
 // The haves for a pull whose tip is not here (see pull).
@@ -59,12 +80,7 @@ async function pullHaves(
 // for. `agreedTip` is the tip both sides last shared, the best have
 // after this side's own.
 export async function pull(
-  project: Project,
-  localWorktree: { id: string; path: string },
-  session: FollowableSession,
-  peerSync: PeerSyncApi,
-  local: GitState,
-  peer: GitState,
+  { project, localWorktree, session, peerSync, local, peer }: Round,
   peerHead: GitHead,
   agreedTip: string | null,
 ): Promise<Outcome> {
@@ -114,12 +130,7 @@ export async function pull(
 // and the state applied there carries `headThere`, this side's head
 // in the peer's names.
 export async function push(
-  project: Project,
-  session: FollowableSession,
-  peerSync: PeerSyncApi,
-  peerMirror: PeerMirrorApi,
-  local: GitState,
-  peer: GitState,
+  { project, localWorktree, session, peerSync, peerMirror, local, peer }: Round,
   headThere: GitHead,
 ): Promise<Outcome> {
   const probe = [
@@ -131,12 +142,11 @@ export async function push(
     commits: probe,
   });
   const peerHas = new Set(present);
-  const localWorktreeId = session.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "";
   const carry = refsToCarry(
     local.head,
     !peerHas.has(local.tip),
     local.indexCommit !== null && !peerHas.has(local.indexCommit)
-      ? indexRefFor(localWorktreeId)
+      ? indexRefFor(localWorktree.id)
       : null,
     "this worktree is on a detached HEAD at a commit the other device does not have",
   );
@@ -146,7 +156,7 @@ export async function push(
     // The peer asks this side for the bundle over a link this side
     // opens (sync:receiveBundle, the peer's grant, the one the whole
     // session rides).
-    await offerSource(peerSync, project, localWorktreeId, (channelId) =>
+    await offerSource(peerSync, project, localWorktree.id, (channelId) =>
       peerSync.receiveBundle({
         projectId: session.projectId,
         refs: wantRefs,
