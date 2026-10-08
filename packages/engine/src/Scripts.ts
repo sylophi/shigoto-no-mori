@@ -313,7 +313,9 @@ const make = Effect.gen(function* () {
     const program = yield* findExecutable(manager);
     if (Option.isNone(program)) return yield* refused("no-manager");
     return {
-      program: program.value,
+      // An empty or relative PATH entry is the cwd's, and the script
+      // runs elsewhere.
+      program: path.resolve(program.value),
       args: runArgs(manager, input.script, input.extra),
     };
   });

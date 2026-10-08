@@ -6,12 +6,14 @@ import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,13 +63,17 @@ const withoutHue = (doc: unknown) =>
     ? doc.map((row: unknown) => Object.assign({}, row, { hue: null }))
     : doc;
 
-// A new project's id, random on each side.
-const withoutIds = (seen: object) =>
+// What differs by side: a new project's id, random on each, and the
+// side's own data dir, where managed worktrees go. Only the run's own
+// dir is masked, so one side using the other's still shows.
+const withoutSideDetails = (seen: object, side: string) =>
   JSON.parse(
-    JSON.stringify(seen).replaceAll(
-      /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
-      "<id>",
-    ),
+    JSON.stringify(seen)
+      .replaceAll(`${box.home}/${side}/`, "<data>/")
+      .replaceAll(
+        /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
+        "<id>",
+      ),
   ) as unknown;
 
 // The same command through both binaries from `cwd`, each on its own
@@ -79,8 +85,8 @@ const sameAt = async (cwd: string, ...args: string[]) => {
     box.runAt(goSm(), "go", cwd, args),
     box.runAt(built, "cli", cwd, args),
   ]);
-  const seen = (run: typeof go) =>
-    withoutIds(
+  const seen = (run: typeof go, side: string) =>
+    withoutSideDetails(
       args.includes("--json")
         ? {
             code: run.code,
@@ -88,8 +94,9 @@ const sameAt = async (cwd: string, ...args: string[]) => {
             stderr: run.stderr,
           }
         : { code: run.code, stdout: run.stdout, stderr: run.stderr },
+      side,
     );
-  assert.deepStrictEqual(seen(ours), seen(go), args.join(" "));
+  assert.deepStrictEqual(seen(ours, "cli"), seen(go, "go"), args.join(" "));
 };
 
 const same = (...args: string[]) => sameAt(box.home, ...args);
@@ -346,6 +353,150 @@ describe("projects add, remove and reorder", () => {
   });
 });
 
+describe("worktrees", () => {
+  // Two projects: one with a linked worktree and a title on it, one
+  // with only its primary.
+  const projects = () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    box.write("projects/A/project.json", { defaultBranch: "main" });
+    return { alpha, beta, fox: `${box.home}/fox` };
+  };
+
+  it("lists the worktrees, scoped to the project at the cwd", async () => {
+    const { alpha, fox } = projects();
+    await same("list");
+    await same("--json", "list");
+    await sameAt(fox, "ls");
+    await sameAt(fox, "--json", "wt", "l", "--all");
+    await same("w", "list", "-p", "alpha");
+    await same("--json", "worktrees", "list", "--project-id", "B");
+    await sameAt(alpha, "list", "--identities");
+    await same("--json", "list", "--identities", "--primary-ref");
+    await same("list", "--primary-ref");
+  });
+
+  it("names one worktree by id, as the app does", async () => {
+    const { fox } = projects();
+    const id = (
+      (await box.runAt(goSm(), "go", fox, ["--json", "path"])).doc as {
+        id: string;
+      }
+    ).id;
+    await same("--json", "list", "--worktree-id", id);
+    await same("list", "--worktree-id", id, "--identities");
+    await sameAt(fox, "list", "--worktree-id", id, "--identities");
+    await same("--json", "list", "--worktree-id", "nope");
+  });
+
+  it("prints a worktree's folder however it's named", async () => {
+    const { alpha, fox } = projects();
+    await same("path", "fox");
+    await same("--json", "path", "alpha/fox");
+    await sameAt(fox, "path");
+    await sameAt(alpha, "--json", "path", "root");
+    await same("path", "fox", "-p", "beta");
+    await same("--json", "path", "nope");
+    await same("path");
+    await same("path", "fox", "extra");
+    await same("list", "alpha");
+    await same("projects", "ls");
+    await same("--json", "p", "rm", "--project-id", "B", "--yes");
+  });
+
+  it("says where a new worktree would go", async () => {
+    projects();
+    await same("--json", "destination", "-p", "alpha", "--name", "owl");
+    await same("worktrees", "destination", "-p", "alpha", "--name", "FOX");
+    await same("--json", "destination", "-p", "alpha", "--name", "primary");
+    await same("destination", "-p", "alpha", "--name", "a/b");
+    await same("destination", "-p", "alpha", "extra");
+  });
+
+  it("says when there are no projects", async () => {
+    await same("list");
+    await same("--json", "list", "--identities");
+  });
+});
+
+describe("status", () => {
+  // A project with a linked worktree holding staged, unstaged and
+  // untracked changes and a stash, and setup and teardown scripts.
+  const project = () => {
+    const alpha = box.repo("alpha", { "a.txt": "a\n", "b.txt": "b\n" });
+    const fox = `${box.home}/fox`;
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", fox);
+    box.git(
+      fox,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      `Work on the fox, ${"and then some more of it, ".repeat(4)}until it's done`,
+    );
+    writeFileSync(`${fox}/a.txt`, "staged\n");
+    box.git(fox, "add", "a.txt");
+    writeFileSync(`${fox}/b.txt`, "stashed\n");
+    box.git(fox, "stash", "-q");
+    writeFileSync(`${fox}/b.txt`, "unstaged\n");
+    writeFileSync(`${fox}/new.txt`, "untracked\n");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    box.write("projects/A/project.json", {
+      defaultBranch: "main",
+      scripts: { setup: "pnpm install", teardown: "echo bye" },
+    });
+    return { alpha, fox };
+  };
+
+  it("shows a worktree's card, the cwd's or a named one", async () => {
+    const { alpha, fox } = project();
+    await sameAt(fox, "status", "--no-pr");
+    await same("--json", "status", "fox", "--no-pr");
+    await sameAt(alpha, "st", "--no-pr");
+    await same("--json", "wt", "status", "alpha/root", "--no-pr");
+    await same("status", "nope", "--no-pr");
+  });
+
+  it("shows the branch's pull request, or why it couldn't look", async () => {
+    project();
+    box.fakeBin(
+      "gh",
+      `if [ "$1" = pr ]; then echo '${JSON.stringify([
+        {
+          number: 7,
+          title: "Fox things",
+          state: "OPEN",
+          isDraft: false,
+          url: "https://github.com/me/alpha/pull/7",
+          baseRefName: "main",
+          headRefName: "fox",
+          isCrossRepository: false,
+          statusCheckRollup: [
+            {
+              __typename: "CheckRun",
+              status: "COMPLETED",
+              conclusion: "SUCCESS",
+            },
+            { __typename: "CheckRun", status: "IN_PROGRESS", conclusion: "" },
+          ],
+        },
+      ])}'; else exit 0; fi`,
+    );
+    await same("status", "fox");
+    await same("--json", "status", "fox");
+    await same("status", "root");
+  });
+});
+
 describe("doctor", () => {
   // Each side's data dir, which the checklist names, as one.
   const sideNeutral = (seen: unknown): unknown =>
@@ -559,6 +710,28 @@ describe("shell", () => {
     await sameInHomes({}, "shell", "status");
   });
 
+  // Go writes over the link. A dotfiles manager's link stays one here,
+  // and the file it tracks gets the hook.
+  it("writes a symlinked config through its link", async () => {
+    seedHomes({ "dotfiles/zshrc": "export A=1\n" });
+    const home = homeOf("cli");
+    symlinkSync("dotfiles/zshrc", join(home, ".zshrc"));
+    const run = (...args: string[]) =>
+      start(built, "cli", box.home, args, { HOME: home }).ended;
+    assert.equal((await run("shell", "install", "zsh")).code, 0);
+    assert.ok(lstatSync(join(home, ".zshrc")).isSymbolicLink());
+    assert.match(
+      readFileSync(join(home, "dotfiles/zshrc"), "utf8"),
+      /^export A=1\n\n# >>> shigomori-dev shell integration >>>\n/,
+    );
+    assert.equal((await run("shell", "uninstall")).code, 0);
+    assert.ok(lstatSync(join(home, ".zshrc")).isSymbolicLink());
+    assert.equal(
+      readFileSync(join(home, "dotfiles/zshrc"), "utf8"),
+      "export A=1\n",
+    );
+  });
+
   it("refreshes an older hook in place, and leaves an edited one alone", async () => {
     const begin = "# >>> shigomori-dev shell integration >>>";
     const end = "# <<< shigomori-dev shell integration <<<";
@@ -586,6 +759,7 @@ case "$name" in
   fail) exit 3 ;;
   term) kill -TERM $$ ;;
   kill) kill -KILL $$ ;;
+  segv) kill -SEGV $$ ;;
   args)
     for arg in "$@"; do echo "[$arg]"; done
     pwd
@@ -599,7 +773,16 @@ case "$name" in
 esac`;
 
 const scripted = () => {
-  const scripts = ["ok", "fail", "term", "kill", "args", "wait", "sleep"];
+  const scripts = [
+    "ok",
+    "fail",
+    "term",
+    "kill",
+    "segv",
+    "args",
+    "wait",
+    "sleep",
+  ];
   const repo = box.repo("repo", {
     "package.json": JSON.stringify({
       scripts: Object.fromEntries(scripts.map((name) => [name, name])),
@@ -770,6 +953,10 @@ describe("run", () => {
       { cwd: worktree, env: box.env("cli"), encoding: "utf8" },
     );
     assert.equal(shellSees.trim(), "137");
+    // A crash is reported as 128+n, never raised on sm, where Go's sm,
+    // the script by then, crashes.
+    const crashed = await start(built, "cli", worktree, ["run", "segv"]).ended;
+    assert.deepEqual([crashed.code, crashed.signal], [139, null]);
   });
 
   it("passes what follows -- to the script as it is, from the worktree's root", async () => {

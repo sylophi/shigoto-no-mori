@@ -32,7 +32,6 @@ import { ExitCode, UsageError } from "../errors.ts";
 import { given, here, projectFlags } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 import { interactive } from "../prompt.ts";
-import type { engine } from "../engine.ts";
 import { handOver } from "../handOver.ts";
 
 // A hook install or uninstall won't touch, or a config file it couldn't
@@ -107,29 +106,38 @@ const loginShell = Effect.map(envVar("SHELL"), (shell) => {
   return isShellKind(kind) ? kind : "";
 });
 
+// The document `shell status --json` prints, and each shell's config
+// home-collapsed, in the same order.
 const status = Effect.gen(function* () {
   const at = yield* place;
   const shells: Hook[] = [];
   for (const kind of SHELL_KINDS) shells.push(yield* inspectHook(at, kind));
   return {
-    ok: true,
-    loginShell: yield* loginShell,
-    active: (yield* envVar(CD_FILE_ENV)) !== "",
-    // Hands off an unreadable file as off an edited one.
-    shells: shells.map(({ shell, path, state }) => ({
-      shell,
-      path,
-      state: state === "unreadable" ? "modified" : state,
-    })),
+    document: {
+      ok: true,
+      loginShell: yield* loginShell,
+      active: (yield* envVar(CD_FILE_ENV)) !== "",
+      // Hands off an unreadable file as off an edited one.
+      shells: shells.map(({ shell, path, state }) => ({
+        shell,
+        path,
+        state: state === "unreadable" ? "modified" : state,
+      })),
+    },
+    shown: shells.map(({ path }) => at.collapse(path)),
   };
 });
 
 // Replaces the file whole, through a temp sibling, so a failed write
 // never leaves the user's config cut short. An existing file keeps its
-// permissions.
-const writeHookFile = (at: Place, target: string, content: string) =>
+// permissions, and a symlinked one (a dotfiles manager's) stays a link,
+// the file it points at getting the change.
+const writeHookFile = (at: Place, file: string, content: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const target = yield* fs
+      .realPath(file)
+      .pipe(Effect.orElseSucceed(() => file));
     const mode = yield* fs.stat(target).pipe(
       Effect.map((info) => info.mode & 0o777),
       Effect.orElseSucceed(() => 0o644),
@@ -234,7 +242,7 @@ const installCommand = Command.make(
         });
       }
       const target = yield* install(yield* place, kind);
-      if (json) return yield* emit(yield* status);
+      if (json) return yield* emit((yield* status).document);
       const { cyan, dim } = styles(stderrColor);
       yield* note(
         `Hooked ${cyan(binaryName)} shell integration into ${cyan(target)}.`,
@@ -272,7 +280,7 @@ const uninstallCommand = Command.make("uninstall", {}, () =>
       }
     }
     if (json) {
-      yield* emit(yield* status);
+      yield* emit((yield* status).document);
     } else if (!removedAny && !failed) {
       yield* note("No shell integration hooks were installed.");
     } else if (removedAny) {
@@ -288,9 +296,8 @@ const uninstallCommand = Command.make("uninstall", {}, () =>
 const statusCommand = Command.make("status", {}, () =>
   Effect.gen(function* () {
     const { json, binaryName, stdoutColor } = yield* Effect.service(Output);
-    const found = yield* status;
+    const { document: found, shown } = yield* status;
     if (json) return yield* emit(found);
-    const { collapse } = yield* place;
     const { dim, green, yellow } = styles(stdoutColor);
     const label = {
       installed: green("installed"),
@@ -300,10 +307,10 @@ const statusCommand = Command.make("status", {}, () =>
     yield* out(
       renderTable(
         ["shell", "hook", "config"],
-        found.shells.map(({ shell, state, path }) => [
+        found.shells.map(({ shell, state }, index) => [
           shell === found.loginShell ? `${shell} *` : shell,
           label[state],
-          dim(collapse(path)),
+          dim(shown[index] ?? ""),
         ]),
         stdoutColor,
       ),
@@ -321,21 +328,17 @@ const statusCommand = Command.make("status", {}, () =>
   }),
 ).pipe(Command.withDescription("Show hook and session state"));
 
-// init runs in every new shell, so it is given Paths alone, never the
-// store the rest open.
-export const shellCommand = (layers: {
-  readonly init: ReturnType<typeof Paths.layer>;
-  readonly services: ReturnType<typeof engine>;
-}) =>
-  Command.make("shell").pipe(
-    Command.withDescription("Shell integration: cd without subshells"),
-    Command.withSubcommands([
-      installCommand.pipe(Command.provide(layers.services)),
-      uninstallCommand.pipe(Command.provide(layers.services)),
-      statusCommand.pipe(Command.provide(layers.services)),
-      init.pipe(Command.provide(layers.init)),
-    ]),
-  );
+// Needs Paths and the platform alone, never the store: init runs in
+// every new shell.
+export const shellCommand = Command.make("shell").pipe(
+  Command.withDescription("Shell integration: cd without subshells"),
+  Command.withSubcommands([
+    installCommand,
+    uninstallCommand,
+    statusCommand,
+    init,
+  ]),
+);
 
 // --- sm cd ---
 
@@ -357,7 +360,7 @@ const enter = (name: string, target: string, cdFile: string) =>
     }
     const shell = (yield* envVar("SHELL")) || "/bin/sh";
     yield* note(`Entering ${where}. Exit the shell to return.`);
-    yield* handOver(shell, [], {
+    yield* handOver("shell", shell, [], {
       cwd: target,
       env: {
         ...process.env,

@@ -23,12 +23,29 @@ export class ExitCode extends Schema.TaggedError<ExitCode>()("ExitCode", {
   code: Schema.Int,
 }) {}
 
+// The signals a program crashes with.
+const CRASHES = new Set([
+  "SIGSEGV",
+  "SIGBUS",
+  "SIGILL",
+  "SIGFPE",
+  "SIGABRT",
+  "SIGTRAP",
+  "SIGSYS",
+]);
+
 // A command whose program was killed by `signal`. sm dies of the same
 // signal (main.ts), so whoever started it sees what running the program
-// themselves would have shown, a shell's 128+n among it.
+// themselves would have shown, a shell's 128+n among it. A crash signal
+// is only reported as 128+n: raising it on sm would read as sm crashing,
+// with a crash report of its own.
 export class Killed extends Schema.TaggedError<Killed>()("Killed", {
   signal: Schema.String,
-}) {}
+}) {
+  get raised(): boolean {
+    return !CRASHES.has(this.signal);
+  }
+}
 
 // A person answered no.
 export class Cancelled extends Schema.TaggedError<Cancelled>()(

@@ -22,10 +22,12 @@ const ERRNO_TEXT: Record<string, string> = {
   ELOOP: "too many levels of symbolic links",
 };
 
-// A failed call's errno as Go words it, else its message.
-export const errnoText = (error: PlatformError.PlatformError) => {
-  const code = Predicate.hasProperty(error.cause, "code")
-    ? String(error.cause.code)
-    : "";
-  return ERRNO_TEXT[code] ?? error.message;
+// An error's errno as Go words it, else `fallback`.
+export const errnoWords = (cause: unknown, fallback: string) => {
+  const code = Predicate.hasProperty(cause, "code") ? String(cause.code) : "";
+  return ERRNO_TEXT[code] ?? fallback;
 };
+
+// A failed call's errno as Go words it, else its message.
+export const errnoText = (error: PlatformError.PlatformError) =>
+  errnoWords(error.cause, error.message);

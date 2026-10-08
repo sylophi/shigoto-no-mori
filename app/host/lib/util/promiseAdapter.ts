@@ -51,3 +51,12 @@ export const make = <I>(name: string) => {
       : Effect.runPromiseWith(current)(effect).catch(() => {});
   return { layer, run, runSyncOr, runIfOpen };
 };
+
+// The adapter of one service, with `call` running a method of it:
+// `call((cli) => cli.readiness)`.
+export const forService = <I, S>(tag: Context.Key<I, S>, name: string) => {
+  const adapter = make<I>(name);
+  const call = <A, E>(f: (service: S) => Effect.Effect<A, E>): Promise<A> =>
+    adapter.run(Effect.flatMap(tag, f));
+  return { ...adapter, call };
+};

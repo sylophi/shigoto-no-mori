@@ -18,6 +18,13 @@ import { flavor, version } from "./build.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { runCommand } from "./commands/run.ts";
 import { cdCommand, shellCommand } from "./commands/shell.ts";
+import {
+  destination,
+  list,
+  path,
+  worktreesCommand,
+} from "./commands/worktrees.ts";
+import { status } from "./commands/status.ts";
 import { engine } from "./engine.ts";
 import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
@@ -37,6 +44,41 @@ function globalFlags(args: ReadonlyArray<string>) {
   };
 }
 
+// Go's aliases, folded before parsing, since effect/cli takes one per
+// command: a namespace's, a worktree verb's (at the top level and after
+// `worktrees`), and a project verb's, which differ: `rm` alone removes
+// a worktree, after `projects` a project.
+const VERBS: Readonly<Record<string, string>> = {
+  ls: "list",
+  l: "list",
+  st: "status",
+};
+const PROJECT_VERBS: Readonly<Record<string, string>> = {
+  ls: "list",
+  rm: "remove",
+};
+const NAMESPACES: Readonly<Record<string, string>> = {
+  worktree: "worktrees",
+  wt: "worktrees",
+  w: "worktrees",
+  project: "projects",
+  p: "projects",
+  launcher: "launchers",
+};
+
+function canonical(args: ReadonlyArray<string>) {
+  const [first, ...more] = args;
+  if (first === undefined) return args;
+  const command = NAMESPACES[first] ?? VERBS[first] ?? first;
+  const [verb, ...after] = more;
+  if (verb === undefined) return [command];
+  if (command === "worktrees") return [command, VERBS[verb] ?? verb, ...after];
+  if (command === "projects") {
+    return [command, PROJECT_VERBS[verb] ?? verb, ...after];
+  }
+  return [command, ...more];
+}
+
 const { json, rest } = globalFlags(process.argv.slice(2));
 const plain =
   json || process.env.NO_COLOR !== undefined || process.env.TERM === "dumb";
@@ -49,15 +91,20 @@ const sm = Command.make("sm").pipe(
     configCommand.pipe(Command.provide(services)),
     projectsCommand.pipe(Command.provide(services)),
     launchersCommand.pipe(Command.provide(services)),
-    shellCommand({ init: Paths.layer(flavor), services }),
+    shellCommand.pipe(Command.provide(Paths.layer(flavor))),
     cdCommand.pipe(Command.provide(services)),
     runCommand.pipe(Command.provide(services)),
+    worktreesCommand.pipe(Command.provide(services)),
+    list.pipe(Command.provide(services)),
+    path.pipe(Command.provide(services)),
+    destination.pipe(Command.provide(services)),
+    status.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(services)),
   ]),
 );
 
 const program = Command.runWith(sm, { version, renderErrors: false })(
-  rest,
+  canonical(rest),
 ).pipe(
   // Only --help of effect/cli's built-in flags, as Go has no others.
   Effect.provide(
@@ -76,6 +123,10 @@ const program = Command.runWith(sm, { version, renderErrors: false })(
     json,
     stdoutColor: !plain && process.stdout.isTTY === true,
     stderrColor: !plain && process.stderr.isTTY === true,
+    width: Math.min(
+      Math.max(process.stdout.columns || process.stderr.columns || 80, 60),
+      110,
+    ),
     binaryName: flavorNames(flavor).binaryName,
   }),
   Effect.flatMap(({ code, error }) =>
@@ -84,7 +135,7 @@ const program = Command.runWith(sm, { version, renderErrors: false })(
       // On the way out, once the runtime has let go of its own handlers,
       // so the signal's default action ends sm. The code stands in should
       // it not.
-      if (error instanceof Killed) {
+      if (error instanceof Killed && error.raised) {
         process.once("exit", () => process.kill(process.pid, error.signal));
       }
     }),

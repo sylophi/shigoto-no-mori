@@ -52,3 +52,29 @@ export const resolveProject = (ref: {
         worktrees.resolveProject(at, Option.getOrUndefined(given(ref.project))),
     });
   });
+
+// How a command names its worktree: a name, <project>/<name> or a path
+// as the positional, -p to narrow the names, or the app's ids.
+export const worktreeFlags = {
+  ...projectFlags,
+  worktreeId: Flag.String("worktree-id").pipe(Flag.optional),
+};
+
+// The worktree a command names, else the one at the cwd, and where the
+// command runs.
+export const resolveWorktree = (ref: {
+  readonly ref?: Option.Option<string>;
+  readonly project: Option.Option<string>;
+  readonly projectId: Option.Option<string>;
+  readonly worktreeId: Option.Option<string>;
+}) =>
+  Effect.gen(function* () {
+    const at = yield* here;
+    const located = yield* (yield* Worktrees.Worktrees).resolve(at, {
+      ref: Option.getOrUndefined(given(ref.ref ?? Option.none())),
+      project: Option.getOrUndefined(given(ref.project)),
+      projectId: Option.getOrUndefined(given(ref.projectId)),
+      worktreeId: Option.getOrUndefined(given(ref.worktreeId)),
+    });
+    return { at, located };
+  });

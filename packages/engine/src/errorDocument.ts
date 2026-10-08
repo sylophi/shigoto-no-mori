@@ -8,6 +8,7 @@ import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
 import { UnknownProject } from "./Registry.ts";
 import { NoPackageJson } from "./Scripts.ts";
+import { UpdateInProgress } from "./stagingLock.ts";
 import {
   DirtyWorktree,
   PullRequestOwnsDescription,
@@ -43,6 +44,7 @@ export const codeOf = (error: unknown): string | undefined => {
   if (error instanceof UnknownWorktree) return "unknown-worktree";
   if (error instanceof NoPackageJson) return "no-package-json";
   if (error instanceof PullRequestOwnsDescription) return "pull-request-open";
+  if (error instanceof UpdateInProgress) return "update-in-progress";
   // A tag, not the class: Landing imports this module.
   if (
     Predicate.isTagged(error, "LandingRefused") &&

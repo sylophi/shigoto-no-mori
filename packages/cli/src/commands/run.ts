@@ -8,6 +8,7 @@
 import * as Scripts from "@shigomori/engine/Scripts";
 import { scriptEnv } from "@shigomori/engine/Lifecycle";
 import * as Worktrees from "@shigomori/engine/Worktrees";
+import { projectsHint } from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
@@ -41,10 +42,7 @@ const target = (ids: {
         problem: `This repo (${at.unregisteredRepo}) isn't registered as a project. Register it with \`${binaryName} projects add\` to run scripts here.`,
       });
     }
-    const hint =
-      at.projects.length === 0
-        ? "No projects are registered yet. Add the repo in the Shigoto no Mori app first."
-        : `Registered projects: ${at.projects.map(({ name }) => name).join(", ")}.`;
+    const hint = projectsHint(at.projects.map(({ name }) => name));
     return yield* new UsageError({
       problem: `\`${binaryName} run\` only works inside a registered project's checkout or worktree. ${hint}`,
     });
@@ -99,7 +97,7 @@ export const runCommand = Command.make(
       yield* scripts.recordRun(project.id, script);
       // From the worktree's root, not the cwd: a nested package.json must
       // not retarget the run.
-      yield* handOver(command.program, command.args, {
+      yield* handOver("exec", command.program, command.args, {
         cwd: worktree.path,
         env: { ...process.env, ...scriptEnv(context, script) },
       });

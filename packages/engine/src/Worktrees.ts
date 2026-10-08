@@ -296,6 +296,13 @@ export class UnknownWorktree extends Schema.TaggedError<UnknownWorktree>()(
   }
 }
 
+// What a command that can't tell the project says about the ones there
+// are.
+export const projectsHint = (names: ReadonlyArray<string>) =>
+  names.length === 0
+    ? "No projects are registered yet. Add the repo in the Shigoto no Mori app first."
+    : `Registered projects: ${names.join(", ")}.`;
+
 // A ref that names no single project or worktree. `usage` is whether
 // the command line was what was wrong (the terminal exits 2), and
 // `projects` are the registered names the hint lists.
@@ -330,10 +337,7 @@ export class TargetError extends Schema.TaggedError<TargetError>()(
   }
 
   override get message(): string {
-    const hint =
-      this.projects.length === 0
-        ? "No projects are registered yet. Add the repo in the Shigoto no Mori app first."
-        : `Registered projects: ${this.projects.join(", ")}.`;
+    const hint = projectsHint(this.projects);
     const quoted = JSON.stringify(this.ref);
     switch (this.reason) {
       case "not-in-project":

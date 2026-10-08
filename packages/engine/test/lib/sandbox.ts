@@ -83,30 +83,44 @@ const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
 // once per test process.
 let built: string | undefined;
 
+const goSources = (file: string) =>
+  file.startsWith("embed/") ||
+  file === "go.mod" ||
+  file === "go.sum" ||
+  (file.endsWith(".go") && !file.endsWith("_test.go") && !file.includes("/"));
+
 export function goSm(): string {
-  built ??= buildGo(
-    cliDir,
-    "sm",
-    (file) =>
-      file.startsWith("embed/") ||
-      file === "go.mod" ||
-      file === "go.sum" ||
-      (file.endsWith(".go") &&
-        !file.endsWith("_test.go") &&
-        !file.includes("/")),
-  );
+  built ??= buildGo(cliDir, "sm", goSources);
   return built;
 }
 
+// The Go sm as a release builds it, its version stamped in, for the verbs
+// a dev build refuses (`update`).
+const releaseBuilds = new Map<string, string>();
+
+export function goSmRelease(version: string): string {
+  const binary =
+    releaseBuilds.get(version) ??
+    buildGo(cliDir, "sm", goSources, [
+      "-X main.flavor=prod",
+      `-X main.version=${version}`,
+      "-X main.binaryName=sm",
+    ]);
+  releaseBuilds.set(version, binary);
+  return binary;
+}
+
 // A Go program built from `dir` into a folder named for the hash of its
-// sources (the files `include` takes), so a build is reused until they
-// change.
+// sources (the files `include` takes) and its -ldflags, so a build is
+// reused until they change.
 function buildGo(
   dir: string,
   name: string,
   include: (file: string) => boolean,
+  ldflags: ReadonlyArray<string> = [],
 ): string {
   const hash = createHash("sha256");
+  if (ldflags.length > 0) hash.update(`${ldflags.join(" ")}\0`);
   for (const rel of readdirSync(dir, { recursive: true })
     .map(String)
     .filter(include)
@@ -122,11 +136,16 @@ function buildGo(
   if (existsSync(binary)) return binary;
   mkdirSync(dirname(binary), { recursive: true });
   const partial = `${binary}.${process.pid}`;
-  execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
-    cwd: dir,
-    env: childEnv(),
-    stdio: ["ignore", "ignore", "inherit"],
-  });
+  const flags = ldflags.length === 0 ? [] : ["-ldflags", ldflags.join(" ")];
+  execFileSync(
+    "go",
+    ["build", "-buildvcs=false", ...flags, "-o", partial, "."],
+    {
+      cwd: dir,
+      env: childEnv(),
+      stdio: ["ignore", "ignore", "inherit"],
+    },
+  );
   renameSync(partial, binary);
   return binary;
 }
@@ -172,6 +191,8 @@ export function macfs(): string {
 
 export type Sandbox = {
   readonly home: string;
+  // The data dir of side `name`, copied from the seed when first asked for.
+  readonly side: (name: string) => string;
   // Writes a JSON file under the data dir.
   readonly write: (file: string, value: unknown) => void;
   // A copy of the data dir for each side, taken when first asked for.
@@ -334,6 +355,7 @@ export function sandbox(): Sandbox {
 
   return {
     home: root,
+    side: sideDir,
     write: (file, value) => {
       mkdirSync(dirname(join(seed, file)), { recursive: true });
       writeFileSync(join(seed, file), JSON.stringify(value));

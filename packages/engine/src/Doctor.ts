@@ -22,7 +22,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
-import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -74,6 +73,7 @@ import {
   stagingLockPath,
   UpdateInProgress,
 } from "./stagingLock.ts";
+import { capture as runCapture } from "./processes.ts";
 import type { ListedProject, RegisteredProject } from "./Registry.ts";
 import * as Terrier from "./Terrier.ts";
 import { terrierProjects } from "./Terrier.ts";
@@ -328,24 +328,8 @@ const make = Effect.gen(function* () {
     args: ReadonlyArray<string>,
     env?: Record<string, string>,
   ) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const handle = yield* spawner.spawn(
-          ChildProcess.make(command, [...args], {
-            stdin: "ignore",
-            ...(env === undefined ? {} : { env, extendEnv: true }),
-          }),
-        );
-        const [stdout, , code] = yield* Effect.all(
-          [
-            handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
-            Stream.runDrain(handle.stderr),
-            handle.exitCode,
-          ],
-          { concurrency: 3 },
-        );
-        return { stdout, code: Number(code) };
-      }),
+    runCapture(spawner, command, args, { env }).pipe(
+      Effect.map(({ output, code }) => ({ stdout: output, code })),
     );
 
   // lstat(2) of names in a folder, by name: a symlink's own, as Go's

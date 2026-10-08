@@ -15,9 +15,11 @@ import {
   resolvePullRequestCheckout,
 } from "@host/lib/githubCli/pullRequestCheckout";
 import { mergeViaCli } from "../cliDelegate";
-import { getGithubCliReadiness } from "@host/lib/githubCli/readiness";
-import { getRepoMergeConfig } from "@host/lib/githubCli/repoConfig";
-import { getRepoDescription } from "@host/lib/githubCli/repoDescription";
+import {
+  getGithubCliReadiness,
+  getRepoDescription,
+  getRepoMergeConfig,
+} from "@host/lib/githubCli/GithubCli";
 import { findProjectOrThrow } from "@host/lib/projects";
 
 export const githubCliHandlers: Handlers<typeof githubCliContract> = {
