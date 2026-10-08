@@ -20,6 +20,7 @@ import * as Launchers from "./Launchers.ts";
 import * as Landing from "./Landing.ts";
 import * as Layout from "./Layout.ts";
 import * as Lifecycle from "./Lifecycle.ts";
+import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
 import * as Registry from "./Registry.ts";
@@ -50,6 +51,7 @@ const services = (options: EngineOptions) =>
     Transfer.layer,
     Dirty.layer,
     Bundle.layer,
+    Open.layer,
   ).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),

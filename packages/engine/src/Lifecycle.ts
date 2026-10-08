@@ -80,6 +80,12 @@ export class Lifecycle extends Context.Service<
       readonly code: number | null;
       readonly runId: string;
     }>;
+    // The user's login shell and the arguments that run a command line
+    // in it, as scripts and custom launchers are run.
+    readonly loginShell: Effect.Effect<{
+      readonly shell: string;
+      readonly args: ReadonlyArray<string>;
+    }>;
   }
 >()("sm/engine/Lifecycle") {}
 
@@ -231,7 +237,7 @@ const make = Effect.gen(function* () {
     );
   });
 
-  return Lifecycle.of({ run });
+  return Lifecycle.of({ run, loginShell });
 });
 
 export const layer = Layer.effect(Lifecycle, make);

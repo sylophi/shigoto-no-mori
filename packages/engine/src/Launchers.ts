@@ -18,7 +18,7 @@ import * as Usage from "./Usage.ts";
 // openArgs are the launch arguments of one that takes the folder that
 // way. A terminal tool is the command line inTerminal runs in the
 // user's terminal, found by its first word on PATH.
-type CatalogApp = {
+export type CatalogApp = {
   readonly id: string;
   readonly label: string;
   readonly bundleNames?: ReadonlyArray<string>;
@@ -45,6 +45,20 @@ export type RowEntry = {
   readonly available?: true;
 };
 
+// A launcher with what launching it takes: an installed app with the
+// bundle or tool it was found by, the repo's GitHub page, or a custom
+// command line.
+export type Launchable =
+  | (RowEntry & {
+      readonly kind: "detected";
+      readonly app: CatalogApp;
+      // The first bundle found ("__finder__" for Finder), if any.
+      readonly bundle: string | undefined;
+      readonly cliOnPath: boolean;
+    })
+  | (RowEntry & { readonly kind: "web"; readonly url: string })
+  | (RowEntry & { readonly kind: "custom"; readonly command: string });
+
 export type LauncherRow = {
   // By uses in the last two weeks, then by label. Hidden ones left out.
   readonly entries: ReadonlyArray<RowEntry>;
@@ -62,6 +76,13 @@ export class Launchers extends Context.Service<
       readonly id: string;
       readonly path: string;
     }) => Effect.Effect<LauncherRow>;
+    // Every launcher the project has, hidden ones included, in the row's
+    // order of assembly: installed apps, the GitHub page, the device's
+    // custom commands, then the project's.
+    readonly launchable: (project: {
+      readonly id: string;
+      readonly path: string;
+    }) => Effect.Effect<ReadonlyArray<Launchable>>;
   }
 >()("sm/engine/Launchers") {}
 
@@ -71,6 +92,14 @@ const GITHUB_REMOTE =
 
 export const isGithubRemote = (remoteUrl: string) =>
   GITHUB_REMOTE.test(remoteUrl.trim());
+
+// The repo's page on GitHub, for a remote that is a GitHub repo.
+const githubPage = (remoteUrl: string) => {
+  const [, host, owner, repo] = GITHUB_REMOTE.exec(remoteUrl.trim()) ?? [];
+  return host === undefined || owner === undefined || repo === undefined
+    ? undefined
+    : `https://${host}/${owner}/${repo}`;
+};
 
 // A JSON field Go reads into a string: absent, null or text.
 const text = (value: unknown) =>
@@ -280,7 +309,84 @@ const make = Effect.gen(function* () {
     };
   });
 
-  return Launchers.of({ catalog: listCatalog, row });
+  // The bundle an app was found by, in its own order of names.
+  const bundleOf = (app: CatalogApp) =>
+    Effect.gen(function* () {
+      for (const bundle of app.bundleNames ?? []) {
+        if (bundle === "__finder__") return bundle;
+        for (const folder of appFolders) {
+          const found = path.join(folder, bundle);
+          if (yield* exists(found)) return found;
+        }
+      }
+      return undefined;
+    });
+
+  const launchable = Effect.fn("Launchers.launchable")(function* (project: {
+    readonly id: string;
+    readonly path: string;
+  }) {
+    const [device, stored, installed, remote] = yield* Effect.all(
+      [
+        settings.read({ kind: "device" }),
+        settings.read({
+          kind: "project",
+          projectId: project.id,
+          path: project.path,
+        }),
+        // In the catalog's order, which Effect.filter doesn't keep.
+        Effect.forEach(apps, available, { concurrency: "unbounded" }).pipe(
+          Effect.map((found) => apps.filter((_, index) => found[index])),
+        ),
+        git
+          .run(project.path, ["remote", "get-url", "origin"])
+          .pipe(Effect.orElseSucceed(() => "")),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const detected = yield* Effect.forEach(installed, (app) =>
+      Effect.gen(function* () {
+        return {
+          kind: "detected" as const,
+          id: `app:${app.id}`,
+          label: app.label,
+          available: true as const,
+          app,
+          bundle: yield* bundleOf(app),
+          cliOnPath: app.cli !== undefined && (yield* onPath(app.cli)),
+        };
+      }),
+    );
+    const page = githubPage(remote);
+    const configured =
+      typeof stored?.defaultBranch === "string" &&
+      stored.defaultBranch.trim() !== "";
+    const custom = [
+      ...decodedLaunchers(device).custom,
+      ...(configured ? decodedLaunchers(stored).custom : []),
+    ].map(({ id, label, command }) => ({
+      kind: "custom" as const,
+      id: `custom:${id ?? ""}`,
+      label: label ?? "",
+      command: command ?? "",
+    }));
+    return [
+      ...detected,
+      ...(page === undefined
+        ? []
+        : [
+            {
+              kind: "web" as const,
+              id: WEB_GITHUB_ID,
+              label: "GitHub",
+              url: page,
+            },
+          ]),
+      ...custom,
+    ] satisfies ReadonlyArray<Launchable>;
+  });
+
+  return Launchers.of({ catalog: listCatalog, row, launchable });
 });
 
 export const layer = Layer.effect(Launchers, make);
