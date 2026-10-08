@@ -31,6 +31,7 @@ import {
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import { implSlot } from "@host/lib/util/implSlot";
+import type { Client } from "@shigomori/contracts/types";
 import {
   listed,
   matchDevices,
@@ -222,11 +223,7 @@ export async function registryOrEmpty(): Promise<DeviceInfo[]> {
 
 // A session a peer runs against one of this device's worktrees, with
 // the peer and the client to drive it through.
-export type PeerMirror = Running & { api: ReturnType<typeof peerMirrorApi> };
-
-function peerMirrorApi(deviceId: string) {
-  return peerClient(mirrorContract, deviceId);
-}
+export type PeerMirror = Running & { api: Client<typeof mirrorContract> };
 
 // The sessions peers run against this device's worktrees, found by
 // asking each connected peer of the registry for its list (a read,
@@ -244,7 +241,7 @@ export async function peerMirrors(
   );
   const found = await Promise.all(
     peers.map(async (device): Promise<PeerMirror[]> => {
-      const api = peerMirrorApi(device.deviceId);
+      const api = peerClient(mirrorContract, device.deviceId);
       try {
         const list = await within(api.list(), () => null);
         if (list === null) return [];

@@ -185,6 +185,10 @@ const peerTransportFor = (deviceId: string): ClientTransport => ({
     }),
 });
 
+// The byte channels of the same session.
+const peerChannelsFor = (deviceId: string) => () =>
+  hubHandlers.peerChannels(deviceId);
+
 // Continuous worktree mirroring, this device's half: the loopback
 // gateway the daemon dials peers through and the daemon itself
 // (main/core/mirror/*, both electron-free), bound here to the peer sessions
@@ -192,10 +196,6 @@ const peerTransportFor = (deviceId: string): ClientTransport => ({
 // engine. Started and stopped by the host's layer graph
 // (main/hostLayer.ts). A boot without the engine binary (a dev run
 // before file-sync:build) reports "unavailable" and keeps retrying.
-// The byte channels of a peer's cached direct session.
-const peerChannelsFor = (deviceId: string) => () =>
-  hubHandlers.peerChannels(deviceId);
-
 const mirrorGateway = createMirrorGateway({
   peerApiFor: (deviceId) => peerClient(mirrorContract, deviceId),
   peerChannelsFor,
@@ -548,8 +548,8 @@ export function registerIpcHandlers(): void {
       (error: unknown) => !isEntityGoneError(error),
     ),
   );
-  // The port-forward engine's peer reach, riding the same
-  // peerTransportFor as the sync wiring above and for the same reason:
+  // The port-forward engine's peer reach, through the same seam as
+  // every other (setPeerReach above) and for the same reason:
   // a second session would supersede the one the renderer's
   // remote-forest queries ride. The engine itself is electron-free
   // (main/core/portForward/engine.ts), and this is its only binding to the

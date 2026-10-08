@@ -653,7 +653,7 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
   // apply` -- is production code against real git.
   setPeerReach({
     transportFor: (deviceId) => {
-      assert.equal(deviceId, "A", "the move dialed an unexpected device");
+      assert.equal(deviceId, "A", "a peer call dialed an unexpected device");
       return {
         ...peerA.transport,
         invoke: async (channel, input) => {
