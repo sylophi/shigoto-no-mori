@@ -19,6 +19,7 @@
 // frame: it crosses as binary channel frames (channels.ts), each well
 // under the cap, with credit-based flow control.
 import { z } from "zod";
+import { errorToWire } from "@shigomori/contracts/errors";
 import { HANDSHAKE_NONCE_PATTERN } from "./proof";
 
 // Largest inbound (client to server) frame the host will buffer, in
@@ -182,51 +183,18 @@ const ResOkFrameSchema = z.object({
   result: z.unknown().optional(),
 });
 
-// The one refusal code a remote gate stamps on a res error: the direct
-// listener's command-access gate. One shared constant so the client
-// transport mints one typed error for "that machine will not run
-// commands from here", distinct from a real handler failure.
-export const COMMAND_REFUSED_CODE = "command-refused";
-
-// The refusal message the gate carries, matched on its own wherever
-// only the text survives (see isCommandRefusedError).
-export const COMMAND_REFUSED_MESSAGE =
-  "this device is not permitted to run commands on the remote machine";
-
-// The typed client-side surface of a command refusal, minted by the
-// direct client transport when a res error carries
-// COMMAND_REFUSED_CODE. The
-// message is preserved verbatim so every message-text matcher keeps
-// behaving as before.
-export class CommandRefusedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CommandRefusedError";
-  }
-}
-
-// Matcher that survives Electron's IPC error serialization (which
-// flattens an error to its message text): the renderer behind the hub
-// bridge sees a plain Error carrying the refusal message, not the
-// instance minted in main. Either form means "ask that machine to
-// allow commands".
-export function isCommandRefusedError(error: unknown): boolean {
-  if (error instanceof CommandRefusedError) return true;
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes(COMMAND_REFUSED_MESSAGE);
-}
-
-// The err form carries a message string because that is exactly what
-// survives Electron's IPC error serialization too: the matchers in
-// packages/contracts/src/errors.ts key on message text, so both wires degrade handler
-// failures identically. `code` is the machine-readable refusal
-// classification, absent on an ordinary handler failure.
+// The err form carries the message every side can show, and `error`,
+// the encoded contract error (packages/contracts/src/errors.ts) when the
+// handler failed with one, which the client decodes back into its
+// class. `code` is the machine-readable refusal classification,
+// absent on an ordinary handler failure.
 const ResErrFrameSchema = z.object({
   t: z.literal("res"),
   id: z.number().int(),
   ok: z.literal(false),
   message: z.string(),
   code: z.string().optional(),
+  error: z.unknown().optional(),
 });
 
 const PushFrameSchema = z.object({
@@ -268,6 +236,12 @@ export function resError(
     message,
     ...(code === undefined ? {} : { code }),
   };
+}
+
+// A handler's failure as the answer to its req: its message, and the
+// error itself when it is a contract error.
+export function resHandlerError(id: number, error: unknown): ServerFrame {
+  return { t: "res", id, ok: false, ...errorToWire(error) };
 }
 
 // The one sanctioned serializer for both directions, so the

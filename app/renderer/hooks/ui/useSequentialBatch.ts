@@ -42,9 +42,11 @@ async function runBatchImpl<T>(
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential by design
         await process(item); // oxlint-disable-line no-await-in-loop -- sequential by design
         setStatus((prev) => new Map(prev).set(key, { kind: "done" }));
-      } catch (err) {
-        const message = errorMessageOf(err);
-        setStatus((prev) => new Map(prev).set(key, { kind: "error", message }));
+      } catch (error) {
+        const message = errorMessageOf(error);
+        setStatus((prev) =>
+          new Map(prev).set(key, { kind: "error", message, error }),
+        );
       }
     }
   } finally {

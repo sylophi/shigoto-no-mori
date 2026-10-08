@@ -11,11 +11,9 @@
 // by a monotonic id, with push frames fanned out to local subscribers.
 // It owns exactly one socket. Redials live one layer up in the direct
 // keeper, which is the single owner of retry.
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { errorFromWire, errorMessageOf } from "@shigomori/contracts/errors";
 import {
   CLOSE_AUTH_FAILED,
-  COMMAND_REFUSED_CODE,
-  CommandRefusedError,
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
@@ -62,9 +60,7 @@ export class RemoteConnectError extends Error {
 
 // The socket closed while invokes were in flight (or an invoke was made
 // after close). Every pending invoke rejects with this so a caller sees
-// a disconnect distinctly from a handler error. Message text stays
-// generic: the packages/contracts/src/errors.ts matchers key on host handler messages,
-// which this is not.
+// a disconnect distinctly from a handler error.
 class RemoteDisconnectedError extends Error {
   readonly code: number | null;
   constructor(code: number | null) {
@@ -594,17 +590,10 @@ export function openDevice(
       pending.delete(frame.id);
       if (frame.ok) {
         entry.resolve(frame.result);
-      } else if (frame.code === COMMAND_REFUSED_CODE) {
-        // The host's gate refused the command (it does not accept
-        // commands from its peers). Typed, message preserved, so a caller can
-        // distinguish "that machine will not run commands from here"
-        // from a real handler failure.
-        entry.reject(new CommandRefusedError(frame.message));
       } else {
-        // A plain Error carrying the host's message text, so the
-        // packages/contracts/src/errors.ts matchers degrade a remote handler failure
-        // exactly as they do an Electron IPC one.
-        entry.reject(new Error(frame.message));
+        // The handler's contract error back as its class, or a plain
+        // Error carrying the host's message.
+        entry.reject(errorFromWire(frame));
       }
       return;
     }

@@ -501,8 +501,7 @@ const SyncCancelMoveResultSchema = strict(
   }),
 );
 
-// How a cancelled move fails, as text: Electron's IPC flattens an
-// error to its message, and a peer's answer arrives re-worded ("The
+// How a cancelled move fails, as text: a peer's answer arrives re-worded ("The
 // other device answered: ..."), so the marker is matched anywhere in
 // it (see isMoveCancelledError). The destination is left as it was,
 // the source untouched: the dialog's cancelled step says so.

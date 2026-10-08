@@ -8,7 +8,7 @@
 // on every call, and nothing learns a project id except from that list
 // or a CLI verb that just wrote it, so the snapshot is never behind a
 // caller that holds an id.
-import { unknownProjectError } from "@shigomori/contracts/errors";
+import { UnknownProjectError } from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import type { Project, ProjectRow } from "@shigomori/contracts/schemas";
 import {
@@ -168,7 +168,7 @@ export async function findProjectOrThrow(projectId: string): Promise<Project> {
   const known = snapshot.find((p) => p.id === projectId);
   if (known !== undefined) return toProject(known);
   const fresh = (await refreshProjects()).find((p) => p.id === projectId);
-  if (fresh === undefined) throw unknownProjectError(projectId);
+  if (fresh === undefined) throw new UnknownProjectError({ projectId });
   return toProject(fresh);
 }
 

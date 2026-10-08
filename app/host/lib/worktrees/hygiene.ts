@@ -7,7 +7,7 @@
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
 import { diskUsageViaCli } from "@host/ipc/cliDelegate";
-import { unknownWorktreeError } from "@shigomori/contracts/errors";
+import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
   isRealBranch,
@@ -332,7 +332,7 @@ export async function findWorktreeForDisk(
 ): Promise<WorktreeIdentity> {
   const identities = await projectIdentities(projectId);
   const found = identities.find((identity) => identity.id === worktreeId);
-  if (!found) throw unknownWorktreeError(worktreeId);
+  if (!found) throw new UnknownWorktreeError({ worktreeId });
   return found;
 }
 

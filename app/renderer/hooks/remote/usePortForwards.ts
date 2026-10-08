@@ -12,13 +12,15 @@
 // local act. Taking it from a scope would have tied the stop control to
 // an api the caller does not need.
 import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import {
+  errorMessageOf,
+  isCommandRefusedError,
+} from "@shigomori/contracts/errors";
 import { CHANNEL_OPEN_TOO_MANY } from "@shigomori/contracts/channelRefusals";
 import type {
   PortForwardSummary,
   PortForwardWorktree,
 } from "@shigomori/contracts/modules/portForward";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";

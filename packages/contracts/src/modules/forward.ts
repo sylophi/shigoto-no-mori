@@ -31,10 +31,8 @@ import { strict } from "../schemas/strict.ts";
 const ChannelIdSchema = HexId32Schema;
 
 // The host's coded refusals, as the exact message texts the client
-// side matches on (the engine's start probe, the UI's inline wording).
-// Electron IPC and the device wires preserve only the message string,
-// so the marker IS the message: mint and match through these, never a
-// literal.
+// side matches on (the engine's start probe, the UI's inline wording):
+// mint and match through these, never a literal.
 // connect-failed is a prefix, the rest are the whole message.
 export const FORWARD_CONNECT_FAILED = "connect-failed";
 

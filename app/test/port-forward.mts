@@ -52,7 +52,7 @@ import { randomBytes } from "node:crypto";
 import type { EventEmitter } from "node:events";
 import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, it } from "vitest";
-import { CommandRefusedError } from "@shared/ipc/socket/frames";
+import { CommandRefusedError } from "@shigomori/contracts/errors";
 import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shigomori/contracts/modules/forward";

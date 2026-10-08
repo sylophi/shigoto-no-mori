@@ -24,7 +24,11 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
-import { errorMessageOf, logFailure } from "@shigomori/contracts/errors";
+import {
+  errorMessageOf,
+  isContractError,
+  logFailure,
+} from "@shigomori/contracts/errors";
 import { landInvitedMirror } from "@host/mirror/invites";
 import {
   pullBranchCollision,
@@ -52,7 +56,6 @@ import {
   peerWorktreeOrUndefined,
   peerWorktreesApiFor,
 } from "@host/ipc/peerSync";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { deleteAnyLocalBranch, listBranches } from "@host/lib/git/branches";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
 import {
@@ -846,10 +849,11 @@ async function runPullWorktree(
 
 // A landing refusal is worded on the peer, where "this device" means
 // the peer, so it is attributed before it reaches this device's user.
-// The command refusal passes as it is: surfaces match on its text.
+// A contract error (the command refusal, an entity gone) passes as it
+// is, since surfaces branch on its class.
 function fromPeer<T>(answer: Promise<T>): Promise<T> {
   return answer.catch((error: unknown) => {
-    if (isCommandRefusedError(error)) throw error;
+    if (isContractError(error)) throw error;
     throw new Error(`The other device answered: ${errorMessageOf(error)}`);
   });
 }

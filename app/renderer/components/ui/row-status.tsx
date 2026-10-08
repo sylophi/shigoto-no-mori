@@ -4,7 +4,7 @@ export type RowStatus =
   | { kind: "idle" }
   | { kind: "running" }
   | { kind: "done" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; error: unknown };
 
 interface RowStatusBadgeProps {
   status: RowStatus;

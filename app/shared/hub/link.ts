@@ -116,9 +116,8 @@ export class HubAskTimeoutError extends Error {
   }
 }
 
-// The peer answered ok:false. The message is the peer's own text, so
-// the packages/contracts/src/errors.ts matchers read it as they would any remote
-// failure, and `code` classifies the refusals a caller acts on.
+// The peer answered ok:false. The message is the peer's own text, and
+// `code` classifies the refusals a caller acts on.
 export class HubAskRefusedError extends Error {
   readonly code: string | undefined;
   constructor(message: string, code: string | undefined) {
@@ -274,9 +273,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       const result = deps.serveConnectInfo(from, frame.input);
       return { answer: frame.ask, id: frame.id, ok: true, result };
     } catch (error) {
-      // Message text only, what survives Electron's IPC error
-      // serialization too, so packages/contracts/src/errors.ts matchers behave the
-      // same on every wire.
+      // The message only: connectInfo fails with no contract error.
       return refusal(frame, errorMessageOf(error));
     }
   }

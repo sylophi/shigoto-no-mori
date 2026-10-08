@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import {
+  errorMessageOf,
+  isCommandRefusedError,
+} from "@shigomori/contracts/errors";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";

@@ -555,8 +555,7 @@ const MirrorStopResultSchema = Schema.UndefinedOr(
 );
 
 // The refusal's leading text, which the renderer matches to offer
-// discard-and-stop. Text rather than a code because Electron's IPC
-// flattens an error to its message (see COMMAND_REFUSED_MESSAGE).
+// discard-and-stop.
 const MIRROR_STOP_UNCONFIRMED =
   "The copy is not confirmed in step with the other device";
 

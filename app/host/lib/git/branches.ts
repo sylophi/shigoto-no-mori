@@ -1,5 +1,5 @@
 import {
-  branchNotMergedError,
+  BranchNotMergedError,
   errorMessageOf,
 } from "@shigomori/contracts/errors";
 import type { BranchList } from "@shigomori/contracts/schemas";
@@ -104,8 +104,8 @@ export async function renameAnyLocalBranch(
 }
 
 // Delete a local branch. Without `force` this is git's safe delete
-// (`-d`), whose "not fully merged" refusal is rethrown as the shared
-// branchNotMergedError so the renderer can offer a force retry. With
+// (`-d`), whose "not fully merged" refusal is rethrown as the
+// contract's BranchNotMergedError so the renderer can offer a force retry. With
 // `force` (`-D`), git still refuses if the branch is checked out in any
 // worktree, which is the safety we care about.
 export async function deleteAnyLocalBranch(
@@ -118,7 +118,7 @@ export async function deleteAnyLocalBranch(
   } catch (err) {
     // git's stderr wording is stable here because core.ts pins LC_ALL=C.
     if (!force && /not fully merged/.test(errorMessageOf(err))) {
-      throw branchNotMergedError(name);
+      throw new BranchNotMergedError({ branch: name });
     }
     throw err;
   }

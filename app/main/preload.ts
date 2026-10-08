@@ -1,9 +1,9 @@
 // Preload script. Runs in an isolated context with access to Node + Electron APIs.
-// Exposes a typed `window.api` to the renderer.
+// Exposes the window's facts and its wire as `window.electronBridge`,
+// which the renderer builds `window.api` over (renderer/electronApi.ts).
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
 import { exposeClerkBridge } from "@clerk/electron/preload";
-import { buildApi } from "@shared/ipc/client";
 import {
   APP_VERSION_FLAG,
   CLERK_PK_FLAG,
@@ -12,7 +12,7 @@ import {
   optionalArgFlag,
   requireArgFlag,
 } from "./argFlags";
-import { electronClientTransport } from "./preloadTransport";
+import { electronBridgeTransport } from "./preloadTransport";
 
 // The narrow bridge @clerk/electron/react rides for token storage and
 // the system-browser OAuth transport, published beside window.api.
@@ -30,7 +30,7 @@ const deviceId = requireArgFlag(DEVICE_ID_FLAG, "--sm-device-id");
 // welcome to flag a version skew.
 const appVersion = requireArgFlag(APP_VERSION_FLAG, "--sm-app-version");
 
-const api = {
+const bridge = {
   deviceId,
   appVersion,
   // The Clerk publishable key main resolved from the account config
@@ -48,15 +48,9 @@ const api = {
   // Widened past the `as const` below so RendererApi says boolean and
   // the web bridge's false assigns.
   isElectron: true as boolean,
-  // Both scopes ride the same IPC bridge: host and client live in one
-  // process here. A peer's host is reached through the hub bridge
-  // (shared/hub/bridgeHandlers.ts), never by swapping this entry.
-  ...buildApi({
-    host: electronClientTransport,
-    client: electronClientTransport,
-  }),
+  ...electronBridgeTransport,
 } as const;
 
-export type RendererApi = typeof api;
+export type ElectronBridge = typeof bridge;
 
-contextBridge.exposeInMainWorld("api", api);
+contextBridge.exposeInMainWorld("electronBridge", bridge);
