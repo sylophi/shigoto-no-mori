@@ -10,6 +10,7 @@ import type {
   CommitMessage,
   CommitSummary,
 } from "@shigomori/contracts/schemas";
+import { MIRROR_IGNORES_LIMIT } from "@shigomori/contracts/mirrorIgnores";
 import { isUntracked } from "@shigomori/contracts/schemas";
 import * as Cache from "effect/Cache";
 import * as Clock from "effect/Clock";
@@ -437,7 +438,7 @@ export class Git extends Context.Service<
     ) => Effect.Effect<string[], GitError>;
     // The gitignore rules a worktree is under, root-relative: every
     // .gitignore git can see and the repository's info/exclude, at
-    // most IGNORE_RULES_LIMIT.
+    // most MIRROR_IGNORES_LIMIT.
     readonly listIgnoreRules: (worktree: string) => Effect.Effect<string[]>;
 
     // --- the remote ---
@@ -591,8 +592,6 @@ const DISCARD_SNAPSHOTS_KEPT = 40;
 // reading the file for.
 const BINARY_SNIFF_BYTES = 8000;
 const UNTRACKED_COUNT_LIMIT = 4 * 1024 * 1024;
-
-const IGNORE_RULES_LIMIT = 512;
 
 // --- make ---------------------------------------------------------------
 
@@ -893,12 +892,13 @@ const make = Effect.gen(function* () {
   };
 
   const changes = Effect.fn("Git.changes")(function* (worktree: string) {
-    const files = yield* status(worktree, "all");
-    // One `diff HEAD --numstat` covers everything git knows about.
-    // New files are counted one at a time, so an unignored build
-    // directory holds one file's bytes in memory, not all of them.
-    const [tracked, untracked] = yield* Effect.all(
+    // One `diff HEAD --numstat` covers everything git knows about, and
+    // needs nothing from the listing. New files are counted one at a
+    // time, so an unignored build directory holds one file's bytes in
+    // memory, not all of them.
+    const [files, tracked] = yield* Effect.all(
       [
+        status(worktree, "all"),
         run(worktree, [
           "-c",
           "core.quotePath=false",
@@ -910,13 +910,15 @@ const make = Effect.gen(function* () {
           Effect.orElseSucceed(() => ""),
           Effect.map(parseNumstat),
         ),
-        Effect.forEach(files.filter(isUntracked), (file) =>
-          countUntracked(worktree, file.path).pipe(
-            Effect.map((counts) => [file.path, counts] as const),
-          ),
-        ).pipe(Effect.map((entries) => new Map(entries))),
       ],
       { concurrency: 2 },
+    );
+    const untracked = new Map(
+      yield* Effect.forEach(files.filter(isUntracked), (file) =>
+        countUntracked(worktree, file.path).pipe(
+          Effect.map((counts) => [file.path, counts] as const),
+        ),
+      ),
     );
     const counted: ChangedFile[] = [];
     for (const file of files) {
@@ -948,6 +950,7 @@ const make = Effect.gen(function* () {
           ),
           Effect.orElseSucceed(() => 0),
         ),
+      { concurrency: 8 },
     );
     return { count: files.length, lastChangeAt: Math.max(0, ...times) };
   });
@@ -1106,19 +1109,6 @@ const make = Effect.gen(function* () {
   // Every caller-supplied revision goes after --end-of-options, so none
   // can be read as a flag.
 
-  const refTip = Effect.fn("Git.refTip")(function* (cwd: string, ref: string) {
-    return yield* run(cwd, [
-      "rev-parse",
-      "--verify",
-      "--quiet",
-      "--end-of-options",
-      ref,
-    ]).pipe(
-      Effect.map((stdout) => Option.some(stdout.trim())),
-      Effect.orElseSucceed(() => Option.none<string>()),
-    );
-  });
-
   const verifyRev = Effect.fn("Git.verifyRev")(function* (
     cwd: string,
     rev: string,
@@ -1130,6 +1120,9 @@ const make = Effect.gen(function* () {
       rev,
     ])).trim();
   });
+
+  const refTip = (cwd: string, ref: string) =>
+    Effect.option(verifyRev(cwd, ref));
 
   const hasObject = (cwd: string, object: string) =>
     succeeds(cwd, ["cat-file", "-e", "--end-of-options", object]);
@@ -1168,30 +1161,45 @@ const make = Effect.gen(function* () {
     );
   });
 
+  // The branches and the default ref picked among them, or none when
+  // they can't be read.
+  const pickDefault = (
+    repo: string,
+    override: string | undefined,
+    remotes: readonly string[] | undefined,
+  ) =>
+    Effect.gen(function* () {
+      const refs = yield* Effect.option(branchRefs(repo));
+      if (Option.isNone(refs)) return Option.none();
+      const picked = pickDefaultRef(
+        refs.value,
+        override,
+        remotes ?? (yield* listRemotes(repo)),
+      );
+      return Option.some({ refs: refs.value, picked });
+    });
+
   const resolveDefaultBranch = Effect.fn("Git.resolveDefaultBranch")(function* (
     repo: string,
     override?: string,
     remotes?: readonly string[],
   ) {
-    const refs = yield* Effect.option(branchRefs(repo));
-    if (Option.isNone(refs)) return Option.none<string>();
-    const picked = pickDefaultRef(
-      refs.value,
-      override,
-      remotes ?? (yield* listRemotes(repo)),
+    return Option.flatMap(
+      yield* pickDefault(repo, override, remotes),
+      ({ refs, picked }) =>
+        picked === undefined
+          ? Option.fromUndefinedOr(refs.locals[0])
+          : Option.some(shortRefName(picked)),
     );
-    if (picked !== undefined) return Option.some(shortRefName(picked));
-    return Option.fromUndefinedOr(refs.value.locals[0]);
   });
 
   const resolveDefaultRef = Effect.fn("Git.resolveDefaultRef")(function* (
     repo: string,
     override?: string,
   ) {
-    const refs = yield* Effect.option(branchRefs(repo));
-    if (Option.isNone(refs)) return Option.none<string>();
-    return Option.fromUndefinedOr(
-      pickDefaultRef(refs.value, override, yield* listRemotes(repo)),
+    return Option.flatMap(
+      yield* pickDefault(repo, override, undefined),
+      ({ picked }) => Option.fromUndefinedOr(picked),
     );
   });
 
@@ -1315,7 +1323,7 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => ""),
     );
     if (exclude !== "") rules.push(...(yield* readRules(exclude)));
-    return [...new Set(rules)].slice(0, IGNORE_RULES_LIMIT);
+    return [...new Set(rules)].slice(0, MIRROR_IGNORES_LIMIT);
   });
 
   // --- the remote ---
@@ -1526,17 +1534,17 @@ const make = Effect.gen(function* () {
         // revision that doesn't resolve is off it too.
         const onLine = (a: string, b: string) =>
           isAncestor(worktree, a, b).pipe(Effect.orElseSucceed(() => false));
-        const backwards = yield* onLine(target, head);
-        const forwards =
-          !backwards &&
-          expectHead !== undefined &&
-          (yield* onLine(head, target));
-        if (!backwards && !forwards) {
+        const range = (yield* onLine(target, head))
+          ? [target, head]
+          : expectHead !== undefined && (yield* onLine(head, target))
+            ? [head, target]
+            : undefined;
+        if (range === undefined) {
           return yield* new UndoRefusedError({ reason: "off-history" });
         }
         // Soft-resetting past a merge stages its whole other side as
         // edits, which is nothing anyone means by undo.
-        const [older, newer] = backwards ? [target, head] : [head, target];
+        const [older, newer] = range;
         const merges = yield* run(worktree, [
           "rev-list",
           "--merges",

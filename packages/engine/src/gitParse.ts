@@ -48,26 +48,21 @@ export type WorktreeEntry = {
   readonly locked: boolean;
 };
 
+const blankEntry = () => ({
+  path: "",
+  head: "",
+  branch: "",
+  bare: false,
+  detached: false,
+  locked: false,
+});
+
 export function parseWorktreeList(stdout: string): WorktreeEntry[] {
   const entries: WorktreeEntry[] = [];
-  let current = {
-    path: "",
-    head: "",
-    branch: "",
-    bare: false,
-    detached: false,
-    locked: false,
-  };
+  let current = blankEntry();
   const flush = () => {
     if (current.path !== "") entries.push(current);
-    current = {
-      path: "",
-      head: "",
-      branch: "",
-      bare: false,
-      detached: false,
-      locked: false,
-    };
+    current = blankEntry();
   };
   for (const line of stdout.split("\n")) {
     if (line === "") {
