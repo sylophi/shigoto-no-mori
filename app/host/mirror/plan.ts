@@ -4,13 +4,13 @@
 import * as Schema from "effect/Schema";
 import {
   MIRROR_LABEL_MODE,
-  MIRROR_LABEL_REPLACES,
   type MirrorGitStatus,
   type MirrorIgnoreMode,
   type MirrorSession,
   MirrorSessionSchema,
 } from "@shigomori/contracts/modules/mirror";
 import {
+  carriedLabels,
   ignoreModeOf,
   localWorktreeIdOf,
   MIRROR_LABEL_IGNORE_MODE,
@@ -76,11 +76,7 @@ export function reopenInput(
     remoteRoot: raw.remoteRoot,
     name: raw.name,
     localWorktreeId: localWorktreeIdOf(raw),
-    labels: {
-      ...raw.labels,
-      [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
-      [MIRROR_LABEL_REPLACES]: raw.session,
-    },
+    labels: carriedLabels(raw, { [MIRROR_LABEL_IGNORE_MODE]: ignoreMode }),
     ignores: [...ignores],
   };
 }

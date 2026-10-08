@@ -94,6 +94,8 @@ import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import {
+  beginTransfer,
+  carriedLabels,
   COPY_GONE_DETAIL,
   createNoAccountSweep,
   endLegacyMirrors,
@@ -105,6 +107,9 @@ import {
   mirrorSessions,
   type MirrorSessionRaw,
   holdRootChecks,
+  isOrphanedTransfer,
+  isTransferSession,
+  onMirrorBranch,
   ORIGINAL_GONE_DETAIL,
   settleMirrorBookkeeping,
   stopMirrorsForWorktree,
@@ -1459,6 +1464,33 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     );
     live.clear();
   }
+});
+
+const oldSession = (labels: Record<string, string>) =>
+  ({ session: "old", labels }) as MirrorSessionRaw;
+
+it("a session from before the mode label reads by its old labels, and a re-open writes them as a mode", () => {
+  const token = beginTransfer();
+  const transfer = oldSession({ transfer: token });
+  assert.ok(isTransferSession(transfer));
+  assert.ok(!isOrphanedTransfer(transfer));
+  assert.ok(isOrphanedTransfer(oldSession({ transfer: "1" })));
+  const primary = oldSession({ copySide: "remote", mirrorBranch: "1" });
+  assert.ok(onMirrorBranch(primary) && !isTransferSession(primary));
+  assert.ok(!onMirrorBranch(oldSession({ copySide: "remote" })));
+  // Neither a legacy mirror nor a mode this build does not know is a
+  // mirror.
+  assert.equal(
+    mirrorSessions({
+      sessions: () => [oldSession({}), oldSession({ mode: "next" })],
+    }).length,
+    0,
+  );
+  assert.deepEqual(carriedLabels(primary, { ignoreMode: "everything" }), {
+    [MIRROR_LABEL_MODE]: "mirror-branch",
+    replaces: "old",
+    ignoreMode: "everything",
+  });
 });
 
 it("the no-account sweep asks about each session once, so a misread credential ends nothing already running", async () => {

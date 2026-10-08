@@ -1057,7 +1057,7 @@ async function fakeMirrorStartTo(
   const session: FakeMirrorSession = {
     session: `sync_${fakeSessionSerial++}`,
     name: sourceWorktree.branch,
-    labels: { copySide: "remote" },
+    labels: { mode: "mirror" },
     localRoot: sourceWorktree.path,
     localProjectId: input.projectId,
     localWorktreeId: input.worktreeId,

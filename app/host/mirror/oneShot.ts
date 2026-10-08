@@ -25,6 +25,7 @@ import {
   endTransfer,
   findSession,
   MIRROR_LABEL_LOCAL_WORKTREE,
+  transferModeFor,
   type MirrorImpl,
   type MirrorSessionRaw,
   requireRunningEngine,
@@ -94,7 +95,7 @@ export async function transferFilesOnce(
       localWorktreeId: input.localWorktreeId,
       labels: {
         [MIRROR_LABEL_LOCAL_WORKTREE]: input.localWorktreeId,
-        [MIRROR_LABEL_MODE]: `transfer-${token}`,
+        [MIRROR_LABEL_MODE]: transferModeFor(token),
       },
       ignores: input.ignores,
       ...(input.direction === "push"

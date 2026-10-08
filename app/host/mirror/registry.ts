@@ -46,28 +46,70 @@ export const MIRROR_LABEL_LOCAL_WORKTREE = "localWorktreeId";
 export const MIRROR_LABEL_IGNORE_MODE = "ignoreMode";
 
 // What kind of session it is (MIRROR_LABEL_MODE), or null for a
-// legacy mirror (below). A session from before the mode label says so
-// in three labels of its own: the engine keeps a session's labels for
-// its life, so they are read here until step 7 of V3.md drops them
-// with the legacy sweep.
+// legacy mirror (below) or a mode this build does not know. A session
+// from before the mode label says so in three labels of its own: the
+// engine keeps a session's labels for its life, so they are read here
+// until step 7 of V3.md drops them with the legacy sweep. A recreate
+// rewrites them into a mode (carriedLabels).
 type MirrorMode = "mirror" | "mirror-branch" | `transfer-${string}`;
+
+const TRANSFER_PREFIX = "transfer-";
 
 function modeOf(labels: Record<string, string>): MirrorMode | null {
   const mode = labels[MIRROR_LABEL_MODE];
-  if (mode !== undefined) return mode as MirrorMode;
+  if (mode !== undefined) {
+    return mode === "mirror" ||
+      mode === "mirror-branch" ||
+      mode.startsWith(TRANSFER_PREFIX)
+      ? (mode as MirrorMode)
+      : null;
+  }
   const transfer = labels["transfer"];
-  if (transfer !== undefined) return `transfer-${transfer}`;
+  if (transfer !== undefined) return `${TRANSFER_PREFIX}${transfer}`;
   if (labels["copySide"] !== "remote") return null;
   return labels["mirrorBranch"] === "1" ? "mirror-branch" : "mirror";
 }
 
+export const transferModeFor = (token: string): MirrorMode =>
+  `${TRANSFER_PREFIX}${token}`;
+
+// The transfer's token, or null for a session that is not a transfer.
+function transferTokenOf(labels: Record<string, string>): string | null {
+  const mode = modeOf(labels);
+  return mode?.startsWith(TRANSFER_PREFIX) === true
+    ? mode.slice(TRANSFER_PREFIX.length)
+    : null;
+}
+
 export const isTransferSession = (session: {
   labels: Record<string, string>;
-}): boolean => modeOf(session.labels)?.startsWith("transfer-") === true;
+}): boolean => transferTokenOf(session.labels) !== null;
 
 export const onMirrorBranch = (session: {
   labels: Record<string, string>;
 }): boolean => modeOf(session.labels) === "mirror-branch";
+
+// The labels of the session that replaces `raw` on the same pair (a
+// re-open, a moved worktree): its own carried over, its kind as a mode,
+// and the session it replaces.
+export function carriedLabels(
+  raw: MirrorSessionRaw,
+  changes: Record<string, string>,
+): Record<string, string> {
+  const {
+    transfer: _transfer,
+    copySide: _copySide,
+    mirrorBranch: _mirrorBranch,
+    ...kept
+  } = raw.labels;
+  const mode = modeOf(raw.labels);
+  return {
+    ...kept,
+    ...(mode === null ? {} : { [MIRROR_LABEL_MODE]: mode }),
+    [MIRROR_LABEL_REPLACES]: raw.session,
+    ...changes,
+  };
+}
 
 // What the daemon reports for one session, before annotation (shared/
 // ipc/modules/mirror.ts), re-exported for the host's own callers.
@@ -239,10 +281,8 @@ export function endTransfer(token: string): void {
 }
 
 export function isOrphanedTransfer(raw: MirrorSessionRaw): boolean {
-  return (
-    isTransferSession(raw) &&
-    !liveTransfers.has(modeOf(raw.labels)?.slice("transfer-".length) ?? "")
-  );
+  const token = transferTokenOf(raw.labels);
+  return token !== null && !liveTransfers.has(token);
 }
 
 export function findSession(
@@ -505,11 +545,9 @@ export async function moveMirrorsOfWorktree(
           remoteRoot: raw.remoteRoot,
           name: raw.name,
           localWorktreeId: moved.id,
-          labels: {
-            ...raw.labels,
+          labels: carriedLabels(raw, {
             [MIRROR_LABEL_LOCAL_WORKTREE]: moved.id,
-            [MIRROR_LABEL_REPLACES]: raw.session,
-          },
+          }),
           ignores: raw.ignores,
         });
         daemon.noteEvent(moved.id, "resumed", "This worktree moved");
