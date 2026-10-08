@@ -32,6 +32,7 @@ import * as Paths from "../../src/Paths.ts";
 import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Store from "../../src/Store.ts";
+import * as Terrier from "../../src/Terrier.ts";
 import * as Usage from "../../src/Usage.ts";
 
 // The services a harness case calls.
@@ -139,6 +140,7 @@ export function sandbox(): Sandbox {
         Registry.layer,
         Scripts.layer,
       ).pipe(
+        Layer.provideMerge(Terrier.layer),
         Layer.provideMerge(
           Layer.mergeAll(
             Config.layer,
@@ -167,13 +169,14 @@ export function sandbox(): Sandbox {
     return runtime;
   };
 
-  const gitEnv = {
+  // Read when a command runs, so a test's PATH change reaches it.
+  const gitEnv = () => ({
     ...childEnv(),
     GIT_AUTHOR_NAME: "t",
     GIT_AUTHOR_EMAIL: "t@t",
     GIT_COMMITTER_NAME: "t",
     GIT_COMMITTER_EMAIL: "t@t",
-  };
+  });
 
   // The verb's last document, as `sm --json` prints it.
   const goAt = (cwd: string, ...args: string[]) =>
@@ -183,7 +186,7 @@ export function sandbox(): Sandbox {
         ["--json", ...args],
         {
           cwd,
-          env: { ...gitEnv, HOME: root, SHIGOMORI_DATA_DIR: side("go") },
+          env: { ...gitEnv(), HOME: root, SHIGOMORI_DATA_DIR: side("go") },
         },
         (error, stdout) => {
           const docs = stdout
@@ -208,7 +211,7 @@ export function sandbox(): Sandbox {
       const dir = join(root, name);
       mkdirSync(dir);
       const git = (...args: string[]) =>
-        execFileSync("git", args, { cwd: dir, env: gitEnv, stdio: "ignore" });
+        execFileSync("git", args, { cwd: dir, env: gitEnv(), stdio: "ignore" });
       git("init", "-q", "-b", "main");
       for (const [file, content] of Object.entries(files)) {
         mkdirSync(dirname(join(dir, file)), { recursive: true });
