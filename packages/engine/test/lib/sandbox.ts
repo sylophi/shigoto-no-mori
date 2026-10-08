@@ -152,12 +152,16 @@ const codeOf = (error: unknown) => {
 
 // What the terminal says for a failure: git's own words for a git that
 // failed, the message otherwise.
-const messageOf = (error: unknown) =>
+const messageOf = (error: unknown): string =>
   error instanceof Git.GitCommandError
     ? Git.stderrOf(error)
-    : error instanceof Error
-      ? error.message
-      : String(error);
+    : error instanceof CloneCheckout.HookFailed
+      ? `post-checkout hook: ${messageOf(error.cause)}`
+      : error instanceof CloneCheckout.CheckoutUnfinished
+        ? messageOf(error.cause)
+        : error instanceof Error
+          ? error.message
+          : String(error);
 
 // Copies `names` from one folder to another as they are, links and
 // times included: worktrees name their repo by absolute path.

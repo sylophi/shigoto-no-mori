@@ -259,7 +259,7 @@ func TestLstatReportsWhatTheIndexRecords(t *testing.T) {
 		}
 		got := lines[rel]
 		want := map[string]float64{
-			"dev": float64(st.Dev), "ino": float64(st.Ino), "mode": float64(st.Mode),
+			"dev": float64(uint32(st.Dev)), "ino": float64(st.Ino), "mode": float64(st.Mode),
 			"uid": float64(st.Uid), "gid": float64(st.Gid), "size": float64(st.Size),
 			"ctimeSec": float64(st.Ctim.Sec), "ctimeNsec": float64(st.Ctim.Nsec),
 			"mtimeSec": float64(st.Mtim.Sec), "mtimeNsec": float64(st.Mtim.Nsec),

@@ -73,8 +73,9 @@ type sized struct {
 // An entry's lstat(2), each time to the nanosecond: the fields git's
 // index records and compares, and the file flags.
 type statted struct {
-	Path      string `json:"path"`
-	Dev       uint64 `json:"dev"`
+	Path string `json:"path"`
+	// As git's index stores it: 32 bits.
+	Dev       uint32 `json:"dev"`
 	Ino       uint64 `json:"ino"`
 	Mode      uint32 `json:"mode"`
 	UID       uint32 `json:"uid"`
@@ -165,7 +166,7 @@ var verbs = map[string]verb{
 				return nil, err
 			}
 			return statted{
-				Path: rel, Dev: uint64(st.Dev), Ino: st.Ino, Mode: uint32(st.Mode),
+				Path: rel, Dev: uint32(st.Dev), Ino: st.Ino, Mode: uint32(st.Mode),
 				UID: st.Uid, GID: st.Gid, Size: st.Size,
 				CtimeSec: st.Ctim.Sec, CtimeNsec: st.Ctim.Nsec,
 				MtimeSec: st.Mtim.Sec, MtimeNsec: st.Mtim.Nsec,

@@ -35,6 +35,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as SqlClient from "effect/sql/SqlClient";
+import { orderSources } from "./CarryOver.ts";
 import * as Darwin from "./Darwin.ts";
 import * as Git from "./Git.ts";
 import { splitZ } from "./gitParse.ts";
@@ -121,19 +122,17 @@ export class CheckoutUnfinished extends Schema.TaggedError<CheckoutUnfinished>()
   { path: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return this.cause instanceof Git.GitCommandError
-      ? Git.stderrOf(this.cause)
-      : `Couldn't check out ${this.path}.`;
+    return `Couldn't check out ${this.path}.`;
   }
 }
 
 // A post-checkout hook that failed, as `git worktree add` reports one:
-// the worktree stays.
+// the worktree stays. What the hook printed is the cause.
 export class HookFailed extends Schema.TaggedError<HookFailed>()("HookFailed", {
-  output: Schema.String,
+  cause: Schema.Defect(),
 }) {
   override get message(): string {
-    return `post-checkout hook: ${this.output}`;
+    return "The post-checkout hook failed.";
   }
 }
 
@@ -214,6 +213,16 @@ const sameConversions = (a: Conversions, b: Conversions) =>
   a.sourceAttr === b.sourceAttr &&
   JSON.stringify(a.config) === JSON.stringify(b.config) &&
   JSON.stringify(a.sourceConfig) === JSON.stringify(b.sourceConfig);
+
+const RECORDS_PER_STATEMENT = 1000;
+
+const chunksOf = <A>(items: ReadonlyArray<A>): A[][] => {
+  const chunks: A[][] = [];
+  for (let i = 0; i < items.length; i += RECORDS_PER_STATEMENT) {
+    chunks.push(items.slice(i, i + RECORDS_PER_STATEMENT));
+  }
+  return chunks;
+};
 
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
@@ -417,17 +426,20 @@ const make = Effect.gen(function* () {
           const stale = [...(yield* recordsOf(source))]
             .filter(([file, record]) => !current(file, record))
             .map(([file]) => file);
-          if (stale.length > 0) {
+          // In chunks, under SQLite's limit on a statement's parameters.
+          for (const chunk of chunksOf(stale)) {
             yield* sql`DELETE FROM clone_verified WHERE source_id = ${sourceId}
-              AND ${sql.in("path", stale)}`;
+              AND ${sql.in("path", chunk)}`;
           }
-          yield* sql`INSERT INTO clone_verified ${sql.insert(
-            [...added].map(([file, record]) => ({
-              source_id: sourceId,
-              path: file,
-              record,
-            })),
-          )} ON CONFLICT (source_id, path) DO UPDATE SET record = excluded.record`;
+          for (const chunk of chunksOf([...added])) {
+            yield* sql`INSERT INTO clone_verified ${sql.insert(
+              chunk.map(([file, record]) => ({
+                source_id: sourceId,
+                path: file,
+                record,
+              })),
+            )} ON CONFLICT (source_id, path) DO UPDATE SET record = excluded.record`;
+          }
         }),
       )
       .pipe(Effect.ignore);
@@ -861,22 +873,32 @@ const make = Effect.gen(function* () {
       ],
       { concurrency: 3 },
     ).pipe(Effect.mapError(fail("clone")));
-    let hashed = 0;
     const kept = new Map<string, IndexStat>();
-    const proven = new Map<string, string>();
     const rejected: string[] = [];
+    // The stale clones to read back, each with the record that proves it.
+    const toHash: Array<{
+      readonly p: string;
+      readonly entry: SourceEntry;
+      readonly stat: IndexStat;
+      readonly record: string;
+    }> = [];
     for (const p of clonableList) {
       const raw = sourceStats.get(p);
       const entry = bySourcePath.get(p);
       const names = sourceXattrs.get(p);
       const st = cloneStats.get(p);
-      const after = raw === undefined ? undefined : indexStatOf(raw);
       if (
         entry === undefined ||
         raw === undefined ||
-        after === undefined ||
         st === undefined ||
-        names === undefined ||
+        names === undefined
+      ) {
+        rejected.push(p);
+        continue;
+      }
+      const after = indexStatOf(raw);
+      const cloneStat = indexStatOf(st);
+      if (
         realDir.get(path.dirname(p)) !== true ||
         !sameFile(after, entry.stat) ||
         !matchesMode(after, entry.mode) ||
@@ -885,32 +907,40 @@ const make = Effect.gen(function* () {
         names.some((name) => name !== "com.apple.provenance") ||
         // clonefile keeps the mtime and mode: anything else isn't our
         // clone.
-        indexStatOf(st).mtimeSec !== after.mtimeSec ||
-        indexStatOf(st).mtimeNsec !== after.mtimeNsec ||
-        indexStatOf(st).size !== after.size ||
-        indexStatOf(st).mode !== after.mode
+        cloneStat.mtimeSec !== after.mtimeSec ||
+        cloneStat.mtimeNsec !== after.mtimeNsec ||
+        cloneStat.size !== after.size ||
+        cloneStat.mode !== after.mode
       ) {
         rejected.push(p);
         continue;
       }
-      if (stale(p)) {
-        const record = verifiedRecord(entry.oid, entry.stat);
-        if (verified.get(p) !== record) {
-          hashed++;
-          const oid = yield* blobId(
-            path.join(worktree, p),
-            entry.mode,
-            algorithm,
-          ).pipe(Effect.option);
-          if (Option.isNone(oid) || oid.value !== entry.oid) {
-            rejected.push(p);
-            continue;
-          }
-          proven.set(p, record);
-        }
+      const record = verifiedRecord(entry.oid, entry.stat);
+      if (stale(p) && verified.get(p) !== record) {
+        toHash.push({ p, entry, stat: cloneStat, record });
+      } else {
+        kept.set(p, cloneStat);
       }
-      kept.set(p, indexStatOf(st));
     }
+    const proven = new Map<string, string>();
+    const hashes = yield* Effect.forEach(
+      toHash,
+      ({ p, entry }) =>
+        blobId(path.join(worktree, p), entry.mode, algorithm).pipe(
+          Effect.option,
+        ),
+      { concurrency: 4 },
+    );
+    toHash.forEach(({ p, entry, stat, record }, index) => {
+      const oid = hashes[index];
+      if (oid !== undefined && Option.contains(oid, entry.oid)) {
+        kept.set(p, stat);
+        proven.set(p, record);
+      } else {
+        rejected.push(p);
+      }
+    });
+    const hashed = toHash.length;
     // A clone turned down is removed for git to write afresh: it may carry
     // what git can't overwrite.
     yield* Effect.forEach(
@@ -972,12 +1002,16 @@ const make = Effect.gen(function* () {
             Effect.map((entries) => {
               const keep: Array<{ rel: string; chmod: boolean }> = [];
               const gone: string[] = [];
+              const goneSet = new Set<string>();
               for (const entry of entries.toSorted((a, b) =>
                 a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
               )) {
-                if (Darwin.isFailed(entry)) continue;
+                // A folder the walk couldn't read may hold what must go.
+                if (Darwin.isFailed(entry)) {
+                  return Effect.fail(entry.error);
+                }
                 const rel = entry.path === "." ? unit : `${unit}/${entry.path}`;
-                if ([...ancestors(rel)].some((dir) => gone.includes(dir))) {
+                if ([...ancestors(rel)].some((dir) => goneSet.has(dir))) {
                   continue;
                 }
                 const isDir = (entry.mode & S_IFMT) === S_IFDIR;
@@ -990,10 +1024,12 @@ const make = Effect.gen(function* () {
                   }
                 } else {
                   gone.push(rel);
+                  goneSet.add(rel);
                 }
               }
-              return { keep, gone };
+              return Effect.succeed({ keep, gone });
             }),
+            Effect.flatten,
           ),
         { concurrency: 4 },
       );
@@ -1139,14 +1175,12 @@ const make = Effect.gen(function* () {
               ? Option.none<HookFailed>()
               : Option.some(
                   new HookFailed({
-                    output: output.trim() || `exit status ${code}`,
+                    cause: new Error(output.trim() || `exit status ${code}`),
                   }),
                 ),
           ),
           Effect.catch((error) =>
-            Effect.succeed(
-              Option.some(new HookFailed({ output: error.message })),
-            ),
+            Effect.succeed(Option.some(new HookFailed({ cause: error }))),
           ),
         );
       // Like git, every hook runs even after one fails, and the first
@@ -1266,20 +1300,13 @@ const make = Effect.gen(function* () {
     readonly baseBranch: string;
   }) {
     if (yield* projectBlocked(input.repo)) return Option.none<CloneSource>();
-    const rank = (source: CloneSource) =>
-      input.baseBranch !== "" &&
-      !source.detached &&
-      source.branch === input.baseBranch
-        ? 0
-        : source.isPrimary
-          ? 1
-          : 2;
-    const ordered = input.checkouts
-      .filter((source) => source.path !== input.destination)
-      .toSorted(
-        (a, b) =>
-          rank(a) - rank(b) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
-      );
+    // In carry-over's order: the checkout on the base branch, the
+    // primary, then the rest by name.
+    const ordered = orderSources(
+      input.checkouts,
+      input.destination,
+      input.baseBranch,
+    );
     for (const source of ordered) {
       if (yield* sourceUsable(source.path, input.destination)) {
         return Option.some(source);

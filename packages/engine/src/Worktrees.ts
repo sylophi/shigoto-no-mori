@@ -13,8 +13,10 @@ import type { CommitSummary } from "@shigomori/contracts/schemas";
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import { isUntracked } from "@shigomori/contracts/schemas";
 import * as Clock from "effect/Clock";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -2107,8 +2109,14 @@ const make = Effect.gen(function* () {
           })
         : Option.none<CloneSource>();
       const noCheckout = Option.isSome(source);
+      // The branch the add makes: a new one, or in checkout mode the local
+      // branch it tracks a remote base with.
       const branch = input.checkout
-        ? ""
+        ? Option.getOrElse(
+            (yield* git.resolveCheckoutRef(project.path, input.base, remotes))
+              .track,
+            () => "",
+          )
         : input.branch.trim() === ""
           ? name
           : input.branch.trim();
@@ -2131,23 +2139,33 @@ const make = Effect.gen(function* () {
       }
       let cloned: Cloned | undefined;
       if (Option.isSome(source)) {
+        // Nothing checked out (the clone and git's own checkout both
+        // failed, or the run was interrupted midway): the add goes again,
+        // and the branch it made, as git undoes its own failed checkout. A
+        // failed hook leaves the worktree, as git leaves it.
+        const undo = git
+          .run(project.path, ["worktree", "remove", "--force", place])
+          .pipe(
+            Effect.andThen(
+              branch === ""
+                ? Effect.void
+                : git.run(project.path, ["branch", "-D", branch]),
+            ),
+            Effect.ignore,
+          );
         const outcome = yield* cloneCheckout
           .finish({ source: source.value.path, worktree: place })
           .pipe(
-            // Nothing checked out: the add goes again, and the branch it
-            // made, as git undoes its own failed checkout. A failed hook
-            // leaves the worktree, as git leaves it.
-            Effect.tapErrorTag("CheckoutUnfinished", () =>
-              git
-                .run(project.path, ["worktree", "remove", "--force", place])
-                .pipe(
-                  Effect.andThen(
-                    branch === ""
-                      ? Effect.void
-                      : git.run(project.path, ["branch", "-D", branch]),
-                  ),
-                  Effect.ignore,
-                ),
+            Effect.onExit((exit) =>
+              Exit.isFailure(exit) &&
+              (Cause.hasInterrupts(exit.cause) ||
+                Cause.hasDies(exit.cause) ||
+                Option.exists(
+                  Cause.findErrorOption(exit.cause),
+                  (error) => error instanceof CloneCheckout.CheckoutUnfinished,
+                ))
+                ? undo
+                : Effect.void,
             ),
           );
         cloned = { from: source.value, outcome };
