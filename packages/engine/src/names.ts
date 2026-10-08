@@ -7,16 +7,19 @@ import * as Random from "effect/Random";
 import doubutsu from "./data/doubutsu-names.json" with { type: "json" };
 import words from "./data/name-words.json" with { type: "json" };
 
-const pairs = words.adjectives.flatMap((adjective) =>
-  words.animals.map((animal) => `${adjective}-${animal}`),
-);
+// Built on the first pick: most commands never pick a name.
+let pairs: ReadonlyArray<string> | undefined;
+const adjectiveAnimalPairs = () =>
+  (pairs ??= words.adjectives.flatMap((adjective) =>
+    words.animals.map((animal) => `${adjective}-${animal}`),
+  ));
 
 export const pickWorktreeName = (
   used: ReadonlySet<string>,
   doubutsuNames: boolean,
 ) =>
   Effect.gen(function* () {
-    const pool = doubutsuNames ? doubutsu.names : pairs;
+    const pool = doubutsuNames ? doubutsu.names : adjectiveAnimalPairs();
     const free = pool.filter((name) => !used.has(name));
     if (free.length > 0) {
       return free[

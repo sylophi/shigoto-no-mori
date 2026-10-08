@@ -121,28 +121,3 @@ export function worktreeBase(
     }
   }
 }
-
-// The names `sm cd root` and `sm path primary` reserve for a project's
-// primary checkout.
-export const isPrimaryKeyword = (name: string) =>
-  name.toLowerCase() === "root" || name.toLowerCase() === "primary";
-
-// A branch name as a folder name: separators to dashes, control
-// characters gone, dots, spaces and dashes trimmed from the ends. Empty
-// when nothing usable is left or the name is reserved.
-export function sanitizeBranchForPath(branch: string): string {
-  const folded = [...branch.replace(/[/:]/g, "-")]
-    .filter((char) => char > "\u001f" && char !== "\u007f")
-    .join("")
-    // Go's \s: tab, newline, form feed, carriage return, space.
-    .replace(/^[.\t\n\f\r -]+|[.\t\n\f\r -]+$/g, "");
-  return folded === "" ||
-    folded === "." ||
-    folded === ".." ||
-    isPrimaryKeyword(folded)
-    ? ""
-    : folded;
-}
-
-export const isValidWorktreeDirName = (name: string) =>
-  name !== "" && sanitizeBranchForPath(name) === name;

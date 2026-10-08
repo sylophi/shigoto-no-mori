@@ -3,10 +3,8 @@ import { it } from "vitest";
 import {
   externalVolumeRoot,
   isManagedPath,
-  isValidWorktreeDirName,
   managedBases,
   projectDriveBase,
-  sanitizeBranchForPath,
   worktreeBase,
   worktreeIdFromPath,
 } from "../src/worktreeLayout.ts";
@@ -105,22 +103,4 @@ it("holds a worktree managed by its parent, not a prefix", () => {
   assert.ok(isManagedPath("/Users/me/.sm/worktrees/repo/otter/", bases));
   assert.ok(!isManagedPath("/Users/me/.sm/worktrees/repo/otter/deep", bases));
   assert.ok(!isManagedPath("relative", bases));
-});
-
-it("turns a branch into a folder name, refusing reserved and empty ones", () => {
-  for (const [branch, want] of [
-    ["feature/login", "feature-login"],
-    ["a:b", "a-b"],
-    ["--.x.--", "x"],
-    ["tab\there", "tabhere"],
-    [" .", ""],
-    ["Root", ""],
-    ["primary", ""],
-    ["..", ""],
-  ] as const) {
-    assert.equal(sanitizeBranchForPath(branch), want, branch);
-  }
-  assert.ok(isValidWorktreeDirName("otter"));
-  assert.ok(!isValidWorktreeDirName("a/b"));
-  assert.ok(!isValidWorktreeDirName(""));
 });

@@ -5,6 +5,8 @@ import * as Config from "./Config.ts";
 import * as layout from "./worktreeLayout.ts";
 import * as Paths from "./Paths.ts";
 
+const LAYOUTS = ["managed-root", "in-project", "custom"] as const;
+
 // A registered project, as the layout needs it.
 type ProjectPlace = { readonly id: string; readonly path: string };
 
@@ -41,10 +43,9 @@ const make = Effect.gen(function* () {
     const onDrive = yield* config
       .get({ kind: "device" }, "managedOnProjectDrive")
       .pipe(Effect.orDie);
+    const layoutName = text(stored?.worktreeLayout);
     return {
-      worktreeLayout: text(
-        stored?.worktreeLayout,
-      ) as layout.LayoutSettings["worktreeLayout"],
+      worktreeLayout: LAYOUTS.find((name) => name === layoutName),
       customWorktreePath: text(stored?.customWorktreePath),
       managedOnProjectDrive: onDrive.value === true,
     };

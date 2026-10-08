@@ -79,16 +79,19 @@ const make = Effect.gen(function* () {
       return app.cli !== undefined && (yield* onPath(app.cli));
     });
 
-  const listCatalog = Effect.forEach(apps, (app) =>
-    Effect.map(
-      available(app),
-      (installed): CatalogEntry => ({
-        kind: "detected",
-        id: `app:${app.id}`,
-        label: app.label,
-        available: installed,
-      }),
-    ),
+  const listCatalog = Effect.forEach(
+    apps,
+    (app) =>
+      Effect.map(
+        available(app),
+        (installed): CatalogEntry => ({
+          kind: "detected",
+          id: `app:${app.id}`,
+          label: app.label,
+          available: installed,
+        }),
+      ),
+    { concurrency: "unbounded" },
   ).pipe(
     Effect.map((entries) =>
       entries.toSorted(
