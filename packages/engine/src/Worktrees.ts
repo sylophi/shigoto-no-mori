@@ -299,6 +299,13 @@ export class UnknownWorktree extends Schema.TaggedError<UnknownWorktree>()(
   }
 }
 
+// What a command that can't tell the project says about the ones there
+// are.
+export const projectsHint = (names: ReadonlyArray<string>) =>
+  names.length === 0
+    ? "No projects are registered yet. Add the repo in the Shigoto no Mori app first."
+    : `Registered projects: ${names.join(", ")}.`;
+
 // A ref that names no single project or worktree. `usage` is whether
 // the command line was what was wrong (the terminal exits 2), and
 // `projects` are the registered names the hint lists.
@@ -333,10 +340,7 @@ export class TargetError extends Schema.TaggedError<TargetError>()(
   }
 
   override get message(): string {
-    const hint =
-      this.projects.length === 0
-        ? "No projects are registered yet. Add the repo in the Shigoto no Mori app first."
-        : `Registered projects: ${this.projects.join(", ")}.`;
+    const hint = projectsHint(this.projects);
     const quoted = JSON.stringify(this.ref);
     switch (this.reason) {
       case "not-in-project":
@@ -675,6 +679,10 @@ export class Worktrees extends Context.Service<
     readonly description: (
       located: Located,
     ) => Effect.Effect<DescriptionView, DescribeRefused>;
+    // What a script is told about the worktree it runs in.
+    readonly scriptContext: (
+      located: Located,
+    ) => Effect.Effect<Lifecycle.ScriptContext>;
     // Sets the title, the description, or both, and answers the pair as
     // stored, with why the pull request couldn't be looked up as
     // `description` says it.
@@ -2890,6 +2898,10 @@ const make = Effect.gen(function* () {
     setAutoPull,
     setAgentWorking,
     description,
+    scriptContext: ({ project, worktree }) =>
+      scriptContext(project, worktree).pipe(
+        Effect.withSpan("Worktrees.scriptContext"),
+      ),
     describe,
     destination,
     create,

@@ -43,12 +43,7 @@ import {
   belowGitFloor,
   compareVersions,
   fields,
-  findHookSpan,
-  fishHookContent,
   formatSize,
-  hookBeginMarker,
-  hookBlock,
-  type HookNames,
   launcherProgram,
   parseGitVersion,
   parsePortPoolDirs,
@@ -57,8 +52,6 @@ import {
   plural,
   pluralize,
   scriptFileTokens,
-  SHELL_KINDS,
-  type ShellKind,
   shellWord,
 } from "./doctorParse.ts";
 import { envVar } from "./environment.ts";
@@ -73,6 +66,14 @@ import { StoreImportError } from "./migrations/importJson.ts";
 import { errnoText, isAbsent, isNotFound } from "./platformErrors.ts";
 import { pidAlive } from "./processes.ts";
 import * as Registry from "./Registry.ts";
+import {
+  CD_FILE_ENV,
+  collapseHome,
+  hookPlace,
+  inspectHook,
+  SHELL_KINDS,
+  type ShellKind,
+} from "./shellHook.ts";
 import {
   acquireStagingLock,
   StagingLockUnavailable,
@@ -352,13 +353,6 @@ type ProjectChecked = {
   readonly identities: Option.Option<ReadonlyArray<WorktreeIdentity>>;
 };
 
-// The state a shell's hook is in: ours and current or an older vintage,
-// absent, or edited past recognizing.
-type Hook =
-  | { readonly state: "missing" }
-  | { readonly state: "modified" }
-  | { readonly state: "installed"; readonly current: boolean };
-
 // The registry's projects, then terrier's, as every command sees them.
 // A terrier listing that failed leaves the list short, so the checks
 // that read "nothing claims this" as a leftover stand down.
@@ -387,21 +381,12 @@ const make = Effect.gen(function* () {
   const darwin = yield* Darwin.Darwin;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
-  const { home, dataDir, binaryName, flavor, configHome } = paths;
+  const { home, dataDir, binaryName, flavor } = paths;
   const names = flavorNames(flavor);
-  const hookNames: HookNames = { binary: binaryName, alias: names.alias };
-  // Read once, as Paths reads the environment.
-  const zdotdir = yield* envVar("ZDOTDIR");
+  // ZDOTDIR read once, as Paths reads the environment.
+  const place = hookPlace(paths, yield* envVar("ZDOTDIR"));
   // The shell wrapper's directive file, set while the hook is active.
-  const cdFile = yield* envVar("SHIGOMORI_CD_FILE");
-
-  const collapseHome = (target: string) => {
-    if (home === "") return target;
-    if (target === home) return "~";
-    return target.startsWith(`${home}/`)
-      ? `~${target.slice(home.length)}`
-      : target;
-  };
+  const cdFile = yield* envVar(CD_FILE_ENV);
 
   // A program's stdout and exit code. Fails when it can't be spawned.
   const capture = (
@@ -437,12 +422,6 @@ const make = Effect.gen(function* () {
     Effect.map(
       statOf(target),
       (info) => Option.isSome(info) && info.value.type === "Directory",
-    );
-
-  const isFile = (target: string) =>
-    Effect.map(
-      statOf(target),
-      (info) => Option.isSome(info) && info.value.type === "File",
     );
 
   const isMissing = (target: string) =>
@@ -595,14 +574,14 @@ const make = Effect.gen(function* () {
         const found = yield* findInstalledBundle;
         if (Option.isSome(found)) {
           return line.warn(
-            `this binary isn't the one inside ${collapseHome(found.value)}, so \`${binaryName} update\` can't reach it`,
-            `Re-link the CLI from the app's Settings, or run ${collapseHome(path.join(found.value, "Contents", "Resources", binaryName))}.`,
+            `this binary isn't the one inside ${collapseHome(home, found.value)}, so \`${binaryName} update\` can't reach it`,
+            `Re-link the CLI from the app's Settings, or run ${collapseHome(home, path.join(found.value, "Contents", "Resources", binaryName))}.`,
           );
         }
         const aside = yield* findAsideBundle;
         if (Option.isSome(aside)) {
           return line.fail(
-            `the app is missing, but ${collapseHome(aside.value)} is the copy an interrupted update set aside`,
+            `the app is missing, but ${collapseHome(home, aside.value)} is the copy an interrupted update set aside`,
             `Rename it back to ${APP_NAME}.app.`,
           );
         }
@@ -614,7 +593,7 @@ const make = Effect.gen(function* () {
       const appVersion = yield* bundleVersion(bundle.value);
       if (appVersion === "") {
         return line.warn(
-          `${collapseHome(bundle.value)} has no readable version in Info.plist`,
+          `${collapseHome(home, bundle.value)} has no readable version in Info.plist`,
           "Reinstall the app.",
         );
       }
@@ -624,7 +603,7 @@ const make = Effect.gen(function* () {
           `Run \`${binaryName} update\`, or re-link the CLI from the app's Settings.`,
         );
       }
-      return line.ok(`${appVersion} at ${collapseHome(bundle.value)}`);
+      return line.ok(`${appVersion} at ${collapseHome(home, bundle.value)}`);
     });
 
   // The binary in PATH order, deduped by the file each entry resolves
@@ -649,7 +628,7 @@ const make = Effect.gen(function* () {
       );
       if (seen.has(resolved)) continue;
       seen.add(resolved);
-      found.push(collapseHome(candidate));
+      found.push(collapseHome(home, candidate));
     }
     return found;
   });
@@ -674,58 +653,6 @@ const make = Effect.gen(function* () {
     );
   });
 
-  // The rc file each shell reads, where install writes the hook.
-  const hookPath = (kind: ShellKind) =>
-    Effect.gen(function* () {
-      if (kind === "zsh") {
-        return path.join(zdotdir === "" ? home : zdotdir, ".zshrc");
-      }
-      if (kind === "bash") {
-        // macOS terminals start bash as a login shell, which never reads
-        // .bashrc.
-        for (const name of [".bash_profile", ".bash_login", ".profile"]) {
-          const candidate = path.join(home, name);
-          if (yield* isFile(candidate)) return candidate;
-        }
-        return path.join(home, ".bash_profile");
-      }
-      return path.join(configHome, "fish", "conf.d", `${names.alias}.fish`);
-    });
-
-  // Whether the shell's hook is installed and recognizably ours, and
-  // whether it is what this build would write.
-  const inspectHook = (kind: ShellKind) =>
-    Effect.gen(function* () {
-      const text = yield* fs.readFileString(yield* hookPath(kind)).pipe(
-        Effect.asSome,
-        Effect.catchIf(isNotFound, () => Effect.succeed(Option.none<string>())),
-        // Unreadable isn't absent: hands off.
-        Effect.orElseSucceed(() => undefined),
-      );
-      if (text === undefined) return { state: "modified" } satisfies Hook;
-      if (Option.isNone(text)) return { state: "missing" } satisfies Hook;
-      if (kind === "fish") {
-        return text.value.includes(hookBeginMarker(hookNames))
-          ? ({
-              state: "installed",
-              current: text.value === fishHookContent(hookNames),
-            } satisfies Hook)
-          : ({ state: "modified" } satisfies Hook);
-      }
-      const lines = text.value.split("\n");
-      const span = findHookSpan(hookNames, lines);
-      if (span.kind === "none") return { state: "missing" } satisfies Hook;
-      if (span.kind === "broken" || !span.ours) {
-        return { state: "modified" } satisfies Hook;
-      }
-      return {
-        state: "installed",
-        current:
-          lines.slice(span.begin, span.end + 1).join("\n") ===
-          hookBlock(hookNames, kind).replace(/\n+$/, ""),
-      } satisfies Hook;
-    });
-
   // Installed and current: install refreshes the block in place, so one
   // from an older vintage was written by a build whose guard line has
   // since changed.
@@ -736,11 +663,11 @@ const make = Effect.gen(function* () {
       const edited: ShellKind[] = [];
       const stale: ShellKind[] = [];
       for (const kind of SHELL_KINDS) {
-        const hook: Hook = yield* inspectHook(kind);
+        const hook = yield* inspectHook(place, kind);
         if (hook.state === "installed") {
           installed.push(kind);
           if (!hook.current) stale.push(kind);
-        } else if (hook.state === "modified") {
+        } else if (hook.state === "modified" || hook.state === "unreadable") {
           edited.push(kind);
         }
       }
@@ -811,7 +738,7 @@ const make = Effect.gen(function* () {
       }
       return Option.some(
         dataDirLine.warn(
-          `${collapseHome(dataDir)} (${sourceText}); ${collapseHome(other)} also holds state and is ignored`,
+          `${collapseHome(home, dataDir)} (${sourceText}); ${collapseHome(home, other)} also holds state and is ignored`,
           fix,
         ),
       );
@@ -820,7 +747,7 @@ const make = Effect.gen(function* () {
   // The data dir's line, and whether there is a data dir the other
   // checks can read.
   const checkDataDir = Effect.gen(function* () {
-    const shown = `${collapseHome(dataDir)} (${sourceText})`;
+    const shown = `${collapseHome(home, dataDir)} (${sourceText})`;
     // A pointer that fails the guard is skipped without a word, which
     // reads as every project vanishing.
     if (paths.dataDirSource === "default" && Option.isSome(paths.pointer)) {
@@ -829,7 +756,7 @@ const make = Effect.gen(function* () {
         return {
           entry: dataDirLine.warn(
             `the pointer file names ${target}, which was ignored because ${problem}, so sm is using ${shown}`,
-            `Fix ${collapseHome(file)} to name a data dir, or delete it.`,
+            `Fix ${collapseHome(home, file)} to name a data dir, or delete it.`,
           ),
           usable: yield* isDirectory(dataDir),
         };
@@ -841,13 +768,14 @@ const make = Effect.gen(function* () {
       if (paths.dataDirSource !== "pointer") {
         return {
           entry: dataDirLine.warn(
-            `${collapseHome(dataDir)} doesn't exist yet (${sourceText}), so nothing is registered`,
+            `${collapseHome(home, dataDir)} doesn't exist yet (${sourceText}), so nothing is registered`,
             `Add a project (${addProject}) and it will be created.`,
           ),
           usable: false,
         };
       }
       const file = collapseHome(
+        home,
         Option.match(paths.pointer, {
           onNone: () => "",
           onSome: (pointer) => pointer.file,
@@ -862,7 +790,7 @@ const make = Effect.gen(function* () {
                 `Connect the drive. To start over on this Mac instead, delete ${file}.`,
               )
             : dataDirLine.warn(
-                `${collapseHome(dataDir)} doesn't exist yet (${sourceText}), so nothing is registered`,
+                `${collapseHome(home, dataDir)} doesn't exist yet (${sourceText}), so nothing is registered`,
                 `If the data was moved or deleted, fix or delete ${file}. Otherwise add a project (${addProject}) and it will be created.`,
               ),
         usable: false,
@@ -871,8 +799,8 @@ const make = Effect.gen(function* () {
     if (Result.isFailure(info)) {
       return {
         entry: dataDirLine.fail(
-          `${collapseHome(dataDir)} can't be read: ${info.failure.message}`,
-          `Check the permissions on ${collapseHome(dataDir)}.`,
+          `${collapseHome(home, dataDir)} can't be read: ${info.failure.message}`,
+          `Check the permissions on ${collapseHome(home, dataDir)}.`,
         ),
         usable: false,
       };
@@ -880,7 +808,7 @@ const make = Effect.gen(function* () {
     if (info.success.type !== "Directory") {
       return {
         entry: dataDirLine.fail(
-          `${collapseHome(dataDir)} is a file, not a directory (${sourceText})`,
+          `${collapseHome(home, dataDir)} is a file, not a directory (${sourceText})`,
           "Move it aside, or point SHIGOMORI_DATA_DIR somewhere else.",
         ),
         usable: false,
@@ -893,7 +821,7 @@ const make = Effect.gen(function* () {
     if (!writable) {
       return {
         entry: dataDirLine.fail(
-          `${collapseHome(dataDir)} isn't writable, so no command that changes state can work`,
+          `${collapseHome(home, dataDir)} isn't writable, so no command that changes state can work`,
           "Fix its ownership or permissions.",
         ),
         usable: true,
@@ -943,7 +871,7 @@ const make = Effect.gen(function* () {
     if (storedProblem({ kind: "device" }, device) !== undefined) {
       return line.warn(
         "parses, but a field has the wrong type and is being dropped",
-        `Check ${collapseHome(configFile)} against the app's Settings.`,
+        `Check ${collapseHome(home, configFile)} against the app's Settings.`,
       );
     }
     return line.ok(`valid, ${keys} key${plural(keys)}`);
@@ -965,7 +893,7 @@ const make = Effect.gen(function* () {
     if (malformed > 0) {
       return registryLine.warn(
         `${malformed} registry ${pluralize(malformed, "entry is", "entries are")} missing an id or path`,
-        `Remove the incomplete entries from ${collapseHome(file)}.`,
+        `Remove the incomplete entries from ${collapseHome(home, file)}.`,
       );
     }
     return registryLine.ok(
@@ -1025,11 +953,11 @@ const make = Effect.gen(function* () {
     const extra = locks.length - 1;
     return repairable(
       line.warn(
-        `${collapseHome(first)} has been held for longer than a write can take${extra > 0 ? ` (and ${extra} more)` : ""}`,
+        `${collapseHome(home, first)} has been held for longer than a write can take${extra > 0 ? ` (and ${extra} more)` : ""}`,
         "Delete it. The process that took it is gone.",
       ),
       {
-        prompt: `Delete ${label} (${locks.map(collapseHome).join(", ")})?`,
+        prompt: `Delete ${label} (${locks.map((lock) => collapseHome(home, lock)).join(", ")})?`,
         label: `deleted ${label}`,
         destructive: true,
         apply: Effect.forEach(locks, removeIfPresent, { discard: true }),
@@ -1052,10 +980,10 @@ const make = Effect.gen(function* () {
       repairable(
         line.warn(
           `left behind by a crashed update${pid !== 0 ? ` (pid ${pid} is gone)` : ""}, so \`${binaryName} update\` refuses to run`,
-          `Delete ${collapseHome(stagingLock)}.`,
+          `Delete ${collapseHome(home, stagingLock)}.`,
         ),
         {
-          prompt: `Delete the stale update staging lock at ${collapseHome(stagingLock)}?`,
+          prompt: `Delete the stale update staging lock at ${collapseHome(home, stagingLock)}?`,
           label: "deleted the stale update staging lock",
           destructive: true,
           apply: fs.remove(stagingLock),
@@ -1128,7 +1056,7 @@ const make = Effect.gen(function* () {
             "Delete them, or let the next update sweep them.",
           ),
           {
-            prompt: `Delete ${shown} of leftover update files in ${collapseHome(updatesDir)}?`,
+            prompt: `Delete ${shown} of leftover update files in ${collapseHome(home, updatesDir)}?`,
             label: `deleted ${shown} of leftover update files`,
             destructive: true,
             // Under the stager's own lock, and listed again once it is
@@ -1471,7 +1399,7 @@ const make = Effect.gen(function* () {
           // Not sm's entry to drop: terrier prune owns it.
           return Result.fail(
             line.warn(
-              `${collapseHome(project.path)} is gone, but ${project.source} still lists it`,
+              `${collapseHome(home, project.path)} is gone, but ${project.source} still lists it`,
               "Restore the directory, or run `terrier prune`.",
             ),
           );
@@ -1479,11 +1407,11 @@ const make = Effect.gen(function* () {
         return Result.fail(
           repairable(
             line.fail(
-              `${collapseHome(project.path)} is gone, so every command for this project fails`,
+              `${collapseHome(home, project.path)} is gone, so every command for this project fails`,
               `If it moved, point the project at it (\`${binaryName} projects relocate ${project.name} <new-path>\`). Otherwise restore the directory, or unregister it (\`${binaryName} projects remove ${project.name}\`).`,
             ),
             {
-              prompt: `Unregister ${project.name} (${collapseHome(project.path)} is gone)? Its config under projects/ goes too.`,
+              prompt: `Unregister ${project.name} (${collapseHome(home, project.path)} is gone)? Its config under projects/ goes too.`,
               label: `unregistered ${project.name}`,
               destructive: true,
               writesStore: true,
@@ -1501,7 +1429,7 @@ const make = Effect.gen(function* () {
       if (Result.isFailure(info) || info.success.type !== "Directory") {
         return Result.fail(
           check("Projects", "project-path", project.name).fail(
-            `${collapseHome(project.path)} isn't a readable directory`,
+            `${collapseHome(home, project.path)} isn't a readable directory`,
             `Check its permissions, or unregister it (${unregisterHint(project)}).`,
           ),
         );
@@ -1519,7 +1447,7 @@ const make = Effect.gen(function* () {
         if (bare) return Result.succeed(project.path);
         return Result.fail(
           check("Projects", "project-repo", project.name).fail(
-            `${collapseHome(project.path)} is no longer a git repository`,
+            `${collapseHome(home, project.path)} is no longer a git repository`,
             `Restore the repo, or unregister it (${unregisterHint(project)}).`,
           ),
         );
@@ -1529,12 +1457,12 @@ const make = Effect.gen(function* () {
       // git answers with a symlink-free path, and everything in sm
       // matches against it, so both ways this can differ are breakage.
       const detail = (yield* sameDirectory(project.path, primaryPath))
-        ? `registered through a symlinked path; git calls the same directory ${collapseHome(primaryPath)}, so nothing run from inside the repo matches it`
-        : `registered at ${collapseHome(project.path)}, which is a worktree of ${collapseHome(primaryPath)}, not the repo's primary checkout`;
+        ? `registered through a symlinked path; git calls the same directory ${collapseHome(home, primaryPath)}, so nothing run from inside the repo matches it`
+        : `registered at ${collapseHome(home, project.path)}, which is a worktree of ${collapseHome(home, primaryPath)}, not the repo's primary checkout`;
       const readd =
         project.source === "terrier"
-          ? `\`terrier add ${collapseHome(primaryPath)}\``
-          : `\`${binaryName} projects add ${collapseHome(primaryPath)}\``;
+          ? `\`terrier add ${collapseHome(home, primaryPath)}\``
+          : `\`${binaryName} projects add ${collapseHome(home, primaryPath)}\``;
       return Result.fail(
         check("Projects", "project-primary", project.name).fail(
           detail,
@@ -1688,7 +1616,7 @@ const make = Effect.gen(function* () {
         return [
           check("Projects", "project-worktrees", project.name).fail(
             `git can't list this project's worktrees: ${errorText(identities.failure)}`,
-            `Run \`git worktree list\` in ${collapseHome(project.path)} to see the failure.`,
+            `Run \`git worktree list\` in ${collapseHome(home, project.path)} to see the failure.`,
           ),
         ];
       }
@@ -1699,7 +1627,7 @@ const make = Effect.gen(function* () {
         const shown = [...drift.moved]
           .map(
             ([oldPath, newPath]) =>
-              `${path.basename(oldPath)} → ${collapseHome(newPath)}`,
+              `${path.basename(oldPath)} → ${collapseHome(home, newPath)}`,
           )
           .toSorted();
         entries.push(
@@ -1739,7 +1667,7 @@ const make = Effect.gen(function* () {
         );
       }
       if (drift.strays.length > 0) {
-        const shown = drift.strays.map(collapseHome);
+        const shown = drift.strays.map((stray) => collapseHome(home, stray));
         entries.push(
           check("Projects", "project-strays", project.name).warn(
             `${shown.length} ${pluralize(shown.length, "directory", "directories")} in the managed layout that git doesn't know about (${shown.join(", ")})`,
@@ -1795,7 +1723,7 @@ const make = Effect.gen(function* () {
         return [
           line.warn(
             `${WORKTREE_INCLUDE} is a directory, so carry-over resolves nothing`,
-            `Remove or replace ${collapseHome(file)}.`,
+            `Remove or replace ${collapseHome(home, file)}.`,
           ),
         ];
       }
@@ -1806,7 +1734,7 @@ const make = Effect.gen(function* () {
         return [
           line.warn(
             `${WORKTREE_INCLUDE} can't be read (open ${file}: ${errnoText(readable.failure)}), so nothing is carried into new worktrees`,
-            `Fix the permissions on ${collapseHome(file)}.`,
+            `Fix the permissions on ${collapseHome(home, file)}.`,
           ),
         ];
       }
@@ -2186,12 +2114,12 @@ const make = Effect.gen(function* () {
       case "unreadable":
         return line.fail(
           `unreadable: ${found.why}`,
-          `Fix the permissions on ${collapseHome(configFile)}.`,
+          `Fix the permissions on ${collapseHome(home, configFile)}.`,
         );
       case "invalid":
         return line.fail(
           "isn't valid JSON, so every global preference is silently ignored",
-          `Repair the JSON in ${collapseHome(configFile)}, or delete it to fall back to defaults.`,
+          `Repair the JSON in ${collapseHome(home, configFile)}, or delete it to fall back to defaults.`,
         );
       case "parsed":
         return checkGlobalConfig(Option.some(found.doc));
@@ -2208,7 +2136,7 @@ const make = Effect.gen(function* () {
       return {
         entry: registryLine.fail(
           "the projects list has the wrong shape, so no project resolves",
-          `Repair the projects array in ${collapseHome(file)}.`,
+          `Repair the projects array in ${collapseHome(home, file)}.`,
         ),
         projects: [],
       };
@@ -2222,7 +2150,7 @@ const make = Effect.gen(function* () {
       return {
         entry: registryLine.warn(
           "the projectOrder list has the wrong shape, so projects list in their default order and can't be reordered",
-          `Repair or delete the projectOrder key in ${collapseHome(file)}.`,
+          `Repair or delete the projectOrder key in ${collapseHome(home, file)}.`,
         ),
         projects: listed,
       };
@@ -2238,16 +2166,18 @@ const make = Effect.gen(function* () {
     const split = (why: string) => ({
       entry: registryLine.fail(
         `can't be split out of state.json: ${why}`,
-        `Fix the permissions on ${collapseHome(dataDir)}.`,
+        `Fix the permissions on ${collapseHome(home, dataDir)}.`,
       ),
       projects: [],
     });
     switch (found.state) {
       case "unreadable":
-        return split(`Couldn't read ${collapseHome(stateFile)}: ${found.why}`);
+        return split(
+          `Couldn't read ${collapseHome(home, stateFile)}: ${found.why}`,
+        );
       case "invalid":
         return split(
-          `${collapseHome(stateFile)} is not valid JSON. Fix the file or move it aside, then retry.`,
+          `${collapseHome(home, stateFile)} is not valid JSON. Fix the file or move it aside, then retry.`,
         );
       case "parsed":
         if (
@@ -2272,7 +2202,7 @@ const make = Effect.gen(function* () {
         return {
           entry: registryLine.fail(
             `unreadable: ${found.why}`,
-            `Fix the permissions on ${collapseHome(registryFile)}.`,
+            `Fix the permissions on ${collapseHome(home, registryFile)}.`,
           ),
           projects: [],
         };
@@ -2280,7 +2210,7 @@ const make = Effect.gen(function* () {
         return {
           entry: registryLine.fail(
             "isn't valid JSON, so every registered project is invisible to sm and the app",
-            `Repair the JSON in ${collapseHome(registryFile)} (it holds the project registry).`,
+            `Repair the JSON in ${collapseHome(home, registryFile)} (it holds the project registry).`,
           ),
           projects: [],
         };
@@ -2297,7 +2227,7 @@ const make = Effect.gen(function* () {
     const unusable = (why: string) => [
       line.warn(
         `can't be used (${why}), so use counts and view preferences are lost and nothing new is recorded`,
-        `Repair ${collapseHome(stateFile)}, or delete it. It holds only that history.`,
+        `Repair ${collapseHome(home, stateFile)}, or delete it. It holds only that history.`,
       ),
     ];
     switch (found.state) {
@@ -2305,11 +2235,11 @@ const make = Effect.gen(function* () {
         return [];
       case "unreadable":
         return unusable(
-          `Couldn't read ${collapseHome(stateFile)}: ${found.why}`,
+          `Couldn't read ${collapseHome(home, stateFile)}: ${found.why}`,
         );
       case "invalid":
         return unusable(
-          `${collapseHome(stateFile)} is not valid JSON. Fix the file or move it aside, then retry.`,
+          `${collapseHome(home, stateFile)} is not valid JSON. Fix the file or move it aside, then retry.`,
         );
       case "parsed":
         return [line.ok("valid")];
@@ -2328,14 +2258,14 @@ const make = Effect.gen(function* () {
           return Option.some(
             line.fail(
               `project.json can't be read (${found.why}), so the store can't import it and no command can run`,
-              `Fix the permissions on ${collapseHome(file)}.`,
+              `Fix the permissions on ${collapseHome(home, file)}.`,
             ),
           );
         case "invalid":
           return Option.some(
             line.fail(
               "project.json exists but is invalid (bad JSON), so the store can't import it and no command can run",
-              `Repair the JSON in ${collapseHome(file)}.`,
+              `Repair the JSON in ${collapseHome(home, file)}.`,
             ),
           );
       }
@@ -2368,7 +2298,7 @@ const make = Effect.gen(function* () {
           ? []
           : [
               check("Data dir", "store", "store").fail(
-                `${collapseHome(refused.path)} can't be read into the store, so no command can run`,
+                `${collapseHome(home, refused.path)} can't be read into the store, so no command can run`,
                 "Fix its permissions, or move it aside.",
               ),
             ],
@@ -2398,8 +2328,8 @@ const make = Effect.gen(function* () {
         ...(failed && dir.entry.status !== "fail"
           ? [
               check("Data dir", "store", "store").fail(
-                `${collapseHome(paths.store)} can't be opened, so no command can run`,
-                `Check the permissions on ${collapseHome(dataDir)}.`,
+                `${collapseHome(home, paths.store)} can't be opened, so no command can run`,
+                `Check the permissions on ${collapseHome(home, dataDir)}.`,
               ),
             ]
           : []),
