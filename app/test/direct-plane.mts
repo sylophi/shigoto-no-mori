@@ -218,7 +218,7 @@ import { createHubConnection as createWebConnection } from "../web/hub/connectio
 import {
   boundPort,
   entryAt,
-  fakeClock,
+  testClock,
   lastOf,
   notYetSet,
   startLoopbackServer,
@@ -316,18 +316,18 @@ function fakeAskDialer(
   return { dialer };
 }
 
-// The keeper on a fake clock over a stub dial, the scaffolding the two
+// The keeper on a TestClock over a stub dial, the scaffolding the two
 // supervision scenarios below share: they differ only in what a failed
 // dial rejects with (transient vs terminal), which is the whole point
 // of running both. Dials fail until succeed() flips them, so a
 // scenario can walk a failure streak into an established session
 // without rebuilding the keeper.
 function stubKeeper(rejectWith: unknown) {
-  const clock = fakeClock();
+  const clock = testClock();
   const dials: Array<{ deviceId: string; at: number }> = [];
   let dialSucceeds = false;
   const keeper = createDirectKeeper({
-    clock,
+    context: clock.context,
     dial: (deviceId) => {
       dials.push({ deviceId, at: clock.now() });
       return dialSucceeds ? Promise.resolve() : Promise.reject(rejectWith);
@@ -1435,15 +1435,15 @@ it("supervised and eager: presence alone establishes the session (no invoke anyw
   const listener = await startDirectListener(trackTest);
   // The plane's presence path wired to the client connection
   // exactly as production wires it (late-bound plus one catch-up
-  // call), with the keeper on a fake clock so the ladder is
+  // call), with the keeper on a TestClock so the ladder is
   // advanced by hand instead of slept out.
   let onPlaneChange: (() => void) | null = null;
   const { client } = await bootPair(stub, trackTest, listener, {
     clientOnChange: () => onPlaneChange?.(),
   });
-  const clock = fakeClock();
+  const clock = testClock();
   const { plane, bridge } = makeDirectBridge(client, {
-    keeper: { clock },
+    keeper: { context: clock.context },
   });
   trackTest(() => bridge.closeDirectPeers());
   onPlaneChange = () => plane.handleConnectionChange();

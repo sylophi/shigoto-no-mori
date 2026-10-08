@@ -18,7 +18,13 @@
 // (close the socket without waiting on the platform's close handshake,
 // which against a dead peer can take a browser a minute, and report
 // through its close path so the supervisor or keeper redials).
-// Browser-global code only: setInterval, setTimeout, Date.now.
+// The pings and the probe are fibers on Schedules, read against the
+// Clock: browser-safe.
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Schedule from "effect/Schedule";
 import {
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_TIMEOUT_MS,
@@ -33,9 +39,9 @@ export type HeartbeatOptions = {
 };
 
 type Heartbeat = {
-  // Arm the interval (once the socket is established).
+  // Arm the pings (once the socket is established).
   start(): void;
-  // Cancel every timer. Idempotent, safe before start.
+  // End the pings and any probe. Idempotent, safe before start.
   stop(): void;
   // An inbound frame arrived: it answers the oldest unanswered ping.
   noteInbound(): void;
@@ -43,13 +49,6 @@ type Heartbeat = {
   // not started, or while a probe is already pending.
   probe(): void;
 };
-
-// A timer must never be what keeps a node process alive (the checks
-// run this code headlessly, and a leaked socket would hang them).
-// Browsers hand back a number, which has no unref.
-function unref(timer: unknown): void {
-  (timer as { unref?: () => void }).unref?.();
-}
 
 export function createHeartbeat(
   deps: HeartbeatOptions & {
@@ -62,65 +61,77 @@ export function createHeartbeat(
   const intervalMs = deps.intervalMs ?? HEARTBEAT_INTERVAL_MS;
   const timeoutMs = deps.timeoutMs ?? HEARTBEAT_TIMEOUT_MS;
   const probeTimeoutMs = deps.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
+  const run = Effect.runForkWith(Context.empty());
 
   let pingSentAt: number | null = null;
-  let intervalTimer: ReturnType<typeof setInterval> | null = null;
-  let probeTimer: ReturnType<typeof setTimeout> | null = null;
-  let started = false;
+  let pings: Fiber.Fiber<void> | null = null;
+  let probing: Fiber.Fiber<void> | null = null;
 
   function stop(): void {
-    started = false;
-    if (intervalTimer !== null) {
-      clearInterval(intervalTimer);
-      intervalTimer = null;
+    for (const fiber of [pings, probing]) {
+      if (fiber !== null) run(Fiber.interrupt(fiber));
     }
-    if (probeTimer !== null) {
-      clearTimeout(probeTimer);
-      probeTimer = null;
-    }
+    pings = null;
+    probing = null;
   }
 
-  function declareDead(): void {
+  const declareDead = Effect.sync(() => {
     stop();
     deps.onDead();
-  }
+  });
 
-  function sendPing(): void {
-    try {
-      deps.sendPing();
-    } catch {
-      return;
+  // A ping the wire refused is left to the close that follows.
+  const sendPing = Effect.try(() => deps.sendPing()).pipe(
+    Effect.andThen(Clock.currentTimeMillis),
+    Effect.map((now) => {
+      if (pingSentAt === null) pingSentAt = now;
+    }),
+    Effect.ignore,
+  );
+
+  // One beat: a ping when none is outstanding, else the verdict on the
+  // oldest one. Answers whether the socket is still alive.
+  const beat = Effect.gen(function* () {
+    if (pingSentAt === null) {
+      yield* sendPing;
+      return true;
     }
-    if (pingSentAt === null) pingSentAt = Date.now();
-  }
+    return (yield* Clock.currentTimeMillis) - pingSentAt < timeoutMs;
+  });
 
   return {
     start() {
-      if (started) return;
-      started = true;
-      intervalTimer = setInterval(() => {
-        if (pingSentAt !== null) {
-          if (Date.now() - pingSentAt >= timeoutMs) declareDead();
-          return;
-        }
-        sendPing();
-      }, intervalMs);
-      unref(intervalTimer);
+      if (pings !== null) return;
+      pings = run(
+        Effect.sleep(intervalMs).pipe(
+          Effect.andThen(
+            beat.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced(intervalMs),
+                while: (alive) => alive,
+              }),
+            ),
+          ),
+          Effect.andThen(declareDead),
+        ),
+      );
     },
     stop,
     noteInbound() {
       pingSentAt = null;
     },
     probe() {
-      if (!started || probeTimer !== null) return;
-      sendPing();
-      const sentAt = Date.now();
-      probeTimer = setTimeout(() => {
-        probeTimer = null;
-        // Any frame since the probe went out is the answer.
-        if (pingSentAt !== null && pingSentAt <= sentAt) declareDead();
-      }, probeTimeoutMs);
-      unref(probeTimer);
+      if (pings === null || probing !== null) return;
+      probing = run(
+        Effect.gen(function* () {
+          yield* sendPing;
+          const sentAt = yield* Clock.currentTimeMillis;
+          yield* Effect.sleep(probeTimeoutMs);
+          probing = null;
+          // Any frame since the probe went out is the answer.
+          if (pingSentAt !== null && pingSentAt <= sentAt) yield* declareDead;
+        }),
+      );
     },
   };
 }

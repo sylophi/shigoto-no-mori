@@ -1,7 +1,7 @@
 // Reconnect supervisor for one remote connection (in shared/ so the main-process hub socket reuses
 // it). It is the SINGLE owner of retry for a connection: nothing else
-// drives the connect function for it, so there is exactly one backoff
-// ladder and one timer per connection, never a fan of overlapping
+// drives the connect function for it, so there is exactly one fiber
+// and one restart schedule per connection, never a fan of overlapping
 // reconnect loops.
 //
 // State machine, copying t3's discipline:
@@ -15,14 +15,24 @@
 // other close backs off.
 //
 // Deterministic on purpose: the ladder is fixed with no random jitter
-// (the renderer runtime forbids Math.random anyway), and time is read
-// through an injected clock so a test can advance it and assert the
-// ladder and the reset without sleeping real seconds.
+// (the renderer runtime forbids Math.random anyway), and time is the
+// Clock of the context the loop runs in, so a test on a TestClock
+// asserts the ladder and the reset without sleeping real seconds.
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
+import { restartSchedule } from "./restartSchedule";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
 // jitter-free so a test asserts the exact sequence.
@@ -43,25 +53,6 @@ export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
 // Defined by the hub contract, whose schema validates it on the
 // Electron wire.
 export type SupervisorStatus = HubStatus["socket"];
-
-// Opaque timer handle: a number in the browser, a Timeout object under
-// node. The supervisor only ever hands it back to clearTimeout.
-export type SupervisorTimer = unknown;
-
-// Injected time source. The default binds the platform globals, and
-// tests pass a controllable clock to advance time and fire timers by
-// hand.
-export type SupervisorClock = {
-  now(): number;
-  setTimeout(fn: () => void, ms: number): SupervisorTimer;
-  clearTimeout(timer: SupervisorTimer): void;
-};
-
-export const defaultSupervisorClock: SupervisorClock = {
-  now: () => Date.now(),
-  setTimeout: (fn, ms) => setTimeout(fn, ms),
-  clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
-};
 
 // The part of an established connection the supervisor and its owner
 // touch: the owner close, the probe, and the remote identity the
@@ -107,7 +98,8 @@ export type CloseClassifier = (
 
 type SupervisorOptions = {
   connect: ConnectFn;
-  clock?: SupervisorClock;
+  // What the loop runs in: the app's, or a test's with a TestClock.
+  context?: Context.Context<never>;
   classifyClose: CloseClassifier;
   // Status observer for a device registry / a live UI.
   onStatus?: (status: SupervisorStatus) => void;
@@ -134,129 +126,114 @@ export function backoffDelayMs(
 }
 
 export function createSupervisor(options: SupervisorOptions): Supervisor {
-  const clock = options.clock ?? defaultSupervisorClock;
   const classifyClose = options.classifyClose;
+  const run = Effect.runForkWith(options.context ?? Context.empty());
 
   let status: SupervisorStatus = { phase: "idle" };
-  // True between start() and stop(). Guards every async continuation so
-  // a connect resolving after stop() cannot revive a torn-down device.
-  let running = false;
-  // Ladder position for the current failure streak. Reset to 0 on a
-  // stable disconnect, advanced on every scheduled backoff.
-  let attempt = 0;
-  let connection: SupervisedConnection | null = null;
-  // When the live connection opened, by the injected clock, so a close
-  // can measure how long it stayed up.
-  let connectedAt = 0;
-  let retryTimer: SupervisorTimer | null = null;
+  let loop: Fiber.Fiber<never> | null = null;
 
-  function setStatus(next: SupervisorStatus): void {
-    status = next;
-    options.onStatus?.(next);
-  }
+  const setStatus = (next: SupervisorStatus) =>
+    Effect.sync(() => {
+      status = next;
+      options.onStatus?.(next);
+    });
 
-  function clearRetry(): void {
-    if (retryTimer !== null) {
-      clock.clearTimeout(retryTimer);
-      retryTimer = null;
+  // Terminal until the owner's next refresh, which drops and recreates
+  // the supervisor: that is what unblocks.
+  const block = (reason: BlockReason, message: string) =>
+    setStatus({ phase: "blocked", reason, message }).pipe(
+      Effect.andThen(Effect.never),
+    );
+
+  // One connection's life: the connect, then the socket until it
+  // closes. Answers how long it stayed up, which the restart schedule
+  // reads (a failed attempt never counts as a stable connection), or
+  // blocks for good.
+  const attempt = Effect.gen(function* () {
+    yield* setStatus({ phase: "connecting" });
+    const closed = yield* Deferred.make<number | null>();
+    const connected = yield* Effect.callback<
+      Result.Result<SupervisedConnection, unknown>
+    >((resume) => {
+      let orphaned = false;
+      // Fires only for a socket that dropped on its own: the transport
+      // suppresses this for an owner-initiated close.
+      options
+        .connect((code) => Deferred.doneUnsafe(closed, Exit.succeed(code)))
+        .then(
+          (connection) => {
+            // Torn down while the handshake was in flight: the orphan is
+            // closed so it does not leak a live socket.
+            if (orphaned) connection.close();
+            else resume(Effect.succeed(Result.succeed(connection)));
+          },
+          (error: unknown) => resume(Effect.succeed(Result.fail(error))),
+        );
+      return Effect.sync(() => {
+        orphaned = true;
+      });
+    });
+    if (Result.isFailure(connected)) {
+      const error = connected.failure;
+      // The transport tags a blocking close as blocked. Anything else
+      // (hello timeout, host restart, network blip) is retryable.
+      if (error instanceof RemoteConnectError && error.blocked) {
+        // A blocking close names itself through the classifier. A
+        // blocking failure with no close code (a refused ticket mint)
+        // names itself in the error.
+        const verdict = classifyClose(error.code) ?? {
+          reason: "refused" as const,
+          message: error.message,
+        };
+        return yield* block(verdict.reason, verdict.message);
+      }
+      return 0;
     }
-  }
-
-  function block(reason: BlockReason, message: string): void {
-    // Terminal until the owner's next refresh, which drops and
-    // recreates the supervisor: that is what unblocks.
-    connection = null;
-    setStatus({ phase: "blocked", reason, message });
-  }
-
-  function scheduleBackoff(resetLadder: boolean): void {
-    // Clear any live retry first so this is the ONLY timer: the module
-    // header promises exactly one backoff ladder, and two overlapping
-    // schedules would fan into parallel connect attempts (C3).
-    clearRetry();
-    if (resetLadder) attempt = 0;
-    const delayMs = backoffDelayMs(BACKOFF_LADDER_MS, attempt);
-    attempt += 1;
-    setStatus({ phase: "backoff", attempt, delayMs });
-    retryTimer = clock.setTimeout(() => {
-      retryTimer = null;
-      if (running) attemptConnect();
-    }, delayMs);
-  }
-
-  function handleClose(code: number | null): void {
-    // Fires only for a socket that dropped on its own: the transport
-    // suppresses this for an owner-initiated close.
-    if (!running) return;
-    connection = null;
+    const connection = connected.success;
+    const connectedAt = yield* Clock.currentTimeMillis;
+    yield* setStatus({
+      phase: "connected",
+      remoteDeviceId: connection.remoteDeviceId,
+      remoteAppVersion: connection.remoteAppVersion,
+    });
+    options.onConnection?.(connection);
+    const code = yield* Deferred.await(closed).pipe(
+      Effect.onInterrupt(() => Effect.sync(() => connection.close())),
+    );
     options.onConnection?.(null);
     const verdict = classifyClose(code);
-    if (verdict !== null) {
-      block(verdict.reason, verdict.message);
-      return;
-    }
-    const openMs = clock.now() - connectedAt;
-    scheduleBackoff(openMs >= STABLE_CONNECTION_MS);
-  }
+    if (verdict !== null) return yield* block(verdict.reason, verdict.message);
+    return (yield* Clock.currentTimeMillis) - connectedAt;
+  });
 
-  function onConnected(next: SupervisedConnection): void {
-    if (!running) {
-      // Torn down while the handshake was in flight. Close the orphan so
-      // it does not leak a live socket.
-      next.close();
-      return;
-    }
-    connection = next;
-    connectedAt = clock.now();
-    setStatus({
-      phase: "connected",
-      remoteDeviceId: next.remoteDeviceId,
-      remoteAppVersion: next.remoteAppVersion,
-    });
-    options.onConnection?.(next);
-  }
-
-  function onConnectError(error: unknown): void {
-    if (!running) return;
-    // The transport tags a blocking close as blocked. Anything else
-    // (hello timeout, host restart, network blip) is retryable, and a
-    // failed attempt never counts as a stable connection.
-    if (error instanceof RemoteConnectError && error.blocked) {
-      // A blocking close names itself through the classifier. A
-      // blocking failure with no close code (a refused ticket mint)
-      // names itself in the error.
-      const verdict = classifyClose(error.code) ?? {
-        reason: "refused" as const,
-        message: error.message,
-      };
-      block(verdict.reason, verdict.message);
-      return;
-    }
-    scheduleBackoff(false);
-  }
-
-  function attemptConnect(): void {
-    setStatus({ phase: "connecting" });
-    options.connect(handleClose).then(onConnected).catch(onConnectError);
-  }
+  const supervise = attempt.pipe(
+    Effect.repeat(
+      restartSchedule(BACKOFF_LADDER_MS).pipe(
+        Schedule.tap(({ output, duration }) =>
+          setStatus({
+            phase: "backoff",
+            attempt: output,
+            delayMs: Duration.toMillis(duration),
+          }),
+        ),
+      ),
+    ),
+    Effect.andThen(Effect.never),
+  );
 
   return {
     start(): void {
-      if (running) return;
-      running = true;
-      attempt = 0;
-      attemptConnect();
+      if (loop !== null) return;
+      loop = run(supervise);
     },
     stop(): void {
-      if (!running && status.phase === "stopped") return;
-      running = false;
-      clearRetry();
-      if (connection !== null) {
-        connection.close();
-        connection = null;
-      }
+      if (loop === null && status.phase === "stopped") return;
+      const stopping = loop;
+      loop = null;
+      if (stopping !== null) run(Fiber.interrupt(stopping));
       options.onConnection?.(null);
-      setStatus({ phase: "stopped" });
+      status = { phase: "stopped" };
+      options.onStatus?.(status);
     },
   };
 }
