@@ -43,6 +43,12 @@ export function parseLauncherId(
   return { kind, id: launcherId.slice(separator + 1) };
 }
 
+// The terminals terminal tools open in (config.json's terminal), as
+// launcher catalog ids, in the order Settings lists them. Mirrors
+// cli/terminals.go terminalIDs.
+export const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
+export type TerminalId = (typeof TERMINAL_IDS)[number];
+
 export const WebLauncherSchema = z.object({
   kind: z.literal("web"),
   id: z.string(),

@@ -561,8 +561,8 @@ function hostHandlersFor(
     "launchers:detect": () => [...FAKE_DETECTED],
     "launchers:forProject": () => ({
       entries: [
-        ...FAKE_DETECTED,
-        { kind: "custom", id: "claude", label: "Claude Code" },
+        ...FAKE_DETECTED.filter((d) => d.available),
+        { kind: "custom", id: "custom:deploy", label: "Deploy preview" },
         { kind: "web", id: "web:github", label: "GitHub" },
       ],
       hiddenCount: 0,
@@ -1253,10 +1253,28 @@ async function fakeSyncPull(
 }
 
 const FAKE_DETECTED = [
-  { kind: "detected", id: "vscode", label: "VS Code", available: true },
-  { kind: "detected", id: "terminal", label: "Terminal", available: true },
-  { kind: "detected", id: "finder", label: "Finder", available: true },
-  { kind: "detected", id: "codex", label: "ChatGPT", available: true },
+  { kind: "detected", id: "app:vscode", label: "VS Code", available: true },
+  { kind: "detected", id: "app:terminal", label: "Terminal", available: true },
+  { kind: "detected", id: "app:ghostty", label: "Ghostty", available: true },
+  { kind: "detected", id: "app:finder", label: "Finder", available: true },
+  { kind: "detected", id: "app:codex", label: "ChatGPT", available: true },
+  {
+    kind: "detected",
+    id: "app:claude-code",
+    label: "Claude Code",
+    available: true,
+  },
+  { kind: "detected", id: "app:neovim", label: "Neovim", available: true },
+  { kind: "detected", id: "app:lazygit", label: "lazygit", available: true },
+  { kind: "detected", id: "app:gemini", label: "Gemini CLI", available: false },
+  {
+    kind: "detected",
+    id: "app:copilot",
+    label: "Copilot CLI",
+    available: false,
+  },
+  { kind: "detected", id: "app:vim", label: "Vim", available: false },
+  { kind: "detected", id: "app:helix", label: "Helix", available: false },
 ] as const;
 
 // ---- account and presence state the fake host can change ----

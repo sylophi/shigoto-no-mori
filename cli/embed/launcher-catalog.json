@@ -136,6 +136,30 @@
   { "id": "ghostty", "label": "Ghostty", "bundleNames": ["Ghostty.app"] },
   { "id": "iterm", "label": "iTerm", "bundleNames": ["iTerm.app"] },
   {
+    "id": "warp",
+    "label": "Warp",
+    "bundleNames": ["Warp.app"],
+    "deepLink": "warp://action/new_window?path={path}"
+  },
+  {
+    "id": "kitty",
+    "label": "kitty",
+    "bundleNames": ["kitty.app"],
+    "openArgs": ["--single-instance", "--directory", "{path}"]
+  },
+  {
+    "id": "wezterm",
+    "label": "WezTerm",
+    "bundleNames": ["WezTerm.app"],
+    "openArgs": ["start", "--cwd", "{path}"]
+  },
+  {
+    "id": "alacritty",
+    "label": "Alacritty",
+    "bundleNames": ["Alacritty.app"],
+    "openArgs": ["--working-directory", "{path}"]
+  },
+  {
     "id": "terminal",
     "label": "Terminal",
     "bundleNames": ["Utilities/Terminal.app"]
@@ -146,5 +170,22 @@
     "bundleNames": ["GitHub Desktop.app"],
     "cli": "github"
   },
-  { "id": "finder", "label": "Finder", "bundleNames": ["__finder__"] }
+  { "id": "finder", "label": "Finder", "bundleNames": ["__finder__"] },
+  { "id": "claude-code", "label": "Claude Code", "inTerminal": "claude" },
+  { "id": "codex-cli", "label": "Codex CLI", "inTerminal": "codex" },
+  { "id": "gemini", "label": "Gemini CLI", "inTerminal": "gemini" },
+  { "id": "opencode", "label": "OpenCode", "inTerminal": "opencode" },
+  { "id": "amp", "label": "Amp", "inTerminal": "amp" },
+  { "id": "cursor-agent", "label": "Cursor CLI", "inTerminal": "cursor-agent" },
+  { "id": "copilot", "label": "Copilot CLI", "inTerminal": "copilot" },
+  { "id": "aider", "label": "Aider", "inTerminal": "aider" },
+  { "id": "pi", "label": "Pi", "inTerminal": "pi" },
+  { "id": "neovim", "label": "Neovim", "inTerminal": "nvim ." },
+  { "id": "vim", "label": "Vim", "inTerminal": "vim ." },
+  { "id": "helix", "label": "Helix", "inTerminal": "hx ." },
+  { "id": "lazygit", "label": "lazygit", "inTerminal": "lazygit" },
+  { "id": "gitui", "label": "GitUI", "inTerminal": "gitui" },
+  { "id": "tig", "label": "tig", "inTerminal": "tig" },
+  { "id": "tmux", "label": "tmux", "inTerminal": "tmux" },
+  { "id": "yazi", "label": "Yazi", "inTerminal": "yazi" }
 ]
