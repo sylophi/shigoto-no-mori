@@ -6,7 +6,7 @@
 // command will: the service's answer wrapped the way the verb prints it.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -16,6 +16,8 @@ import * as Icons from "../src/Icons.ts";
 import * as Launchers from "../src/Launchers.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Scripts from "../src/Scripts.ts";
+import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
+import * as Worktrees from "../src/Worktrees.ts";
 import { type Engine, goSm, type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 // A cold build of cli/ takes longer than a test's timeout.
@@ -43,11 +45,12 @@ const same = async (
   engine: Effect.Effect<unknown, unknown, Engine>,
   normalize: (doc: unknown) => unknown = (doc) => doc,
   cwd = box.home,
-) =>
+) => {
   assert.deepStrictEqual(
     await box.engine(engine),
     normalize(await box.goAt(cwd, ...go)),
   );
+};
 
 // Steps that each read what the one before left, run one after another.
 const inTurn = (steps: ReadonlyArray<() => Promise<void>>) =>
@@ -442,6 +445,515 @@ describe("projects list", () => {
         Effect.map(Option.getOrNull),
       ),
     );
+  });
+});
+
+// --- worktrees ----------------------------------------------------------
+
+// The worktree verbs as the terminal will run them: where the command
+// runs, then the service call. A project "repo" (P1) with its linked
+// worktrees under the in-project base, managed for both sides whatever
+// data dir each has.
+const worktrees = Effect.service(Worktrees.Worktrees);
+
+const hereAt = (cwd: string) =>
+  worktrees.pipe(Effect.flatMap((service) => service.here(cwd)));
+
+// The worktree a verb names, then what the verb does with it.
+const onTarget = <A, E>(
+  cwd: string,
+  target: Worktrees.Target,
+  run: (
+    service: Worktrees.Worktrees["Service"],
+    located: Worktrees.Located,
+  ) => Effect.Effect<A, E>,
+) =>
+  Effect.gen(function* () {
+    const service = yield* worktrees;
+    const here = yield* service.here(cwd);
+    return yield* run(service, yield* service.resolve(here, target));
+  });
+
+const seedProject = (files: Record<string, string> = { "a.txt": "a\n" }) => {
+  const repo = box.repo("repo", files);
+  box.write("registry.json", {
+    projects: [{ id: "P1", name: "repo", path: repo }],
+  });
+  const tree = (name: string, ...base: string[]) => {
+    const path = join(repo, ".shigomori", "worktrees", name);
+    box.git(repo, "worktree", "add", "-q", "-b", name, path, ...base);
+    return path;
+  };
+  return { repo, tree };
+};
+
+// A gh on PATH that answers `pr list` with `prs`, or fails with
+// `stderr`, for both sides. The engine reads PATH when its runtime is
+// first built, so this goes before any engine call.
+const fakeGh = (answer: { prs?: unknown[]; stderr?: string }) =>
+  box.fakeBin(
+    "gh",
+    answer.stderr === undefined
+      ? `cat <<'JSON'\n${JSON.stringify(answer.prs ?? [])}\nJSON`
+      : `echo ${JSON.stringify(answer.stderr)} >&2\nexit 1`,
+  );
+
+describe("worktrees list", () => {
+  it("lists the project at the cwd, primary first, with sync, changes, commits and marks", async () => {
+    const { repo, tree } = seedProject();
+    const fox = tree("fox");
+    const owl = tree("owl");
+    writeFileSync(join(fox, "a.txt"), "edited\n");
+    writeFileSync(join(fox, "new.txt"), "new\n");
+    box.git(owl, "commit", "-q", "--allow-empty", "-m", "owl's own");
+    box.git(repo, "checkout", "-q", "--detach");
+    box.write("registry.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+      autoPullWorktrees: { [worktreeIdFromPath(repo)]: true },
+    });
+    const list = (cwd: string) =>
+      same(
+        ["worktrees", "list"],
+        Effect.gen(function* () {
+          const here = yield* hereAt(cwd);
+          const scope = here.current ? [here.current.project] : here.projects;
+          return (yield* (yield* worktrees).list(scope)).rows;
+        }),
+        undefined,
+        cwd,
+      );
+    await list(fox);
+    await list(box.home);
+  });
+
+  it("lists identities, with the primary ref when asked", async () => {
+    const { repo, tree } = seedProject();
+    tree("fox");
+    box.git(repo, "remote", "add", "origin", "git@github.com:me/repo.git");
+    box.git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+    for (const primaryRef of [false, true]) {
+      // oxlint-disable-next-line no-await-in-loop -- one shape at a time
+      await same(
+        [
+          "worktrees",
+          "list",
+          "--identities",
+          ...(primaryRef ? ["--primary-ref"] : []),
+        ],
+        Effect.gen(function* () {
+          const here = yield* hereAt(repo);
+          return (yield* (yield* worktrees).identityList(here.projects, {
+            primaryRef,
+          })).rows;
+        }),
+        undefined,
+        repo,
+      );
+    }
+  });
+
+  it("settles the shelf: a snapshot first, then unshelved once worked in", async () => {
+    const { repo, tree } = seedProject();
+    const fox = tree("fox");
+    const owl = tree("owl");
+    const shelved = {
+      [worktreeIdFromPath(fox)]: true,
+      [worktreeIdFromPath(owl)]: true,
+    };
+    box.write("registry.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+      shelvedWorktrees: shelved,
+    });
+    const list = () =>
+      same(
+        ["worktrees", "list", "-p", "repo"],
+        worktrees.pipe(
+          Effect.flatMap((service) =>
+            service.list([{ id: "P1", name: "repo", path: repo }]),
+          ),
+          Effect.map(({ rows }) => rows),
+        ),
+      );
+    await list();
+    box.git(fox, "commit", "-q", "--allow-empty", "-m", "worked");
+    await list();
+    await list();
+  });
+
+  it("lists one worktree by id, and refuses an unknown one with its code", async () => {
+    const { tree } = seedProject();
+    const fox = tree("fox");
+    const byId = (worktreeId: string) =>
+      same(
+        ["worktrees", "list", "--worktree-id", worktreeId],
+        onTarget(box.home, { worktreeId }, (service, located) =>
+          service
+            .row(located, { settle: true })
+            .pipe(Effect.map((row) => [row])),
+        ),
+      );
+    await byId(worktreeIdFromPath(fox));
+    await byId("nope");
+  });
+});
+
+// Go lists the candidates in the order its lookups finished.
+const sortedCandidates = (doc: unknown) => {
+  const { error } = doc as { error: string };
+  return {
+    ...(doc as object),
+    error: error.replace(
+      /\(([^)]*)\)/,
+      (_, list: string) => `(${list.split(", ").toSorted().join(", ")})`,
+    ),
+  };
+};
+
+describe("worktrees path", () => {
+  it("resolves names, paths, <project>/<name>, the reserved names and the cwd, and says why it can't", async () => {
+    const { repo, tree } = seedProject();
+    const fox = tree("fox");
+    mkdirSync(join(box.home, "plain"));
+    const path = (cwd: string, ...args: string[]) =>
+      same(
+        ["worktrees", "path", ...args],
+        onTarget(
+          cwd,
+          {
+            ref: args.find((arg) => !arg.startsWith("-") && arg !== "repo"),
+            project: args.includes("-p") ? "repo" : undefined,
+          },
+          (_, { project, worktree }) =>
+            Effect.succeed({
+              id: worktree.id,
+              name: worktree.name,
+              branch: worktree.branch,
+              path: worktree.path,
+              projectName: project.name,
+              projectId: project.id,
+              isPrimary: worktree.isPrimary,
+            }),
+        ),
+        undefined,
+        cwd,
+      );
+    await path(box.home, "fox");
+    await path(box.home, "FOX");
+    await path(box.home, "repo/fox");
+    await path(box.home, "root");
+    await path(box.home, "repo/primary");
+    await path(fox);
+    await path(join(fox, "."), ".");
+    await path(box.home, fox);
+    await path(repo, "-p", "repo");
+    await path(box.home, "-p", "repo");
+    await path(box.home, "nope");
+    await path(box.home, "repo/nope");
+    await path(box.home, "other/fox");
+    await path(box.home);
+    await path(join(box.home, "plain"), join(box.home, "plain"));
+  });
+
+  it("finds a name in several projects ambiguous, and the reserved names need a project", async () => {
+    const one = box.repo("one");
+    const two = box.repo("two");
+    for (const repo of [one, two]) {
+      box.git(
+        repo,
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "fox",
+        join(repo, ".shigomori", "worktrees", "fox"),
+      );
+    }
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "one", path: one },
+        { id: "B", name: "two", path: two },
+      ],
+    });
+    for (const ref of ["fox", "root"]) {
+      // oxlint-disable-next-line no-await-in-loop -- one ref at a time
+      await same(
+        ["worktrees", "path", ref],
+        onTarget(box.home, { ref }, (_, located) =>
+          Effect.succeed(located.worktree.path),
+        ),
+        sortedCandidates,
+      );
+    }
+  });
+});
+
+describe("worktrees status", () => {
+  it("cards a worktree: upstream, base, change counts, stash, last commit, scripts, ports", async () => {
+    const { repo, tree } = seedProject({ "a.txt": "a\n", "b.txt": "b\n" });
+    box.write("projects/P1/project.json", {
+      defaultBranch: "main",
+      scripts: { setup: "pnpm i" },
+    });
+    const fox = tree("fox");
+    box.git(fox, "commit", "-q", "--allow-empty", "-m", "ahead");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "moved on");
+    writeFileSync(join(fox, "a.txt"), "staged\n");
+    box.git(fox, "add", "a.txt");
+    writeFileSync(join(fox, "a.txt"), "staged, then edited\n");
+    writeFileSync(join(fox, "b.txt"), "unstaged\n");
+    writeFileSync(join(fox, "c.txt"), "untracked\n");
+    writeFileSync(
+      join(fox, "port-pool.config.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        portNames: ["web", "api"],
+        envFiles: { ".env": { PORT: "${web}", API: "${api}", URL: "x${web}" } },
+      }),
+    );
+    writeFileSync(join(fox, ".env"), "PORT=4100\nexport API='4101'\n");
+    box.git(repo, "stash", "list");
+    const status = (...args: string[]) =>
+      same(
+        ["worktrees", "status", "fox", ...args],
+        onTarget(box.home, { ref: "fox" }, (service, located) =>
+          service.status(located, { pullRequest: !args.includes("--no-pr") }),
+        ),
+      );
+    await status("--no-pr");
+    box.git(fox, "branch", "--set-upstream-to", "main");
+    await status("--no-pr");
+  });
+
+  it("cards the pull request gh finds, skipping a stranger's fork", async () => {
+    fakeGh({
+      prs: [
+        { number: 9, title: "fork", state: "OPEN", isCrossRepository: true },
+        {
+          number: 7,
+          title: "Mine",
+          state: "OPEN",
+          isDraft: false,
+          url: "https://github.com/me/repo/pull/7",
+          baseRefName: "main",
+          headRefName: "fox",
+          isCrossRepository: false,
+          autoMergeRequest: { mergeMethod: "SQUASH" },
+          statusCheckRollup: [
+            { status: "COMPLETED", conclusion: "SUCCESS" },
+            { status: "IN_PROGRESS", conclusion: "" },
+            { state: "FAILURE" },
+          ],
+        },
+      ],
+    });
+    seedProject().tree("fox");
+    await same(
+      ["worktrees", "status", "fox"],
+      onTarget(box.home, { ref: "fox" }, (service, located) =>
+        service.status(located, { pullRequest: true }),
+      ),
+    );
+  });
+
+  it("says why the pull request couldn't be looked up", async () => {
+    fakeGh({
+      stderr:
+        "none of the git remotes configured for this repository point to a known GitHub host",
+    });
+    seedProject().tree("fox");
+    await same(
+      ["worktrees", "status", "fox"],
+      onTarget(box.home, { ref: "fox" }, (service, located) =>
+        service.status(located, { pullRequest: true }),
+      ),
+    );
+  });
+});
+
+describe("worktrees marks", () => {
+  it("shelves and unshelves a managed worktree, refusing the primary and an external", async () => {
+    const { repo, tree } = seedProject();
+    tree("fox");
+    const outside = join(box.home, "outside");
+    box.git(repo, "worktree", "add", "-q", "-b", "outside", outside);
+    const shelve = (ref: string, on: boolean) =>
+      same(
+        ["worktrees", on ? "shelve" : "unshelve", ref],
+        onTarget(box.home, { ref }, (service, { worktree }) =>
+          service.setShelved(worktree, on).pipe(
+            Effect.as({
+              ok: true,
+              name: worktree.name,
+              id: worktree.id,
+              shelved: on,
+            }),
+          ),
+        ),
+      );
+    await inTurn([
+      () => shelve("fox", true),
+      () => shelve("repo/root", true),
+      () => shelve("outside", true),
+      () => shelve("fox", false),
+      () => shelve("outside", false),
+    ]);
+  });
+
+  it("sets auto-pull on any checkout and answers the row", async () => {
+    const { tree } = seedProject();
+    tree("fox");
+    const autopull = (ref: string, mode?: "on" | "off") =>
+      same(
+        ["worktrees", "autopull", ...(mode ? [mode] : []), ref],
+        onTarget(box.home, { ref }, (service, located) =>
+          Effect.gen(function* () {
+            if (mode)
+              yield* service.setAutoPull(located.worktree, mode === "on");
+            return { ok: true, worktree: yield* service.row(located) };
+          }),
+        ),
+      );
+    await inTurn([
+      () => autopull("fox", "on"),
+      () => autopull("repo/root", "on"),
+      () => autopull("fox"),
+      () => autopull("fox", "off"),
+    ]);
+  });
+});
+
+describe("worktrees agent-working", () => {
+  it("marks a managed worktree as worked in by an agent, refusing the primary and an external", async () => {
+    const { repo, tree } = seedProject();
+    tree("fox");
+    box.git(
+      repo,
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "outside",
+      join(box.home, "outside"),
+    );
+    const mark = (ref: string, mode?: "on" | "off") =>
+      same(
+        ["worktrees", "agent-working", ...(mode ? [mode] : []), ref],
+        onTarget(box.home, { ref }, (service, located) =>
+          Effect.gen(function* () {
+            if (mode) {
+              yield* service.setAgentWorking(located.worktree, mode === "on");
+            }
+            return { ok: true, worktree: yield* service.row(located) };
+          }),
+        ),
+      );
+    await inTurn([
+      () => mark("fox", "on"),
+      () => mark("fox"),
+      () => mark("repo/root", "on"),
+      () => mark("outside", "on"),
+      () => mark("outside", "off"),
+      () => mark("fox", "off"),
+    ]);
+    await same(
+      ["worktrees", "list", "--identities", "-p", "repo"],
+      worktrees.pipe(
+        Effect.flatMap((service) =>
+          service.identityList([{ id: "P1", name: "repo", path: repo }], {
+            primaryRef: false,
+          }),
+        ),
+        Effect.map(({ rows }) => rows),
+      ),
+    );
+  });
+});
+
+describe("worktrees describe", () => {
+  const describeVerb = (
+    ref: string,
+    change: { title?: string; description?: string },
+  ) =>
+    same(
+      [
+        "worktrees",
+        "describe",
+        ref,
+        ...(change.title === undefined ? [] : ["-t", change.title]),
+        ...(change.description === undefined ? [] : ["-d", change.description]),
+      ],
+      onTarget(
+        box.home,
+        { ref },
+        (service, located): Effect.Effect<object, unknown> =>
+          change.title === undefined && change.description === undefined
+            ? service
+                .description(located)
+                .pipe(Effect.map((view) => ({ ok: true, ...view })))
+            : service
+                .describe(located, change)
+                .pipe(Effect.map((worktree) => ({ ok: true, worktree }))),
+      ),
+    );
+
+  it("sets, keeps and clears the title and description, and refuses what doesn't fit", async () => {
+    const { repo, tree } = seedProject();
+    tree("fox");
+    box.git(
+      repo,
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "outside",
+      join(box.home, "outside"),
+    );
+    await inTurn([
+      () => describeVerb("fox", {}),
+      () =>
+        describeVerb("fox", {
+          title: "  Fix the thing ",
+          description: "\n\n  code\nmore  \n\n",
+        }),
+      () => describeVerb("fox", { title: "Renamed" }),
+      // Trimmed as Go trims: a next-line character is space to it.
+      () => describeVerb("fox", { title: "Next line\u0085" }),
+      () => describeVerb("fox", { title: "Renamed" }),
+      () => describeVerb("fox", {}),
+      () => describeVerb("fox", { description: "" }),
+      () => describeVerb("fox", { title: "tab\there" }),
+      () => describeVerb("fox", { title: "x".repeat(257) }),
+      () => describeVerb("repo/root", { title: "The primary" }),
+      () => describeVerb("outside", { title: "nope" }),
+      () => describeVerb("outside", {}),
+      () => describeVerb("fox", {}),
+    ]);
+  });
+
+  it("leaves the title to an open pull request from this repository", async () => {
+    fakeGh({
+      prs: [
+        {
+          number: 3,
+          url: "u3",
+          title: "Fork's",
+          body: "",
+          isCrossRepository: true,
+        },
+        {
+          number: 4,
+          url: "u4",
+          title: "Ours",
+          body: "Body",
+          isCrossRepository: false,
+        },
+      ],
+    });
+    const { repo, tree } = seedProject();
+    box.git(repo, "remote", "add", "origin", "git@github.com:me/repo.git");
+    tree("fox");
+    await describeVerb("fox", {});
+    await describeVerb("fox", { title: "Mine" });
   });
 });
 

@@ -28,6 +28,7 @@ import { app } from "electron";
 import { cliBinaryPath } from "./cliRunner";
 import { uninstallShellIntegration } from "./cliShell";
 import { log } from "@shared/log";
+import { envSetting } from "@shared/config";
 
 function cliFlavor(): "prod" | "dev" {
   return app.isPackaged ? "prod" : "dev";
@@ -87,7 +88,7 @@ async function linkOwnership(link: string): Promise<LinkOwnership> {
 }
 
 function isOnPath(dir: string): boolean {
-  return (process.env.PATH ?? "")
+  return (envSetting("PATH") ?? "")
     .split(delimiter)
     .some((entry) => entry === dir);
 }

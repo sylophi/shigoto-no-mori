@@ -177,7 +177,7 @@ function wipeDevProfile(profile: DevProfile): void {
   console.log(`[dev-profile] wiped ${profile.name}`);
 }
 
-// The Clerk bridge's token store (main/electron/clerk.ts), one file in
+// The Clerk bridge's token store (main/electron/ClerkTokens.ts), one file in
 // userData. On macOS dev runs under Chromium's mock keychain, so the
 // safeStorage ciphertext is portable between dev instances on one
 // machine. On Linux and Windows the dev keychain item is per app

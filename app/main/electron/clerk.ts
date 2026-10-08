@@ -16,9 +16,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
-import { storage } from "@clerk/electron/storage";
 import type { TokenStorage } from "@clerk/electron";
-import { CLERK_TOKEN_STORE } from "@shared/packaging/appName.mts";
+import { clerkTokenStorage } from "./clerkTokenStorage";
 import {
   RENDERER_SCHEME_HOST,
   rendererSchemeName,
@@ -33,23 +32,17 @@ export function rendererSchemeUrl(): string {
   return `${rendererSchemeOrigin(app.isPackaged ? "prod" : "dev")}/`;
 }
 
-// The SDK's electron-store adapter reads and decrypts the token file on
-// EVERY getItem: a synchronous file read plus an OS keychain call, at
-// construction and then on each of clerk-js's periodic session
-// refreshes. Wrap it so construction moves off the boot path to the
-// first token access, and reads after the first are answered from
-// memory: main is the sole writer, so the cache can never be stale.
-function lazyMemoizedTokenStorage(): TokenStorage {
-  let backing: TokenStorage | null = null;
+// The token store decrypts on every getItem, an OS keychain call on
+// each of clerk-js's periodic session refreshes. Reads after the first
+// are answered from memory: main is the sole writer, so the cache can
+// never be stale.
+function memoizedTokenStorage(): TokenStorage {
   const cache = new Map<string, string | null>();
-  // Named explicitly (the SDK's own default) so the dev launchers can
-  // find the file when cloning a sign-in (scripts/lib/devProfile.mts).
-  const store = () => (backing ??= storage({ name: CLERK_TOKEN_STORE }));
   return {
     getItem: async (key) => {
       const cached = cache.get(key);
       if (cached !== undefined) return cached;
-      const value = await store().getItem(key);
+      const value = await clerkTokenStorage.getItem(key);
       // A setItem that landed while the disk read was in flight is
       // fresher than what was read, so never let the read overwrite it.
       const raced = cache.get(key);
@@ -58,11 +51,11 @@ function lazyMemoizedTokenStorage(): TokenStorage {
       return value;
     },
     setItem: async (key, value) => {
-      await store().setItem(key, value);
+      await clerkTokenStorage.setItem(key, value);
       cache.set(key, value);
     },
     removeItem: async (key) => {
-      await store().removeItem(key);
+      await clerkTokenStorage.removeItem(key);
       cache.set(key, null);
     },
   };
@@ -76,7 +69,7 @@ function lazyMemoizedTokenStorage(): TokenStorage {
 // second-instance listeners still receive the OAuth deep links.
 export function createDesktopClerkBridge(): { cleanup: () => void } {
   return createClerkBridge({
-    storage: lazyMemoizedTokenStorage(),
+    storage: memoizedTokenStorage(),
     renderer: { scheme: rendererScheme(), host: RENDERER_SCHEME_HOST },
     manageSingleInstanceLock: false,
   });
