@@ -23,7 +23,7 @@ export type RegisteredProject = {
 };
 
 // The marks a worktree can carry, keyed by its path-derived id.
-export type WorktreeMark = "shelved" | "autoPull";
+export type WorktreeMark = "shelved" | "autoPull" | "agentWorking";
 
 export class ProjectAlreadyAdded extends Schema.TaggedError<ProjectAlreadyAdded>()(
   "ProjectAlreadyAdded",

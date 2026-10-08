@@ -22,7 +22,7 @@ export const tables = Effect.gen(function* () {
   ) STRICT`;
   yield* sql`CREATE TABLE worktree_marks (
     worktree_id TEXT NOT NULL,
-    mark TEXT NOT NULL CHECK (mark IN ('shelved', 'autoPull')),
+    mark TEXT NOT NULL CHECK (mark IN ('shelved', 'autoPull', 'agentWorking')),
     PRIMARY KEY (worktree_id, mark)
   ) STRICT`;
   // What a shelved worktree looked like when it went on the shelf.

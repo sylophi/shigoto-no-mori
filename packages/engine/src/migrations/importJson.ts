@@ -173,6 +173,7 @@ export const importJson = Effect.gen(function* () {
   for (const [key, mark] of [
     ["shelvedWorktrees", "shelved"],
     ["autoPullWorktrees", "autoPull"],
+    ["agentWorkingWorktrees", "agentWorking"],
   ] as const) {
     yield* insertAll(
       "worktree_marks",
