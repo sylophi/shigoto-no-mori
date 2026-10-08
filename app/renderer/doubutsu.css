@@ -863,25 +863,13 @@
 /* The sidebar's New worktree and Add project buttons and the device
    filter's row of outline buttons above them skip the peach outline
    fill above, so they read as one set of controls on the mint rail.
-   The buttons fall back to their variant's own fills (plain --background, muted on
-   hover), and the pills wear the same --background. The picked pill
-   keeps the accent every selection here wears. All unlayered, like
-   the outline fill they outrank. */
+   They fall back to their own fills: the variant's plain --background,
+   muted on hover, and the picked pill's accent. Unlayered, like the
+   outline fill they outrank. */
 .doubutsu
-  [data-slot="sidebar-inbox-create"]
+  :is([data-slot="sidebar-inbox-create"], [data-slot="sidebar-device-filter"])
   [data-slot="button"][data-variant="outline"] {
   background-color: revert-layer;
-}
-.doubutsu
-  [data-slot="sidebar-device-filter"]
-  [data-slot="button"]:not([aria-checked="true"]) {
-  background-color: var(--background);
-}
-.doubutsu
-  [data-slot="sidebar-device-filter"]
-  [data-slot="button"][aria-checked="true"] {
-  background-color: var(--accent);
-  color: var(--accent-foreground);
 }
 
 /* The 1px sidebar resize handle is bg-border, which doubutsu zeroes,
