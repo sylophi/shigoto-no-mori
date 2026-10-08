@@ -879,6 +879,62 @@ describe("bundle", () => {
   });
 });
 
+describe("open", () => {
+  // A worktree on a GitHub repo, a custom launcher, and a terminal tool
+  // (Claude Code) on PATH whose terminal is driven by a fake osascript.
+  const project = () => {
+    const alpha = box.repo("alpha");
+    box.git(alpha, "remote", "add", "origin", "git@github.com:me/alpha.git");
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    box.write("config.json", {
+      launchers: [{ id: "m", label: "Mark", command: "true" }],
+    });
+    box.fakeBin("open", "exit 0");
+    box.fakeBin("claude", "exit 0");
+    box.fakeBin("osascript", "exit 0");
+    return { fox: `${box.home}/fox` };
+  };
+
+  it("opens a worktree in a launcher, by id, label or name", async () => {
+    const { fox } = project();
+    await same("open", "Mark", "fox");
+    await same("--json", "open", "custom:m", "fox");
+    await sameAt(fox, "open", "github");
+    await same("--json", "o", "claude-code", "fox");
+    await same("wt", "open", "nope", "fox");
+  });
+
+  it("refuses a command line it can't use", async () => {
+    const { fox } = project();
+    await same("open", "Mark");
+    await sameAt(fox, "open");
+    await same("open", "Mark", "--project-id", "A");
+    await same(
+      "open",
+      "Mark",
+      "fox",
+      "--worktree-id",
+      "x",
+      "--project-id",
+      "A",
+    );
+  });
+
+  it("says when macOS won't let the terminal be driven", async () => {
+    project();
+    box.fakeBin(
+      "osascript",
+      "echo 'execution error: Not authorized to send Apple events to Terminal. (-1743)' >&2; exit 1",
+    );
+    await same("open", "Claude Code", "fox");
+    box.fakeBin("osascript", "echo 'something else' >&2; exit 1");
+    await same("--json", "open", "claude-code", "fox");
+  });
+});
+
 describe("doctor", () => {
   // Each side's data dir, which the checklist names, as one.
   const sideNeutral = (seen: unknown): unknown =>
