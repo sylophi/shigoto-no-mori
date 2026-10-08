@@ -35,6 +35,8 @@ const STATE_FILES = [
 export class Paths extends Context.Service<
   Paths,
   {
+    // The user's home directory.
+    readonly home: string;
     readonly dataDir: string;
     readonly dataDirSource: DataDirSource;
     // The store's database file, in the data dir.
@@ -146,6 +148,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   });
 
   return Paths.of({
+    home,
     dataDir: resolved.dataDir,
     dataDirSource: resolved.source,
     store: path.join(resolved.dataDir, "store.db"),

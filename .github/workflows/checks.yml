@@ -137,7 +137,8 @@ jobs:
         run: pnpm run check:contracts
 
   # The engine's tests, on macOS: the Darwin service's tests drive the
-  # darwin helper, built from macfs/ (hence Go).
+  # darwin helper, built from macfs/, and the parity harness runs the Go
+  # sm built from cli/ (hence Go).
   engine:
     runs-on: macos-latest
     timeout-minutes: 10
@@ -155,7 +156,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: macfs/go.mod
-          cache-dependency-path: macfs/go.sum
+          cache-dependency-path: |
+            cli/go.sum
+            macfs/go.sum
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts

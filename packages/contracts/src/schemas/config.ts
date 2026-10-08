@@ -143,23 +143,28 @@ function structFieldsOf(
 }
 
 // Every field a schema models, as the keys down to it, nested objects
-// field by field (["scripts", "setup"]). The host's project write and
-// the cli-reads key check both walk it.
-export function modeledKeyPaths(
+// field by field (["scripts", "setup"]), with the field's own schema
+// node. The engine's settings read their kinds from it.
+export function modeledKeyFields(
   schema: Schema.Top,
-  prefix: string[] = [],
-): string[][] {
-  return walkKeyPaths(structFieldsOf(schema.ast) ?? [], prefix);
+): Array<{ path: string[]; ast: SchemaAST.AST }> {
+  return walkKeyFields(structFieldsOf(schema.ast) ?? [], []);
 }
 
-function walkKeyPaths(
+// The paths alone. The host's project write and the cli-reads key check
+// both walk it.
+export function modeledKeyPaths(schema: Schema.Top): string[][] {
+  return modeledKeyFields(schema).map(({ path }) => path);
+}
+
+function walkKeyFields(
   fields: ReadonlyArray<SchemaAST.PropertySignature>,
   prefix: string[],
-): string[][] {
+): Array<{ path: string[]; ast: SchemaAST.AST }> {
   return fields.flatMap((field) => {
     const path = prefix.concat(String(field.name));
     const nested = structFieldsOf(field.type);
-    return nested ? walkKeyPaths(nested, path) : [path];
+    return nested ? walkKeyFields(nested, path) : [{ path, ast: field.type }];
   });
 }
 
