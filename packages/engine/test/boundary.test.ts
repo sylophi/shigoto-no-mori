@@ -25,10 +25,10 @@ const isAllowed = (specifier: string, fileDir: string) =>
 const stripComments = (code: string) =>
   code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
-// `from "x"` (imports and re-exports), `import("x")`, `import "x"` and
-// `require("x")`.
+// `from "x"` (imports and re-exports), `import("x")`, `require("x")`,
+// and `import "x"` at the start of a statement.
 const IMPORT_SPECIFIER =
-  /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
+  /(?:\bfrom\s*|\b(?:import|require)\s*\(\s*|^\s*import\s*)["']([^"']+)["']/gm;
 const BUN_GLOBAL = /\bBun\b/;
 
 it("imports only Node, Effect and the contracts, and no Bun global", () => {
