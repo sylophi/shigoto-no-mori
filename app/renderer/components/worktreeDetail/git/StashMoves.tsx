@@ -11,8 +11,8 @@ import type { StashEntry, Worktree } from "@shared/schemas";
 
 // Under a stash's title on the Stashes tab: put it back (and drop it,
 // or keep it), or drop it. A restore lands on the changes it went back
-// into. A drop moves on to the next stash, or to the changes once none
-// is left.
+// into. A drop moves on to the next stash, or to the tab's empty state
+// once none is left.
 export function StashMoves({
   worktree,
   stash,
@@ -73,7 +73,7 @@ export function StashMoves({
                 if (next) {
                   nav.toStash(worktree.projectId, worktree.id, next, true);
                 } else {
-                  toChanges();
+                  nav.toStashes(worktree.projectId, worktree.id, true);
                 }
                 toast("Dropped the stash", {
                   duration: UNDO_TOAST_MS,

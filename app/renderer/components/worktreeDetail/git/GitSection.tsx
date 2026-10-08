@@ -237,8 +237,8 @@ function CommitRow({
 }
 
 // Under the newest commits: how the branch stands against the primary
-// branch, in GitHub's words ("5 commits ahead of, 4 commits behind
-// main"), and the way to everything it changes at once.
+// branch ("5 commits ahead of origin/main, 4 behind"), and the way to
+// everything it changes at once.
 function BranchLine({
   worktree,
   base,
@@ -256,8 +256,8 @@ function BranchLine({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 pl-[4.75rem] text-xs text-muted-foreground">
       <span>
-        {more ? `${own}+ commits` : pluralize(own, "commit")} ahead of
-        {behind > 0 && `, ${pluralize(behind, "commit")} behind`} {base}
+        {more ? `${own}+ commits` : pluralize(own, "commit")} ahead of {base}
+        {behind > 0 && `, ${behind} behind`}
       </span>
       <button
         type="button"

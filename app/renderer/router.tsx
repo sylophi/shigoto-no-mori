@@ -225,6 +225,12 @@ const branchDiffRoute = createRoute({
   component: withDeviceScope(BranchDiff),
 });
 
+const stashesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.stashes,
+  component: withDeviceScope(StashDiff),
+});
+
 const stashDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.stash,
@@ -321,6 +327,7 @@ const routeTree = rootRoute.addChildren([
   worktreeDiffRoute,
   pullRequestDiffRoute,
   branchDiffRoute,
+  stashesRoute,
   stashDiffRoute,
   commitDiffRoute,
   worktreeFilesRoute,

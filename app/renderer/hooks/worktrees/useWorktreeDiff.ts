@@ -80,9 +80,10 @@ export function useStashDiff(
   const { api, keys } = useHostScope();
   return useQuery<string>({
     queryKey: keys.stashDiff(projectId, worktreeId ?? "", hash),
-    queryFn: worktreeId
-      ? () => api.worktrees.stashDiff({ projectId, worktreeId, hash })
-      : skipToken,
+    queryFn:
+      worktreeId && hash
+        ? () => api.worktrees.stashDiff({ projectId, worktreeId, hash })
+        : skipToken,
     staleTime: Infinity,
     meta: { errorTitle: "Couldn't read the stash" },
   });

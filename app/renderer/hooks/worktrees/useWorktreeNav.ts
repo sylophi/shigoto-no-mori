@@ -87,6 +87,11 @@ export function useWorktreeNav() {
       );
     },
 
+    // The Git page's Stashes tab with no stash picked.
+    toStashes(projectId: string, worktreeId: string, replace = false) {
+      go("stashes", { projectId, worktreeId }, replace);
+    },
+
     // One stash, on the Git page's Stashes tab.
     toStash(
       projectId: string,

@@ -19,7 +19,7 @@ const counted = (label: string, count: number) =>
 // timeline draws them, with the remote's and the primary branch's
 // markers). The two most used sit at the ends, the easier targets. Each tab is the page's routes for it, and a switch replaces
 // the page's entry, so Back still leaves. History opens on the newest
-// commit and Stashes on the newest stash, and each is off without one.
+// commit (and is off without one), Stashes on the newest stash.
 export function GitPageSidebar({
   worktree,
   tab,
@@ -51,8 +51,12 @@ export function GitPageSidebar({
               nav.toDiff(projectId, worktreeId, { replace: true });
             } else if (next === "history" && head) {
               nav.toCommit(projectId, worktreeId, head, true);
-            } else if (next === "stashes" && newestStash) {
-              nav.toStash(projectId, worktreeId, newestStash, true);
+            } else if (next === "stashes") {
+              if (newestStash) {
+                nav.toStash(projectId, worktreeId, newestStash, true);
+              } else {
+                nav.toStashes(projectId, worktreeId, true);
+              }
             }
           }}
           options={[
@@ -63,7 +67,6 @@ export function GitPageSidebar({
             {
               value: "stashes",
               label: counted("Stashes", stashes.length),
-              disabled: !newestStash,
             },
             { value: "history", label: "History", disabled: !head },
           ]}
