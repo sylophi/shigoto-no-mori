@@ -51,6 +51,8 @@ import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { applyUserShellEnv } from "./core/shellEnv";
 import * as HostLayer from "./hostLayer";
+import * as Observability from "./observability";
+import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
@@ -182,6 +184,7 @@ registerIpcHandlers();
 const runtime = ManagedRuntime.make(
   ShellLayer.layer.pipe(
     Layer.provideMerge(HostLayer.layer({ hurried: isHurriedQuit })),
+    Layer.provideMerge(Observability.layer),
   ),
 );
 
@@ -460,7 +463,7 @@ app.on("ready", async () => {
   try {
     dropRemovedLanKeys();
   } catch (error) {
-    console.warn("[config] LAN key drain failed:", error);
+    log.warn("[config] LAN key drain failed:", error);
   }
   buildAppMenu();
   // Host liveness. Install the crash guards before
@@ -476,7 +479,7 @@ app.on("ready", async () => {
   // The window is already up, so the graph delays only the background
   // machinery. A quit that came first has disposed it.
   await runtime.context().catch((error: unknown) => {
-    if (!quitting) console.error("[boot] the layer graph failed:", error);
+    if (!quitting) log.error("[boot] the layer graph failed:", error);
   });
 });
 
@@ -512,7 +515,7 @@ app.on("before-quit", (event) => {
   void runtime
     .dispose()
     .catch((error: unknown) => {
-      console.error("[quit] a finalizer failed:", error);
+      log.error("[quit] a finalizer failed:", error);
     })
     .finally(() => app.exit(0));
 });

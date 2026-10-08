@@ -25,6 +25,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Config from "../../src/Config.ts";
 import * as Git from "../../src/Git.ts";
 import * as GitHub from "../../src/GitHub.ts";
+import * as Icons from "../../src/Icons.ts";
 import * as Identity from "../../src/Identity.ts";
 import * as Launchers from "../../src/Launchers.ts";
 import * as Layout from "../../src/Layout.ts";
@@ -39,6 +40,7 @@ import * as Worktrees from "../../src/Worktrees.ts";
 // The services a harness case calls.
 export type Engine =
   | Config.Config
+  | Icons.Icons
   | Launchers.Launchers
   | Layout.Layout
   | Registry.Registry
@@ -162,7 +164,12 @@ export function sandbox(): Sandbox {
           ),
         ),
         Layer.provideMerge(
-          Layer.mergeAll(Config.layer, Usage.layer, Identity.layer),
+          Layer.mergeAll(
+            Config.layer,
+            Usage.layer,
+            Identity.layer,
+            Icons.layer,
+          ),
         ),
         Layer.provideMerge(Git.layer),
         Layer.provideMerge(Store.layer),
@@ -230,6 +237,7 @@ export function sandbox(): Sandbox {
         execFileSync("git", args, { cwd: dir, env: gitEnv, stdio: "ignore" });
       git("init", "-q", "-b", "main");
       for (const [file, content] of Object.entries(files)) {
+        mkdirSync(dirname(join(dir, file)), { recursive: true });
         writeFileSync(join(dir, file), content);
       }
       git("add", "-A");

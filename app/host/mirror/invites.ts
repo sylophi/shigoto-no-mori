@@ -48,6 +48,7 @@ import {
   WorktreeScopedPayloadSchema,
 } from "@shigomori/contracts/schemas";
 import { strict } from "@shigomori/contracts/schemas/strict";
+import { log } from "@shared/log";
 
 // What the ask named, which the landing must match.
 const MirrorInviteAskSchema = strict(
@@ -94,7 +95,7 @@ export function setMirrorInviteStore(next: MirrorInviteStore | null): void {
   try {
     invites = next.load().filter(isLanded);
   } catch (error) {
-    console.warn(
+    log.warn(
       `[mirror] the invitations could not be read, starting with none: ${errorMessageOf(error)}`,
     );
   }
@@ -108,7 +109,7 @@ function persist(): void {
   try {
     store?.save(invites.filter(isLanded));
   } catch (error) {
-    console.warn(
+    log.warn(
       `[mirror] the invitations could not be saved: ${errorMessageOf(error)}`,
     );
   }

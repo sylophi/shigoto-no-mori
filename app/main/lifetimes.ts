@@ -7,18 +7,22 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-const logged = (name: string, start: Effect.Effect<void>) =>
+// Each start and stop is a span in the trace file, named for the
+// subsystem, so a slow boot or quit shows which one held it.
+const traced = (step: "start" | "stop", name: string) =>
+  Effect.withSpan(`Lifetime.${step}`, { attributes: { subsystem: name } });
+
+const started = (name: string, start: Effect.Effect<void>) =>
   start.pipe(
+    traced("start", name),
     Effect.catchCause((cause) =>
-      Effect.sync(() => {
-        console.error(`[boot] ${name} failed to start:`, Cause.squash(cause));
-      }),
+      Effect.logError(`[boot] ${name} failed to start:`, Cause.squash(cause)),
     ),
   );
 
 // Started with the app and never stopped.
 export const starts = (name: string, start: () => void) =>
-  Layer.effectDiscard(logged(name, Effect.sync(start)));
+  Layer.effectDiscard(started(name, Effect.sync(start)));
 
 // Started with the app and stopped when the graph closes.
 export const lifetime = (
@@ -27,9 +31,13 @@ export const lifetime = (
   stop: () => void,
 ) =>
   Layer.effectDiscard(
-    Effect.acquireRelease(logged(name, start), () => Effect.sync(stop)),
+    Effect.acquireRelease(started(name, start), () =>
+      Effect.sync(stop).pipe(traced("stop", name)),
+    ),
   );
 
 // Nothing to start, something to undo when the graph closes.
-export const onQuit = (stop: Effect.Effect<void>) =>
-  Layer.effectDiscard(Effect.addFinalizer(() => stop));
+export const onQuit = (name: string, stop: Effect.Effect<void>) =>
+  Layer.effectDiscard(
+    Effect.addFinalizer(() => stop.pipe(traced("stop", name))),
+  );

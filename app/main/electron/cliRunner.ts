@@ -18,6 +18,7 @@ import { onAbort } from "@host/lib/util/abort";
 import type { CliDoc, CliResult, CliRunOpts } from "@host/ipc/cliDelegate";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import { bundledBinaryResolver } from "./bundledBinary";
+import { log } from "@shared/log";
 
 export const cliBinaryPath = bundledBinaryResolver(
   CLI_DIST_DIR,
@@ -176,7 +177,7 @@ export async function runCli(
           docs.push(doc);
           onDoc?.(doc);
         } catch {
-          console.warn("[cli] unparseable output line:", line.slice(0, 200));
+          log.warn("[cli] unparseable output line:", line.slice(0, 200));
         }
       }),
     );

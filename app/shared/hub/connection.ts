@@ -49,6 +49,7 @@ import {
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
 import { createLimiter } from "@shared/util/limit";
+import { log } from "@shared/log";
 
 // The deadline for one dial phase: the ticket mint, and separately the
 // socket accept (the first presence envelope). Named rather than a bare
@@ -365,7 +366,7 @@ export function createHubConnectionCore(
           try {
             nextLink.handleMessage(text);
           } catch (error) {
-            console.warn(
+            log.warn(
               `[hub] inbound message handler threw: ${errorMessageOf(error)}`,
             );
           }

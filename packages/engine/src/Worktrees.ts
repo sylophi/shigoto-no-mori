@@ -538,8 +538,7 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const paths = yield* Paths.Paths;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
-  // The terminal binary's name, which the hints name.
-  const binary = paths.dataDirName === ".sm" ? "sm" : "smd";
+  const binary = paths.binaryName;
 
   const deviceFlag = (key: string) =>
     config.get({ kind: "device" }, key).pipe(

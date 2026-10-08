@@ -14,6 +14,7 @@ import {
   safeStorageItemNames,
 } from "../core/keychain/reset";
 import { deleteGenericPassword } from "../core/keychain/security";
+import { log } from "@shared/log";
 
 export function resetSafeStorageItemOnce(): void {
   const userData = app.getPath("userData");
@@ -31,14 +32,14 @@ export function resetSafeStorageItemOnce(): void {
       deleteItem: () => deleteGenericPassword(service, account),
     });
   } catch (error) {
-    console.warn(
+    log.warn(
       `[keychain] could not reset the "${service}" item, will retry at ` +
         `the next launch: ${errorMessageOf(error)}`,
     );
     return;
   }
   if (outcome === "owned") return;
-  console.log(
+  log.info(
     outcome === "deleted"
       ? `[keychain] replaced the "${service}" item so this signed build ` +
           "owns it. Any earlier sign-in needs redoing once."

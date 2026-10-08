@@ -6,7 +6,8 @@
 // it starts the subsystem, and the scope closing stops it.
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import { errorMessageOf, logFailure } from "@shigomori/contracts/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import { log, logFailure } from "@shared/log";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { refreshProjects } from "@host/lib/projects";
@@ -54,6 +55,7 @@ import { lifetime, onQuit, starts } from "./lifetimes";
 // which an explicit update accepts.
 const scripts = (hurried: () => boolean) =>
   onQuit(
+    "the scripts",
     Effect.suspend(() => {
       if (hurried()) {
         return Effect.sync(() => signalAllScriptsBestEffort("SIGTERM"));
@@ -76,7 +78,7 @@ const scripts = (hurried: () => boolean) =>
 // The CLI's children run in their own process groups, and a lifecycle
 // script one spawned follows it down. The file-sync processes register
 // here too, so a mirror daemon still up after its stop goes with them.
-const cliChildren = onQuit(Effect.sync(killAllCli));
+const cliChildren = onQuit("the CLI children", Effect.sync(killAllCli));
 
 // The sweeps and watchers read the project list synchronously, from the
 // snapshot host/lib/projects keeps of the CLI's list.
@@ -116,7 +118,7 @@ function onExternalStateChange(worktreeDataProjects: ReadonlySet<string>) {
       }
     })
     .catch((error: unknown) => {
-      console.warn(
+      log.warn(
         `[scripts] reap after external change failed: ${errorMessageOf(error)}`,
       );
     });
@@ -188,11 +190,14 @@ const controlHost = lifetime(
 
 // New scripts are refused from the moment the quit begins, so none
 // starts after the reap at the end has looked.
-const scriptGate = onQuit(Effect.sync(markShuttingDown));
+const scriptGate = onQuit("the script gate", Effect.sync(markShuttingDown));
 
 // Port forwards start on demand. Stopping them before the remote planes
 // gives their best-effort closes a socket to ride out on.
-const portForwards = onQuit(Effect.sync(stopAllPortForwards));
+const portForwards = onQuit(
+  "the port forwards",
+  Effect.sync(stopAllPortForwards),
+);
 
 // Built from the bottom up, so the scope closes from the top down: read
 // downward, this is the quit sequence.
