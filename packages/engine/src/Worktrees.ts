@@ -264,6 +264,7 @@ export type PrimaryTarget = {
 export type WorktreeEvent =
   | Lifecycle.LifecycleEvent
   | { readonly event: "carryOver"; readonly report: CarryOverReport }
+  | { readonly event: "cloned"; readonly cloned: Cloned }
   | { readonly event: "created"; readonly worktree: WorktreeRow };
 
 // Where the events go, and whether a script's output may be truecolor
@@ -2238,6 +2239,8 @@ const make = Effect.gen(function* () {
       yield* registry.setMark("agentWorking", made.id, true);
     }
     const worktree = yield* row({ project, worktree: made });
+    if (cloned !== undefined)
+      yield* reporter.report({ event: "cloned", cloned });
     yield* reporter.report({ event: "created", worktree });
     const failures = yield* createLifecycle(
       project,
@@ -2702,6 +2705,8 @@ const make = Effect.gen(function* () {
       yield* rekeyWorktree(project, worktree.id, made.id);
     }
     const adopted = yield* row({ project, worktree: made });
+    if (cloned !== undefined)
+      yield* reporter.report({ event: "cloned", cloned });
     yield* reporter.report({ event: "created", worktree: adopted });
     const failures = yield* createLifecycle(
       project,

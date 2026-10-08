@@ -345,7 +345,7 @@ export const shellCommand = Command.make("shell").pipe(
 // Moves the user's shell into a worktree: through the wrapper's
 // directive file when it gave one, else by starting $SHELL there, whose
 // exit sm passes on.
-const enter = (name: string, target: string, cdFile: string) =>
+export const enter = (name: string, target: string, cdFile: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const { stderrColor } = yield* Effect.service(Output);

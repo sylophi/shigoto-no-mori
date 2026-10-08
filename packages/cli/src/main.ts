@@ -17,6 +17,7 @@ import { projectsCommand } from "./commands/projects.ts";
 import { flavor, version } from "./build.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { runCommand } from "./commands/run.ts";
+import { adopt, create, move, rekey, rm, setup } from "./commands/changes.ts";
 import { cdCommand, shellCommand } from "./commands/shell.ts";
 import {
   destination,
@@ -55,6 +56,11 @@ const VERBS: Readonly<Record<string, string>> = {
   l: "list",
   st: "status",
   "auto-pull": "autopull",
+  new: "create",
+  n: "create",
+  remove: "rm",
+  mv: "move",
+  c: "cd",
 };
 const PROJECT_VERBS: Readonly<Record<string, string>> = {
   ls: "list",
@@ -107,6 +113,12 @@ const sm = Command.make("sm").pipe(
     unshelve.pipe(Command.provide(services)),
     autopull.pipe(Command.provide(services)),
     agentWorking.pipe(Command.provide(services)),
+    create.pipe(Command.provide(services)),
+    rm.pipe(Command.provide(services)),
+    move.pipe(Command.provide(services)),
+    adopt.pipe(Command.provide(services)),
+    setup.pipe(Command.provide(services)),
+    rekey.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(services)),
   ]),
 );
