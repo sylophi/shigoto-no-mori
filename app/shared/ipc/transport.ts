@@ -1,4 +1,9 @@
 import type { ContractModule } from "@shigomori/contracts/contract";
+import {
+  type ErrorWire,
+  errorFromWire,
+  errorToWire,
+} from "@shigomori/contracts/errors";
 import type { ChannelMux } from "./socket/channels";
 import type {
   BroadcastKeys,
@@ -14,6 +19,25 @@ export type ClientTransport = {
   invoke(channel: string, input: unknown): Promise<unknown>;
   subscribe(channel: string, handler: (payload: unknown) => void): () => void;
 };
+
+// An invoke's outcome as a value, for a wire that keeps only an error's
+// message (Electron's IPC and its context bridge): the handler's
+// failure crosses as data and becomes an error again on the far side.
+export type Settled =
+  | { ok: true; value: unknown }
+  | ({ ok: false } & ErrorWire);
+
+export function settle(run: Promise<unknown>): Promise<Settled> {
+  return run.then(
+    (value) => ({ ok: true, value }),
+    (error: unknown) => ({ ok: false, ...errorToWire(error) }),
+  );
+}
+
+export function unsettle(settled: Settled): unknown {
+  if (settled.ok) return settled.value;
+  throw errorFromWire(settled);
+}
 
 // Context handed to every invoke handler. Deliberately Electron free:
 // minting a notifier bound to the calling connection lets a handler

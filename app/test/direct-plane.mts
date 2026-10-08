@@ -132,10 +132,10 @@ import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import { it } from "vitest";
+import { CommandRefusedError } from "@shigomori/contracts/errors";
 import {
   CLOSE_AUTH_FAILED,
   CLOSE_AUTH_LOCKED_OUT,
-  CommandRefusedError,
   type ServerFrame,
 } from "@shared/ipc/socket/frames";
 import {

@@ -1,16 +1,17 @@
 // The browser binding's composition root: the twin of main/ipc/register.ts
 // (which registers the handlers on the Electron and remote wires and
-// assembles the direct plane) and main/preload.ts (which builds
-// window.api) in one, since a browser has no process boundary to split
-// them across. It builds the SAME window.api surface the preload
-// exposes, by the same means: the scalar facts (deviceId, appVersion,
-// isDev, isElectron) plus buildApi over one ClientTransport per scope.
+// assembles the direct plane) and renderer/electronApi.ts (which builds
+// window.api over the preload's bridge) in one, since a browser has no
+// process boundary to split them across. It builds the SAME window.api
+// surface the desktop does, by the same means: the scalar facts
+// (deviceId, appVersion, isDev, isElectron) plus buildApi over one
+// ClientTransport per scope.
 // The transports are in-page loopback wires (loopback.ts, the twin of
 // main/preloadTransport.ts) instead of the IPC bridge, with the
 // browser-servable client modules (clientConfig, account, hub, shell,
 // releases) registered through the shared registrar and every OS-bound
 // channel answered by a typed stub default. Renderer components therefore
-// mount unmodified: they cannot tell this bridge from the preload's.
+// mount unmodified: they cannot tell this bridge from the desktop's.
 //
 // Every platform fact arrives through WebBridgeDeps rather than a
 // browser global read at module scope, so the headless bridge check

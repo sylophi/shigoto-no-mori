@@ -59,10 +59,10 @@ import {
 } from "@shigomori/contracts/modules/cli";
 import { safeDecode } from "@shigomori/contracts/codec";
 import {
-  convertRefusedError,
+  ConvertRefusedError,
   isEntityGoneError,
-  unknownProjectError,
-  unknownWorktreeError,
+  UnknownProjectError,
+  UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
 import {
@@ -152,9 +152,9 @@ const decodePhase = Schema.decodeUnknownSync(
 );
 
 // The failure for a run that produced no ok result. The CLI's --json
-// error document carries a stable `code` for entity-gone failures;
-// mapping it onto the shared constructors here means the renderer's
-// matcher keys on the code, not on the CLI's prose.
+// error document carries a stable `code` for entity-gone failures,
+// which become the contract's error classes here, so the renderer
+// branches on their tag, not on the CLI's prose.
 function cliFailure(
   result: CliResult,
   fallback: string,
@@ -162,22 +162,21 @@ function cliFailure(
 ): Error {
   const code = result.docs.find(isErrorDoc)?.["code"];
   if (code === "unknown-project" && ids.projectId !== undefined) {
-    return unknownProjectError(ids.projectId);
+    return new UnknownProjectError({ projectId: ids.projectId });
   }
   if (code === "unknown-worktree" && ids.worktreeId !== undefined) {
-    return unknownWorktreeError(ids.worktreeId);
+    return new UnknownWorktreeError({ worktreeId: ids.worktreeId });
   }
   return new Error(runner().cliFailureMessage(result, fallback));
 }
 
 // An unforced `sm adopt` stopped by its guard (cli/cmd_rm.go
 // requireClean), the only run on the streaming runner that sends these
-// codes. Electron's IPC keeps only an error's message, so the code
-// becomes packages/contracts/src/errors.ts' convert refusal here.
+// codes, which become the contract's ConvertRefusedError here.
 function guardRefusal(result: CliResult): Error | null {
   const code = result.docs.find(isErrorDoc)?.["code"];
   if (code === "uncommitted-changes" || code === "status-unreadable") {
-    return convertRefusedError(code);
+    return new ConvertRefusedError({ refusal: code });
   }
   return null;
 }
@@ -306,7 +305,10 @@ function runStreamingCreate(
           if (created === null) {
             reject(
               guardRefusal(result) ??
-                cliFailure(result, failureLabel, { worktreeId }),
+                cliFailure(result, failureLabel, {
+                  projectId: project.id,
+                  worktreeId,
+                }),
             );
             return;
           }
@@ -396,7 +398,7 @@ export async function deleteViaCli(
   if (input.skipCleanup) args.push("--skip-cleanup");
   const { ok, cleanupError } = await runRemoval(
     args,
-    input.worktreeId,
+    { projectId: project.id, worktreeId: input.worktreeId },
     notify,
     opts,
   );
@@ -419,7 +421,7 @@ export async function deleteStackViaCli(
   if (input.skipCleanup) args.push("--skip-cleanup");
   const { ok, cleanupError, final } = await runRemoval(
     args,
-    input.worktreeId,
+    { projectId: project.id, worktreeId: input.worktreeId },
     notify,
   );
   const removed = removedIdsOf(final);
@@ -432,7 +434,7 @@ export async function deleteStackViaCli(
 // cancelled move's rollback puts the run on a clock (opts.timeoutMs).
 async function runRemoval(
   args: string[],
-  worktreeId: string,
+  ids: { projectId: string; worktreeId: string },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
   opts: Pick<CliRunOpts, "timeoutMs"> = {},
 ): Promise<
@@ -459,7 +461,7 @@ async function runRemoval(
       final,
     };
   }
-  throw cliFailure(result, `sm ${args[0]} failed`, { worktreeId });
+  throw cliFailure(result, `sm ${args[0]} failed`, ids);
 }
 
 const RemovedIdSchema = Schema.Struct({ id: Schema.String });
@@ -525,7 +527,10 @@ export async function doneViaCli(
     ...worktreeArgv(["done"], project, worktreeId),
     "--force",
   ]);
-  const final = finalOkDoc(result, "sm done failed", { worktreeId });
+  const final = finalOkDoc(result, "sm done failed", {
+    projectId: project.id,
+    worktreeId,
+  });
   return decodeWorktree(final["worktree"]);
 }
 
@@ -572,7 +577,7 @@ export async function setShelvedViaCli(
   const result = await runner().runCli(
     worktreeArgv([shelved ? "shelve" : "unshelve"], project, worktreeId),
   );
-  finalOkDoc(result, "sm shelve failed", { worktreeId });
+  finalOkDoc(result, "sm shelve failed", { projectId: project.id, worktreeId });
 }
 
 export async function projectsAddViaCli(path: string): Promise<Project> {
@@ -720,7 +725,10 @@ export async function dirtyCaptureViaCli(
   const result = await runner().runCli(
     worktreeArgv(["dirty", "capture"], project, worktreeId),
   );
-  const final = finalOkDoc(result, "sm dirty capture failed", { worktreeId });
+  const final = finalOkDoc(result, "sm dirty capture failed", {
+    projectId: project.id,
+    worktreeId,
+  });
   const doc = decodeDirtyCaptured(final);
   return doc.captured
     ? { captured: true, commit: doc.commit }
@@ -746,7 +754,10 @@ export async function dirtyApplyViaCli(
   const result = await runner().runCli(
     worktreeArgv(["dirty", "apply"], project, worktreeId),
   );
-  const final = finalOkDoc(result, "sm dirty apply failed", { worktreeId });
+  const final = finalOkDoc(result, "sm dirty apply failed", {
+    projectId: project.id,
+    worktreeId,
+  });
   return decodeDirtyApplied(final);
 }
 
@@ -866,6 +877,7 @@ export async function setAutoPullViaCli(
     ),
   );
   const final = finalOkDoc(result, "sm worktrees autopull failed", {
+    projectId: project.id,
     worktreeId,
   });
   return decodeWorktree(final["worktree"]);
@@ -886,6 +898,7 @@ export async function moveViaCli(
     destinationPath,
   ]);
   const final = finalOkDoc(result, "sm worktrees move failed", {
+    projectId: project.id,
     worktreeId,
   });
   return decodeWorktree(final["worktree"]);
@@ -939,7 +952,7 @@ export async function openLauncherViaCli(
     "--",
     launcherId,
   ]);
-  finalOkDoc(result, "sm open failed", { worktreeId });
+  finalOkDoc(result, "sm open failed", { projectId: project.id, worktreeId });
 }
 
 // ---- Reads ----

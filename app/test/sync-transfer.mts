@@ -53,7 +53,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, it } from "vitest";
-import { CommandRefusedError } from "@shared/ipc/socket/frames";
+import { CommandRefusedError } from "@shigomori/contracts/errors";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
   type SyncCloneInto,
@@ -1539,8 +1539,12 @@ describe("cancelMove", () => {
       () => !processAlive(sendSetupPid),
       "the peer's setup script to die",
     );
+    // The peer unwinds on its own after the link drops: the branch goes
+    // with the worktree, and the incoming ref after them.
     await waitFor(
-      async () => !(await refExists(targetRepo, "refs/heads/cancel2")),
+      async () =>
+        !(await refExists(targetRepo, "refs/heads/cancel2")) &&
+        !(await refExists(targetRepo, "refs/shigomori/incoming/cancel2")),
       "the peer to remove the cancelled copy",
       20_000,
     );

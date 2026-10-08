@@ -4,6 +4,7 @@
 // worktree is read, then kept, so ticking, committing and discarding
 // show their outcome and the commit → push flow runs end to end.
 import type { ChangedFile, CommitSummary } from "@shigomori/contracts/schemas";
+import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import type { FakeWorktree } from "./fixtures";
 
 // The files a worktree's changes are drawn from: the first
@@ -123,7 +124,7 @@ export function createFakeChanges(
       }: { summary: string; stagePaths?: readonly string[]; amend?: boolean },
     ) => {
       const worktree = findWorktree(worktreeId);
-      if (!worktree) throw new Error("Unknown worktree");
+      if (!worktree) throw new UnknownWorktreeError({ worktreeId });
       const listed = new Set(stagePaths ?? []);
       const files = filesOf(worktreeId);
       const taken = files.filter(
@@ -162,7 +163,7 @@ export function createFakeChanges(
         worktreeId,
         filesOf(worktreeId).filter((file) => !touches(file, set)),
       );
-      if (!worktree) throw new Error("Unknown worktree");
+      if (!worktree) throw new UnknownWorktreeError({ worktreeId });
       return { snapshot: "5eed5ab", worktree };
     },
 
