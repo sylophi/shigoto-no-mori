@@ -7,6 +7,7 @@ import { basename, join } from "node:path";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import { it } from "vitest";
 import {
@@ -94,12 +95,21 @@ it("an interrupted run takes its git down with it, hooks and all", async () => {
     `#!/bin/sh\necho $$ > '${pidFile}'\nsleep 60\n`,
   );
   chmodSync(join(repo, ".git/hooks/pre-commit"), 0o755);
+  // Interrupted once the hook is running, however long git takes to
+  // get there.
   const outcome = await withGit((g) =>
-    g
-      .run(repo, ["commit", "-q", "--allow-empty", "-m", "slow"])
-      .pipe(Effect.timeout("500 millis"), Effect.exit),
+    Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(
+        g.run(repo, ["commit", "-q", "--allow-empty", "-m", "slow"]),
+      );
+      while (!existsSync(pidFile) || readFileSync(pidFile, "utf8") === "") {
+        yield* Effect.sleep("20 millis");
+      }
+      yield* Fiber.interrupt(fiber);
+      return yield* Effect.exit(Fiber.join(fiber));
+    }),
   );
-  assert.ok(Exit.isFailure(outcome));
+  assert.ok(Exit.hasInterrupts(outcome));
   const hook = Number(readFileSync(pidFile, "utf8"));
   assert.throws(() => process.kill(hook, 0), /ESRCH/);
 });

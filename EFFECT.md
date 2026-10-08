@@ -7,8 +7,8 @@ PR changes to these rules, not older code.
 
 Effect is pinned to one exact version, the latest stable release (the
 workspace catalog). The source of that version, `node_modules/effect`
-in any checkout, is the reference for any API question. `Schema`,
-`rpc`, `socket`, `process`, `cli`, `http` and `sql` are marked
+in any checkout, is the reference for any API question. `rpc`,
+`socket`, `process`, `cli`, `http` and `sql` are marked
 `@stability unstable` in that version. Never write a pattern on those
 modules from memory; read the source first.
 

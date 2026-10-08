@@ -3,11 +3,15 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
   "scripts": {
     "typecheck": "$(effect-tsgo get-exe-path)",
     "test": "vitest run"
   },
   "dependencies": {
+    "@effect/sql-sqlite-node": "catalog:",
     "@shigomori/contracts": "workspace:*",
     "effect": "catalog:"
   },
