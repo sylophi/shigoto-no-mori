@@ -25,6 +25,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as CloneCheckout from "../../src/CloneCheckout.ts";
 import * as Config from "../../src/Config.ts";
 import * as Git from "../../src/Git.ts";
+import * as Hygiene from "../../src/Hygiene.ts";
 import * as Icons from "../../src/Icons.ts";
 import * as Launchers from "../../src/Launchers.ts";
 import * as Layout from "../../src/Layout.ts";
@@ -46,7 +47,8 @@ export type Engine =
   | Scripts.Scripts
   | Terrier.Terrier
   | Usage.Usage
-  | Worktrees.Worktrees;
+  | Worktrees.Worktrees
+  | Hygiene.Hygiene;
 
 const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
 
@@ -60,6 +62,13 @@ for (const key of Object.keys(process.env)) {
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
+  // No background gc or maintenance: a sandbox's repos are copied while
+  // git runs, and a pack rewritten mid-copy loses files.
+  GIT_CONFIG_COUNT: "2",
+  GIT_CONFIG_KEY_0: "gc.auto",
+  GIT_CONFIG_VALUE_0: "0",
+  GIT_CONFIG_KEY_1: "maintenance.auto",
+  GIT_CONFIG_VALUE_1: "false",
 });
 
 const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });

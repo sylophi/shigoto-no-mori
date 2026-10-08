@@ -263,7 +263,8 @@ func TestLstatReportsWhatTheIndexRecords(t *testing.T) {
 			"uid": float64(st.Uid), "gid": float64(st.Gid), "size": float64(st.Size),
 			"ctimeSec": float64(st.Ctim.Sec), "ctimeNsec": float64(st.Ctim.Nsec),
 			"mtimeSec": float64(st.Mtim.Sec), "mtimeNsec": float64(st.Mtim.Nsec),
-			"flags": float64(st.Flags),
+			"flags": float64(st.Flags), "blocks": float64(st.Blocks),
+			"nlink": float64(st.Nlink),
 		}
 		for key, value := range want {
 			if got[key] != value {
@@ -283,5 +284,28 @@ func TestLstatReportsWhatTheIndexRecords(t *testing.T) {
 	// A time the file was given comes back to the nanosecond.
 	if got := lines["a/run"]["mtimeNsec"]; got != float64(fixtureTime.Nanosecond()) {
 		t.Fatalf("mtimeNsec = %v", got)
+	}
+}
+
+func TestLstatAddsPrivateSizeWhenAsked(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "f"), strings.Repeat("x", 1<<16), 0o644)
+	plain := macfs(t, "f", "lstat", "-stdin", root)
+	if _, ok := plain["f"]["privateBytes"]; ok {
+		t.Fatalf("privateBytes without -private: %v", plain["f"])
+	}
+	sized := macfs(t, "f", "lstat", "-stdin", "-private", root)
+	if got, ok := sized["f"]["privateBytes"].(float64); !ok || got <= 0 {
+		t.Fatalf("privateBytes = %v", sized["f"]["privateBytes"])
+	}
+}
+
+func TestWalkStepsOverSkippedFolders(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "keep/a"), "a", 0o644)
+	writeFile(t, filepath.Join(root, "nested/wt/b"), "b", 0o644)
+	walked := macfs(t, "", "lstat", "-skip", "nested/wt", root)
+	if got := slices.Sorted(maps.Keys(walked)); !slices.Equal(got, []string{".", "keep", "keep/a", "nested"}) {
+		t.Fatalf("walked = %v", got)
 	}
 }

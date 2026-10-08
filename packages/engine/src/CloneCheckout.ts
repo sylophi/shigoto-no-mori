@@ -183,9 +183,6 @@ const UF_COMPRESSED = 0x20;
 const UF_TRACKED = 0x40;
 const KEPT_FLAGS = UF_COMPRESSED | UF_TRACKED;
 
-const S_IFMT = 0o170000;
-const S_IFDIR = 0o040000;
-
 const nanos = (sec: number, nsec: number) =>
   BigInt(sec) * 1_000_000_000n + BigInt(nsec);
 
@@ -390,7 +387,10 @@ const make = Effect.gen(function* () {
             Effect.orElseSucceed(() => []),
           );
           for (const entry of entries) {
-            if (!Darwin.isFailed(entry) && (entry.mode & S_IFMT) === S_IFDIR) {
+            if (
+              !Darwin.isFailed(entry) &&
+              (entry.mode & Darwin.S_IFMT) === Darwin.S_IFDIR
+            ) {
               yield* fs
                 .chmod(path.join(target, entry.path), 0o700)
                 .pipe(Effect.ignore);
@@ -807,7 +807,7 @@ const make = Effect.gen(function* () {
       realDir.set(
         dir,
         st !== undefined &&
-          (st.mode & S_IFMT) === S_IFDIR &&
+          (st.mode & Darwin.S_IFMT) === Darwin.S_IFDIR &&
           realDir.get(path.dirname(dir)) === true,
       );
       attrsChanged.set(
@@ -1016,7 +1016,7 @@ const make = Effect.gen(function* () {
                 if ([...ancestors(rel)].some((dir) => goneSet.has(dir))) {
                   continue;
                 }
-                const isDir = (entry.mode & S_IFMT) === S_IFDIR;
+                const isDir = (entry.mode & Darwin.S_IFMT) === Darwin.S_IFDIR;
                 if (isDir ? targetDirs.has(rel) : tracked.has(rel)) {
                   if (isDir) {
                     keep.push({
