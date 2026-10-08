@@ -32,6 +32,7 @@ import {
   dropMirrorInvitesWithPeers,
   forgetMirrorInvitesOf,
 } from "@host/mirror/invites";
+import { log } from "@shared/log";
 
 // The label keys the start orchestration writes on a session, lifted
 // back out for the renderer by annotate below. Labels are the one
@@ -183,7 +184,7 @@ export async function endLegacyMirrors(): Promise<void> {
       try {
         await daemon.terminate(raw.session);
       } catch (error) {
-        console.warn(
+        log.warn(
           `[mirror] could not end a mirror started from the copy's device: ${errorMessageOf(error)}`,
         );
         return;
@@ -282,7 +283,7 @@ async function endSessionsOnWorktree(
       try {
         await daemon.terminate(raw.session);
       } catch (error) {
-        console.warn(
+        log.warn(
           `[mirror] could not stop the mirror of a worktree being deleted: ${errorMessageOf(error)}`,
         );
         return;
@@ -440,7 +441,7 @@ async function endOnce(
     await end();
     return true;
   } catch (error) {
-    console.warn(`[mirror] could not end a session: ${errorMessageOf(error)}`);
+    log.warn(`[mirror] could not end a session: ${errorMessageOf(error)}`);
     return false;
   } finally {
     endingSessions.delete(session);
@@ -623,9 +624,7 @@ async function endSessions(
       try {
         await daemon.terminate(raw.session);
       } catch (error) {
-        console.warn(
-          `[mirror] could not end ${what}: ${errorMessageOf(error)}`,
-        );
+        log.warn(`[mirror] could not end ${what}: ${errorMessageOf(error)}`);
         return;
       }
       if (isTransferSession(raw)) return;

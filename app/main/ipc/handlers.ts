@@ -30,11 +30,7 @@ import {
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
-import {
-  errorMessageOf,
-  isEntityGoneError,
-  logFailure,
-} from "@shigomori/contracts/errors";
+import { errorMessageOf, isEntityGoneError } from "@shigomori/contracts/errors";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import { portForwardContract } from "@shigomori/contracts/modules/portForward";
@@ -162,6 +158,7 @@ import {
   hubHandlers,
   onPeerPush,
 } from "./register";
+import { log, logFailure } from "@shared/log";
 
 // The pull/transplant orchestrations' and the port-forward engine's
 // peer reach, routed through the SAME invokePeer path (and so the same
@@ -224,7 +221,7 @@ const broadcastMirrorChanged = coalesce(() => {
   try {
     broadcastAll(mirrorContract, "changed", currentMirrorList());
   } catch (error) {
-    console.warn(
+    log.warn(
       `[mirror] the changed broadcast goes without its list: ${errorMessageOf(error)}`,
     );
     broadcastAll(mirrorContract, "changed", undefined);
@@ -282,7 +279,7 @@ const reapOrphanedTransfers = () => {
     if (!isOrphanedTransfer(session) || reaped.has(session.session)) continue;
     reaped.add(session.session);
     void mirrorDaemon.terminate(session.session).catch((error: unknown) => {
-      console.warn(
+      log.warn(
         `[mirror] could not end an orphaned transfer session: ${errorMessageOf(error)}`,
       );
     });
@@ -411,7 +408,7 @@ async function ensureMirrorGateway(): Promise<void> {
   try {
     await mirrorGateway.start();
   } catch (error) {
-    console.warn(
+    log.warn(
       "[mirror] gateway failed to bind, retrying:",
       errorMessageOf(error),
     );

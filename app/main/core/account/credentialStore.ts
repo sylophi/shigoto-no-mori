@@ -21,6 +21,7 @@ import {
   type StoreCipher,
   type StoredAccount,
 } from "@shared/account/credentialStore";
+import { log } from "@shared/log";
 
 export type { AccountStore, StoreCipher, StoredAccount };
 
@@ -64,7 +65,7 @@ export function createAccountStore(opts: {
             // failing a sign-out over, but a credential that stayed is
             // worth a line.
             if (!isENOENT(error)) {
-              console.warn(
+              log.warn(
                 `[account] could not remove ${path}: ${errorMessageOf(error)}`,
               );
             }

@@ -99,6 +99,7 @@ import {
   startUpdater,
 } from "./electron/updater";
 import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
+import { log } from "@shared/log";
 
 enableDevCdpPort();
 
@@ -223,7 +224,7 @@ registerIpcHandlers();
 void Promise.all([shellEnvReady, app.whenReady()])
   .then(() => (isShuttingDown() ? undefined : startMirrorEngine()))
   .catch((error: unknown) => {
-    console.warn("[mirror] engine failed to start:", errorMessageOf(error));
+    log.warn("[mirror] engine failed to start:", errorMessageOf(error));
   });
 
 let mainWindow: BrowserWindow | null = null;
@@ -496,7 +497,7 @@ app.on("ready", async () => {
   try {
     dropRemovedLanKeys();
   } catch (error) {
-    console.warn("[config] LAN key drain failed:", error);
+    log.warn("[config] LAN key drain failed:", error);
   }
   buildAppMenu();
   // Host liveness. Install the crash guards before
@@ -514,7 +515,7 @@ app.on("ready", async () => {
   // before they start. The window is already up, so this delays only
   // the background machinery.
   await refreshProjects().catch((error: unknown) => {
-    console.warn(`[projects] first list failed: ${errorMessageOf(error)}`);
+    log.warn(`[projects] first list failed: ${errorMessageOf(error)}`);
   });
   startBackgroundFetch();
   startUpdater();
@@ -574,7 +575,7 @@ app.on("ready", async () => {
         }
       })
       .catch((err: unknown) => {
-        console.warn(
+        log.warn(
           `[scripts] reap after external change failed: ${errorMessageOf(err)}`,
         );
       });

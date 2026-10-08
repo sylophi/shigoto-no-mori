@@ -1,3 +1,4 @@
+import { log } from "@shared/log";
 // Byte channels on the direct websocket: raw binary frames multiplexed
 // beside the JSON invoke/push frames, so a byte stream (a forwarded
 // TCP connection, the file-sync engine's protocol) crosses as bytes
@@ -439,7 +440,7 @@ export function createUnknownChannelFrameWarner(label: string): () => void {
   return () => {
     dropped += 1;
     if (dropped % 50 === 1) {
-      console.warn(
+      log.warn(
         `[${label}] dropping a binary frame for no attached channel (dropped ${dropped} so far)`,
       );
     }
