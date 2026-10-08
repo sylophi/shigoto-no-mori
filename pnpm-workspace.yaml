@@ -116,6 +116,7 @@ overrides:
 # hub's suite, supports ^4.1 only.
 catalog:
   "@effect/platform-node": 4.0.2
+  "@effect/sql-sqlite-node": 4.0.2
   "@effect/tsgo": 0.51.1
   "@types/node": ^24.13.5
   "@types/react": ^19.2.17
