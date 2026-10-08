@@ -40,11 +40,11 @@ function inSpan<A>(
   parent: Tracer.Span | undefined,
 ): Promise<A> {
   if (context === null) return run(untraced);
+  // A rejection is a defect here, which runPromise rejects with as it
+  // was thrown, so callers still branch on its class.
   return Effect.runPromiseWith(context)(
     Effect.currentSpan.pipe(
       Effect.orDie,
-      // A rejection is a defect here, which runPromise rejects with
-      // as it was thrown, so callers still branch on its class.
       Effect.flatMap((span) => Effect.promise(() => run(handle(span)))),
       Effect.withSpan(name, { attributes, parent }),
     ),

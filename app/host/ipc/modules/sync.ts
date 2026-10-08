@@ -1,17 +1,8 @@
-// Host side of moving a worktree between devices. The landing (the
-// copy made on the destination) is ONE function, landWorktree, run on
-// the destination whichever device started the move: a pull runs it
-// here against a link it opened to the source, a send asks the peer to
-// run it (sync:receiveWorktree) against a link this device opened and
-// answers on. The source's side of either is host/lib/sync/
-// sourceLink.ts. What stays per direction is what the grant decides:
-// the files step (the mirror engine run once, from the device holding
-// the grant) and the teardown (the source's delete, on its own device
-// or over the peer's grant).
-//
-// The handlers decode, call and answer. The landing is
-// host/lib/sync/landing.ts, the pull and the send host/lib/sync/move.ts,
-// and the receipts and the teardown host/lib/sync/receipts.ts.
+// The wire for moving a worktree between devices: the handlers decode,
+// call and answer. The landing is host/lib/sync/landing.ts, the pull
+// and the send host/lib/sync/move.ts, the receipts and the teardown
+// host/lib/sync/receipts.ts, and a source's answers
+// host/lib/sync/sourceLink.ts.
 import {
   SYNC_IGNORED_PATHS_LIMIT,
   syncContract,

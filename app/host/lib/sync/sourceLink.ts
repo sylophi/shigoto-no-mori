@@ -457,6 +457,13 @@ async function sendBundle(
   }
 }
 
+// The key a move and everything else on its source worktree go by in
+// every device's trace file: the source worktree is the one id the
+// device running a move, the device landing it and the source all hold.
+export const sourceWorktreeAttribute = (worktreeId: string) => ({
+  sourceWorktree: worktreeId,
+});
+
 // One question, answered on the link.
 async function answerAsk(
   link: Link,
@@ -513,7 +520,7 @@ export async function serveSource(
         // oxlint-disable-next-line no-await-in-loop -- one question at a time
         await traced(
           "SourceLink.answer",
-          { ask: request.ask, "move.sourceWorktree": worktreeId },
+          { ask: request.ask, ...sourceWorktreeAttribute(worktreeId) },
           () => answerAsk(link, project, facts, request),
         );
       } catch (error) {

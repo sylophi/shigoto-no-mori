@@ -45,6 +45,7 @@ import {
   attachLinkFarEnd,
   incomingRefFor,
   type ProgressFrame,
+  sourceWorktreeAttribute,
   withLinkSource,
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
@@ -102,18 +103,16 @@ async function refuseLandingCollision(
   }
 }
 
-// What names a move in the trace files of both devices: the source
-// worktree is the key a move goes by on either side, so its spans on
-// the device running it, the device landing it and the device answering
-// for its source all carry it.
+// A move's span attributes, keyed by its source worktree like the
+// source's answers (sourceWorktreeAttribute).
 export const moveAttributes = (
   direction: "pull" | "send",
   peer: string | undefined,
   sourceWorktreeId: string,
 ) => ({
-  "move.direction": direction,
-  "move.peer": peer,
-  "move.sourceWorktree": sourceWorktreeId,
+  direction,
+  peer,
+  ...sourceWorktreeAttribute(sourceWorktreeId),
 });
 
 // What a landing is told: which repo (by identity, re-resolved here),
