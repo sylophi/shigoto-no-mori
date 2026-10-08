@@ -7,9 +7,8 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
-import { resolveProject } from "../here.ts";
+import { projectFlags, resolveProject } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
-import { projectFlags } from "./projects.ts";
 
 // Every app the catalog knows, installed or not. Project-free.
 const catalog = Effect.gen(function* () {
@@ -42,7 +41,8 @@ export const launchersCommand = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const { binaryName } = yield* Effect.service(Output);
+      const { binaryName, json, stdoutColor, stderrColor } =
+        yield* Effect.service(Output);
       const verb = Option.getOrElse(input.verb, () => "list");
       if (verb !== "list" && verb !== "ls") {
         return yield* new UsageError({
@@ -52,7 +52,6 @@ export const launchersCommand = Command.make(
       if (input.catalog) return yield* catalog;
       const project = yield* resolveProject(input);
       const row = yield* (yield* Launchers.Launchers).row(project);
-      const { json, stdoutColor } = yield* Effect.service(Output);
       if (json) return yield* emit({ ok: true, ...row });
       if (row.entries.length === 0) {
         return yield* note(`No launchers available for ${project.name}.`);
@@ -70,10 +69,7 @@ export const launchersCommand = Command.make(
         ),
       );
       if (row.hiddenCount > 0) {
-        const { dim: dimErr } = styles(
-          (yield* Effect.service(Output)).stderrColor,
-        );
-        yield* note(dimErr(`${row.hiddenCount} hidden`));
+        yield* note(styles(stderrColor).dim(`${row.hiddenCount} hidden`));
       }
     }),
 ).pipe(Command.withDescription("A project's launcher row"));

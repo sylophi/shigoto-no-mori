@@ -29,18 +29,13 @@ const rendered = (value: unknown) =>
       ? value
       : JSON.stringify(value);
 
-// The verb's document under --json, carrying a project's name, else
-// its line.
-const report = (settings: Settings, doc: object, line: string) =>
-  Effect.gen(function* () {
-    const { json } = yield* Effect.service(Output);
-    if (!json) return yield* out(line);
-    yield* emit(
-      settings.project === undefined
-        ? { ok: true, ...doc }
-        : { ok: true, project: settings.project, ...doc },
-    );
-  });
+// A verb's document under --json, carrying a project's name.
+const document = (settings: Settings, doc: object) =>
+  emit(
+    settings.project === undefined
+      ? { ok: true, ...doc }
+      : { ok: true, project: settings.project, ...doc },
+  );
 
 // A project's lines end with its name.
 const suffix = (settings: Settings) =>
@@ -54,7 +49,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       const config = yield* Config.Config;
       const listed = yield* config.list(settings.scope);
       const { json, stdoutColor } = yield* Effect.service(Output);
-      if (json) return yield* report(settings, { settings: listed }, "");
+      if (json) return yield* document(settings, { settings: listed });
       const { dim } = styles(stdoutColor);
       const rows = listed.map(({ key, value, set }) => {
         const cell = rendered(value);
@@ -77,7 +72,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       const config = yield* Config.Config;
       const setting = yield* config.get(settings.scope, key);
       const { json } = yield* Effect.service(Output);
-      if (json) return yield* report(settings, setting, "");
+      if (json) return yield* document(settings, setting);
       // Nothing for an unset key, so command substitution stays clean.
       if (setting.value !== null) yield* out(rendered(setting.value));
     }),
@@ -96,11 +91,9 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       const stored = yield* config.read(settings.scope);
       // A device with no settings reads as an empty document, a project
       // as null.
-      yield* report(
-        settings,
-        { config: settings.scope.kind === "device" ? (stored ?? {}) : stored },
-        "",
-      );
+      yield* document(settings, {
+        config: settings.scope.kind === "device" ? (stored ?? {}) : stored,
+      });
     }),
   ).pipe(Command.withDescription("Print the settings as stored (--json)"));
 
@@ -112,14 +105,19 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
         const settings = yield* resolve;
         const config = yield* Config.Config;
         const stored = yield* config.set(settings.scope, key, value);
-        const { green } = styles((yield* Effect.service(Output)).stdoutColor);
-        yield* stored === undefined
-          ? report(settings, { key }, green(`unset ${key}${suffix(settings)}`))
-          : report(
-              settings,
-              { key, value: stored },
-              green(`set ${key} = ${rendered(stored)}${suffix(settings)}`),
-            );
+        const { json, stdoutColor } = yield* Effect.service(Output);
+        // A value equal to the default clears the key.
+        const cleared = stored === undefined;
+        if (json) {
+          return yield* document(
+            settings,
+            cleared ? { key } : { key, value: stored },
+          );
+        }
+        const line = cleared
+          ? `unset ${key}`
+          : `set ${key} = ${rendered(stored)}`;
+        yield* out(styles(stdoutColor).green(`${line}${suffix(settings)}`));
       }),
   ).pipe(Command.withDescription("Change a setting"));
 
@@ -132,7 +130,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
         const config = yield* Config.Config;
         yield* config.unset(settings.scope, key);
         const { json, stdoutColor } = yield* Effect.service(Output);
-        if (json) return yield* report(settings, { key }, "");
+        if (json) return yield* document(settings, { key });
         const { value } = yield* config.get(settings.scope, key);
         const fallback = value === null ? "" : ` (default: ${rendered(value)})`;
         yield* out(

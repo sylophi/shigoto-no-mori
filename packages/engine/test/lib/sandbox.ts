@@ -22,23 +22,17 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as CarryOver from "../../src/CarryOver.ts";
 import * as Config from "../../src/Config.ts";
-import * as Darwin from "../../src/Darwin.ts";
 import * as Git from "../../src/Git.ts";
-import * as GitHub from "../../src/GitHub.ts";
 import * as Icons from "../../src/Icons.ts";
-import * as Identity from "../../src/Identity.ts";
 import * as Launchers from "../../src/Launchers.ts";
-import * as Lifecycle from "../../src/Lifecycle.ts";
 import * as Layout from "../../src/Layout.ts";
-import * as Paths from "../../src/Paths.ts";
 import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Terrier from "../../src/Terrier.ts";
 import * as Usage from "../../src/Usage.ts";
+import { engineLayer } from "../../src/layer.ts";
 import { nodeStore } from "./nodeStore.ts";
-import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 
 // The services a harness case calls.
@@ -243,32 +237,7 @@ export function sandbox(): Sandbox {
   const engineRuntime = () => {
     const dataDir = sideDir("engine");
     runtime ??= ManagedRuntime.make(
-      Worktrees.layer.pipe(
-        Layer.provideMerge(
-          Layer.mergeAll(
-            Launchers.layer,
-            Layout.layer,
-            Registry.layer,
-            Scripts.layer,
-            WorktreeData.layer,
-            GitHub.layer,
-            Lifecycle.layer,
-            CarryOver.layer,
-          ),
-        ),
-        Layer.provideMerge(Terrier.layer),
-        Layer.provideMerge(Darwin.layer(macfs())),
-        Layer.provideMerge(
-          Layer.mergeAll(
-            Config.layer,
-            Usage.layer,
-            Identity.layer,
-            Icons.layer,
-          ),
-        ),
-        Layer.provideMerge(Git.layer),
-        Layer.provideMerge(nodeStore),
-        Layer.provideMerge(Paths.layer("dev")),
+      engineLayer({ flavor: "dev", store: nodeStore, macfs: macfs() }).pipe(
         Layer.provide(NodeServices.layer),
         Layer.provide(
           ConfigProvider.layer(

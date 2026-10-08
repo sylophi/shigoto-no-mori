@@ -5,6 +5,7 @@ import * as Terrier from "@shigomori/engine/Terrier";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Flag from "effect/cli/Flag";
 import { note, Output, styles } from "./output.ts";
 
 // Terrier's trouble, before a command that lists projects.
@@ -21,6 +22,12 @@ const here = Effect.gen(function* () {
   yield* warnTerrier;
   return yield* (yield* Worktrees.Worktrees).here(process.cwd());
 });
+
+// How a command names its project, beside or instead of a positional.
+export const projectFlags = {
+  project: Flag.String("project").pipe(Flag.withAlias("p"), Flag.optional),
+  projectId: Flag.String("project-id").pipe(Flag.optional),
+};
 
 // The project a command names: --project-id as the app addresses it,
 // else -p or a positional, else the one at the cwd.
