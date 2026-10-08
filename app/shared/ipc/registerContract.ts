@@ -96,16 +96,25 @@ function wrapContractCall<Ctx>(
 // gated, and a remote gated one which consent line covers it. Thrown at
 // registration, so such a call never serves.
 export function classificationGap(call: ContractCall): string | null {
-  if (annotation(call, Scope) !== "host" || isBroadcast(call)) return null;
+  if (isBroadcast(call)) return null;
+  const host = annotation(call, Scope) === "host";
   const remote = annotation(call, Remote);
-  if (remote === undefined)
+  if (host && remote === undefined) {
     return `${channelOf(call)} does not say whether it is remote`;
-  if (!remote) return null;
-  const gated = annotation(call, Gated);
-  if (gated === undefined)
+  }
+  const gated = remote === true ? annotation(call, Gated) : false;
+  if (host && gated === undefined) {
     return `${channelOf(call)} is remote but does not say whether it is gated`;
-  if (gated && annotation(call, Grant) === undefined) {
+  }
+  // A grant names what the switch hands to other devices, so exactly
+  // the remote gated host calls carry one.
+  const handedOver = host && remote === true && gated === true;
+  const grant = annotation(call, Grant);
+  if (handedOver && grant === undefined) {
     return `${channelOf(call)} is remote and gated but names no grant`;
+  }
+  if (!handedOver && grant !== undefined) {
+    return `${channelOf(call)} names a grant but the switch does not hand it over`;
   }
   return null;
 }
@@ -133,14 +142,19 @@ export function registerContract<M extends ContractModule>(
     string,
     (i: unknown, ctx: HandlerContext) => unknown
   >;
-  for (const call of calls) {
-    if (isBroadcast(call)) continue;
+  // Every call checked before any is mounted, so a module either
+  // serves whole or not at all.
+  const invokes = calls.filter((call) => !isBroadcast(call));
+  for (const call of invokes) {
     const gap = classificationGap(call);
     if (gap !== null) throw new Error(`registerContract: ${gap}`);
-    const handler = byName[keyOf(call)];
-    if (handler === undefined) {
+    if (byName[keyOf(call)] === undefined) {
       throw new Error(`registerContract: no handler for "${channelOf(call)}"`);
     }
+  }
+  for (const call of invokes) {
+    const handler = byName[keyOf(call)];
+    if (handler === undefined) continue;
     // The call's exposure decision rides to the transport so a composite
     // wire can withhold a non-remote channel from the socket entirely.
     const remote = annotation(call, Remote) === true;

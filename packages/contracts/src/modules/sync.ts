@@ -568,7 +568,7 @@ export const syncContract = defineContract(
   invoke("openSource", SyncOpenSourcePayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
-    grant: "changeCode",
+    grant: "browseFiles",
     movesHostState: false,
     invitable: "copy",
   }),

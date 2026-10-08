@@ -731,7 +731,7 @@ export const mirrorContract = defineContract(
   invoke("openStream", MirrorOpenStreamPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
-    grant: "changeCode",
+    grant: "browseFiles",
     movesHostState: false,
     invitable: "copy",
   }),
@@ -742,7 +742,7 @@ export const mirrorContract = defineContract(
   invoke("gitState", MirrorWorktreePayloadSchema, GitStateSchema, {
     remote: true,
     gated: true,
-    grant: "changeCode",
+    grant: "browseFiles",
     movesHostState: false,
     invitable: "copy",
   }),

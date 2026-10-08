@@ -25,7 +25,7 @@ export const runtimeContract = defineContract(
   invoke("info", VoidSchema, RuntimeInfoSchema, {
     remote: true,
     gated: true,
-    grant: "changeApp",
+    grant: "browseFiles",
     movesHostState: false,
   }),
   invoke("nuke", VoidSchema, VoidSchema, { remote: false }),

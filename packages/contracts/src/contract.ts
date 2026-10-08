@@ -172,12 +172,18 @@ export const defineContract = <
   name: Name,
   scope: ContractScope,
   ...rpcs: Rpcs
-): RpcGroup.RpcGroup<Rpc.Prefixed<Rpcs[number], `${Name}:`>> =>
-  RpcGroup.make(...rpcs)
+): RpcGroup.RpcGroup<Rpc.Prefixed<Rpcs[number], `${Name}:`>> => {
+  // The group keys its calls by tag, so a second call under one name
+  // would replace the first without a word.
+  const keys = rpcs.map((rpc) => rpc["_tag"]);
+  const twice = keys.find((key, i) => keys.indexOf(key) !== i);
+  if (twice !== undefined) throw new Error(`${name}:${twice} is defined twice`);
+  return RpcGroup.make(...rpcs)
     .prefix(`${name}:`)
     .annotate(ModuleName, name)
     .annotate(Scope, scope)
     .annotateRpcs(Scope, scope);
+};
 
 // ---- Reading a module ----
 
