@@ -1,9 +1,6 @@
 // Shared `gh` invocation chokepoint. Keep this thin: each caller picks
 // its own error policy (swallow vs. throw) and its own JSON projection.
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileP = promisify(execFile);
+import * as Processes from "../util/processes";
 
 // A wedged gh (proxy auth, SSO browser prompt) must not hang forever:
 // the readiness probe gates every PR feature, so one stuck spawn would
@@ -11,19 +8,18 @@ const execFileP = promisify(execFile);
 // timeout.
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-// Every gh spawn funnels through here.
+// Every gh spawn funnels through here. Fails with a CommandError.
 export function execGh(
   args: string[],
   options: { cwd?: string; maxBuffer?: number; timeout?: number } = {},
 ): Promise<{ stdout: string; stderr: string }> {
-  // No option spreading: a caller passing `timeout: undefined` would
-  // override (and disable) the default. Spread own-properties win
-  // even when undefined.
-  return execFileP("gh", args, {
-    timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
-    cwd: options.cwd,
-    maxBuffer: options.maxBuffer,
-  });
+  return Processes.run(
+    Processes.exec("gh", args, {
+      cwd: options.cwd,
+      timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
+      maxOutputBytes: options.maxBuffer,
+    }),
+  );
 }
 
 // gh's stderr tends to be one long line with a `gh:` prefix; the rest
