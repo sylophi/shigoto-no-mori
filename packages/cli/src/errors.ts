@@ -24,7 +24,7 @@ export class ExitCode extends Schema.TaggedError<ExitCode>()("ExitCode", {
 }) {}
 
 // A command whose program was killed by `signal`. sm dies of the same
-// signal, so whoever started it sees what running the program
+// signal (main.ts), so whoever started it sees what running the program
 // themselves would have shown, a shell's 128+n among it.
 export class Killed extends Schema.TaggedError<Killed>()("Killed", {
   signal: Schema.String,
@@ -49,14 +49,7 @@ export const report = (error: unknown) =>
     if (error instanceof CliError.ShowHelp && problems.length === 0) return 0;
     if (error instanceof ExitCode) return error.code;
     if (error instanceof Killed) {
-      // Raised once everything else is done, when the runtime has let go
-      // of its own handlers and the signal's default action applies. The
-      // code stands in should it not.
-      const { signal } = error;
-      yield* Effect.sync(() =>
-        process.once("exit", () => process.kill(process.pid, signal)),
-      );
-      return 128 + (constants.signals[signal as NodeJS.Signals] ?? 0);
+      return 128 + (constants.signals[error.signal as NodeJS.Signals] ?? 0);
     }
     const { json, stderrColor, binaryName } = yield* Effect.service(Output);
     const document =

@@ -20,6 +20,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
+import { flavorNames } from "./flavor.ts";
+import type { Paths } from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
 
 export type ShellKind = "zsh" | "bash" | "fish";
@@ -182,8 +184,27 @@ export type HookPlace = {
   readonly configHome: string;
 };
 
+export const hookPlace = (
+  paths: Paths["Service"],
+  zdotdir: string,
+): HookPlace => ({
+  names: { binary: paths.binaryName, alias: flavorNames(paths.flavor).alias },
+  home: paths.home,
+  configHome: paths.configHome,
+  zdotdir,
+});
+
+// A path under the home directory as ~/..., as the user reads it.
+export const collapseHome = (home: string, target: string) => {
+  if (home === "") return target;
+  if (target === home) return "~";
+  return target.startsWith(`${home}/`)
+    ? `~${target.slice(home.length)}`
+    : target;
+};
+
 // The file each shell reads, where install writes the hook.
-export const hookPath = (place: HookPlace, kind: ShellKind) =>
+const hookPath = (place: HookPlace, kind: ShellKind) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -215,43 +236,36 @@ export const hookPath = (place: HookPlace, kind: ShellKind) =>
     );
   });
 
-// installed: the hook is there and recognizably ours, `current` when it
-// is what this build writes. missing: no hook, or no file. modified:
-// markers with content we didn't write, or a file that can't be read,
-// which install and uninstall leave alone.
-export type HookState = "installed" | "missing" | "modified";
-
-export type Hook = {
-  readonly shell: ShellKind;
-  readonly path: string;
-  readonly state: HookState;
-  readonly current: boolean;
-  // What the file holds, when it could be read.
-  readonly text: string | undefined;
-  // Why a file that is there couldn't be read.
-  readonly unreadable: PlatformError.PlatformError | undefined;
-};
+// A shell's hook and the file it lives in. Install and uninstall leave
+// a modified or unreadable one alone.
+export type Hook = { readonly shell: ShellKind; readonly path: string } &
+  // No hook, in a file that holds `text` or in no file at all.
+  (
+    | { readonly state: "missing"; readonly text: string | undefined }
+    // Markers around content we didn't write, or a fish drop-in that
+    // isn't ours.
+    | { readonly state: "modified" }
+    | {
+        readonly state: "unreadable";
+        readonly error: PlatformError.PlatformError;
+      }
+    // Ours, and `current` when it is what this build writes.
+    | {
+        readonly state: "installed";
+        readonly text: string;
+        readonly current: boolean;
+      }
+  );
 
 export const inspectHook = (place: HookPlace, kind: ShellKind) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const target = yield* hookPath(place, kind);
-    const hook = {
-      shell: kind,
-      path: target,
-      current: false,
-      text: undefined,
-      unreadable: undefined,
-    };
-    const read = yield* fs.readFileString(target).pipe(Effect.result);
+    const at = { shell: kind, path: yield* hookPath(place, kind) };
+    const read = yield* fs.readFileString(at.path).pipe(Effect.result);
     if (Result.isFailure(read)) {
       return isNotFound(read.failure)
-        ? ({ ...hook, state: "missing" } satisfies Hook)
-        : ({
-            ...hook,
-            state: "modified",
-            unreadable: read.failure,
-          } satisfies Hook);
+        ? ({ ...at, state: "missing", text: undefined } satisfies Hook)
+        : ({ ...at, state: "unreadable", error: read.failure } satisfies Hook);
     }
     const text = read.success;
     if (kind === "fish") {
@@ -259,28 +273,28 @@ export const inspectHook = (place: HookPlace, kind: ShellKind) =>
       // overwritten" header), so our marker makes it ours, any vintage.
       return text.includes(hookBeginMarker(place.names))
         ? ({
-            ...hook,
+            ...at,
             state: "installed",
-            current: text === fishHookContent(place.names),
             text,
+            current: text === fishHookContent(place.names),
           } satisfies Hook)
-        : ({ ...hook, state: "modified", text } satisfies Hook);
+        : ({ ...at, state: "modified" } satisfies Hook);
     }
     const lines = text.split("\n");
     const span = findHookSpan(place.names, lines);
     if (span.kind === "none") {
-      return { ...hook, state: "missing", text } satisfies Hook;
+      return { ...at, state: "missing", text } satisfies Hook;
     }
     if (span.kind === "broken" || !span.ours) {
-      return { ...hook, state: "modified", text } satisfies Hook;
+      return { ...at, state: "modified" } satisfies Hook;
     }
     return {
-      ...hook,
+      ...at,
       state: "installed",
+      text,
       current:
         lines.slice(span.begin, span.end + 1).join("\n") ===
         hookBlock(place.names, kind).replace(/\n+$/, ""),
-      text,
     } satisfies Hook;
   });
 

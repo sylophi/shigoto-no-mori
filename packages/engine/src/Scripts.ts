@@ -79,12 +79,6 @@ export class ScriptRefused extends Schema.TaggedError<ScriptRefused>()(
   }
 }
 
-// How `sm run` starts a script: the program and its arguments.
-export type ScriptCommand = {
-  readonly program: string;
-  readonly args: ReadonlyArray<string>;
-};
-
 export class Scripts extends Context.Service<
   Scripts,
   {
@@ -102,8 +96,15 @@ export class Scripts extends Context.Service<
       readonly script: string;
       readonly extra: ReadonlyArray<string>;
     }) => Effect.Effect<
-      ScriptCommand,
+      { readonly program: string; readonly args: ReadonlyArray<string> },
       NoPackageJson | UnreadablePackageJson | ScriptRefused
+    >;
+    // The scripts of the package.json in `dir`, in manifest order.
+    readonly readScripts: (
+      dir: string,
+    ) => Effect.Effect<
+      ReadonlyArray<PackageScript>,
+      NoPackageJson | UnreadablePackageJson
     >;
     // Counts a run of the project's script.
     readonly recordRun: (
@@ -385,6 +386,7 @@ const make = Effect.gen(function* () {
         ),
       ),
     command: (input) => command(input).pipe(Effect.provideContext(platform)),
+    readScripts,
     recordRun,
     setSort,
     arrange,

@@ -4,14 +4,14 @@
 // wrapper's directive file, or in a subshell without one.
 import { basename, dirname, join } from "node:path";
 import { envVar } from "@shigomori/engine/environment";
-import { flavorNames } from "@shigomori/engine/flavor";
 import * as Paths from "@shigomori/engine/Paths";
 import {
   CD_FILE_ENV,
   cdDirective,
   fishHookContent,
+  collapseHome,
   type Hook,
-  hookPath,
+  hookPlace,
   inspectHook,
   isShellKind,
   SHELL_KINDS,
@@ -32,7 +32,8 @@ import { ExitCode, UsageError } from "../errors.ts";
 import { given, here, projectFlags } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 import { interactive } from "../prompt.ts";
-import { handOver } from "./run.ts";
+import type { engine } from "../engine.ts";
+import { handOver } from "../handOver.ts";
 
 // A hook install or uninstall won't touch, or a config file it couldn't
 // read or write. `path` is home-collapsed.
@@ -49,6 +50,7 @@ class HookFileError extends Schema.TaggedError<HookFileError>()(
       "left",
     ]),
     path: Schema.String,
+    // The flavor's command and alias, which Go's words name.
     binary: Schema.String,
     alias: Schema.String,
     cause: Schema.optional(Schema.Defect()),
@@ -76,23 +78,28 @@ class HookFileError extends Schema.TaggedError<HookFileError>()(
 
 // Where the hooks live, and how a path under home is shown.
 const place = Effect.gen(function* () {
-  const { home, configHome, binaryName, flavor } = yield* Paths.Paths;
-  const collapse = (target: string) =>
-    home === ""
-      ? target
-      : target === home
-        ? "~"
-        : target.startsWith(`${home}/`)
-          ? `~${target.slice(home.length)}`
-          : target;
+  const paths = yield* Paths.Paths;
   return {
-    names: { binary: binaryName, alias: flavorNames(flavor).alias },
-    home,
-    configHome,
-    zdotdir: yield* envVar("ZDOTDIR"),
-    collapse,
+    ...hookPlace(paths, yield* envVar("ZDOTDIR")),
+    collapse: (target: string) => collapseHome(paths.home, target),
   };
 });
+
+type Place = Effect.Success<typeof place>;
+
+const hookError = (
+  at: Place,
+  reason: HookFileError["reason"],
+  target: string,
+  cause?: unknown,
+) =>
+  new HookFileError({
+    reason,
+    path: at.collapse(target),
+    binary: at.names.binary,
+    alias: at.names.alias,
+    cause,
+  });
 
 // The login shell, when it is one sm supports.
 const loginShell = Effect.map(envVar("SHELL"), (shell) => {
@@ -108,17 +115,21 @@ const status = Effect.gen(function* () {
     ok: true,
     loginShell: yield* loginShell,
     active: (yield* envVar(CD_FILE_ENV)) !== "",
-    shells: shells.map(({ shell, path, state }) => ({ shell, path, state })),
+    // Hands off an unreadable file as off an edited one.
+    shells: shells.map(({ shell, path, state }) => ({
+      shell,
+      path,
+      state: state === "unreadable" ? "modified" : state,
+    })),
   };
 });
 
 // Replaces the file whole, through a temp sibling, so a failed write
 // never leaves the user's config cut short. An existing file keeps its
 // permissions.
-const writeHookFile = (target: string, content: string, shown: string) =>
+const writeHookFile = (at: Place, target: string, content: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const { names } = yield* place;
     const mode = yield* fs.stat(target).pipe(
       Effect.map((info) => info.mode & 0o777),
       Effect.orElseSucceed(() => 0o644),
@@ -132,94 +143,62 @@ const writeHookFile = (target: string, content: string, shown: string) =>
       Effect.andThen(fs.chmod(temp, mode)),
       Effect.andThen(fs.rename(temp, target)),
       Effect.tapError(() => fs.remove(temp).pipe(Effect.ignore)),
-      Effect.mapError(
-        (cause) =>
-          new HookFileError({
-            reason: "write",
-            path: shown,
-            binary: names.binary,
-            alias: names.alias,
-            cause,
-          }),
-      ),
+      Effect.mapError((cause) => hookError(at, "write", target, cause)),
     );
   });
 
-const install = (kind: ShellKind) =>
+// Installs the shell's hook, and answers where, home-collapsed.
+const install = (at: Place, kind: ShellKind) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const at = yield* place;
     const hook = yield* inspectHook(at, kind);
-    const shown = at.collapse(hook.path);
-    const refused = (reason: HookFileError["reason"], cause?: unknown) =>
-      new HookFileError({
-        reason,
-        path: shown,
-        binary: at.names.binary,
-        alias: at.names.alias,
-        cause,
-      });
-    if (hook.unreadable !== undefined) {
-      return yield* refused("read", hook.unreadable);
+    if (hook.state === "unreadable") {
+      return yield* hookError(at, "read", hook.path, hook.error);
     }
     if (hook.state === "modified") {
-      return yield* refused(kind === "fish" ? "foreign" : "edited");
-    }
-    if (kind !== "fish") {
-      return yield* writeHookFile(
+      return yield* hookError(
+        at,
+        kind === "fish" ? "foreign" : "edited",
         hook.path,
-        withHook(at.names, kind, hook.text),
-        shown,
       );
     }
-    const dir = dirname(hook.path);
-    yield* fs.makeDirectory(dir, { recursive: true }).pipe(
-      Effect.mapError(
-        (cause) =>
-          new HookFileError({
-            reason: "create",
-            path: at.collapse(dir),
-            binary: at.names.binary,
-            alias: at.names.alias,
-            cause,
-          }),
-      ),
-    );
-    yield* writeHookFile(hook.path, fishHookContent(at.names), shown);
+    if (kind === "fish") {
+      const dir = dirname(hook.path);
+      yield* fs
+        .makeDirectory(dir, { recursive: true })
+        .pipe(Effect.mapError((cause) => hookError(at, "create", dir, cause)));
+      yield* writeHookFile(at, hook.path, fishHookContent(at.names));
+    } else {
+      yield* writeHookFile(at, hook.path, withHook(at.names, kind, hook.text));
+    }
+    return at.collapse(hook.path);
   });
 
-// Whether the shell's hook was there to remove.
-const uninstall = (kind: ShellKind) =>
+// Removes the shell's hook, and answers where it was, home-collapsed,
+// none when there was none.
+const uninstall = (at: Place, kind: ShellKind) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const at = yield* place;
     const hook = yield* inspectHook(at, kind);
-    const shown = at.collapse(hook.path);
-    const refused = (reason: HookFileError["reason"], cause?: unknown) =>
-      new HookFileError({
-        reason,
-        path: shown,
-        binary: at.names.binary,
-        alias: at.names.alias,
-        cause,
-      });
-    if (hook.unreadable !== undefined) {
-      return yield* refused("read", hook.unreadable);
+    switch (hook.state) {
+      case "missing":
+        return Option.none<string>();
+      case "unreadable":
+        return yield* hookError(at, "read", hook.path, hook.error);
+      case "modified":
+        return yield* hookError(at, "left", hook.path);
+      case "installed":
+        yield* kind === "fish"
+          ? fs
+              .remove(hook.path)
+              .pipe(
+                Effect.mapError((cause) =>
+                  hookError(at, "remove", hook.path, cause),
+                ),
+              )
+          : writeHookFile(at, hook.path, withoutHook(at.names, hook.text));
+        return Option.some(at.collapse(hook.path));
     }
-    if (hook.state === "missing") return false;
-    if (hook.state === "modified") return yield* refused("left");
-    if (kind === "fish") {
-      yield* fs
-        .remove(hook.path)
-        .pipe(Effect.mapError((cause) => refused("remove", cause)));
-    } else {
-      yield* writeHookFile(
-        hook.path,
-        withoutHook(at.names, hook.text ?? ""),
-        shown,
-      );
-    }
-    return true;
   });
 
 const init = Command.make(
@@ -254,13 +233,11 @@ const installCommand = Command.make(
             : `Couldn't tell your shell from $SHELL. Usage: ${binaryName} shell install <zsh|bash|fish>`,
         });
       }
-      yield* install(kind);
+      const target = yield* install(yield* place, kind);
       if (json) return yield* emit(yield* status);
-      const at = yield* place;
       const { cyan, dim } = styles(stderrColor);
-      const target = yield* hookPath(at, kind);
       yield* note(
-        `Hooked ${cyan(binaryName)} shell integration into ${cyan(at.collapse(target))}.`,
+        `Hooked ${cyan(binaryName)} shell integration into ${cyan(target)}.`,
       );
       yield* note(
         dim(
@@ -282,17 +259,16 @@ const uninstallCommand = Command.make("uninstall", {}, () =>
     let removedAny = false;
     let failed = false;
     for (const kind of SHELL_KINDS) {
-      const removed = yield* uninstall(kind).pipe(Effect.result);
+      const removed = yield* uninstall(at, kind).pipe(Effect.result);
       if (Result.isFailure(removed)) {
         failed = true;
         yield* note(yellow(removed.failure.message));
         continue;
       }
-      if (!removed.success) continue;
+      if (Option.isNone(removed.success)) continue;
       removedAny = true;
       if (!json) {
-        const target = yield* hookPath(at, kind);
-        yield* note(`Removed the hook from ${cyan(at.collapse(target))}.`);
+        yield* note(`Removed the hook from ${cyan(removed.success.value)}.`);
       }
     }
     if (json) {
@@ -345,28 +321,33 @@ const statusCommand = Command.make("status", {}, () =>
   }),
 ).pipe(Command.withDescription("Show hook and session state"));
 
-export const shellCommand = Command.make("shell").pipe(
-  Command.withDescription("Shell integration: cd without subshells"),
-  Command.withSubcommands([
-    installCommand,
-    uninstallCommand,
-    statusCommand,
-    init,
-  ]),
-);
+// init runs in every new shell, so it is given Paths alone, never the
+// store the rest open.
+export const shellCommand = (layers: {
+  readonly init: ReturnType<typeof Paths.layer>;
+  readonly services: ReturnType<typeof engine>;
+}) =>
+  Command.make("shell").pipe(
+    Command.withDescription("Shell integration: cd without subshells"),
+    Command.withSubcommands([
+      installCommand.pipe(Command.provide(layers.services)),
+      uninstallCommand.pipe(Command.provide(layers.services)),
+      statusCommand.pipe(Command.provide(layers.services)),
+      init.pipe(Command.provide(layers.init)),
+    ]),
+  );
 
 // --- sm cd ---
 
 // Moves the user's shell into a worktree: through the wrapper's
 // directive file when it gave one, else by starting $SHELL there, whose
 // exit sm passes on.
-const enter = (name: string, target: string) =>
+const enter = (name: string, target: string, cdFile: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const { stderrColor } = yield* Effect.service(Output);
     const { cyan, dim } = styles(stderrColor);
     const where = `${cyan(name)} ${dim(`(${target})`)}`;
-    const cdFile = yield* envVar(CD_FILE_ENV);
     if (cdFile !== "") {
       const written = yield* fs
         .writeFileString(cdFile, cdDirective(target), { mode: 0o600 })
@@ -424,6 +405,6 @@ export const cdCommand = Command.make(
           `Already in ${cyan(worktree.name)} ${dim(`(${worktree.path})`)}.`,
         );
       }
-      yield* enter(worktree.name, worktree.path);
+      yield* enter(worktree.name, worktree.path, cdFile);
     }),
 ).pipe(Command.withAlias("c"), Command.withDescription("Enter a worktree"));
