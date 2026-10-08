@@ -18,6 +18,8 @@ package main
 // project remove carry or drop them with the rest.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
@@ -33,6 +35,8 @@ type agentSession struct {
 	State   string `json:"state"`
 	// When the state last changed, in ms.
 	At int64 `json:"at"`
+	// The permission prompts it waits on (toolWait).
+	Waits []string `json:"waits,omitempty"`
 }
 
 // A session's states: working through a turn, waiting on the user
@@ -51,7 +55,11 @@ const agentSessionsKey = "agentSessions"
 type harness struct {
 	id, label  string
 	sessionEnv string
-	install    hookInstall
+	// Whether its subagents' events name the subagent by agent_id, the
+	// thread id the subagent's own shell binds under (Codex). A Claude
+	// Code subagent works within its parent's session.
+	subagentIDs bool
+	install     hookInstall
 }
 
 func lookupHarness(id string) *harness {
@@ -125,21 +133,33 @@ func findAgentSession(m map[string][]agentSession, harnessID, session string) (s
 
 // Binds a session to a worktree, moving it off any other. A session
 // already bound there keeps its state; a new one starts in state.
-func bindAgentSession(harnessID, session, worktreeID, state string) error {
+func bindAgentSession(session agentSession, worktreeID string) error {
 	return updateAgentSessions(func(m map[string][]agentSession) bool {
-		at, i := findAgentSession(m, harnessID, session)
+		at, i := findAgentSession(m, session.Harness, session.Session)
 		if at == worktreeID {
 			return false
 		}
 		if i >= 0 {
-			state = m[at][i].State
+			session = m[at][i]
 			m[at] = slices.Delete(m[at], i, i+1)
+		} else {
+			session.At = time.Now().UnixMilli()
 		}
-		m[worktreeID] = append(m[worktreeID], agentSession{
-			Harness: harnessID, Session: session, State: state, At: time.Now().UnixMilli(),
-		})
+		m[worktreeID] = append(m[worktreeID], session)
 		return true
 	})
+}
+
+// A session bound outside a hook: working, since it binds from a
+// command it runs mid-turn, but only when its harness has the hooks
+// that will report the turn's end. Without them it would read working
+// for good.
+func newSession(harnessID, session string) agentSession {
+	state := agentIdle
+	if h := lookupHarness(harnessID); h != nil && h.status().Hooks == "installed" {
+		state = agentWorking
+	}
+	return agentSession{Harness: harnessID, Session: session, State: state}
 }
 
 // The automatic binding run() does before a command: a session's shell
@@ -155,7 +175,7 @@ func autoBindAgentSession(ctx cliContext) {
 	if at, _ := findAgentSession(agentSessionsFrom(readRegistryHints()), harnessID, session); at == id {
 		return
 	}
-	if err := bindAgentSession(harnessID, session, id, agentWorking); err != nil {
+	if err := bindAgentSession(newSession(harnessID, session), id); err != nil {
 		vlog("[agents] bind: %v", err)
 	}
 }
@@ -167,7 +187,7 @@ func bindAgentSessionToNew(worktreeID string) []agentSession {
 	if session == "" {
 		return nil
 	}
-	if err := bindAgentSession(harnessID, session, worktreeID, agentWorking); err != nil {
+	if err := bindAgentSession(newSession(harnessID, session), worktreeID); err != nil {
 		note(yellowErr("warning:") + " couldn't bind this agent session to it: " + err.Error())
 		return nil
 	}
@@ -221,7 +241,7 @@ func cmdAgentsBind(ctx cliContext, args []string) (int, error) {
 	if !shelfable(id) {
 		return 1, errf("Only managed worktrees can be bound to an agent session, not the primary checkout or an external one")
 	}
-	if err := bindAgentSession(harnessID, session, id.ID, agentWorking); err != nil {
+	if err := bindAgentSession(newSession(harnessID, session), id.ID); err != nil {
 		return 1, err
 	}
 	if jsonMode {
@@ -310,41 +330,72 @@ func cmdAgentsIdle(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-// What a harness hands its hooks on stdin: the fields every event
-// carries in both Claude Code and Codex, plus Notification's type.
+// What a harness hands its hooks on stdin: the fields Claude Code and
+// Codex share, Notification's type, a Codex subagent's own thread id,
+// and the tool a permission prompt or a tool's end is about.
 type agentEvent struct {
-	Name             string `json:"hook_event_name"`
-	Session          string `json:"session_id"`
-	Cwd              string `json:"cwd"`
-	NotificationType string `json:"notification_type"`
+	Name             string          `json:"hook_event_name"`
+	Session          string          `json:"session_id"`
+	Cwd              string          `json:"cwd"`
+	NotificationType string          `json:"notification_type"`
+	AgentID          string          `json:"agent_id"`
+	ToolName         string          `json:"tool_name"`
+	ToolInput        json.RawMessage `json:"tool_input"`
 }
 
-// The state an event puts its session in. "" leaves it alone, and
-// unbind drops the binding. PostToolUse only ends a wait (the tool ran,
-// so its permission prompt was answered): it fires on every tool, and,
-// installed async, can land after the turn's Stop.
-func agentEventState(event agentEvent, current string) (state string, unbind bool) {
+// One permission prompt, as the tool call it asks about. The prompt
+// carries no call id, so the call is its tool and input, which its
+// PostToolUse repeats.
+func toolWait(event agentEvent) string {
+	var input any
+	_ = json.Unmarshal(event.ToolInput, &input)
+	sum := sha256.Sum256(append([]byte(event.ToolName+"\x00"), mustRaw(input)...))
+	return hex.EncodeToString(sum[:8])
+}
+
+// Moves a session through one event: whether that changed it, and
+// whether its binding goes. A session waits while any permission
+// prompt is open, and a tool's end closes only its own prompt: tools
+// run side by side, and PostToolUse, installed async, can land after a
+// later prompt or after the turn's Stop.
+func (s *agentSession) apply(event agentEvent) (changed, unbind bool) {
+	state, waits := s.State, s.Waits
 	switch event.Name {
 	case "UserPromptSubmit":
-		return agentWorking, false
-	case "PostToolUse":
-		if current == agentWaiting {
-			return agentWorking, false
-		}
+		state, waits = agentWorking, nil
 	case "PermissionRequest":
-		return agentWaiting, false
+		state, waits = agentWaiting, append(slices.Clone(waits), toolWait(event))
+	case "PostToolUse", "PostToolUseFailure":
+		i := slices.Index(waits, toolWait(event))
+		if i < 0 {
+			return false, false
+		}
+		waits = slices.Delete(slices.Clone(waits), i, i+1)
+		if len(waits) == 0 {
+			state = agentWorking
+		}
 	case "Notification":
 		// Claude Code's "waiting for your input" nudge, a minute after a
 		// turn ends, and the only one that follows an interrupt.
-		if event.NotificationType == "idle_prompt" {
-			return agentIdle, false
+		if event.NotificationType != "idle_prompt" {
+			return false, false
 		}
+		state, waits = agentIdle, nil
 	case "Stop", "StopFailure", "Interrupt":
-		return agentIdle, false
-	case "SessionEnd":
-		return "", true
+		state, waits = agentIdle, nil
+	case "SessionEnd", "SubagentStop":
+		return true, true
+	default:
+		return false, false
 	}
-	return "", false
+	if state == s.State && slices.Equal(waits, s.Waits) {
+		return false, false
+	}
+	if state != s.State {
+		s.At = time.Now().UnixMilli()
+	}
+	s.State, s.Waits = state, waits
+	return true, false
 }
 
 // sm agents event --harness <id>: what the installed hooks run, one
@@ -378,16 +429,22 @@ func cmdAgentsEvent(args []string) (int, error) {
 // Judged against a plain read first, so the common event that changes
 // nothing (PostToolUse mid-turn) takes no lock and loads no projects.
 func applyAgentEvent(harnessID string, event agentEvent) error {
+	key := event.Session
+	if h := lookupHarness(harnessID); h != nil && h.subagentIDs && event.AgentID != "" {
+		key = event.AgentID
+	} else if event.Name == "SubagentStop" {
+		// The parent's session id: its subagent ending isn't its end.
+		return nil
+	}
 	sessions := agentSessionsFrom(readRegistryHints())
-	if at, i := findAgentSession(sessions, harnessID, event.Session); at != "" {
-		state, unbind := agentEventState(event, sessions[at][i].State)
-		if !unbind && (state == "" || state == sessions[at][i].State) {
+	if at, i := findAgentSession(sessions, harnessID, key); at != "" {
+		if changed, _ := sessions[at][i].apply(event); !changed {
 			return nil
 		}
 	} else {
 		// An unbound session started in a managed worktree belongs to it.
-		state, unbind := agentEventState(event, "")
-		if state == "" || unbind {
+		session := agentSession{Harness: harnessID, Session: key}
+		if changed, unbind := session.apply(event); !changed || unbind {
 			return nil
 		}
 		projects, err := loadMergedProjects()
@@ -402,23 +459,18 @@ func applyAgentEvent(harnessID string, event agentEvent) error {
 		if current == nil || !shelfable(current.worktree) {
 			return nil
 		}
-		return bindAgentSession(harnessID, event.Session, current.worktree.ID, state)
+		return bindAgentSession(session, current.worktree.ID)
 	}
 	return updateAgentSessions(func(m map[string][]agentSession) bool {
-		at, i := findAgentSession(m, harnessID, event.Session)
+		at, i := findAgentSession(m, harnessID, key)
 		if at == "" {
 			return false
 		}
-		state, unbind := agentEventState(event, m[at][i].State)
+		changed, unbind := m[at][i].apply(event)
 		if unbind {
 			m[at] = slices.Delete(m[at], i, i+1)
-			return true
 		}
-		if state == "" || state == m[at][i].State {
-			return false
-		}
-		m[at][i].State, m[at][i].At = state, time.Now().UnixMilli()
-		return true
+		return changed
 	})
 }
 

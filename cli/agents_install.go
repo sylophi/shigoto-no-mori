@@ -55,13 +55,14 @@ var harnesses = []harness{
 			{event: "UserPromptSubmit"},
 			{event: "PermissionRequest"},
 			{event: "PostToolUse", async: true},
+			{event: "PostToolUseFailure", async: true},
 			{event: "Notification", matcher: "idle_prompt"},
 			{event: "Stop"},
 			{event: "StopFailure"},
 			{event: "SessionEnd"},
 		},
 	}},
-	{id: "codex", label: "Codex", sessionEnv: "CODEX_THREAD_ID", install: hookInstall{
+	{id: "codex", label: "Codex", sessionEnv: "CODEX_THREAD_ID", subagentIDs: true, install: hookInstall{
 		dir:      func() string { return homeOr("CODEX_HOME", ".codex") },
 		file:     "hooks.json",
 		trust:    true,
@@ -72,6 +73,7 @@ var harnesses = []harness{
 			{event: "PostToolUse", async: true},
 			{event: "Stop"},
 			{event: "Interrupt"},
+			{event: "SubagentStop"},
 			{event: "SessionEnd"},
 		},
 	}},
@@ -104,8 +106,12 @@ var hookBinary = func() string {
 	return exe
 }
 
+// `|| true`: a hook's exit code is an instruction to its harness (2
+// blocks the prompt, or keeps the turn going), and sm failing before
+// `agents event` runs (a data dir it can't open, an older build that
+// lacks the command) must never be one.
 func (h harness) hookCommand() string {
-	return shellQuote(hookBinary()) + " agents event --harness " + h.id
+	return shellQuote(hookBinary()) + " agents event --harness " + h.id + " || true"
 }
 
 // Whether a hook command is one of ours for this harness, whatever
@@ -119,7 +125,8 @@ func (h harness) isOurCommand(command string) bool {
 	} else if i := strings.IndexByte(command, ' '); i >= 0 {
 		bin, rest = command[:i], command[i:]
 	}
-	return filepath.Base(bin) == binaryName && strings.TrimSpace(rest) == "agents event --harness "+h.id
+	rest = strings.TrimSuffix(strings.TrimSpace(rest), " || true")
+	return filepath.Base(bin) == binaryName && rest == "agents event --harness "+h.id
 }
 
 // --- JSON objects that keep their key order ---
@@ -242,7 +249,8 @@ func (d *hooksDoc) groups(event string) []json.RawMessage {
 }
 
 // Drops every handler of ours, then any group and event left empty.
-func (d *hooksDoc) removeOurs(h harness) {
+// Reports whether there was any.
+func (d *hooksDoc) removeOurs(h harness) (removed bool) {
 	for _, event := range append([]string{}, d.hooks.keys...) {
 		var kept []json.RawMessage
 		changed := false
@@ -269,6 +277,7 @@ func (d *hooksDoc) removeOurs(h harness) {
 				kept = append(kept, mustRaw(group))
 			}
 		}
+		removed = removed || changed
 		switch {
 		case !changed:
 		case len(kept) == 0:
@@ -277,6 +286,7 @@ func (d *hooksDoc) removeOurs(h harness) {
 			d.hooks.set(event, mustRaw(kept))
 		}
 	}
+	return removed
 }
 
 // The one hook entry a spec installs.
@@ -322,13 +332,28 @@ func (d *hooksDoc) write(removeIfEmpty bool) error {
 		return err
 	}
 	out.WriteByte('\n')
-	// Through a symlink (a dotfiles repo's) to the file itself, so the
-	// rename replaces the file and the link stays.
-	path := d.path
-	if real, err := filepath.EvalSymlinks(path); err == nil {
-		path = real
-	}
+	path := linkTarget(d.path)
 	return writeHookFile(path, out.String(), rcFileMode(path))
+}
+
+// The file a hooks path names: through a symlink (a dotfiles repo's)
+// to the file itself, even one not created yet, so a write replaces
+// the file and the link stays.
+func linkTarget(path string) string {
+	if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return path
+	}
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return real
+	}
+	target, err := os.Readlink(path)
+	if err != nil {
+		return path
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	return target
 }
 
 // Where each of our entries sits: [event] -> group index, for the ones
@@ -454,10 +479,11 @@ func (h harness) status() harnessStatus {
 	st.Hooks = "installed"
 	if h.install.trust {
 		hashes := codexTrustedHashes(h.install.dir())
-		// Codex keys by the resolved path.
-		keyPath, err := filepath.EvalSymlinks(st.Path)
-		if err != nil {
-			keyPath = st.Path
+		// Codex keys by its config dir's resolved path and the file's
+		// own name, a symlink's included.
+		keyPath := st.Path
+		if dir, err := filepath.EvalSymlinks(filepath.Dir(st.Path)); err == nil {
+			keyPath = filepath.Join(dir, filepath.Base(st.Path))
 		}
 		trusted := true
 		for _, spec := range h.install.hooks {
@@ -504,18 +530,30 @@ func cmdAgentsInstall(args []string, install bool) (int, error) {
 		return exitCodeOf(err), err
 	}
 	for _, h := range picked {
-		if install && !h.detected() {
-			return 1, errf("%s isn't set up here (no %s)", h.label, h.install.dir())
+		if !h.detected() {
+			if install {
+				return 1, errf("%s isn't set up here (no %s)", h.label, h.install.dir())
+			}
+			continue
 		}
-		doc, err := readHooksDoc(h.hooksPath())
+		// Under the file's lock, so two installs at once (sm and a dev
+		// build's smd) can't each drop the other's entries.
+		err := withFileLock(linkTarget(h.hooksPath()), func() error {
+			doc, err := readHooksDoc(h.hooksPath())
+			if err != nil {
+				return err
+			}
+			// Nothing to do writes nothing: the file stays as it was.
+			upToDate := install && h.status().Hooks == "installed"
+			if removed := doc.removeOurs(h); upToDate || !(removed || install) {
+				return nil
+			}
+			if install {
+				doc.addOurs(h)
+			}
+			return doc.write(!install && h.install.ownsFile)
+		})
 		if err != nil {
-			return 1, err
-		}
-		doc.removeOurs(h)
-		if install {
-			doc.addOurs(h)
-		}
-		if err := doc.write(!install && h.install.ownsFile); err != nil {
 			return 1, err
 		}
 		if !jsonMode {

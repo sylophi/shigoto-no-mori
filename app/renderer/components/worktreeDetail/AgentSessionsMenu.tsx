@@ -18,7 +18,7 @@ import {
   harnessLabel,
 } from "@/lib/agentSessions";
 import { cn } from "@/lib/utils";
-import type { Worktree } from "@shared/schemas";
+import type { AgentSession, Worktree } from "@shared/schemas";
 import { FooterVerb, LABEL_RANK } from "./footerFit";
 
 // The agent sessions bound to the worktree (`sm agents`), as a footer
@@ -27,13 +27,14 @@ import { FooterVerb, LABEL_RANK } from "./footerFit";
 // none when it is interrupted).
 export function AgentSessionsMenu({
   worktree,
+  sessions,
   busy,
 }: {
   worktree: Worktree;
+  sessions: AgentSession[];
   busy: boolean;
 }) {
   const idle = useIdleAgents();
-  const sessions = worktree.agentSessions;
   const state = agentSessionsState(sessions);
   const view = AGENT_STATE_VIEW[state];
   const [only] = sessions;

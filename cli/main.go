@@ -179,11 +179,11 @@ var agentItems = []helpItem{
 	{"agents bind [<name>] [--harness <id> --session <id>]", "Bind an agent session to a worktree",
 		"A session is bound to one worktree at a time, and binding it elsewhere moves it. Without the flags it binds the session whose shell runs the command (CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID). That also happens on its own: any command run inside a managed worktree from such a shell binds the session there, and `create` binds it to the new worktree. The primary checkout and external worktrees can't be bound. --json prints {ok, worktree: <row>}."},
 	{"agents unbind [--harness <id> --session <id>]", "Unbind an agent session",
-		"Without the flags, the session whose shell runs the command. It stays unbound until a command binds it again (see bind). --json prints {ok, unbound}, unbound false when it wasn't bound."},
+		"Without the flags, the session whose shell runs the command. It stays unbound until a command, or the session's next hook event from inside a managed worktree, binds it again (see bind). --json prints {ok, unbound}, unbound false when it wasn't bound."},
 	{"agents idle [<name>]", "Mark a worktree's agent sessions idle",
 		"For a turn whose end no hook reported (Claude Code reports none when it is interrupted). --json prints {ok, worktree: <row>}."},
 	{"agents event --harness <id>", "Report a session's lifecycle event (stdin)",
-		"What the installed hooks run, and what any other harness can call the same way: one JSON object on stdin with hook_event_name and session_id (and cwd, which binds an unbound session started in a managed worktree). UserPromptSubmit sets the session working, PermissionRequest waiting on the user, PostToolUse working again after a wait, Stop, StopFailure, Interrupt and an idle_prompt Notification idle, and SessionEnd unbinds it. Prints nothing and exits 0 whatever happens."},
+		"What the installed hooks run, and what any other harness can call the same way: one JSON object on stdin with hook_event_name and session_id (and cwd, which binds an unbound session started in a managed worktree). UserPromptSubmit sets the session working, PermissionRequest waiting on the user, PostToolUse (or PostToolUseFailure) for the tool it asked about working again once no prompt is open, Stop, StopFailure, Interrupt and an idle_prompt Notification idle, and SessionEnd unbinds it. With agent_id (a Codex subagent) the event is that subagent's, and its SubagentStop unbinds it. Prints nothing and exits 0 whatever happens."},
 }
 
 var shellItems = []helpItem{

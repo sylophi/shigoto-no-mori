@@ -39,8 +39,33 @@ func sendEvent(t *testing.T, ctx cliContext, name, session, extra string) {
 	}
 }
 
+// Claude Code set up in a temp config dir, with or without the hooks.
+func sandboxClaude(t *testing.T, hooks bool) {
+	t.Helper()
+	fakeHookBinary(t)
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	if hooks {
+		if code, err := cmdAgentsInstall([]string{"claude"}, true); code != 0 || err != nil {
+			t.Fatalf("install: %d, %v", code, err)
+		}
+	}
+}
+
+// Without the hooks nothing would ever report the turn's end, so a
+// session binds idle.
+func TestAgentSessionBindsIdleWithoutHooks(t *testing.T) {
+	proj := autoPullSandbox(t)
+	sandboxClaude(t, false)
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "s0")
+	fox := createViaCmd(t, proj, "fox")
+	if got := sessionsOf(t, fox.ID); len(got) != 1 || got[0].State != agentIdle {
+		t.Fatalf("create without hooks didn't bind the session idle: %+v", got)
+	}
+}
+
 func TestAgentSessionLifecycle(t *testing.T) {
 	proj := autoPullSandbox(t)
+	sandboxClaude(t, true)
 	t.Setenv("CLAUDE_CODE_SESSION_ID", "s1")
 	fox := createViaCmd(t, proj, "fox")
 	if got := sessionsOf(t, fox.ID); len(got) != 1 || got[0].Session != "s1" || got[0].State != agentWorking {
@@ -58,6 +83,8 @@ func TestAgentSessionLifecycle(t *testing.T) {
 		{"UserPromptSubmit", "", agentWorking},
 		{"PermissionRequest", "", agentWaiting},
 		{"PostToolUse", "", agentWorking},
+		{"PermissionRequest", "", agentWaiting},
+		{"PostToolUseFailure", "", agentWorking},
 		{"Notification", `,"notification_type":"permission_prompt"`, agentWorking},
 		{"Notification", `,"notification_type":"idle_prompt"`, agentIdle},
 	}
@@ -181,14 +208,18 @@ func TestAgentsInstallKeepsTheRestOfTheFile(t *testing.T) {
 		t.Fatalf("install changed the file's mode to %v", info.Mode().Perm())
 	}
 
-	// Installing again replaces ours rather than adding a second set.
+	// Installing again changes nothing, not even the file's formatting.
+	before, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, append(before, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if code, err := cmdAgentsInstall([]string{"claude"}, true); code != 0 || err != nil {
 		t.Fatalf("reinstall: %d, %v", code, err)
 	}
-	doc, _ := readHooksDoc(path)
-	if _, total := doc.ourEntries(claude); total != len(claude.install.hooks) {
-		t.Fatalf("reinstall left %d entries, want %d", total, len(claude.install.hooks))
+	if after, _ := os.ReadFile(path); string(after) != string(before)+"\n" {
+		t.Fatalf("a reinstall with nothing to change rewrote the file")
 	}
+	doc, _ := readHooksDoc(path)
 
 	// An entry from another build of ours is outdated.
 	doc.removeOurs(claude)
@@ -261,6 +292,13 @@ func TestCodexTrustStatus(t *testing.T) {
 	if _, err := os.Stat(codex.hooksPath()); !os.IsNotExist(err) {
 		t.Fatalf("uninstall left an empty hooks.json behind")
 	}
+	// Removing what isn't there writes nothing.
+	if code, err := cmdAgentsInstall([]string{"codex"}, false); code != 0 || err != nil {
+		t.Fatalf("second uninstall: %d, %v", code, err)
+	}
+	if _, err := os.Stat(codex.hooksPath()); !os.IsNotExist(err) {
+		t.Fatalf("uninstall with nothing to remove created hooks.json")
+	}
 }
 
 func TestAgentsInstallThroughSymlinkAndRefusesMalformed(t *testing.T) {
@@ -299,5 +337,86 @@ func TestAgentsInstallThroughSymlinkAndRefusesMalformed(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(link); string(raw) != malformed {
 		t.Fatalf("a refused install still wrote: %s", raw)
+	}
+}
+
+// A tool finishing closes only its own permission prompt, whatever
+// order the hooks land in.
+func TestAgentWaitsTrackEachPrompt(t *testing.T) {
+	proj := autoPullSandbox(t)
+	sandboxClaude(t, true)
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "s4")
+	fox := createViaCmd(t, proj, "fox")
+	ctx := resolveContext(proj.Path, []project{proj})
+	bash := `,"tool_name":"Bash","tool_input":{"command":"pnpm test","description":"run"}`
+	// The same input with its keys the other way round.
+	bashAgain := `,"tool_name":"Bash","tool_input":{"description":"run","command":"pnpm test"}`
+	edit := `,"tool_name":"Edit","tool_input":{"file_path":"a.go"}`
+	read := `,"tool_name":"Read","tool_input":{"file_path":"b.go"}`
+	steps := []struct{ event, extra, want string }{
+		{"UserPromptSubmit", "", agentWorking},
+		{"PermissionRequest", bash, agentWaiting},
+		{"PermissionRequest", edit, agentWaiting},
+		{"PostToolUse", read, agentWaiting}, // a tool that asked nothing
+		{"PostToolUse", bashAgain, agentWaiting},
+		{"PostToolUseFailure", edit, agentWorking},
+	}
+	for _, step := range steps {
+		sendEvent(t, ctx, step.event, "s4", step.extra)
+		if got := sessionsOf(t, fox.ID); len(got) != 1 || got[0].State != step.want {
+			t.Fatalf("after %s%s: %+v, want %s", step.event, step.extra, got, step.want)
+		}
+	}
+}
+
+// A Codex subagent binds under its own thread id, its events name it
+// by agent_id beside the parent's session_id, and its SubagentStop
+// unbinds it alone.
+func TestCodexSubagentSessions(t *testing.T) {
+	proj := autoPullSandbox(t)
+	fox := createViaCmd(t, proj, "fox")
+	owl := createViaCmd(t, proj, "owl")
+	codexEvent := func(name, session, extra string) {
+		t.Helper()
+		var event agentEvent
+		payload := `{"hook_event_name":"` + name + `","session_id":"` + session + `"` + extra + `}`
+		if err := json.Unmarshal([]byte(payload), &event); err != nil {
+			t.Fatal(err)
+		}
+		if err := applyAgentEvent("codex", event); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	codexEvent("UserPromptSubmit", "parent", `,"cwd":"`+fox.Path+`"`)
+	codexEvent("UserPromptSubmit", "parent", `,"agent_id":"child","cwd":"`+owl.Path+`"`)
+	if f, o := sessionsOf(t, fox.ID), sessionsOf(t, owl.ID); len(f) != 1 || f[0].Session != "parent" || len(o) != 1 || o[0].Session != "child" {
+		t.Fatalf("parent and child bindings: fox %+v, owl %+v", f, o)
+	}
+	codexEvent("SubagentStop", "parent", `,"agent_id":"child"`)
+	if f, o := sessionsOf(t, fox.ID), sessionsOf(t, owl.ID); len(f) != 1 || len(o) != 0 {
+		t.Fatalf("SubagentStop: fox %+v, owl %+v", f, o)
+	}
+}
+
+func TestAgentsInstallThroughDanglingSymlink(t *testing.T) {
+	fakeHookBinary(t)
+	dir := t.TempDir()
+	t.Setenv("CODEX_HOME", dir)
+	target := filepath.Join(t.TempDir(), "dotfiles", "hooks.json")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "hooks.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := cmdAgentsInstall([]string{"codex"}, true); code != 0 || err != nil {
+		t.Fatalf("install: %d, %v", code, err)
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("install replaced the dangling link: %v", err)
+	}
+	if st := lookupHarness("codex").status(); st.Hooks != "installed" {
+		t.Fatalf("hooks written through the link read as %s", st.Hooks)
 	}
 }

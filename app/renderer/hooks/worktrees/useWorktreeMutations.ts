@@ -451,7 +451,7 @@ export function useIdleAgents() {
     (w) => ({
       ...w,
       agentWorking: false,
-      agentSessions: w.agentSessions.map((s) => ({
+      agentSessions: w.agentSessions?.map((s) => ({
         ...s,
         state: "idle" as const,
       })),

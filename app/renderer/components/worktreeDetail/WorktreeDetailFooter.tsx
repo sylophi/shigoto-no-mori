@@ -3,10 +3,7 @@ import { type ReactNode, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/ui/inline-error";
 import { assertNever } from "@/lib/utils";
-import {
-  type CleanupError,
-  type Worktree,
-} from "@shared/schemas";
+import { type CleanupError, type Worktree } from "@shared/schemas";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import {
   CollapsedThroughProvider,
@@ -240,9 +237,13 @@ function NormalRow({
 }) {
   return (
     <div className="ml-auto flex items-center gap-3">
-      {worktree.agentSessions.length > 0 && (
-        <AgentSessionsMenu worktree={worktree} busy={busy} />
-      )}
+      {worktree.agentSessions?.length ? (
+        <AgentSessionsMenu
+          worktree={worktree}
+          sessions={worktree.agentSessions}
+          busy={busy}
+        />
+      ) : null}
       <WorktreeOptions worktree={worktree} busy={busy}>
         {options}
       </WorktreeOptions>

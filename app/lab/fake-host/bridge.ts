@@ -440,7 +440,7 @@ function hostHandlersFor(
       const worktree = findWorktree(worktreeId);
       if (!worktree) throw new Error("Unknown worktree");
       worktree.agentWorking = false;
-      worktree.agentSessions = worktree.agentSessions.map((session) => ({
+      worktree.agentSessions = worktree.agentSessions?.map((session) => ({
         ...session,
         state: "idle",
         at: Date.now(),

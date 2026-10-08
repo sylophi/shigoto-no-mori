@@ -146,8 +146,8 @@ export const WorktreeSchema = z.object({
   // worktree on its own shelf until every session's turn ends.
   agentWorking: z.boolean(),
   // The agent sessions bound here, which their harness's hooks keep up
-  // to date.
-  agentSessions: z.array(AgentSessionSchema),
+  // to date. Absent from a peer on an older build.
+  agentSessions: z.array(AgentSessionSchema).optional(),
   // What `sm describe` set (WorktreeDescriptionSchema): the work's
   // name and summary, until a pull request's take their place
   // (renderer/lib/worktreeTitle.ts). Absent when unset.
