@@ -20,7 +20,11 @@ export const warnTerrier = Effect.gen(function* () {
 
 const here = Effect.gen(function* () {
   yield* warnTerrier;
-  return yield* (yield* Worktrees.Worktrees).here(process.cwd());
+  // A folder removed under the shell has no cwd, which reads as Go's ".".
+  const cwd = yield* Effect.try(() => process.cwd()).pipe(
+    Effect.orElseSucceed(() => "."),
+  );
+  return yield* (yield* Worktrees.Worktrees).here(cwd);
 });
 
 // How a command names its project, beside or instead of a positional.
@@ -28,6 +32,10 @@ export const projectFlags = {
   project: Flag.String("project").pipe(Flag.withAlias("p"), Flag.optional),
   projectId: Flag.String("project-id").pipe(Flag.optional),
 };
+
+// A flag given a value. An empty one is no flag, as in Go.
+export const given = (flag: Option.Option<string>) =>
+  Option.filter(flag, (value) => value !== "");
 
 // The project a command names: --project-id as the app addresses it,
 // else -p or a positional, else the one at the cwd.
@@ -38,7 +46,9 @@ export const resolveProject = (ref: {
   Effect.gen(function* () {
     const worktrees = yield* Worktrees.Worktrees;
     const at = yield* here;
-    return Option.isSome(ref.projectId) && ref.projectId.value !== ""
-      ? yield* worktrees.resolveProjectById(at, ref.projectId.value)
-      : yield* worktrees.resolveProject(at, Option.getOrUndefined(ref.project));
+    return yield* Option.match(given(ref.projectId), {
+      onSome: (projectId) => worktrees.resolveProjectById(at, projectId),
+      onNone: () =>
+        worktrees.resolveProject(at, Option.getOrUndefined(given(ref.project))),
+    });
   });

@@ -41,6 +41,18 @@ const document = (settings: Settings, doc: object) =>
 const suffix = (settings: Settings) =>
   settings.project === undefined ? "" : ` for ${settings.project}`;
 
+// A key back at its default, and the default a person now gets.
+const reportUnset = (settings: Settings, key: string) =>
+  Effect.gen(function* () {
+    const { json, stdoutColor } = yield* Effect.service(Output);
+    if (json) return yield* document(settings, { key });
+    const { value } = yield* (yield* Config.Config).get(settings.scope, key);
+    const fallback = value === null ? "" : ` (default: ${rendered(value)})`;
+    yield* out(
+      styles(stdoutColor).green(`unset ${key}${fallback}${suffix(settings)}`),
+    );
+  });
+
 // The verbs over the settings `resolve` names.
 export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
   const list = Command.make("list", {}, () =>
@@ -105,19 +117,15 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
         const settings = yield* resolve;
         const config = yield* Config.Config;
         const stored = yield* config.set(settings.scope, key, value);
+        // Empty text clears a text key, which reports as unset does.
+        if (stored === undefined) return yield* reportUnset(settings, key);
         const { json, stdoutColor } = yield* Effect.service(Output);
-        // A value equal to the default clears the key.
-        const cleared = stored === undefined;
-        if (json) {
-          return yield* document(
-            settings,
-            cleared ? { key } : { key, value: stored },
-          );
-        }
-        const line = cleared
-          ? `unset ${key}`
-          : `set ${key} = ${rendered(stored)}`;
-        yield* out(styles(stdoutColor).green(`${line}${suffix(settings)}`));
+        if (json) return yield* document(settings, { key, value: stored });
+        yield* out(
+          styles(stdoutColor).green(
+            `set ${key} = ${rendered(stored)}${suffix(settings)}`,
+          ),
+        );
       }),
   ).pipe(Command.withDescription("Change a setting"));
 
@@ -129,15 +137,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
         const settings = yield* resolve;
         const config = yield* Config.Config;
         yield* config.unset(settings.scope, key);
-        const { json, stdoutColor } = yield* Effect.service(Output);
-        if (json) return yield* document(settings, { key });
-        const { value } = yield* config.get(settings.scope, key);
-        const fallback = value === null ? "" : ` (default: ${rendered(value)})`;
-        yield* out(
-          styles(stdoutColor).green(
-            `unset ${key}${fallback}${suffix(settings)}`,
-          ),
-        );
+        yield* reportUnset(settings, key);
       }),
   ).pipe(Command.withDescription("Reset a setting to its default"));
 

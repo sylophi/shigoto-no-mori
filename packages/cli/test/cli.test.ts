@@ -190,6 +190,7 @@ describe("projects", () => {
     await same("projects", "icon", "-p", "alpha");
     await same("--json", "projects", "icon", "--project-id", "B");
     await same("projects", "icon", "beta");
+    await same("projects", "icon", "alpha", "-p", "");
     await sameAt(alpha, "--json", "projects", "icon");
     await sameAt(beta, "projects", "icon");
   });
@@ -219,6 +220,15 @@ describe("projects", () => {
       "alpha",
     );
     await same("projects", "config", "unset", "scripts.setup", "-p", "alpha");
+    await same(
+      "projects",
+      "config",
+      "set",
+      "scripts.teardown",
+      "",
+      "-p",
+      "alpha",
+    );
     await same(
       "--json",
       "projects",

@@ -7,7 +7,7 @@ import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
-import { projectFlags, resolveProject, warnTerrier } from "../here.ts";
+import { given, projectFlags, resolveProject, warnTerrier } from "../here.ts";
 import { emit, note, out, Output, renderTable } from "../output.ts";
 import { configVerbs, type Settings } from "./config.ts";
 
@@ -61,7 +61,7 @@ const icon = Command.make(
     Effect.gen(function* () {
       const found = yield* resolveProject({
         projectId,
-        project: Option.orElse(project, () => name),
+        project: Option.orElse(given(project), () => name),
       });
       const icons = yield* Icons.Icons;
       const options = { rescanMisses: refreshIcons };
