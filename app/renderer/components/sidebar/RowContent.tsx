@@ -40,6 +40,8 @@ export function RowContent({
           project={row.project}
           local={row.local}
           groupId={row.groupId}
+          groupKey={row.groupKey}
+          pinned={row.pinned}
           expanded={row.expanded}
           current={row.groupKey === currentGroupKey}
           branches={row.branches}

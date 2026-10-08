@@ -64,6 +64,7 @@ const rows = (trees: Worktree[], allowAgentWorking: boolean, open: boolean) =>
       projects: [project],
       remote: [],
       sortMode: "manual",
+      pinned: new Set(),
     }),
     worktreeSort: "name",
     openShelves: {

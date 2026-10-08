@@ -51,7 +51,11 @@ export function VirtualRow({
       data-index={index}
       data-slot="sidebar-row"
       ref={measureRef}
-      className={cn("absolute top-0 left-0 w-full", ROW_LAYOUT[row.kind])}
+      className={cn(
+        "absolute top-0 left-0 w-full",
+        ROW_LAYOUT[row.kind],
+        row.kind === "project" && row.pinnedEnd && "pb-3",
+      )}
       style={{ transform: `translateY(${start}px)` }}
       onMouseEnter={() => setHoveredProjectId(rowProjectId)}
       onMouseLeave={() =>

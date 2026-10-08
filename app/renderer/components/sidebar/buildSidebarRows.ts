@@ -67,8 +67,9 @@ export interface BuildSidebarRowsArgs {
   arrangeMode: boolean;
   // Splits the list of projects under a header per owner (ownerOf),
   // the owners where `order` puts them, the ones in `shut` drawn as
-  // their header alone. Null lists the projects as one run, and so
-  // does a list with a single owner, which a header would only repeat.
+  // their header alone, and the pinned projects above them all. Null
+  // lists the projects as one run, and so does a list with a single
+  // owner, which a header would only repeat.
   byOwner: { shut: ReadonlySet<string> } | null;
   // Peer devices' forests, merged into the tree: a remote project
   // sharing a local project's repo identity contributes its worktrees
@@ -233,6 +234,8 @@ export function buildSidebarRows({
       project,
       local: true,
       expanded: false,
+      // Arranging draws the stored order, which the pins don't lead.
+      pinned: false,
       devices: [],
       members: [],
     }));
@@ -342,6 +345,7 @@ export function buildSidebarRows({
       project,
       local: group.local,
       expanded: inProject,
+      pinned: order.pinned.has(group.groupKey),
       // The worktrees beside the primary checkouts. Those are left out
       // because every project has one, and a number on every line
       // would say nothing about where the work is. None while this
@@ -502,11 +506,10 @@ export function buildSidebarRows({
     }
   }
 
-  // The list split by owner files the headers drawn above under them.
-  const drawn =
-    inProject || byOwner === null
-      ? rows
-      : ownerSections(rows, order.owners, byOwner.shut);
+  // The pinned projects lead the list, parted from the rest by a gap,
+  // and the rest split by owner files the headers drawn above under
+  // them.
+  const drawn = inProject ? rows : pinnedFirst(rows, byOwner, order.owners);
 
   return {
     rows: drawn,
@@ -597,6 +600,26 @@ export function ownerOf(project: Project): Owner | null {
     name: owner,
     repo: repo.join("/"),
   };
+}
+
+const isPinned = (row: SidebarRow) => row.kind === "project" && row.pinned;
+
+// The list of projects' rows with the pinned ones first, the last of
+// them marked for the gap under it when more follow, then the rest,
+// split by owner when `byOwner` says to.
+function pinnedFirst(
+  rows: SidebarRow[],
+  byOwner: BuildSidebarRowsArgs["byOwner"],
+  owners: ProjectGroupOrder["owners"],
+): SidebarRow[] {
+  const lead = rows.filter(isPinned);
+  const rest = rows.filter((row) => !isPinned(row));
+  const after =
+    byOwner === null ? rest : ownerSections(rest, owners, byOwner.shut);
+  const end = lead.at(-1);
+  if (end?.kind === "project" && after.length > 0)
+    lead[lead.length - 1] = { ...end, pinnedEnd: true };
+  return [...lead, ...after];
 }
 
 // The list of projects' rows under a header per owner, the owners in
@@ -706,10 +729,12 @@ function claimRemote(
 // under the peer-only id it would have, so narrowed to a peer that
 // holds it too, the peer's group keeps the local project's place. And
 // owner rank and header label by owner key (ownerOf), for the list
-// split by owner.
+// split by owner. And the pinned groups' keys (projectGroupKey), which
+// lead the list wherever their rank puts them.
 export interface ProjectGroupOrder {
   groups: ReadonlyMap<string, number>;
   owners: ReadonlyMap<string, { rank: number; label: string }>;
+  pinned: ReadonlySet<string>;
 }
 
 // Where each group sits in the tree, decided over every device's
@@ -728,6 +753,7 @@ export function projectGroupOrder({
   projects,
   remote,
   sortMode,
+  pinned,
 }: {
   // This machine's projects as buildSidebarRows is handed them, so a
   // repo registered twice here has its peers claimed by the same
@@ -735,6 +761,7 @@ export function projectGroupOrder({
   projects: readonly Project[];
   remote: readonly RemoteForestItem[];
   sortMode: ProjectSortMode;
+  pinned: ReadonlySet<string>;
 }): ProjectGroupOrder {
   const { claimed, peerOnly } = claimRemote(projects, remote);
   const entries = projects.map((project, i) => ({
@@ -783,6 +810,7 @@ export function projectGroupOrder({
   return {
     groups,
     owners: new Map(ranked.map(([key, label], rank) => [key, { rank, label }])),
+    pinned,
   };
 }
 

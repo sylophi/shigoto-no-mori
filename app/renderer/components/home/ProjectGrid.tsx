@@ -21,6 +21,7 @@ import {
 import { AlertTriangle, GitPullRequest } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PinnedMark } from "@/components/shared/PinnedMark";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -127,7 +128,13 @@ function Grid({
         <section
           key={section.key}
           style={{
-            gridColumn: `span ${Math.min(section.rows.length, columns)}`,
+            // An unnamed section (the pinned projects, or the rest of
+            // a list that isn't split) has no heading to stand level
+            // with, so it takes lines of its own.
+            gridColumn:
+              section.label === null
+                ? "1 / -1"
+                : `span ${Math.min(section.rows.length, columns)}`,
           }}
           className="grid grid-cols-subgrid content-start gap-y-2"
         >
@@ -195,7 +202,7 @@ function ProjectTile({
   work: GroupWork | undefined;
   onOpen: () => void;
 }) {
-  const { project, local, devices, members, branches } = row;
+  const { project, local, devices, members, branches, pinned } = row;
   const [hovered, setHovered] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const group = useGroupMembers(members, local ? project : undefined);
@@ -279,6 +286,7 @@ function ProjectTile({
                   {project.name}
                 </span>
               </SimpleTooltip>
+              {pinned && <PinnedMark />}
               <DeviceBadgeCluster devices={devices} />
             </span>
             {/* Two lines tall even when shorter or empty, so a repo
@@ -325,6 +333,8 @@ function ProjectTile({
         <ProjectGroupActions
           name={project.name}
           identity={project.identity}
+          groupKey={row.groupKey}
+          pinned={pinned}
           members={group}
           isHovered={hovered}
           triggerRef={triggerRef}
