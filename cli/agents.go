@@ -132,7 +132,8 @@ func findAgentSession(m map[string][]agentSession, harnessID, session string) (s
 }
 
 // Binds a session to a worktree, moving it off any other. A session
-// already bound there keeps its state; a new one starts in state.
+// bound elsewhere keeps its state and waits, and a new one starts as
+// given.
 func bindAgentSession(session agentSession, worktreeID string) error {
 	return updateAgentSessions(func(m map[string][]agentSession) bool {
 		at, i := findAgentSession(m, session.Harness, session.Session)
