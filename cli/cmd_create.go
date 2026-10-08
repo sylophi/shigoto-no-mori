@@ -74,11 +74,14 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	if markAutoPullIfNew(readGlobalConfigHints(), worktree.ID, false) {
 		worktree.AutoPull = true
 	}
+	// Best-effort like the auto-pull seed: the worktree exists either
+	// way, and a failed create would only be retried into a second one.
 	if parsed.bools["agent-working"] {
 		if err := setRegistryMark(agentWorkingKey, worktree.ID, true); err != nil {
-			return 1, err
+			note(yellowErr("warning:") + " couldn't mark it as agent working: " + err.Error())
+		} else {
+			worktree.AgentWorking = true
 		}
-		worktree.AgentWorking = true
 	}
 	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
 		"created "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")

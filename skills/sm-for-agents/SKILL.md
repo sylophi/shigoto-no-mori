@@ -1,6 +1,6 @@
 ---
 name: sm-for-agents
-description: Shigoto no Mori (sm) features for agents: worktree titles, the agent-working mark, and app links. Use when working with sm and you need better ways to interface with the user.
+description: "Shigoto no Mori (sm) features for agents: worktree titles, the agent-working mark, and app links. Use when working with sm and you need better ways to interface with the user."
 ---
 
 These let the user follow your work in the app without asking. Outside
@@ -28,7 +28,8 @@ sm agent-working off   # before every reply that waits on the user
 ```
 
 While it's on, the app keeps the worktree on a folded shelf, so turning
-it off tells the user it's their turn.
+it off tells the user it's their turn. `sm worktrees create
+--agent-working` starts a new worktree with it on.
 
 ## Links
 

@@ -1,6 +1,6 @@
 ---
 name: sm-basics
-description: Shigoto no Mori (sm) basics: register a project, and create, rename, land or tear down worktrees.
+description: "Shigoto no Mori (sm) basics: register a project, and create, rename, land or tear down worktrees."
 ---
 
 ## Register a project
@@ -23,7 +23,7 @@ sm projects config --setup '<cmd>' --default-branch <ref>
 ## Create a worktree
 
 ```sh
-sm worktrees create --no-cd --agent-working
+sm worktrees create --no-cd
 ```
 
 `cd` to the path it prints. `--base <ref>` branches from another ref.

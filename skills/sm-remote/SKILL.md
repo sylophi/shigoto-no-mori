@@ -1,6 +1,6 @@
 ---
 name: sm-remote
-description: Move or mirror a Shigoto no Mori (sm) worktree between the user's machines.
+description: "Move or mirror a Shigoto no Mori (sm) worktree between the user's machines."
 ---
 
 The app must be open and signed in on both machines. If a command says
