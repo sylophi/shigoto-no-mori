@@ -100,6 +100,7 @@ export interface ExecOptions {
   // The whole environment of the command. The app's own when absent.
   readonly env?: Record<string, string | undefined> | undefined;
   readonly timeout?: Duration.Input | undefined;
+  // Past it stdout fails the command and stderr is cut short.
   readonly maxOutputBytes?: number | undefined;
 }
 
@@ -113,47 +114,42 @@ export const exec = Effect.fn("exec")(function* (
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const name = command.slice(command.lastIndexOf("/") + 1);
   yield* Effect.annotateCurrentSpan({ command: name });
-  const fail =
-    (reason: CommandError["reason"], exitCode: number | null = null) =>
-    (cause: unknown) =>
-      new CommandError({ command: name, reason, exitCode, cause });
+  const fail = (
+    reason: CommandError["reason"],
+    cause: unknown,
+    exitCode: number | null = null,
+  ) => new CommandError({ command: name, reason, exitCode, cause });
   const limit = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT;
-  const run = Effect.gen(function* () {
-    const handle = yield* spawner
-      .spawn(
-        ChildProcess.make(command, [...args], {
-          cwd: options.cwd,
-          env: options.env,
-          stdin: "ignore",
-        }),
-      )
-      .pipe(
-        Effect.mapError((error) =>
-          fail(isNotFound(error) ? "not-found" : "failed")(error),
-        ),
-      );
+  return yield* Effect.gen(function* () {
+    const handle = yield* spawner.spawn(
+      ChildProcess.make(command, [...args], {
+        cwd: options.cwd,
+        env: options.env,
+        stdin: "ignore",
+      }),
+    );
     const [stdout, stderr] = yield* Effect.all(
       [
-        readAll(
-          handle.stdout.pipe(Stream.mapError(fail("failed"))),
-          limit,
-          () => fail("too-large")(undefined),
-        ),
-        readAll(handle.stderr.pipe(Stream.mapError(fail("failed"))), limit),
+        readAll(handle.stdout, limit, () => fail("too-large", undefined)),
+        readAll(handle.stderr, limit),
       ],
       { concurrency: 2 },
     );
-    const code = yield* handle.exitCode.pipe(Effect.mapError(fail("failed")));
+    const code = yield* handle.exitCode;
     if (code !== 0) {
-      return yield* fail("failed", code)(new Error(stderr.trim()));
+      return yield* fail("failed", new Error(stderr.trim()), code);
     }
     return { stdout, stderr };
-  }).pipe(Effect.scoped);
-  if (options.timeout === undefined) return yield* run;
-  return yield* run.pipe(
+  }).pipe(
+    Effect.scoped,
+    Effect.mapError((error) =>
+      isCommandError(error)
+        ? error
+        : fail(isNotFound(error) ? "not-found" : "failed", error),
+    ),
     Effect.timeoutOrElse({
-      duration: options.timeout,
-      orElse: () => Effect.fail(fail("timed-out")(undefined)),
+      duration: options.timeout ?? Duration.infinity,
+      orElse: () => Effect.fail(fail("timed-out", undefined)),
     }),
   );
 });

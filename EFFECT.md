@@ -107,8 +107,8 @@ export const layer = Layer.effect(Registry, make);
   captures the context when it is built and turns calls away once it
   is closed, and a `run` that the Promise functions callers already
   import go through. A call made before the graph is up waits for it.
-  A proof that reaches the subsystem brings the layer up itself
-  (`withLayer` in `app/test/lib/vitestKit.mts`).
+  The proofs bring every adapter's layer up for each file
+  (`app/test/lib/adapters.mts`).
 
   ```ts
   export const { layer: adapter, run } =

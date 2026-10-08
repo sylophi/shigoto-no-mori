@@ -223,11 +223,8 @@ import {
 } from "./lib/directBoot.mts";
 import { bootDevice } from "./lib/hubBoot.mts";
 import { delay } from "./lib/checkKit.mts";
-import { processesLayer, trackTest, withLayer } from "./lib/vitestKit.mts";
+import { trackTest } from "./lib/vitestKit.mts";
 import { startStubHub } from "./lib/hubStub.mts";
-
-// resolveCloudflaredBinary's probes.
-withLayer(processesLayer);
 
 // A blackholed candidate (TEST-NET-3, never routed): a dial to it
 // hangs or dies on its own, never reaching any listener.
