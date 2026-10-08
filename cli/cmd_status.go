@@ -135,24 +135,42 @@ type checkNode struct {
 func rollupChecks(nodes []checkNode) prChecks {
 	var checks prChecks
 	for _, node := range nodes {
-		verdict := node.State
-		if verdict == "" {
-			verdict = node.Conclusion
-			if node.Status != "COMPLETED" {
-				verdict = "PENDING"
-			}
-		}
 		checks.Total++
-		switch verdict {
-		case "SUCCESS", "NEUTRAL", "SKIPPED":
+		switch node.verdict() {
+		case checkPassing:
 			checks.Passing++
-		case "FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE":
+		case checkFailing:
 			checks.Failing++
 		default:
 			checks.Pending++
 		}
 	}
 	return checks
+}
+
+type checkVerdict int
+
+const (
+	checkPending checkVerdict = iota
+	checkPassing
+	checkFailing
+)
+
+func (node checkNode) verdict() checkVerdict {
+	verdict := node.State
+	if verdict == "" {
+		verdict = node.Conclusion
+		if node.Status != "COMPLETED" {
+			verdict = "PENDING"
+		}
+	}
+	switch verdict {
+	case "SUCCESS", "NEUTRAL", "SKIPPED":
+		return checkPassing
+	case "FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE":
+		return checkFailing
+	}
+	return checkPending
 }
 
 // What ghProbeReason says when no remote is on a GitHub host gh knows,
