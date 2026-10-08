@@ -16,18 +16,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
-// First to lose its label, first. The long, rarely used transfers go
+// First to lose its label, first. The transfer to start a mirror goes
 // first. The verbs whose label carries state (a running mirror's peer,
-// auto-pull on or off) or guards a delete go last.
+// an agent at work) or guards a delete go last.
 export const LABEL_RANK = {
-  transplant: 1,
-  mirrorTo: 2,
-  files: 3,
+  mirrorTo: 1,
+  files: 2,
+  options: 3,
   mirror: 4,
-  shelve: 5,
-  agentWorking: 6,
-  autoPull: 7,
-  delete: 8,
+  agentWorking: 5,
+  delete: 6,
 } as const;
 
 const rankOf = (label: HTMLElement) => Number(label.dataset.labelRank);
