@@ -34,6 +34,7 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
+import { useSetProjectPinned } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -148,6 +149,9 @@ interface ProjectGroupActionsProps {
   name: string;
   // The group's repo identity, which the designation is keyed by.
   identity: string | null | undefined;
+  // The group's key (projectGroupKey), which its pin is kept by.
+  groupKey: string;
+  pinned: boolean;
   members: readonly GroupMember[];
   isHovered: boolean;
   // The `…` trigger, so the header's right-click can pop the same menu.
@@ -159,12 +163,15 @@ interface ProjectGroupActionsProps {
 export function ProjectGroupActions({
   name,
   identity,
+  groupKey,
+  pinned,
   members,
   isHovered,
   triggerRef,
   onLocate,
 }: ProjectGroupActionsProps) {
   const creator = useGroupCreator(members, identity);
+  const setPinned = useSetProjectPinned(groupKey);
   const live = members.filter(
     (member): member is LiveMember => member.api !== undefined,
   );
@@ -225,6 +232,9 @@ export function ProjectGroupActions({
               <DropdownMenuSeparator />
             </>
           )}
+          <DropdownMenuItem onClick={() => setPinned(!pinned)}>
+            {pinned ? "Unpin" : "Pin"}
+          </DropdownMenuItem>
           <AddToDeviceSubmenu
             name={name}
             members={members}

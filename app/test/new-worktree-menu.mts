@@ -75,6 +75,7 @@ const sections = ({
       projects: local,
       remote: peers,
       sortMode: "manual",
+      pinned: new Set(),
     }),
     byOwner,
     commandableApi: (deviceId) => (commandable(deviceId) ? anyApi : undefined),

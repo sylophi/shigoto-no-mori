@@ -57,6 +57,11 @@ export type SidebarRow =
       branches?: number;
       devices: readonly SidebarDeviceBadge[];
       members: readonly RemoteProjectMember[];
+      // Pinned to the top of the list (ProjectGroupOrder.pinned).
+      pinned: boolean;
+      // The last of the pinned projects leading the list, with more
+      // after it: a gap under it parts them from the rest.
+      pinnedEnd?: boolean;
     }
   // A local worktree. `mirror` names the peer device it is kept in
   // step with (a live mirror either way round), in which case the
