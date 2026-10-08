@@ -298,7 +298,7 @@ export function makeDirectBridge(
     openSocket: (url) => new WsClient(url),
     deadlineMs: opts.deadlineMs ?? 3000,
     // The keeper's clock/ladder seam, so retry scenarios advance a
-    // fake clock instead of sleeping the real ladder out.
+    // TestClock instead of sleeping the real ladder out.
     keeper: opts.keeper,
   });
   return { plane, bridge: plane.handlers };

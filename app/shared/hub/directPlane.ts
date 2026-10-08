@@ -33,7 +33,7 @@ import {
 } from "@shared/hub/directKeeper";
 import { applyDirectPresence } from "@shared/hub/directPresence";
 import type { OpenClientSocket } from "@shared/ipc/socket/wsClientTransport";
-import type { SupervisorClock } from "@shared/remote/supervisor";
+import type * as Context from "effect/Context";
 
 // The peer's command-access switch flipping, as its direct listener
 // pushes it. The bridge records it on the peer's session so the status
@@ -79,10 +79,10 @@ export type DirectPlaneDeps = {
   // shrink it so failure scenarios settle fast, real owners omit it
   // and take the dialer's HELLO_TIMEOUT_MS default.
   deadlineMs?: number;
-  // The keeper's clock, a check seam too: the direct-plane check
-  // drives retries with a fake clock instead of sleeping the real
+  // What the keeper's loops run in, a check seam too: the direct-plane
+  // check drives retries on a TestClock instead of sleeping the real
   // ladder out. Real owners omit it and take real time.
-  keeper?: { clock?: SupervisorClock };
+  keeper?: { context?: Context.Context<never> };
   // The host half, absent on platforms that only ever dial out: the
   // direct listener's targeted roster close, and this device's own
   // tunnel endpoint state for the status snapshot.

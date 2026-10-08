@@ -13,14 +13,17 @@
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import { watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   gitDirOf,
   isRelevantGitPath,
-  reconcileGitWatchers,
-  startGitWatcher,
-  stopGitWatcher,
+  GitWatcher,
+  layer as gitWatcherLayer,
 } from "../main/core/gitWatcher.ts";
 import {
   delay,
@@ -125,17 +128,29 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   let projects = [{ id: "p1", name: "repo", path: repo }];
   // (Re)start the watcher over the sandbox, past what came before, and
   // let the platform watcher settle before producing events.
+  let runtime: ManagedRuntime.ManagedRuntime<GitWatcher, never> | null = null;
+  const running = () => {
+    assert.ok(runtime !== null, "the watcher is not running");
+    return runtime;
+  };
+  const stop = async () => {
+    await runtime?.dispose();
+    runtime = null;
+  };
   const restart = async (suppressed = false) => {
-    stopGitWatcher();
+    await stop();
     await caughtUp(join(repo, ".git"));
-    startGitWatcher({
-      onChange: (projectId) => changes.push(projectId),
-      suppressed: () => suppressed,
-      projects: () => projects,
-    });
+    runtime = ManagedRuntime.make(
+      gitWatcherLayer({
+        onChange: (projectId) => changes.push(projectId),
+        suppressed: () => suppressed,
+        projects: () => projects,
+      }).pipe(Layer.provide(NodeServices.layer)),
+    );
+    await runtime.context();
     await delay(150);
   };
-  trackTest(() => stopGitWatcher());
+  trackTest(stop);
   await restart();
 
   // Noise first: status refreshes, a working-tree edit, and the
@@ -181,7 +196,11 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   // commit is not observed.
   await restart();
   projects = [];
-  reconcileGitWatchers();
+  await running().runPromise(
+    Effect.gen(function* () {
+      yield* (yield* GitWatcher).reconcile;
+    }),
+  );
   writeFileSync(join(worktree, "d.txt"), "four\n");
   git(worktree, "add", "d.txt");
   git(worktree, "commit", "-q", "-m", "four");

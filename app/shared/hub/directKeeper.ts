@@ -12,7 +12,7 @@
 // somebody clicked it.
 //
 // Retry discipline, same rails as shared/remote/supervisor.ts (whose
-// ladder, stable threshold and clock this reuses rather than copying):
+// ladder and restart schedule this reuses rather than copying):
 // forever-retry with capped backoff for transient failures, a stable
 // reset so a healthy session that blips does not inherit a punishing
 // delay, and TERMINAL verdicts schedule NOTHING rather than spin.
@@ -46,15 +46,14 @@
 // also deletes the keeper's entry), or quit (stop's latch).
 //
 // Pure shared code (no node builtins, no electron), driven headlessly
-// by the direct-plane check with a fake clock and a stub dial.
-import {
-  BACKOFF_LADDER_MS,
-  backoffDelayMs,
-  defaultSupervisorClock,
-  STABLE_CONNECTION_MS,
-  type SupervisorClock,
-  type SupervisorTimer,
-} from "@shared/remote/supervisor";
+// by the direct-plane check on a TestClock with a stub dial.
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Result from "effect/Result";
+import { BACKOFF_LADDER_MS, restartSchedule } from "@shared/remote/supervisor";
 import { isTerminalDialError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { log } from "@shared/log";
@@ -64,11 +63,12 @@ type DirectKeeperDeps = {
   // means an established session (or one already cached), rejecting
   // means the attempt failed with the dialer's typed error.
   dial(deviceId: string): Promise<unknown>;
-  // The one test seam: the check drives the ladder with a fake clock
-  // instead of sleeping it out. The ladder and the stable threshold
-  // are NOT seams -- they are the shared supervisor constants, and the
-  // check asserts against those same constants on purpose.
-  clock?: SupervisorClock;
+  // What the peers' loops run in: the app's, or the check's with a
+  // TestClock, which drives the ladder instead of sleeping it out. The
+  // ladder and the stable threshold are NOT seams -- they are the
+  // shared supervisor constants, and the check asserts against those
+  // same constants on purpose.
+  context?: Context.Context<never>;
 };
 
 export type DirectKeeper = {
@@ -87,67 +87,51 @@ export type DirectKeeper = {
   // dial failure, cleared the moment a dial succeeds), for the
   // bridge's no-session rejection. Null when none applies.
   unavailableReason(deviceId: string): string | null;
-  // Quit latch: cancel every timer and ignore everything after, so a
+  // Quit latch: end every peer's loop and ignore everything after, so a
   // pending retry cannot dial mid-teardown.
   stop(): void;
 };
 
 type PeerState = {
-  // Ladder position for the current failure streak, supervisor-style:
-  // advanced on every scheduled backoff, reset only by a stable
-  // session's drop or the peer's roster re-entry (a fresh state).
-  attempt: number;
-  // When the live session was established, by the injected clock, so a
-  // drop can measure stability.
-  connectedAt: number;
-  timer: SupervisorTimer | null;
+  loop: Fiber.Fiber<never> | null;
+  // The current attempt's session drop, armed before its dial, so a
+  // drop reported however early ends the session's wait.
+  dropped: Deferred.Deferred<void> | null;
   lastFailure: string | null;
 };
 
 export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
-  const clock = deps.clock ?? defaultSupervisorClock;
+  const run = Effect.runForkWith(deps.context ?? Context.empty());
 
   // Membership here IS "was in the last live roster": reconcile prunes
   // and seeds it, so an offline-to-online transition always lands on a
-  // fresh state (attempt 0, dialing at once) without a second roster
-  // copy.
+  // fresh loop (the ladder's bottom, dialing at once) without a second
+  // roster copy.
   const states = new Map<string, PeerState>();
-  // Set by stop(), which also CLEARS states. Only reconcile reads it:
-  // every other path is already guarded by the state-identity check
-  // below, which a cleared map fails on its own. See stop().
+  // Set by stop(), which also ends every loop. Only reconcile reads it,
+  // since only reconcile seeds new loops.
   let stopped = false;
 
-  // The one liveness question every async continuation asks: is this
-  // still the state the map holds for this peer? A continuation
-  // landing after the peer left the roster (state deleted or
-  // replaced), or after stop() cleared the map, must change nothing.
-  function isCurrent(deviceId: string, state: PeerState): boolean {
-    return states.get(deviceId) === state;
-  }
-
-  function clearTimer(state: PeerState): void {
-    if (state.timer !== null) {
-      clock.clearTimeout(state.timer);
-      state.timer = null;
-    }
-  }
-
-  function dialNow(deviceId: string, state: PeerState): void {
-    deps.dial(deviceId).then(
-      () => {
-        if (!isCurrent(deviceId, state)) return;
-        state.connectedAt = clock.now();
-        if (state.lastFailure !== null) {
-          log.info(`[direct] session to ${deviceId} established`);
-        }
-        state.lastFailure = null;
-        // attempt is NOT reset here: only a drop after a STABLE run
-        // resets the ladder (peerDropped), so a connect-then-die
-        // flapper keeps climbing instead of hammering at the bottom
-        // rung.
-      },
-      (error: unknown) => {
-        if (!isCurrent(deviceId, state)) return;
+  // One dial and, when it lands, the session until it drops. Answers
+  // how long the session stayed up, which the restart schedule reads:
+  // a failed dial counts as 0, and only a drop after a STABLE run
+  // resets the ladder, so a connect-then-die flapper keeps climbing
+  // instead of hammering at the bottom rung.
+  const attempt = (deviceId: string, state: PeerState) =>
+    Effect.gen(function* () {
+      const dropped = yield* Deferred.make<void>();
+      state.dropped = dropped;
+      const dialed = yield* Effect.callback<Result.Result<unknown, unknown>>(
+        (resume) => {
+          const dialing = Promise.resolve().then(() => deps.dial(deviceId));
+          dialing.then(
+            (session) => resume(Effect.succeed(Result.succeed(session))),
+            (error: unknown) => resume(Effect.succeed(Result.fail(error))),
+          );
+        },
+      );
+      if (Result.isFailure(dialed)) {
+        const error = dialed.failure;
         const message = errorMessageOf(error);
         // One line per DISTINCT reason, not per rung: the ladder
         // redials forever, and a reason unchanged since the last
@@ -159,47 +143,52 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
           log.warn(`[direct] dial to ${deviceId} failed: ${message}`);
         }
         state.lastFailure = message;
-        if (isTerminalDialError(error)) {
-          // Redialing cannot change it and WOULD feed the host's
-          // failed-auth lockout, so schedule nothing: this peer's next
-          // dial comes from its roster re-entry (see the header),
-          // which seeds a fresh state.
-          return;
-        }
-        scheduleRedial(deviceId, state);
-      },
-    );
-  }
+        // Redialing cannot change a terminal verdict and WOULD feed the
+        // host's failed-auth lockout, so the loop parks: this peer's
+        // next dial comes from its roster re-entry (see the header),
+        // which starts a fresh loop.
+        if (isTerminalDialError(error)) return yield* Effect.never;
+        return 0;
+      }
+      const connectedAt = yield* Clock.currentTimeMillis;
+      if (state.lastFailure !== null) {
+        log.info(`[direct] session to ${deviceId} established`);
+      }
+      state.lastFailure = null;
+      yield* Deferred.await(dropped);
+      return (yield* Clock.currentTimeMillis) - connectedAt;
+    });
 
-  // The one backoff rule: delay from the current rung, then advance,
-  // exactly the supervisor's scheduleBackoff.
-  function scheduleRedial(deviceId: string, state: PeerState): void {
-    clearTimer(state);
-    const delayMs = backoffDelayMs(BACKOFF_LADDER_MS, state.attempt);
-    state.attempt += 1;
-    state.timer = clock.setTimeout(() => {
-      state.timer = null;
-      if (!isCurrent(deviceId, state)) return;
-      dialNow(deviceId, state);
-    }, delayMs);
-  }
+  const keep = (deviceId: string) => {
+    const state: PeerState = { loop: null, dropped: null, lastFailure: null };
+    state.loop = run(
+      attempt(deviceId, state).pipe(
+        Effect.repeat(restartSchedule(BACKOFF_LADDER_MS)),
+        Effect.andThen(Effect.never),
+      ),
+    );
+    return state;
+  };
+
+  const forget = (state: PeerState) => {
+    if (state.loop !== null) run(Fiber.interrupt(state.loop));
+  };
 
   return {
     reconcile(online) {
       // The ONE place the latch does real work: reconcile SEEDS the
       // map, so a roster feed arriving after stop() would re-add peers
-      // and dial them into a teardown. Every other path only ever
-      // reads an existing entry, which stop() already deleted.
+      // and dial them into a teardown.
       if (stopped) return;
       const live = new Set(online);
       for (const [deviceId, state] of states) {
         if (!live.has(deviceId)) {
           // The peer left the roster (or our own link went down and
-          // the caller fed []). Cancel its schedule and forget it.
-          // Closing its sessions is the presence sweep's job, and the
-          // gate that keeps sessions alive through OUR OWN hub
-          // outage lives there too (directPresence.ts).
-          clearTimer(state);
+          // the caller fed []). End its loop and forget it. Closing
+          // its sessions is the presence sweep's job, and the gate that
+          // keeps sessions alive through OUR OWN hub outage lives there
+          // too (directPresence.ts).
+          forget(state);
           states.delete(deviceId);
         }
       }
@@ -209,29 +198,19 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
         // this a no-op resolve for a session that survived a device hub
         // blip, so a reconnect's full-roster diff costs nothing for
         // peers still connected.
-        const state: PeerState = {
-          attempt: 0,
-          connectedAt: 0,
-          timer: null,
-          lastFailure: null,
-        };
-        states.set(deviceId, state);
-        dialNow(deviceId, state);
+        states.set(deviceId, keep(deviceId));
       }
     },
 
     peerDropped(deviceId) {
-      // A live roster entry is the whole condition: the bridge fires
-      // this only for a session it had ESTABLISHED and that closed on
-      // its own, a peer already swept from the roster (or stopped) has
-      // no entry, and scheduleRedial clears whatever timer the entry
-      // held first, so a redundant call cannot stack schedules.
+      // The bridge fires this only for a session it had ESTABLISHED and
+      // that closed on its own. A peer already swept from the roster
+      // (or stopped) has no entry.
       const state = states.get(deviceId);
-      if (state === undefined) return;
-      if (clock.now() - state.connectedAt >= STABLE_CONNECTION_MS) {
-        state.attempt = 0;
-      }
-      scheduleRedial(deviceId, state);
+      if (state?.dropped == null) return;
+      const { dropped } = state;
+      state.dropped = null;
+      run(Deferred.succeed(dropped, undefined));
     },
 
     unavailableReason(deviceId) {
@@ -240,7 +219,7 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
 
     stop() {
       stopped = true;
-      for (const state of states.values()) clearTimer(state);
+      for (const state of states.values()) forget(state);
       states.clear();
     },
   };
