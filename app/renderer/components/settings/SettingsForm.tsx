@@ -143,6 +143,7 @@ export function SettingsForm({
           darkTheme: prev.darkTheme,
           pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
           villageLife: prev.villageLife,
+          villageNews: prev.villageNews,
           markTerrierProjects: prev.markTerrierProjects,
           showDeviceBadges: prev.showDeviceBadges,
           allowAgentWorking: prev.allowAgentWorking,
@@ -266,6 +267,8 @@ export function SettingsForm({
               )}
               villageLife={form.villageLife}
               onVillageLifeChange={setField("villageLife")}
+              villageNews={form.villageNews}
+              onVillageNewsChange={setField("villageNews")}
             />
             <SidebarSection form={form} setForm={setForm} />
             <WorktreePrefixesSection list="hidden" />

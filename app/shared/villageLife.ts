@@ -39,3 +39,11 @@ export function villageLifeShows(
 ): boolean {
   return villageLifeEnabled(config) && status?.kind === "ready";
 }
+
+// Whether villagers moving in or out say so (Village news, under
+// Village life). On when unset.
+export function villageNewsEnabled(
+  config: Pick<ClientConfig, "villageNews">,
+): boolean {
+  return config.villageNews ?? true;
+}

@@ -20,6 +20,7 @@ import {
   resolveDoubutsuPicks,
 } from "@shared/themes";
 import { errorMessageOf } from "@shared/errors";
+import { villageNewsEnabled } from "@shared/villageLife";
 import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
@@ -35,6 +36,7 @@ export interface SettingsFormState {
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
   villageLife: boolean;
+  villageNews: boolean;
   markTerrierProjects: boolean;
   showDeviceBadges: boolean;
   allowAgentWorking: boolean;
@@ -70,6 +72,7 @@ export function fromConfig(
     darkTheme: picks.dark,
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
     villageLife: clientConfig.villageLife ?? false,
+    villageNews: villageNewsEnabled(clientConfig),
     markTerrierProjects: clientConfig.markTerrierProjects ?? false,
     showDeviceBadges: clientConfig.showDeviceBadges ?? true,
     allowAgentWorking: clientConfig.allowAgentWorking ?? false,
@@ -153,7 +156,7 @@ function toLocalDeviceSettingsPatch(
 
 // Appearance saves through the client-scoped store, not the device
 // config, omitting a key at its default to keep the file tidy.
-function toClientConfig(state: SettingsFormState): ClientConfig {
+export function toClientConfig(state: SettingsFormState): ClientConfig {
   return {
     // Default is "system"; omit when on the default to keep the file tidy.
     theme: state.theme === "system" ? undefined : state.theme,
@@ -172,6 +175,8 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
       : false,
     // Default is off, so off is omitted and the opt-in stored as `true`.
     villageLife: state.villageLife ? true : undefined,
+    // Default is on, with the same opt-out serialization as doubutsu.
+    villageNews: state.villageNews ? undefined : false,
     // Default is off, the same opt-in serialization as villageLife.
     markTerrierProjects: state.markTerrierProjects ? true : undefined,
     // Default is on, with the same opt-out serialization as doubutsu.

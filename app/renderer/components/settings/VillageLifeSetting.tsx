@@ -19,22 +19,27 @@ const AC_NOTICE = acNotice.notice;
 // the setting gates reads useVillageLife, never this field.
 export function VillageLifeSetting({
   villageLife,
-  onChange,
+  onVillageLifeChange,
+  villageNews,
+  onVillageNewsChange,
 }: {
   villageLife: boolean;
-  onChange: (next: boolean) => void;
+  onVillageLifeChange: (next: boolean) => void;
+  villageNews: boolean;
+  onVillageNewsChange: (next: boolean) => void;
 }) {
   // The row opens once the villager data is here, all of it. Locked,
   // it reads off, which is what the window shows whatever the stored
   // value (villageLifeShows, the rule every extra follows).
   const { data: villagerData } = useVillagerDataStatus();
   const view = villageLifeRow(villagerData);
+  const shows = villageLifeShows({ villageLife }, villagerData);
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 space-y-3">
         <ToggleRow
-          checked={villageLifeShows({ villageLife }, villagerData)}
-          onCheckedChange={onChange}
+          checked={shows}
+          onCheckedChange={onVillageLifeChange}
           disabled={view.locked}
           label={
             <span className="inline-flex items-center gap-1.5">
@@ -56,6 +61,15 @@ export function VillageLifeSetting({
           }
           description={view.description}
         />
+        <div className="pl-11">
+          <ToggleRow
+            checked={shows && villageNews}
+            onCheckedChange={onVillageNewsChange}
+            disabled={!shows}
+            label="Village news"
+            description="Villagers say when they move in or out."
+          />
+        </div>
       </div>
       <VillagerDataControl />
     </div>
