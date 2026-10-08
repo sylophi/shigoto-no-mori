@@ -87,11 +87,10 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
             <>
               {pluralize(worktree.changedCount, "file")} changed
               {named.length > 0 && (
-                <Muted>
-                  {" · "}
+                <Aside>
                   {named.map((f) => getBrowseLeafSegment(f.path)).join(", ")}
                   {unnamed > 0 && ` and ${unnamed} more`}
-                </Muted>
+                </Aside>
               )}
             </>
           ) : (
@@ -109,12 +108,11 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
             }
           >
             {pluralize(stashes.length, "stash", "stashes")}
-            <Muted>
-              {" · "}
+            <Aside>
               {newestStash.named
                 ? newestStash.message
                 : `On top of ${newestStash.message}`}
-            </Muted>
+            </Aside>
           </EntryRow>
         )}
         {commits.length === 0 ? (
@@ -238,9 +236,9 @@ function CommitRow({
   );
 }
 
-// Under the newest commits: where the branch began, how much it holds
-// (more than the rows above show), how far the primary branch has moved
-// since, and the way to all of it at once.
+// Under the newest commits: how the branch stands against the primary
+// branch, in GitHub's words ("5 commits ahead of, 4 commits behind
+// main"), and the way to everything it changes at once.
 function BranchLine({
   worktree,
   base,
@@ -256,16 +254,15 @@ function BranchLine({
   const nav = useWorktreeNav();
   const behind = worktree.behindPrimary;
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 pl-[4.75rem] text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 pl-[4.75rem] text-xs text-muted-foreground">
       <span>
-        {more ? `${own}+ commits` : pluralize(own, "commit")} since{" "}
-        <span className="font-mono">{base}</span>
-        {behind > 0 && ` · it has ${pluralize(behind, "new commit")}`}
+        {more ? `${own}+ commits` : pluralize(own, "commit")} ahead of
+        {behind > 0 && `, ${pluralize(behind, "commit")} behind`} {base}
       </span>
       <button
         type="button"
         onClick={() => nav.toBranchDiff(worktree.projectId, worktree.id)}
-        className="inline-flex items-center gap-0.5 hover:text-foreground"
+        className="ml-auto inline-flex items-center gap-0.5 hover:text-foreground"
       >
         All branch changes
         <ChevronRight aria-hidden className="size-3.5 opacity-60" />
@@ -276,4 +273,10 @@ function BranchLine({
 
 function Muted({ children }: { children: ReactNode }) {
   return <span className="text-muted-foreground">{children}</span>;
+}
+
+// What follows a row's figure, set apart by space and tone rather than
+// a separator.
+function Aside({ children }: { children: ReactNode }) {
+  return <span className="ml-2 text-muted-foreground">{children}</span>;
 }

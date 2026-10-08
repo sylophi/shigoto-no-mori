@@ -43,10 +43,8 @@ export function CommitDiff() {
           <span className="font-mono">{hash}</span>
           {commit && (
             <>
-              {" · "}
-              {commit.author}
-              {" · "}
-              <RelativeDate date={commit.date} />
+              {" by "}
+              {commit.author}, <RelativeDate date={commit.date} />
             </>
           )}
         </>

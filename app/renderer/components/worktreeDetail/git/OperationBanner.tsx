@@ -77,7 +77,7 @@ export function OperationBanner({
         ) : (
           <>
             {title}
-            <span className="text-muted-foreground"> · {detail}</span>
+            <span className="ml-2 text-muted-foreground">{detail}</span>
           </>
         )}
       </div>

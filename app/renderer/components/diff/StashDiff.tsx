@@ -31,8 +31,8 @@ export function StashDiff() {
       subtitle={
         stash && (
           <>
-            {!stash.named && `On top of ${stash.message} · `}
             Stashed <RelativeDate date={stash.date} />
+            {!stash.named && ` on top of ${stash.message}`}
           </>
         )
       }

@@ -38,7 +38,16 @@ function MarkerRow({
           // The note isn't on screen here, so the name's tooltip says
           // it. Without one, the tooltip only finishes a name cut off.
           <SimpleTooltip
-            tip={note ? `${name} · ${note}` : name}
+            tip={
+              note ? (
+                <span className="flex flex-col">
+                  <span className="font-mono">{name}</span>
+                  <span>{note}</span>
+                </span>
+              ) : (
+                name
+              )
+            }
             whenTruncated={!note}
           >
             {chip}
@@ -109,8 +118,8 @@ export function BaseMarker({
       name={base}
       note={
         behind > 0
-          ? `This branch began here · ${pluralize(behind, "new commit")} since`
-          : "This branch began here"
+          ? `Where this branch began, ${pluralize(behind, "new commit")} since`
+          : "Where this branch began"
       }
       move={
         canSyncFromPrimary(worktree) ? (

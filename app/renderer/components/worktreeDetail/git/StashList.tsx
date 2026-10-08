@@ -45,8 +45,8 @@ export function StashList({
                   {stash.named ? stash.message : "Stashed changes"}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {!stash.named && `On top of ${stash.message} · `}
                   <RelativeDate date={stash.date} />
+                  {!stash.named && `, on top of ${stash.message}`}
                 </span>
               </span>
             </button>
