@@ -393,6 +393,7 @@ try {
       ["birch", "cedar", "elm", "fir"],
       "all of them, past the few a name finds",
     );
+    assert.equal(named("gro").length, 3, "the few, for less than its name");
     assert.deepEqual(named("grove/fir"), ["fir"], "ahead of the repo");
     assert.deepEqual(named("fir-tree"), ["fir"], "the repo's own name");
     assert.deepEqual(named("gitlab.com/vines"), ["ivy"], "another host's");

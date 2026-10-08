@@ -1,5 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
-import { LayoutGrid, MonitorSmartphone, Radio } from "lucide-react";
+import {
+  LayoutGrid,
+  MonitorSmartphone,
+  Radio,
+  Settings as SettingsIcon,
+} from "lucide-react";
 import {
   ACCOUNT_SECTION,
   selectSettingsTab,
@@ -30,7 +35,7 @@ export function usePalettePages(): PalettePage[] {
       key: "page:account",
       label: hasLocalHost ? ACCOUNT_SECTION.label : "Devices",
       icon: hasLocalHost ? ACCOUNT_SECTION.icon : MonitorSmartphone,
-      aliases: [ACCOUNT_SECTION.label, "Devices"],
+      aliases: [hasLocalHost ? "Devices" : ACCOUNT_SECTION.label],
       open: () => void navigate({ to: "/account" }),
     },
   ];
@@ -50,6 +55,13 @@ export function usePalettePages(): PalettePage[] {
       },
     );
   }
+  // Settings itself, on the section it was left on.
+  pages.push({
+    key: "page:settings",
+    label: "Settings",
+    icon: SettingsIcon,
+    open: () => void navigate({ to: "/settings" }),
+  });
   for (const section of [...client, ...host]) {
     pages.push({
       key: `page:settings:${section.id}`,

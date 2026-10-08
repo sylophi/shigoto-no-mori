@@ -31,6 +31,7 @@ import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
 import { hasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
+import { scoreFields } from "@/lib/fuzzyMatch";
 import { cn } from "@/lib/utils";
 import {
   buildPaletteEntries,
@@ -214,9 +215,22 @@ function PaletteDialog({
       page,
     }));
     const leadingPages = leadingCount(listQuery, namedPages, pageFields, shown);
+    // Projects and pages ahead of the worktrees go best first, whichever
+    // kind, so ↩ on "live" opens the page and not a project "lively".
+    const namedScore = (row: PaletteRow) =>
+      scoreFields(
+        listQuery,
+        row.kind === "project"
+          ? projectNames(row.item.project)
+          : row.kind === "page"
+            ? pageFields(row.page)
+            : [],
+      );
     const rows = [
-      ...projectRows.slice(0, leading),
-      ...pageRows.slice(0, leadingPages),
+      ...[
+        ...projectRows.slice(0, leading),
+        ...pageRows.slice(0, leadingPages),
+      ].toSorted((a, b) => namedScore(b) - namedScore(a)),
       ...worktreeRows,
       ...projectRows.slice(leading),
       ...pageRows.slice(leadingPages),

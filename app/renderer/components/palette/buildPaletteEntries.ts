@@ -238,9 +238,8 @@ function ownerNames(project: Project): string[] {
   return owner ? [owner.label, `${owner.label}/${owner.repo}`] : [];
 }
 
-// The few projects the query names, best first, and any it names as
-// well as the last of them, so an owner's name finds all of its
-// projects. Every project
+// The few projects the query names, best first, and all of an owner's
+// when it is the owner's name. Every project
 // on every device, the ones with no worktrees too, since the sidebar's
 // list of projects is the other way to them. Not one whose folder is
 // gone, which the sidebar won't open either. Only for a query:
@@ -301,12 +300,12 @@ export function rankPaletteProjects(
       deviceCount: devices.size,
     }),
   );
-  const score = (p: PaletteProject) =>
-    scoreFields(query, projectNames(p.project));
   const ranked = rankByScore(query, items, (p) => projectNames(p.project));
-  const last = ranked[PROJECTS_SHOWN - 1];
-  const floor = last ? score(last) : 0;
-  return ranked.filter((p) => score(p) >= floor);
+  const owner = query.toLowerCase();
+  return ranked.filter(
+    (p, i) =>
+      i < PROJECTS_SHOWN || ownerOf(p.project)?.label.toLowerCase() === owner,
+  );
 }
 
 const PROJECTS_SHOWN = 3;
@@ -346,11 +345,8 @@ export interface PalettePage {
   open: () => void;
 }
 
-export const pageFields = ({ label, parent, aliases = [] }: PalettePage) => [
-  label,
-  ...aliases,
-  parent ? `${parent} ${label}` : "",
-];
+export const pageFields = ({ label, parent, aliases = [] }: PalettePage) =>
+  parent ? [label, ...aliases, `${parent} ${label}`] : [label, ...aliases];
 
 // The pages the query names, best first. Only for a query: unasked,
 // the list is the worktrees.
