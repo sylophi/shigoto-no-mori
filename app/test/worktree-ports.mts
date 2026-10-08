@@ -1,6 +1,6 @@
 // Durable proof for the worktree port list's three pure-ish parts,
 // under plain Node with no Electron and no git:
-//   - the port-pool state reader (host/lib/portPool.ts) honours
+//   - the port-pool state reader (host/lib/ports.ts) honours
 //     XDG_DATA_HOME, keeps the project's declared port order, tolerates
 //     a trailing slash on the recorded directory, skips malformed
 //     allocations and unknown fields, and reads a missing or corrupt
@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { poolPortsFor } from "@host/lib/portPool";
+import { onPorts } from "@host/lib/ports";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { dialLoopback, isLoopbackPortListening } from "@host/lib/net";
 import { errorCodeOf } from "@shigomori/contracts/errors";
@@ -27,6 +27,8 @@ import {
 } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import { beforeAll, it } from "vitest";
+
+const poolPortsFor = (dir: string) => onPorts((ports) => ports.poolPorts(dir));
 
 async function listenOn(host: string, track: Track): Promise<number> {
   const server = await startLoopbackServer((socket) => socket.end(), { host });
