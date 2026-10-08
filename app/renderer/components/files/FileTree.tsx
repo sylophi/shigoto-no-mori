@@ -13,6 +13,7 @@ interface TreeCtx {
   worktreeId: string;
   selectedPath: string | null;
   expanded: ReadonlySet<string>;
+  hideIgnored: boolean;
   onToggleFolder: (path: string, open: boolean) => void;
   onSelectFile: (path: string) => void;
 }
@@ -20,7 +21,8 @@ interface TreeCtx {
 // The files page's list: the worktree as a folder tree, read one folder
 // at a time (sync:worktreeFolder) as folders are opened, so a
 // node_modules costs nothing until someone opens it. Ignored entries
-// are dimmed, which is the one thing the tree says about git.
+// are dimmed or left out, which is the one thing the tree says about
+// git.
 //
 // Rows are one flat run of buttons in document order, whatever their
 // depth, which is what keeps the arrow keys a sibling query away.
@@ -106,11 +108,19 @@ function FolderRows({
   relative: string;
   depth: number;
 }) {
-  const { selectedPath, expanded, onToggleFolder, onSelectFile, tabStop } = ctx;
+  const {
+    selectedPath,
+    expanded,
+    hideIgnored,
+    onToggleFolder,
+    onSelectFile,
+    tabStop,
+  } = ctx;
   const { data, isPending, isError } = useWorktreeFolder(
     ctx.projectId,
     ctx.worktreeId,
     relative,
+    false,
   );
   if (isPending) {
     return (
@@ -121,9 +131,23 @@ function FolderRows({
     );
   }
   if (isError) return <TreeNote depth={depth}>Couldn't read folder</TreeNote>;
-  if (data.length === 0) return <TreeNote depth={depth}>Empty</TreeNote>;
-  return data.map((entry, index) => {
-    const path = relative ? `${relative}/${entry.name}` : entry.name;
+  const pathOf = (name: string) => (relative ? `${relative}/${name}` : name);
+  // The open file and the folders down to it stay, so a linked ignored
+  // file still has its row.
+  const leadsToSelected = (path: string) =>
+    selectedPath === path || !!selectedPath?.startsWith(`${path}/`);
+  const entries = hideIgnored
+    ? data.filter((e) => !e.ignored || leadsToSelected(pathOf(e.name)))
+    : data;
+  if (entries.length === 0) {
+    return (
+      <TreeNote depth={depth}>
+        {data.length === 0 ? "Empty" : "Only ignored files"}
+      </TreeNote>
+    );
+  }
+  return entries.map((entry, index) => {
+    const path = pathOf(entry.name);
     const open = entry.isDirectory && expanded.has(path);
     const selected = path === selectedPath;
     return (

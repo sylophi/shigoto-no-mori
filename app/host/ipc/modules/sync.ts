@@ -150,8 +150,12 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     return { present };
   },
 
-  worktreeFolder: async ({ relative, ...input }) =>
-    listWorktreeFolder(await findWorktreePathOrThrow(input), relative),
+  worktreeFolder: async ({ relative, ruleIgnored, ...input }) =>
+    listWorktreeFolder(
+      await findWorktreePathOrThrow(input),
+      relative,
+      ruleIgnored,
+    ),
 
   // The ignored files a capture leaves behind (see the contract note):
   // listed against the worktree, not the project, so a peer's
