@@ -2,6 +2,7 @@
 // builds once: its store over the process's SQLite driver, its flavor,
 // and where the darwin helper (macfs) is. The updater talks HTTP through
 // fetch, the one client Node and Bun both have.
+import * as Bundle from "./Bundle.ts";
 import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
@@ -46,6 +47,7 @@ const services = (options: EngineOptions) =>
     Projects.layer,
     Doctor.layer,
     Transfer.layer,
+    Bundle.layer,
   ).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
