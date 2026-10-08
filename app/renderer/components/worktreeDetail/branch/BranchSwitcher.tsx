@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
-import { Check, ChevronsUpDown, Loader2, Search } from "lucide-react";
+import { Check, Loader2, Search } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBranches } from "@/hooks/git/useBranches";
@@ -11,6 +11,7 @@ import { rankByScore } from "@/lib/fuzzyMatch";
 import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 
+// Switching the worktree's branch, opened from BranchMenu.
 export function BranchSwitcher({
   worktree,
   anchorRef,
@@ -19,9 +20,8 @@ export function BranchSwitcher({
 }: {
   worktree: Worktree;
   anchorRef: React.RefObject<HTMLElement | null>;
-  // Opened from elsewhere (BranchMenu), with no trigger of its own.
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const { data: branches, isFetching: branchesFetching } = useBranches(
     worktree.projectId,
@@ -31,12 +31,9 @@ export function BranchSwitcher({
   const queryClient = useQueryClient();
   const { keys } = useHostScope();
   const [query, setQuery] = useState("");
-  const [ownOpen, setOwnOpen] = useState(false);
-  const controlled = open !== undefined;
-  const isOpen = open ?? ownOpen;
-  // A fresh list each time it opens, however it was opened.
+  // A fresh list each time it opens.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!open) return;
     setQuery("");
     void queryClient.invalidateQueries({
       queryKey: keys.branches(worktree.projectId),
@@ -45,7 +42,7 @@ export function BranchSwitcher({
       queryKey: keys.worktrees(worktree.projectId),
     });
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- on opening only
-  }, [isOpen]);
+  }, [open]);
 
   // Exclude branches in use by *other* worktrees only; keeping this
   // worktree's own branch lets the popup show it with a check mark.
@@ -84,22 +81,10 @@ export function BranchSwitcher({
       }}
       inputValue={query}
       onInputValueChange={setQuery}
-      open={isOpen}
-      onOpenChange={(next) => {
-        setOwnOpen(next);
-        onOpenChange?.(next);
-      }}
+      open={open}
+      onOpenChange={onOpenChange}
       autoHighlight
     >
-      {!controlled && (
-        <Combobox.Trigger
-          aria-label="Switch branch"
-          data-icon-button
-          className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
-        >
-          <ChevronsUpDown aria-hidden className="size-3.5" />
-        </Combobox.Trigger>
-      )}
       <Combobox.Portal>
         <Combobox.Positioner
           anchor={anchorRef}
