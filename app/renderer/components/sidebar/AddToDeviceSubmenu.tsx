@@ -57,10 +57,12 @@ export function AddToDeviceSubmenu({
   const { api, project } = source;
 
   const addTo = async (tab: DeviceTab) => {
-    const url = await api.projects.cloneUrl(project.id).catch((err) => {
-      notifyError(`Couldn't read ${name}'s remote`, err);
-      return undefined;
-    });
+    const url = await api.projects
+      .cloneUrl({ projectId: project.id })
+      .catch((err) => {
+        notifyError(`Couldn't read ${name}'s remote`, err);
+        return undefined;
+      });
     if (url === undefined) return;
     if (url === null) {
       // Nothing to clone from. The dialog still opens there, to browse:

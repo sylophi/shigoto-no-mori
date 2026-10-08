@@ -75,7 +75,7 @@ async function locateStartFolder(
     dir = getBrowseParentPath(dir)
   ) {
     // oxlint-disable-next-line no-await-in-loop -- nearest first, and the first that lists ends the walk.
-    const listed = await api.fs.listDirectory(dir).then(
+    const listed = await api.fs.listDirectory({ path: dir }).then(
       () => true,
       () => false,
     );

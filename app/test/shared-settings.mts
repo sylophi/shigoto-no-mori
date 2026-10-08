@@ -357,11 +357,11 @@ it("browser copy: served off localStorage through the same contract, announcing 
   assert.deepEqual(await bridge.api.sharedSettings.read(), {
     entries: {},
   });
-  const doc = await bridge.api.sharedSettings.set(KEY, KIWI);
+  const doc = await bridge.api.sharedSettings.set({ key: KEY, value: KIWI });
   assert.equal(doc.entries[KEY]?.by, bridge.api.deviceId);
   assert.deepEqual(await bridge.api.sharedSettings.read(), doc);
-  await bridge.api.sharedSettings.set(KEY, KIWI);
-  await bridge.api.sharedSettings.merge(doc);
+  await bridge.api.sharedSettings.set({ key: KEY, value: KIWI });
+  await bridge.api.sharedSettings.merge({ doc });
   assert.equal(announced.length, 1);
   await bridge.stop();
 });
@@ -370,12 +370,12 @@ it("convergence: three copies never all online together agree after pairwise exc
   const [a, b, c] = [webBridge(), webBridge(), webBridge()];
   // A picks while alone, then meets B. A leaves, C arrives having
   // made an older-looking pick of its own for another setting.
-  await a.api.sharedSettings.set(KEY, KIWI);
-  await c.api.sharedSettings.set("other", "from-c");
+  await a.api.sharedSettings.set({ key: KEY, value: KIWI });
+  await c.api.sharedSettings.set({ key: "other", value: "from-c" });
   await exchange(b.api, a.api);
   await exchange(c.api, b.api);
   // C re-picks after hearing of A's pick, so C's must win everywhere.
-  await c.api.sharedSettings.set(KEY, LYCHEE);
+  await c.api.sharedSettings.set({ key: KEY, value: LYCHEE });
   await exchange(b.api, c.api);
   await exchange(a.api, b.api);
   const docs = await Promise.all(

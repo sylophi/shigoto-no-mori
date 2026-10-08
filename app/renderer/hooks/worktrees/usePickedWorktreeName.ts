@@ -7,7 +7,7 @@ export function usePickedWorktreeName(projectId: string | null) {
     queryKey: keys.pickedWorktreeName(projectId),
     queryFn:
       projectId !== null
-        ? () => api.projects.pickWorktreeName(projectId)
+        ? () => api.projects.pickWorktreeName({ projectId })
         : skipToken,
     // Re-roll on every visit (gcTime drops the pick as soon as the form
     // unmounts), but never while the form is open: a random pick has no

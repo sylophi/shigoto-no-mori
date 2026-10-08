@@ -8,7 +8,7 @@ export function useWorktreeIncludeStatus(projectId: string | null) {
     queryKey: keys.worktreeIncludeStatus(projectId),
     queryFn:
       projectId !== null
-        ? () => api.projects.worktreeIncludeStatus(projectId)
+        ? () => api.projects.worktreeIncludeStatus({ projectId })
         : skipToken,
     // Each fetch spawns two `git ls-files` enumerations in main. Dampen
     // the global refetch-on-focus/mount so Cmd-Tabbing around while

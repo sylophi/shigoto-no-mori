@@ -273,7 +273,9 @@ export function useSettingsSave({
         // own api: the host applies it over the stored document under
         // its config write lock, so everything the form does not manage
         // rides through untouched.
-        await window.api.globalConfig.writeDeviceSettings(devicePatch);
+        await window.api.globalConfig.writeDeviceSettings({
+          patch: devicePatch,
+        });
       }
       // keepReachable rides the same client store but is written
       // immediately by useKeepReachableUpdate, never staged in this form.

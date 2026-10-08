@@ -19,7 +19,7 @@ function worktreeDataQueryOptions(
 ) {
   return queryOptions<ShigomoriWorktreeData | null>({
     queryKey: keys.worktreeData(projectId, worktreeId),
-    queryFn: () => api.worktreeData.read(projectId, worktreeId),
+    queryFn: () => api.worktreeData.read({ projectId, worktreeId }),
     meta: { errorTitle: "Couldn't load worktree state" },
   });
 }
@@ -69,11 +69,11 @@ export function useWorktreeDataWrite() {
           ...worktreeDataQueryOptions(api, keys, projectId, worktreeId),
           staleTime: 0,
         })) ?? {};
-      await api.worktreeData.write(
+      await api.worktreeData.write({
         projectId,
         worktreeId,
-        typeof patch === "function" ? patch(current) : patch,
-      );
+        data: typeof patch === "function" ? patch(current) : patch,
+      });
       return { projectId, worktreeId };
     },
     onSuccess: ({ projectId, worktreeId }) => {

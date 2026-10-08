@@ -261,7 +261,7 @@ export function AddProjectView({
     const run = scanRun.current;
     // No try here, for cloneAndOpen's reason: the early return.
     const results = await scope.api.fs
-      .scanForGitRepos(browseDir)
+      .scanForGitRepos({ path: browseDir })
       .catch((err: unknown) => {
         if (scanRun.current === run) {
           notifyError("Couldn't scan for git repos", err);

@@ -18,9 +18,10 @@
 //   window.api): the write lands on this machine's disk, so their
 //   reads and invalidations must stay pinned to the local `queryKeys`
 //   registry.
+import type { HostApi } from "@shared/ipc/client";
 import { hasLocalHost } from "@/lib/localHost";
 import { createContext, use, type ReactNode } from "react";
-import { remoteDeviceById, type RemoteDeviceApi } from "@/lib/remote/devices";
+import { remoteDeviceById } from "@/lib/remote/devices";
 import {
   localDeviceId,
   queryKeys,
@@ -28,40 +29,10 @@ import {
   type QueryKeyRegistry,
 } from "@/lib/queryKeys";
 
-// The host-scoped slice of the api surface: exactly the namespaces
-// whose contracts are defineContract("host", ...). window.api and a
-// connected remote device's api both satisfy it, so one hook body
-// serves both. Client-scoped namespaces are excluded on purpose: a
-// hook that reaches for scope.api.dialog fails to compile instead of
-// rejecting at runtime on a remote device. test/host-boundary.mts
-// keeps this list equal to the host namespaces buildApi exposes.
-export type HostApi = Pick<
-  RemoteDeviceApi,
-  | "branches"
-  | "cli"
-  | "forward"
-  | "fs"
-  | "git"
-  | "githubCli"
-  | "globalConfig"
-  | "hygiene"
-  | "launchers"
-  | "mirror"
-  | "packageScripts"
-  | "portPool"
-  | "ports"
-  | "projects"
-  | "runtime"
-  | "scripts"
-  | "sharedSettings"
-  | "shigomori"
-  | "sync"
-  | "terrier"
-  | "updater"
-  | "villagers"
-  | "worktreeData"
-  | "worktrees"
->;
+// The host-scoped api (shared/ipc/client.ts), the one a scope's hooks
+// reach: scope.api.dialog fails to compile rather than rejecting on a
+// remote device.
+export type { HostApi };
 
 // The two halves of a scope a read needs, for the query option
 // factories a caller outside React shares with the hooks.

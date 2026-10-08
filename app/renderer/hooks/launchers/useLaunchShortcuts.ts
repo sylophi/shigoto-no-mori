@@ -26,13 +26,16 @@ export function useLaunchShortcuts(
   useEffect(() => {
     if (!held) return;
     const menuEntries = entries.map((e) => ({ id: e.id, label: e.label }));
-    void window.api.menu.setLaunchToolsEnabled(true, menuEntries);
+    void window.api.menu.setLaunchToolsEnabled({
+      enabled: true,
+      entries: menuEntries,
+    });
   }, [held, entries]);
 
   useEffect(() => {
     if (!held) return;
     return () => {
-      void window.api.menu.setLaunchToolsEnabled(false);
+      void window.api.menu.setLaunchToolsEnabled({ enabled: false });
     };
   }, [held]);
 
