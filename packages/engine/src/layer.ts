@@ -4,6 +4,7 @@
 import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
+import * as Control from "./Control.ts";
 import * as Darwin from "./Darwin.ts";
 import type { Flavor } from "./flavor.ts";
 import * as Git from "./Git.ts";
@@ -21,6 +22,7 @@ import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
 import type * as Store from "./Store.ts";
 import * as Terrier from "./Terrier.ts";
+import * as Transfer from "./Transfer.ts";
 import * as Usage from "./Usage.ts";
 import * as WorktreeData from "./WorktreeData.ts";
 import * as Worktrees from "./Worktrees.ts";
@@ -31,9 +33,10 @@ export const engineLayer = (options: {
   readonly store: ReturnType<typeof Store.layer>;
   readonly macfs: string;
 }) =>
-  Layer.merge(Landing.layer, Projects.layer).pipe(
+  Layer.mergeAll(Landing.layer, Projects.layer, Transfer.layer).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
+    Layer.provideMerge(Control.layer(options.flavor)),
     Layer.provideMerge(
       Layer.mergeAll(
         Launchers.layer,

@@ -20,6 +20,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
+import { errorDocument, isUsage } from "../src/errorDocument.ts";
 import type * as GitHub from "../src/GitHub.ts";
 import * as Landing from "../src/Landing.ts";
 import * as Hygiene from "../src/Hygiene.ts";
@@ -28,8 +29,17 @@ import * as Launchers from "../src/Launchers.ts";
 import * as Registry from "../src/Registry.ts";
 import type { RegisteredProject } from "../src/Registry.ts";
 import * as Scripts from "../src/Scripts.ts";
+import * as Transfer from "../src/Transfer.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import * as Worktrees from "../src/Worktrees.ts";
+import {
+  type FakeApp,
+  fakeApp,
+  type Frame,
+  progress,
+  refusal,
+  success,
+} from "./lib/fakeApp.ts";
 import { type Engine, goSm, type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 // A cold build of cli/ takes longer than a test's timeout.
@@ -2138,5 +2148,358 @@ describe("projects reorder", () => {
       () => reorder(["G", "A"]),
       list,
     ]);
+  });
+});
+
+// --- the cross-device verbs -------------------------------------------------
+
+describe("transfer", () => {
+  let app: FakeApp | undefined;
+  afterEach(async () => {
+    await app?.close();
+    app = undefined;
+  });
+
+  // The app both sides dial, published in the data dir each copies.
+  const serve = async (
+    reply: (request: Frame) => ReadonlyArray<Frame>,
+    busy = false,
+  ) => {
+    app = await fakeApp(reply, { busy });
+    box.write("control.json", app.file());
+    return app;
+  };
+
+  const transfer = Effect.service(Transfer.Transfer);
+
+  // A verb run on each side against the app: the documents printed (the
+  // progress events, then the verb's own), the exit code, and what each
+  // asked the app, compared. The engine's code is the terminal's: 3 for a
+  // caveat, 2 for a usage error, 1 for any other.
+  const sameAsked = async (
+    go: ReadonlyArray<string>,
+    run: (
+      service: Transfer.Transfer["Service"],
+      here: Worktrees.Here,
+      onProgress: Transfer.OnProgress,
+    ) => Effect.Effect<
+      { readonly document: unknown; readonly caveats?: ReadonlyArray<string> },
+      unknown,
+      Engine
+    >,
+    cwd = box.home,
+  ) => {
+    const goRun = await box.runAt(goSm(), "go", cwd, ["--json", ...go]);
+    const goAsked = app?.received() ?? [];
+    const events: unknown[] = [];
+    const onProgress: Transfer.OnProgress = ({ document }) =>
+      Effect.sync(() => {
+        if (document !== undefined) events.push(document);
+      });
+    const last = await box.engine(
+      Effect.gen(function* () {
+        const answered = yield* run(
+          yield* transfer,
+          yield* hereAt(cwd),
+          onProgress,
+        );
+        return {
+          doc: answered.document,
+          code: (answered.caveats?.length ?? 0) > 0 ? 3 : 0,
+        };
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed({
+            doc: { ok: false, ...errorDocument(error) },
+            code: isUsage(error) ? 2 : 1,
+          }),
+        ),
+      ),
+    );
+    const { doc, code } = last as { doc: unknown; code: number };
+    assert.deepStrictEqual(
+      { docs: [...events, doc], code, asked: app?.received() ?? [] },
+      { docs: goRun.docs, code: goRun.code, asked: goAsked },
+    );
+  };
+
+  const moved = {
+    worktree: { id: "w9", name: "fox", branch: "fox", path: "/there/fox" },
+    captured: true,
+    dirtyApplied: false,
+    device: { deviceId: "d1", name: "Studio Mac" },
+    copySide: "remote",
+    files: { crossed: false, conflicts: 0, error: "peer went away" },
+    source: { fate: "shelve", done: false, error: "it changed" },
+  };
+
+  it("sends, brings and mirrors with the options asked, progress and caveats", async () => {
+    const { tree } = seedProject();
+    tree("fox");
+    let result: unknown = moved;
+    await serve((request) => [
+      progress({ step: "capture", worktreeId: "x" }),
+      { t: "res", id: 99, ok: true, result: "someone else's" },
+      progress({ step: "create", createPhase: "checkout" }),
+      { t: "push", channel: "other", payload: { step: "nope" } },
+      progress("not a document"),
+      success(request, result),
+    ]);
+    await sameAsked(
+      [
+        "worktrees",
+        "send",
+        "fox",
+        "--to",
+        "Studio",
+        "--leave-out",
+        "gitignored",
+        "--no-setup",
+        "--source",
+        "shelve",
+      ],
+      (service, here, onProgress) =>
+        service.send(
+          here,
+          { ref: "fox" },
+          {
+            to: "Studio",
+            leaveOut: "gitignored",
+            noSetup: true,
+            source: "shelve",
+          },
+          onProgress,
+        ),
+    );
+    result = { ...moved, captured: false, files: undefined, source: undefined };
+    await sameAsked(
+      [
+        "worktrees",
+        "bring",
+        "owl",
+        "--from",
+        "Studio",
+        "-p",
+        "repo",
+        "--setup",
+      ],
+      (service, here, onProgress) =>
+        service.bring(
+          here,
+          { ref: "owl", project: "repo" },
+          { from: "Studio", setup: true },
+          onProgress,
+        ),
+    );
+    await sameAsked(
+      ["worktrees", "mirror", "owl", "--from", "Studio", "--project-id", "P1"],
+      (service, here, onProgress) =>
+        service.mirror(
+          here,
+          { ref: "owl", projectId: "P1" },
+          { from: "Studio" },
+          onProgress,
+        ),
+    );
+    result = {
+      ...moved,
+      alreadyMirrored: true,
+      cloned: { name: "repo", path: "/s/repo" },
+    };
+    await sameAsked(
+      ["worktrees", "mirror", "fox", "--clone-into", "~/code"],
+      (service, here, onProgress) =>
+        service.mirror(
+          here,
+          { ref: "fox" },
+          { cloneInto: "~/code" },
+          onProgress,
+        ),
+    );
+  });
+
+  it("refuses what the command line got wrong, asking nothing", async () => {
+    const { tree } = seedProject();
+    tree("fox");
+    await serve(() => []);
+    const cases: ReadonlyArray<
+      [ReadonlyArray<string>, string, Worktrees.Target, Transfer.TransferFlags]
+    > = [
+      [["send", "nope", "--to", ""], "send", { ref: "nope" }, { to: "" }],
+      [
+        ["send", "fox", "--from", "Studio"],
+        "send",
+        { ref: "fox" },
+        { from: "Studio" },
+      ],
+      [
+        ["bring", "owl", "--to", "Studio"],
+        "bring",
+        { ref: "owl" },
+        { to: "Studio" },
+      ],
+      [
+        ["bring", "--from", "Studio", "-p", "repo"],
+        "bring",
+        { project: "repo" },
+        { from: "Studio" },
+      ],
+      [
+        ["bring", "owl", "-p", "repo", "--clone-into", "x"],
+        "bring",
+        { ref: "owl", project: "repo" },
+        { cloneInto: "x" },
+      ],
+      [
+        ["mirror", "fox", "--to", "A", "--from", "B"],
+        "mirror",
+        { ref: "fox" },
+        { to: "A", from: "B" },
+      ],
+      [
+        ["mirror", "fox", "--source", "keep"],
+        "mirror",
+        { ref: "fox" },
+        { source: "keep" },
+      ],
+      [
+        ["send", "fox", "--leave-out", "preset"],
+        "send",
+        { ref: "fox" },
+        { leaveOut: "preset" },
+      ],
+      [
+        ["send", "nope", "--to", "Studio"],
+        "send",
+        { ref: "nope" },
+        { to: "Studio" },
+      ],
+    ];
+    for (const [args, verb, target, flags] of cases) {
+      // oxlint-disable-next-line no-await-in-loop -- one case at a time
+      await sameAsked(["worktrees", ...args], (service, here) =>
+        verb === "send"
+          ? service.send(here, target, flags, () => Effect.void)
+          : verb === "bring"
+            ? service.bring(here, target, flags, () => Effect.void)
+            : service.mirror(here, target, flags, () => Effect.void),
+      );
+    }
+  });
+
+  it("stops a mirror, says what to do when it isn't in step, and lists the mirrors", async () => {
+    const { tree } = seedProject();
+    const fox = tree("fox");
+    const mirror = {
+      session: "sync_1",
+      device: { deviceId: "d1", name: "Studio Mac" },
+      localRoot: fox,
+      remoteRoot: "/s/fox",
+      copySide: "remote",
+      paused: true,
+      status: "watching",
+      conflicts: 2,
+    };
+    let reply = (request: Frame): Frame =>
+      success(request, { mirror, copyStayed: "the copy is busy" });
+    await serve((request) => [reply(request)]);
+    const unmirror = (force: boolean) =>
+      sameAsked(
+        ["worktrees", "unmirror", "fox", ...(force ? ["-f"] : [])],
+        (service, here) => service.unmirror(here, { ref: "fox" }, { force }),
+      );
+    await unmirror(true);
+    reply = (request) => success(request, { mirror });
+    await unmirror(false);
+    reply = (request) =>
+      refusal(request, "The mirror isn't in step.", "stop-unconfirmed");
+    await unmirror(false);
+    reply = (request) =>
+      success(request, { daemon: "running", mirrors: [mirror] });
+    await sameAsked(["worktrees", "mirrors"], (service) => service.mirrors);
+  });
+
+  it("lists the devices, scoped by the cwd or a project, and a peer's worktrees", async () => {
+    const { repo } = seedProject();
+    await serve((request) => [
+      success(
+        request,
+        request["channel"] === "control:devices"
+          ? {
+              thisDevice: { deviceId: "d0", name: "Laptop" },
+              devices: [
+                {
+                  deviceId: "d1",
+                  name: "Studio",
+                  platform: "darwin",
+                  block: "no-grant",
+                },
+              ],
+            }
+          : {
+              worktrees: [
+                {
+                  device: { deviceId: "d1", name: "Studio", extra: 1 },
+                  projectId: "Q1",
+                  worktree: {
+                    id: "w1",
+                    name: "owl",
+                    branch: "owl",
+                    path: "/s/owl",
+                  },
+                },
+                { device: { name: "Laptop 2" }, projectId: "Q2" },
+              ],
+              unreachable: ["Mini"],
+            },
+      ),
+    ]);
+    await sameAsked(["devices"], (service, here) => service.devices(here, {}));
+    await sameAsked(
+      ["devices"],
+      (service, here) => service.devices(here, {}),
+      repo,
+    );
+    await sameAsked(["devices", "-p", "repo"], (service, here) =>
+      service.devices(here, { project: "repo" }),
+    );
+    await sameAsked(
+      ["worktrees", "list", "--remote", "-p", "repo", "--from", "Studio"],
+      (service, here) =>
+        service.peerWorktrees(here, { project: "repo", from: "Studio" }),
+    );
+    await sameAsked(
+      ["worktrees", "list", "--remote"],
+      (service, here) => service.peerWorktrees(here, {}),
+      repo,
+    );
+  });
+
+  it("carries the app's refusal, and says when it's busy or not there", async () => {
+    seedProject();
+    await serve((request) => [
+      refusal(request, "Several devices could take part.", "ambiguous-device"),
+    ]);
+    await sameAsked(
+      ["worktrees", "bring", "owl", "-p", "repo"],
+      (service, here) =>
+        service.bring(
+          here,
+          { ref: "owl", project: "repo" },
+          {},
+          () => Effect.void,
+        ),
+    );
+    await app?.close();
+    await sameAsked(["worktrees", "mirrors"], (service) => service.mirrors);
+  });
+
+  it("says the app isn't running when it published nothing", async () => {
+    await sameAsked(["worktrees", "mirrors"], (service) => service.mirrors);
+  });
+
+  it("tells a busy app from an absent one", async () => {
+    await serve(() => [], true);
+    await sameAsked(["devices"], (service, here) => service.devices(here, {}));
   });
 });

@@ -4,9 +4,11 @@
 // after its merge) carries it.
 import * as Predicate from "effect/Predicate";
 import { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
+import { AppBusy, AppNotRunning, ControlRefused } from "./Control.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
 import { UnknownProject } from "./Registry.ts";
+import { StopUnconfirmed } from "./Transfer.ts";
 import {
   DirtyWorktree,
   PullRequestOwnsDescription,
@@ -41,6 +43,11 @@ export const codeOf = (error: unknown): string | undefined => {
   if (error instanceof UnknownProject) return "unknown-project";
   if (error instanceof UnknownWorktree) return "unknown-worktree";
   if (error instanceof PullRequestOwnsDescription) return "pull-request-open";
+  if (error instanceof AppNotRunning) return "app-not-running";
+  if (error instanceof AppBusy) return "app-busy";
+  // The app's own code, passed through.
+  if (error instanceof ControlRefused) return error.code;
+  if (error instanceof StopUnconfirmed) return "stop-unconfirmed";
   // A tag, not the class: Landing imports this module.
   if (
     Predicate.isTagged(error, "LandingRefused") &&
