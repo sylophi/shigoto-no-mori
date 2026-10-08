@@ -23,7 +23,7 @@ Shigoto no Mori is a lightweight desktop app, with a matching website, for manag
 - Show enough git context per worktree (branch, ahead/behind, diff summary, status) to act without leaving the app.
 - Make the machine a worktree lives on stop mattering: see every project and worktree on every device, reach remote work through port forwarding, continuous syncing, or a one-time transfer (see below), change any device's settings from anywhere.
 
-It deliberately does not own the terminal, the editor, the agent, or the dev server. Those tools already exist and are good. The app's job is the worktree, the launcher, and the at-a-glance status, wherever the worktree lives.
+It owns the shell for the work done in it, in a worktree or anywhere else, since more of the way from a branch to a landed change now happens inside it. It deliberately does not own the editor, the agent, or the dev server. Those tools already exist and are good. An agent runs in the app's terminal, and the app still does not own it. The app's job is the worktree, the shell, the launcher, and the at-a-glance status, wherever the worktree lives.
 
 The product succeeds when a developer can run 3 to 10 parallel worktrees, spread across their machines, with agents or experiments and feel calm, not chaotic. For the multi-device half, the bar is not "remote access works". The bar is that you stop noticing which machine a worktree lives on.
 
@@ -74,7 +74,7 @@ t3 code is the comparison product for the multi-device half: a real account, a r
 
 1. **Worktree is the primary noun.** No abstraction layer (task, session, feature) between the user and the thing on disk. The list you see is the worktrees you have.
 
-2. **Lean in, don't lock in.** The app makes parallel work easy by letting the user configure what to launch inside each worktree. It does not own the editor, the shell, the agent, or the dev server.
+2. **Lean in, don't lock in.** The app makes parallel work easy by letting the user configure what to launch inside each worktree, and by giving that work a shell of its own. It owns the terminal, not what runs in it: the editor, the agent, and the dev server stay outside it.
 
 3. **Calm parallelism.** Running 10 worktrees should feel like 10 quiet things, not 10 noisy things. Visual hierarchy, color, and motion all serve this, even at the playful end of the AC spectrum.
 
