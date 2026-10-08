@@ -31,7 +31,6 @@ import {
   mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
 import { errorMessageOf, isEntityGoneError } from "@shigomori/contracts/errors";
-import type { ContractModule } from "@shigomori/contracts/contract";
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import { portForwardContract } from "@shigomori/contracts/modules/portForward";
 import { portPoolContract } from "@shigomori/contracts/modules/portPool";
@@ -104,7 +103,8 @@ import { scriptsHandlers } from "@host/ipc/modules/scripts";
 import { sharedSettingsHandlers } from "@host/ipc/modules/sharedSettings";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
-import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
+import { controlHandlers } from "@host/ipc/modules/control";
+import { setControlImpl } from "@host/lib/control/peers";
 import { releasesHandlers } from "./modules/releases";
 import { shellHandlers } from "./modules/shell";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
@@ -119,9 +119,13 @@ import {
   setWorktreeRemovalBroadcaster,
   worktreesHandlers,
 } from "@host/ipc/modules/worktrees";
-import { buildClient } from "@shared/ipc/buildClient";
 import type { ClientTransport } from "@shared/ipc/transport";
-import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import {
+  peerClient,
+  peerMirrorApiFor,
+  peerSyncApiFor,
+  setPeerReach,
+} from "@host/ipc/peerSync";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
 import { createPortForwardEngine } from "../core/portForward/engine";
 import * as MirrorDaemon from "../core/mirror/daemon";
@@ -188,26 +192,13 @@ const peerTransportFor = (deviceId: string): ClientTransport => ({
 // engine. Started and stopped by the host's layer graph
 // (main/hostLayer.ts). A boot without the engine binary (a dev run
 // before file-sync:build) reports "unavailable" and keeps retrying.
-// A peer's surface for one contract, on the cached direct session
-// (peerTransportFor): built per call, never held.
-const peerClient =
-  <M extends ContractModule>(contract: M) =>
-  (deviceId: string) =>
-    buildClient(contract, peerTransportFor(deviceId));
-// A peer's sync surface plus the byte channels of the same session,
-// which the source links of a move or a mirror's git follower ride
-// (host/lib/sync/sourceLink.ts).
-const peerSyncClient = (deviceId: string) => ({
-  ...buildClient(syncContract, peerTransportFor(deviceId)),
-  channels: () => hubHandlers.peerChannels(deviceId),
-});
-// A peer's mirror surface: the gateway's stream open, the follower's
-// git half and the start asked from the copy's side all ride it.
-const peerMirrorClient = peerClient(mirrorContract);
+// The byte channels of a peer's cached direct session.
+const peerChannelsFor = (deviceId: string) => () =>
+  hubHandlers.peerChannels(deviceId);
 
 const mirrorGateway = createMirrorGateway({
-  peerApiFor: peerMirrorClient,
-  peerChannelsFor: (deviceId) => () => hubHandlers.peerChannels(deviceId),
+  peerApiFor: (deviceId) => peerClient(mirrorContract, deviceId),
+  peerChannelsFor,
 });
 // The daemon snapshots on every cycle of every session and the
 // follower reports every verdict. The renderer's ping is coalesced so
@@ -360,8 +351,8 @@ function teardownStep(what: string, run: () => unknown): Promise<void> {
 // (onPeerPush) and the daemon's snapshots (above).
 const gitFollower = createGitFollower({
   sessions: liveMirrorSessions,
-  peerSyncApiFor: peerSyncClient,
-  peerMirrorApiFor: peerMirrorClient,
+  peerSyncApiFor,
+  peerMirrorApiFor,
   followDescription,
   // The states both sides last agreed on, beside the engine's own
   // data so a restart resumes the follow rule rather than falling
@@ -530,13 +521,11 @@ export function registerIpcHandlers(): void {
   // every dep and folds directPeerVersions back into the status
   // snapshot.
   registerContract(hubContract, hubHandlers);
-  // The sync orchestrations' peer reach (host/ipc/peerSync.ts), riding
+  // Every peer reach of the host (host/ipc/peerSync.ts), riding
   // peerTransportFor above.
-  setPeerSyncApiImpl({
-    syncApiFor: peerSyncClient,
-    worktreesApiFor: peerClient(worktreesContract),
-    mirrorApiFor: peerMirrorClient,
-    worktreeDataApiFor: peerClient(worktreeDataContract),
+  setPeerReach({
+    transportFor: peerTransportFor,
+    channelsFor: peerChannelsFor,
     thisDeviceId: getDeviceId,
   });
   // The mirrors this device asked peers for (host/mirror/invites.ts),
@@ -567,9 +556,8 @@ export function registerIpcHandlers(): void {
   // peer sessions and to the renderer's changed signal.
   setPortForwardEngine(
     createPortForwardEngine({
-      forwardApiFor: peerClient(forwardContract),
-      // The byte channels of the same cached direct session.
-      channelsFor: (deviceId) => () => hubHandlers.peerChannels(deviceId),
+      forwardApiFor: (deviceId) => peerClient(forwardContract, deviceId),
+      channelsFor: peerChannelsFor,
       onChange: () => {
         broadcastAll(portForwardContract, "changed", undefined);
       },
@@ -714,15 +702,14 @@ export function registerIpcHandlers(): void {
   registerContract(cliContract, cliHandlers);
   // The CLI's cross-device verbs, on the control wire alone
   // (packages/contracts/src/modules/control.ts). The device registry rides the
-  // stored credential and the peer reach is peerTransportFor above,
-  // the one cached session per peer everything else rides.
+  // stored credential, and the peers are reached through the seam
+  // above.
   setControlImpl({
     listDevices: async () => [
       ...(await accountHandlers.listDevices(undefined, undefined)),
     ],
     directPeers: async () =>
       (await hubHandlers.status(undefined, undefined)).peerAcceptsCommands,
-    peerTransportFor,
   });
   registerControlContract(controlContract, controlHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);

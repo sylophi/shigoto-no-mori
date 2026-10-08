@@ -97,7 +97,7 @@ import {
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
-import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import { setPeerReach } from "@host/ipc/peerSync";
 import {
   COPY_GONE_DETAIL,
   createNoAccountSweep,
@@ -1339,29 +1339,26 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     // The peer's list never answers, which the copy-gone probe reads
     // as no answer (the copy may well be there), so no refusal is
     // waved through as a copy already gone.
-    setPeerSyncApiImpl({
-      syncApiFor: () => {
-        throw new Error("not in this check");
-      },
-      worktreesApiFor: () => ({
-        list: () => Promise.reject(new Error("not in this check")),
-        delete: async ({ worktreeId }) => {
-          deleted.push(worktreeId);
-          return { ok: true as const };
+    setPeerReach({
+      // The peer's own serving side, as far as this check asks it: the
+      // copy's delete and its release. Everything else refuses.
+      transportFor: () => ({
+        local: true,
+        invoke: async (channel, input) => {
+          const { worktreeId } = input as { worktreeId: string };
+          if (channel === "worktrees:delete") {
+            deleted.push(worktreeId);
+            return { ok: true };
+          }
+          if (channel === "mirror:release") {
+            released.push(worktreeId);
+            return undefined;
+          }
+          throw new Error("not in this check");
         },
-        setShelved: () => Promise.reject(new Error("not in this check")),
+        subscribe: () => () => {},
       }),
-      mirrorApiFor: () => ({
-        gitState: () => Promise.reject(new Error("not in this check")),
-        applyGitState: () => Promise.reject(new Error("not in this check")),
-        startTo: () => Promise.reject(new Error("not in this check")),
-        release: async ({ worktreeId }) => {
-          released.push(worktreeId);
-        },
-      }),
-      worktreeDataApiFor: () => {
-        throw new Error("not in this check");
-      },
+      channelsFor: () => () => Promise.reject(new Error("not in this check")),
       thisDeviceId: () => "B",
     });
 

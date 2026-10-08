@@ -98,7 +98,8 @@ import {
 import { loose } from "@shigomori/contracts/schemas/loose";
 import { strict } from "@shigomori/contracts/schemas/strict";
 import { only } from "@shared/util/only";
-import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
+import { controlHandlers } from "@host/ipc/modules/control";
+import { setControlImpl } from "@host/lib/control/peers";
 import {
   mirrorHandlers,
   setMirrorImpl,
@@ -116,7 +117,7 @@ import {
   setWorktreeRemovalBroadcaster,
   worktreesHandlers,
 } from "@host/ipc/modules/worktrees";
-import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import { setPeerReach } from "@host/ipc/peerSync";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { listMirrorInvites } from "@host/mirror/invites";
 import {
@@ -484,19 +485,6 @@ it("control.json is owner-only, a bad or missing hello is refused, only the cont
       ],
     ],
   }));
-  setPeerSyncApiImpl({
-    // The sync surface and the session's byte channels, which a
-    // move's source link rides.
-    syncApiFor: () => ({
-      ...buildClient(syncContract, peerA.transport),
-      channels: peerA.channels,
-    }),
-    worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
-    mirrorApiFor: () => buildClient(mirrorContract, peerA.transport),
-    worktreeDataApiFor: () =>
-      buildClient(worktreeDataContract, peerA.transport),
-    thisDeviceId: () => "B",
-  });
   // The account as the hub would list it: this device, the peer, a
   // machine that is signed in but away, and a browser.
   connected = ["A"];
@@ -530,7 +518,13 @@ it("control.json is owner-only, a bad or missing hello is refused, only the cont
       Object.fromEntries(
         connected.map((id) => [id, listener.acceptsCommands()]),
       ),
-    peerTransportFor: () => peerTransport,
+  });
+  // Every reach into the peer: its contracts, and the session's byte
+  // channels, which a move's source link rides.
+  setPeerReach({
+    transportFor: () => peerTransport,
+    channelsFor: () => peerA.channels,
+    thisDeviceId: () => "B",
   });
   // The delete's removal, as main fans it out to every window and
   // peer. Each record notes which sessions had ended by then: the
