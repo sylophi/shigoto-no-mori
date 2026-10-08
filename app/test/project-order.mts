@@ -83,7 +83,11 @@ const owned = (p: Project, remoteUrl: string | null): Project => ({
   remote: remoteUrl,
 });
 
-const noShelves = () => ({ shelved: new Set(), hidden: new Set() });
+const noShelves = () => ({
+  agentWorking: new Set(),
+  shelved: new Set(),
+  hidden: new Set(),
+});
 
 // The rows the tree draws, the way Sidebar calls the builder: this
 // machine's projects pre-sorted, the order over every device, the rows
@@ -126,6 +130,7 @@ function treeRows({
     order: projectGroupOrder({ projects: ordered, remote: peers, sortMode }),
     openShelves: noShelves(),
     hiddenPrefixes: [],
+    allowAgentWorking: false,
     byPrefix: null,
     arrangeMode: false,
     byOwner: shut ? { shut } : null,

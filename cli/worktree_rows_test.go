@@ -215,7 +215,7 @@ func TestAutoPullVerb(t *testing.T) {
 	set := func(mode string) worktreeJSON {
 		t.Helper()
 		docs := captureJSON(t, func() {
-			if code, err := cmdAutoPull(ctx, []string{mode, "--project-id", proj.ID, "--worktree-id", wt.ID}); code != 0 || err != nil {
+			if code, err := cmdRegistryMark(ctx, []string{mode, "--project-id", proj.ID, "--worktree-id", wt.ID}, autoPullMark); code != 0 || err != nil {
 				t.Fatalf("autopull %s: %d, %v", mode, code, err)
 			}
 		})
@@ -238,7 +238,7 @@ func TestAutoPullVerb(t *testing.T) {
 	// The primary takes the mark too, by name from its checkout.
 	primaryCtx := resolveContext(proj.Path, []project{proj})
 	captureJSON(t, func() {
-		if code, err := cmdAutoPull(primaryCtx, []string{"on", "root"}); code != 0 || err != nil {
+		if code, err := cmdRegistryMark(primaryCtx, []string{"on", "root"}, autoPullMark); code != 0 || err != nil {
 			t.Fatalf("autopull on root: %d, %v", code, err)
 		}
 	})
@@ -246,7 +246,7 @@ func TestAutoPullVerb(t *testing.T) {
 		t.Fatal("autopull on root didn't mark the primary")
 	}
 
-	if code, _ := cmdAutoPull(ctx, []string{"on", "a", "b"}); code != 2 {
+	if code, _ := cmdRegistryMark(ctx, []string{"on", "a", "b"}, autoPullMark); code != 2 {
 		t.Errorf("two refs = exit %d, want 2", code)
 	}
 }

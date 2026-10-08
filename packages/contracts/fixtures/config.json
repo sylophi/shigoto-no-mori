@@ -695,6 +695,7 @@
         "villageLife": true,
         "markTerrierProjects": true,
         "showDeviceBadges": false,
+        "allowAgentWorking": true,
         "pauseAnimationsOnBattery": false,
         "keepReachable": false,
         "forwardLocalPorts": {
@@ -804,6 +805,7 @@
         "villageLife": true,
         "markTerrierProjects": true,
         "showDeviceBadges": false,
+        "allowAgentWorking": true,
         "pauseAnimationsOnBattery": false,
         "keepReachable": false,
         "forwardLocalPorts": {
@@ -843,6 +845,7 @@
           "villageLife": true,
           "markTerrierProjects": true,
           "showDeviceBadges": false,
+          "allowAgentWorking": true,
           "pauseAnimationsOnBattery": false,
           "keepReachable": false,
           "forwardLocalPorts": {

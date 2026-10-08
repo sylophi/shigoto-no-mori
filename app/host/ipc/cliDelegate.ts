@@ -858,27 +858,37 @@ export async function projectsRelocateViaCli(
 
 // ---- Worktree marks and moves ----
 
-// The auto-pull mark (`sm worktrees autopull`), answered with the
-// worktree's refreshed row. The pull itself stays with the app's fetch
-// sweep (host/lib/worktrees/autoPullSweep.ts).
-export async function setAutoPullViaCli(
+// A worktree's on/off mark (`sm worktrees autopull|agent-working`),
+// answered with the worktree's refreshed row.
+async function setMarkViaCli(
+  verb: "autopull" | "agent-working",
   project: Project,
   worktreeId: string,
-  autoPull: boolean,
+  on: boolean,
 ): Promise<Worktree> {
   const result = await runner().runCli(
-    worktreeArgv(
-      ["worktrees", "autopull", autoPull ? "on" : "off"],
-      project,
-      worktreeId,
-    ),
+    worktreeArgv(["worktrees", verb, on ? "on" : "off"], project, worktreeId),
   );
-  const final = finalOkDoc(result, "sm worktrees autopull failed", {
+  const final = finalOkDoc(result, `sm worktrees ${verb} failed`, {
     projectId: project.id,
     worktreeId,
   });
   return decodeWorktree(final["worktree"]);
 }
+
+// The auto-pull mark. The pull itself stays with the app's fetch sweep
+// (host/lib/worktrees/autoPullSweep.ts).
+export const setAutoPullViaCli = (
+  project: Project,
+  worktreeId: string,
+  autoPull: boolean,
+) => setMarkViaCli("autopull", project, worktreeId, autoPull);
+
+export const setAgentWorkingViaCli = (
+  project: Project,
+  worktreeId: string,
+  agentWorking: boolean,
+) => setMarkViaCli("agent-working", project, worktreeId, agentWorking);
 
 // `git worktree move` plus the re-key of everything stored under the
 // worktree's path-derived id (marks, its data file, a pending dirty capture).

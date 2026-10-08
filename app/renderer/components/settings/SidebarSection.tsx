@@ -52,6 +52,12 @@ export function SidebarSection({
             : "Turn on Automatically use terrier in this device's settings to list terrier's projects, then mark them here."
         }
       />
+      <ToggleRow
+        checked={form.allowAgentWorking}
+        onCheckedChange={setField("allowAgentWorking")}
+        label="Allow agents to mark worktrees as working"
+        description="A worktree an agent is working in waits on its own folded shelf until the agent hands it back."
+      />
     </section>
   );
 }

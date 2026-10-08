@@ -57,6 +57,7 @@ export function ProjectGrid() {
     ...sources.local,
     order: sources.order,
     hiddenPrefixes: sources.hiddenPrefixes,
+    allowAgentWorking: sources.allowAgentWorking,
     byOwner: sources.groupByOwner,
     remote: sources.shownRemote,
     mirrors: sources.mirrors,

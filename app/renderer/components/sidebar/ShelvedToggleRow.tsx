@@ -1,4 +1,4 @@
-import type { GroupShelf } from "./sidebarRow";
+import { SHELF_LABELS, type GroupShelf } from "./sidebarRow";
 
 interface ShelvedToggleRowProps {
   shelf: GroupShelf;
@@ -13,6 +13,7 @@ export function ShelvedToggleRow({
   expanded,
   onToggle,
 }: ShelvedToggleRowProps) {
+  const label = SHELF_LABELS[shelf].toLowerCase();
   return (
     <button
       type="button"
@@ -20,7 +21,7 @@ export function ShelvedToggleRow({
       aria-expanded={expanded}
       className="w-full px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
     >
-      {expanded ? `Hide ${shelf}` : `${count} ${shelf}`}
+      {expanded ? `Hide ${label}` : `${count} ${label}`}
     </button>
   );
 }

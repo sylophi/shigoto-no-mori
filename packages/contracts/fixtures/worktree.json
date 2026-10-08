@@ -365,6 +365,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": false,
+          "agentWorking": false,
           "title": "Remote UI flows",
           "description": "Drive the forest's worktrees from another device."
         }
@@ -402,7 +403,8 @@
             "isExternal": true,
             "detached": false,
             "shelved": false,
-            "autoPull": true
+            "autoPull": true,
+            "agentWorking": false
           },
           "carryOver": null
         },
@@ -436,7 +438,8 @@
             "isExternal": true,
             "detached": false,
             "shelved": false,
-            "autoPull": true
+            "autoPull": true,
+            "agentWorking": false
           }
         }
       }
@@ -806,6 +809,26 @@
       }
     ]
   },
+  "SetAgentWorkingPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "agentWorking": true
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "agentWorking": "on"
+      }
+    ]
+  },
   "SetAutoPullPayloadSchema": {
     "accepts": [
       {
@@ -932,6 +955,7 @@
         "detached": false,
         "shelved": false,
         "autoPull": false,
+        "agentWorking": false,
         "primaryRef": "origin/main",
         "primaryBranch": "main"
       },
@@ -945,7 +969,8 @@
         "isExternal": true,
         "detached": false,
         "shelved": false,
-        "autoPull": true
+        "autoPull": true,
+        "agentWorking": false
       }
     ],
     "normalizes": [
@@ -979,7 +1004,8 @@
           "isExternal": true,
           "detached": false,
           "shelved": false,
-          "autoPull": true
+          "autoPull": true,
+          "agentWorking": false
         },
         "output": {
           "id": "cbc5ccb43624",
@@ -991,7 +1017,8 @@
           "isExternal": true,
           "detached": false,
           "shelved": false,
-          "autoPull": true
+          "autoPull": true,
+          "agentWorking": false
         }
       }
     ],
@@ -1006,7 +1033,8 @@
         "isExternal": true,
         "detached": false,
         "shelved": false,
-        "autoPull": true
+        "autoPull": true,
+        "agentWorking": false
       },
       {
         "id": "cbc5ccb43624",
@@ -1017,7 +1045,8 @@
         "isExternal": true,
         "detached": false,
         "shelved": false,
-        "autoPull": true
+        "autoPull": true,
+        "agentWorking": false
       }
     ]
   },
@@ -1160,6 +1189,7 @@
         "detached": false,
         "shelved": false,
         "autoPull": false,
+        "agentWorking": false,
         "title": "Remote UI flows",
         "description": "Drive the forest's worktrees from another device."
       },
@@ -1192,7 +1222,8 @@
         "isExternal": true,
         "detached": false,
         "shelved": false,
-        "autoPull": true
+        "autoPull": true,
+        "agentWorking": false
       },
       {
         "id": "5780f2399520",
@@ -1215,7 +1246,8 @@
         "isExternal": false,
         "detached": true,
         "shelved": true,
-        "autoPull": false
+        "autoPull": false,
+        "agentWorking": true
       }
     ],
     "normalizes": [
@@ -1250,6 +1282,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": true,
+          "agentWorking": false,
           "pullRequest": 148
         },
         "output": {
@@ -1281,7 +1314,8 @@
           "isExternal": true,
           "detached": false,
           "shelved": false,
-          "autoPull": true
+          "autoPull": true,
+          "agentWorking": false
         }
       }
     ],
@@ -1315,7 +1349,8 @@
         "isExternal": true,
         "detached": false,
         "shelved": false,
-        "autoPull": true
+        "autoPull": true,
+        "agentWorking": true
       },
       {
         "id": "cbc5ccb43624",
@@ -1346,7 +1381,8 @@
         "isExternal": true,
         "detached": false,
         "shelved": false,
-        "autoPull": true
+        "autoPull": true,
+        "agentWorking": false
       },
       {
         "id": "cbc5ccb43624",
@@ -1377,7 +1413,8 @@
         "isExternal": true,
         "detached": false,
         "shelved": false,
-        "autoPull": true
+        "autoPull": true,
+        "agentWorking": false
       },
       {
         "id": "cbc5ccb43624",
@@ -1408,7 +1445,8 @@
         "isExternal": true,
         "detached": false,
         "shelved": false,
-        "autoPull": true
+        "autoPull": true,
+        "agentWorking": true
       },
       {
         "id": "cbc5ccb43624",

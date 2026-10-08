@@ -45,6 +45,7 @@ type worktreeJSON struct {
 	Detached          bool            `json:"detached"`
 	Shelved           bool            `json:"shelved"`
 	AutoPull          bool            `json:"autoPull"`
+	AgentWorking      bool            `json:"agentWorking"`
 	// What `describe` set: the work's name and summary until a pull
 	// request takes them over.
 	Title       string `json:"title,omitempty"`
@@ -62,6 +63,7 @@ type buildContext struct {
 	primaryBranch string
 	shelved       map[string]bool
 	autoPull      map[string]bool
+	agentWorking  map[string]bool
 	// The shelf snapshots (shelf.go), read with the marks and only when
 	// anything is shelved: nothing shelved, nothing to compare against.
 	shelfSnapshots map[string]shelfSnapshot
@@ -113,6 +115,7 @@ func newBuildContext(proj project, remotes []string, primaryRef string, config *
 		primaryBranch: primaryBranchOf(primaryRef, remotes),
 		shelved:       marks[shelvedKey],
 		autoPull:      marks[autoPullKey],
+		agentWorking:  marks[agentWorkingKey],
 		chain:         &primaryChain{path: proj.Path, ref: primaryRef},
 		config:        config,
 	}
@@ -132,11 +135,20 @@ func primaryBranchOf(primaryRef string, remotes []string) string {
 	return primaryRef
 }
 
-// Only worktrees the app manages carry a shelved mark: the primary
-// checkout and externals never do, and the two readers of the registry
-// set must agree on that or a card and a row disagree.
+// Only worktrees the app manages go on a shelf (shelved or agent
+// working): the primary checkout and externals never do, and the two
+// readers of the registry set must agree on that or a card and a row
+// disagree.
+func shelfable(id worktreeIdentity) bool {
+	return !id.IsPrimary && !id.IsExternal
+}
+
 func shelvedFlag(id worktreeIdentity, ctx buildContext) bool {
-	return !id.IsPrimary && !id.IsExternal && ctx.shelved[id.ID]
+	return shelfable(id) && ctx.shelved[id.ID]
+}
+
+func agentWorkingFlag(id worktreeIdentity, ctx buildContext) bool {
+	return shelfable(id) && ctx.agentWorking[id.ID]
 }
 
 // The identity fields of a full status object, for reusing helpers
@@ -202,10 +214,11 @@ func probeWorktree(proj project, id worktreeIdentity, ctx buildContext) (worktre
 		Shelved:           shelvedFlag(id, ctx),
 		// Unlike the shelf, any checkout can follow its upstream: the
 		// primary is the mark's main customer.
-		AutoPull:    ctx.autoPull[id.ID],
-		Title:       desc.Title,
-		Description: desc.Description,
-		ProjectName: proj.Name,
+		AutoPull:     ctx.autoPull[id.ID],
+		AgentWorking: agentWorkingFlag(id, ctx),
+		Title:        desc.Title,
+		Description:  desc.Description,
+		ProjectName:  proj.Name,
 	}, probe
 }
 

@@ -60,6 +60,7 @@ export const GRANTS = {
       "worktrees:renameBranch",
       "worktrees:resetSoft",
       "worktrees:restoreDiscard",
+      "worktrees:setAgentWorking",
       "worktrees:setAutoPull",
       "worktrees:setShelved",
       "worktrees:setStaged",

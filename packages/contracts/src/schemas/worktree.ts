@@ -128,6 +128,11 @@ export const WorktreeSchema = Schema.Struct({
   // Meant for the primary checkout and other branches only ever read
   // here.
   autoPull: Schema.Boolean,
+  // Agent-driven "come back later" flag (`sm agent-working`): an agent
+  // is working here, so once agents are allowed to (isAgentWorking) the
+  // sidebar files it on its own shelf until the agent clears it and
+  // hands the work back. Absent (an older build's row) = off.
+  agentWorking: Schema.optional(Schema.Boolean),
   // What `sm describe` set (WorktreeDescriptionSchema): the work's
   // name and summary, until a pull request's take their place
   // (renderer/lib/worktreeTitle.ts). Absent when unset.
@@ -155,6 +160,7 @@ export const WorktreeIdentitySchema = Schema.Struct({
   detached: WorktreeSchema.fields.detached,
   shelved: WorktreeSchema.fields.shelved,
   autoPull: WorktreeSchema.fields.autoPull,
+  agentWorking: WorktreeSchema.fields.agentWorking,
   primaryRef: WorktreeSchema.fields.primaryRef,
   primaryBranch: WorktreeSchema.fields.primaryBranch,
 });
@@ -259,6 +265,16 @@ export function isManagedWorktree(
   worktree: Pick<Worktree, "isPrimary" | "isExternal">,
 ): boolean {
   return !worktree.isPrimary && !worktree.isExternal;
+}
+
+// Whether the agent-working mark counts: only once the window allows
+// agents to mark worktrees as working (useAllowAgentWorking). Otherwise
+// the mark is ignored everywhere.
+export function isAgentWorking(
+  worktree: Pick<Worktree, "agentWorking">,
+  allowAgentWorking: boolean,
+): boolean {
+  return allowAgentWorking && worktree.agentWorking === true;
 }
 
 // Whether the worktree has a data file (title, custom ports) of its own.
@@ -417,6 +433,11 @@ export const SetShelvedPayloadSchema = Schema.Struct({
 export const SetAutoPullPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   autoPull: Schema.Boolean,
+});
+
+export const SetAgentWorkingPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  agentWorking: Schema.Boolean,
 });
 
 export const CheckoutBranchPayloadSchema = Schema.Struct({

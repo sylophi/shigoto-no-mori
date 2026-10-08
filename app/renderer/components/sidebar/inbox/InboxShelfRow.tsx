@@ -1,11 +1,18 @@
-import { Archive, EyeOff, GitMerge, type LucideIcon } from "lucide-react";
+import {
+  Archive,
+  EyeOff,
+  GitMerge,
+  Hammer,
+  type LucideIcon,
+} from "lucide-react";
 import { FoldHeader } from "../FoldHeader";
-import type { InboxShelf } from "../sidebarRow";
+import { SHELF_LABELS, type InboxShelf } from "../sidebarRow";
 
-const SHELVES: Record<InboxShelf, { label: string; Icon: LucideIcon }> = {
-  shelved: { label: "Shelved", Icon: Archive },
-  merged: { label: "Merged", Icon: GitMerge },
-  hidden: { label: "Hidden", Icon: EyeOff },
+const ICONS: Record<InboxShelf, LucideIcon> = {
+  agentWorking: Hammer,
+  shelved: Archive,
+  merged: GitMerge,
+  hidden: EyeOff,
 };
 
 interface InboxShelfRowProps {
@@ -24,14 +31,13 @@ export function InboxShelfRow({
   expanded,
   onToggle,
 }: InboxShelfRowProps) {
-  const { label, Icon } = SHELVES[shelf];
   return (
     <FoldHeader
-      label={label}
+      label={SHELF_LABELS[shelf]}
       count={count}
       expanded={expanded}
       onToggle={onToggle}
-      Icon={Icon}
+      Icon={ICONS[shelf]}
     />
   );
 }

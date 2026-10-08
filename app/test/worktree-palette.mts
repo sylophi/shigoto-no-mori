@@ -145,6 +145,7 @@ function palette(
     mirrors,
     deviceBadges: new Map(),
     hiddenPrefixes,
+    allowAgentWorking: false,
     visits,
   });
 }

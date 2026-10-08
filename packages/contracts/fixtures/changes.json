@@ -417,6 +417,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": false,
+          "agentWorking": false,
           "title": "Remote UI flows"
         }
       }
@@ -466,6 +467,7 @@
             "detached": false,
             "shelved": false,
             "autoPull": false,
+            "agentWorking": false,
             "title": "Remote UI flows"
           },
           "undone": 1
@@ -513,6 +515,7 @@
             "detached": false,
             "shelved": false,
             "autoPull": false,
+            "agentWorking": false,
             "title": "Remote UI flows"
           }
         }
@@ -562,6 +565,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": false,
+          "agentWorking": false,
           "title": "Remote UI flows"
         }
       },
@@ -615,6 +619,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": false,
+          "agentWorking": false,
           "title": "Remote UI flows"
         }
       }
@@ -664,6 +669,7 @@
             "detached": false,
             "shelved": false,
             "autoPull": false,
+            "agentWorking": false,
             "title": "Remote UI flows"
           },
           "summary": "Show which device a worktree lives on"
@@ -711,6 +717,7 @@
             "detached": false,
             "shelved": false,
             "autoPull": false,
+            "agentWorking": false,
             "title": "Remote UI flows"
           }
         }
@@ -760,6 +767,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": false,
+          "agentWorking": false,
           "title": "Remote UI flows"
         }
       },
@@ -805,6 +813,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": false,
+          "agentWorking": false,
           "title": "Remote UI flows"
         }
       }
@@ -895,6 +904,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": false,
+          "agentWorking": false,
           "title": "Remote UI flows"
         }
       }
@@ -944,6 +954,7 @@
             "detached": false,
             "shelved": false,
             "autoPull": false,
+            "agentWorking": false,
             "title": "Remote UI flows"
           },
           "ref": "refs/shigomori/discards/5c1e0f9a2b7d"
@@ -991,6 +1002,7 @@
             "detached": false,
             "shelved": false,
             "autoPull": false,
+            "agentWorking": false,
             "title": "Remote UI flows"
           }
         }
@@ -1040,6 +1052,7 @@
           "detached": false,
           "shelved": false,
           "autoPull": false,
+          "agentWorking": false,
           "title": "Remote UI flows"
         }
       },
