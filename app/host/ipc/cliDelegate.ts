@@ -882,6 +882,22 @@ export async function setAgentHooksViaCli(
   );
 }
 
+// Unbinds one agent session from the worktree it is bound to.
+export async function unbindAgentViaCli(
+  harness: string,
+  session: string,
+): Promise<void> {
+  const result = await runner().runCli([
+    "agents",
+    "unbind",
+    "--harness",
+    harness,
+    "--session",
+    session,
+  ]);
+  finalOkDoc(result, "sm agents unbind failed");
+}
+
 // `git worktree move` plus the re-key of everything stored under the
 // worktree's path-derived id (marks, its data file, a pending dirty capture).
 // The caller keeps the app-side guards around it (the tombstone, script

@@ -1,4 +1,4 @@
-import { Bot, Check, Copy } from "lucide-react";
+import { Bot, Check, Copy, Unlink } from "lucide-react";
 import { useCopied } from "@/components/ui/copy-button";
 import {
   DropdownMenu,
@@ -11,7 +11,10 @@ import { IconButton } from "@/components/ui/icon-button";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useIdleAgents } from "@/hooks/worktrees/useWorktreeMutations";
+import {
+  useIdleAgents,
+  useUnbindAgent,
+} from "@/hooks/worktrees/useWorktreeMutations";
 import {
   AGENT_STATE_VIEW,
   agentSessionsState,
@@ -24,7 +27,8 @@ import { FooterVerb, LABEL_RANK } from "./footerFit";
 // The agent sessions bound to the worktree (`sm agents`), as a footer
 // verb in their combined state's tone that opens the list. Marking them
 // idle is for a turn whose end no hook reported (Claude Code reports
-// none when it is interrupted).
+// none when it is interrupted), and unbinding one is for a session
+// that bound itself where it doesn't belong.
 export function AgentSessionsMenu({
   worktree,
   sessions,
@@ -77,6 +81,7 @@ export function AgentSessionsMenu({
                 <RelativeDate date={new Date(session.at).toISOString()} />
               </span>
               <SessionId id={session.session} />
+              <UnbindButton worktree={worktree} session={session} busy={busy} />
             </div>
           );
         })}
@@ -117,6 +122,37 @@ function SessionId({ id }: { id: string }) {
         ) : (
           <Copy className="size-3" />
         )}
+      </IconButton>
+    </SimpleTooltip>
+  );
+}
+
+function UnbindButton({
+  worktree,
+  session,
+  busy,
+}: {
+  worktree: Worktree;
+  session: AgentSession;
+  busy: boolean;
+}) {
+  const unbind = useUnbindAgent();
+  return (
+    <SimpleTooltip tip="Unbind">
+      <IconButton
+        aria-label="Unbind"
+        disabled={unbind.isPending || busy}
+        onClick={() =>
+          unbind.mutate({
+            projectId: worktree.projectId,
+            worktreeId: worktree.id,
+            harness: session.harness,
+            session: session.session,
+          })
+        }
+        className="-my-1 p-0.5"
+      >
+        <Unlink className="size-3" />
       </IconButton>
     </SimpleTooltip>
   );
