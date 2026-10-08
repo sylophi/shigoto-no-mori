@@ -503,9 +503,9 @@ const seedProject = (files: Record<string, string> = { "a.txt": "a\n" }) => {
 };
 
 // A gh on PATH that answers `pr list` with `prs`, or fails with
-// `stderr`, for both sides. Each side reads PATH when its sandbox is
-// made, so the sandbox is made again, empty.
-const fakeGh = async (answer: { prs?: unknown[]; stderr?: string }) => {
+// `stderr`, for both sides. The engine reads PATH when its runtime is
+// first built, so this goes before any engine call.
+const fakeGh = (answer: { prs?: unknown[]; stderr?: string }) => {
   const bin = mkdtempSync(join(tmpdir(), "fake-gh-"));
   const script = join(bin, "gh");
   writeFileSync(
@@ -521,8 +521,6 @@ const fakeGh = async (answer: { prs?: unknown[]; stderr?: string }) => {
     process.env.PATH = previous;
     rmSync(bin, { recursive: true, force: true });
   });
-  await box.remove();
-  box = sandbox();
 };
 
 describe("worktrees list", () => {
@@ -752,7 +750,7 @@ describe("worktrees status", () => {
   });
 
   it("cards the pull request gh finds, skipping a stranger's fork", async () => {
-    await fakeGh({
+    fakeGh({
       prs: [
         { number: 9, title: "fork", state: "OPEN", isCrossRepository: true },
         {
@@ -783,7 +781,7 @@ describe("worktrees status", () => {
   });
 
   it("says why the pull request couldn't be looked up", async () => {
-    await fakeGh({
+    fakeGh({
       stderr:
         "none of the git remotes configured for this repository point to a known GitHub host",
     });
@@ -908,7 +906,7 @@ describe("worktrees describe", () => {
   });
 
   it("leaves the title to an open pull request from this repository", async () => {
-    await fakeGh({
+    fakeGh({
       prs: [
         {
           number: 3,

@@ -191,13 +191,14 @@ export function sandbox(): Sandbox {
     return runtime;
   };
 
-  const gitEnv = {
+  // Read per call, so a test's PATH change reaches the Go side.
+  const gitEnv = () => ({
     ...childEnv(),
     GIT_AUTHOR_NAME: "t",
     GIT_AUTHOR_EMAIL: "t@t",
     GIT_COMMITTER_NAME: "t",
     GIT_COMMITTER_EMAIL: "t@t",
-  };
+  });
 
   // The verb's last document, as `sm --json` prints it.
   const goAt = (cwd: string, ...args: string[]) =>
@@ -207,7 +208,7 @@ export function sandbox(): Sandbox {
         ["--json", ...args],
         {
           cwd,
-          env: { ...gitEnv, HOME: root, SHIGOMORI_DATA_DIR: side("go") },
+          env: { ...gitEnv(), HOME: root, SHIGOMORI_DATA_DIR: side("go") },
         },
         (error, stdout) => {
           const docs = stdout
@@ -228,13 +229,13 @@ export function sandbox(): Sandbox {
     },
     go: (...args) => goAt(root, ...args),
     git: (cwd, ...args) =>
-      execFileSync("git", args, { cwd, env: gitEnv, encoding: "utf8" }),
+      execFileSync("git", args, { cwd, env: gitEnv(), encoding: "utf8" }),
     goAt,
     repo: (name, files = {}) => {
       const dir = join(root, name);
       mkdirSync(dir);
       const git = (...args: string[]) =>
-        execFileSync("git", args, { cwd: dir, env: gitEnv, stdio: "ignore" });
+        execFileSync("git", args, { cwd: dir, env: gitEnv(), stdio: "ignore" });
       git("init", "-q", "-b", "main");
       for (const [file, content] of Object.entries(files)) {
         mkdirSync(dirname(join(dir, file)), { recursive: true });

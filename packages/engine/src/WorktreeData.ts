@@ -35,17 +35,26 @@ export class WorktreeData extends Context.Service<
   }
 >()("sm/engine/WorktreeData") {}
 
+export const NO_DESCRIPTION: Description = {
+  title: "",
+  description: "",
+  describedAt: 0,
+};
+
 type Row = {
   readonly title: string | null;
   readonly description: string | null;
   readonly described_at: number | null;
 };
 
-const descriptionOf = (row: Row | undefined): Description => ({
-  title: row?.title ?? "",
-  description: row?.description ?? "",
-  describedAt: row?.described_at ?? 0,
-});
+const descriptionOf = (row: Row | undefined): Description =>
+  row === undefined
+    ? NO_DESCRIPTION
+    : {
+        title: row.title ?? "",
+        description: row.description ?? "",
+        describedAt: row.described_at ?? 0,
+      };
 
 const orNull = (value: string) => (value === "" ? null : value);
 
@@ -58,12 +67,11 @@ const make = Effect.gen(function* () {
       Effect.map(([row]) => descriptionOf(row)),
     );
 
-  const description = Effect.fn("WorktreeData.description")(function* (
-    projectId: string,
-    worktreeId: string,
-  ) {
-    return yield* read(projectId, worktreeId);
-  }, Effect.orDie);
+  const description = (projectId: string, worktreeId: string) =>
+    read(projectId, worktreeId).pipe(
+      Effect.orDie,
+      Effect.withSpan("WorktreeData.description"),
+    );
 
   const describe = Effect.fn("WorktreeData.describe")(function* (
     projectId: string,

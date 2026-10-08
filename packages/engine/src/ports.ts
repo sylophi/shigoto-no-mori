@@ -2,6 +2,8 @@
 // env files it wrote rather than out of port-pool's own state: the
 // files are the contract both sides agree on.
 
+import * as Predicate from "effect/Predicate";
+
 // A port name, the port it holds, and where it was found.
 export type PortInfo = {
   readonly name: string;
@@ -22,9 +24,6 @@ export type PortPoolConfig = {
 
 export const PORT_POOL_CONFIG = "port-pool.config.json";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 // Key by key, tolerantly: "is this worktree configured" is what
 // provision and release both hinge on, and a portNames or envFiles shape
 // this build doesn't model must not turn it into a no, since release
@@ -39,7 +38,7 @@ export function parsePortPoolConfig(text: string | undefined): PortPoolConfig {
   } catch {
     return none;
   }
-  if (!isRecord(doc)) return none;
+  if (!Predicate.isObject(doc)) return none;
   const names = doc["portNames"];
   const portNames =
     Array.isArray(names) && names.every((name) => typeof name === "string")
@@ -47,10 +46,10 @@ export function parsePortPoolConfig(text: string | undefined): PortPoolConfig {
       : [];
   const files = doc["envFiles"];
   const envFiles =
-    isRecord(files) &&
+    Predicate.isObject(files) &&
     Object.values(files).every(
       (vars) =>
-        isRecord(vars) &&
+        Predicate.isObject(vars) &&
         Object.values(vars).every((template) => typeof template === "string"),
     )
       ? (files as Record<string, Record<string, string>>)
@@ -87,8 +86,6 @@ export function parseEnvAssignments(content: string): Map<string, string> {
   return env;
 }
 
-const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
 // The value each declared port name holds in the env files `files`
 // (name to content). Only a whole-value template ("${renderer}") can be
 // reversed: a name inside a larger string (a URL) goes unreported
@@ -102,12 +99,12 @@ export function matchPorts(
   );
   const ports: PortInfo[] = [];
   const seen = new Set<string>();
-  for (const file of Object.keys(config.envFiles).toSorted(byName)) {
+  for (const file of Object.keys(config.envFiles).toSorted()) {
     const content = files.get(file);
     if (content === undefined) continue;
     const env = parseEnvAssignments(content);
     const vars = config.envFiles[file] ?? {};
-    for (const key of Object.keys(vars).toSorted(byName)) {
+    for (const key of Object.keys(vars).toSorted()) {
       const name = byTemplate.get(vars[key] ?? "");
       if (name === undefined || seen.has(name)) continue;
       const raw = env.get(key) ?? "";

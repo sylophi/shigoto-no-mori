@@ -13,7 +13,6 @@ export const findExecutable = Effect.fn("findExecutable")(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const searched = yield* Config.String("PATH").pipe(
-    Config.withDefault(""),
     Effect.orElseSucceed(() => ""),
   );
   for (const dir of searched.split(":")) {

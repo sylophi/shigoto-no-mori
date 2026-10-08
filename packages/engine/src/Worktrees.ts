@@ -13,6 +13,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -447,23 +448,37 @@ const primaryCheckoutPath = (
   );
 };
 
-const basename = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-const dirname = (path: string) => path.slice(0, path.lastIndexOf("/"));
-
 // A leaf that only repeats the repo's folder name (the Codex layout)
 // takes its parent's name instead, when that passes as a folder name.
-const externalWorktreeName = (worktreePath: string, projectPath: string) => {
-  const leaf = basename(worktreePath);
-  if (
-    leaf.toLowerCase() !==
-    basename(projectPath)
-      .replace(/\.git$/, "")
-      .toLowerCase()
-  ) {
+const externalWorktreeName = (
+  path: Path.Path,
+  worktreePath: string,
+  projectPath: string,
+) => {
+  const leaf = path.basename(worktreePath);
+  if (leaf.toLowerCase() !== path.basename(projectPath, ".git").toLowerCase()) {
     return leaf;
   }
-  const parent = basename(dirname(worktreePath));
+  const parent = path.basename(path.dirname(worktreePath));
   return isValidWorktreeDirName(parent) ? parent : leaf;
+};
+
+// `{ [key]: value }`, or nothing when the value is empty: the fields
+// Go's omitempty leaves out.
+const nonEmpty = <K extends string, V extends string | number>(
+  key: K,
+  value: V,
+) =>
+  (value === "" || value === 0 ? {} : { [key]: value }) as {
+    readonly [P in K]?: V;
+  };
+
+const NO_CHANGES = {
+  staged: 0,
+  unstaged: 0,
+  untracked: 0,
+  conflicted: 0,
+  changedCount: 0,
 };
 
 export const isPrimaryKeyword = (name: string) =>
@@ -546,19 +561,18 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => false),
     );
 
-  // The project's settings, which count only once it is configured
-  // (it has a default branch).
+  // The project's settings and its default branch, which count only
+  // once it is configured (it has one).
   const projectSettings = (project: RegisteredProject) =>
     config
       .read({ kind: "project", projectId: project.id, path: project.path })
       .pipe(
-        Effect.map((doc) =>
-          doc !== null &&
-          typeof doc["defaultBranch"] === "string" &&
-          doc["defaultBranch"].trim() !== ""
-            ? doc
-            : null,
-        ),
+        Effect.map((doc) => {
+          const branch = doc?.["defaultBranch"];
+          return typeof branch === "string" && branch.trim() !== ""
+            ? { settings: doc, defaultBranch: branch }
+            : { settings: null, defaultBranch: undefined };
+        }),
       );
 
   const identities = Effect.fn("Worktrees.identities")(function* (
@@ -576,8 +590,8 @@ const make = Effect.gen(function* () {
       // The primary keeps its folder's name.
       const name =
         isExternal && !isPrimary && (yield* codexNames)
-          ? externalWorktreeName(entry.path, project.path)
-          : basename(entry.path);
+          ? externalWorktreeName(path, entry.path, project.path)
+          : path.basename(entry.path);
       found.push({
         id: worktreeIdFromPath(entry.path),
         projectId: project.id,
@@ -596,14 +610,12 @@ const make = Effect.gen(function* () {
   // The project's primary ref, the default-branch setting honored, and
   // its remotes alongside.
   const primaryRefOf = Effect.fn(function* (project: RegisteredProject) {
-    const remotes = yield* git.listRemotes(project.path);
-    const settings = yield* projectSettings(project);
-    const override =
-      typeof settings?.["defaultBranch"] === "string"
-        ? settings["defaultBranch"]
-        : undefined;
+    const [remotes, { settings, defaultBranch }] = yield* Effect.all(
+      [git.listRemotes(project.path), projectSettings(project)],
+      { concurrency: 2 },
+    );
     const primaryRef = Option.getOrElse(
-      yield* git.resolveDefaultBranch(project.path, override, remotes),
+      yield* git.resolveDefaultBranch(project.path, defaultBranch, remotes),
       () => "",
     );
     // The ref's local branch: "main" for "origin/main".
@@ -618,9 +630,11 @@ const make = Effect.gen(function* () {
   });
 
   // What every row of one project is built against, read once.
-  const contextOf = Effect.fn(function* (project: RegisteredProject) {
+  const contextOf = Effect.fn(function* (
+    project: RegisteredProject,
+    marked: Effect.Success<typeof marks>,
+  ) {
     const primary = yield* primaryRefOf(project);
-    const marked = yield* marks;
     const chain = yield* Effect.cached(
       git.firstParentChain(project.path, primary.primaryRef),
     );
@@ -661,7 +675,7 @@ const make = Effect.gen(function* () {
   const descriptionOf = (worktree: WorktreeIdentity) =>
     hasWorktreeData(worktree)
       ? data.description(worktree.projectId, worktree.id)
-      : Effect.succeed({ title: "", description: "", describedAt: 0 });
+      : Effect.succeed(WorktreeData.NO_DESCRIPTION);
 
   // A row, and what the shelf needs of its probes: when they started,
   // and whether the status answered (a failed one shows as 0 changes,
@@ -710,18 +724,12 @@ const make = Effect.gen(function* () {
         divergedClean: probes.sync.divergedClean,
         behindPrimary: probes.relation.behindPrimary,
         unpushedCount: probes.unpushed,
-        ...(context.primaryRef === ""
-          ? {}
-          : { primaryRef: context.primaryRef }),
-        ...(context.primaryBranch === ""
-          ? {}
-          : { primaryBranch: context.primaryBranch }),
+        ...nonEmpty("primaryRef", context.primaryRef),
+        ...nonEmpty("primaryBranch", context.primaryBranch),
         mergedIntoPrimary: probes.relation.mergedIntoPrimary,
         changedCount: changes.count,
-        ...(changes.lastChangeAt === 0
-          ? {}
-          : { lastChangeAt: changes.lastChangeAt }),
-        ...(probes.createdAt === 0 ? {} : { createdAt: probes.createdAt }),
+        ...nonEmpty("lastChangeAt", changes.lastChangeAt),
+        ...nonEmpty("createdAt", probes.createdAt),
         recentCommits: probes.commits,
         isPrimary: worktree.isPrimary,
         isExternal: worktree.isExternal,
@@ -729,8 +737,8 @@ const make = Effect.gen(function* () {
         shelved: isShelved(worktree, context.shelved),
         // Unlike the shelf, any checkout can follow its upstream.
         autoPull: context.autoPull.has(worktree.id),
-        ...(title === "" ? {} : { title }),
-        ...(description === "" ? {} : { description }),
+        ...nonEmpty("title", title),
+        ...nonEmpty("description", description),
         projectName: context.project.name,
       };
       return { row, at, statusOk: Result.isSuccess(probes.changes) };
@@ -744,12 +752,13 @@ const make = Effect.gen(function* () {
   // between (which drops the snapshot) wins over the listing's stale
   // view. A seed lands only while the worktree is still marked and has
   // none, a retire only while the snapshot is the one compared against.
-  const settle = (probed: ReadonlyArray<Probed>) =>
-    Effect.gen(function* () {
+  const settle = (probed: ReadonlyArray<Probed>) => {
+    const rows = probed.map(({ row }) => row);
+    return Effect.gen(function* () {
       const shelved = probed.filter(
         ({ row, statusOk }) => row.shelved && statusOk,
       );
-      if (shelved.length === 0) return probed.map(({ row }) => row);
+      if (shelved.length === 0) return rows;
       const stored = new Map(
         (yield* sql<ShelfSnapshot & { worktree_id: string }>`
           SELECT worktree_id, at, head, changed FROM shelf_snapshots
@@ -773,9 +782,7 @@ const make = Effect.gen(function* () {
         else if (shelfWorked(snapshot, seen))
           retires.push([row.id, snapshot.at]);
       }
-      if (seeds.length === 0 && retires.length === 0) {
-        return probed.map(({ row }) => row);
-      }
+      if (seeds.length === 0 && retires.length === 0) return rows;
       const unshelved = new Set<string>();
       yield* sql.withTransaction(
         Effect.gen(function* () {
@@ -796,7 +803,7 @@ const make = Effect.gen(function* () {
           }
         }),
       );
-      return probed.map(({ row }) =>
+      return rows.map((row) =>
         unshelved.has(row.id)
           ? Object.assign({}, row, { shelved: false })
           : row,
@@ -804,16 +811,18 @@ const make = Effect.gen(function* () {
     }).pipe(
       // A failed write leaves every row shelved: the next listing tries
       // again.
-      Effect.catchTags({
-        SqlError: () => Effect.succeed(probed.map(({ row }) => row)),
-      }),
+      Effect.catchTags({ SqlError: () => Effect.succeed(rows) }),
     );
+  };
 
   const rowsOf = Effect.fn("Worktrees.rowsOf")(function* (
     project: RegisteredProject,
+    marked: Effect.Success<typeof marks>,
   ) {
-    const found = yield* identities(project);
-    const context = yield* contextOf(project);
+    const [found, context] = yield* Effect.all(
+      [identities(project), contextOf(project, marked)],
+      { concurrency: 2 },
+    );
     const probed = yield* Effect.forEach(
       primaryFirst(found),
       (worktree) => probe(worktree, context),
@@ -825,58 +834,53 @@ const make = Effect.gen(function* () {
   const list = Effect.fn("Worktrees.list")(function* (
     projects: ReadonlyArray<RegisteredProject>,
   ) {
-    return yield* across(projects, rowsOf);
+    const marked = yield* marks;
+    return yield* across(projects, (project) => rowsOf(project, marked));
   });
 
   const row = Effect.fn("Worktrees.row")(function* (
     located: Located,
     options: { readonly settle?: boolean } = {},
   ) {
-    const context = yield* contextOf(located.project);
+    const context = yield* contextOf(located.project, yield* marks);
     const probed = yield* probe(located.worktree, context);
     if (!options.settle) return probed.row;
     const [settled] = yield* settle([probed]);
     return settled ?? probed.row;
   });
 
-  const identityRowsOf = (
-    project: RegisteredProject,
-    found: ReadonlyArray<WorktreeIdentity>,
-    withPrimaryRef: boolean,
+  // The project's primary ref as the identity rows carry it, asked for
+  // or not.
+  const refsOf = (project: RegisteredProject, withPrimaryRef: boolean) =>
+    withPrimaryRef
+      ? primaryRefOf(project).pipe(
+          Effect.map(({ primaryRef, primaryBranch }) => ({
+            ...nonEmpty("primaryRef", primaryRef),
+            ...nonEmpty("primaryBranch", primaryBranch),
+          })),
+        )
+      : Effect.succeed({});
+
+  const identityRowOf = (
+    worktree: WorktreeIdentity,
     marked: Effect.Success<typeof marks>,
-  ) =>
-    Effect.gen(function* () {
-      const primary = withPrimaryRef
-        ? yield* primaryRefOf(project)
-        : { primaryRef: "", primaryBranch: "" };
-      // The project's primary ref, the same on every row.
-      const refs = {
-        ...(primary.primaryRef === ""
-          ? {}
-          : { primaryRef: primary.primaryRef }),
-        ...(primary.primaryBranch === ""
-          ? {}
-          : { primaryBranch: primary.primaryBranch }),
-      };
-      return primaryFirst(found).map(
-        (worktree): IdentityRow =>
-          Object.assign(
-            {
-              id: worktree.id,
-              projectId: worktree.projectId,
-              name: worktree.name,
-              branch: worktree.branch,
-              path: worktree.path,
-              isPrimary: worktree.isPrimary,
-              isExternal: worktree.isExternal,
-              detached: worktree.detached,
-              shelved: isShelved(worktree, marked.shelved),
-              autoPull: marked.autoPull.has(worktree.id),
-            },
-            refs,
-          ),
-      );
-    });
+    refs: Pick<IdentityRow, "primaryRef" | "primaryBranch">,
+  ): IdentityRow =>
+    Object.assign(
+      {
+        id: worktree.id,
+        projectId: worktree.projectId,
+        name: worktree.name,
+        branch: worktree.branch,
+        path: worktree.path,
+        isPrimary: worktree.isPrimary,
+        isExternal: worktree.isExternal,
+        detached: worktree.detached,
+        shelved: isShelved(worktree, marked.shelved),
+        autoPull: marked.autoPull.has(worktree.id),
+      },
+      refs,
+    );
 
   const identityList = Effect.fn("Worktrees.identityList")(function* (
     projects: ReadonlyArray<RegisteredProject>,
@@ -884,9 +888,13 @@ const make = Effect.gen(function* () {
   ) {
     const marked = yield* marks;
     return yield* across(projects, (project) =>
-      identities(project).pipe(
-        Effect.flatMap((found) =>
-          identityRowsOf(project, found, options.primaryRef, marked),
+      Effect.all([identities(project), refsOf(project, options.primaryRef)], {
+        concurrency: 2,
+      }).pipe(
+        Effect.map(([found, refs]) =>
+          primaryFirst(found).map((worktree) =>
+            identityRowOf(worktree, marked, refs),
+          ),
         ),
       ),
     );
@@ -896,13 +904,11 @@ const make = Effect.gen(function* () {
     located: Located,
     options: { readonly primaryRef: boolean },
   ) {
-    const [only] = yield* identityRowsOf(
-      located.project,
-      [located.worktree],
-      options.primaryRef,
+    return identityRowOf(
+      located.worktree,
       yield* marks,
+      yield* refsOf(located.project, options.primaryRef),
     );
-    return only as IdentityRow;
   });
 
   // --- the status card ---
@@ -910,13 +916,7 @@ const make = Effect.gen(function* () {
   const changeCounts = (worktree: string) =>
     git.status(worktree).pipe(
       Effect.map((files) => {
-        const counts = {
-          staged: 0,
-          unstaged: 0,
-          untracked: 0,
-          conflicted: 0,
-          changedCount: files.length,
-        };
+        const counts = { ...NO_CHANGES, changedCount: files.length };
         for (const file of files) {
           if (isUntracked(file)) counts.untracked++;
           else if (file.conflicted) counts.conflicted++;
@@ -927,13 +927,7 @@ const make = Effect.gen(function* () {
         }
         return counts;
       }),
-      Effect.orElseSucceed(() => ({
-        staged: 0,
-        unstaged: 0,
-        untracked: 0,
-        conflicted: 0,
-        changedCount: 0,
-      })),
+      Effect.orElseSucceed(() => NO_CHANGES),
     );
 
   const stashCount = (worktree: string) =>
@@ -956,11 +950,18 @@ const make = Effect.gen(function* () {
       const pool = parsePortPoolConfig(
         yield* readOptional(path.join(worktree, PORT_POOL_CONFIG)),
       );
-      const files = new Map<string, string>();
-      for (const name of Object.keys(pool.envFiles)) {
-        const content = yield* readOptional(path.join(worktree, name));
-        if (content !== undefined) files.set(name, content);
-      }
+      const files = new Map(
+        (yield* Effect.forEach(
+          Object.keys(pool.envFiles),
+          (name) =>
+            readOptional(path.join(worktree, name)).pipe(
+              Effect.map((content) => [name, content] as const),
+            ),
+          { concurrency: "unbounded" },
+        )).flatMap(([name, content]) =>
+          content === undefined ? [] : [[name, content] as const],
+        ),
+      );
       const [enabled, installed] = yield* Effect.all([
         deviceFlag("portPool"),
         findExecutable("port-pool").pipe(
@@ -994,8 +995,22 @@ const make = Effect.gen(function* () {
         stashes: stashCount(worktree.path),
         commits: git.listCommits(worktree.path, { skip: 0, count: 1 }),
         upstream: git.upstreamSync(worktree.path),
+        // The base divergence needs the primary ref, so it is asked
+        // beside it.
         context: Effect.all({
-          primary: primaryRefOf(project),
+          primary: primaryRefOf(project).pipe(
+            Effect.flatMap((primary) =>
+              git.aheadBehind(worktree.path, primary.primaryRef).pipe(
+                Effect.map((base) => ({
+                  ...primary,
+                  base: Option.map(base, (sync) => ({
+                    ref: primary.primaryRef,
+                    ...sync,
+                  })),
+                })),
+              ),
+            ),
+          ),
           marked: marks,
         }),
         ports: portsOf(worktree.path),
@@ -1003,18 +1018,11 @@ const make = Effect.gen(function* () {
       { concurrency: "unbounded" },
     );
     const { primary, marked } = probes.context;
-    const base = Option.map(
-      yield* git.aheadBehind(worktree.path, primary.primaryRef),
-      (sync) => ({ ref: primary.primaryRef, ...sync }),
-    );
     const { title, description } = probes.described;
     const scripts = primary.settings?.["scripts"];
     const script = (key: "setup" | "teardown") => {
-      const value =
-        typeof scripts === "object" && scripts !== null
-          ? (scripts as Record<string, unknown>)[key]
-          : undefined;
-      return typeof value === "string" && value !== "" ? { [key]: value } : {};
+      const value = Predicate.isObject(scripts) ? scripts[key] : undefined;
+      return nonEmpty(key, typeof value === "string" ? value : "");
     };
     return {
       id: worktree.id,
@@ -1027,13 +1035,13 @@ const make = Effect.gen(function* () {
       isExternal: worktree.isExternal,
       detached: worktree.detached,
       shelved: isShelved(worktree, marked.shelved),
-      ...(title === "" ? {} : { title }),
-      ...(description === "" ? {} : { description }),
+      ...nonEmpty("title", title),
+      ...nonEmpty("description", description),
       git: {
         upstream: probes.upstream.hasUpstream
           ? { ahead: probes.upstream.ahead, behind: probes.upstream.behind }
           : null,
-        base: Option.getOrNull(base),
+        base: Option.getOrNull(primary.base),
         ...probes.counts,
         stashCount: probes.stashes,
         lastCommit: probes.commits[0] ?? null,
@@ -1041,14 +1049,12 @@ const make = Effect.gen(function* () {
       ...probes.ports,
       scripts: { ...script("setup"), ...script("teardown") },
       pr: probes.pr.found,
-      ...(probes.pr.found === null && probes.pr.unavailable !== undefined
-        ? { prUnavailable: probes.pr.unavailable }
+      ...(probes.pr.found === null
+        ? nonEmpty("prUnavailable", probes.pr.unavailable ?? "")
         : {}),
       ...(probes.pr.skipped ? { prSkipped: true as const } : {}),
       autoPull: marked.autoPull.has(worktree.id),
-      ...(primary.primaryBranch === ""
-        ? {}
-        : { primaryBranch: primary.primaryBranch }),
+      ...nonEmpty("primaryBranch", primary.primaryBranch),
     } satisfies StatusCard;
   });
 
@@ -1088,7 +1094,8 @@ const make = Effect.gen(function* () {
           const common = commonDir.trim();
           return Option.some({
             toplevel: toplevel.trim(),
-            primaryPath: basename(common) === ".git" ? dirname(common) : common,
+            primaryPath:
+              path.basename(common) === ".git" ? path.dirname(common) : common,
           });
         }),
         Effect.orElseSucceed(() => Option.none()),
@@ -1213,13 +1220,20 @@ const make = Effect.gen(function* () {
       const scope = target.projectId
         ? [yield* resolveProjectById(here, target.projectId)]
         : here.projects;
-      for (const project of scope) {
-        const found = yield* identities(project).pipe(Effect.option);
-        const worktree = Option.getOrUndefined(found)?.find(
-          (id) => id.id === target.worktreeId,
-        );
-        if (worktree) return { project, worktree };
-      }
+      const found = yield* Effect.forEach(
+        scope,
+        (project) =>
+          identities(project).pipe(
+            Effect.map((listed) => {
+              const worktree = listed.find((id) => id.id === target.worktreeId);
+              return worktree ? [{ project, worktree }] : [];
+            }),
+            Effect.orElseSucceed((): Located[] => []),
+          ),
+        { concurrency: "unbounded" },
+      );
+      const [first] = found.flat();
+      if (first) return first;
       return yield* new UnknownWorktree({ worktreeId: target.worktreeId });
     }
 
