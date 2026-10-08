@@ -1,28 +1,21 @@
-// The updater's pure half: picking a prerelease build's release, reading
-// the feeds and the shared files as Go's encoding/json reads them, the
-// dates the feeds carry, and GitHub's rate limit.
+// The updater's pure half: picking a prerelease build's release, the
+// release list as GitHub sends it, the dates the feeds carry, and
+// GitHub's rate limit.
 import assert from "node:assert/strict";
-import * as Result from "effect/Result";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
 import { parseSemver, type Semver } from "../src/semver.ts";
 import {
-  decodeFeedAnswer,
-  decodeReleaseList,
-  decodeReleaseListCache,
-  decodeStagedManifest,
-  decodeUpdaterStatus,
-  encodeReleaseListCache,
-  encodeStagedManifest,
   formatKitchen,
-  formatTimeJson,
-  type GitHubRelease,
   isRateLimited,
   parseReleaseDate,
-  parseRfc3339,
   pickRelease,
   rateLimitReset,
-  ZERO_TIME,
+  ReleaseList,
 } from "../src/updateFeed.ts";
+
+type Release = (typeof ReleaseList.Type)[number];
 
 const semver = (raw: string): Semver => {
   const version = parseSemver(raw);
@@ -32,21 +25,21 @@ const semver = (raw: string): Semver => {
 
 // A release the way GitHub lists it, with the dmg and the zip the makers
 // upload for `arch`.
-const labRelease = (tag: string, arch = "arm64"): GitHubRelease => {
+const labRelease = (tag: string, arch = "arm64"): Release => {
   const version = tag.replace(/^v/, "");
   return {
-    tagName: tag,
+    tag_name: tag,
     prerelease: tag.includes("-"),
     body: `notes for ${tag}`,
-    publishedAt: "2026-09-15T12:00:00Z",
+    published_at: "2026-09-15T12:00:00Z",
     assets: [
       {
         name: `Shigoto.no.Mori-${version}-${arch}.dmg`,
-        url: `https://example.test/${tag}.dmg`,
+        browser_download_url: `https://example.test/${tag}.dmg`,
       },
       {
         name: `Shigoto.no.Mori-darwin-${arch}-${version}.zip`,
-        url: `https://example.test/${tag}.zip`,
+        browser_download_url: `https://example.test/${tag}.zip`,
       },
     ],
   };
@@ -54,7 +47,7 @@ const labRelease = (tag: string, arch = "arm64"): GitHubRelease => {
 
 describe("pickRelease", () => {
   const current = semver("2.0.0-beta.2");
-  const releases: GitHubRelease[] = [
+  const releases: Release[] = [
     labRelease("v2.0.0-beta.1"),
     labRelease("v2.0.0-beta.2"),
     // Assets come minutes after the tag.
@@ -66,9 +59,9 @@ describe("pickRelease", () => {
     labRelease("v2.1.0-beta.1"),
     labRelease("v1.8.0"),
     labRelease("v1.7.1"),
-    { ...labRelease("latest"), tagName: "latest" },
+    { ...labRelease("latest"), tag_name: "latest" },
   ];
-  const withAlso = (...extra: GitHubRelease[]) => [...extra, ...releases];
+  const withAlso = (...extra: Release[]) => [...extra, ...releases];
 
   it("finds nothing ahead in the channel", () => {
     assert.equal(pickRelease(current, releases, "arm64"), undefined);
@@ -97,7 +90,6 @@ describe("pickRelease", () => {
       "arm64",
     );
     assert.equal(picked?.version, "2.0.0");
-    // A full release past the channel's own line wins too.
     assert.equal(
       pickRelease(current, withAlso(labRelease("v2.3.1")), "arm64")?.version,
       "2.3.1",
@@ -119,8 +111,14 @@ describe("pickRelease", () => {
     const dmgOnly = {
       ...labRelease("v2.0.0-beta.5"),
       assets: [
-        { name: "Shigoto.no.Mori-darwin-arm64-2.0.0-beta.5.dmg", url: "d" },
-        { name: "Shigoto.no.Mori-linux-arm64-2.0.0-beta.5.zip", url: "l" },
+        {
+          name: "Shigoto.no.Mori-darwin-arm64-2.0.0-beta.5.dmg",
+          browser_download_url: "d",
+        },
+        {
+          name: "Shigoto.no.Mori-linux-arm64-2.0.0-beta.5.zip",
+          browser_download_url: "l",
+        },
       ],
     };
     assert.equal(pickRelease(current, [dmgOnly], "arm64"), undefined);
@@ -138,12 +136,11 @@ describe("pickRelease", () => {
     assert.equal(picked?.version, "2.0.0-beta.6");
   });
 
-  it("ranks a draft like any release, and passes an untagged one by", () => {
-    // Drafts only reach an authenticated caller, so the flag isn't read.
-    // An unpublished draft's tag is GitHub's placeholder, never a version.
+  it("passes an unpublished draft by", () => {
+    // Its tag is GitHub's placeholder, never a version.
     const untagged = {
       ...labRelease("v2.0.0-beta.8"),
-      tagName: "untagged-4f2a9c",
+      tag_name: "untagged-4f2a9c",
     };
     assert.equal(pickRelease(current, [untagged], "arm64"), undefined);
   });
@@ -157,152 +154,46 @@ describe("pickRelease", () => {
     );
   });
 
-  it("takes the tag's v off, and keeps a date it can't read empty", () => {
+  it("reads GitHub's nulls as empty", () => {
     const picked = pickRelease(
       current,
-      [{ ...labRelease("2.0.0-beta.3"), publishedAt: "soon" }],
+      [{ ...labRelease("2.0.0-beta.3"), body: null, published_at: null }],
       "arm64",
     );
-    assert.equal(picked?.version, "2.0.0-beta.3");
-    assert.equal(picked?.releaseDate, "");
+    assert.deepEqual(picked, {
+      url: "https://example.test/2.0.0-beta.3.zip",
+      version: "2.0.0-beta.3",
+      notes: "",
+      releaseDate: "",
+    });
   });
 });
 
-const ok = <A>(decoded: Result.Result<A, string>) => {
-  assert.ok(Result.isSuccess(decoded), String(Result.getFailure(decoded)));
-  return decoded.success;
-};
+describe("the release list as GitHub sends it", () => {
+  const decode = Schema.decodeUnknownOption(ReleaseList);
 
-const fails = (decoded: Result.Result<unknown, string>) =>
-  assert.ok(Result.isFailure(decoded));
-
-describe("decoding as Go does", () => {
-  it("matches keys in any case, the last one winning, and skips nulls", () => {
-    assert.deepEqual(
-      ok(
-        decodeFeedAnswer({
-          URL: "https://a",
-          Name: "v2.0.0",
-          notes: null,
-          pub_date: "x",
-          PUB_DATE: "2026-09-15T12:00:00Z",
-          extra: 1,
-        }),
-      ),
+  it("ignores the fields the picker doesn't read", () => {
+    const decoded = decode([
       {
-        url: "https://a",
-        name: "v2.0.0",
-        notes: "",
-        pubDate: "2026-09-15T12:00:00Z",
+        ...labRelease("v1.0.0"),
+        body: null,
+        draft: false,
+        assets: [{ name: "a.zip", browser_download_url: "u", size: 3 }],
       },
-    );
-    assert.equal(ok(decodeFeedAnswer({ url: "a", URL: null })).url, "a");
-    assert.deepEqual(ok(decodeFeedAnswer(null)), {
-      url: "",
-      name: "",
-      notes: "",
-      pubDate: "",
-    });
+    ]);
+    assert.ok(Option.isSome(decoded));
+    assert.deepEqual(decoded.value[0]?.assets, [
+      { name: "a.zip", browser_download_url: "u" },
+    ]);
   });
 
-  it("fails on a value of the wrong type anywhere", () => {
-    fails(decodeFeedAnswer({ url: 5 }));
-    fails(decodeFeedAnswer([]));
-    fails(decodeFeedAnswer("x"));
-    fails(decodeReleaseList({}));
-    fails(decodeReleaseList([{ tag_name: 1 }]));
-    fails(decodeReleaseList([{ prerelease: "yes" }]));
-    fails(decodeReleaseList([{ assets: {} }]));
-    fails(decodeReleaseList([{ assets: [{ name: false }] }]));
-    fails(decodeReleaseList([3]));
-    fails(decodeUpdaterStatus({ pid: 1.5 }));
-    fails(decodeUpdaterStatus({ pid: "12" }));
-    fails(decodeUpdaterStatus({ state: "error" }));
-  });
-
-  it("reads null as none and keeps what it doesn't know out", () => {
-    assert.deepEqual(ok(decodeReleaseList(null)), []);
-    const [release] = ok(
-      decodeReleaseList([
-        {
-          tag_name: "v1.0.0",
-          prerelease: null,
-          draft: true,
-          assets: [null, { name: "a.zip", browser_download_url: "u", size: 3 }],
-        },
-        null,
-      ]),
+  it("refuses a value of the wrong type", () => {
+    assert.ok(Option.isNone(decode({})));
+    assert.ok(
+      Option.isNone(decode([{ ...labRelease("v1.0.0"), tag_name: 1 }])),
     );
-    assert.deepEqual(release, {
-      tagName: "v1.0.0",
-      prerelease: false,
-      body: "",
-      publishedAt: "",
-      assets: [
-        { name: "", url: "" },
-        { name: "a.zip", url: "u" },
-      ],
-    });
-    assert.deepEqual(
-      ok(decodeUpdaterStatus({ pid: 7, appVersion: "1.0.0", state: null })),
-      { pid: 7, appVersion: "1.0.0", state: { kind: "", message: "" } },
-    );
-  });
-
-  it("reads the release list copy the Go sm writes", () => {
-    // As json.MarshalIndent writes it: local times to the nanosecond, the
-    // zero time for no reset, and the list as raw JSON.
-    const fromGo = JSON.parse(`{
-  "url": "https://api.github.com/repos/sylophi/shigoto-no-mori/releases?per_page=100",
-  "fetchedAt": "2026-10-08T14:03:07.123456789+02:00",
-  "etag": "W/\\"abc\\"",
-  "retryAt": "0001-01-01T00:00:00Z",
-  "body": [
-    { "tag_name": "v2.0.0-beta.3" }
-  ]
-}`);
-    const cache = ok(decodeReleaseListCache(fromGo));
-    assert.equal(cache.fetchedAt, Date.UTC(2026, 9, 8, 12, 3, 7, 123));
-    assert.equal(cache.retryAt, ZERO_TIME);
-    assert.equal(cache.etag, 'W/"abc"');
-    assert.deepEqual(cache.body, [{ tag_name: "v2.0.0-beta.3" }]);
-    // And what this writes, Go's shape again.
-    assert.deepEqual(JSON.parse(encodeReleaseListCache(cache)), {
-      url: fromGo.url,
-      fetchedAt: "2026-10-08T12:03:07.123Z",
-      etag: 'W/"abc"',
-      retryAt: "0001-01-01T00:00:00Z",
-      body: [{ tag_name: "v2.0.0-beta.3" }],
-    });
-    assert.equal(
-      "etag" in JSON.parse(encodeReleaseListCache({ ...cache, etag: "" })),
-      false,
-    );
-  });
-
-  it("keeps a copy's null body, and tells a missing one", () => {
-    assert.equal(
-      ok(decodeReleaseListCache({ url: "u", body: null })).body,
-      null,
-    );
-    assert.equal(ok(decodeReleaseListCache({ url: "u" })).body, undefined);
-    fails(decodeReleaseListCache({ url: "u", fetchedAt: "yesterday" }));
-  });
-
-  it("writes the manifest the app reads, empty fields left out", () => {
-    const manifest = {
-      version: "2.0.0",
-      bundleName: "Shigoto no Mori.app",
-      notes: "",
-      releaseDate: "2026-09-15T12:00:00Z",
-    };
-    assert.equal(
-      encodeStagedManifest(manifest),
-      `{\n  "version": "2.0.0",\n  "bundleName": "Shigoto no Mori.app",\n  "releaseDate": "2026-09-15T12:00:00Z"\n}\n`,
-    );
-    assert.deepEqual(
-      ok(decodeStagedManifest(JSON.parse(encodeStagedManifest(manifest)))),
-      manifest,
+    assert.ok(
+      Option.isNone(decode([{ ...labRelease("v1.0.0"), prerelease: "yes" }])),
     );
   });
 });
@@ -312,56 +203,19 @@ const today = (hours: number, minutes: number) =>
   new Date(2026, 9, 8, hours, minutes).getTime();
 
 describe("dates", () => {
-  it("reads the formats the feeds use, in UTC to the second", () => {
+  it("reads RFC 3339, in UTC to the second, and nothing else", () => {
     const cases: Record<string, string> = {
       "2026-09-15T12:00:00Z": "2026-09-15T12:00:00Z",
       "2026-09-15T12:00:00.987654Z": "2026-09-15T12:00:00Z",
       "2026-09-15T14:30:00+02:30": "2026-09-15T12:00:00Z",
-      "2026-09-15T2:00:00Z": "2026-09-15T02:00:00Z",
-      "Tue, 15 Sep 2026 12:00:00 -0700": "2026-09-15T19:00:00Z",
-      "tue, 15 sep 2026 12:00:00 +0000": "2026-09-15T12:00:00Z",
-      "Tue, 15 Sep 2026 12:00:00 UTC": "2026-09-15T12:00:00Z",
-      "Tue, 15 Sep 2026 12:00:00 GMT": "2026-09-15T12:00:00Z",
-      // The weekday isn't checked against the date, as Go doesn't.
-      "Fri, 15 Sep 2026 12:00:00 GMT": "2026-09-15T12:00:00Z",
-      "2024-02-29T00:00:00Z": "2024-02-29T00:00:00Z",
-      "2026-02-29T00:00:00Z": "",
-      "2026-13-01T00:00:00Z": "",
-      "2026-09-15T24:00:00Z": "",
+      "Tue, 15 Sep 2026 12:00:00 GMT": "",
       "2026-09-15 12:00:00Z": "",
       "2026-09-15T12:00:00": "",
-      "Tue, 15 Sep 2026 12:00:00 Moon": "",
       "": "",
-      "2026-09-15T12:00:00,5Z": "2026-09-15T12:00:00Z",
-      "2026-09-15t12:00:00z": "",
-      "2026-09-15T12:00:00+24:00": "2026-09-14T12:00:00Z",
-      "2026-09-15T12:00:00+25:00": "",
-      // Go reads every abbreviation it takes as UTC, GMT+3 too.
-      "Tue, 15 Sep 2026 12:00:00 GMT+3": "2026-09-15T12:00:00Z",
-      "Tue, 15 Sep 2026 12:00:00 GMT+30": "",
-      "Tue, 15 Sep 2026 12:00:00.5 GMT": "2026-09-15T12:00:00Z",
-      "Tue, 15 Sep 2026 12:00:00 +2500": "",
-      "Tue,  5 Sep 2026 12:00:00 GMT": "",
-      "Tue, 5 Sep 2026 12:00:00 GMT": "",
     };
     for (const [raw, want] of Object.entries(cases)) {
       assert.equal(parseReleaseDate(raw), want, raw);
     }
-  });
-
-  it("keeps the fraction to the millisecond", () => {
-    assert.equal(
-      parseRfc3339("2026-09-15T12:00:00,5678Z"),
-      Date.UTC(2026, 8, 15, 12, 0, 0, 567),
-    );
-  });
-
-  it("writes times as time.Time marshals them", () => {
-    assert.equal(formatTimeJson(ZERO_TIME), "0001-01-01T00:00:00Z");
-    assert.equal(
-      formatTimeJson(Date.UTC(2026, 9, 8, 12, 3, 7, 120)),
-      "2026-10-08T12:03:07.12Z",
-    );
   });
 
   it("prints the kitchen clock", () => {
@@ -390,7 +244,6 @@ describe("GitHub's rate limit", () => {
       [{ reset?: string; retryAfter?: string }, number]
     > = [
       [{ reset: seconds(now + 1_800_000) }, now + 1_800_000],
-      [{ reset: `+${seconds(now + 60_000)}` }, now + 60_000],
       // A reset in the past, or past the hour, falls to the next header.
       [{ reset: seconds(now - 1000), retryAfter: "90" }, now + 90_000],
       [{ reset: seconds(now + 7_200_000), retryAfter: "90" }, now + 90_000],
@@ -398,7 +251,6 @@ describe("GitHub's rate limit", () => {
       [{ retryAfter: "3599" }, now + 3_599_000],
       [{ retryAfter: "3600" }, hour],
       [{ retryAfter: "0" }, hour],
-      [{ retryAfter: " 90" }, hour],
       [{ reset: "soon", retryAfter: "1.5" }, hour],
       [{}, hour],
     ];

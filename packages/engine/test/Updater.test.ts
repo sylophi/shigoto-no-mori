@@ -510,7 +510,14 @@ describe("the update server", () => {
     );
     assert.match(
       await errorFor(json({ url: 5 })),
-      /^The update feed answered malformed JSON: cannot unmarshal number/,
+      /^The update feed answered malformed JSON: /,
+    );
+    // Nothing past a megabyte is read, so a longer answer is cut short.
+    assert.match(
+      await errorFor(
+        json({ notes: "x".repeat(2 << 20), url: "u", name: "v2" }),
+      ),
+      /^The update feed answered malformed JSON: /,
     );
     assert.equal(
       await errorFor("unreachable"),
@@ -786,11 +793,15 @@ describe("staging", () => {
       APP,
       "manifest.json",
     ]);
-    assert.deepEqual(calls(), [
-      `codesign --verify --deep --strict -- ${box.updates}/extract/${APP}`,
-      `codesign -dvv -- ${box.installed}`,
-      `codesign -dvv -- ${box.updates}/extract/${APP}`,
-    ]);
+    // The three checks run at once, so in no set order.
+    assert.deepEqual(
+      calls().toSorted(),
+      [
+        `codesign --verify --deep --strict -- ${box.updates}/extract/${APP}`,
+        `codesign -dvv -- ${box.installed}`,
+        `codesign -dvv -- ${box.updates}/extract/${APP}`,
+      ].toSorted(),
+    );
     // Asked again, the staged bundle answers without a download.
     const again = await using({ box, http: client }, (u) =>
       u.stage({ running: running(box) }),
@@ -1187,6 +1198,27 @@ describe("installing", () => {
     );
   });
 
+  it("reads the installed app's Team ID once in a run", async () => {
+    const box = newBox();
+    const { client } = network(
+      serverFor("2.0.0", zipOf([{ version: "2.0.0" }])),
+    );
+    await using({ box, http: client }, (u) =>
+      u.update({ running: running(box) }),
+    );
+    assert.equal(versionAt(box.installed), "2.0.0");
+    // Verified when staged and again when placed, against one reading.
+    assert.equal(
+      calls().filter((line) => line.startsWith("codesign --verify")).length,
+      2,
+    );
+    assert.equal(
+      calls().filter((line) => line === `codesign -dvv -- ${box.installed}`)
+        .length,
+      1,
+    );
+  });
+
   it("copies the bundle over when it can't be moved next to the app", async () => {
     const { box, http } = await readyBox();
     const doc = await using(
@@ -1458,7 +1490,7 @@ describe("updating under a running app", () => {
     status(box, {
       pid: app,
       appVersion: "1.0.0",
-      state: { kind: "ready", version: "2.0.0" },
+      state: { kind: "ready", version: "2.0.0", releaseDate: null },
     });
     const { seen, progress } = progressLog();
     const doc = await updating(

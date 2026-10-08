@@ -17,6 +17,16 @@
 // `codesign --verify` passes and its Team ID matches the installed app's,
 // so a compromised feed can point at another release of ours and nowhere
 // else. Every verification failure refuses the update.
+import type {
+  StagedManifest,
+  UpdateRequest,
+  UpdateStageResultSchema,
+  UpdaterStatus,
+} from "@shigomori/contracts/schemas/runtime";
+import {
+  StagedManifestSchema,
+  UpdaterStatusSchema,
+} from "@shigomori/contracts/schemas/runtime";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -39,33 +49,41 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { Flavor } from "./flavor.ts";
+import { parseJson } from "./json.ts";
 import * as Paths from "./Paths.ts";
-import { isPrerelease, parseSemver, compareSemver } from "./semver.ts";
+import { compareSemver, isPrerelease, parseSemver } from "./semver.ts";
 import {
-  decodeFeedAnswer,
-  decodeReleaseList,
-  decodeReleaseListCache,
-  decodeStagedManifest,
-  decodeUpdaterStatus,
-  encodeReleaseListCache,
-  encodeStagedManifest,
+  FeedAnswer,
   formatKitchen,
   formatLocalRfc3339,
   isRateLimited,
-  parseGoInt,
-  parseJson,
   parseReleaseDate,
+  parseRfc3339,
   pickRelease,
   rateLimitReset,
+  ReleaseList,
+  ReleaseListCache,
   type ReleaseInfo,
-  type ReleaseListCache,
-  type StagedManifest,
   trimV,
-  type UpdaterStatus,
-  ZERO_TIME,
 } from "./updateFeed.ts";
 
+// What failed underneath, with what failed under an HTTP request too.
+const causeText = (cause: unknown): string => {
+  if (HttpClientError.isHttpClientError(cause)) {
+    const under = Predicate.hasProperty(cause.reason, "cause")
+      ? cause.reason.cause
+      : undefined;
+    return under === undefined
+      ? cause.message
+      : `${cause.message}: ${causeText(under)}`;
+  }
+  return cause instanceof Error ? cause.message : String(cause);
+};
+
 // --- errors ------------------------------------------------------------------
+
+// The messages are the Go sm's, what failed underneath included where Go
+// includes it.
 
 export class UpdatesUnavailable extends Schema.TaggedError<UpdatesUnavailable>()(
   "UpdatesUnavailable",
@@ -91,7 +109,12 @@ export class BadUpdateUrl extends Schema.TaggedError<BadUpdateUrl>()(
   { cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Bad update URL.";
+    const url =
+      HttpClientError.isHttpClientError(this.cause) &&
+      Predicate.isTagged(this.cause.reason, "InvalidUrlError")
+        ? this.cause.reason.request.url
+        : "";
+    return `Bad update URL ${JSON.stringify(url)}: ${causeText(this.cause)}`;
   }
 }
 
@@ -111,21 +134,22 @@ export class FeedFailed extends Schema.TaggedError<FeedFailed>()("FeedFailed", {
 }) {
   override get message(): string {
     const server = this.source === "update-server";
+    const cause = causeText(this.cause);
     switch (this.reason) {
       case "unreachable":
         return server
-          ? "Couldn't reach the update feed."
-          : "Couldn't reach the release list.";
+          ? `Couldn't reach the update feed: ${cause}`
+          : `Couldn't reach the release list: ${cause}`;
       case "status":
         return server
           ? `The update feed answered HTTP ${this.status}.`
           : `The release list answered HTTP ${this.status}.`;
       case "unreadable":
-        return "Couldn't read the release list.";
+        return `Couldn't read the release list: ${cause}`;
       case "malformed":
         return server
-          ? "The update feed answered malformed JSON."
-          : "The release list is malformed JSON.";
+          ? `The update feed answered malformed JSON: ${cause}`
+          : `The release list is malformed JSON: ${cause}`;
       case "incomplete":
         return "The update feed answered without a release URL or name.";
     }
@@ -153,15 +177,16 @@ export class DownloadFailed extends Schema.TaggedError<DownloadFailed>()(
   },
 ) {
   override get message(): string {
+    const cause = causeText(this.cause);
     switch (this.reason) {
       case "unreachable":
-        return "Couldn't download the update.";
+        return `Couldn't download the update: ${cause}`;
       case "status":
         return `Downloading the update failed with HTTP ${this.status}.`;
       case "create":
-        return `Couldn't write the update to ${this.path}.`;
+        return `Couldn't write the update to ${this.path}: ${cause}`;
       case "interrupted":
-        return "The update download was interrupted.";
+        return `The update download was interrupted: ${cause}`;
     }
   }
 }
@@ -184,19 +209,20 @@ export class StagingFailed extends Schema.TaggedError<StagingFailed>()(
   },
 ) {
   override get message(): string {
+    const cause = causeText(this.cause);
     switch (this.reason) {
       case "directory":
-        return `Couldn't create ${this.path}.`;
+        return `Couldn't create ${this.path}: ${cause}`;
       case "extract":
-        return "Couldn't extract the update.";
+        return `Couldn't extract the update: ${cause}`;
       case "read":
-        return `Couldn't read ${this.path}.`;
+        return `Couldn't read ${this.path}: ${cause}`;
       case "bundles":
         return `The update zip contained ${this.count} app bundles instead of exactly one.`;
       case "stage":
-        return "Couldn't stage the update.";
+        return `Couldn't stage the update: ${cause}`;
       case "manifest":
-        return "Couldn't write the staging manifest.";
+        return `Couldn't write the staging manifest: ${cause}`;
     }
   }
 }
@@ -219,11 +245,12 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
   },
 ) {
   override get message(): string {
+    const cause = causeText(this.cause);
     switch (this.reason) {
       case "invalid":
-        return "The downloaded update failed code-signature verification.";
+        return `The downloaded update failed code-signature verification: ${cause}`;
       case "unreadable":
-        return `Couldn't read the code signature of ${this.bundle}.`;
+        return `Couldn't read the code signature of ${this.bundle}: ${cause}`;
       case "no-team-identifier":
         return `codesign reported no TeamIdentifier for ${this.bundle}.`;
       case "installed-unsigned":
@@ -276,15 +303,16 @@ export class SwapFailed extends Schema.TaggedError<SwapFailed>()("SwapFailed", {
   rollbackCause: Schema.optional(Schema.Defect()),
 }) {
   override get message(): string {
+    const cause = causeText(this.cause);
     switch (this.reason) {
       case "move-next-to":
-        return "Couldn't move the update next to the app.";
+        return `Couldn't move the update next to the app: ${cause}`;
       case "move-aside":
-        return "Couldn't move the old app aside.";
+        return `Couldn't move the old app aside: ${cause}`;
       case "install":
-        return "Couldn't install the update (the old app was restored).";
+        return `Couldn't install the update: ${cause} (the old app was restored)`;
       case "rollback":
-        return `Couldn't install the update and restoring the old app failed too. The old app is at ${this.aside}.`;
+        return `Couldn't install the update (${cause}) and restoring the old app failed too (${causeText(this.rollbackCause)}). The old app is at ${this.aside}.`;
     }
   }
 }
@@ -303,7 +331,7 @@ export class RelaunchFailed extends Schema.TaggedError<RelaunchFailed>()(
   { version: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return `Installed ${this.version} but couldn't relaunch the app.`;
+    return `Installed ${this.version} but couldn't relaunch the app: ${causeText(this.cause)}`;
   }
 }
 
@@ -332,7 +360,7 @@ export class HandoffFailed extends Schema.TaggedError<HandoffFailed>()(
       case "unpublished":
         return `The app is running but hasn't published its updater state. Wait for it to finish starting (or quit it) and rerun \`${this.binary} update\`.`;
       case "request":
-        return "Couldn't write the update request.";
+        return `Couldn't write the update request: ${causeText(this.cause)}`;
       case "install":
         return `Install failed: ${this.detail}`;
       case "same-version":
@@ -342,97 +370,6 @@ export class HandoffFailed extends Schema.TaggedError<HandoffFailed>()(
     }
   }
 }
-
-type UpdaterError =
-  | UpdatesUnavailable
-  | NotInBundle
-  | BadUpdateUrl
-  | FeedFailed
-  | RateLimited
-  | DownloadFailed
-  | StagingFailed
-  | SignatureRejected
-  | UpdateInProgress
-  | StagingLockFailed
-  | NothingStaged
-  | SwapFailed
-  | AppStillRunning
-  | RelaunchFailed
-  | HandoffFailed;
-
-const isUpdaterError = (error: unknown): error is UpdaterError =>
-  error instanceof UpdatesUnavailable ||
-  error instanceof NotInBundle ||
-  error instanceof BadUpdateUrl ||
-  error instanceof FeedFailed ||
-  error instanceof RateLimited ||
-  error instanceof DownloadFailed ||
-  error instanceof StagingFailed ||
-  error instanceof SignatureRejected ||
-  error instanceof UpdateInProgress ||
-  error instanceof StagingLockFailed ||
-  error instanceof NothingStaged ||
-  error instanceof SwapFailed ||
-  error instanceof AppStillRunning ||
-  error instanceof RelaunchFailed ||
-  error instanceof HandoffFailed;
-
-// What failed underneath, with what failed under an HTTP request too.
-const causeText = (cause: unknown): string => {
-  if (HttpClientError.isHttpClientError(cause)) {
-    const under = Predicate.hasProperty(cause.reason, "cause")
-      ? cause.reason.cause
-      : undefined;
-    return under === undefined
-      ? cause.message
-      : `${cause.message}: ${causeText(under)}`;
-  }
-  return cause instanceof Error ? cause.message : String(cause);
-};
-
-// A message with what failed underneath, the way Go's sm puts it.
-const withCause = (message: string, cause: unknown) =>
-  `${message.slice(0, -1)}: ${causeText(cause)}`;
-
-// The words the Go sm prints for an updater failure: the error's message,
-// and for a failure with something underneath, its text too. Anything
-// else gets undefined.
-export const wordsOf = (error: unknown): string | undefined => {
-  if (!isUpdaterError(error)) return undefined;
-  if (error instanceof BadUpdateUrl) {
-    const url =
-      HttpClientError.isHttpClientError(error.cause) &&
-      Predicate.isTagged(error.cause.reason, "InvalidUrlError")
-        ? error.cause.reason.request.url
-        : "";
-    return `Bad update URL ${JSON.stringify(url)}: ${causeText(error.cause)}`;
-  }
-  if (error instanceof SwapFailed) {
-    if (error.reason === "install") {
-      return `Couldn't install the update: ${causeText(error.cause)} (the old app was restored)`;
-    }
-    if (error.reason === "rollback") {
-      return `Couldn't install the update (${causeText(error.cause)}) and restoring the old app failed too (${causeText(error.rollbackCause)}). The old app is at ${error.aside}.`;
-    }
-    return withCause(error.message, error.cause);
-  }
-  const detailed =
-    (error instanceof FeedFailed &&
-      ["unreachable", "unreadable", "malformed"].includes(error.reason)) ||
-    (error instanceof DownloadFailed &&
-      ["unreachable", "create", "interrupted"].includes(error.reason)) ||
-    (error instanceof StagingFailed &&
-      ["directory", "extract", "read", "stage", "manifest"].includes(
-        error.reason,
-      )) ||
-    (error instanceof SignatureRejected &&
-      ["invalid", "unreadable"].includes(error.reason)) ||
-    error instanceof RelaunchFailed ||
-    (error instanceof HandoffFailed && error.reason === "request");
-  return detailed && "cause" in error && error.cause !== undefined
-    ? withCause(error.message, error.cause)
-    : error.message;
-};
 
 // --- the documents and the inputs ---------------------------------------------
 
@@ -470,27 +407,26 @@ export type UpdateInput = {
   readonly progress?: ((progress: Progress) => Effect.Effect<void>) | undefined;
 };
 
-// The documents `sm update --json` prints, field for field.
-export type UpToDate = {
-  readonly ok: true;
-  readonly status: "up-to-date";
-  readonly version: string;
-};
+// The documents `sm update --json` prints, field for field: the stage
+// results the app reads (UpdateStageResultSchema) and the two documents
+// only the terminal prints.
+type StageResult = typeof UpdateStageResultSchema.Type;
+
+export type UpToDate = { readonly ok: true } & Extract<
+  StageResult,
+  { readonly status: "up-to-date" }
+>;
+
+export type Staged = { readonly ok: true } & Extract<
+  StageResult,
+  { readonly status: "staged" }
+>;
 
 export type UpdateAvailable = {
   readonly ok: true;
   readonly status: "update-available";
   readonly version: string;
   readonly installed: string;
-};
-
-export type Staged = {
-  readonly ok: true;
-  readonly status: "staged";
-  readonly version: string;
-  readonly installed: string;
-  readonly notes?: string;
-  readonly releaseDate?: string;
 };
 
 export type Updated = {
@@ -634,6 +570,68 @@ const within = <A, E, R>(effect: Effect.Effect<A, E, R>, deadline: number) =>
 const isBadUrl = (error: HttpClientError.HttpClientError) =>
   Predicate.isTagged(error.reason, "InvalidUrlError");
 
+const feedFailed =
+  (source: FeedFailed["source"]) =>
+  (
+    reason: FeedFailed["reason"],
+    fields: { readonly status?: number; readonly cause?: unknown } = {},
+  ) =>
+    new FeedFailed({ source, reason, ...fields });
+
+// A body's text, cut off at `limit` bytes as Go's LimitReader cuts it:
+// nothing past the limit is read.
+const bodyText = (
+  response: HttpClientResponse.HttpClientResponse,
+  limit: number,
+) => {
+  let read = 0;
+  return response.stream.pipe(
+    Stream.takeUntil((chunk) => (read += chunk.length) >= limit),
+    Stream.runCollect,
+    Effect.map((chunks) => {
+      const bytes = new Uint8Array(Math.min(read, limit));
+      let at = 0;
+      for (const chunk of chunks) {
+        const part = chunk.subarray(0, bytes.length - at);
+        bytes.set(part, at);
+        at += part.length;
+      }
+      return new TextDecoder().decode(bytes);
+    }),
+  );
+};
+
+// Whether a pid names a live process, whoever owns it: kill(pid, 0)
+// signals nothing, and EPERM means it lives under another user.
+const isAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return Predicate.hasProperty(error, "code") && error.code === "EPERM";
+  }
+};
+
+const pidAlive = (pid: number) => Effect.sync(() => isAlive(pid));
+
+const logged = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+// The installed app, and its Team ID, read once per run.
+type Anchor = {
+  readonly bundle: string;
+  readonly team: Effect.Effect<string, SignatureRejected>;
+};
+
+// What the release list copy holds, its times in epoch ms (0 for none).
+type Kept = {
+  readonly url: string;
+  readonly fetchedAt: number;
+  readonly etag: string;
+  readonly retryAt: number;
+  readonly body: unknown;
+};
+
 // What a finished command said: whether it exited 0, and its output.
 type Ran = {
   readonly ok: boolean;
@@ -695,12 +693,10 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   // that is missing, unreadable or malformed reads as absent.
   const readShared = <A>(
     file: string,
-    decode: (value: unknown) => Result.Result<A, string>,
+    decode: (value: unknown) => Option.Option<A>,
   ) =>
     fs.readFileString(file).pipe(
-      Effect.map((text) =>
-        Result.getSuccess(Result.flatMap(parseJson(text), decode)),
-      ),
+      Effect.map((text) => Option.flatMap(parseJson(text), decode)),
       Effect.orElseSucceed(() => Option.none<A>()),
     );
 
@@ -720,22 +716,14 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       .pipe(Effect.tapError(() => fs.remove(temporary).pipe(Effect.ignore)));
   });
 
-  // Whether a pid names a live process, whoever owns it: what kill(pid, 0)
-  // tells, without signalling anything.
-  const pidAlive = (pid: number) =>
-    run("/bin/ps", ["-p", String(pid), "-o", "pid="]).pipe(
-      Effect.map((ran) => ran.ok),
-    );
-
   // A live pid isn't yet the app: pids recycle across reboots, and handing
   // the install to a recycled one would wait on a process that never
-  // restarts. The executable's name has to match too.
+  // restarts. The executable's name has to match too, and ps fails for a
+  // pid that is gone.
   const appAlive = (pid: number) =>
-    Effect.gen(function* () {
-      if (!(yield* pidAlive(pid))) return false;
-      const ps = yield* run("ps", ["-o", "comm=", "-p", String(pid)], "stdout");
-      return ps.ok && ps.output.includes(APP_EXECUTABLE);
-    });
+    run("ps", ["-o", "comm=", "-p", String(pid)], "stdout").pipe(
+      Effect.map((ps) => ps.ok && ps.output.includes(APP_EXECUTABLE)),
+    );
 
   // Any process with the app's executable name, even one that hasn't
   // published updater.json yet. -x matches exactly, so the "... Helper"
@@ -745,8 +733,9 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   );
 
   // The app's updater.json, none when it is missing or malformed.
-  const readStatus = readShared(statusPath, decodeUpdaterStatus).pipe(
-    Effect.map(Option.filter((status) => status.pid > 0)),
+  const readStatus = readShared(
+    statusPath,
+    Schema.decodeUnknownOption(UpdaterStatusSchema),
   );
 
   // The running app instance, when there is one.
@@ -806,18 +795,6 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       ),
     );
 
-  // A body's text, cut off at `limit` bytes as Go's LimitReader cuts it.
-  const bodyText = (
-    response: HttpClientResponse.HttpClientResponse,
-    limit: number,
-    deadline: number,
-  ) =>
-    within(response.arrayBuffer, deadline).pipe(
-      Effect.map((buffer) =>
-        new TextDecoder().decode(new Uint8Array(buffer).subarray(0, limit)),
-      ),
-    );
-
   // The update server compares versions and answers 204 when nothing is
   // newer. This build's version is in the URL, so any other answer but
   // 200 means a broken feed, not a missing update.
@@ -828,10 +805,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     const url =
       input.feedUrl ||
       `https://update.electronjs.org/${FEED_REPO}/darwin-${running.arch}/${running.version}`;
-    const failed = (
-      reason: FeedFailed["reason"],
-      fields: { status?: number; cause?: unknown } = {},
-    ) => new FeedFailed({ source: "update-server", reason, ...fields });
+    const failed = feedFailed("update-server");
     const deadline =
       (yield* Clock.currentTimeMillis) + Duration.toMillis(FEED_TIMEOUT);
     const response = yield* send(feedRequest(url, running), deadline, (cause) =>
@@ -841,52 +815,68 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     if (response.status !== 200) {
       return yield* failed("status", { status: response.status });
     }
-    const text = yield* bodyText(response, FEED_BODY_LIMIT, deadline).pipe(
-      Effect.mapError((cause) => failed("malformed", { cause })),
-    );
-    const answer = Result.flatMap(parseJson(text), decodeFeedAnswer);
-    if (Result.isFailure(answer)) {
-      return yield* failed("malformed", { cause: new Error(answer.failure) });
-    }
-    const version = trimV(answer.success.name);
-    if (answer.success.url === "" || version === "") {
-      return yield* failed("incomplete");
-    }
+    const answer = yield* within(
+      bodyText(response, FEED_BODY_LIMIT).pipe(
+        Effect.flatMap(
+          Schema.decodeUnknownEffect(Schema.fromJsonString(FeedAnswer)),
+        ),
+      ),
+      deadline,
+    ).pipe(Effect.mapError((cause) => failed("malformed", { cause })));
+    const zip = answer.url ?? "";
+    const version = trimV(answer.name ?? "");
+    if (zip === "" || version === "") return yield* failed("incomplete");
     return {
-      url: answer.success.url,
+      url: zip,
       version,
-      notes: answer.success.notes,
-      releaseDate: parseReleaseDate(answer.success.pubDate),
+      notes: answer.notes ?? "",
+      releaseDate: parseReleaseDate(answer.pub_date ?? ""),
     } satisfies ReleaseInfo;
   });
 
-  const releasesOf = (body: unknown) => {
-    const releases = decodeReleaseList(body);
-    return Result.isSuccess(releases)
-      ? Effect.succeed(releases.success)
-      : Effect.fail(
-          new FeedFailed({
-            source: "release-list",
-            reason: "malformed",
-            cause: new Error(releases.failure),
-          }),
-        );
-  };
-
-  // The kept copy of the release list, when it came from `url`.
-  const readReleaseListCache = (url: string) =>
-    readShared(releaseListPath, decodeReleaseListCache).pipe(
-      Effect.map(
-        Option.filter((cache) => cache.url === url && cache.body !== undefined),
+  const releasesOf = (body: unknown) =>
+    Schema.decodeUnknownEffect(ReleaseList)(body).pipe(
+      Effect.mapError((cause) =>
+        feedFailed("release-list")("malformed", { cause }),
       ),
     );
 
+  // The kept copy of the release list, when it came from `url`.
+  const readReleaseListCache = (url: string) =>
+    readShared(releaseListPath, (value): Option.Option<Kept> => {
+      const cache = Schema.decodeUnknownOption(ReleaseListCache)(value);
+      if (Option.isNone(cache) || cache.value.url !== url) return Option.none();
+      const { fetchedAt, etag = "", retryAt, body } = cache.value;
+      const fetched = parseRfc3339(fetchedAt);
+      return body === undefined || fetched === undefined
+        ? Option.none()
+        : Option.some({
+            url,
+            fetchedAt: fetched,
+            etag,
+            retryAt: parseRfc3339(retryAt ?? "") ?? 0,
+            body,
+          });
+    });
+
   // Best effort: a copy that can't be written only costs the next check
   // a full request.
-  const keepReleaseList = (cache: ReleaseListCache, pid: number) =>
-    writeShared(releaseListPath, encodeReleaseListCache(cache), pid).pipe(
-      Effect.ignore,
-    );
+  const keepReleaseList = (kept: Kept, pid: number) =>
+    writeShared(
+      releaseListPath,
+      `${JSON.stringify(
+        {
+          url: kept.url,
+          fetchedAt: new Date(kept.fetchedAt).toISOString(),
+          ...(kept.etag === "" ? {} : { etag: kept.etag }),
+          retryAt: new Date(kept.retryAt).toISOString(),
+          body: kept.body,
+        },
+        null,
+        2,
+      )}\n`,
+      pid,
+    ).pipe(Effect.ignore);
 
   // The release list, and whether the API confirmed it this run rather
   // than the kept copy answering. Within RELEASE_LIST_MAX_AGE the copy
@@ -901,10 +891,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     const url =
       input.releasesUrl ||
       `https://api.github.com/repos/${FEED_REPO}/releases?per_page=100`;
-    const failed = (
-      reason: FeedFailed["reason"],
-      fields: { status?: number; cause?: unknown } = {},
-    ) => new FeedFailed({ source: "release-list", reason, ...fields });
+    const failed = feedFailed("release-list");
     const cached = Option.getOrUndefined(yield* readReleaseListCache(url));
     const now = yield* Clock.currentTimeMillis;
     if (
@@ -928,7 +915,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     );
     if (response.status === 304 && cached !== undefined) {
       yield* keepReleaseList(
-        { ...cached, fetchedAt: now, retryAt: ZERO_TIME },
+        { ...cached, fetchedAt: now, retryAt: 0 },
         running.pid,
       );
       return { releases: yield* releasesOf(cached.body), confirmed: true };
@@ -950,23 +937,22 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     if (response.status !== 200) {
       return yield* failed("status", { status: response.status });
     }
-    const text = yield* bodyText(
-      response,
-      RELEASE_LIST_BODY_LIMIT,
+    const text = yield* within(
+      bodyText(response, RELEASE_LIST_BODY_LIMIT),
       deadline,
     ).pipe(Effect.mapError((cause) => failed("unreadable", { cause })));
-    const body = parseJson(text);
-    if (Result.isFailure(body)) {
-      return yield* failed("malformed", { cause: new Error(body.failure) });
-    }
-    const releases = yield* releasesOf(body.success);
+    const body = yield* Effect.try({
+      try: (): unknown => JSON.parse(text),
+      catch: (cause) => failed("malformed", { cause }),
+    });
+    const releases = yield* releasesOf(body);
     yield* keepReleaseList(
       {
         url,
         fetchedAt: now,
         etag: header(response, "etag") ?? "",
-        retryAt: ZERO_TIME,
-        body: body.success,
+        retryAt: 0,
+        body,
       },
       running.pid,
     );
@@ -1017,20 +1003,29 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     return team === "not set" ? "" : team;
   });
 
+  // The installed bundle for a run, its Team ID read at most once.
+  const anchorOf = (bundle: string) =>
+    Effect.map(
+      Effect.cached(teamOf(bundle)),
+      (team): Anchor => ({ bundle, team }),
+    );
+
   // A valid deep, strict signature and the installed app's Team ID. An
   // unsigned installed app refuses too: with no anchor there is nothing
-  // to trust, and release builds are always signed.
+  // to trust, and release builds are always signed. The checks run at
+  // once, and fail in the order Go's sm made them.
   const verify = Effect.fn("Updater.verify")(function* (
-    installed: string,
+    installed: Anchor,
     candidate: string,
   ) {
-    const checked = yield* run("codesign", [
-      "--verify",
-      "--deep",
-      "--strict",
-      "--",
-      candidate,
-    ]);
+    const [checked, installedTeam, team] = yield* Effect.all(
+      [
+        run("codesign", ["--verify", "--deep", "--strict", "--", candidate]),
+        Effect.result(installed.team),
+        Effect.result(teamOf(candidate)),
+      ],
+      { concurrency: "unbounded" },
+    );
     if (!checked.ok) {
       return yield* new SignatureRejected({
         reason: "invalid",
@@ -1038,20 +1033,20 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         cause: new Error(checked.output.trim()),
       });
     }
-    const installedTeam = yield* teamOf(installed);
-    const team = yield* teamOf(candidate);
-    if (installedTeam === "") {
+    if (Result.isFailure(installedTeam)) return yield* installedTeam.failure;
+    if (Result.isFailure(team)) return yield* team.failure;
+    if (installedTeam.success === "") {
       return yield* new SignatureRejected({
         reason: "installed-unsigned",
-        bundle: installed,
+        bundle: installed.bundle,
       });
     }
-    if (team !== installedTeam) {
+    if (team.success !== installedTeam.success) {
       return yield* new SignatureRejected({
         reason: "other-team",
         bundle: candidate,
-        team,
-        installedTeam,
+        team: team.success,
+        installedTeam: installedTeam.success,
       });
     }
   });
@@ -1063,15 +1058,11 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   const lockHolder = Effect.gen(function* () {
     const raw = yield* fs.readFileString(lockPath).pipe(Effect.option);
     if (Option.isNone(raw)) return Option.none();
-    const pid = parseGoInt(raw.value.trim());
+    const text = raw.value.trim();
+    const pid = /^\d+$/.test(text) ? Number(text) : 0;
     // kill(0) and kill(-1) always "succeed".
-    if (pid === undefined || pid < 2n) {
-      return Option.some({ pid: 0, alive: false });
-    }
-    return Option.some({
-      pid: Number(pid),
-      alive: yield* pidAlive(Number(pid)),
-    });
+    if (pid < 2) return Option.some({ pid: 0, alive: false });
+    return Option.some({ pid, alive: yield* pidAlive(pid) });
   });
 
   // One stager at a time, across the terminal and the app's periodic
@@ -1125,14 +1116,11 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
 
   // The staged update, when its manifest and its bundle are both there.
   const readManifest = Effect.gen(function* () {
-    const manifest = yield* readShared(manifestPath, decodeStagedManifest);
-    if (
-      Option.isNone(manifest) ||
-      manifest.value.version === "" ||
-      manifest.value.bundleName === ""
-    ) {
-      return Option.none<StagedManifest>();
-    }
+    const manifest = yield* readShared(
+      manifestPath,
+      Schema.decodeUnknownOption(StagedManifestSchema),
+    );
+    if (Option.isNone(manifest)) return Option.none<StagedManifest>();
     const bundle = yield* fs
       .stat(path.join(stagedDir, manifest.value.bundleName))
       .pipe(Effect.option);
@@ -1264,12 +1252,12 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   // Everything runs under the lock, so a concurrent stager never sees
   // another's half-written files or deletes them.
   const stageUpdate = Effect.fn("Updater.stageUpdate")(function* (
-    installed: string,
+    installed: Anchor,
     input: UpdateInput,
   ) {
     const { running } = input;
     yield* lock(running.pid);
-    yield* pruneLeftovers(installed);
+    yield* pruneLeftovers(installed.bundle);
     const { release, confirmed } = yield* queryFeed(input);
     if (release === undefined) {
       // A fresh boot after an install can find its own (or an older)
@@ -1332,15 +1320,18 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         ),
       );
     yield* removeAll(extractDir);
+    // Empty fields left out, as Go's omitempty leaves them.
     const manifest: StagedManifest = {
       version: release.version,
       bundleName: name,
-      notes: release.notes,
-      releaseDate: release.releaseDate,
+      ...(release.notes === "" ? {} : { notes: release.notes }),
+      ...(release.releaseDate === ""
+        ? {}
+        : { releaseDate: release.releaseDate }),
     };
     yield* writeShared(
       manifestPath,
-      encodeStagedManifest(manifest),
+      `${JSON.stringify(manifest, null, 2)}\n`,
       running.pid,
     ).pipe(
       Effect.mapError(
@@ -1366,9 +1357,10 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   // a rename or an unlink, never a write in place, so it keeps running.
   const swap = Effect.fn("Updater.swap")(function* (
     staged: string,
-    target: string,
+    installed: Anchor,
     pid: number,
   ) {
+    const target = installed.bundle;
     const dir = path.dirname(target);
     const base = path.basename(target);
     const incoming = path.join(dir, `.${base}.new-${pid}`);
@@ -1387,7 +1379,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       }
       yield* removeAll(staged);
     }
-    yield* verify(target, incoming).pipe(
+    yield* verify(installed, incoming).pipe(
       Effect.tapError(() => removeAll(incoming)),
     );
     const aside = path.join(dir, `${base}.old-${pid}`);
@@ -1404,20 +1396,20 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
             cause: setAside.failure,
           });
         }
-        const installed = yield* fs
+        const renamedIn = yield* fs
           .rename(incoming, target)
           .pipe(Effect.result);
-        if (Result.isFailure(installed)) {
+        if (Result.isFailure(renamedIn)) {
           const restored = yield* fs.rename(aside, target).pipe(Effect.result);
           yield* removeAll(incoming);
           return yield* Result.isFailure(restored)
             ? new SwapFailed({
                 reason: "rollback",
                 aside,
-                cause: installed.failure,
+                cause: renamedIn.failure,
                 rollbackCause: restored.failure,
               })
-            : new SwapFailed({ reason: "install", cause: installed.failure });
+            : new SwapFailed({ reason: "install", cause: renamedIn.failure });
         }
       }),
     );
@@ -1431,7 +1423,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   // and it dies with the app a moment later. The manifest is read once
   // the lock is held, since that stager may have replaced the bundle.
   const installStaged = Effect.fn("Updater.installStaged")(function* (
-    target: string,
+    installed: Anchor,
     pid: number,
   ) {
     yield* lock(pid).pipe(
@@ -1442,7 +1434,11 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     );
     const manifest = yield* readManifest;
     if (Option.isNone(manifest)) return yield* new NothingStaged();
-    yield* swap(path.join(stagedDir, manifest.value.bundleName), target, pid);
+    yield* swap(
+      path.join(stagedDir, manifest.value.bundleName),
+      installed,
+      pid,
+    );
     yield* clearStaged;
     return manifest.value;
   }, Effect.scoped);
@@ -1473,11 +1469,8 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         if (status.appVersion !== app.appVersion) return Option.some(status);
         sameVersion = true;
       }
-      if (
-        status !== undefined &&
-        status.pid === app.pid &&
-        status.state.kind === "error"
-      ) {
+      const state = status?.state;
+      if (status?.pid === app.pid && state?.kind === "error") {
         // Only an error written since the request: the app never clears
         // one from an earlier failed check on this path.
         const info = yield* fs.stat(statusPath).pipe(Effect.option);
@@ -1485,7 +1478,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         if (Option.isSome(written) && written.value.getTime() > requestedAt) {
           return yield* new HandoffFailed({
             reason: "install",
-            detail: status.state.message,
+            detail: state.message,
           });
         }
       }
@@ -1527,8 +1520,6 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       );
     }).pipe(Effect.ignore);
 
-  const logged = (error: unknown) => wordsOf(error) ?? causeText(error);
-
   // --- the methods ---
 
   const available =
@@ -1551,9 +1542,11 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     input: UpdateInput,
   ) {
     yield* available;
-    const bundle = yield* installedBundle(input.running.executable);
+    const installed = yield* anchorOf(
+      yield* installedBundle(input.running.executable),
+    );
     yield* report(input, { phase: "checking" });
-    return { bundle, staged: yield* stageUpdate(bundle, input) };
+    return { installed, staged: yield* stageUpdate(installed, input) };
   });
 
   const stage = Effect.fn("Updater.stage")(function* (input: UpdateInput) {
@@ -1565,14 +1558,14 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       status: "staged",
       version,
       installed: input.running.version,
-      ...(notes === "" ? {} : { notes }),
-      ...(releaseDate === "" ? {} : { releaseDate }),
+      ...(notes === undefined ? {} : { notes }),
+      ...(releaseDate === undefined ? {} : { releaseDate }),
     } satisfies Staged;
   });
 
   const update = Effect.fn("Updater.update")(function* (input: UpdateInput) {
     const { running } = input;
-    const { bundle, staged } = yield* stageFor(input);
+    const { installed: anchor, staged } = yield* stageFor(input);
     if (Option.isNone(staged)) return upToDate(running);
     let app = yield* runningApp;
     if (Option.isNone(app) && (yield* appRunning)) {
@@ -1599,7 +1592,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
         phase: "installing",
         version: staged.value.version,
       });
-      const installed = yield* installStaged(bundle, running.pid);
+      const installed = yield* installStaged(anchor, running.pid);
       return {
         ok: true,
         status: "updated",
@@ -1608,9 +1601,10 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       } satisfies Updated;
     }
     const requestedAt = yield* Clock.currentTimeMillis;
+    const request: UpdateRequest = { action: "install", requestedAt };
     yield* writeShared(
       requestPath,
-      `${JSON.stringify({ action: "install", requestedAt }, null, 2)}\n`,
+      `${JSON.stringify(request, null, 2)}\n`,
       running.pid,
     ).pipe(
       Effect.mapError(
@@ -1654,7 +1648,8 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
       yield* appendInstallLog(`finish-install: ${logged(error)} (aborting)`);
       return yield* error;
     }
-    const installed = yield* installStaged(bundle, input.running.pid).pipe(
+    const anchor = yield* anchorOf(bundle);
+    const installed = yield* installStaged(anchor, input.running.pid).pipe(
       // The app quit to restart, so the current version comes back rather
       // than leaving it closed. A failed swap has restored it.
       Effect.tapError((error) =>

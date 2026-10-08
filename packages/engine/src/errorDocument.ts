@@ -6,7 +6,7 @@ import * as Predicate from "effect/Predicate";
 import { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
-import { UpdateInProgress, wordsOf } from "./Updater.ts";
+import { UpdateInProgress } from "./Updater.ts";
 import {
   DirtyWorktree,
   PullRequestOwnsDescription,
@@ -29,8 +29,6 @@ export const messageOf = (error: unknown): string => {
     return `post-checkout hook: ${messageOf(error.cause)}`;
   }
   if (error instanceof CheckoutUnfinished) return messageOf(error.cause);
-  const updater = wordsOf(error);
-  if (updater !== undefined) return updater;
   return error instanceof Error ? error.message : String(error);
 };
 

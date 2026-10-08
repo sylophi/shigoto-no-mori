@@ -76,7 +76,7 @@ export type UpdaterState = typeof UpdaterStateSchema.Type;
 // reader of updater.json is the Go CLI, so UpdaterStatusSchema exists
 // to pin the published shape. cli/cmd_update.go mirrors the subset it
 // needs (pid, appVersion, and the state's error kind).
-const UpdaterStatusSchema = Schema.Struct({
+export const UpdaterStatusSchema = Schema.Struct({
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   appVersion: Schema.String,
   state: UpdaterStateSchema,
