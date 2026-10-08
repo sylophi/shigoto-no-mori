@@ -77,13 +77,15 @@ async function derive(schema: ContractSchema, seed: string): Promise<unknown> {
         size,
       }),
     ).then(([value]) => Schema.encodeUnknownSync(schema)(value));
-  for (const attempt of [0, 1, 2, 3, 4, 5, 6, 7]) {
-    const at = `${seed}#${attempt}`;
-    // oxlint-disable-next-line no-await-in-loop -- each attempt only runs when the one before sent nothing
+  // A schema that may send nothing can derive nothing, so a few seeds
+  // are tried for one that sends something.
+  const attempt = async (n: number): Promise<unknown> => {
+    if (n === 8) throw new Error(`${seed}: every sample derived sends nothing`);
+    const at = `${seed}#${n}`;
     const encoded = await sample(at, 2).catch(() => sample(at, undefined));
-    if (encoded !== undefined) return encoded;
-  }
-  throw new Error(`${seed}: every sample derived sends nothing`);
+    return encoded === undefined ? attempt(n + 1) : encoded;
+  };
+  return attempt(0);
 }
 
 if (process.env["UPDATE_WIRE_FIXTURES"] === "1") {

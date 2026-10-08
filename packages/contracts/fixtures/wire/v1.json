@@ -1225,14 +1225,14 @@
     }
   },
   "projects:clone": {
+    "payload": {
+      "url": "霬衬ɹ:b睚᪨",
+      "parentDir": "0"
+    },
     "success": {
       "id": " ",
       "name": "X",
       "path": "RH"
-    },
-    "payload": {
-      "url": "霬衬ɹ:b睚᪨",
-      "parentDir": "0"
     }
   },
   "projects:cloneUrl": {
@@ -1452,6 +1452,10 @@
     }
   },
   "sharedSettings:set": {
+    "payload": {
+      "key": "+1",
+      "value": "\udc00"
+    },
     "success": {
       "entries": {
         "quickCreateDevice/remote:github.com/alex/notes": {
@@ -1460,10 +1464,6 @@
           "by": "dev_8f3ac2e1"
         }
       }
-    },
-    "payload": {
-      "key": "+1",
-      "value": "\udc00"
     }
   },
   "shell:openExternal": {
