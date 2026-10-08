@@ -10,25 +10,18 @@ import {
   type PaletteEntry,
 } from "@/components/palette/buildPaletteEntries";
 import {
-  buildSidebarRows,
   projectGroupKey,
   type ProjectGroupOrder,
 } from "@/components/sidebar/buildSidebarRows";
 import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadge";
-import type { SidebarRow } from "@/components/sidebar/sidebarRow";
+import {
+  projectListSections,
+  type ProjectSection,
+} from "@/components/sidebar/projectListSections";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
-
-export type ProjectTileRow = Extract<SidebarRow, { kind: "project" }>;
-
-export interface Section {
-  key: string;
-  // The owner's name, null for a list that isn't split.
-  label: string | null;
-  rows: ProjectTileRow[];
-}
 
 // What a tile says about its project's work, off the palette's entries.
 export interface GroupWork {
@@ -56,47 +49,15 @@ export interface GridInput {
   visits: Record<string, number>;
 }
 
-const NO_SHELVES = {
-  agentWorking: new Set<string>(),
-  shelved: new Set<string>(),
-  hidden: new Set<string>(),
-};
-
-export function buildGrid({ visits, byOwner, ...forest }: GridInput): {
-  sections: Section[];
+export function buildGrid({ visits, ...forest }: GridInput): {
+  sections: ProjectSection[];
   work: Map<string, GroupWork>;
 } {
-  // The tree's list of projects, every owner open.
-  const { rows } = buildSidebarRows({
-    ...forest,
-    openKey: null,
-    // Only an open project's rows are sorted.
-    worktreeSort: "name",
-    openShelves: NO_SHELVES,
-    // Only an open project's rows are grouped.
-    byPrefix: null,
-    arrangeMode: false,
-    byOwner: byOwner ? { shut: new Set() } : null,
-  });
   const { entries } = buildPaletteEntries({ ...forest, visits });
-  return { sections: sectionsOf(rows), work: workByGroup(entries) };
-}
-
-// The list's project rows under their owners. The owner headers come
-// before their projects (ownerSections), and a list that isn't split
-// has none, so it is one unnamed section.
-function sectionsOf(rows: readonly SidebarRow[]): Section[] {
-  const sections: Section[] = [];
-  for (const row of rows) {
-    if (row.kind === "owner-header") {
-      sections.push({ key: row.key, label: row.label, rows: [] });
-    } else if (row.kind === "project") {
-      const last = sections.at(-1);
-      if (last) last.rows.push(row);
-      else sections.push({ key: "all", label: null, rows: [row] });
-    }
-  }
-  return sections;
+  return {
+    sections: projectListSections(forest),
+    work: workByGroup(entries),
+  };
 }
 
 // Each project's entries, in the palette's order, by the group key its
