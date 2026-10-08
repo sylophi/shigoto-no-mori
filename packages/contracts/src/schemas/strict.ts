@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 
 // A struct that refuses a key it does not declare, as zod's
 // strictObject did. Only at its own level: a struct nested in it still
@@ -14,25 +15,38 @@ export function strict<const Fields extends Schema.Struct.Fields>(
     Schema.declareConstructor<
       Schema.Struct<Fields>["Type"],
       Schema.Struct<Fields>["Encoded"]
-    >()([struct], ([codec]) => (input, ast, options) => {
-      if (
-        typeof input === "object" &&
-        input !== null &&
-        !Array.isArray(input)
-      ) {
-        for (const [key, value] of Object.entries(input)) {
-          if (!declared.has(key)) {
-            return Effect.fail(
-              new SchemaIssue.Pointer(
-                [key],
-                new SchemaIssue.UnexpectedKey(ast, value, options),
-              ),
-            );
+    >()(
+      [struct],
+      ([codec]) =>
+        (input, ast, options) => {
+          if (
+            typeof input === "object" &&
+            input !== null &&
+            !Array.isArray(input)
+          ) {
+            for (const [key, value] of Object.entries(input)) {
+              if (!declared.has(key)) {
+                return Effect.fail(
+                  new SchemaIssue.Pointer(
+                    [key],
+                    new SchemaIssue.UnexpectedKey(ast, value, options),
+                  ),
+                );
+              }
+            }
           }
-        }
-      }
-      return SchemaParser.decodeUnknownEffect(codec)(input, options);
-    }),
+          return SchemaParser.decodeUnknownEffect(codec)(input, options);
+        },
+      {
+        // Read as the struct it wraps wherever a schema is derived from
+        // its codec, as the wire samples are (test/wire.test.ts).
+        toCodec: ([codec]) =>
+          Schema.link<Schema.Struct<Fields>["Encoded"]>()(
+            codec,
+            SchemaTransformation.passthrough(),
+          ),
+      },
+    ),
     { struct },
   );
 }
