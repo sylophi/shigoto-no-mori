@@ -1426,6 +1426,9 @@ describe("worktrees adopt and setup", () => {
     await adoptVerb(repo, "fox");
     writeFileSync(join(outside, "new.txt"), "new\n");
     await adoptVerb(repo, outside);
+    // Refused too where the user's setting hides untracked files.
+    box.git(outside, "config", "status.showUntrackedFiles", "no");
+    await adoptVerb(repo, outside);
     await adoptVerb(repo, outside, true);
   });
 

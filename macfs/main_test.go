@@ -286,3 +286,16 @@ func TestLstatReportsWhatTheIndexRecords(t *testing.T) {
 		t.Fatalf("mtimeNsec = %v", got)
 	}
 }
+
+func TestLstatAddsPrivateSizeWhenAsked(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "f"), strings.Repeat("x", 1<<16), 0o644)
+	plain := macfs(t, "f", "lstat", "-stdin", root)
+	if _, ok := plain["f"]["privateBytes"]; ok {
+		t.Fatalf("privateBytes without -private: %v", plain["f"])
+	}
+	sized := macfs(t, "f", "lstat", "-stdin", "-private", root)
+	if got, ok := sized["f"]["privateBytes"].(float64); !ok || got <= 0 {
+		t.Fatalf("privateBytes = %v", sized["f"]["privateBytes"])
+	}
+}

@@ -19,6 +19,7 @@ import * as Darwin from "./Darwin.ts";
 import * as Git from "./Git.ts";
 import { splitRemoteRef } from "./gitParse.ts";
 import type { RegisteredProject } from "./Registry.ts";
+import { isSameOrInside } from "./worktreeLayout.ts";
 import * as Worktrees from "./Worktrees.ts";
 
 // A folder's measure: `bytes` is its footprint, what `du` reports
@@ -88,31 +89,25 @@ const ACTIVITY_EXCLUDED = new Set([
   "__pycache__",
 ]);
 
-const S_IFMT = 0o170000;
-const S_IFDIR = 0o040000;
-const S_IFREG = 0o100000;
-const S_IFLNK = 0o120000;
-
 // A ref to compare against, and the tree it points at. A null tree means
 // it wouldn't resolve, which turns the containment probe off for it.
 type PrimaryCandidate = { readonly ref: string; readonly tree: string | null };
 
-// Probes run through a shared window: this is asked for every project at
-// once, and each worktree's chain can include a merge-tree.
+// Worktrees probed at once. Git caps its own spawns across every caller.
 const PROBE_SLOTS = 6;
 // Each walk is a helper streaming a whole tree, so a wider window mostly
 // makes the first size land later.
 const WALK_SLOTS = 3;
 
-// Whether `path` is `root` or inside it.
-const isSameOrInside = (path: string, root: string) =>
-  path === root || path.startsWith(root.endsWith("/") ? root : `${root}/`);
+// What deleting a file of `allocated` bytes would free: its private
+// blocks where the volume can tell (APFS), else all of them.
+const ownBytes = (allocated: number, privateBytes: number | undefined) =>
+  privateBytes === undefined ? allocated : Math.min(privateBytes, allocated);
 
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
   const darwin = yield* Darwin.Darwin;
   const worktrees = yield* Worktrees.Worktrees;
-  const probes = yield* Semaphore.make(PROBE_SLOTS);
   const walks = yield* Semaphore.make(WALK_SLOTS);
 
   // --- the facts ---
@@ -196,11 +191,14 @@ const make = Effect.gen(function* () {
       ) {
         refs.push(split.branch);
       }
-      return yield* Effect.forEach(refs, (ref) =>
-        git.treeOf(repo, ref).pipe(
-          Effect.map((tree): PrimaryCandidate => ({ ref, tree })),
-          Effect.orElseSucceed((): PrimaryCandidate => ({ ref, tree: null })),
-        ),
+      return yield* Effect.forEach(
+        refs,
+        (ref) =>
+          git.treeOf(repo, ref).pipe(
+            Effect.map((tree): PrimaryCandidate => ({ ref, tree })),
+            Effect.orElseSucceed((): PrimaryCandidate => ({ ref, tree: null })),
+          ),
+        { concurrency: "unbounded" },
       );
     });
 
@@ -264,13 +262,10 @@ const make = Effect.gen(function* () {
 
   // A project's identities with its primary ref, kept long enough to
   // serve one page load: the page asks for every row's size at once.
-  // Keyed by the project as text: a key compares by value.
   const identities = yield* Cache.make({
-    lookup: (key: string) =>
+    lookup: (project: RegisteredProject) =>
       worktrees
-        .identityList([JSON.parse(key) as RegisteredProject], {
-          primaryRef: true,
-        })
+        .identityList([project], { primaryRef: true })
         .pipe(
           Effect.flatMap(({ rows, skipped }) =>
             skipped[0] === undefined
@@ -282,15 +277,13 @@ const make = Effect.gen(function* () {
     timeToLive: Duration.seconds(10),
   });
 
+  // A key compares by value: the project's own fields, nothing more.
   const identitiesOf = (project: RegisteredProject) =>
-    Cache.get(
-      identities,
-      JSON.stringify({
-        id: project.id,
-        name: project.name,
-        path: project.path,
-      }),
-    );
+    Cache.get(identities, {
+      id: project.id,
+      name: project.name,
+      path: project.path,
+    });
 
   const facts = Effect.fn("Hygiene.facts")(function* (
     project: RegisteredProject,
@@ -305,11 +298,8 @@ const make = Effect.gen(function* () {
     const candidates = yield* candidatesOf(project.path, primaryRef, remotes);
     return yield* Effect.forEach(
       listed,
-      (identity) =>
-        probes.withPermit(
-          factsOf(identity, project.path, candidates, primaryBranch),
-        ),
-      { concurrency: "unbounded" },
+      (identity) => factsOf(identity, project.path, candidates, primaryBranch),
+      { concurrency: PROBE_SLOTS },
     );
   });
 
@@ -322,110 +312,92 @@ const make = Effect.gen(function* () {
     const relativeExcludes = exclude
       .filter((path) => path !== root && isSameOrInside(path, root))
       .map((path) => path.slice(root.length + 1));
-    const excluded = (rel: string) =>
-      relativeExcludes.some((ex) => rel === ex || rel.startsWith(`${ex}/`));
     // Whether a path's own name and every folder above it may date
     // activity.
     const countsAsActivity = (rel: string) =>
-      rel === "." ||
       rel.split("/").every((part) => !ACTIVITY_EXCLUDED.has(part));
-
-    let bytes = 0;
-    let reclaimable = 0;
-    let lastActivityAt: number | null = null;
-    let partial = false;
-    // Single-linked files whose private size is asked once the walk ends.
-    const own: Array<{ rel: string; allocated: number }> = [];
+    const total = {
+      bytes: 0,
+      reclaimableBytes: 0,
+      lastActivityAt: null as number | null,
+      partial: false,
+    };
     // Multiply linked inodes: counted once, and toward reclaimable only
     // when the walk met every link.
     const linked = new Map<
       string,
-      { rel: string; nlink: number; seen: number; allocated: number }
+      { nlink: number; seen: number; allocated: number; own: number }
     >();
+    const add = (entry: Darwin.Entry<Darwin.LstatEntry>) => {
+      if (Darwin.isFailed(entry)) {
+        total.partial = true;
+        return;
+      }
+      if (
+        entry.path !== "." &&
+        relativeExcludes.some((ex) => isSameOrInside(entry.path, ex))
+      ) {
+        return;
+      }
+      const kind = entry.mode & Darwin.S_IFMT;
+      const allocated = entry.blocks * 512;
+      if (kind === Darwin.S_IFDIR) {
+        // A folder's own blocks: 0 on APFS, a block or more on ext4.
+        total.bytes += allocated;
+        total.reclaimableBytes += allocated;
+        return;
+      }
+      // Symlinks count as themselves, never their target, and never as
+      // activity. Anything else (a fifo, a socket) is skipped.
+      if (kind !== Darwin.S_IFREG && kind !== Darwin.S_IFLNK) return;
+      if (kind === Darwin.S_IFREG && countsAsActivity(entry.path)) {
+        const mtime =
+          entry.mtimeSec * 1000 + Math.floor(entry.mtimeNsec / 1_000_000);
+        if (total.lastActivityAt === null || mtime > total.lastActivityAt) {
+          total.lastActivityAt = mtime;
+        }
+      }
+      const own = ownBytes(allocated, entry.privateBytes);
+      if (entry.nlink > 1) {
+        const key = `${entry.dev}:${entry.ino}`;
+        const inode = linked.get(key) ?? {
+          nlink: entry.nlink,
+          seen: 0,
+          allocated,
+          own,
+        };
+        inode.seen++;
+        linked.set(key, inode);
+        return;
+      }
+      total.bytes += allocated;
+      total.reclaimableBytes += own;
+    };
 
-    yield* darwin.lstat({ root }).pipe(
-      Stream.runForEach((entry) =>
-        Effect.sync(() => {
-          if (Darwin.isFailed(entry)) {
-            partial = true;
-            return;
-          }
-          if (entry.path !== "." && excluded(entry.path)) return;
-          const kind = entry.mode & S_IFMT;
-          const allocated = entry.blocks * 512;
-          if (kind === S_IFDIR) {
-            // A folder's own blocks: 0 on APFS, a block or more on ext4.
-            bytes += allocated;
-            reclaimable += allocated;
-            return;
-          }
-          // Symlinks count as themselves, never their target, and never
-          // as activity. Anything else (a fifo, a socket) is skipped.
-          if (kind !== S_IFREG && kind !== S_IFLNK) return;
-          if (kind === S_IFREG && countsAsActivity(entry.path)) {
-            const mtime =
-              entry.mtimeSec * 1000 + Math.floor(entry.mtimeNsec / 1e6);
-            if (lastActivityAt === null || mtime > lastActivityAt) {
-              lastActivityAt = mtime;
-            }
-          }
-          if (entry.nlink > 1) {
-            const key = `${entry.dev}:${entry.ino}`;
-            const inode = linked.get(key) ?? {
-              rel: entry.path,
-              nlink: entry.nlink,
-              seen: 0,
-              allocated,
-            };
-            inode.seen++;
-            linked.set(key, inode);
-            return;
-          }
-          bytes += allocated;
-          if (allocated > 0) own.push({ rel: entry.path, allocated });
-        }),
+    yield* walks.withPermit(
+      darwin.lstat({ root, private: true }).pipe(
+        Stream.runForEach((entry) => Effect.sync(() => add(entry))),
+        // The helper failing outright is a measure that couldn't finish.
+        Effect.catch(() => Effect.sync(() => void (total.partial = true))),
       ),
-      // The helper failing outright is a measure that couldn't finish.
-      Effect.catch(() => Effect.sync(() => void (partial = true))),
     );
-
     for (const inode of linked.values()) {
-      bytes += inode.allocated;
-      if (inode.seen >= inode.nlink) own.push(inode);
+      total.bytes += inode.allocated;
+      if (inode.seen >= inode.nlink) total.reclaimableBytes += inode.own;
     }
-    // What deleting each file would free: its private blocks where the
-    // volume can tell (APFS), else all of them.
-    const privateSizes = yield* own.length === 0
-      ? Effect.succeed(new Map<string, number | null>())
-      : darwin.privateSize({ root, paths: own.map(({ rel }) => rel) }).pipe(
-          Stream.runCollect,
-          Effect.map(
-            (entries) =>
-              new Map(
-                entries.flatMap((entry) =>
-                  Darwin.isFailed(entry) ? [] : [[entry.path, entry.bytes]],
-                ),
-              ),
-          ),
-          Effect.orElseSucceed(() => new Map<string, number | null>()),
-        );
-    for (const { rel, allocated } of own) {
-      const privateBytes = privateSizes.get(rel);
-      reclaimable +=
-        privateBytes === undefined || privateBytes === null
-          ? allocated
-          : Math.min(privateBytes, allocated);
-    }
-    return { bytes, reclaimableBytes: reclaimable, lastActivityAt, partial };
+    return total satisfies DiskUsage;
   });
 
-  // Keyed by the path and what was carved out of it, so a walk isn't
-  // reused after a nested worktree came or went.
+  // Kept for a minute by the folder and what was carved out of it, so a
+  // walk isn't reused after a nested worktree came or went.
   const measured = yield* Cache.make({
-    lookup: (key: string) => {
-      const [root = key, ...excluded] = key.split("\0");
-      return walks.withPermit(measure(root, excluded));
-    },
+    lookup: ({
+      root,
+      exclude,
+    }: {
+      readonly root: string;
+      readonly exclude: ReadonlyArray<string>;
+    }) => measure(root, exclude),
     capacity: 256,
     timeToLive: Duration.minutes(1),
   });
@@ -448,10 +420,10 @@ const make = Effect.gen(function* () {
         (path) => path !== worktree.path && isSameOrInside(path, worktree.path),
       )
       .toSorted();
-    const usage = yield* Cache.get(
-      measured,
-      [worktree.path, ...nested].join("\0"),
-    );
+    const usage = yield* Cache.get(measured, {
+      root: worktree.path,
+      exclude: nested,
+    });
     return { worktreeId, ...usage };
   });
 

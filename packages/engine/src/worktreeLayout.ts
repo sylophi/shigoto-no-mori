@@ -121,3 +121,7 @@ export function worktreeBase(
       return managedRoot;
   }
 }
+
+// Whether `path` is `root` or anything below it.
+export const isSameOrInside = (path: string, root: string) =>
+  path === root || path.startsWith(root.endsWith("/") ? root : `${root}/`);

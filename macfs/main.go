@@ -8,7 +8,7 @@
 //	macfs xattrs [-stdin] [-strip] <root>  xattr names, stripped but provenance
 //	macfs privsize [-stdin] <root>     APFS private size, null where unknown
 //	macfs fstype [-stdin] <root>       the filesystem's type name
-//	macfs lstat [-stdin] <root>        lstat(2): what git's index records, the flags, blocks and links
+//	macfs lstat [-stdin] [-private] <root>  lstat(2): what git's index records, the flags, blocks and links
 //
 // Without -stdin, clone and fstype answer for the root itself and the
 // other four walk the whole tree under it (the root included, no
@@ -90,6 +90,9 @@ type statted struct {
 	// many names the inode has.
 	Blocks int64  `json:"blocks"`
 	Nlink  uint32 `json:"nlink"`
+	// With -private, a regular file's APFS private size: the bytes no
+	// clone shares. Absent where the volume can't say.
+	PrivateBytes *int64 `json:"privateBytes,omitempty"`
 }
 
 type typed struct {
@@ -163,19 +166,27 @@ var verbs = map[string]verb{
 			return out, err
 		}
 	}},
-	"lstat": {roots: 1, walks: true, op: func(*flag.FlagSet) op {
+	"lstat": {roots: 1, walks: true, op: func(set *flag.FlagSet) op {
+		withPrivate := set.Bool("private", false, "add each regular file's APFS private size")
 		return func(roots []string, rel string) (any, error) {
+			p := filepath.Join(roots[0], rel)
 			var st unix.Stat_t
-			if err := unix.Lstat(filepath.Join(roots[0], rel), &st); err != nil {
+			if err := unix.Lstat(p, &st); err != nil {
 				return nil, err
 			}
-			return statted{
+			out := statted{
 				Path: rel, Dev: uint32(st.Dev), Ino: st.Ino, Mode: uint32(st.Mode),
 				UID: st.Uid, GID: st.Gid, Size: st.Size,
 				CtimeSec: st.Ctim.Sec, CtimeNsec: st.Ctim.Nsec,
 				MtimeSec: st.Mtim.Sec, MtimeNsec: st.Mtim.Nsec,
 				Flags: st.Flags, Blocks: st.Blocks, Nlink: uint32(st.Nlink),
-			}, nil
+			}
+			if *withPrivate && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Blocks > 0 {
+				if n, ok, _ := privateSize(p); ok {
+					out.PrivateBytes = &n
+				}
+			}
+			return out, nil
 		}
 	}},
 	"fstype": {roots: 1, op: func(*flag.FlagSet) op {
@@ -186,7 +197,7 @@ var verbs = map[string]verb{
 	}},
 }
 
-const usage = "usage: macfs clone|flags|xattrs|privsize|fstype|lstat [-stdin] [-clear|-strip] <root> [<dst>]"
+const usage = "usage: macfs clone|flags|xattrs|privsize|fstype|lstat [-stdin] [-clear|-strip|-private] <root> [<dst>]"
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
