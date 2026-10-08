@@ -20,7 +20,11 @@ import {
   signalAllScriptsBestEffort,
 } from "@host/lib/scripts";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
+import * as GithubCli from "@host/lib/githubCli/GithubCli";
+import * as Ports from "@host/lib/ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
+import * as Terrier from "@host/lib/terrier";
+import * as Villagers from "@host/lib/villagers";
 import * as Processes from "@host/lib/util/processes";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import * as GitWatcher from "./core/gitWatcher";
@@ -225,6 +229,18 @@ const portForwards = onQuit(
   Effect.sync(stopAllPortForwards),
 );
 
+// What the host answers from caches of other tools: gh, terrier and
+// port-pool.
+const toolAnswers = Layer.mergeAll(
+  GithubCli.adapter,
+  Terrier.adapter,
+  Ports.adapter,
+).pipe(
+  Layer.provideMerge(
+    Layer.mergeAll(GithubCli.layer, Terrier.layer, Ports.layer),
+  ),
+);
+
 // Built from the bottom up, so the scope closes from the top down: read
 // downward, this is the quit sequence.
 export const layer = (options: { readonly hurried: () => boolean }) =>
@@ -250,6 +266,10 @@ export const layer = (options: { readonly hurried: () => boolean }) =>
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.adapter),
     Layer.provideMerge(ScriptRuns.layer),
+    Layer.provideMerge(toolAnswers),
+    // A villager download under way stops here, and resumes next launch.
+    Layer.provideMerge(Villagers.adapter),
+    Layer.provideMerge(Villagers.deviceLayer),
     // The Promise face of the platform's child processes for the code
     // that is not Effect yet. Last to go, so every finalizer above can
     // still spawn.

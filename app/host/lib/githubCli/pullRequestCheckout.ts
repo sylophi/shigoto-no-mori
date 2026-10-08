@@ -19,8 +19,8 @@ import { run } from "../git/core";
 import { localBranchExists } from "../git/remotes";
 import { isCommandError, stderrOf } from "../util/processes";
 import { execGh, trimGhError } from "./exec";
-import { getGithubRepoInfo, remoteNameForUrl } from "./remote";
-import { ghUnavailableReason } from "./readiness";
+import { getGithubRepoInfo, ghUnavailableReason } from "./GithubCli";
+import { remoteNameForUrl } from "./remote";
 
 // Enough to fill a picker without paging. Deliberately below the
 // sidebar sweep's 200: that one indexes every branch in the project,
