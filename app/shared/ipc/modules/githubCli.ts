@@ -4,6 +4,7 @@ import {
   DisablePullRequestAutoMergePayloadSchema,
   GithubCliPullRequestDiffPayloadSchema,
   GithubCliReadinessSchema,
+  GithubOwnerListSchema,
   GithubCliWorktreePullRequestPayloadSchema,
   MergePullRequestPayloadSchema,
   MergePullRequestResultSchema,
@@ -11,6 +12,7 @@ import {
   PullRequestCandidateListSchema,
   PullRequestCheckoutRefSchema,
   PullRequestDetailSchema,
+  PublishRepoPayloadSchema,
   PullRequestSchema,
   RepoMergeConfigSchema,
   ResolvePullRequestCheckoutPayloadSchema,
@@ -21,6 +23,17 @@ export const githubCliContract = defineContract("host", {
   readiness: invoke("githubCli:readiness", z.void(), GithubCliReadinessSchema, {
     remote: true,
     gated: false,
+  }),
+  // Where the add-project dialog can publish a new repository.
+  owners: invoke("githubCli:owners", z.void(), GithubOwnerListSchema, {
+    remote: true,
+    gated: false,
+  }),
+  // Runs for as long as the push does, under the device's own gh login.
+  publish: invoke("githubCli:publish", PublishRepoPayloadSchema, z.void(), {
+    tracksProjectUsage: true,
+    remote: true,
+    gated: true,
   }),
   projectPullRequests: invoke(
     "githubCli:projectPullRequests",

@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { z } from "zod";
 import { CommitHashSchema } from "@shared/schemas";
 import { run } from "../git/core";
@@ -14,7 +15,12 @@ import { remoteNameForUrl } from "./remote";
 // `fallback` covers the rare non-Error / empty-message throw.
 async function runGh(
   args: string[],
-  opts: { cwd: string; fallback: string; maxBuffer?: number; timeout?: number },
+  opts: {
+    cwd?: string;
+    fallback: string;
+    maxBuffer?: number;
+    timeout?: number;
+  },
 ): Promise<string> {
   if (!(await ghReady())) {
     throw new Error("GitHub CLI isn't ready");
@@ -149,4 +155,51 @@ export async function disablePullRequestAutoMerge(opts: {
     cwd: opts.cwd,
     fallback: "gh pr merge --disable-auto failed",
   });
+}
+
+// Who a new repository can be published under: the signed-in user,
+// then the organizations they belong to, in one round trip.
+export async function listGithubOwners(): Promise<string[]> {
+  const stdout = await runGh(
+    [
+      "api",
+      "graphql",
+      "-f",
+      "query=query { viewer { login organizations(first: 100) { nodes { login } } } }",
+      "--jq",
+      ".data.viewer.login, .data.viewer.organizations.nodes[].login",
+    ],
+    { fallback: "Couldn't list your GitHub accounts" },
+  );
+  return stdout.split("\n").filter((line) => line.length > 0);
+}
+
+// Creates `owner/<folder name>` on GitHub from the repo at `cwd` (no
+// owner is the signed-in user), adds it as origin and pushes the
+// current branch there. GitHub swaps the
+// characters a repo name can't hold for dashes on its own.
+export async function publishRepo(opts: {
+  cwd: string;
+  owner: string | undefined;
+  visibility: "private" | "public";
+}): Promise<void> {
+  const name = basename(opts.cwd);
+  await runGh(
+    [
+      "repo",
+      "create",
+      `--${opts.visibility}`,
+      "--source",
+      opts.cwd,
+      "--remote",
+      "origin",
+      "--push",
+      // The name is a folder's, and one can start with a dash.
+      "--",
+      opts.owner ? `${opts.owner}/${name}` : name,
+    ],
+    // The push moves the whole history, so it gets far longer than a
+    // read does.
+    { cwd: opts.cwd, fallback: "Couldn't publish to GitHub", timeout: 300_000 },
+  );
 }

@@ -325,6 +325,18 @@ function hostHandlersFor(
         )?.[0] ?? `remote:${normalizeRemoteUrl(url)}`;
       return registerProject(disk, forest, `${parent}/${folder}`, identity);
     },
+    // Quick, as a new repository is, but long enough to see the stage.
+    "projects:create": async ({ parentDir, name }) => {
+      await sleep(600);
+      const parent = resolveOnDisk(disk, parentDir);
+      const entries = disk.dirs[parent];
+      if (entries === undefined) throw new Error(`${parent} is not a folder`);
+      if (entries.some((entry) => entry.name === name)) {
+        throw new Error(`${parent}/${name} already exists`);
+      }
+      entries.push({ name, isGitRepo: true });
+      return registerProject(disk, forest, `${parent}/${name}`);
+    },
     // Points the project at a repo on the fake disk, the primary row
     // with it, so a missing project (?missing=1) comes back.
     "projects:relocate": ({ id, path }) => {
@@ -570,7 +582,28 @@ function hostHandlersFor(
     }),
     "packageScripts:getSort": () => "manifest",
     "packageScripts:getOrder": () => [],
-    "githubCli:readiness": () => ({ installed: true, authed: true }),
+    "githubCli:readiness": () => {
+      const gh = new URLSearchParams(location.search).get("gh");
+      return {
+        installed: gh !== "missing",
+        authed: gh === null,
+        unavailable:
+          gh === null
+            ? null
+            : gh === "missing"
+              ? "gh-missing"
+              : "gh-signed-out",
+      };
+    },
+    "githubCli:owners": () => ["rin", "sylophi", "dittofleet"],
+    // Takes the push's moment, and gives the project the remote it
+    // would have.
+    "githubCli:publish": async ({ projectId, owner = "rin" }) => {
+      await sleep(1500);
+      const project = forest.projects.find((entry) => entry.id === projectId);
+      if (!project) throw new Error("Unknown project");
+      project.identity = `remote:github.com/${owner}/${project.name}`;
+    },
     "terrier:readiness": () => ({ installed: true, readable: true }),
     // One repo, one set of PRs: every checkout of shigoto-no-mori
     // answers with the same map, as the real sweep would on each

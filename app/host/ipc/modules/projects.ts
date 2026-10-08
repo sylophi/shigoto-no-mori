@@ -2,10 +2,12 @@ import { pickCloneUrl, repoNameFromUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shared/errors";
 import { reorderProjects } from "@shared/reorder";
 import type { Handlers } from "@shared/ipc/types";
+import type { Project } from "@shared/schemas";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
 import { isGitRepo } from "@host/lib/git/core";
+import { createRepo } from "@host/lib/git/init";
 import { listRemoteEntries } from "@host/lib/git/remotes";
 import {
   findProjectOrThrow,
@@ -41,6 +43,26 @@ import {
 // one's project back.
 let reorderChain: Promise<void> = Promise.resolve();
 
+// Registers a checkout the app just made (a clone, a new repository).
+// The checkout stays if registering fails, so the error says where it
+// is: a retry would only find the folder taken. Terrier first, for
+// add's reason.
+async function registerNewCheckout(
+  path: string,
+  terrier: boolean | undefined,
+  made: string,
+): Promise<Project> {
+  try {
+    if (terrier) await terrierAdd(path);
+    return await registerProject(path);
+  } catch (error) {
+    throw new Error(
+      `${made} ${path}, but couldn't add it as a project: ${errorMessageOf(error)}`,
+      { cause: error },
+    );
+  }
+}
+
 export const projectsHandlers: Handlers<typeof projectsContract> = {
   list: () => listProjectsWithStatus(),
 
@@ -67,18 +89,12 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     // echoed: it may carry a token.
     if (folder === null) throw new Error("Not a git remote URL");
     const path = await cloneRepo(url, expandHome(parentDir), folder);
-    // The checkout stays if registering fails, so the error says where
-    // it is: a retry would only find the folder taken. Terrier first, for
-    // add's reason.
-    try {
-      if (terrier) await terrierAdd(path);
-      return await registerProject(path);
-    } catch (error) {
-      throw new Error(
-        `Cloned into ${path}, but couldn't add it as a project: ${errorMessageOf(error)}`,
-        { cause: error },
-      );
-    }
+    return registerNewCheckout(path, terrier, "Cloned into");
+  },
+
+  create: async ({ parentDir, name, terrier }) => {
+    const path = await createRepo(expandHome(parentDir), name);
+    return registerNewCheckout(path, terrier, "Created");
   },
 
   remove: async ({ id }) => {

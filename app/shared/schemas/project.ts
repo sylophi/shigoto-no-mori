@@ -92,9 +92,19 @@ export type WorktreeSortMode = z.infer<typeof WorktreeSortModeSchema>;
 export const SidebarViewSchema = z.enum(["projects", "inbox"]);
 export type SidebarView = z.infer<typeof SidebarViewSchema>;
 
+// The folder a clone or a new repository lands in: one path segment
+// under the parent the caller picked.
+const FolderNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((name) => !/[\\/]/.test(name) && name !== "." && name !== "..", {
+    message: "The folder name must be a single path segment",
+  });
+
 // `terrier` also registers the repo in terrier (host/lib/terrier.ts),
-// for a device with the integration on. The add and the clone both
-// take it.
+// for a device with the integration on. The add, the clone and the
+// create all take it.
 export const AddProjectPayloadSchema = PathPayloadSchema.extend({
   terrier: z.boolean().optional(),
 });
@@ -113,18 +123,20 @@ export const CloneProjectPayloadSchema = z.object({
     .trim()
     .refine(isCloneableRemote, { message: "Not a git remote URL" }),
   parentDir: z.string().min(1),
-  name: z
-    .string()
-    .trim()
-    .min(1)
-    .refine((name) => !/[\\/]/.test(name) && name !== "." && name !== "..", {
-      message: "The folder name must be a single path segment",
-    })
-    .optional(),
+  name: FolderNameSchema.optional(),
   terrier: z.boolean().optional(),
 });
 
 export type CloneProjectPayload = z.infer<typeof CloneProjectPayloadSchema>;
+
+// Start a new repository at `parentDir/name` and register it.
+export const CreateProjectPayloadSchema = z.object({
+  parentDir: z.string().min(1),
+  name: FolderNameSchema,
+  terrier: z.boolean().optional(),
+});
+
+export type CreateProjectPayload = z.infer<typeof CreateProjectPayloadSchema>;
 
 export const RemoveProjectPayloadSchema = z.object({
   id: z.string().min(1),

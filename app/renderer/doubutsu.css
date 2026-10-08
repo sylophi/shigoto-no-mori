@@ -764,6 +764,17 @@
   font-weight: 500;
   -webkit-text-stroke: 0.2px currentColor;
 }
+/* A mono input's placeholder reads as prose (placeholder:font-sans),
+   but that utility carries the inlined Geist stack, as the body rule
+   did, and it inherits the mono treatment above. It takes the body's
+   font back. */
+.doubutsu .placeholder\:font-sans::placeholder {
+  font-family:
+    "Zen Maru Gothic", "Hiragino Maru Gothic ProN", ui-sans-serif, system-ui,
+    sans-serif;
+  font-weight: 700;
+  -webkit-text-stroke: 0;
+}
 /* The pierre diff viewer renders inside shadow DOM, where the class
    selectors above can't reach, but the body's 700 still gets in via
    inheritance, so diff code rendered fat. Pin the mono treatment on

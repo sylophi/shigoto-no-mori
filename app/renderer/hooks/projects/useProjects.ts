@@ -9,6 +9,7 @@ import { useRouter } from "@tanstack/react-router";
 import type {
   AddProjectPayload,
   CloneProjectPayload,
+  CreateProjectPayload,
   Project,
 } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
@@ -72,6 +73,19 @@ export function useCloneProject() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: keys.projects() }),
     meta: { errorTitle: "Couldn't clone the repository" },
+  });
+}
+
+// Starts a new repository on the scoped device and registers it.
+export function useCreateProject() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<Project, Error, CreateProjectPayload>({
+    mutationFn: (input) => api.projects.create(input),
+    // Returned for the same reason useAddProject returns it.
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.projects() }),
+    meta: { errorTitle: "Couldn't create the repository" },
   });
 }
 
