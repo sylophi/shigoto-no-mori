@@ -12,9 +12,11 @@ const PHASES = {
   portPoolProvision: "port-pool provision",
 } as const;
 
-type Slot =
-  | { readonly kind: "setup" | "teardown" }
-  | { readonly kind: "portPool"; readonly phase: string };
+// The slot a lifecycle script runs in, as its start names it.
+type Slot = Extract<
+  Worktrees.WorktreeEvent,
+  { readonly event: "script"; readonly kind: "started" }
+>["slot"];
 
 const slotLabel = (slot: Slot) =>
   slot.kind === "portPool" ? `port-pool ${slot.phase}` : slot.kind;
@@ -31,6 +33,19 @@ export const reporter = (
     const slots = new Map<string, string>();
     const marker = (runId: string) => dim(`[${slots.get(runId) ?? ""}]`);
 
+    // How the files were cloned. Go says a failed clone on stderr
+    // under --json too.
+    const cloned = ({ from, outcome }: Worktrees.Cloned) =>
+      Result.isFailure(outcome)
+        ? note(
+            `${dim("[checkout]")} cloning failed (${outcome.failure.message}), checking out with git`,
+          )
+        : output.json
+          ? Effect.void
+          : note(
+              `${dim("[checkout]")} ${outcome.success.cloned} files cloned from ${from.isPrimary ? "the primary checkout" : from.name}${outcome.success.hashed > 0 ? ` (${outcome.success.hashed} read back to verify)` : ""}, ${outcome.success.written} written by git`,
+            );
+
     const human = (event: Worktrees.WorktreeEvent) => {
       switch (event.event) {
         case "phase":
@@ -39,9 +54,8 @@ export const reporter = (
             : note(`${dim(`[${PHASES[event.phase]}]`)} …`);
         case "created":
           return note(created(event.worktree));
-        // Said by `cloned` below, under --json too.
         case "cloned":
-          return Effect.void;
+          return cloned(event.cloned);
         case "carryOver": {
           const { report } = event;
           const tag = dim("[carry-over]");
@@ -61,7 +75,7 @@ export const reporter = (
         case "script":
           switch (event.kind) {
             case "started":
-              slots.set(event.runId, slotLabel(event.slot as Slot));
+              slots.set(event.runId, slotLabel(event.slot));
               return note(`${marker(event.runId)} running`);
             case "data":
               return Effect.sync(() => process.stderr.write(event.data));
@@ -75,26 +89,13 @@ export const reporter = (
       }
     };
 
-    // How the files were cloned: a line for a person, and a failed
-    // clone said even under --json, as Go says it on stderr.
-    const cloned = ({ from, outcome }: Worktrees.Cloned) =>
-      Result.isFailure(outcome)
-        ? note(
-            `${dim("[checkout]")} cloning failed (${outcome.failure.message}), checking out with git`,
-          )
-        : output.json
-          ? Effect.void
-          : note(
-              `${dim("[checkout]")} ${outcome.success.cloned} files cloned from ${from.isPrimary ? "the primary checkout" : from.name}${outcome.success.hashed > 0 ? ` (${outcome.success.hashed} read back to verify)` : ""}, ${outcome.success.written} written by git`,
-            );
-
     return {
       report: (event: Worktrees.WorktreeEvent) =>
-        event.event === "cloned"
-          ? cloned(event.cloned)
-          : output.json
-            ? emit(event)
-            : human(event),
+        !output.json
+          ? human(event)
+          : event.event === "cloned"
+            ? cloned(event.cloned)
+            : emit(event),
       color: !output.json && output.stderrColor,
     } satisfies Worktrees.Reporter;
   });

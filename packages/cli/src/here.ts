@@ -4,6 +4,7 @@
 import { isAbsolute, resolve } from "node:path";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Terrier from "@shigomori/engine/Terrier";
+import { isSameOrInside } from "@shigomori/engine/worktreeLayout";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -99,8 +100,7 @@ export const absolute = (raw: string) =>
 // move leaves standing in a folder that is gone.
 export const cwdInside = (path: string) => {
   try {
-    const cwd = process.cwd();
-    return cwd === path || cwd.startsWith(`${path}/`);
+    return isSameOrInside(process.cwd(), path);
   } catch {
     return false;
   }

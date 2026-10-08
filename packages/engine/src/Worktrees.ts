@@ -281,12 +281,10 @@ export type Cloned = {
   readonly outcome: Result.Result<CloneReport, CloneFailed>;
 };
 
-// A new worktree, the lifecycle scripts that failed on it, and how its
-// files were cloned when they were.
+// A new worktree and the lifecycle scripts that failed on it.
 export type Created = {
   readonly worktree: WorktreeRow;
   readonly failures: ReadonlyArray<Lifecycle.ScriptFailure>;
-  readonly cloned?: Cloned | undefined;
 };
 
 // --- errors ---------------------------------------------------------------
@@ -586,6 +584,13 @@ export class CleanupFailed extends Schema.TaggedError<CleanupFailed>()(
     return `${this.phase} ${detail}; worktree not removed`;
   }
 }
+
+// The document's account of a failed cleanup, which the app reads.
+export const cleanupErrorOf = (error: CleanupFailed) => ({
+  phase: error.phase,
+  exitCode: error.exitCode,
+  runId: error.runId,
+});
 
 // A removal git finished on its side (its admin entry is gone) whose
 // checkout is still on disk because the sweep after it failed.
@@ -2250,7 +2255,7 @@ const make = Effect.gen(function* () {
       input.skipSetup ?? false,
       reporter,
     );
-    return { worktree, failures, cloned };
+    return { worktree, failures };
   });
 
   // Fails closed on a dirty or unreadable worktree, untracked files
@@ -2716,7 +2721,7 @@ const make = Effect.gen(function* () {
       false,
       reporter,
     );
-    return { worktree: adopted, failures, cloned };
+    return { worktree: adopted, failures };
   });
 
   const setup = Effect.fn("Worktrees.setup")(function* (

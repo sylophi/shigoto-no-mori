@@ -42,6 +42,13 @@ const flag = (name: string, description: string) =>
     Flag.withDefault(false),
   );
 
+const force = (description: string) =>
+  Flag.Boolean("force").pipe(
+    Flag.withAlias("f"),
+    Flag.withDescription(description),
+    Flag.withDefault(false),
+  );
+
 // Go reads the positionals it needs and lets the rest be.
 const rest = Argument.String("args").pipe(Argument.variadic());
 
@@ -148,11 +155,7 @@ export const adopt = Command.make(
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
     rest,
-    force: Flag.Boolean("force").pipe(
-      Flag.withAlias("f"),
-      Flag.withDescription("Adopt it with uncommitted changes"),
-      Flag.withDefault(false),
-    ),
+    force: force("Adopt it with uncommitted changes"),
   },
   (input) =>
     Effect.gen(function* () {
@@ -228,11 +231,7 @@ export const rm = Command.make(
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
     rest,
-    force: Flag.Boolean("force").pipe(
-      Flag.withAlias("f"),
-      Flag.withDescription("Remove it with uncommitted changes"),
-      Flag.withDefault(false),
-    ),
+    force: force("Remove it with uncommitted changes"),
     keepBranch: flag("keep-branch", "Keep its branch"),
     skipCleanup: flag("skip-cleanup", "Skip its teardown and port release"),
   },
@@ -261,11 +260,7 @@ export const rm = Command.make(
                 ? Effect.andThen(
                     emit({
                       ok: false,
-                      cleanupError: {
-                        phase: failed.phase,
-                        exitCode: failed.exitCode,
-                        runId: failed.runId,
-                      },
+                      cleanupError: Worktrees.cleanupErrorOf(failed),
                     }),
                     Effect.fail(new ExitCode({ code: 1 })),
                   )
