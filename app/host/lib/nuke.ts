@@ -24,6 +24,7 @@ import {
   markDeleteInflight,
 } from "./scripts";
 import { dataDir, dataDirSource, defaultDataDir } from "./util/paths";
+import { log } from "@shared/log";
 
 export async function nukeEverything(
   onProgress: (progress: NukeProgress) => void = () => {},
@@ -131,6 +132,6 @@ async function removeForNuke(project: Project, worktreeId: string) {
   try {
     await forceRemoveViaCli(project, worktreeId);
   } catch (error) {
-    console.warn(`[nuke] ${project.name}: ${errorMessageOf(error)}`);
+    log.warn(`[nuke] ${project.name}: ${errorMessageOf(error)}`);
   }
 }

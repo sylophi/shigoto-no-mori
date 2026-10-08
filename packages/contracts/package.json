@@ -9,7 +9,8 @@
   },
   "scripts": {
     "typecheck": "$(effect-tsgo get-exe-path) && $(effect-tsgo get-exe-path) -p test",
-    "test": "vitest run"
+    "test": "vitest run",
+    "wire-fixtures": "UPDATE_WIRE_FIXTURES=1 vitest run test/wire.test.ts"
   },
   "dependencies": {
     "effect": "catalog:"

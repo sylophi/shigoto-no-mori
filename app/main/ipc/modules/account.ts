@@ -56,6 +56,7 @@ import {
   resolveServiceConfig,
   type AccountServiceConfig,
 } from "@shared/account/serviceConfig";
+import { log } from "@shared/log";
 
 // Built lazily on first handler use, never at import time. This module is
 // imported before app "ready" (registerIpcHandlers runs at the top of
@@ -87,7 +88,7 @@ function buildCipher(): StoreCipher {
   const available = safeStorage.isEncryptionAvailable();
   if (!available && !cipherWarned) {
     cipherWarned = true;
-    console.warn(
+    log.warn(
       "[account] OS encryption unavailable, storing the hub credential " +
         "as plaintext in userData.",
     );
@@ -458,10 +459,7 @@ export function makeAccountHandlers(
     try {
       renamed = renameLocally(store(), record, defaultName.name);
     } catch (error) {
-      console.warn(
-        "[account] could not rename the device to its default",
-        error,
-      );
+      log.warn("[account] could not rename the device to its default", error);
       return record;
     }
     accountChanged();
@@ -555,7 +553,7 @@ export function makeAccountHandlers(
           onRevokeFailure: (error) => {
             if (revokeWarned) return;
             revokeWarned = true;
-            console.warn(
+            log.warn(
               "[account] best-effort device revoke on sign-out failed, " +
                 "clearing the local credential anyway.",
               error,

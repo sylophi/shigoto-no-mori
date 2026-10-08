@@ -87,6 +87,7 @@ import {
   readGitState,
   watchIndexFile,
 } from "./gitState";
+import { log } from "@shared/log";
 
 // The slice of a daemon session the follower reads. `status` is the
 // file-sync engine's own (watching is idle, everything else is a cycle
@@ -311,7 +312,7 @@ export function createGitFollower(deps: {
   // Sessions whose title carry has failed, so a peer that can't take it
   // (an older build) is reported once, not on every sweep.
   const descriptionFailed = new Set<string>();
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const warn = deps.log ?? ((message: string) => log.warn(message));
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
   // The agreed states by session id, loaded on the first start (the
   // follower is built at module load, before the data dir exists)
@@ -325,7 +326,7 @@ export function createGitFollower(deps: {
     try {
       stored = deps.agreedStore?.load() ?? {};
     } catch (error) {
-      log(
+      warn(
         `[mirror] git follow: agreed store unreadable: ${errorMessageOf(error)}`,
       );
     }
@@ -346,7 +347,7 @@ export function createGitFollower(deps: {
     try {
       deps.agreedStore?.save(stored);
     } catch (error) {
-      log(
+      warn(
         `[mirror] git follow: agreed store unwritable: ${errorMessageOf(error)}`,
       );
     }
@@ -393,7 +394,7 @@ export function createGitFollower(deps: {
     try {
       deps.onCopyGone(session);
     } catch (error) {
-      log(
+      warn(
         `[mirror] git follow ${session.session}: ending a gone copy failed: ${errorMessageOf(error)}`,
       );
     }
@@ -492,7 +493,7 @@ export function createGitFollower(deps: {
           .catch((error: unknown) => {
             if (descriptionFailed.has(session.session)) return;
             descriptionFailed.add(session.session);
-            log(
+            warn(
               `[mirror] following the title and description failed: ${errorMessageOf(error)}`,
             );
           });
@@ -601,7 +602,7 @@ export function createGitFollower(deps: {
       }
       setStatus(record, { status: "blocked", detail: outcome.reason });
     } catch (error) {
-      log(`[mirror] git follow ${session.session}: ${errorMessageOf(error)}`);
+      warn(`[mirror] git follow ${session.session}: ${errorMessageOf(error)}`);
       setStatus(record, { status: "error", detail: errorMessageOf(error) });
     }
   }

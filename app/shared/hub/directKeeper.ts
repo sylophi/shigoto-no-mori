@@ -57,6 +57,7 @@ import {
 } from "@shared/remote/supervisor";
 import { isTerminalDialError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { log } from "@shared/log";
 
 type DirectKeeperDeps = {
   // One dial attempt for one peer: the bridge's dialPeer. Resolving
@@ -137,7 +138,7 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
         if (!isCurrent(deviceId, state)) return;
         state.connectedAt = clock.now();
         if (state.lastFailure !== null) {
-          console.info(`[direct] session to ${deviceId} established`);
+          log.info(`[direct] session to ${deviceId} established`);
         }
         state.lastFailure = null;
         // attempt is NOT reset here: only a drop after a STABLE run
@@ -155,7 +156,7 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
         // it asks, through the no-session rejection), so without it a
         // peer that never connects leaves no trace in the log.
         if (message !== state.lastFailure) {
-          console.warn(`[direct] dial to ${deviceId} failed: ${message}`);
+          log.warn(`[direct] dial to ${deviceId} failed: ${message}`);
         }
         state.lastFailure = message;
         if (isTerminalDialError(error)) {

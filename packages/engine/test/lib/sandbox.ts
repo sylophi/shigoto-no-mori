@@ -23,24 +23,40 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Config from "../../src/Config.ts";
+import * as Git from "../../src/Git.ts";
+import * as Identity from "../../src/Identity.ts";
+import * as Launchers from "../../src/Launchers.ts";
+import * as Layout from "../../src/Layout.ts";
 import * as Paths from "../../src/Paths.ts";
+import * as Registry from "../../src/Registry.ts";
+import * as Scripts from "../../src/Scripts.ts";
 import * as Store from "../../src/Store.ts";
+import * as Usage from "../../src/Usage.ts";
 
 // The services a harness case calls.
-export type Engine = Config.Config;
+export type Engine =
+  | Config.Config
+  | Launchers.Launchers
+  | Layout.Layout
+  | Registry.Registry
+  | Scripts.Scripts
+  | Usage.Usage;
 
 const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
 
 // git's variables point a child at the repository a hook runs in, and
-// the user's git config would reach the sandbox's repos.
-const scrubbedEnv = (): NodeJS.ProcessEnv => ({
-  ...Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
-  ),
+// the user's git config would reach the sandbox's repos. The engine's
+// Git service runs git under this process's environment, so the
+// process's own goes the same way.
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith("GIT_")) delete process.env[key];
+}
+Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
-  LC_ALL: "C",
 });
+
+const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
 
 // The Go sm as cli/ is now, built once per state of its sources (the
 // non-test Go files, the module files, the embedded data) and hashed
@@ -79,7 +95,7 @@ function buildGoSm(): string {
   const partial = `${binary}.${process.pid}`;
   execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
     cwd: cliDir,
-    env: scrubbedEnv(),
+    env: childEnv(),
     stdio: ["ignore", "ignore", "inherit"],
   });
   renameSync(partial, binary);
@@ -92,6 +108,11 @@ export type Sandbox = {
   readonly write: (file: string, value: unknown) => void;
   // A copy of the data dir for each side, taken when first asked for.
   readonly go: (...args: string[]) => Promise<unknown>;
+  // The same, run from `cwd`.
+  readonly goAt: (cwd: string, ...args: string[]) => Promise<unknown>;
+  // A git repository at `name` beside the data dirs, which both sides
+  // share, with `files` committed.
+  readonly repo: (name: string, files?: Record<string, string>) => string;
   readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
   readonly remove: () => Promise<void>;
 };
@@ -110,7 +131,16 @@ export function sandbox(): Sandbox {
   const engineRuntime = () => {
     const dataDir = side("engine");
     runtime ??= ManagedRuntime.make(
-      Config.layer.pipe(
+      Layer.mergeAll(
+        Launchers.layer,
+        Layout.layer,
+        Registry.layer,
+        Scripts.layer,
+      ).pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(Config.layer, Usage.layer, Identity.layer),
+        ),
+        Layer.provideMerge(Git.layer),
         Layer.provideMerge(Store.layer),
         Layer.provideMerge(Paths.layer("dev")),
         Layer.provide(NodeServices.layer),
@@ -119,6 +149,7 @@ export function sandbox(): Sandbox {
             ConfigProvider.fromEnv({
               env: {
                 HOME: root,
+                PATH: process.env.PATH ?? "",
                 SHIGOMORI_DATA_DIR: dataDir,
               },
             }),
@@ -129,20 +160,28 @@ export function sandbox(): Sandbox {
     return runtime;
   };
 
+  const gitEnv = {
+    ...childEnv(),
+    GIT_AUTHOR_NAME: "t",
+    GIT_AUTHOR_EMAIL: "t@t",
+    GIT_COMMITTER_NAME: "t",
+    GIT_COMMITTER_EMAIL: "t@t",
+  };
+
   // The verb's last document, as `sm --json` prints it.
-  const go = (...args: string[]) =>
+  const goAt = (cwd: string, ...args: string[]) =>
     new Promise<unknown>((resolve, reject) => {
       execFile(
         goSm(),
         ["--json", ...args],
         {
-          cwd: root,
-          env: { ...scrubbedEnv(), HOME: root, SHIGOMORI_DATA_DIR: side("go") },
+          cwd,
+          env: { ...gitEnv, HOME: root, SHIGOMORI_DATA_DIR: side("go") },
         },
         (error, stdout) => {
           const docs = stdout
             .split("\n")
-            .filter((line) => line.startsWith("{"))
+            .filter((line) => line.startsWith("{") || line.startsWith("["))
             .map((line) => JSON.parse(line) as unknown);
           if (docs.length === 0) reject(error ?? new Error("no document"));
           else resolve(docs.at(-1));
@@ -156,7 +195,21 @@ export function sandbox(): Sandbox {
       mkdirSync(dirname(join(seed, file)), { recursive: true });
       writeFileSync(join(seed, file), JSON.stringify(value));
     },
-    go,
+    go: (...args) => goAt(root, ...args),
+    goAt,
+    repo: (name, files = {}) => {
+      const dir = join(root, name);
+      mkdirSync(dir);
+      const git = (...args: string[]) =>
+        execFileSync("git", args, { cwd: dir, env: gitEnv, stdio: "ignore" });
+      git("init", "-q", "-b", "main");
+      for (const [file, content] of Object.entries(files)) {
+        writeFileSync(join(dir, file), content);
+      }
+      git("add", "-A");
+      git("commit", "-q", "--allow-empty", "-m", "init");
+      return dir;
+    },
     // The service call's answer, or its error as the terminal reports
     // one: {ok: false, error: message}.
     engine: (run) =>

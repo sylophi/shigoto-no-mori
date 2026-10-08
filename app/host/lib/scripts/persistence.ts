@@ -26,6 +26,7 @@ import { withFileLock } from "../util/lockFile";
 import { isENOENT, dataDir } from "../util/paths";
 import { signalTree } from "./process";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { log } from "@shared/log";
 
 const execFileP = promisify(execFile);
 
@@ -100,7 +101,7 @@ export function persistRunningScripts(
   } catch (error) {
     // Losing the record costs the next boot's sweep and nothing else.
     // A script run must not fail over it.
-    console.warn(
+    log.warn(
       `[scripts] couldn't record running scripts: ${errorMessageOf(error)}`,
     );
   }
@@ -118,16 +119,14 @@ function readSnapshot(): Snapshot | null {
     // running, which is why both return null (nothing to sweep) rather
     // than an empty record set.
     if (!isENOENT(error)) {
-      console.warn(`[scripts] couldn't read ${FILE}: ${errorMessageOf(error)}`);
+      log.warn(`[scripts] couldn't read ${FILE}: ${errorMessageOf(error)}`);
     }
     return null;
   }
   try {
     return decodeSnapshot(JSON.parse(raw));
   } catch (error) {
-    console.warn(
-      `[scripts] ignoring unusable ${FILE}: ${errorMessageOf(error)}`,
-    );
+    log.warn(`[scripts] ignoring unusable ${FILE}: ${errorMessageOf(error)}`);
     return null;
   }
 }
@@ -263,7 +262,7 @@ async function killOrphan(record: PersistedScript): Promise<boolean> {
   await signalTree(record.pid, "SIGKILL");
   const died = await waitForExit(record.pid, ORPHAN_GRACE_MS);
   if (!died) {
-    console.warn(
+    log.warn(
       `[scripts] orphaned pid ${record.pid} survived SIGKILL, leaving it alone`,
     );
   }
@@ -285,7 +284,7 @@ async function reapOrphans(
   if (ours.length === 0) return { stopped: 0 };
   const outcomes = await Promise.all(ours.map((r) => killOrphan(r)));
   const stopped = outcomes.filter(Boolean).length;
-  console.warn(
+  log.warn(
     `[scripts] stopped ${stopped} of ${ours.length} script(s) left running by a previous session`,
   );
   return { stopped };
@@ -324,7 +323,7 @@ export function startOrphanScriptSweep(): void {
   if (sweep) return;
   const records = claimOrphanRecords();
   sweep = reapOrphans(records).catch((error) => {
-    console.warn(`[scripts] orphan sweep failed: ${errorMessageOf(error)}`);
+    log.warn(`[scripts] orphan sweep failed: ${errorMessageOf(error)}`);
     return { stopped: 0 };
   });
 }

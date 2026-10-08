@@ -15,6 +15,7 @@ import {
   withSchemaVersion,
 } from "../util/jsonFile";
 import { isENOENT, dataDir } from "../util/paths";
+import { log } from "@shared/log";
 
 // A loose mirror of the legacy ShigomoriConfig: we only need to recognize
 // the fields we're moving. Anything else is preserved by pass-through.
@@ -45,7 +46,7 @@ async function migrateOne(projectId: string): Promise<void> {
   try {
     parsed = JSON.parse(raw) as LegacyConfig;
   } catch (err) {
-    console.warn(
+    log.warn(
       `[shigomori] couldn't parse legacy ${oldFile}; leaving in place:`,
       err,
     );

@@ -20,6 +20,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { userInfo } from "node:os";
+import { log } from "@shared/log";
 
 type Env = Record<string, string>;
 
@@ -255,10 +256,10 @@ export async function applyUserShellEnv(): Promise<void> {
         );
   replaceProcessEnv(mergeShellEnv(base, captured, launchEnv));
   if (captured === null) {
-    console.warn(
+    log.warn(
       `[shell] no environment from ${shell ?? "an unknown login shell"}, running on launchd's`,
     );
   } else {
-    console.log(`[shell] rebuilt the environment from ${shell}`);
+    log.info(`[shell] rebuilt the environment from ${shell}`);
   }
 }

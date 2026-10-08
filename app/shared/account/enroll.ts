@@ -16,6 +16,7 @@ import type { AccountStore, StoredAccount } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
 import { deriveAccountId } from "./token";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
+import { log } from "@shared/log";
 
 type EnrollDeviceDeps = {
   config: AccountServiceConfig;
@@ -305,7 +306,7 @@ async function pushStale(
   try {
     await deps.service.update(credential, deps.deviceId, stale);
   } catch (error) {
-    console.warn(
+    log.warn(
       `[account] could not push this device's name or icon to the device hub: ${errorMessageOf(error)}`,
     );
     return;

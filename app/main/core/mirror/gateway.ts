@@ -33,6 +33,7 @@ import {
   listenLoopback,
   type PeerChannels,
 } from "../portForward/bridge";
+import { log } from "@shared/log";
 
 const isWorktreeId = Schema.is(WorktreeIdSchema);
 
@@ -152,7 +153,7 @@ export function createMirrorGateway(deps: {
   peerChannelsFor: (deviceId: string) => PeerChannels;
   log?: (message: string) => void;
 }) {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const warn = deps.log ?? ((message: string) => log.warn(message));
   let server: Server | null = null;
   let address: string | null = null;
   // Minted per bind, so a token cannot outlive the listener it opened.
@@ -178,7 +179,7 @@ export function createMirrorGateway(deps: {
         }
         if (!secretsMatch(preface.token, token ?? "")) {
           // Nothing legitimate reaches here, so log it.
-          log("[mirror] gateway refused a connection with a bad token");
+          warn("[mirror] gateway refused a connection with a bad token");
           socket.end("error bad preface\n");
           return;
         }
@@ -201,7 +202,7 @@ export function createMirrorGateway(deps: {
             socket.write("ok\n");
           },
           onOpenFailed: (error) => {
-            log(
+            warn(
               `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorMessageOf(error)}`,
             );
             socket.write(
@@ -215,7 +216,7 @@ export function createMirrorGateway(deps: {
         streams.add(conn);
       },
       (error: unknown) => {
-        log(`[mirror] gateway: ${errorMessageOf(error)}`);
+        warn(`[mirror] gateway: ${errorMessageOf(error)}`);
         socket.destroy();
       },
     );

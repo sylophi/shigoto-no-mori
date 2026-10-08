@@ -23,6 +23,7 @@ import {
 } from "@shigomori/contracts/schemas/sharedSettings";
 import { getDeviceId } from "../config/deviceId";
 import { registryStore, SHARED_SETTINGS_KEY } from "../config/store";
+import { log } from "@shared/log";
 
 // registry.json is hand-editable, so the stored value is parsed rather
 // than trusted. A mangled one reads as empty, and the next merge from
@@ -72,7 +73,7 @@ export const sharedSettingsCopy = createSharedSettingsCopy(
         try {
           listener(doc);
         } catch (error) {
-          console.warn(
+          log.warn(
             `[sharedSettings] change listener failed: ${errorMessageOf(error)}`,
           );
         }
