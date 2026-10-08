@@ -14,6 +14,7 @@ import {
   TICKET_PREFIX,
   TICKET_TTL_MS,
 } from "../src/ticket.ts";
+import type { Env } from "../src/env.ts";
 import {
   BASE,
   TEST_TOKEN_PREFIX,
@@ -459,10 +460,43 @@ describe("POST /tickets", () => {
   });
 });
 
+// A limiter whose window never rolls over. The simulated ratelimits
+// binding counts in windows aligned to the wall clock, so a burst that
+// crosses a minute boundary starts again from zero and never reaches
+// the limit.
+function frozenLimiter(limit: number): RateLimit {
+  const counts = new Map<string, number>();
+  return {
+    async limit({ key }) {
+      const count = (counts.get(key) ?? 0) + 1;
+      counts.set(key, count);
+      return { success: count <= limit };
+    },
+  };
+}
+
+// Made-up budgets, fresh for each case. The cases cover which budget
+// each route draws on and what an over-budget caller gets back, not the
+// sizes in wrangler.jsonc.
+const BUDGET = 5;
+const OPEN_BUDGET = 2;
+
+function limitedEnv(): Env {
+  return {
+    ...env,
+    RATE_LIMIT: frozenLimiter(BUDGET),
+    RATE_LIMIT_OPEN: frozenLimiter(OPEN_BUDGET),
+  };
+}
+
 // The limiters key on CF-Connecting-IP, which only the Cloudflare edge
-// sets, so every other spec (no such header) runs unlimited and each
-// rate limiting case spends its own made-up address.
-async function statusesFrom(ip: string, count: number, path: string) {
+// sets, so every other spec (no such header) runs unlimited.
+async function statusesFrom(
+  testEnv: Env,
+  ip: string,
+  count: number,
+  path: string,
+) {
   const statuses: number[] = [];
   for (let i = 0; i < count; i++) {
     // oxlint-disable-next-line no-await-in-loop -- the limiter counts in arrival order, so these have to land one at a time
@@ -474,6 +508,7 @@ async function statusesFrom(ip: string, count: number, path: string) {
           Upgrade: "websocket",
         },
       }),
+      testEnv,
     );
     statuses.push(response.status);
   }
@@ -481,18 +516,34 @@ async function statusesFrom(ip: string, count: number, path: string) {
 }
 
 describe("rate limiting", () => {
+  // A missing binding would fail open in rateLimited, so the cases below,
+  // which stand in their own limiters, would never notice it.
+  it("binds both budgets from wrangler.jsonc", async () => {
+    for (const limiter of [env.RATE_LIMIT, env.RATE_LIMIT_OPEN]) {
+      // oxlint-disable-next-line no-await-in-loop -- two calls, order does not matter
+      expect(await limiter.limit({ key: "203.0.113.30" })).toEqual({
+        success: true,
+      });
+    }
+  });
+
   it("answers 429 with Retry-After once one address is over budget", async () => {
+    const testEnv = limitedEnv();
     const statuses = await statusesFrom(
+      testEnv,
       "203.0.113.10",
-      310,
+      BUDGET + 1,
       HUB_ROUTES.listDevices.path,
     );
-    expect(statuses.slice(0, 300).every((status) => status === 401)).toBe(true);
+    expect(statuses.slice(0, BUDGET).every((status) => status === 401)).toBe(
+      true,
+    );
     expect(statuses.at(-1)).toBe(429);
     const response = await call(
       new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
         headers: { "CF-Connecting-IP": "203.0.113.10" },
       }),
+      testEnv,
     );
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("60");
@@ -501,6 +552,7 @@ describe("rate limiting", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     // One caller's budget is not another's.
     const other = await statusesFrom(
+      testEnv,
       "203.0.113.11",
       1,
       HUB_ROUTES.listDevices.path,
@@ -509,12 +561,16 @@ describe("rate limiting", () => {
   });
 
   it("holds the credential-free routes to the tighter budget", async () => {
+    const testEnv = limitedEnv();
     const statuses = await statusesFrom(
+      testEnv,
       "203.0.113.20",
-      70,
+      OPEN_BUDGET + 1,
       HUB_ROUTES.connect.path,
     );
-    expect(statuses.slice(0, 60).every((status) => status === 403)).toBe(true);
+    expect(
+      statuses.slice(0, OPEN_BUDGET).every((status) => status === 403),
+    ).toBe(true);
     expect(statuses.at(-1)).toBe(429);
     // Enroll draws on the same budget, already spent above.
     const response = await call(
@@ -522,6 +578,7 @@ describe("rate limiting", () => {
         method: HUB_ROUTES.enroll.method,
         headers: { "CF-Connecting-IP": "203.0.113.20" },
       }),
+      testEnv,
     );
     expect(response.status).toBe(429);
   });
