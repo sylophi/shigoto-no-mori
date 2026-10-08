@@ -487,50 +487,72 @@ async function statusesFrom(ip: string, count: number, path: string) {
   return statuses;
 }
 
+// The local limiter counts in windows aligned to the wall clock, so a
+// burst that straddles a minute boundary meets a fresh counter halfway.
+// One that fails across a rollover runs again on addresses of its own,
+// which a minute-long window then holds whole.
+async function inOneWindow(burst: (net: string) => Promise<void>) {
+  const started = Math.floor(Date.now() / 60_000);
+  try {
+    await burst("203.0.113");
+  } catch (error) {
+    if (Math.floor(Date.now() / 60_000) === started) throw error;
+    await burst("198.51.100");
+  }
+}
+
 describe("rate limiting", () => {
   it("answers 429 with Retry-After once one address is over budget", async () => {
-    const statuses = await statusesFrom(
-      "203.0.113.10",
-      310,
-      HUB_ROUTES.listDevices.path,
-    );
-    expect(statuses.slice(0, 300).every((status) => status === 401)).toBe(true);
-    expect(statuses.at(-1)).toBe(429);
-    const response = await call(
-      new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
-        headers: { "CF-Connecting-IP": "203.0.113.10" },
-      }),
-    );
-    expect(response.status).toBe(429);
-    expect(response.headers.get("Retry-After")).toBe("60");
-    expect(await response.json()).toEqual({ error: "too many requests" });
-    // The 429 still carries CORS, or a browser client could not read it.
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    // One caller's budget is not another's.
-    const other = await statusesFrom(
-      "203.0.113.11",
-      1,
-      HUB_ROUTES.listDevices.path,
-    );
-    expect(other).toEqual([401]);
+    await inOneWindow(async (net) => {
+      const statuses = await statusesFrom(
+        `${net}.10`,
+        310,
+        HUB_ROUTES.listDevices.path,
+      );
+      expect(statuses.slice(0, 300).every((status) => status === 401)).toBe(
+        true,
+      );
+      expect(statuses.at(-1)).toBe(429);
+      const response = await call(
+        new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
+          headers: { "CF-Connecting-IP": `${net}.10` },
+        }),
+      );
+      expect(response.status).toBe(429);
+      expect(response.headers.get("Retry-After")).toBe("60");
+      expect(await response.json()).toEqual({ error: "too many requests" });
+      // The 429 still carries CORS, or a browser client could not read it.
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      // One caller's budget is not another's.
+      const other = await statusesFrom(
+        `${net}.11`,
+        1,
+        HUB_ROUTES.listDevices.path,
+      );
+      expect(other).toEqual([401]);
+    });
   });
 
   it("holds the credential-free routes to the tighter budget", async () => {
-    const statuses = await statusesFrom(
-      "203.0.113.20",
-      70,
-      HUB_ROUTES.connect.path,
-    );
-    expect(statuses.slice(0, 60).every((status) => status === 403)).toBe(true);
-    expect(statuses.at(-1)).toBe(429);
-    // Enroll draws on the same budget, already spent above.
-    const response = await call(
-      new Request(`${BASE}${HUB_ROUTES.enroll.path}`, {
-        method: HUB_ROUTES.enroll.method,
-        headers: { "CF-Connecting-IP": "203.0.113.20" },
-      }),
-    );
-    expect(response.status).toBe(429);
+    await inOneWindow(async (net) => {
+      const statuses = await statusesFrom(
+        `${net}.20`,
+        70,
+        HUB_ROUTES.connect.path,
+      );
+      expect(statuses.slice(0, 60).every((status) => status === 403)).toBe(
+        true,
+      );
+      expect(statuses.at(-1)).toBe(429);
+      // Enroll draws on the same budget, already spent above.
+      const response = await call(
+        new Request(`${BASE}${HUB_ROUTES.enroll.path}`, {
+          method: HUB_ROUTES.enroll.method,
+          headers: { "CF-Connecting-IP": `${net}.20` },
+        }),
+      );
+      expect(response.status).toBe(429);
+    });
   });
 });
 

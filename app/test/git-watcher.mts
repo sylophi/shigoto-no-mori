@@ -13,7 +13,7 @@
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   gitDirOf,
@@ -38,6 +38,34 @@ import { it } from "vitest";
 const gitEnv = scrubbedGitEnv();
 
 const git = sandboxGit(gitEnv);
+
+// FSEvents hands a new watch the events from just before it began, so
+// the setup's own ref writes could reach the watcher as a ping. Once a
+// throwaway watch on the same directory sees a marker written now,
+// every earlier write is behind it, and a watch started after that
+// sees none of them. Each call has a marker of its own, so an earlier
+// call's late events cannot stand in for it.
+let markers = 0;
+async function caughtUp(gitDir: string): Promise<void> {
+  const name = `sm-check-marker-${markers++}`;
+  let seen = false;
+  const marker = watch(
+    gitDir,
+    { recursive: true, persistent: false },
+    (_event, file) => {
+      if (file === name) seen = true;
+    },
+  );
+  try {
+    let writes = 0;
+    await waitFor(() => {
+      if (!seen) writeFileSync(join(gitDir, name), String(writes++));
+      return seen;
+    }, "the git directory's watch to catch up");
+  } finally {
+    marker.close();
+  }
+}
 
 it("allowlist: refs, HEAD, packed-refs and a worktree's HEAD count, while objects, logs, index, FETCH_HEAD and lock files do not", async () => {
   for (const path of [
@@ -95,10 +123,11 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
 
   const changes: string[] = [];
   let projects = [{ id: "p1", name: "repo", path: repo }];
-  // (Re)start the watcher over the sandbox and let the platform
-  // watcher settle before producing events.
+  // (Re)start the watcher over the sandbox, past what came before, and
+  // let the platform watcher settle before producing events.
   const restart = async (suppressed = false) => {
     stopGitWatcher();
+    await caughtUp(join(repo, ".git"));
     startGitWatcher({
       onChange: (projectId) => changes.push(projectId),
       suppressed: () => suppressed,
