@@ -324,6 +324,7 @@ function bridgePeerTransport(
   const counts = new Map<string, number>();
   return {
     transport: {
+      remote: true,
       invoke: (channel, input) => {
         counts.set(channel, (counts.get(channel) ?? 0) + 1);
         return Promise.resolve(

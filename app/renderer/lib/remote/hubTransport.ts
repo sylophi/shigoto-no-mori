@@ -52,6 +52,7 @@ function releaseUnderlyingIfIdle(): void {
 // transport, so everything above stays transport agnostic.
 export function createHubClientTransport(deviceId: string): ClientTransport {
   return {
+    remote: true,
     invoke(channel: string, input: unknown): Promise<unknown> {
       // Omit input when undefined so a void contract input survives the
       // bridge as an absent field, matching both wires' invariant.

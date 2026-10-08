@@ -26,7 +26,6 @@
 // one copy nobody can pull from: a browser serves no calls, so its
 // picks travel only by being offered. (A desktop always has a window
 // to do its pulling: the app quits with its last one.)
-import { callOf, payloadOf } from "@shigomori/contracts/contract";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   SharedSettingsDoc,
@@ -39,8 +38,6 @@ import {
 } from "@shared/sharedSettings";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
-import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
-import { safeDecode } from "@shigomori/contracts/codec";
 import { queryKeys } from "@/lib/queryKeys";
 import { deviceStatusView } from "./deviceStatus";
 import { remoteDeviceStore } from "./devices";
@@ -73,15 +70,9 @@ export async function writeSharedSetting(
 // A peer's copy moved: fold it into the local copy. Unconditional on
 // purpose. The host settles an echo cheaply, and asking it every time
 // is what lets a local copy that was reset behind the window fill back
-// in. The bridge forwards a peer's pushes wholesale, so the copy is
-// parsed against the contract's schema rather than trusted.
-function mergePeerSharedSettings(payload: unknown): void {
-  const parsed = safeDecode(
-    payloadOf(callOf(sharedSettingsContract, "changed")),
-    payload,
-  );
-  if (!parsed.success) return;
-  window.api.sharedSettings.merge({ doc: parsed.data }).catch(() => undefined);
+// in. The peer's client decoded the copy (shared/ipc/buildClient.ts).
+function mergePeerSharedSettings(doc: SharedSettingsDoc): void {
+  window.api.sharedSettings.merge({ doc }).catch(() => undefined);
 }
 
 // The one writer of the cached local copy. Merged in rather than set,

@@ -18,6 +18,11 @@ import type {
 export type ClientTransport = {
   invoke(channel: string, input: unknown): Promise<unknown>;
   subscribe(channel: string, handler: (payload: unknown) => void): () => void;
+  // True when the far end is another device: the client then decodes
+  // every result and push with the call's schema (buildClient.ts), the
+  // check the serving side makes of its inputs, since a peer may run
+  // another build.
+  readonly remote?: boolean;
 };
 
 // An invoke's outcome as a value, for a wire that keeps only an error's
