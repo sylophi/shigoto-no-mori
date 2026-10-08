@@ -51,9 +51,10 @@ const execFileP = promisify(execFile);
 // The Go modules whose binaries ship inside the app (the CLI, the
 // file-sync engine and the darwin helper), each walked for the modules
 // ACTUALLY LINKED into its default build: `go list -deps` over the main
-// package, with the default build tags, so a dependency reachable only through a build
-// tag this project never sets (Mutagen's source-available parts behind
-// `mutagensspl`) is neither compiled in nor listed.
+// package, with the default build tags, so a dependency reachable only
+// through a build tag this project never sets (Mutagen's
+// source-available parts behind `mutagensspl`) is neither compiled in
+// nor listed.
 const GO_MODULES = ["cli", "file-sync", "macfs"];
 
 // License file names Go modules use, in lookup order.
