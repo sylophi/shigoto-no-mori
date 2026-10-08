@@ -31,12 +31,7 @@ import {
 } from "@host/lib/scripts";
 import { terrierAdd } from "@host/lib/terrier";
 import { expandHome } from "@host/lib/util/paths";
-import {
-  projectIconViaCli,
-  projectsRemoveViaCli,
-  reorderProjectsViaCli,
-  worktreeDestinationViaCli,
-} from "../cliDelegate";
+import { projectIcon, removeProject, storeProjectOrder, worktreeDestination } from "@host/lib/engineCalls";
 
 // Moves run one at a time: each writes the whole order, so a second
 // drag computed before the first's refresh landed would put the first
@@ -115,7 +110,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       // Registry drop and per-project state deletion (the icon cache
       // entry included) run in the CLI, same engine as `sm projects
       // remove`.
-      await projectsRemoveViaCli(id);
+      await removeProject(id);
       // A path terrier also registers doesn't leave the sidebar:
       // dropping the registry entry just demotes it to a terrier-sourced
       // project, and when the id carries over (registration minted the
@@ -147,7 +142,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       const current = loadProjects();
       const next = reorderProjects(current, draggedId, targetId, position);
       if (next === current) return;
-      await reorderProjectsViaCli(next.map((p) => p.id));
+      await storeProjectOrder(next.map((p) => p.id));
       await refreshProjects();
     });
     // The chain outlives a failed move, and the caller still sees it fail.
@@ -172,7 +167,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
   // The name the CLI would pick for a new worktree right now.
   pickWorktreeName: async ({ projectId }) =>
-    (await worktreeDestinationViaCli(projectId)).name,
+    (await worktreeDestination(projectId)).name,
 
   worktreeIncludeStatus: async ({ projectId }) => {
     const project = await findProjectOrThrow(projectId);
@@ -192,5 +187,5 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   },
 
   // The CLI resolves icons through its shared cache (cli/icon.go).
-  icon: ({ projectId }) => projectIconViaCli(projectId),
+  icon: ({ projectId }) => projectIcon(projectId),
 };

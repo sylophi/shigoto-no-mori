@@ -4,6 +4,7 @@
 // Electron-backed capability they need arrives through a setter here.
 // Must run before registerIpcHandlers so the first renderer call never
 // lands on a throwing default.
+import { app } from "electron";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
@@ -33,7 +34,7 @@ import {
 import { busyActionRemoteRefusal } from "./busyPrompt";
 import { refreshProject, sweepForPeer } from "./fetch";
 import { relaunchAppUnattended } from "./relaunch";
-import { stopStateWatcher } from "./stateWatcher";
+import { stopStoreWatcher } from "@host/lib/storeWatcher";
 import { stopUpdaterBridge } from "./updaterBridge";
 
 export function installHostImpls(): void {
@@ -45,6 +46,7 @@ export function installHostImpls(): void {
     installShellIntegration,
     uninstallShellIntegration,
     hookPathEnv,
+    appVersion: () => app.getVersion(),
   });
   setGitImpl({ refreshProject, sweepForPeer });
   // Reconcile the direct listener on every config change, whatever
@@ -60,7 +62,7 @@ export function installHostImpls(): void {
   });
   setRuntimeImpl({
     uninstallCliEverything,
-    stopStateWatcher,
+    stopStoreWatcher,
     stopUpdaterBridge,
     stopControlHost,
     broadcastNukeProgress: (progress) =>

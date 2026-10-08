@@ -19,12 +19,8 @@ import {
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { type Project, type Worktree } from "@shigomori/contracts/schemas";
-import {
-  createViaCli,
-  dirtyApplyViaCli,
-  forceRemoveViaCli,
-  worktreeDestinationViaCli,
-} from "@host/ipc/cliDelegate";
+import { dirtyApplyViaCli } from "@host/ipc/cliDelegate";
+import { createWorktree, forceRemoveWorktree, worktreeDestination } from "@host/lib/engineCalls";
 import { deleteAnyLocalBranch, listBranches } from "@host/lib/git/branches";
 import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
@@ -104,7 +100,7 @@ async function refuseLandingCollision(
   // the create, after the bundle crossed. The CLI's destination read
   // makes the same two checks here, before a byte moves.
   if (worktreeName !== undefined) {
-    const { path, taken } = await worktreeDestinationViaCli(
+    const { path, taken } = await worktreeDestination(
       project.id,
       worktreeName,
     );
@@ -406,7 +402,7 @@ const landIncoming = (
     // with the move, and only when it was interrupted.
     const { worktree } = yield* Effect.acquireRelease(
       step(() =>
-        createViaCli(
+        createWorktree(
           project,
           {
             branchName: input.branch,
@@ -489,7 +485,7 @@ function rollBackLanded(
     "[sync] could not remove the worktree of a cancelled move",
     async () => {
       const project = await findProjectOrThrow(worktree.projectId);
-      await forceRemoveViaCli(project, worktree.id, {
+      await forceRemoveWorktree(project, worktree.id, {
         timeoutMs: ROLLBACK_CLEANUP_MS,
       });
       await deleteAnyLocalBranch(project.path, worktree.branch, true).catch(

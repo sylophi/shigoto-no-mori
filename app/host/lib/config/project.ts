@@ -17,7 +17,7 @@ import {
   ShigomoriWorktreeDataSchema,
   type WorktreeDescription,
 } from "@shigomori/contracts/schemas";
-import { shigomoriReadViaCli } from "@host/ipc/cliDelegate";
+import { readProjectConfig } from "@host/lib/engineCalls";
 import {
   atomicWriteJsonSync,
   readJsonOrNull,
@@ -45,7 +45,7 @@ function worktreeDataPath(projectId: string, worktreeId: string): string {
 // user notices and fixes it.
 const configCache = ttlMapCache<string, ShigomoriConfig | null>(
   5_000,
-  shigomoriReadViaCli,
+  readProjectConfig,
 );
 
 const worktreeCache = ttlMapCache<string, ShigomoriWorktreeData | null>(

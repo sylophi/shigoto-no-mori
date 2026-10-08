@@ -18,7 +18,7 @@
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
-import { rekeyViaCli } from "@host/ipc/cliDelegate";
+import { rekeyWorktree } from "@host/lib/engineCalls";
 import { run } from "./git/core";
 import { listWorktreeIdentities } from "./git/worktrees";
 import { findProjectInsideDataDir, listProjects } from "./projects";
@@ -244,10 +244,10 @@ async function rekeyWorktrees(
     for (const m of moved) {
       if (!reverse) {
         // oxlint-disable-next-line no-await-in-loop -- each re-key is a locked read-modify-write of the same files
-        m.newId = await rekeyViaCli(project.id, m.oldId, m.newPath);
+        m.newId = await rekeyWorktree(project.id, m.oldId, m.newPath);
       } else if (m.newId !== undefined) {
         // oxlint-disable-next-line no-await-in-loop -- see above
-        await rekeyViaCli(project.id, m.newId, m.oldPath);
+        await rekeyWorktree(project.id, m.newId, m.oldPath);
       }
     }
   }

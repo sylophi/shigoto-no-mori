@@ -11,11 +11,7 @@
 import { UnknownProjectError } from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import type { Project, ProjectRow } from "@shigomori/contracts/schemas";
-import {
-  listProjectsViaCli,
-  projectsAddViaCli,
-  projectsRelocateViaCli,
-} from "@host/ipc/cliDelegate";
+import * as EngineCalls from "@host/lib/engineCalls";
 import {
   findWorktreeIdentityOrThrow,
   listWorktreeIdentities,
@@ -32,7 +28,7 @@ let running: Promise<readonly ProjectRow[]> | null = null;
 let queued: Promise<readonly ProjectRow[]> | null = null;
 
 async function listOnce(): Promise<readonly ProjectRow[]> {
-  const rows = await listProjectsViaCli({ refreshIcons: !iconsRescanned });
+  const rows = await EngineCalls.listProjects({ refreshIcons: !iconsRescanned });
   iconsRescanned = true;
   snapshot = rows;
   return rows;
@@ -61,7 +57,7 @@ export function refreshProjects(): Promise<readonly ProjectRow[]> {
 // the list so the sync readers (the git watcher's reconcile right after
 // the IPC call settles) see the new project.
 export async function registerProject(path: string): Promise<Project> {
-  const project = await projectsAddViaCli(path);
+  const project = await EngineCalls.addProject(path);
   await refreshProjects();
   return project;
 }
@@ -82,7 +78,7 @@ export async function relocateProject(
   id: string,
   path: string,
 ): Promise<Project> {
-  const project = await projectsRelocateViaCli(id, path);
+  const project = await EngineCalls.relocateProject(id, path);
   await refreshProjects();
   return project;
 }

@@ -11,7 +11,7 @@ import {
   withGlobalConfigWriteLock,
 } from "@host/lib/config/global";
 import { invalidateTerrierReadiness } from "@host/lib/terrier";
-import { type ClearingWrite, globalConfigWriteViaCli } from "../cliDelegate";
+import { type ClearingWrite, writeGlobalConfig } from "@host/lib/engineCalls";
 
 // A patched value equal to the key's default is stored by omission, so
 // config.json stays tidy whichever device saved it. Values are plain
@@ -62,7 +62,7 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
         if (isDefault(key, value)) doc[key] = null;
         else Object.assign(doc, { [key]: value });
       }
-      await globalConfigWriteViaCli(doc);
+      await writeGlobalConfig(doc);
       // The watcher treats the delegated spawn as a self-write, so the
       // TTL cache must be dropped here rather than by the fs event. This
       // fans out to the config-change subscribers too, so the direct

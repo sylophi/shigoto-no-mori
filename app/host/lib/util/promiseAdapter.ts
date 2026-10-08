@@ -7,35 +7,45 @@
 // since the IPC handlers and a few module-level probes come first.
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 
+type RunPromise<I> = <A, E>(
+  effect: Effect.Effect<A, E, I>,
+  options?: { readonly signal?: AbortSignal | undefined },
+) => Promise<A>;
+
 export const make = <I>(name: string) => {
-  let open!: (context: Context.Context<I>) => void;
-  let context = new Promise<Context.Context<I>>((resolve) => {
+  let open!: (runPromise: RunPromise<I>) => void;
+  let runner = new Promise<RunPromise<I>>((resolve) => {
     open = resolve;
   });
   let current: Context.Context<I> | undefined;
+  // Each call runs in the layer's own fiber set, so the graph closing
+  // interrupts whatever is still under way, after turning new calls
+  // away.
   const layer = Layer.effectDiscard(
-    Effect.acquireRelease(
-      Effect.context<I>().pipe(
-        Effect.tap((ctx) =>
-          Effect.sync(() => {
-            open(ctx);
-            context = Promise.resolve(ctx);
-            current = ctx;
-          }),
-        ),
-      ),
-      () =>
+    Effect.gen(function* () {
+      const ctx = yield* Effect.context<I>();
+      const runPromise: RunPromise<I> =
+        yield* FiberSet.makeRuntimePromise<I>();
+      yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           current = undefined;
-          context = Promise.reject(new Error(`${name} stopped with the app`));
-          context.catch(() => {});
+          runner = Promise.reject(new Error(`${name} stopped with the app`));
+          runner.catch(() => {});
         }),
-    ),
+      );
+      open(runPromise);
+      runner = Promise.resolve(runPromise);
+      current = ctx;
+    }),
   );
-  const run = <A, E>(effect: Effect.Effect<A, E, I>): Promise<A> =>
-    context.then((ctx) => Effect.runPromiseWith(ctx)(effect));
+  // `signal` interrupts the run, as a caller's cancel.
+  const run = <A, E>(
+    effect: Effect.Effect<A, E, I>,
+    options?: { readonly signal?: AbortSignal | undefined },
+  ): Promise<A> => runner.then((runPromise) => runPromise(effect, options));
   // A synchronous read for a caller that cannot wait, `orElse` while
   // the layer is not up.
   const runSyncOr = <A>(

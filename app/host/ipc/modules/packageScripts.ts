@@ -11,20 +11,19 @@ import {
   writeScriptSort,
 } from "@host/lib/scripts/packageScriptStats";
 import { findWorktreeIdentityOrThrow } from "@host/lib/git/worktrees";
-import { noteSelfWrite } from "@host/lib/util/selfWrite";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { cliRunScriptSpawn, packageScriptsViaCli } from "../cliDelegate";
+import { packageScriptLaunch, packageScripts } from "@host/lib/engineCalls";
 import { scriptEventNotifier } from "../scriptRun";
 
 export const packageScriptsHandlers: Handlers<
   typeof packageScriptsContract,
   HandlerContext
 > = {
-  // `sm run` with no script: the scripts in manifest order (an object
+  // The worktree's scripts in manifest order (an object
   // keeps that order), the manager the lockfile selects, and each
   // script's use stats. Null when there is no readable package.json.
   list: async ({ projectId, worktreeId }) => {
-    const doc = await packageScriptsViaCli(projectId, worktreeId);
+    const doc = await packageScripts(projectId, worktreeId);
     if (doc === null) return null;
     return {
       scripts: Object.fromEntries(
@@ -66,31 +65,31 @@ export const packageScriptsHandlers: Handlers<
     const project = await findProjectOrThrow(projectId);
     const [worktree, doc] = await Promise.all([
       findWorktreeIdentityOrThrow(project.id, worktreeId),
-      packageScriptsViaCli(project.id, worktreeId),
+      packageScripts(project.id, worktreeId),
     ]);
 
-    // Validated here even though the CLI validates again: a missing
+    // Validated here even though the engine validates again: a missing
     // script should fail this IPC call, not surface as error output in
     // an already-opened console run.
     if (!doc?.scripts.some((script) => script.name === scriptName)) {
       throw new Error(`Script "${scriptName}" is not defined in package.json`);
     }
 
-    // `sm run` is the engine: it picks the manager, sets the
-    // SHIGOMORI_* env and counts the run in the use log. That count is
-    // a state.json write from a child the app started, landing moments
-    // after the spawn, so it is noted as the app's own: the state
-    // watcher would otherwise answer every run with an app-wide
-    // refetch.
-    const command = cliRunScriptSpawn({ projectId, worktreeId, scriptName });
+    // The engine picks the manager and counts the run in the use log;
+    // the app's registry spawns the command with the SHIGOMORI_* env.
+    const { command, scriptEnv } = await packageScriptLaunch({
+      projectId,
+      worktreeId,
+      scriptName,
+    });
     const runId = startScript({
       command,
       slot: { kind: "package", name: scriptName },
       worktree,
       project,
+      scriptEnv,
       notify: scriptEventNotifier(handlerCtx),
     });
-    noteSelfWrite();
     return { runId };
   },
 };

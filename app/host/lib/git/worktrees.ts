@@ -12,11 +12,7 @@ import {
   type Worktree,
   type WorktreeIdentity,
 } from "@shigomori/contracts/schemas";
-import {
-  describeWorktreeViaCli,
-  listWorktreeIdentitiesViaCli,
-  listWorktreesViaCli,
-} from "@host/ipc/cliDelegate";
+import * as EngineCalls from "@host/lib/engineCalls";
 import { createLimiter } from "@shared/util/limit";
 import { run } from "./core";
 
@@ -30,7 +26,7 @@ const rowLists = createLimiter(2);
 
 // A project's rows, primary first.
 export function listWorktrees(projectId: string): Promise<readonly Worktree[]> {
-  return rowLists(() => listWorktreesViaCli(projectId));
+  return rowLists(() => EngineCalls.listWorktrees(projectId));
 }
 
 // One row, freshly probed.
@@ -38,7 +34,7 @@ export function describeWorktree(
   projectId: string,
   worktreeId: string,
 ): Promise<Worktree> {
-  return describeWorktreeViaCli(projectId, worktreeId);
+  return EngineCalls.describeWorktree(projectId, worktreeId);
 }
 
 // A project's checkouts without git probes. `primaryRef` also resolves
@@ -47,7 +43,7 @@ export function listWorktreeIdentities(
   projectId: string,
   opts: { primaryRef?: boolean } = {},
 ): Promise<readonly WorktreeIdentity[]> {
-  return listWorktreeIdentitiesViaCli({ projectId }, opts);
+  return EngineCalls.listWorktreeIdentities({ projectId }, opts);
 }
 
 // The checkout `worktreeId` names, or the entity-gone error.
@@ -56,7 +52,7 @@ export async function findWorktreeIdentityOrThrow(
   worktreeId: string,
   opts: { primaryRef?: boolean } = {},
 ): Promise<WorktreeIdentity> {
-  const [identity] = await listWorktreeIdentitiesViaCli(
+  const [identity] = await EngineCalls.listWorktreeIdentities(
     { projectId, worktreeId },
     opts,
   );

@@ -1,28 +1,21 @@
-// Compiles the sm CLI (a Go module in cli/) into a standalone binary,
-// same distribution shape as port-pool. Two flavors, mirroring the
-// app's packaged/dev split; naming and data dir policy come from
-// shared/packaging/cliDist.mts and are injected into the binary via
-// -ldflags so the two languages share one source of truth.
+// Compiles the terminal sm (packages/cli) into a standalone Bun binary.
+// Two flavors, mirroring the app's packaged/dev split; naming and data
+// dir policy are the engine's (packages/engine/src/flavor.ts).
 //   default -> dist-cli/sm   targets ~/.sm  (bundled with the app)
 //   --dev   -> dist-cli/smd  targets ~/.smd (built by `pnpm dev`)
+// The binary finds the darwin helper beside itself, as the app's
+// Resources ship them, so a dev build gets a copy of the one in
+// dist-macfs/ (build it first, as dev-cli.mts does).
 //
 // Run: pnpm cli:build [--dev]
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { CLI_DIST_DIR, cliBinaryName } from "../shared/packaging/cliDist.mts";
 import {
-  APP_BUNDLE_ID,
-  UPDATE_FEED_REPO,
-  CLI_DIST_DIR,
-  cliAliasName,
-  cliBinaryName,
-  cliConfigDirName,
-  cliDataDirName,
-  DATA_DIR_POINTER_FILE,
-  LEGACY_DATA_DIR_POINTER_FILE,
-  legacyDataDirName,
-} from "../shared/packaging/cliDist.mts";
-import { deepLinkOrigin } from "../shared/packaging/rendererScheme.mts";
+  MACFS_BINARY_NAME,
+  MACFS_DIST_DIR,
+} from "../shared/packaging/macfsDist.mts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
 const flavor = process.argv.includes("--dev") ? "dev" : "prod";
@@ -32,38 +25,24 @@ const version =
     ? "dev"
     : JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).version;
 
-const outfile = join(appRoot, CLI_DIST_DIR, cliBinaryName(flavor));
-
-const ldflags = [
-  `-X main.version=${version}`,
-  `-X main.flavor=${flavor}`,
-  `-X main.dataDirName=${cliDataDirName(flavor)}`,
-  `-X main.legacyDataDirName=${legacyDataDirName(flavor)}`,
-  `-X main.configDirName=${cliConfigDirName(flavor)}`,
-  `-X main.dataDirPointerName=${DATA_DIR_POINTER_FILE}`,
-  `-X main.legacyDataDirPointerName=${LEGACY_DATA_DIR_POINTER_FILE}`,
-  `-X main.binaryName=${cliBinaryName(flavor)}`,
-  `-X main.aliasName=${cliAliasName(flavor)}`,
-  `-X main.appBundleID=${APP_BUNDLE_ID}`,
-  `-X main.updateFeedRepo=${UPDATE_FEED_REPO}`,
-  `-X main.deepLinkOrigin=${deepLinkOrigin(flavor)}`,
-  "-s",
-  "-w",
-].join(" ");
+const outdir = join(appRoot, CLI_DIST_DIR);
+const outfile = join(outdir, cliBinaryName(flavor));
 
 execFileSync(
-  "go",
+  "node",
   [
-    "build",
-    "-C",
-    join(repoRoot, "cli"),
-    "-trimpath",
-    "-ldflags",
-    ldflags,
-    "-o",
+    "build.mts",
     outfile,
-    ".",
+    ...(flavor === "prod" ? ["--prod"] : []),
+    `--version=${version}`,
   ],
-  { cwd: appRoot, stdio: "inherit" },
+  { cwd: join(repoRoot, "packages", "cli"), stdio: "inherit" },
 );
+
+if (flavor === "dev") {
+  const macfs = join(appRoot, MACFS_DIST_DIR, MACFS_BINARY_NAME);
+  if (existsSync(macfs)) {
+    copyFileSync(macfs, join(outdir, MACFS_BINARY_NAME));
+  }
+}
 console.log(`built ${outfile} (version ${version})`);

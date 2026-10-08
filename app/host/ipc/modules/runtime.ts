@@ -21,7 +21,7 @@ import {
 // Electron imports.
 type RuntimeImpl = {
   uninstallCliEverything: () => Promise<void>;
-  stopStateWatcher: () => Promise<void>;
+  stopStoreWatcher: () => Promise<void>;
   stopUpdaterBridge: () => void;
   // Unpublishes control.json, so the moved data dir never carries the
   // address of this pre-move process to a CLI that resolved the new one.
@@ -75,7 +75,7 @@ export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
         await moveDataDir(parentDir, {
           beforeMove: async () => {
             watchersStopped = true;
-            await runtimeImpl().stopStateWatcher();
+            await runtimeImpl().stopStoreWatcher();
             runtimeImpl().stopUpdaterBridge();
             runtimeImpl().stopControlHost();
           },

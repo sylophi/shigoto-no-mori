@@ -2,9 +2,7 @@
 // Client config is how this app instance looks (theme, palettes).
 // Device config in the shigomori root gates what a machine can do and
 // stays with the host and the CLI. This file is owned by the main
-// process alone and the CLI never touches it. Seeding from the
-// pre-split device config lives in clientConfigMigration.ts, so this
-// store stays a pure userData read/write.
+// process alone and the CLI never touches it.
 //
 // Reads are synchronous because the boot path needs the saved theme
 // before the BrowserWindow exists (main/index.ts applies it via

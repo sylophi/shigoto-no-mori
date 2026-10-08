@@ -122,7 +122,7 @@ export function startUpdaterBridge(
 
 let bridgeWatcher: ReturnType<typeof watch> | null = null;
 
-// Same contract as stopStateWatcher: released before the data-folder
+// Same contract as stopStoreWatcher: released before the data-folder
 // move renames the data dir. The post-move relaunch starts a fresh bridge.
 export function stopUpdaterBridge(): void {
   bridgeWatcher?.close();

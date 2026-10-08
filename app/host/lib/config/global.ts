@@ -18,7 +18,7 @@ import {
   type GlobalConfig,
   StoredGlobalConfigSchema,
 } from "@shigomori/contracts/schemas";
-import { globalConfigReadViaCli } from "@host/ipc/cliDelegate";
+import * as EngineCalls from "@host/lib/engineCalls";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
@@ -35,7 +35,7 @@ function configPath(): string {
 
 // The stored document, no defaults filled in: each reader applies its
 // own, as it always has.
-const cache = ttlValueCache<GlobalConfig>(5_000, globalConfigReadViaCli);
+const cache = ttlValueCache<GlobalConfig>(5_000, EngineCalls.readGlobalConfig);
 
 export async function readGlobalConfig(): Promise<GlobalConfig> {
   return cache.get();
@@ -46,7 +46,7 @@ export async function readGlobalConfig(): Promise<GlobalConfig> {
 // INVARIANT: the device-settings patch write MUST base itself on this,
 // never on the 5s-TTL readGlobalConfig, because it hands the CLI every
 // managed setting and the CLI clears every registered key the payload
-// omits (see globalConfigWriteViaCli). A base up to the TTL stale would write
+// omits (see EngineCalls.writeGlobalConfig). A base up to the TTL stale would write
 // back a value a CLI `set` just changed, as authoritative. Unlike
 // invalidateGlobalConfigCache this fires no change listeners: it is a
 // read, not a config change.

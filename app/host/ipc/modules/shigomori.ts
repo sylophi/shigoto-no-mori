@@ -4,7 +4,7 @@ import {
   invalidateProjectConfigCache,
   readShigomoriConfig,
 } from "@host/lib/config/project";
-import { shigomoriWriteViaCli } from "../cliDelegate";
+import { writeProjectConfig } from "@host/lib/engineCalls";
 
 export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
   // project.json as stored, read through the CLI (`sm projects config
@@ -17,7 +17,7 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
     // write (it also handles the in-project exclude side effect and
     // validates projectId, mapping onto the same unknown-project
     // error).
-    await shigomoriWriteViaCli(projectId, config);
+    await writeProjectConfig(projectId, config);
     // The watcher treats the delegated spawn as a self-write, so the
     // TTL cache must be dropped here rather than by the fs event.
     invalidateProjectConfigCache(projectId);
