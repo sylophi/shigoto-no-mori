@@ -11,6 +11,10 @@
 // contracts' RPC client.
 import { createConnection, type Socket } from "node:net";
 import { kill } from "node:process";
+import {
+  CONTROL_ERROR_CODES,
+  isControlErrorCode,
+} from "@shigomori/contracts/modules/control";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -36,6 +40,10 @@ export class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
         : "Start it with `pnpm dev` in a checkout, sign in, and try again.";
     return `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${hint}`;
   }
+
+  get code(): string {
+    return "app-not-running";
+  }
 }
 
 // The app is there, at its cap of connections.
@@ -45,12 +53,16 @@ export class AppBusy extends Schema.TaggedError<AppBusy>()("AppBusy", {
   override get message(): string {
     return `The app is serving as many ${this.binary} commands as it takes at once. Try again in a moment.`;
   }
+
+  get code(): string {
+    return "app-busy";
+  }
 }
 
 // The connection went away after the call was sent.
 export class ConnectionLost extends Schema.TaggedError<ConnectionLost>()(
   "ConnectionLost",
-  { channel: Schema.String },
+  {},
 ) {
   override get message(): string {
     return "Lost the connection to the app before it answered. A transfer it had started is cancelled and rolled back. Anything else keeps running there: check the app, or `sm worktrees mirrors`.";
@@ -62,7 +74,7 @@ export class ControlRefused extends Schema.TaggedError<ControlRefused>()(
   "ControlRefused",
   {
     channel: Schema.String,
-    code: Schema.optional(Schema.String),
+    code: Schema.optional(Schema.Literals(CONTROL_ERROR_CODES)),
     said: Schema.String,
   },
 ) {
@@ -167,7 +179,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
 
   // A connection to the loopback port, closed with the scope: each
   // frame it reads (none when the line isn't one, or once it closed),
-  // and whether a frame could be written.
+  // and a write that fails with `error` when the frame can't be written.
   const connect = Effect.fn(function* (port: number) {
     const lines = yield* Queue.unbounded<string | undefined>();
     const socket = yield* Effect.acquireRelease(
@@ -188,10 +200,14 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
           : Schema.decodeOption(FrameSchema)(line),
       ),
     );
-    const send = (frame: Readonly<Record<string, unknown>>) =>
-      Effect.callback<boolean>((resume) => {
-        socket.write(`${JSON.stringify(frame)}\n`, (error) =>
-          resume(Effect.succeed(error === undefined || error === null)),
+    const send = <E>(frame: Readonly<Record<string, unknown>>, error: E) =>
+      Effect.callback<void, E>((resume) => {
+        socket.write(`${JSON.stringify(frame)}\n`, (failed) =>
+          resume(
+            failed === undefined || failed === null
+              ? Effect.void
+              : Effect.fail(error),
+          ),
         );
       });
     return { next, send };
@@ -202,9 +218,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     readonly token: string;
   }) {
     const connection = yield* connect(file.port);
-    if (!(yield* connection.send({ t: "hello", token: file.token }))) {
-      return yield* notRunning;
-    }
+    yield* connection.send({ t: "hello", token: file.token }, notRunning);
     const welcome = yield* connection.next;
     // The app is there and said so. Any other refusal is a control.json
     // this listener didn't write.
@@ -247,16 +261,16 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         yield* Effect.logDebug(
           `control: connected to the app (v${file.appVersion}, pid ${file.pid})`,
         );
-        const sent = yield* connection.send(
+        yield* connection.send(
           input === undefined
             ? { t: "req", id: 1, channel }
             : { t: "req", id: 1, channel, input },
+          new ConnectionLost(),
         );
-        if (!sent) return yield* new ConnectionLost({ channel });
         for (;;) {
           const frame = yield* connection.next;
           if (Option.isNone(frame)) {
-            return yield* new ConnectionLost({ channel });
+            return yield* new ConnectionLost();
           }
           const { t, id, ok, result, message, code, payload } = frame.value;
           if (t === "push" && onPush !== undefined) {
@@ -267,7 +281,8 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
           if (ok !== true) {
             return yield* new ControlRefused({
               channel,
-              ...(code === undefined || code === "" ? {} : { code }),
+              // Only the codes this wire owns, as the app sends no other.
+              ...(isControlErrorCode(code) ? { code } : {}),
               said: message ?? "",
             });
           }

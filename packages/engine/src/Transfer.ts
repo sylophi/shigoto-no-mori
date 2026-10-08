@@ -12,7 +12,16 @@
 // peer's worktree by its folder name or branch, the one device that
 // qualifies when none is named) and the folder a clone goes in, so a
 // name is passed through as given. Answers are the documents `sm --json`
-// prints, with what the terminal's lines read beside them.
+// prints, with the headline a person reads.
+import {
+  type ControlDevice,
+  ControlLeaveOutSchema,
+  type ControlMirror,
+  type ControlPeerWorktree,
+  ControlSourceFateSchema,
+  type ControlTransferResult,
+} from "@shigomori/contracts/modules/control";
+import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -21,7 +30,6 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Control from "./Control.ts";
 import type * as Git from "./Git.ts";
-import type { Document } from "./Landing.ts";
 import * as Paths from "./Paths.ts";
 import type * as Registry from "./Registry.ts";
 import type { RegisteredProject } from "./Registry.ts";
@@ -42,8 +50,11 @@ export type TransferFlags = {
 // A progress push: the event `sm --json` prints for it (none for a
 // payload that isn't an object), and the step's line when it differs
 // from the one before (a transfer pushes per chunk).
+type ProgressDocument = Readonly<SyncPullProgress> & {
+  readonly event: "progress";
+};
 export type Progress = {
-  readonly document: Document | undefined;
+  readonly document: ProgressDocument | undefined;
   readonly line: string | undefined;
 };
 
@@ -113,6 +124,9 @@ export class StopUnconfirmed extends Schema.TaggedError<StopUnconfirmed>()(
   override get message(): string {
     return `${this.said}\nStopping removes the copy, so make sure both sides hold the work (${this.binary} worktrees mirrors), or pass -f to stop anyway.`;
   }
+  get code(): string {
+    return "stop-unconfirmed";
+  }
 }
 
 // The app's answer isn't the shape this build reads.
@@ -127,7 +141,21 @@ export class UnreadableAnswer extends Schema.TaggedError<UnreadableAnswer>()(
 
 // --- the slices of the app's documents ------------------------------------
 
-// Absent reads as empty, as Go's zero values.
+// A lenient read of the contracts' type T: every field it names is one
+// of T's, whatever T holds there decodes, and an absent field reads as
+// Go's zero value.
+type Reads<T, S extends Schema.Top> = [
+  Exclude<keyof S["Type"], keyof T>,
+] extends [never]
+  ? [T] extends [S["Encoded"]]
+    ? S
+    : never
+  : never;
+const reading =
+  <T>() =>
+  <S extends Schema.Top>(schema: S & Reads<T, S>): S =>
+    schema;
+
 const text = Schema.String.pipe(
   Schema.withDecodingDefaultKey(Effect.succeed("")),
 );
@@ -137,125 +165,134 @@ const flag = Schema.Boolean.pipe(
 const count = Schema.Int.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0)));
 const list = <S extends Schema.Top>(item: S) =>
   Schema.Array(item).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])));
+const struct = <S extends Schema.Top>(schema: S) =>
+  schema.pipe(Schema.withDecodingDefaultKey(Effect.succeed({})));
 
-const NamedDeviceSchema = Schema.Struct({ deviceId: text, name: text });
-export type NamedDevice = typeof NamedDeviceSchema.Type;
-const namedDevice = NamedDeviceSchema.pipe(
-  Schema.withDecodingDefaultKey(Effect.succeed({})),
+type NamedDevice = ControlPeerWorktree["device"];
+const namedDevice = struct(
+  reading<NamedDevice>()(Schema.Struct({ deviceId: text, name: text })),
 );
 
-const WorktreeSliceSchema = Schema.Struct({
-  name: text,
-  branch: text,
-  path: text,
-});
+type SourceOutcome = NonNullable<ControlTransferResult["source"]>;
 
-const TransferResultSchema = Schema.Struct({
-  worktree: WorktreeSliceSchema.pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed({})),
-  ),
-  captured: flag,
-  dirtyApplied: flag,
-  device: namedDevice,
-  copySide: text,
-  alreadyMirrored: flag,
-  // The project the other device cloned first, having no checkout of
-  // the repo.
-  cloned: Schema.optional(Schema.Struct({ name: text, path: text })),
-  files: Schema.optional(Schema.Struct({ crossed: flag, error: text })),
-  source: Schema.optional(
-    Schema.Struct({ fate: text, done: flag, error: text }),
-  ),
-});
+const TransferResultSchema = reading<ControlTransferResult>()(
+  Schema.Struct({
+    worktree: struct(
+      reading<ControlTransferResult["worktree"]>()(
+        Schema.Struct({ name: text }),
+      ),
+    ),
+    captured: flag,
+    dirtyApplied: flag,
+    device: namedDevice,
+    alreadyMirrored: flag,
+    cloned: Schema.optional(
+      reading<NonNullable<ControlTransferResult["cloned"]>>()(
+        Schema.Struct({ name: text, path: text }),
+      ),
+    ),
+    files: Schema.optional(
+      reading<NonNullable<ControlTransferResult["files"]>>()(
+        Schema.Struct({ error: text }),
+      ),
+    ),
+    source: Schema.optional(
+      reading<SourceOutcome>()(
+        Schema.Struct({ fate: text, done: flag, error: text }),
+      ),
+    ),
+  }),
+);
 export type TransferResult = typeof TransferResultSchema.Type;
 
-const MirrorSchema = Schema.Struct({
-  device: namedDevice,
-  localRoot: text,
-  copySide: text,
-  paused: flag,
-  status: text,
-  git: text,
-  conflicts: count,
-});
-export type Mirror = typeof MirrorSchema.Type;
+const MirrorSchema = reading<ControlMirror>()(
+  Schema.Struct({
+    device: namedDevice,
+    localRoot: text,
+    copySide: text,
+    paused: flag,
+    status: text,
+    git: text,
+    conflicts: count,
+  }),
+);
 
-const DeviceSchema = Schema.Struct({ name: text, platform: text, block: text });
-export type Device = typeof DeviceSchema.Type;
+type MirrorStop = {
+  readonly mirror: ControlMirror;
+  readonly copyStayed?: string;
+};
+const MirrorStopSchema = reading<MirrorStop>()(
+  Schema.Struct({ mirror: struct(MirrorSchema), copyStayed: text }),
+);
 
+type MirrorList = {
+  readonly daemon: string;
+  readonly mirrors: ReadonlyArray<ControlMirror>;
+};
+const MirrorsSchema = reading<MirrorList>()(
+  Schema.Struct({ daemon: text, mirrors: list(MirrorSchema) }),
+);
+
+type DeviceList = {
+  readonly thisDevice: NamedDevice;
+  readonly devices: ReadonlyArray<ControlDevice>;
+};
+const DevicesSchema = reading<DeviceList>()(
+  Schema.Struct({
+    thisDevice: namedDevice,
+    devices: list(
+      reading<ControlDevice>()(
+        Schema.Struct({ name: text, platform: text, block: text }),
+      ),
+    ),
+  }),
+);
+
+// The worktree is the app's document, passed through.
 const PeerWorktreesSchema = Schema.Struct({
   worktrees: list(
-    Schema.Struct({
-      device: namedDevice,
-      worktree: Schema.optional(Schema.Unknown),
-    }),
+    reading<ControlPeerWorktree>()(
+      Schema.Struct({
+        device: namedDevice,
+        worktree: Schema.optional(Schema.Unknown),
+      }),
+    ),
   ),
   unreachable: list(Schema.String),
 });
 
-const MirrorStopSchema = Schema.Struct({
-  mirror: MirrorSchema.pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
-  copyStayed: text,
-});
-
-const MirrorsSchema = Schema.Struct({
-  daemon: text,
-  mirrors: list(MirrorSchema),
-});
-
-const DevicesSchema = Schema.Struct({
-  thisDevice: namedDevice,
-  devices: list(DeviceSchema),
-});
-
-const ProgressSchema = Schema.Struct({ step: text, createPhase: text });
+const ProgressSchema = reading<SyncPullProgress>()(
+  Schema.Struct({ step: text, createPhase: text }),
+);
 
 // --- what the verbs answer ------------------------------------------------
 
-// A finished send, bring or mirror: the document, what didn't hold (the
-// terminal exits 3 when anything didn't), the headline, and the answer.
+// The answers as the contracts type them, which is what the app sends.
+type Ok<T> = Readonly<T> & { readonly ok: true };
+type WithCaveats<T> = Ok<T> & { readonly caveats: ReadonlyArray<string> };
+
+// A finished send, bring or mirror: the document `sm --json` prints (the
+// terminal exits 3 when it has caveats), and the headline.
 export type Transferred = {
-  readonly document: Document;
-  readonly caveats: ReadonlyArray<string>;
+  readonly document: WithCaveats<ControlTransferResult>;
   readonly headline: string;
-  readonly result: TransferResult;
 };
 
 // A project's worktrees on the other devices: the document (list's
-// shape, each saying whose it is), the devices that weren't asked, and
-// a row per worktree.
+// shape, each saying whose it is), and the devices that weren't asked.
 export type PeerWorktrees = {
-  readonly document: ReadonlyArray<Document>;
+  readonly document: ReadonlyArray<
+    ControlPeerWorktree["worktree"] & { readonly device: NamedDevice }
+  >;
   readonly project: RegisteredProject;
   readonly unreachable: ReadonlyArray<string>;
-  readonly rows: ReadonlyArray<{
-    readonly name: string;
-    readonly branch: string;
-    readonly device: NamedDevice;
-  }>;
 };
 
-// A stopped mirror. A copy that stayed is its caveat.
+// A stopped mirror, and the worktree it was asked of. A copy that stayed
+// is its caveat.
 export type Unmirrored = {
-  readonly document: Document;
-  readonly caveats: ReadonlyArray<string>;
+  readonly document: WithCaveats<MirrorStop>;
   readonly worktree: Worktrees.WorktreeIdentity;
-  readonly mirror: Mirror;
-};
-
-export type Mirrors = {
-  readonly document: Document;
-  readonly daemon: string;
-  readonly mirrors: ReadonlyArray<Mirror>;
-};
-
-// The account's other devices. `scoped` is whether a project was asked
-// about, so each says whether it could take part.
-export type Devices = {
-  readonly document: Document;
-  readonly scoped: boolean;
-  readonly thisDevice: NamedDevice;
-  readonly devices: ReadonlyArray<Device>;
 };
 
 type ResolveError =
@@ -264,11 +301,11 @@ type ResolveError =
   | Registry.UnknownProject
   | Git.GitError;
 
-type TransferError =
-  | TransferRefused
-  | ResolveError
-  | Control.ControlError
-  | UnreadableAnswer;
+type ReadError = Control.ControlError | UnreadableAnswer;
+
+type TransferError = TransferRefused | ResolveError | ReadError;
+
+type ProjectRef = Pick<Worktrees.Target, "project" | "projectId">;
 
 export class Transfer extends Context.Service<
   Transfer,
@@ -300,38 +337,23 @@ export class Transfer extends Context.Service<
       here: Worktrees.Here,
       target: Worktrees.Target,
       options: { readonly force: boolean },
-    ) => Effect.Effect<
-      Unmirrored,
-      ResolveError | Control.ControlError | UnreadableAnswer | StopUnconfirmed
-    >;
+    ) => Effect.Effect<Unmirrored, ResolveError | ReadError | StopUnconfirmed>;
     // `sm worktrees mirrors`: the mirrors this device is part of.
-    readonly mirrors: Effect.Effect<
-      Mirrors,
-      Control.ControlError | UnreadableAnswer
-    >;
-    // `sm devices`, inside a project or naming one with -p or its id.
+    readonly mirrors: Effect.Effect<Ok<MirrorList>, ReadError>;
+    // `sm devices`, inside a project or naming one, each device saying
+    // whether it could take part.
     readonly devices: (
       here: Worktrees.Here,
-      ref: {
-        readonly project?: string | undefined;
-        readonly projectId?: string | undefined;
-      },
-    ) => Effect.Effect<
-      Devices,
-      ResolveError | Control.ControlError | UnreadableAnswer
-    >;
+      ref: ProjectRef,
+    ) => Effect.Effect<Ok<DeviceList>, ResolveError | ReadError>;
     // `sm worktrees list --remote`: the project's worktrees on the other
     // devices, or on the one `from` names.
     readonly peerWorktrees: (
       here: Worktrees.Here,
-      ref: {
-        readonly project?: string | undefined;
+      ref: Pick<Worktrees.Target, "project"> & {
         readonly from?: string | undefined;
       },
-    ) => Effect.Effect<
-      PeerWorktrees,
-      ResolveError | Control.ControlError | UnreadableAnswer
-    >;
+    ) => Effect.Effect<PeerWorktrees, ResolveError | ReadError>;
   }
 >()("sm/engine/Transfer") {}
 
@@ -342,6 +364,9 @@ const refused = (
   reason: TransferRefused["reason"],
   flagName = "",
 ) => new TransferRefused({ reason, flag: flagName, binary });
+
+const isLeaveOut = Schema.is(ControlLeaveOutSchema);
+const isSourceFate = Schema.is(ControlSourceFateSchema);
 
 // The options every transfer takes, as the control op takes them.
 // Nothing asked is nothing sent: the app then applies the project's
@@ -366,7 +391,7 @@ export const transferOptions = (
   if (options.mirror) input["mirror"] = true;
   const rule = flags.leaveOut ?? "";
   if (rule !== "") {
-    if (rule !== "nothing" && rule !== "gitignored") return fail("leave-out");
+    if (!isLeaveOut(rule)) return fail("leave-out");
     input["leaveOut"] = rule;
   }
   if (flags.setup === true && flags.noSetup === true) return fail("setup-both");
@@ -375,9 +400,7 @@ export const transferOptions = (
   const fate = flags.source ?? "";
   if (fate !== "") {
     if (options.mirror) return fail("mirror-source");
-    if (fate !== "keep" && fate !== "shelve" && fate !== "teardown") {
-      return fail("source");
-    }
+    if (!isSourceFate(fate)) return fail("source");
     input["source"] = fate;
   }
   if (flags.cloneInto !== undefined) {
@@ -389,7 +412,7 @@ export const transferOptions = (
 };
 
 // What became of a source whose fate was carried out.
-const SOURCE_FATE_DONE: Readonly<Record<string, string>> = {
+const SOURCE_FATE_DONE: Partial<Record<SourceOutcome["fate"], string>> = {
   shelve: "shelved",
   teardown: "removed",
 };
@@ -408,7 +431,7 @@ export const caveatsOf = (result: TransferResult): ReadonlyArray<string> => [
     : []),
   ...(result.source !== undefined && !result.source.done
     ? [
-        `the source was not ${SOURCE_FATE_DONE[result.source.fate] ?? ""}: ${result.source.error}`,
+        `the source was not ${isSourceFate(result.source.fate) ? (SOURCE_FATE_DONE[result.source.fate] ?? "") : ""}: ${result.source.error}`,
       ]
     : []),
 ];
@@ -454,14 +477,15 @@ const stepLine = (payload: unknown): string | undefined => {
     : label;
 };
 
-const isDocument = (value: unknown): value is Document =>
+const isDocument = (
+  value: unknown,
+): value is Readonly<Record<string, unknown>> =>
   Predicate.isObject(value) && !Array.isArray(value);
 
-// The app's own document, whole, with the fields beside it.
-const appDocument = (
-  raw: unknown,
-  extra: Readonly<Record<string, unknown>> = {},
-): Document => ({ ...(isDocument(raw) ? raw : {}), ok: true, ...extra });
+// The app's own document, whole, with the fields beside it. The app
+// sends what the contracts type, and a field read here was checked.
+const appDocument = <T>(raw: unknown): Ok<T> =>
+  ({ ...(isDocument(raw) ? raw : {}), ok: true }) as Ok<T>;
 
 // --- the service ----------------------------------------------------------
 
@@ -489,28 +513,16 @@ const make = Effect.gen(function* () {
   // variable in `--from "$DEVICE"` would otherwise read as no direction,
   // and turn a bring into a send to whichever device qualifies.
   const checkDeviceFlags = (flags: TransferFlags) => {
-    for (const [name, value] of Object.entries({
-      to: flags.to,
-      from: flags.from,
-    })) {
+    // Template literals, which the import boundary's scan doesn't read
+    // as a module name.
+    for (const name of [`to`, `from`] as const) {
+      const value = flags[name];
       if (value !== undefined && value.trim() === "") {
         return Effect.fail(refused(binary, "blank-device", name));
       }
     }
     return Effect.void;
   };
-
-  // The project a command names: by id, by -p, or the one at the cwd.
-  const projectOf = (
-    here: Worktrees.Here,
-    ref: {
-      readonly project?: string | undefined;
-      readonly projectId?: string | undefined;
-    },
-  ) =>
-    ref.projectId !== undefined && ref.projectId !== ""
-      ? worktrees.resolveProjectById(here, ref.projectId)
-      : worktrees.resolveProject(here, ref.project);
 
   // Progress as the app streams it, each sync:pullProgress push.
   const progressOf = (onProgress: OnProgress) => {
@@ -522,7 +534,7 @@ const make = Effect.gen(function* () {
       if (fresh) last = line;
       return onProgress({
         document: isDocument(payload)
-          ? { ...payload, event: "progress" }
+          ? ({ ...payload, event: "progress" } as ProgressDocument)
           : undefined,
         line: fresh ? line : undefined,
       });
@@ -541,12 +553,12 @@ const make = Effect.gen(function* () {
       input,
       progressOf(onProgress),
     );
-    const caveats = caveatsOf(decoded);
     return {
-      document: appDocument(raw, { caveats }),
-      caveats,
+      document: {
+        ...appDocument<ControlTransferResult>(raw),
+        caveats: caveatsOf(decoded),
+      },
       headline: headlineOf(decoded, direction),
-      result: decoded,
     };
   });
 
@@ -587,7 +599,7 @@ const make = Effect.gen(function* () {
     mirror: boolean,
     onProgress: OnProgress,
   ) {
-    const project = yield* projectOf(here, target);
+    const project = yield* worktrees.resolveProjectRef(here, target);
     const wanted = target.ref ?? "";
     if (wanted === "") return yield* refused(binary, "no-worktree");
     const input = yield* transferOptions(flags, {
@@ -611,8 +623,9 @@ const make = Effect.gen(function* () {
     onProgress: OnProgress,
   ) {
     yield* checkDeviceFlags(flags);
-    if ((flags.from ?? "") !== "")
+    if ((flags.from ?? "") !== "") {
       return yield* refused(binary, "send-direction");
+    }
     return yield* runSend(here, target, flags, false, onProgress);
   });
 
@@ -623,8 +636,9 @@ const make = Effect.gen(function* () {
     onProgress: OnProgress,
   ) {
     yield* checkDeviceFlags(flags);
-    if ((flags.to ?? "") !== "")
+    if ((flags.to ?? "") !== "") {
       return yield* refused(binary, "bring-direction");
+    }
     return yield* runBring(here, target, flags, false, onProgress);
   });
 
@@ -669,57 +683,38 @@ const make = Effect.gen(function* () {
       }),
     );
     // The mirror stopped either way. A copy that stayed is the caveat.
-    const caveats = decoded.copyStayed === "" ? [] : [decoded.copyStayed];
     return {
-      document: appDocument(raw, { caveats }),
-      caveats,
+      document: {
+        ...appDocument<MirrorStop>(raw),
+        caveats: decoded.copyStayed === "" ? [] : [decoded.copyStayed],
+      },
       worktree: located.worktree,
-      mirror: decoded.mirror,
     };
   });
 
-  const mirrors = Effect.gen(function* () {
-    const { raw, decoded } = yield* invoke(
-      MirrorsSchema,
-      "control:mirrors",
-      undefined,
-    );
-    return {
-      document: appDocument(raw),
-      daemon: decoded.daemon,
-      mirrors: decoded.mirrors,
-    };
-  }).pipe(Effect.withSpan("Transfer.mirrors"));
+  const mirrors = invoke(MirrorsSchema, "control:mirrors", undefined).pipe(
+    Effect.map(({ raw }) => appDocument<MirrorList>(raw)),
+    Effect.withSpan("Transfer.mirrors"),
+  );
 
   const devices = Effect.fn("Transfer.devices")(function* (
     here: Worktrees.Here,
-    ref: {
-      readonly project?: string | undefined;
-      readonly projectId?: string | undefined;
-    },
+    ref: ProjectRef,
   ) {
     const scoped =
       (ref.project ?? "") !== "" ||
       (ref.projectId ?? "") !== "" ||
       here.current !== undefined;
-    const input = scoped ? { projectId: (yield* projectOf(here, ref)).id } : {};
-    const { raw, decoded } = yield* invoke(
-      DevicesSchema,
-      "control:devices",
-      input,
-    );
-    return {
-      document: appDocument(raw),
-      scoped,
-      thisDevice: decoded.thisDevice,
-      devices: decoded.devices,
-    };
+    const input = scoped
+      ? { projectId: (yield* worktrees.resolveProjectRef(here, ref)).id }
+      : {};
+    const { raw } = yield* invoke(DevicesSchema, "control:devices", input);
+    return appDocument<DeviceList>(raw);
   });
 
   const peerWorktrees = Effect.fn("Transfer.peerWorktrees")(function* (
     here: Worktrees.Here,
-    ref: {
-      readonly project?: string | undefined;
+    ref: Pick<Worktrees.Target, "project"> & {
       readonly from?: string | undefined;
     },
   ) {
@@ -732,23 +727,16 @@ const make = Effect.gen(function* () {
         ? { projectId: project.id }
         : { projectId: project.id, device: from },
     );
-    const sliceOf = Schema.decodeUnknownOption(WorktreeSliceSchema);
     return {
-      // Each named the way the device fields of Go's struct are.
-      document: decoded.worktrees.map(({ device, worktree }) => ({
-        ...(isDocument(worktree) ? worktree : {}),
-        device: { deviceId: device.deviceId, name: device.name },
-      })),
+      document: decoded.worktrees.map(
+        ({ device, worktree }) =>
+          ({
+            ...(isDocument(worktree) ? worktree : {}),
+            device,
+          }) as PeerWorktrees["document"][number],
+      ),
       project,
       unreachable: decoded.unreachable,
-      rows: decoded.worktrees.map(({ device, worktree }) => {
-        const slice = Option.getOrElse(sliceOf(worktree), () => ({
-          name: "",
-          branch: "",
-          path: "",
-        }));
-        return { name: slice.name, branch: slice.branch, device };
-      }),
     };
   });
 

@@ -114,11 +114,10 @@ describe("transfer options", () => {
 });
 
 const result = (fields: Partial<TransferResult> = {}): TransferResult => ({
-  worktree: { name: "feat", branch: "feat", path: "/Users/rin/feat" },
+  worktree: { name: "feat" },
   captured: false,
   dirtyApplied: false,
   device: { deviceId: "d1", name: "Studio Mac" },
-  copySide: "remote",
   alreadyMirrored: false,
   ...fields,
 });
@@ -159,7 +158,7 @@ describe("headlines and caveats", () => {
         result({
           captured: true,
           dirtyApplied: true,
-          files: { crossed: true, error: "" },
+          files: { error: "" },
           source: { fate: "teardown", done: true, error: "" },
         }),
       ),
@@ -169,7 +168,7 @@ describe("headlines and caveats", () => {
       caveatsOf(
         result({
           captured: true,
-          files: { crossed: false, error: "peer went away" },
+          files: { error: "peer went away" },
           source: {
             fate: "teardown",
             done: false,
@@ -190,7 +189,6 @@ describe("headlines and caveats", () => {
 
 const noProgress = () => Effect.void;
 const headline = (doc: unknown) => (doc as { headline: string }).headline;
-const scoped = (doc: unknown) => (doc as { scoped: boolean }).scoped;
 
 let box: Sandbox;
 let app: FakeApp | undefined;
@@ -329,18 +327,7 @@ describe("send, bring and mirror", () => {
       "the uncommitted changes did not apply on the copy, so they exist only on the source";
     assert.deepEqual(sent, {
       document: { ...transferAnswer, ok: true, caveats: [caveat] },
-      caveats: [caveat],
       headline: 'sent fox to "Studio Mac"',
-      result: {
-        worktree: { name: "fox", branch: "fox", path: "/there/fox" },
-        captured: true,
-        dirtyApplied: false,
-        device: { deviceId: "d1", name: "Studio Mac" },
-        copySide: "remote",
-        alreadyMirrored: false,
-        files: { crossed: true, error: "" },
-        source: { fate: "shelve", done: true, error: "" },
-      },
     });
   });
 
@@ -498,7 +485,6 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
       status: "watching",
       conflicts: 0,
     };
-    const { session: _, ...slice } = mirror;
     let unconfirmed = false;
     const served = await serve((request) => [
       unconfirmed
@@ -515,9 +501,7 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
         ok: true,
         caveats: ["the copy is busy"],
       },
-      caveats: ["the copy is busy"],
       worktree: (stopped as { worktree: unknown }).worktree,
-      mirror: { ...slice, git: "" },
     });
     unconfirmed = true;
     assert.deepEqual(
@@ -576,43 +560,29 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
       ),
     ]);
     assert.deepEqual(await outcome((transfer) => transfer.mirrors), {
-      document: { daemon: "stopped", mirrors: [], ok: true },
       daemon: "stopped",
       mirrors: [],
+      ok: true,
     });
     const devices = await outcome((transfer, here) =>
       transfer.devices(here, {}),
     );
     assert.deepEqual(devices, {
-      document: {
-        thisDevice: { deviceId: "d0", name: "Laptop" },
-        devices: [
-          {
-            deviceId: "d1",
-            name: "Studio",
-            platform: "darwin",
-            block: "no-grant",
-          },
-        ],
-        ok: true,
-      },
-      scoped: false,
       thisDevice: { deviceId: "d0", name: "Laptop" },
-      devices: [{ name: "Studio", platform: "darwin", block: "no-grant" }],
+      devices: [
+        {
+          deviceId: "d1",
+          name: "Studio",
+          platform: "darwin",
+          block: "no-grant",
+        },
+      ],
+      ok: true,
     });
-    assert.equal(
-      scoped(
-        await outcome((transfer, here) => transfer.devices(here, {}), repo),
-      ),
-      true,
-    );
-    assert.equal(
-      scoped(
-        await outcome((transfer, here) =>
-          transfer.devices(here, { projectId: "P1" }),
-        ),
-      ),
-      true,
+    // Scoped by the cwd, and by the project's id.
+    await outcome((transfer, here) => transfer.devices(here, {}), repo);
+    await outcome((transfer, here) =>
+      transfer.devices(here, { projectId: "P1" }),
     );
     assert.deepEqual(
       served.received().map(({ request }) => request),
@@ -670,13 +640,6 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
         ],
         project: { id: "P1", name: "repo", path: join(box.home, "repo") },
         unreachable: ["Laptop"],
-        rows: [
-          {
-            name: "owl",
-            branch: "owl-b",
-            device: { deviceId: "d1", name: "Studio" },
-          },
-        ],
       },
     );
     assert.deepEqual(

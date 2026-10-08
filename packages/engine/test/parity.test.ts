@@ -2176,19 +2176,16 @@ describe("transfer", () => {
 
   // A verb run on each side against the app: the documents printed (the
   // progress events, then the verb's own), the exit code, and what each
-  // asked the app, compared. The engine's code is the terminal's: 3 for a
-  // caveat, 2 for a usage error, 1 for any other.
+  // asked the app, compared. A verb answers its document, or an answer
+  // holding it. The engine's code is the terminal's: 3 for a caveat, 2
+  // for a usage error, 1 for any other.
   const sameAsked = async (
     go: ReadonlyArray<string>,
     run: (
       service: Transfer.Transfer["Service"],
       here: Worktrees.Here,
       onProgress: Transfer.OnProgress,
-    ) => Effect.Effect<
-      { readonly document: unknown; readonly caveats?: ReadonlyArray<string> },
-      unknown,
-      Engine
-    >,
+    ) => Effect.Effect<object, unknown, Engine>,
     cwd = box.home,
   ) => {
     const goRun = await box.runAt(goSm(), "go", cwd, ["--json", ...go]);
@@ -2205,10 +2202,15 @@ describe("transfer", () => {
           yield* hereAt(cwd),
           onProgress,
         );
-        return {
-          doc: answered.document,
-          code: (answered.caveats?.length ?? 0) > 0 ? 3 : 0,
-        };
+        const document = "document" in answered ? answered.document : answered;
+        const caveats =
+          typeof document === "object" &&
+          document !== null &&
+          "caveats" in document &&
+          Array.isArray(document.caveats)
+            ? document.caveats
+            : [];
+        return { doc: document, code: caveats.length > 0 ? 3 : 0 };
       }).pipe(
         Effect.catch((error) =>
           Effect.succeed({
