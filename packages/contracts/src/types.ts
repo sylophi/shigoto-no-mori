@@ -74,7 +74,7 @@ export type HostApiOf<M extends ContractModule> = Api<
 >;
 
 // What a push's subscriber receives.
-export type BroadcastPayload<R> = Decoded<PayloadOf<R>>;
+type BroadcastPayload<R> = Decoded<PayloadOf<R>>;
 
 export type BroadcastKeys<M extends ContractModule> = KeyOf<
   BroadcastsOf<M>["_tag"]
