@@ -444,3 +444,90 @@ describe("projects list", () => {
     );
   });
 });
+
+describe("projects list with terrier", () => {
+  // A terrier on PATH that answers as `version` and `ls --json` do.
+  const fakeTerrier = (version: string, paths: ReadonlyArray<string>) =>
+    box.fakeBin(
+      "terrier",
+      `if [ "$1" = version ]; then echo ${version}; else echo '${JSON.stringify(
+        { projects: paths.map((path) => ({ path })) },
+      )}'; fi`,
+    );
+  const list = Effect.service(Registry.Registry).pipe(
+    Effect.flatMap((registry) => registry.rows()),
+  );
+
+  it("adds terrier's repos the registry doesn't hold, read-only, by name", async () => {
+    const both = box.repo("both");
+    const extra = box.repo("zeta");
+    fakeTerrier("v0.1.4", [
+      `${extra}/`,
+      both,
+      "relative/path",
+      `${box.home}/alpha-gone`,
+    ]);
+    box.write("config.json", { terrier: true });
+    box.write("registry.json", {
+      projects: [{ id: "B", name: "both", path: both }],
+    });
+    await same(["projects", "list"], list, withoutHue);
+  });
+
+  it("lists none of terrier's while its version isn't one this build reads", async () => {
+    fakeTerrier("v0.2.0", [box.repo("zeta")]);
+    box.write("config.json", { terrier: true });
+    box.write("registry.json", { projects: [] });
+    await same(["projects", "list"], list, withoutHue);
+    assert.deepEqual(await box.engine(list), []);
+  });
+});
+
+describe("launchers", () => {
+  it("lists a project's row: installed apps, its GitHub page, custom ones, by use", async () => {
+    const recent = Date.now() - 60_000;
+    const repo = box.repo("repo");
+    execFileSync(
+      "git",
+      ["remote", "add", "origin", "https://github.com/Me/Repo.git"],
+      { cwd: repo },
+    );
+    box.write("registry.json", {
+      projects: [{ id: "P", name: "repo", path: repo }],
+    });
+    box.write("config.json", {
+      launchers: [
+        { id: "a", label: "zsh here", command: "zsh" },
+        { label: "no id", command: "x" },
+      ],
+      hiddenLaunchers: ["app:finder", "custom:gone"],
+    });
+    box.write("projects/P/project.json", {
+      defaultBranch: "main",
+      launchers: [{ id: "b", label: "Agent", command: "claude" }],
+    });
+    box.write("state.json", {
+      launcherUseLog: {
+        "custom:a": [1, recent, recent],
+        "web:github": [recent],
+      },
+    });
+    await same(
+      ["launchers", "-p", "repo"],
+      Effect.service(Launchers.Launchers).pipe(
+        Effect.flatMap((launchers) => launchers.row({ id: "P", path: repo })),
+        Effect.map((row) => Object.assign({ ok: true }, row)),
+      ),
+    );
+    const row = (await box.engine(
+      Effect.flatMap(Effect.service(Launchers.Launchers), (launchers) =>
+        launchers.row({ id: "P", path: repo }),
+      ),
+    )) as Launchers.LauncherRow;
+    assert.deepEqual(
+      [row.entries.slice(0, 2).map(({ id }) => id), row.hiddenCount],
+      [["custom:a", "web:github"], 1],
+    );
+    assert.ok(row.entries.some(({ id }) => id === "custom:b"));
+  });
+});
