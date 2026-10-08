@@ -8,7 +8,6 @@
 import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
 import {
-  isHaltedStatus,
   isTransferSession,
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_REPLACES,
@@ -329,18 +328,30 @@ export const ORIGINAL_GONE_DETAIL =
 //   - the stops that came while the daemon was down, replayed,
 //   - a session whose original is gone (removed from a terminal, from
 //     Finder, or while the app was not running, none of which pass the
-//     delete that stops its mirror): the engine halts on a root that
-//     disappeared, so a halted session's root is looked at, and one
-//     whose root is missing ends with its copy kept. Ended rather than
-//     left halted, since its Stop would otherwise remove the copy that
-//     is now the only one there is,
+//     delete that stops its mirror): every session's root is looked at
+//     on every snapshot, and one whose root is missing ends with its
+//     copy kept. The engine has more than one word for a root that
+//     went (a halt when the copy stood still, a conflict at the root
+//     when the copy had changed too, a problem at the root when the
+//     parent folder went with it), and the look is one stat on a
+//     snapshot the engine only sends on a change, so no word is
+//     waited for. Ended rather than left there, since its Stop would
+//     otherwise remove the copy that is now the only one there is,
+//     and the git half keeps failing to read a worktree that is not
+//     there,
 //   - a session a re-open replaced (MIRROR_LABEL_REPLACES) that
 //     outlived it (a quit or a failed terminate between the re-open's
 //     create and its terminate), so a pair never has two sessions.
-// Each session is asked once per state, and a terminate that fails is
-// logged and asked again on a later snapshot.
-const checkedRoots = new Set<string>();
+// A terminate that fails is logged and asked again on a later
+// snapshot.
 const endingSessions = new Set<string>();
+// The sessions whose root is being looked at, or was found gone and
+// ended, kept until the engine stops listing them: snapshots overlap,
+// and a sweep that starts between the end and the engine's next
+// snapshot would find the session listed still and end it twice. A
+// look that finds the root, or an end that fails, forgets the mark,
+// so the next snapshot looks again.
+const rootLooks = new Set<string>();
 
 // Sessions a re-open is replacing right now (MirrorImpl.recreate): the
 // re-open ends the old one itself once the new one is up, so the
@@ -396,9 +407,7 @@ export async function settleMirrorBookkeeping(): Promise<void> {
 
   const sessions = mirrorSessions(daemon);
   const live = new Set(sessions.map((raw) => raw.session));
-  for (const key of checkedRoots) {
-    if (!live.has(key.slice(0, key.lastIndexOf(":")))) checkedRoots.delete(key);
-  }
+  for (const id of rootLooks) if (!live.has(id)) rootLooks.delete(id);
   const replaced = new Set(
     sessions
       .map((raw) => raw.labels[MIRROR_LABEL_REPLACES])
@@ -414,18 +423,14 @@ export async function settleMirrorBookkeeping(): Promise<void> {
         return;
       }
       if (holdingRoots.has(localWorktreeIdOf(raw))) return;
-      // Looked at on first sight (a boot after the root went) and on
-      // every halt, never on the busy states a live mirror cycles
-      // through. A failed end forgets the look, so a later snapshot
-      // tries again.
-      const key = `${raw.session}:${isHaltedStatus(raw.status) ? "halted" : "seen"}`;
-      if (checkedRoots.has(key)) return;
-      checkedRoots.add(key);
-      if (await rootExists(raw.localRoot)) return;
-      const ended = await endOnce(raw.session, () =>
-        endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL),
-      );
-      if (!ended) checkedRoots.delete(key);
+      if (rootLooks.has(raw.session)) return;
+      rootLooks.add(raw.session);
+      const ended =
+        !(await rootExists(raw.localRoot)) &&
+        (await endOnce(raw.session, () =>
+          endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL),
+        ));
+      if (!ended) rootLooks.delete(raw.session);
     }),
   );
 }
