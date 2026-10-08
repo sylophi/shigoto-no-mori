@@ -87,6 +87,10 @@ function buildQueryKeys(deviceId: string) {
     ) => host("worktreeDiff", projectId, worktreeId, [...paths], untracked),
     worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
       host("worktreeChanges", projectId, worktreeId),
+    // One file's hunks and which are staged, under the diff prefix so
+    // the working-tree invalidation drops it with the file's diff.
+    worktreeFileHunks: (projectId: string, worktreeId: string, path: string) =>
+      host("worktreeDiff", projectId, worktreeId, "hunks", path),
     worktreeStashes: (projectId: string, worktreeId: string) =>
       host("worktreeStashes", projectId, worktreeId),
     // The git operation a worktree is stopped in, if any.

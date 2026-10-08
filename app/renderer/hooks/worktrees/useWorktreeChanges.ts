@@ -11,6 +11,8 @@ import type {
   CommitChangesResult,
   CommitMessage,
   DiscardChangesResult,
+  HunkStates,
+  LineChange,
   ResetSoftResult,
   Worktree,
 } from "@shared/schemas";
@@ -102,6 +104,83 @@ export function useSetStaged() {
     },
     meta: { errorTitle: "Couldn't update the selection" },
   });
+}
+
+// One modified file's hunks and which the next commit takes. Off for
+// anything else (an untracked, deleted, renamed or conflicted file),
+// which only ticks whole.
+export function useFileHunks(
+  projectId: string,
+  worktreeId: string,
+  path: string | undefined,
+) {
+  const { api, keys } = useHostScope();
+  return useQuery<HunkStates>({
+    queryKey: keys.worktreeFileHunks(projectId, worktreeId, path ?? ""),
+    queryFn: path
+      ? () => api.worktrees.fileHunks({ projectId, worktreeId, path })
+      : skipToken,
+    staleTime: 0,
+    meta: { errorTitle: "Couldn't read the file's hunks" },
+  });
+}
+
+interface SetHunksStagedInput {
+  projectId: string;
+  worktreeId: string;
+  path: string;
+  changes: LineChange[];
+  staged: boolean;
+}
+
+// Tick or untick hunks. Answers with a fresh status, settled into the
+// list the way a file tick is, and the hunks are read again.
+export function useSetHunksStaged() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<ChangedFile[], Error, SetHunksStagedInput>({
+    mutationFn: (input) => api.worktrees.setHunksStaged(input),
+    onSuccess: (files, vars) => {
+      const key = keys.worktreeChanges(vars.projectId, vars.worktreeId);
+      const carried = new Map(
+        queryClient
+          .getQueryData<ChangedFile[]>(key)
+          ?.map((file) => [changeKey(file), file.counts]),
+      );
+      queryClient.setQueryData(
+        key,
+        files.map((file) => {
+          const counts = carried.get(changeKey(file));
+          return counts ? { ...file, counts } : file;
+        }),
+      );
+    },
+    onSettled: (_data, _err, vars) =>
+      queryClient.invalidateQueries({
+        queryKey: keys.worktreeFileHunks(
+          vars.projectId,
+          vars.worktreeId,
+          vars.path,
+        ),
+      }),
+    meta: { errorTitle: "Couldn't update the selection" },
+  });
+}
+
+export function useDiscardHunks() {
+  return useWorkingTreeMutation<
+    {
+      projectId: string;
+      worktreeId: string;
+      path: string;
+      changes: LineChange[];
+    },
+    DiscardChangesResult
+  >(
+    (api, input) => api.worktrees.discardHunks(input),
+    (data) => data.worktree,
+    "Couldn't discard the change",
+  );
 }
 
 // Everything derived from the working tree: the sidebar's count and

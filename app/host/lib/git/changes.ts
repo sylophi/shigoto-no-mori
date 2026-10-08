@@ -422,7 +422,7 @@ export function resetSoft(
 // and wrap it in a commit. The ref keeps the objects alive through gc
 // and shows up in `git for-each-ref` for anyone recovering by hand.
 // restoreDiscard is the app's own way back.
-async function snapshotPaths(
+export async function snapshotPaths(
   worktreePath: string,
   paths: readonly string[],
 ): Promise<string> {

@@ -7,7 +7,10 @@ import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
   useCommitChanges,
   useDiscardChanges,
+  useDiscardHunks,
+  useFileHunks,
   useRestoreDiscard,
+  useSetHunksStaged,
   useSetStaged,
   useWorktreeChanges,
 } from "@/hooks/worktrees/useWorktreeChanges";
@@ -84,6 +87,14 @@ function ChangesView({
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   const picked =
     files?.find((file) => changeKey(file) === pickedKey) ?? files?.[0] ?? null;
+  // Only a modified file ticks by hunk: the others are whole-file
+  // changes (an addition, a removal, a rename) or a conflict.
+  const hunkPath =
+    picked?.kind === "modified" && !picked.conflicted ? picked.path : undefined;
+  const { data: hunkStates } = useFileHunks(projectId, worktreeId, hunkPath);
+  const { mutate: stageHunks, isPending: stagingHunks } = useSetHunksStaged();
+  const { mutate: discardHunks, isPending: discardingHunks } =
+    useDiscardHunks();
   const diff = useFileDiff(
     projectId,
     worktreeId,
@@ -113,7 +124,9 @@ function ChangesView({
     restoring ||
     undo.pending ||
     stash.isPending ||
-    resolve.isPending;
+    resolve.isPending ||
+    stagingHunks ||
+    discardingHunks;
   const resetAmendDraft = useAmendDraft({
     projectId,
     worktreeId,
@@ -227,6 +240,42 @@ function ChangesView({
         onSetStaged: (paths, staged) =>
           stage({ projectId, worktreeId, paths, staged }),
         onDiscard,
+        hunks:
+          hunkPath && hunkStates
+            ? {
+                states: hunkStates,
+                onSetStaged: (changes, staged) =>
+                  stageHunks({
+                    projectId,
+                    worktreeId,
+                    path: hunkPath,
+                    changes,
+                    staged,
+                  }),
+                onDiscard: (changes) =>
+                  discardHunks(
+                    { projectId, worktreeId, path: hunkPath, changes },
+                    {
+                      onSuccess: ({ snapshot }) =>
+                        toast("Discarded the change", {
+                          description: "The file was snapshotted first.",
+                          duration: UNDO_TOAST_MS,
+                          action: {
+                            label: "Undo",
+                            onClick: () =>
+                              restore(
+                                { projectId, worktreeId, snapshot },
+                                {
+                                  onSuccess: () =>
+                                    say(worktree, "Change restored"),
+                                },
+                              ),
+                          },
+                        }),
+                    },
+                  ),
+              }
+            : undefined,
         onResolve: (path, side) =>
           resolve.mutate({ projectId, worktreeId, path, side }),
         onStash: () => {

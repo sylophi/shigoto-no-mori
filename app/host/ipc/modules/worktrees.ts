@@ -20,6 +20,11 @@ import {
   squashIntoParent,
 } from "@host/lib/git/history";
 import {
+  discardHunks,
+  readHunkStates,
+  setHunksStaged,
+} from "@host/lib/git/hunks";
+import {
   applyStash,
   dropStash,
   listStashes,
@@ -334,6 +339,23 @@ export const worktreesHandlers: Handlers<
 
   setStaged: async (input) =>
     setStaged(await findWorktreePathOrThrow(input), input.paths, input.staged),
+
+  fileHunks: async (input) =>
+    readHunkStates(await findWorktreePathOrThrow(input), input.path),
+  setHunksStaged: async (input) =>
+    setHunksStaged(
+      await findWorktreePathOrThrow(input),
+      input.path,
+      input.changes,
+      input.staged,
+    ),
+  discardHunks: async (input) => {
+    const { result: snapshot, worktree } = await mutateAndDescribeWith(
+      input,
+      (wt) => discardHunks(wt.path, input.path, input.changes),
+    );
+    return { snapshot, worktree };
+  },
 
   commit: async (input) => {
     const { result: hash, worktree } = await mutateAndDescribeWith(

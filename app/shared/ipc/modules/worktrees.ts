@@ -17,10 +17,13 @@ import {
   DeleteWorktreePayloadSchema,
   DeleteWorktreeResultSchema,
   DiscardChangesPayloadSchema,
+  DiscardHunksPayloadSchema,
   DiscardChangesResultSchema,
   DropStashPayloadSchema,
   FileDiffPayloadSchema,
+  FileHunksPayloadSchema,
   GitOperationStateSchema,
+  HunkStatesSchema,
   ListCommitsPayloadSchema,
   ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
@@ -33,6 +36,7 @@ import {
   RestoreStashPayloadSchema,
   RewordCommitPayloadSchema,
   SetAutoPullPayloadSchema,
+  SetHunksStagedPayloadSchema,
   SetAgentWorkingPayloadSchema,
   SetShelvedPayloadSchema,
   SetStagedPayloadSchema,
@@ -160,6 +164,26 @@ export const worktreesContract = defineContract("host", {
     SetStagedPayloadSchema,
     z.array(ChangedFileSchema),
     { remote: true, gated: true },
+  ),
+  // One modified file's hunks (host/lib/git/hunks.ts): which the next
+  // commit takes, ticking them, and throwing them away.
+  fileHunks: invoke(
+    "worktrees:fileHunks",
+    FileHunksPayloadSchema,
+    HunkStatesSchema,
+    { remote: true, gated: false },
+  ),
+  setHunksStaged: invoke(
+    "worktrees:setHunksStaged",
+    SetHunksStagedPayloadSchema,
+    z.array(ChangedFileSchema),
+    { remote: true, gated: true },
+  ),
+  discardHunks: invoke(
+    "worktrees:discardHunks",
+    DiscardHunksPayloadSchema,
+    DiscardChangesResultSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
   ),
   commit: invoke(
     "worktrees:commit",

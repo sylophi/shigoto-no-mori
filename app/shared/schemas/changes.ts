@@ -209,3 +209,36 @@ export const ResolveConflictPayloadSchema = WorktreeScopedPayloadSchema.extend({
   path: RepoRelPathSchema,
   side: z.enum(["mine", "theirs"]),
 });
+
+// One change of a zero-context diff of HEAD against the working tree,
+// by its line ranges (hunk-header numbers). Identifies a hunk of a
+// modified file for ticking and discarding it.
+export const LineChangeSchema = z.object({
+  oldStart: z.number().int().nonnegative(),
+  oldCount: z.number().int().nonnegative(),
+  newStart: z.number().int().nonnegative(),
+  newCount: z.number().int().nonnegative(),
+});
+export type LineChange = z.infer<typeof LineChangeSchema>;
+
+// A modified file's changes and which the next commit takes. Not
+// `editable` when the index holds something the working tree doesn't,
+// which no pick of these changes describes.
+export const HunkStatesSchema = z.object({
+  changes: z.array(LineChangeSchema.extend({ staged: z.boolean() })),
+  editable: z.boolean(),
+});
+export type HunkStates = z.infer<typeof HunkStatesSchema>;
+
+export const FileHunksPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  path: RepoRelPathSchema,
+});
+
+export const SetHunksStagedPayloadSchema = FileHunksPayloadSchema.extend({
+  changes: z.array(LineChangeSchema).min(1),
+  staged: z.boolean(),
+});
+
+export const DiscardHunksPayloadSchema = FileHunksPayloadSchema.extend({
+  changes: z.array(LineChangeSchema).min(1),
+});

@@ -33,6 +33,7 @@ import {
   CODE_THEME,
 } from "./codeTheme";
 import { DiffFileIndex } from "./DiffFileIndex";
+import { HunkBar, hunkAnnotations, type HunkControls } from "./HunkBar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
@@ -384,6 +385,8 @@ export function DiffView({
                     // you asked for, and folding it away would leave
                     // the pane blank with nothing to unfold it from.
                     onToggle={singleFile ? undefined : setCollapsed}
+                    hunks={changes?.hunks}
+                    busy={changes?.busy ?? false}
                   />
                 );
               })}
@@ -437,6 +440,8 @@ function DiffFileRow({
   wrapLines,
   themeType,
   onToggle,
+  hunks,
+  busy,
 }: {
   fileDiff: FileDiffMetadata;
   fileId: string;
@@ -451,6 +456,9 @@ function DiffFileRow({
   // Absent when the pane shows one picked file, where there is nothing
   // to fold away. The header prefix goes with it.
   onToggle: ((key: string, collapsed: boolean) => void) | undefined;
+  // The changes page's hunk ticks for this file, when it has them.
+  hunks: HunkControls | undefined;
+  busy: boolean;
 }) {
   return (
     <div data-diff-file={fileId}>
@@ -467,6 +475,18 @@ function DiffFileRow({
           collapsed,
         }}
         metrics={DIFF_METRICS}
+        lineAnnotations={hunks && hunkAnnotations(fileDiff, hunks.states)}
+        renderAnnotation={
+          hunks
+            ? (annotation) => (
+                <HunkBar
+                  group={annotation.metadata}
+                  controls={hunks}
+                  busy={busy}
+                />
+              )
+            : undefined
+        }
         renderHeaderPrefix={
           onToggle
             ? () => (
