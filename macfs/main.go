@@ -125,19 +125,17 @@ var verbs = map[string]verb{
 			if err == nil && *strip {
 				err = stripXattrs(p, names)
 			}
-			return attributed{rel, append([]string{}, names...)}, err
+			return attributed{rel, names}, err
 		}
 	}},
 	"privsize": {roots: 1, walks: true, op: func(*flag.FlagSet) op {
 		return func(roots []string, rel string) (any, error) {
-			if _, err := os.Lstat(filepath.Join(roots[0], rel)); err != nil {
-				return nil, err
-			}
 			out := sized{Path: rel}
-			if n, ok := privateSize(filepath.Join(roots[0], rel)); ok {
+			n, ok, err := privateSize(filepath.Join(roots[0], rel))
+			if ok {
 				out.Bytes = &n
 			}
-			return out, nil
+			return out, err
 		}
 	}},
 	"fstype": {roots: 1, op: func(*flag.FlagSet) op {
@@ -174,7 +172,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	// Paths go to a pool of workers, whose lines one writer encodes.
-	paths := make(chan string)
+	paths := make(chan string, 256)
 	lines := make(chan any, 64)
 	var workers sync.WaitGroup
 	for range runtime.NumCPU() * 2 {

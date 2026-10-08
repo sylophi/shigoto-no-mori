@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"os"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -62,21 +63,24 @@ func chflagsNoFollow(p string, flags uint32) error {
 
 // p's own extended attribute names, a symlink's included.
 func listXattrs(p string) ([]string, error) {
+	var small [1024]byte
+	buf := small[:]
 	for {
-		size, err := unix.Llistxattr(p, nil)
-		if err != nil || size == 0 {
-			return nil, err
-		}
-		buf := make([]byte, size)
 		n, err := unix.Llistxattr(p, buf)
-		// Grew between the two calls.
+		// More than fits: ask how much, then read again (it may grow in
+		// between).
 		if errors.Is(err, unix.ERANGE) {
+			size, err := unix.Llistxattr(p, nil)
+			if err != nil {
+				return nil, err
+			}
+			buf = make([]byte, size+64)
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
-		var names []string
+		names := []string{}
 		for name := range strings.SplitSeq(string(buf[:n]), "\x00") {
 			if name != "" {
 				names = append(names, name)
@@ -111,10 +115,10 @@ const attrCmnextPrivateSize = 0x8
 // A file's private size on APFS, via getattrlist(2), which x/sys
 // doesn't wrap. ok is false where the volume can't say (HFS+, a network
 // mount), and the caller falls back to the allocated size.
-func privateSize(path string) (int64, bool) {
+func privateSize(path string) (int64, bool, error) {
 	p, err := syscall.BytePtrFromString(path)
 	if err != nil {
-		return 0, false
+		return 0, false, err
 	}
 	attrs := unix.Attrlist{
 		Bitmapcount: unix.ATTR_BIT_MAP_COUNT,
@@ -131,12 +135,16 @@ func privateSize(path string) (int64, bool) {
 		uintptr(len(buf)),
 		uintptr(unix.FSOPT_NOFOLLOW|unix.FSOPT_ATTR_CMN_EXTENDED),
 		0)
+	// A volume that doesn't know the attribute may refuse the whole call.
+	if errno == unix.EINVAL || errno == unix.ENOTSUP {
+		return 0, false, nil
+	}
 	if errno != 0 {
-		return 0, false
+		return 0, false, &os.PathError{Op: "getattrlist", Path: path, Err: errno}
 	}
 	returnedForkAttrs := binary.NativeEndian.Uint32(buf[20:24])
 	if returnedForkAttrs&attrCmnextPrivateSize == 0 {
-		return 0, false
+		return 0, false, nil
 	}
-	return int64(binary.NativeEndian.Uint64(buf[24:32])), true
+	return int64(binary.NativeEndian.Uint64(buf[24:32])), true, nil
 }
