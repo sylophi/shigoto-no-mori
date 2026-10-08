@@ -2,7 +2,7 @@ import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
-import { rankByScore, scoreFields, scoreMatch } from "@/lib/fuzzyMatch";
+import { rankByScore, scoreFields } from "@/lib/fuzzyMatch";
 import { isCloneableRemote } from "@shared/cloneUrl";
 import { sanitizeBranchName } from "@shared/git/branches";
 import { isAnchoredPath } from "@shared/projectPaths";
@@ -18,6 +18,7 @@ import {
   deviceBadgeOf,
   mirrorBadgeLookup,
   mirrorPairsOf,
+  ownerOf,
   projectGroupKey,
   worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
@@ -168,7 +169,8 @@ export function initialPaletteKey(
 
 // Best field wins: a query can name the branch, its title, the folder, the
 // project (alone or ahead of the branch, "sm feat"), the device, so
-// "thinkpad" narrows to that machine's work, or the pull request, by
+// "thinkpad" narrows to that machine's work, the project's owner, so
+// an org's name narrows to its work, or the pull request, by
 // "#148" or its title. Merged and shelved worktrees score at half, so
 // they come up for a query that names them and sink under one that
 // matches live work as well. Ties keep the recency order, since the
@@ -187,6 +189,7 @@ const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
   worktree.name,
   `${project.name} ${worktree.branch}`,
   device?.label ?? "",
+  ownerOf(project)?.label ?? "",
   pr ? `#${pr.number}` : "",
   pr?.title ?? "",
 ];
@@ -222,7 +225,19 @@ export function projectLead(
   return open.find((t) => t.device?.reachable !== false) ?? open[0] ?? trees[0];
 }
 
-// The few projects the query names by name, best first. Every project
+// What a project answers to: its name, and its remote's owner (the
+// sidebar's owner headers, ownerOf), alone or ahead of the repo
+// ("sylophi/web").
+function projectFields(project: Project): string[] {
+  const owner = ownerOf(project);
+  if (!owner) return [project.name];
+  const repo = project.remote?.split("/").slice(2).join("/");
+  return [project.name, owner.label, `${owner.label}/${repo}`];
+}
+
+// The few projects the query names, best first, and any it names as
+// well as the last of them, so an owner's name finds all of its
+// projects. Every project
 // on every device, the ones with no worktrees too, since the sidebar's
 // list of projects is the other way to them. Not one whose folder is
 // gone, which the sidebar won't open either. Only for a query:
@@ -283,8 +298,18 @@ export function rankPaletteProjects(
       deviceCount: devices.size,
     }),
   );
-  return rankByScore(query, items, (p) => p.project.name).slice(0, 3);
+  const ranked = rankByScore(query, items, (p) => projectFields(p.project));
+  const last = ranked[PROJECTS_SHOWN - 1];
+  if (!last) return [...ranked];
+  const floor = scoreFields(query, projectFields(last.project));
+  return ranked.filter(
+    (p, i) =>
+      i < PROJECTS_SHOWN ||
+      scoreFields(query, projectFields(p.project)) >= floor,
+  );
 }
+
+const PROJECTS_SHOWN = 3;
 
 // How many of the ranked projects go above the worktrees: those the
 // query names at least as well as the top worktree, so typing a
@@ -301,7 +326,7 @@ export function leadingProjectCount(
   if (!entry) return projects.length;
   const top = scoreFields(query, entryFields(entry)) * entryWeight(entry);
   const trailing = projects.findIndex(
-    (p) => scoreMatch(query, p.project.name) < top,
+    (p) => scoreFields(query, projectFields(p.project)) < top,
   );
   return trailing < 0 ? projects.length : trailing;
 }

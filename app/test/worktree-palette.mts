@@ -13,7 +13,9 @@
 // one on screen, a mirrored peer's page counting as its local row. A
 // query names projects once across devices, those with no worktrees and
 // those only a peer holds too, and they go above the worktrees when the
-// query names a project best. A query turns into a branch name
+// query names a project best. A project's owner names it (alone or
+// ahead of the repo) and all of that owner's projects, and its
+// worktrees too. A query turns into a branch name
 // git takes (a pasted path or URL never does), and a new worktree goes to
 // the project on screen first. The matched letters are the ones the
 // ranking matched.
@@ -354,6 +356,54 @@ try {
     assert.equal(there?.device?.deviceId, PEER, "only the peer holds it");
     assert.equal(there?.localProject, undefined);
     assert.equal(there?.deviceCount, 1);
+  });
+
+  await proof.check("an owner names its projects and their work", () => {
+    const owned = (name: string, remote: string) => ({
+      ...project(name),
+      remote,
+    });
+    const projects = [
+      owned("birch", "github.com/grove/birch"),
+      owned("cedar", "github.com/grove/cedar"),
+      owned("elm", "github.com/grove/elm"),
+      owned("fir", "github.com/grove/fir-tree"),
+      owned("ivy", "gitlab.com/vines/ivy"),
+      project("loose"),
+    ];
+    const named = (query: string) =>
+      rankPaletteProjects(query, [], projects, []).map((p) => p.project.name);
+    assert.deepEqual(
+      named("grove").toSorted(),
+      ["birch", "cedar", "elm", "fir"],
+      "all of them, past the few a name finds",
+    );
+    assert.deepEqual(named("grove/fir"), ["fir"], "ahead of the repo");
+    assert.deepEqual(named("fir-tree"), ["fir"], "the repo's own name");
+    assert.deepEqual(named("gitlab.com/vines"), ["ivy"], "another host's");
+    const grove = { ...lantern, remote: "github.com/grove/lantern" };
+    const { entries: list } = buildPaletteEntries({
+      projects: [forest, grove],
+      worktreeQueries: localTrees.map(loaded),
+      pullRequestQueries: localPullRequests.map(loaded),
+      remote: [],
+      mirrors: [],
+      deviceBadges: new Map(),
+      hiddenPrefixes: [],
+      allowAgentWorking: false,
+      visits: {},
+    });
+    const shown = rankPaletteEntries("grove", list);
+    assert.deepEqual(keys(shown), [local("wick")], "its worktrees");
+    assert.equal(
+      leadingProjectCount(
+        "grove",
+        rankPaletteProjects("grove", list, [forest, grove], [peerForest]),
+        shown,
+      ),
+      1,
+      "above them",
+    );
   });
 
   await proof.check("projects lead when the query names one best", () => {

@@ -5,6 +5,7 @@ import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { DeviceBadge, MirrorBadge } from "@/components/sidebar/DeviceBadge";
+import { ownerOf } from "@/components/sidebar/buildSidebarRows";
 import { PullRequestPill } from "@/components/sidebar/PullRequestPill";
 import { StatusIndicator } from "@/components/sidebar/StatusIndicator";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
@@ -129,8 +130,11 @@ function WorktreeRow({
   );
 }
 
+// A project under its owner, the sidebar's header for it, so a query
+// naming the owner shows why the project is in the list.
 function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
   const { project, device, worktreeCount, deviceCount } = item;
+  const owner = ownerOf(project);
   return (
     <RowLayout
       dim={device !== undefined && !device.reachable}
@@ -144,6 +148,11 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
       title={<Highlight text={project.name} query={query} />}
       detail={
         <>
+          {owner && (
+            <>
+              <Highlight text={owner.label} query={query} /> ·{" "}
+            </>
+          )}
           {worktreeCount > 0
             ? pluralize(worktreeCount, "worktree")
             : "No worktrees"}

@@ -11,7 +11,7 @@ import {
 import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { DeviceBadge, useDeviceBadges } from "@/components/sidebar/DeviceBadge";
-import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
+import { ownerOf, worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { rowDeviceId } from "@/lib/routePaths";
 import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
@@ -207,13 +207,17 @@ function PaletteDialog({
     const [target, ...others] = hasLocalHost
       ? createTargets(projects, shown, entries, pageProjectId)
       : [];
-    // A project's or device's own name is a lookup, not a branch.
+    // A project's, owner's or device's own name is a lookup, not a
+    // branch.
     const isQuery = (name: string | undefined) =>
       name?.toLowerCase() === listQuery.toLowerCase();
     if (
       branch &&
       target &&
-      !named.some((item) => isQuery(item.project.name)) &&
+      !named.some(
+        (item) =>
+          isQuery(item.project.name) || isQuery(ownerOf(item.project)?.label),
+      ) &&
       !entries.some(
         (e) =>
           (!e.device && e.worktree.branch === branch) ||
