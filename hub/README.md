@@ -339,7 +339,9 @@ pnpm run test   # just the suite
 The suite runs inside workerd via @cloudflare/vitest-pool-workers with
 real (local) D1, Durable Object and websocket implementations. Clerk
 is stubbed through the `createWorker(deps)` seam, so no network or
-real credentials are needed.
+real credentials are needed. vitest-pool-workers supports vitest ^4.1
+only, so the hub pins vitest 4.1 itself while the workspace catalog
+is on 5.
 
 `pnpm run dev` serves the Worker on `http://localhost:8787` (loopback
 only, and it fails rather than move when the port is taken) with its
