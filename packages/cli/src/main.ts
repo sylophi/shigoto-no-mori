@@ -3,11 +3,6 @@
 // from the build.
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
-import * as Config from "@shigomori/engine/Config";
-import * as Git from "@shigomori/engine/Git";
-import * as Paths from "@shigomori/engine/Paths";
-import * as Store from "@shigomori/engine/Store";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -16,6 +11,9 @@ import * as CliConfig from "effect/cli/CliConfig";
 import * as Command from "effect/cli/Command";
 import * as GlobalFlag from "effect/cli/GlobalFlag";
 import { configCommand } from "./commands/config.ts";
+import { launchersCommand } from "./commands/launchers.ts";
+import { projectsCommand } from "./commands/projects.ts";
+import { engine } from "./engine.ts";
 import { report } from "./errors.ts";
 import { Output } from "./output.ts";
 
@@ -42,18 +40,15 @@ const { json, rest } = globalFlags(process.argv.slice(2));
 const plain =
   json || process.env.NO_COLOR !== undefined || process.env.TERM === "dumb";
 
-const engine = Config.layer.pipe(
-  Layer.provideMerge(
-    Store.layer((filename) => SqliteClient.make({ filename })),
-  ),
-  Layer.provideMerge(Git.layer),
-  Layer.provideMerge(Paths.layer(flavor)),
-);
-
 // Provided per command group, so help and usage errors open no store.
+const services = engine(flavor);
 const sm = Command.make("sm").pipe(
   Command.withDescription("Shigoto no Mori"),
-  Command.withSubcommands([configCommand.pipe(Command.provide(engine))]),
+  Command.withSubcommands([
+    configCommand.pipe(Command.provide(services)),
+    projectsCommand.pipe(Command.provide(services)),
+    launchersCommand.pipe(Command.provide(services)),
+  ]),
 );
 
 const program = Command.runWith(sm, { version: "dev", renderErrors: false })(
