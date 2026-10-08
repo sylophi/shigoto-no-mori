@@ -5,21 +5,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { type Flavor, flavorNames } from "./flavor.ts";
+import { isAbsent, isNotFound } from "./platformErrors.ts";
 
 // How the data dir was found: the SHIGOMORI_DATA_DIR override, the
 // pointer file, a pre-2.0 default adopted in place, or the flavor's
 // default under the home directory.
 export type DataDirSource = "env" | "pointer" | "legacy" | "default";
-
-const isNotFound = (error: PlatformError.PlatformError) =>
-  Predicate.isTagged(error.reason, "NotFound");
-
-const isNotDirectory = (error: PlatformError.PlatformError) =>
-  Predicate.hasProperty(error.cause, "code") && error.cause.code === "ENOTDIR";
 
 export class RetiredRootVariable extends Schema.TaggedError<RetiredRootVariable>()(
   "RetiredRootVariable",
@@ -111,7 +104,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     for (const file of STATE_FILES) {
       const exists = yield* fs.exists(path.join(dir, file)).pipe(
         // A data dir path that is a file holds nothing.
-        Effect.catchIf(isNotDirectory, () => Effect.succeed(false)),
+        Effect.catchIf(isAbsent, () => Effect.succeed(false)),
         Effect.orElseSucceed(() => {
           unreadable = true;
           return false;
@@ -143,8 +136,8 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     // the current name holds none, so an upgrade never runs against an
     // empty data dir beside a full one.
     if (
-      (yield* holdsState(legacy)) !== "absent" &&
-      (yield* holdsState(current)) !== "present"
+      (yield* holdsState(current)) !== "present" &&
+      (yield* holdsState(legacy)) !== "absent"
     ) {
       return { dataDir: legacy, source: "legacy" as const };
     }

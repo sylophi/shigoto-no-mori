@@ -4,15 +4,15 @@ import {
   StateFileSchema,
 } from "@shigomori/contracts/schemas/dataDir";
 import { ShigomoriWorktreeDataSchema } from "@shigomori/contracts/schemas/config";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Paths from "../Paths.ts";
+import { isAbsent } from "../platformErrors.ts";
 
 export class StoreImportError extends Schema.TaggedError<StoreImportError>()(
   "StoreImportError",
@@ -23,35 +23,31 @@ export class StoreImportError extends Schema.TaggedError<StoreImportError>()(
   }
 }
 
-const isAbsent = (error: PlatformError.PlatformError) =>
-  Predicate.isTagged(error.reason, "NotFound") ||
-  (Predicate.hasProperty(error.cause, "code") &&
-    error.cause.code === "ENOTDIR");
-
 type JsonObject = { readonly [key: string]: unknown };
 
 const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
 );
 
-// One key's value, none when absent or (logged) when it doesn't parse.
+// A file or key the import does without, logged.
+const skipped = <A>(file: string, what: string, fallback: A) =>
+  Effect.logWarning("Skipped what the store could not import").pipe(
+    Effect.annotateLogs({ path: file, what }),
+    Effect.as(fallback),
+  );
+
+// One key's value, `fallback` when absent or when it doesn't parse.
 const lenientKey = <S extends Schema.Decoder<unknown>>(
   file: string,
   key: string,
   schema: S,
   value: unknown,
-): Effect.Effect<Option.Option<S["Type"]>> =>
+  fallback: S["Type"],
+): Effect.Effect<S["Type"]> =>
   value === undefined
-    ? Effect.succeed(Option.none())
+    ? Effect.succeed(fallback)
     : Schema.decodeUnknownEffect(schema)(value).pipe(
-        Effect.map((decoded) => Option.some<S["Type"]>(decoded)),
-        Effect.catchTags({
-          SchemaError: () =>
-            Effect.logWarning("Skipped a key the store could not import").pipe(
-              Effect.annotateLogs({ path: file, key }),
-              Effect.as(Option.none<S["Type"]>()),
-            ),
-        }),
+        Effect.catchTags({ SchemaError: () => skipped(file, key, fallback) }),
       );
 
 const uses = (
@@ -102,11 +98,8 @@ export const importJson = Effect.gen(function* () {
   const lenientDocument = (file: string) =>
     readDocument(file).pipe(
       Effect.catchTags({
-        StoreImportError: (error) =>
-          Effect.logWarning("Skipped a file the store could not import").pipe(
-            Effect.annotateLogs({ path: file, cause: String(error.cause) }),
-            Effect.as(Option.none<JsonObject>()),
-          ),
+        StoreImportError: () =>
+          skipped(file, "the file", Option.none<JsonObject>()),
       }),
     );
 
@@ -123,12 +116,35 @@ export const importJson = Effect.gen(function* () {
   const registry = yield* readDocument(registryFile);
   // Until registry.json first existed, the projects and the shelf lived
   // in state.json, so it is read as strictly as the registry then.
-  const state = Option.isSome(registry)
-    ? yield* lenientDocument(stateFile)
-    : yield* readDocument(stateFile);
+  const legacy = Option.isNone(registry);
+  const state = legacy
+    ? yield* readDocument(stateFile)
+    : yield* lenientDocument(stateFile);
   const stateDoc: JsonObject = Option.getOrElse(state, () => ({}));
   const registryDoc: JsonObject = Option.getOrElse(registry, () => stateDoc);
-  const registrySource = Option.isSome(registry) ? registryFile : stateFile;
+  const registrySource = legacy ? stateFile : registryFile;
+  const registryKey = <K extends keyof typeof RegistryFileSchema.fields>(
+    key: K,
+    fallback: (typeof RegistryFileSchema.fields)[K]["Type"],
+  ) =>
+    lenientKey(
+      registrySource,
+      key,
+      RegistryFileSchema.fields[key],
+      registryDoc[key],
+      fallback,
+    );
+  const stateKey = <K extends keyof typeof StateFileSchema.fields>(
+    key: K,
+    fallback: (typeof StateFileSchema.fields)[K]["Type"],
+  ) =>
+    lenientKey(
+      stateFile,
+      key,
+      StateFileSchema.fields[key],
+      stateDoc[key],
+      fallback,
+    );
 
   const projects = yield* Schema.decodeUnknownEffect(
     Schema.UndefinedOr(RegistryFileSchema.fields.projects),
@@ -137,29 +153,10 @@ export const importJson = Effect.gen(function* () {
       (cause) => new StoreImportError({ path: registrySource, cause }),
     ),
   );
-  const seen = new Set<string>();
   yield* insertAll(
     "projects",
-    (projects ?? [])
-      .filter(({ id }) => !seen.has(id) && seen.add(id))
-      .map(({ id, name, path: at }, position) => ({
-        id,
-        name,
-        path: at,
-        position,
-      })),
-  );
-
-  const order = yield* lenientKey(
-    registryFile,
-    "projectOrder",
-    RegistryFileSchema.fields.projectOrder,
-    Option.isSome(registry) ? registryDoc.projectOrder : undefined,
-  );
-  yield* insertAll(
-    "project_order",
-    [...new Set(Option.getOrElse(order, () => []))].map(
-      (projectPath, position) => ({ path: projectPath, position }),
+    Arr.dedupeWith(projects ?? [], (a, b) => a.id === b.id).map(
+      ({ id, name, path: at }, position) => ({ id, name, path: at, position }),
     ),
   );
 
@@ -167,30 +164,25 @@ export const importJson = Effect.gen(function* () {
     ["shelvedWorktrees", "shelved"],
     ["autoPullWorktrees", "autoPull"],
   ] as const) {
-    const marks = yield* lenientKey(
-      registrySource,
-      key,
-      RegistryFileSchema.fields[key],
-      registryDoc[key],
-    );
     yield* insertAll(
       "worktree_marks",
-      Object.entries(Option.getOrElse(marks, () => ({})))
+      Object.entries(yield* registryKey(key, {}))
         .filter(([, on]) => on)
         .map(([worktree_id]) => ({ worktree_id, mark })),
     );
   }
 
-  if (Option.isSome(registry)) {
-    const snapshots = yield* lenientKey(
-      registryFile,
-      "shelfSnapshots",
-      RegistryFileSchema.fields.shelfSnapshots,
-      registryDoc.shelfSnapshots,
+  // The keys registry.json has had from the start.
+  if (!legacy) {
+    yield* insertAll(
+      "project_order",
+      Arr.dedupe(yield* registryKey("projectOrder", [])).map(
+        (projectPath, position) => ({ path: projectPath, position }),
+      ),
     );
     yield* insertAll(
       "shelf_snapshots",
-      Object.entries(Option.getOrElse(snapshots, () => ({}))).flatMap(
+      Object.entries(yield* registryKey("shelfSnapshots", {})).flatMap(
         ([worktree_id, entry]) =>
           Option.match(Schema.decodeUnknownOption(ShelfSnapshotSchema)(entry), {
             onNone: () => [],
@@ -200,59 +192,38 @@ export const importJson = Effect.gen(function* () {
           }),
       ),
     );
-
-    const deviceId = yield* lenientKey(
-      registryFile,
-      "deviceId",
-      RegistryFileSchema.fields.deviceId,
-      registryDoc.deviceId,
-    );
+    const deviceId = yield* registryKey("deviceId", "");
     yield* insertAll(
       "device",
-      Option.toArray(deviceId).map((device_id) => ({ id: 1, device_id })),
+      deviceId === "" ? [] : [{ id: 1, device_id: deviceId }],
     );
-
-    const shared = yield* lenientKey(
-      registryFile,
-      "sharedSettings",
-      RegistryFileSchema.fields.sharedSettings,
-      registryDoc.sharedSettings,
-    );
+    const shared = yield* registryKey("sharedSettings", { entries: {} });
     yield* insertAll(
       "shared_settings",
-      Object.entries(
-        Option.match(shared, {
-          onNone: () => ({}),
-          onSome: ({ entries }) => entries,
-        }),
-      ).map(([key, entry]) => ({ key, entry: JSON.stringify(entry) })),
+      Object.entries(shared.entries).map(([key, entry]) => ({
+        key,
+        entry: JSON.stringify(entry),
+      })),
     );
   }
 
-  const stateKey = <K extends keyof typeof StateFileSchema.fields>(key: K) =>
-    lenientKey(stateFile, key, StateFileSchema.fields[key], stateDoc[key]);
-  const projectUses = yield* stateKey("projectUseLog");
-  const launcherUses = yield* stateKey("launcherUseLog");
-  const scriptUses = yield* stateKey("packageScriptUseLog");
   yield* insertAll("usage", [
-    ...Object.entries(Option.getOrElse(projectUses, () => ({}))).flatMap(
+    ...Object.entries(yield* stateKey("projectUseLog", {})).flatMap(
       ([projectId, times]) => uses("project", projectId, "", times),
     ),
-    ...Object.entries(Option.getOrElse(launcherUses, () => ({}))).flatMap(
+    ...Object.entries(yield* stateKey("launcherUseLog", {})).flatMap(
       ([launcherId, times]) => uses("launcher", "", launcherId, times),
     ),
-    ...Object.entries(Option.getOrElse(scriptUses, () => ({}))).flatMap(
+    ...Object.entries(yield* stateKey("packageScriptUseLog", {})).flatMap(
       ([projectId, scripts]) =>
         Object.entries(scripts).flatMap(([script, times]) =>
           uses("script", projectId, script, times),
         ),
     ),
   ]);
-
-  const sorts = yield* stateKey("packageScriptSort");
   yield* insertAll(
     "script_sort",
-    Object.entries(Option.getOrElse(sorts, () => ({}))).map(
+    Object.entries(yield* stateKey("packageScriptSort", {})).map(
       ([project_id, mode]) => ({ project_id, mode }),
     ),
   );
@@ -260,12 +231,10 @@ export const importJson = Effect.gen(function* () {
     ["packageScriptOrder", "order"],
     ["packageScriptLaunchRow", "launchRow"],
   ] as const) {
-    const lists = yield* stateKey(key);
     yield* insertAll(
       "script_lists",
-      Object.entries(Option.getOrElse(lists, () => ({}))).flatMap(
-        ([project_id, names]) =>
-          names.map((name, position) => ({ project_id, list, position, name })),
+      Object.entries(yield* stateKey(key, {})).flatMap(([project_id, names]) =>
+        names.map((name, position) => ({ project_id, list, position, name })),
       ),
     );
   }
@@ -273,8 +242,7 @@ export const importJson = Effect.gen(function* () {
   const config = yield* readDocument(path.join(dataDir, "config.json"));
   // A data dir nothing has used yet starts with the settings of a fresh
   // install. One from before doubutsuNames defaulted on keeps it off.
-  const fresh =
-    Option.isNone(registry) && Option.isNone(state) && Option.isNone(config);
+  const fresh = legacy && Option.isNone(state) && Option.isNone(config);
   yield* insertAll(
     "device_config",
     configRows(Option.getOrElse(config, () => (fresh ? FRESH_INSTALL : {}))),
@@ -308,21 +276,19 @@ export const importJson = Effect.gen(function* () {
       const data = yield* lenientKey(
         filePath,
         "worktree data",
-        ShigomoriWorktreeDataSchema,
+        Schema.UndefinedOr(ShigomoriWorktreeDataSchema),
         doc.value,
+        undefined,
       );
-      if (Option.isNone(data)) continue;
-      const { title, description, describedAt, ports } = data.value;
-      yield* insertAll("worktree_data", [
-        {
-          project_id: projectId,
-          worktree_id: file.slice(0, -".json".length),
-          title: title ?? null,
-          description: description ?? null,
-          described_at: describedAt ?? null,
-          ports: ports === undefined ? null : JSON.stringify(ports),
-        },
-      ]);
+      if (data === undefined) continue;
+      yield* sql`INSERT INTO worktree_data ${sql.insert({
+        project_id: projectId,
+        worktree_id: file.slice(0, -".json".length),
+        title: data.title ?? null,
+        description: data.description ?? null,
+        described_at: data.describedAt ?? null,
+        ports: data.ports === undefined ? null : JSON.stringify(data.ports),
+      })}`;
     }
   }
 });

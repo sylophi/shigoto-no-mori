@@ -35,18 +35,18 @@ export const layer: Layer.Layer<
     const platform = yield* Effect.context<
       Paths.Paths | FileSystem.FileSystem | Path.Path
     >();
-    const sql = yield* SqliteClient.make({ filename: store }).pipe(
-      Effect.mapError((cause) => new StoreOpenError({ path: store, cause })),
-    );
-    // The schema's history, applied in order. A released migration is
-    // never edited; a change is a new one.
-    yield* SqliteMigrator.run({
-      loader: SqliteMigrator.fromRecord({
-        "1_tables": tables,
-        "2_import_json": Effect.provideContext(importJson, platform),
-      }),
+    const sql = yield* Effect.gen(function* () {
+      const client = yield* SqliteClient.make({ filename: store });
+      // The schema's history, applied in order. A released migration is
+      // never edited; a change is a new one.
+      yield* SqliteMigrator.run({
+        loader: SqliteMigrator.fromRecord({
+          "1_tables": tables,
+          "2_import_json": Effect.provideContext(importJson, platform),
+        }),
+      }).pipe(Effect.provideService(SqlClient.SqlClient, client));
+      return client;
     }).pipe(
-      Effect.provideService(SqlClient.SqlClient, sql),
       Effect.mapError((cause) => new StoreOpenError({ path: store, cause })),
       // The migrator turns a migration's failure into a defect; an import
       // that refused a file comes back out as its own error.

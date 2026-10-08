@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { ProjectSchema } from "./project.ts";
 import { PackageScriptSortModeSchema } from "./scripts.ts";
 
 // The JSON documents a 2.x data dir keeps at its top level, which the
@@ -11,9 +12,9 @@ export const RegistryFileSchema = Schema.Struct({
   // In registration order.
   projects: Schema.Array(
     Schema.Struct({
-      id: Schema.String,
-      name: Schema.String,
-      path: Schema.String,
+      id: ProjectSchema.fields.id,
+      name: ProjectSchema.fields.name,
+      path: ProjectSchema.fields.path,
     }),
   ),
   // The sidebar's manual order, as project paths.
