@@ -75,9 +75,24 @@ func TestUnusableTerminalFallsBackToTerminal(t *testing.T) {
 		if err := os.WriteFile(configJSONPath(), []byte(`{"terminal": "`+pick+`"}`), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if got := chosenTerminal(); got != defaultTerminal {
+		if got := chosenTerminal().id; got != defaultTerminal {
 			t.Errorf("terminal %q: chose %q, want %q", pick, got, defaultTerminal)
 		}
+	}
+}
+
+// A denied Automation permission says where to allow it.
+func TestDeniedAutomationSaysWhereToAllowIt(t *testing.T) {
+	sandboxDataDir(t)
+	bin := t.TempDir()
+	script := "#!/bin/sh\necho '42:51: execution error: Not authorized to send Apple events to Terminal. (-1743)' >&2\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(bin, "osascript"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	err := launchInTerminal("vim .", t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "Privacy & Security > Automation") {
+		t.Errorf("err = %v, want the Automation settings named", err)
 	}
 }
 
