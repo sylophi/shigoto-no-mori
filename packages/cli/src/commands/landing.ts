@@ -4,8 +4,7 @@
 // and rm --stack cleans up a landed stack. The engine answers each with
 // Go's --json document, which a person's lines are read from.
 import { execFile } from "node:child_process";
-import type * as Landing from "@shigomori/engine/Landing";
-import * as LandingService from "@shigomori/engine/Landing";
+import * as Landing from "@shigomori/engine/Landing";
 import type * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -217,7 +216,7 @@ const reportCleanup = (doc: Doc, located: Worktrees.Located) =>
 export const pr = Command.make("pr", target, (input) =>
   Effect.gen(function* () {
     const { located } = yield* resolveWorktree(input);
-    const doc = yield* (yield* LandingService.Landing).pullRequest(located);
+    const doc = yield* (yield* Landing.Landing).pullRequest(located);
     const { json, stderrColor } = yield* Effect.service(Output);
     if (json) return yield* emit(doc);
     const url = text(doc["url"]);
@@ -248,7 +247,7 @@ export const merge = Command.make(
   (input) =>
     Effect.gen(function* () {
       const method = yield* methodOf(input.method);
-      const landing = yield* LandingService.Landing;
+      const landing = yield* Landing.Landing;
       const { json, binaryName, stderrColor } = yield* Effect.service(Output);
       const title = { current: "" };
       const report = yield* landingReporter(title);
@@ -295,7 +294,7 @@ export const land = Command.make(
       const { located } = yield* resolveWorktree(input);
       const { json, binaryName, stdoutColor, stderrColor } =
         yield* Effect.service(Output);
-      const doc = yield* (yield* LandingService.Landing).land(
+      const doc = yield* (yield* Landing.Landing).land(
         located,
         {
           force: input.force,
@@ -350,7 +349,7 @@ export const done = Command.make(
   (input) =>
     Effect.gen(function* () {
       const { located } = yield* resolveWorktree(input);
-      const doc = yield* (yield* LandingService.Landing).done(located, {
+      const doc = yield* (yield* Landing.Landing).done(located, {
         force: input.force,
       });
       yield* reportCleanup(doc, located);
@@ -367,7 +366,7 @@ export const removeStack = (
   },
 ) =>
   Effect.gen(function* () {
-    const doc = yield* (yield* LandingService.Landing).removeStack(
+    const doc = yield* (yield* Landing.Landing).removeStack(
       located,
       options,
       yield* reporter(),
