@@ -1,0 +1,106 @@
+import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Git from "./Git.ts";
+import { orderRemotesByPrecedence, pickDefaultRef } from "./gitParse.ts";
+
+// What makes the same project on two devices the same repo. Derived,
+// never stored.
+export type RepoIdentity = {
+  // `root:<sha>` of the default ref's root commit, else
+  // `remote:<host/owner/repo>` of the primary remote, else none. Null
+  // also when git couldn't be asked, so it never matches across devices.
+  readonly identity: string | null;
+  // The primary fetch remote as `host/owner/repo`, which the sidebar
+  // groups projects by owner off. Null without a network remote.
+  readonly remote: string | null;
+};
+
+export class Identity extends Context.Service<
+  Identity,
+  {
+    readonly of: (projectPath: string) => Effect.Effect<RepoIdentity>;
+  }
+>()("sm/engine/Identity") {}
+
+const make = Effect.gen(function* () {
+  const git = yield* Git.Git;
+
+  // The primary fetch remote among those whose URL normalizes.
+  const primaryRemote = (projectPath: string) =>
+    git.run(projectPath, ["remote", "-v"]).pipe(
+      Effect.map((stdout) => {
+        const usable = new Map<string, string>();
+        for (const line of stdout.split("\n")) {
+          const match = /^(\S+)\s+(\S+)\s+\(fetch\)/.exec(line);
+          const [, name, url] = match ?? [];
+          if (name === undefined || url === undefined || usable.has(name)) {
+            continue;
+          }
+          const normalized = normalizeRemoteUrl(url);
+          if (normalized !== null) usable.set(name, normalized);
+        }
+        const [first] = orderRemotesByPrecedence([...usable.keys()]);
+        return first === undefined ? null : (usable.get(first) ?? null);
+      }),
+      Effect.orElseSucceed(() => null),
+    );
+
+  // `root:<sha>` of the parentless commit the default ref reaches (never
+  // HEAD, which would name the checkout, not the repo). None for a
+  // shallow clone, whose root is fake, or without a default ref. A
+  // failed git run fails, which reads as no identity.
+  const rootCommitKey = (projectPath: string) =>
+    Effect.gen(function* () {
+      const shallow = yield* git.run(projectPath, [
+        "rev-parse",
+        "--is-shallow-repository",
+      ]);
+      if (shallow.trim() !== "false") return Option.none<string>();
+      const ref = pickDefaultRef(
+        yield* git.branchRefs(projectPath),
+        undefined,
+        yield* git.listRemotes(projectPath),
+      );
+      if (ref === undefined) return Option.none<string>();
+      const roots = (yield* git.run(projectPath, [
+        "rev-list",
+        "--max-parents=0",
+        ref,
+        "--",
+      ]))
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "")
+        .toSorted();
+      return Option.map(
+        Option.fromNullishOr(roots[0]),
+        (root) => `root:${root}`,
+      );
+    });
+
+  const of = Effect.fn("Identity.of")(function* (projectPath: string) {
+    const [remote, root] = yield* Effect.all(
+      [
+        primaryRemote(projectPath),
+        rootCommitKey(projectPath).pipe(Effect.option),
+      ],
+      { concurrency: 2 },
+    );
+    // A failed git run is no identity. A repo the root can't decide
+    // falls back to its remote.
+    const identity = Option.match(root, {
+      onNone: () => null,
+      onSome: Option.getOrElse(() =>
+        remote === null ? null : `remote:${remote}`,
+      ),
+    });
+    return { identity, remote };
+  });
+
+  return Identity.of({ of });
+});
+
+export const layer = Layer.effect(Identity, make);
