@@ -66,6 +66,7 @@ import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
+import type * as Types from "effect/Types";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
@@ -259,7 +260,7 @@ const registered = (
 // of it and reports the sessions it was asked to create. `git` is the
 // follower's verdict the stop guard reads.
 function fakeMirrorEngine() {
-  const sessions = new Map<string, MirrorSessionRaw>();
+  const sessions = new Map<string, Types.Mutable<MirrorSessionRaw>>();
   const state: {
     created: MirrorCreateInput[];
     terminated: string[];

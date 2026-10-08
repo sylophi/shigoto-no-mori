@@ -93,6 +93,10 @@ import {
 } from "./gitState";
 
 const decodeHasCommitsResult = Schema.decodeSync(SyncHasCommitsResultSchema);
+const decodeGitState = Schema.decodeSync(GitStateSchema);
+const decodeApplyGitStateResult = Schema.decodeSync(
+  MirrorApplyGitStateResultSchema,
+);
 
 // The slice of a daemon session the follower reads. `status` is the
 // file-sync engine's own (watching is idle, everything else is a cycle
@@ -283,7 +287,7 @@ async function pullHaves(
 }
 
 export function createGitFollower(deps: {
-  sessions: () => FollowableSession[];
+  sessions: () => readonly FollowableSession[];
   peerSyncApiFor: (deviceId: string) => PeerSyncApi;
   peerMirrorApiFor: (deviceId: string) => PeerMirrorApi;
   // Persists the agreed state per session. Absent means memory only
@@ -531,7 +535,7 @@ export function createGitFollower(deps: {
         return;
       }
       const local = localRead.value;
-      const peerAsIs = GitStateSchema.parse(peerRead.value);
+      const peerAsIs = decodeGitState(peerRead.value);
       // Each side's head in the other's names: the peer's is what
       // agreement, divergence and the apply are judged on, this side's
       // is what a push carries. A copy that left the mirror/ rule has
@@ -771,7 +775,7 @@ export function createGitFollower(deps: {
         }),
       );
     }
-    const result = MirrorApplyGitStateResultSchema.parse(
+    const result = decodeApplyGitStateResult(
       await peerMirror.applyGitState({
         projectId: session.projectId,
         worktreeId: session.worktreeId,

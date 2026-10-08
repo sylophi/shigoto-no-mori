@@ -24,41 +24,47 @@
 // beside the follower's store, so a relaunch still serves the mirrors
 // it asked for. Pending ones do not: an ask dies with the process that
 // made it.
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { z } from "zod";
+import type * as Types from "effect/Types";
 import { errorMessageOf } from "@shared/errors";
-import {
-  DeviceIdZod,
-  SyncCloneIntoZod,
-  WorktreeIdZod,
-} from "@shared/schemas/zodBridge";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import { allContractModules } from "@shared/ipc/client";
 import type { InvitableScope } from "@shared/ipc/contract";
-import { MirrorWorktreePayloadSchema } from "@shared/ipc/modules/mirror";
+import {
+  type MirrorWorktreePayload,
+  MirrorWorktreePayloadSchema,
+} from "@shared/ipc/modules/mirror";
+import { SyncCloneIntoSchema } from "@shared/ipc/modules/sync";
 import {
   ProjectScopedPayloadSchema,
+  WorktreeIdSchema,
   WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
-
-type MirrorWorktreePayload = z.infer<typeof MirrorWorktreePayloadSchema>;
+import { strict } from "@shared/schemas/strict";
 
 // What the ask named, which the landing must match.
-const MirrorInviteAskSchema = z.strictObject({
-  peerDeviceId: DeviceIdZod,
-  // The peer's original, the id its landing names.
-  sourceWorktreeId: WorktreeIdZod,
-  // The repo it belongs to, and where the copy lands when this device
-  // has no checkout of it.
-  identity: z.string().min(1),
-  cloneInto: SyncCloneIntoZod.optional(),
-});
-export type MirrorInviteAsk = z.infer<typeof MirrorInviteAskSchema>;
+const MirrorInviteAskSchema = strict(
+  Schema.Struct({
+    peerDeviceId: DeviceIdSchema,
+    // The peer's original, the id its landing names.
+    sourceWorktreeId: WorktreeIdSchema,
+    // The repo it belongs to, and where the copy lands when this device
+    // has no checkout of it.
+    identity: Schema.NonEmptyString,
+    cloneInto: Schema.optional(SyncCloneIntoSchema),
+  }),
+);
+export type MirrorInviteAsk = typeof MirrorInviteAskSchema.Type;
 
-export const MirrorInviteSchema = MirrorInviteAskSchema.extend({
-  // The copy here, once the landing answered. Absent while pending.
-  copy: MirrorWorktreePayloadSchema.optional(),
-});
-export type MirrorInvite = z.infer<typeof MirrorInviteSchema>;
+export const MirrorInviteSchema = strict(
+  Schema.Struct({
+    ...MirrorInviteAskSchema.struct.fields,
+    // The copy here, once the landing answered. Absent while pending.
+    copy: Schema.optional(MirrorWorktreePayloadSchema),
+  }),
+);
+export type MirrorInvite = typeof MirrorInviteSchema.Type;
 type Landed = MirrorInvite & { copy: MirrorWorktreePayload };
 
 // Where the landed invitations live, wired by main beside the
@@ -68,12 +74,12 @@ type Landed = MirrorInvite & { copy: MirrorWorktreePayload };
 // (a check, a surface without the daemon), nothing persists and
 // nothing is admitted past the switch.
 export type MirrorInviteStore = {
-  load: () => MirrorInvite[];
+  load: () => readonly MirrorInvite[];
   save: (invites: MirrorInvite[]) => void;
 };
 
 let store: MirrorInviteStore | null = null;
-let invites: MirrorInvite[] = [];
+let invites: Types.Mutable<MirrorInvite>[] = [];
 
 export function setMirrorInviteStore(next: MirrorInviteStore | null): void {
   store = next;
@@ -118,7 +124,7 @@ export function listMirrorInvites(): MirrorInvite[] {
 // undoes it, pending or landed: the ask failed, and whatever the
 // peer's rollback removed under it is gone.
 export function inviteMirror(ask: MirrorInviteAsk): { withdraw: () => void } {
-  const invite: MirrorInvite = { ...ask };
+  const invite: Types.Mutable<MirrorInvite> = { ...ask };
   invites.push(invite);
   return { withdraw: () => keepInvites((other) => other !== invite) };
 }
@@ -193,11 +199,12 @@ for (const module of allContractModules) {
 export const invitableChannels = (): ReadonlyMap<string, InvitableScope> =>
   invitable;
 
-const LandingScopeSchema = z.object({
-  sourceWorktreeId: WorktreeIdZod,
-  identity: z.string().min(1),
-  cloneInto: SyncCloneIntoZod.optional(),
+const LandingScopeSchema = Schema.Struct({
+  sourceWorktreeId: WorktreeIdSchema,
+  identity: Schema.NonEmptyString,
+  cloneInto: Schema.optional(SyncCloneIntoSchema),
 });
+const decodeLandingScope = Schema.decodeUnknownOption(LandingScopeSchema);
 
 function sameCloneInto(
   a: MirrorInvite["cloneInto"],
@@ -219,15 +226,15 @@ export function mirrorInviteAdmits(
   if (mine.length === 0) return false;
   switch (scope) {
     case "landing": {
-      const landing = LandingScopeSchema.safeParse(input);
+      const landing = decodeLandingScope(input);
       return (
-        landing.success &&
+        Option.isSome(landing) &&
         mine.some(
           (invite) =>
             !isLanded(invite) &&
-            invite.sourceWorktreeId === landing.data.sourceWorktreeId &&
-            invite.identity === landing.data.identity &&
-            sameCloneInto(invite.cloneInto, landing.data.cloneInto),
+            invite.sourceWorktreeId === landing.value.sourceWorktreeId &&
+            invite.identity === landing.value.identity &&
+            sameCloneInto(invite.cloneInto, landing.value.cloneInto),
         )
       );
     }
