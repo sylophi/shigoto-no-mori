@@ -41,12 +41,11 @@ import {
 } from "@/components/sidebar/ProjectGroupActions";
 import { useLocateProject } from "@/components/sidebar/LocateProjectPicker";
 import { StatusPill } from "@/components/sidebar/StatusPill";
-import {
-  buildGrid,
-  type GroupWork,
-  type ProjectTileRow,
-  type Section,
-} from "./gridModel";
+import type {
+  ProjectListRow,
+  ProjectSection,
+} from "@/components/sidebar/projectListSections";
+import { buildGrid, type GroupWork } from "./gridModel";
 
 export function ProjectGrid() {
   const sources = useForestSources({ warm: true });
@@ -87,7 +86,7 @@ function Grid({
   sections,
   work,
 }: {
-  sections: readonly Section[];
+  sections: readonly ProjectSection[];
   work: ReadonlyMap<string, GroupWork>;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
@@ -96,7 +95,7 @@ function Grid({
   const { openCreateForm } = useQuickCreateWorktree();
   // The worktree the tile names, or with none anywhere yet, the place
   // to make one: the palette's ↩ on a project.
-  const open = (row: ProjectTileRow, lead: GroupWork["lead"]) => {
+  const open = (row: ProjectListRow, lead: GroupWork["lead"]) => {
     if (lead) {
       toPageOn(lead.device?.deviceId, "detail", {
         projectId: lead.worktree.projectId,
@@ -192,7 +191,7 @@ function ProjectTile({
   work,
   onOpen,
 }: {
-  row: ProjectTileRow;
+  row: ProjectListRow;
   work: GroupWork | undefined;
   onOpen: () => void;
 }) {
