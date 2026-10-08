@@ -22,6 +22,7 @@ import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
+import * as SharedSettings from "./SharedSettings.ts";
 import * as Store from "./Store.ts";
 import type * as SqlClient from "effect/sql/SqlClient";
 import * as Terrier from "./Terrier.ts";
@@ -69,7 +70,13 @@ const services = (options: EngineOptions) =>
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(Darwin.layer(options.macfs)),
     Layer.provideMerge(
-      Layer.mergeAll(Config.layer, Usage.layer, Identity.layer, Icons.layer),
+      Layer.mergeAll(
+        Config.layer,
+        Usage.layer,
+        Identity.layer,
+        Icons.layer,
+        SharedSettings.layer,
+      ),
     ),
     Layer.provideMerge(Git.layer),
     Layer.provideMerge(options.store),
