@@ -8,6 +8,7 @@ import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { log, logFailure } from "@shared/log";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { refreshProjects } from "@host/lib/projects";
@@ -127,30 +128,47 @@ function onExternalStateChange(worktreeDataProjects: ReadonlySet<string>) {
     });
 }
 
-const stateWatcher = StateWatcher.adapter.pipe(
-  Layer.provideMerge(StateWatcher.layer(onExternalStateChange)),
+// A layer that failed to start is logged and the rest of the graph
+// still comes up, like a lifetime (lifetimes.ts).
+const logged = <R>(name: string, layer: Layer.Layer<never, never, R>) =>
+  layer.pipe(
+    Layer.catchCause((cause) =>
+      Layer.effectDiscard(
+        Effect.logError(`[boot] ${name} failed to start:`, Cause.squash(cause)),
+      ),
+    ),
+  );
+
+const stateWatcher = logged(
+  "the state watcher",
+  StateWatcher.adapter.pipe(
+    Layer.provide(StateWatcher.layer(onExternalStateChange)),
+  ),
 );
 
 // Git state inside every project (commits, checkouts, refs written by
 // any tool), as a project-scoped ping on every wire.
-const gitWatcher = GitWatcher.adapter.pipe(
-  Layer.provideMerge(
-    GitWatcher.layer({
-      onChange: announceProjectChanged,
-      // The app's own git commands move refs the same way an agent's
-      // do, and their callers already invalidate their targets, so a
-      // running sm child and an app-run mutating git command in flight
-      // or just done in that repository are skipped, as the state
-      // watcher skips the app's own data dir writes.
-      suppressed: (gitDir) =>
-        cliChildCount() > 0 ||
-        gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
-    }),
-  ),
-  // An app-side project add or remove runs as a CLI child whose
-  // registry write the state watcher drops as the app's own.
-  Layer.tap(() =>
-    Effect.sync(() => onHostMutationSettled(reconcileGitWatchers)),
+const gitWatcher = logged(
+  "the git watcher",
+  GitWatcher.adapter.pipe(
+    Layer.provide(
+      GitWatcher.layer({
+        onChange: announceProjectChanged,
+        // The app's own git commands move refs the same way an agent's
+        // do, and their callers already invalidate their targets, so a
+        // running sm child and an app-run mutating git command in flight
+        // or just done in that repository are skipped, as the state
+        // watcher skips the app's own data dir writes.
+        suppressed: (gitDir) =>
+          cliChildCount() > 0 ||
+          gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
+      }),
+    ),
+    // An app-side project add or remove runs as a CLI child whose
+    // registry write the state watcher drops as the app's own.
+    Layer.tap(() =>
+      Effect.sync(() => onHostMutationSettled(reconcileGitWatchers)),
+    ),
   ),
 );
 

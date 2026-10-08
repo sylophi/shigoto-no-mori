@@ -188,7 +188,11 @@ const make = (poke: (worktreeDataProjects: ReadonlySet<string>) => void) =>
         ),
       ),
     );
-    return StateWatcher.of({ release: FiberHandle.clear(watching) });
+    return StateWatcher.of({
+      release: FiberHandle.clear(watching).pipe(
+        Effect.withSpan("StateWatcher.release"),
+      ),
+    });
   });
 
 export const layer = (
@@ -199,8 +203,9 @@ export const layer = (
 const promiseAdapter = PromiseAdapter.make<StateWatcher>("The state watcher");
 export const adapter = promiseAdapter.layer;
 
+// A watcher that is not up has nothing to release.
 export function stopStateWatcher(): Promise<void> {
-  return promiseAdapter.run(
+  return promiseAdapter.runIfOpen(
     Effect.gen(function* () {
       yield* (yield* StateWatcher).release;
     }),

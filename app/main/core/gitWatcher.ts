@@ -35,6 +35,7 @@ import * as FiberMap from "effect/FiberMap";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
@@ -124,17 +125,22 @@ const make = (deps: GitWatcherDeps) =>
     const fs = yield* FileSystem.FileSystem;
     // Each watched project's git directory and the fiber watching it.
     const watches = yield* FiberMap.make<string>();
-    const gitDirs = new Map<string, string>();
+    // What each running watch watches. Written only under `serial`, so
+    // two reconciles fired at once (an external change and a settled
+    // mutation) cannot interleave their reads of the registry.
+    const gitDirs = new Map<string, { readonly gitDir: string }>();
+    const serial = yield* Semaphore.make(1);
 
     // One project's pings: its git directory's relevant changes,
     // debounced. Suppression is checked at event time, not when the
     // debounce fires, mirroring the state watcher: a CLI child finishing
     // right after an external commit must not swallow the refresh that
     // commit deserves.
-    const watch = (projectId: string, gitDir: string) =>
-      fs.watch(gitDir, { recursive: true }).pipe(
+    const watch = (projectId: string, entry: { readonly gitDir: string }) =>
+      fs.watch(entry.gitDir, { recursive: true }).pipe(
         Stream.filter(
-          (event) => isRelevantGitPath(event.path) && !deps.suppressed(gitDir),
+          (event) =>
+            isRelevantGitPath(event.path) && !deps.suppressed(entry.gitDir),
         ),
         Stream.debounce(DEBOUNCE_MS),
         Stream.runForEach(() => Effect.sync(() => deps.onChange(projectId))),
@@ -142,7 +148,12 @@ const make = (deps: GitWatcherDeps) =>
         // watchable right now: the watch drops, and a later reconcile
         // re-adds it if it comes back.
         Effect.ignore,
-        Effect.ensuring(Effect.sync(() => gitDirs.delete(projectId))),
+        // Only its own entry: a reconcile may have replaced it already.
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (gitDirs.get(projectId) === entry) gitDirs.delete(projectId);
+          }),
+        ),
       );
 
     const reconcile = Effect.gen(function* () {
@@ -156,7 +167,7 @@ const make = (deps: GitWatcherDeps) =>
         const gitDir = gitDirOf(project.path);
         if (gitDir !== null) wanted.set(project.id, gitDir);
       }
-      for (const [projectId, gitDir] of gitDirs) {
+      for (const [projectId, { gitDir }] of gitDirs) {
         if (wanted.get(projectId) !== gitDir) {
           gitDirs.delete(projectId);
           yield* FiberMap.remove(watches, projectId);
@@ -164,10 +175,11 @@ const make = (deps: GitWatcherDeps) =>
       }
       for (const [projectId, gitDir] of wanted) {
         if (gitDirs.has(projectId)) continue;
-        gitDirs.set(projectId, gitDir);
-        yield* FiberMap.run(watches, projectId, watch(projectId, gitDir));
+        const entry = { gitDir };
+        gitDirs.set(projectId, entry);
+        yield* FiberMap.run(watches, projectId, watch(projectId, entry));
       }
-    }).pipe(Effect.withSpan("GitWatcher.reconcile"));
+    }).pipe(serial.withPermits(1), Effect.withSpan("GitWatcher.reconcile"));
 
     yield* reconcile;
     return GitWatcher.of({ reconcile });
