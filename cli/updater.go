@@ -3,14 +3,15 @@ package main
 // The update engine behind `sm update` (cmd_update.go). The CLI owns
 // the whole pipeline. The app is not involved until the moment a
 // running instance has to restart:
-//   query    find the release to move to. A full release asks the
-//            update.electronjs.org feed for this repo/arch/version and
-//            lets the server compare versions (204 = up to date, 200 =
-//            JSON pointing at the release zip). That feed hides
-//            prereleases, so a PRERELEASE build reads the repo's
-//            release list from the GitHub API instead and picks the
-//            highest of: any full release ahead of it, or a later
-//            prerelease in its own channel (semver.go releaseChannel).
+//   query    find the release to move to. Read the repo's release list
+//            from the GitHub API and pick the highest of: any full
+//            release ahead of this build, or, for a PRERELEASE build,
+//            a later prerelease in its own channel (semver.go
+//            releaseChannel). When GitHub can't answer, ask the
+//            update.electronjs.org feed for this repo/arch/version
+//            instead, which compares versions itself (204 = up to
+//            date, 200 = JSON pointing at the release zip) but hides
+//            prereleases.
 //   stage    download the zip under <dataDir>/updates, extract it, verify
 //            the code signature, and park the new bundle in
 //            updates/staged with a manifest describing it.
@@ -27,6 +28,7 @@ package main
 // arbitrary code. Verification failures always fail closed.
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -84,13 +86,14 @@ var feedClient = &http.Client{Timeout: feedTimeout}
 
 // Stand-ins for the two endpoints, from `sm update --feed-url` and
 // `--releases-url` (app/lab/dev-app.md). Flags, not environment
-// variables, so they don't ride `sm run` into script trees. The feed
-// stand-in forces the single-answer path on every build, prerelease or
-// not, so one flag keeps a test build off the real feeds.
+// variables, so they don't ride `sm run` into script trees. Either
+// one turns both real endpoints off, so one flag keeps a test build
+// off them. An endpoint without a stand-in then has no URL ("") and
+// isn't asked.
 var feedURLOverride, releasesURLOverride string
 
 func updateServerURL() string {
-	if feedURLOverride != "" {
+	if feedURLOverride != "" || releasesURLOverride != "" {
 		return feedURLOverride
 	}
 	return "https://update.electronjs.org/" + updateFeedRepo + "/darwin-" + feedArch() + "/" + version
@@ -98,11 +101,11 @@ func updateServerURL() string {
 
 // The release-list stand-in serves the GitHub release-list JSON. 100
 // is the API's page maximum. The list is ordered by the tagged
-// commit's date, not by version, so a prerelease cut from an old
-// commit sinks. Once the repo passes 100 releases such a tag could
+// commit's date, not by version, so a release cut from an old commit
+// (a prerelease, or a backported patch) sinks. Once the repo passes 100 releases such a tag could
 // fall off the page.
 func releaseListURL() string {
-	if releasesURLOverride != "" {
+	if feedURLOverride != "" || releasesURLOverride != "" {
 		return releasesURLOverride
 	}
 	return "https://api.github.com/repos/" + updateFeedRepo + "/releases?per_page=100"
@@ -123,17 +126,26 @@ func feedArch() string {
 // earlier run already staged, so it must not be taken as "up to date"
 // for anything destructive.
 //
-// A prerelease build ranks the release list itself (the release
+// The release list is ranked against this build's version (the release
 // workflow stamps the tag into package.json, so v2.0.0-beta.2 ships as
-// "2.0.0-beta.2"). Every other build lets the update server compare.
-func queryFeed() (release *releaseInfo, confirmed bool, err error) {
-	if feedURLOverride == "" {
-		if current, ok := parseSemver(version); ok && current.isPrerelease() {
-			return queryReleaseList(current)
+// "2.0.0-beta.2"). The update server's "nothing newer" can't speak for
+// a prerelease build's channel, so for one it is unconfirmed too. When
+// both fail, the release list's error is the one reported.
+func queryFeed() (*releaseInfo, bool, error) {
+	current, _ := parseSemver(version)
+	var listErr error
+	if releaseListURL() != "" {
+		release, confirmed, err := queryReleaseList(current)
+		if err == nil || updateServerURL() == "" {
+			return release, confirmed, err
 		}
+		listErr = err
 	}
-	release, err = queryUpdateServer()
-	return release, true, err
+	release, err := queryUpdateServer()
+	if err != nil {
+		return nil, false, cmp.Or(listErr, err)
+	}
+	return release, !current.isPrerelease(), nil
 }
 
 func newFeedRequest(url string) (*http.Request, error) {
@@ -249,7 +261,6 @@ func decodeReleaseList(body []byte) ([]ghRelease, error) {
 	return releases, nil
 }
 
-// The prerelease build's feed.
 func queryReleaseList(current semver) (*releaseInfo, bool, error) {
 	releases, confirmed, err := fetchReleaseList()
 	if err != nil {
@@ -342,9 +353,9 @@ func rateLimitReset(resp *http.Response, now time.Time) time.Time {
 	return limit
 }
 
-// The release a prerelease build should move to, or nil when none is
-// ahead of it: the highest of the full releases and the prereleases
-// in the current build's own channel that have a zip for this arch.
+// The release this build should move to, or nil when none is ahead of
+// it: the highest of the full releases and, for a prerelease build,
+// the prereleases in its own channel that have a zip for this arch.
 // A full 2.0.0 therefore beats every 2.0.0-beta.N and ends the beta
 // ride. A release flagged prerelease under a full-release tag stays
 // hidden, as the update server hides it. A release without the zip
