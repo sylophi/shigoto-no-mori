@@ -151,7 +151,7 @@ export function cloudflaredEnv(connectorToken: string): Record<string, string> {
 // unsigned copy, the wrong architecture) is the one case the user can
 // act on and cannot otherwise see, so it is logged. A missing file is
 // not: that is the ordinary "ships none" answer. The probe is bounded
-// so a wedged binary cannot stall the runner's serialized lifecycle.
+// so a wedged binary cannot stall a start attempt.
 const PROBE_TIMEOUT_MS = 10_000;
 
 const runsAsCloudflared = (path: string) =>
@@ -405,9 +405,10 @@ const make = (options: Options) =>
     // takes out an innocent process. Residual exposure, accepted: when the
     // app is SIGKILLed and never launched again, the orphan connector
     // keeps running until the machine reboots or the user kills it.
-    const reapStale = Effect.gen(function* () {
+    const reaped = yield* Ref.make(false);
+    const reapStaleOnce = Effect.gen(function* () {
       const path = yield* pidFile;
-      if (path === null) return;
+      if (path === null || (yield* Ref.getAndSet(reaped, true))) return;
       const raw = yield* fs.readFileString(path).pipe(Effect.option);
       if (Option.isNone(raw)) return;
       const pid = Number.parseInt(raw.value.trim(), 10);
@@ -424,14 +425,13 @@ const make = (options: Options) =>
           Option.isSome(name) &&
           name.value.stdout.trim().toLowerCase().includes("cloudflared")
         ) {
-          yield* Effect.sync(() => process.kill(pid, "SIGKILL")).pipe(
+          yield* Effect.try(() => process.kill(pid, "SIGKILL")).pipe(
             Effect.ignore,
           );
         }
       }
       yield* fs.remove(path, { force: true }).pipe(Effect.ignore);
     }).pipe(withSpawner);
-    const reapStaleOnce = yield* Effect.cached(reapStale);
 
     // The readiness probe chain for a freshly spawned child: attempts on
     // the probe ladder until routable, then advertise. A child that is
@@ -488,6 +488,7 @@ const make = (options: Options) =>
         // From here to a successful probe the connector is not serving,
         // and "starting" (which reads as tunnelUrl() null) must never
         // advertise a dead child.
+        const previous = (yield* Ref.get(status)).state;
         yield* setStatus({ state: "starting", hostname: null });
         yield* remember({ denied: false });
         if ((yield* Ref.get(memory)).unconfigured) {
@@ -496,10 +497,13 @@ const make = (options: Options) =>
         }
         const binaryPath = yield* withSpawner(options.resolveBinary);
         if (binaryPath === null) {
-          yield* Effect.logInfo(
-            "[tunnel] no usable cloudflared (the cloudflaredPath config " +
-              "key, the bundled copy, PATH), tunnel endpoints are off",
-          );
+          // Logged on the way into no-binary, not on every reconcile.
+          if (previous !== "no-binary") {
+            yield* Effect.logInfo(
+              "[tunnel] no usable cloudflared (the cloudflaredPath config " +
+                "key, the bundled copy, PATH), tunnel endpoints are off",
+            );
+          }
           yield* setStatus({ state: "no-binary", hostname: null });
           return yield* park;
         }
@@ -636,6 +640,8 @@ const make = (options: Options) =>
     // A stop clears the cached provision: a later start under a
     // possibly different account must never front stale credentials.
     const stopNow = Effect.gen(function* () {
+      // Not advertised from the moment the stop begins.
+      yield* setStatus({ state: "off", hostname: null });
       yield* FiberHandle.clear(supervisor);
       yield* Ref.update(memory, (current) => ({
         ...stopped,
@@ -675,6 +681,8 @@ const make = (options: Options) =>
             ) {
               return;
             }
+            // The old child is not advertised while it goes.
+            yield* setStatus({ state: "starting", hostname: null });
             yield* FiberHandle.clear(supervisor);
             yield* remember({ wantedPort: wanted.port });
             yield* FiberHandle.run(
@@ -715,8 +723,12 @@ const onTunnel = <A>(f: (tunnel: Tunnel["Service"]) => Effect.Effect<A>) =>
   });
 
 export const tunnel = {
+  // Nothing to reconcile once the app is quitting: the layer's close
+  // has stopped the child.
   reconcile: (wanted: { readonly port: number } | null) =>
-    promiseAdapter.run(onTunnel((t) => t.reconcile(wanted))),
+    promiseAdapter
+      .run(onTunnel((t) => t.reconcile(wanted)))
+      .catch(() => undefined),
   state: (): TunnelState =>
     promiseAdapter.runSyncOr(
       onTunnel((t) => t.status),

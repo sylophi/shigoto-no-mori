@@ -42,7 +42,6 @@ import { getDeviceId } from "@host/lib/config/deviceId";
 import { readGlobalConfig } from "@host/lib/config/global";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import * as TunnelService from "@host/direct/cloudflared";
-import { resolveCloudflaredBinary, tunnel } from "@host/direct/cloudflared";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { createWsServerBinding } from "@host/socket/server";
@@ -173,7 +172,7 @@ export const tunnelLayer = TunnelService.adapter.pipe(
           // The connector the app ships
           // (shared/packaging/cloudflaredDist.mts, fetched by `pnpm
           // start` in dev).
-          resolveCloudflaredBinary(
+          TunnelService.resolveCloudflaredBinary(
             config.cloudflaredPath,
             bundledBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
           ),
@@ -241,7 +240,7 @@ const directPlane = createDirectPlane({
   dialableKinds: devDialKinds(),
   host: {
     closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
-    tunnelState: () => tunnel.state(),
+    tunnelState: () => TunnelService.tunnel.state(),
   },
 });
 
@@ -261,7 +260,7 @@ const serveConnectInfo = makeConnectInfo({
   mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
   // The tunnel candidate, advertised only while
   // the cloudflared child is currently healthy (probed routable).
-  tunnelUrl: () => tunnel.tunnelUrl(),
+  tunnelUrl: () => TunnelService.tunnel.tunnelUrl(),
   acceptsCommands: acceptsPeerCommands,
 });
 
@@ -566,7 +565,7 @@ export async function refreshDirectHost(): Promise<void> {
   // the config write or account change that triggered the refresh.
   await logFailure("[tunnel] reconcile failed", () => {
     const listener = directWsServer.status();
-    return tunnel.reconcile(
+    return TunnelService.tunnel.reconcile(
       listener.listening && listener.port !== null
         ? { port: listener.port }
         : null,
