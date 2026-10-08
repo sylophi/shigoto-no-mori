@@ -37,6 +37,7 @@ import {
 // keeps this list equal to the host namespaces buildApi exposes.
 export type HostApi = Pick<
   RemoteDeviceApi,
+  | "agents"
   | "branches"
   | "cli"
   | "forward"

@@ -53,7 +53,7 @@ interface BuildInboxRowsArgs {
   // as their header alone.
   groupedPrefixes: readonly string[];
   shutGroups: ReadonlySet<string>;
-  // Whether the agent-working mark counts (isAgentWorking).
+  // Whether a working agent session shelves its worktree (isAgentWorking).
   allowAgentWorking: boolean;
 }
 

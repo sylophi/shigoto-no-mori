@@ -45,7 +45,10 @@ type worktreeJSON struct {
 	Detached          bool            `json:"detached"`
 	Shelved           bool            `json:"shelved"`
 	AutoPull          bool            `json:"autoPull"`
-	AgentWorking      bool            `json:"agentWorking"`
+	// Whether a bound agent session is working (agents.go), and the
+	// sessions themselves.
+	AgentWorking  bool           `json:"agentWorking"`
+	AgentSessions []agentSession `json:"agentSessions"`
 	// What `describe` set: the work's name and summary until a pull
 	// request takes them over.
 	Title       string `json:"title,omitempty"`
@@ -63,7 +66,7 @@ type buildContext struct {
 	primaryBranch string
 	shelved       map[string]bool
 	autoPull      map[string]bool
-	agentWorking  map[string]bool
+	agentSessions map[string][]agentSession
 	// The shelf snapshots (shelf.go), read with the marks and only when
 	// anything is shelved: nothing shelved, nothing to compare against.
 	shelfSnapshots map[string]shelfSnapshot
@@ -109,13 +112,14 @@ func loadPrimaryRef(proj project) (remotes []string, primaryRef string, config *
 func newBuildContext(proj project, remotes []string, primaryRef string, config *projectConfig) buildContext {
 	all := readRegistryHints()
 	marks := worktreeMarkSetsFrom(all)
+	sessions := agentSessionsFrom(all)
 	ctx := buildContext{
 		hasRemote:     len(remotes) > 0,
 		primaryRef:    primaryRef,
 		primaryBranch: primaryBranchOf(primaryRef, remotes),
 		shelved:       marks[shelvedKey],
 		autoPull:      marks[autoPullKey],
-		agentWorking:  marks[agentWorkingKey],
+		agentSessions: sessions,
 		chain:         &primaryChain{path: proj.Path, ref: primaryRef},
 		config:        config,
 	}
@@ -148,7 +152,14 @@ func shelvedFlag(id worktreeIdentity, ctx buildContext) bool {
 }
 
 func agentWorkingFlag(id worktreeIdentity, ctx buildContext) bool {
-	return shelfable(id) && ctx.agentWorking[id.ID]
+	return shelfable(id) && anyWorking(ctx.agentSessions[id.ID])
+}
+
+func agentSessionsOf(id worktreeIdentity, ctx buildContext) []agentSession {
+	if list := ctx.agentSessions[id.ID]; shelfable(id) && list != nil {
+		return list
+	}
+	return []agentSession{}
 }
 
 // The identity fields of a full status object, for reusing helpers
@@ -214,11 +225,12 @@ func probeWorktree(proj project, id worktreeIdentity, ctx buildContext) (worktre
 		Shelved:           shelvedFlag(id, ctx),
 		// Unlike the shelf, any checkout can follow its upstream: the
 		// primary is the mark's main customer.
-		AutoPull:     ctx.autoPull[id.ID],
-		AgentWorking: agentWorkingFlag(id, ctx),
-		Title:        desc.Title,
-		Description:  desc.Description,
-		ProjectName:  proj.Name,
+		AutoPull:      ctx.autoPull[id.ID],
+		AgentWorking:  agentWorkingFlag(id, ctx),
+		AgentSessions: agentSessionsOf(id, ctx),
+		Title:         desc.Title,
+		Description:   desc.Description,
+		ProjectName:   proj.Name,
 	}, probe
 }
 

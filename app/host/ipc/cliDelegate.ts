@@ -54,6 +54,10 @@ import {
 } from "@shared/schemas";
 import { type DoctorReport, DoctorReportSchema } from "@shared/ipc/modules/cli";
 import {
+  type AgentHarnessStatus,
+  AgentHarnessStatusSchema,
+} from "@shared/ipc/modules/agents";
+import {
   convertRefusedError,
   isEntityGoneError,
   unknownProjectError,
@@ -818,18 +822,14 @@ export async function projectsRelocateViaCli(
 
 // ---- Worktree marks and moves ----
 
-// A worktree's on/off mark (`sm worktrees autopull|agent-working`),
-// answered with the worktree's refreshed row.
-async function setMarkViaCli(
-  verb: "autopull" | "agent-working",
+// A worktree verb answered with the worktree's refreshed row.
+async function worktreeRowViaCli(
+  verb: string[],
   project: Project,
   worktreeId: string,
-  on: boolean,
 ): Promise<Worktree> {
-  const result = await runner().runCli(
-    worktreeArgv(["worktrees", verb, on ? "on" : "off"], project, worktreeId),
-  );
-  const final = finalOkDoc(result, `sm worktrees ${verb} failed`, {
+  const result = await runner().runCli(worktreeArgv(verb, project, worktreeId));
+  const final = finalOkDoc(result, `sm ${verb.join(" ")} failed`, {
     worktreeId,
   });
   return WorktreeSchema.parse(final["worktree"]);
@@ -841,13 +841,46 @@ export const setAutoPullViaCli = (
   project: Project,
   worktreeId: string,
   autoPull: boolean,
-) => setMarkViaCli("autopull", project, worktreeId, autoPull);
+) =>
+  worktreeRowViaCli(
+    ["worktrees", "autopull", autoPull ? "on" : "off"],
+    project,
+    worktreeId,
+  );
 
-export const setAgentWorkingViaCli = (
-  project: Project,
-  worktreeId: string,
-  agentWorking: boolean,
-) => setMarkViaCli("agent-working", project, worktreeId, agentWorking);
+export const idleAgentsViaCli = (project: Project, worktreeId: string) =>
+  worktreeRowViaCli(["agents", "idle"], project, worktreeId);
+
+// ---- Agent integrations (`sm agents`) ----
+
+function harnessStatusesOf(result: CliResult, fallback: string) {
+  return z
+    .array(AgentHarnessStatusSchema)
+    .parse(finalOkDoc(result, fallback)["harnesses"]);
+}
+
+export async function agentHarnessesViaCli(): Promise<AgentHarnessStatus[]> {
+  const result = await runner().runCli(
+    ["agents", "status"],
+    undefined,
+    undefined,
+    { readOnly: true },
+  );
+  return harnessStatusesOf(result, "sm agents status failed");
+}
+
+// Installs or removes one harness's hooks, answered with every
+// harness's status.
+export async function setAgentHooksViaCli(
+  harness: string,
+  install: boolean,
+): Promise<AgentHarnessStatus[]> {
+  const verb = install ? "install" : "uninstall";
+  return harnessStatusesOf(
+    await runner().runCli(["agents", verb, harness]),
+    `sm agents ${verb} failed`,
+  );
+}
 
 // `git worktree move` plus the re-key of everything stored under the
 // worktree's path-derived id (marks, its data file, a pending dirty capture).

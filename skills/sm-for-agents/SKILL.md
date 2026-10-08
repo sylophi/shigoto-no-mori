@@ -1,6 +1,6 @@
 ---
 name: sm-for-agents
-description: "Shigoto no Mori (sm) features for agents: worktree titles, the agent-working mark, and app links. Use when working with sm and you need better ways to interface with the user."
+description: "Shigoto no Mori (sm) features for agents: worktree titles, agent sessions, and app links. Use when working with sm and you need better ways to interface with the user."
 ---
 
 These let the user follow your work in the app without asking. Outside
@@ -20,16 +20,16 @@ Write them like a PR's title and body: short, what and why, and what's
 left to do. Run it again whenever they stop being true. Once there's a
 PR, edit the PR instead.
 
-## Agent working
+## Agent sessions
+
+When you start work in a worktree, bind your session to it:
 
 ```sh
-sm agent-working on    # starting a stretch of work
-sm agent-working off   # before every reply that waits on the user
+sm agents bind
 ```
 
-While it's on, the app keeps the worktree on a folded shelf, so turning
-it off tells the user it's their turn. `sm worktrees create
---agent-working` starts a new worktree with it on.
+On Claude Code or Codex, any `sm` command run inside the worktree
+already does this, so there's no need.
 
 ## Links
 

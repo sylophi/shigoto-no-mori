@@ -26,6 +26,11 @@ func TestMain(m *testing.M) {
 	os.Setenv("GIT_CONFIG_VALUE_0", "false")
 	os.Setenv("GIT_CONFIG_KEY_1", "gc.auto")
 	os.Setenv("GIT_CONFIG_VALUE_1", "0")
+	// Run from an agent's shell, every create would bind its session
+	// (agents.go). The agents tests set their own.
+	for _, h := range harnesses {
+		os.Unsetenv(h.sessionEnv)
+	}
 	// A data dir of the run's own, so a test that writes state without
 	// sandboxDataDir (a clone checkout's verified-files cache) never
 	// reaches the real one.

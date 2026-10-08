@@ -1,6 +1,6 @@
 // Durable proof for the Agent working shelf: with agents allowed to
-// mark worktrees as working, a worktree an agent marked (`sm
-// agent-working`) files on its own fold (groupShelfOf, which the
+// mark worktrees as working, a worktree with a working agent session
+// (`sm agents`) files on its own fold (groupShelfOf, which the
 // inbox's buildInboxRows files by too, and the tree's buildSidebarRows),
 // folded until opened and ahead of the other folds, and the mark
 // outranks being shelved or hidden. Cleared, or with agents not allowed

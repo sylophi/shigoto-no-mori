@@ -54,9 +54,8 @@ export function useShowDeviceBadges(): boolean {
   return useClientFlag(showDeviceBadges);
 }
 
-// Whether agents may mark worktrees as working (`sm agent-working`),
-// which then files them on their own shelf (isAgentWorking). Off unless
-// switched on.
+// Whether a worktree an agent session is working in (`sm agents`) goes
+// on its own shelf (isAgentWorking). Off unless switched on.
 export function useAllowAgentWorking(): boolean {
   return useClientFlag(allowAgentWorking);
 }

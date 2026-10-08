@@ -63,7 +63,7 @@ import {
   doneViaCli,
   moveViaCli,
   setAutoPullViaCli,
-  setAgentWorkingViaCli,
+  idleAgentsViaCli,
   setShelvedViaCli,
 } from "../cliDelegate";
 
@@ -286,12 +286,8 @@ export const worktreesHandlers: Handlers<
       autoPull,
     ),
 
-  setAgentWorking: async ({ projectId, worktreeId, agentWorking }) =>
-    setAgentWorkingViaCli(
-      await findProjectOrThrow(projectId),
-      worktreeId,
-      agentWorking,
-    ),
+  idleAgents: async ({ projectId, worktreeId }) =>
+    idleAgentsViaCli(await findProjectOrThrow(projectId), worktreeId),
 
   renameBranch: (input) =>
     mutateAndDescribe(input, (wt) => renameBranch(wt.path, input.newBranch)),

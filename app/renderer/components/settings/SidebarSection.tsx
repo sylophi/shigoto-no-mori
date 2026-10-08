@@ -55,8 +55,8 @@ export function SidebarSection({
       <ToggleRow
         checked={form.allowAgentWorking}
         onCheckedChange={setField("allowAgentWorking")}
-        label="Allow agents to mark worktrees as working"
-        description="A worktree an agent is working in waits on its own folded shelf until the agent hands it back."
+        label="Shelve worktrees agents are working in"
+        description="A worktree waits on its own folded shelf while an agent's turn runs in it. Agents report their turns through the hooks in Integrations."
       />
     </section>
   );

@@ -38,9 +38,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		// transplant was told not to set the copy up.
 		// no-clone: have git write every tracked file instead of cloning
 		// them from an existing checkout (cloneCheckout).
-		// agent-working: set the agent-working mark (`sm agent-working`)
-		// from the start, for an agent that creates a worktree to work in.
-		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}, "no-clone": {}, "agent-working": {}},
+		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}, "no-clone": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -74,14 +72,12 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	if markAutoPullIfNew(readGlobalConfigHints(), worktree.ID, false) {
 		worktree.AutoPull = true
 	}
-	// Best-effort like the auto-pull seed: the worktree exists either
-	// way, and a failed create would only be retried into a second one.
-	if parsed.bools["agent-working"] {
-		if err := setRegistryMark(agentWorkingKey, worktree.ID, true); err != nil {
-			note(yellowErr("warning:") + " couldn't mark it as agent working: " + err.Error())
-		} else {
-			worktree.AgentWorking = true
-		}
+	// An agent session that creates a worktree works in it. Best-effort
+	// like the auto-pull seed: the worktree exists either way, and a
+	// failed create would only be retried into a second one.
+	if sessions := bindAgentSessionToNew(worktree.ID); sessions != nil {
+		worktree.AgentSessions = sessions
+		worktree.AgentWorking = anyWorking(sessions)
 	}
 	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
 		"created "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")
