@@ -44,6 +44,10 @@ export class WorktreeData extends Context.Service<
       projectId: string,
       worktreeId: string,
     ) => Effect.Effect<void>;
+    // Every project and worktree id something is kept under.
+    readonly kept: Effect.Effect<
+      ReadonlyArray<{ readonly projectId: string; readonly worktreeId: string }>
+    >;
   }
 >()("sm/engine/WorktreeData") {}
 
@@ -137,7 +141,19 @@ const make = Effect.gen(function* () {
       WHERE project_id = ${projectId} AND worktree_id = ${worktreeId}`;
   }, Effect.orDie);
 
-  return WorktreeData.of({ description, describe, move, forget });
+  const kept = sql<{ project_id: string; worktree_id: string }>`
+    SELECT project_id, worktree_id FROM worktree_data`.pipe(
+    Effect.map((rows) =>
+      rows.map(({ project_id, worktree_id }) => ({
+        projectId: project_id,
+        worktreeId: worktree_id,
+      })),
+    ),
+    Effect.orDie,
+    Effect.withSpan("WorktreeData.kept"),
+  );
+
+  return WorktreeData.of({ description, describe, move, forget, kept });
 });
 
 export const layer = Layer.effect(WorktreeData, make);

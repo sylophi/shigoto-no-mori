@@ -253,6 +253,18 @@ export function sandbox(): Sandbox {
     GIT_COMMITTER_EMAIL: "t@t",
   });
 
+  // What a binary sees of this process's environment, as the engine sees
+  // only what its runtime is given: PATH, the temp dir, and git's
+  // variables with the sandbox's identity.
+  const sideEnv = (): NodeJS.ProcessEnv =>
+    Object.fromEntries(
+      Object.entries(gitEnv()).filter(
+        ([name]) =>
+          ["PATH", "TMPDIR", "LC_ALL"].includes(name) ||
+          name.startsWith("GIT_"),
+      ),
+    );
+
   // A binary run from `cwd` against its own copy of the data dir
   // (`side`): its exit code, its last JSON document and its stderr.
   const runAt = (
@@ -267,7 +279,7 @@ export function sandbox(): Sandbox {
         [...args],
         {
           cwd,
-          env: { ...gitEnv(), HOME: root, SHIGOMORI_DATA_DIR: sideDir(side) },
+          env: { ...sideEnv(), HOME: root, SHIGOMORI_DATA_DIR: sideDir(side) },
         },
         (error, stdout, stderr) => {
           // A spawn failure or a signal has no exit code to compare.

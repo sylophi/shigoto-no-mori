@@ -32,10 +32,11 @@ import {
   belowGitFloor,
   formatSize,
   launcherProgram,
-  newerThan,
   parseGitVersion,
   parsePortPoolDirs,
   parseProcessTable,
+  parseSemver,
+  compareVersions,
   scriptFileTokens,
 } from "../src/doctorParse.ts";
 import { engineLayer } from "../src/layer.ts";
@@ -155,6 +156,14 @@ const tokens = (command: string) =>
 
 // Paths as they are, no home to expand.
 const expand = (path: string) => path;
+
+// Which of two versions ranks higher, none when either doesn't parse.
+const order = (a: string, b: string) => {
+  const [x, y] = [parseSemver(a), parseSemver(b)];
+  return x === undefined || y === undefined
+    ? undefined
+    : Math.sign(compareVersions(x, y));
+};
 
 describe("the data dir", () => {
   it("reads the device's settings, absent, valid or with a value of the wrong type", async () => {
@@ -781,8 +790,9 @@ describe("the parsers", () => {
       "5 MB",
       "3.0 GB",
     ]);
-    assert.equal(newerThan("2.1.0", "2.0.9"), true);
-    assert.equal(newerThan("2.0.0-beta.2", "2.0.0"), false);
-    assert.equal(newerThan("2.0.0", "dev"), false);
+    assert.equal(order("2.1.0", "2.0.9"), 1);
+    assert.equal(order("2.0.0-beta.2", "2.0.0"), -1);
+    assert.equal(order("2.0.0-beta.10", "2.0.0-beta.9"), 1);
+    assert.equal(order("2.0.0", "dev"), undefined);
   });
 });

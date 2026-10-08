@@ -70,13 +70,18 @@ export const isGithubRemote = (remoteUrl: string) =>
 const text = (value: unknown) =>
   value === undefined || value === null || typeof value === "string";
 
-// A settings document's custom launchers and hidden ids as the Go sm
-// decodes them: a missing field reads as empty, and a document holding
-// one of the wrong type reads as the defaults (none of either).
-const launchersOf = (
+// A settings document's custom launchers, each field as stored, and its
+// hidden ids, as the Go sm decodes them: a missing field reads as empty,
+// and a document holding one of the wrong type reads as the defaults
+// (none of either).
+export const decodedLaunchers = (
   doc: Readonly<Record<string, unknown>> | null,
 ): {
-  readonly custom: ReadonlyArray<RowEntry>;
+  readonly custom: ReadonlyArray<{
+    readonly id?: string | null;
+    readonly label?: string | null;
+    readonly command?: string | null;
+  }>;
   readonly hidden: ReadonlyArray<string>;
 } => {
   const none = { custom: [], hidden: [] };
@@ -97,15 +102,33 @@ const launchersOf = (
     ) && hidden.every((id) => typeof id === "string");
   if (!wellTyped) return none;
   return {
-    custom: entries.map((entry) => {
-      const { id, label } = (entry ?? {}) as { id?: string; label?: string };
-      return {
-        kind: "custom" as const,
-        id: `custom:${id ?? ""}`,
-        label: label ?? "",
-      };
-    }),
+    custom: entries.map(
+      (entry) =>
+        (entry ?? {}) as {
+          id?: string | null;
+          label?: string | null;
+          command?: string | null;
+        },
+    ),
     hidden: hidden as ReadonlyArray<string>,
+  };
+};
+
+// The same, as rows.
+const launchersOf = (
+  doc: Readonly<Record<string, unknown>> | null,
+): {
+  readonly custom: ReadonlyArray<RowEntry>;
+  readonly hidden: ReadonlyArray<string>;
+} => {
+  const { custom, hidden } = decodedLaunchers(doc);
+  return {
+    custom: custom.map(({ id, label }) => ({
+      kind: "custom" as const,
+      id: `custom:${id ?? ""}`,
+      label: label ?? "",
+    })),
+    hidden,
   };
 };
 

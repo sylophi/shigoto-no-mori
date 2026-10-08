@@ -2190,23 +2190,6 @@ describe("doctor", () => {
     return go as Doctor.DoctorDocument;
   };
 
-  // The engine reads its environment from the sandbox, and the Go sm
-  // from this process, so the variables that move the shell hook and
-  // the pointer file are left out of both.
-  const moved = ["ZDOTDIR", "XDG_CONFIG_HOME", "SHIGOMORI_CD_FILE"];
-  const kept = new Map<string, string | undefined>();
-  beforeEach(() => {
-    for (const name of moved) {
-      kept.set(name, process.env[name]);
-      delete process.env[name];
-    }
-  });
-  afterEach(() => {
-    for (const [name, value] of kept) {
-      if (value !== undefined) process.env[name] = value;
-    }
-  });
-
   // A gh that is signed in, so the line reads the same on any machine.
   beforeEach(() => {
     box.fakeBin(

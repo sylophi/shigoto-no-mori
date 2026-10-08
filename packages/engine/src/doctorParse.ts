@@ -2,6 +2,7 @@
 // and port-pool print, the words a finding counts with, the shell hook
 // as install writes it, and just enough semver to tell an update file
 // this build already is.
+import { shellQuote } from "./Lifecycle.ts";
 
 export const plural = (n: number) => (n === 1 ? "" : "s");
 
@@ -29,7 +30,7 @@ const trimChars = (text: string, chars: string) => {
 
 // check-attr --source (a clone checkout reads the new commit's
 // attributes with it) landed in git 2.40, which makes it the floor.
-export const GIT_FLOOR = { major: 2, minor: 40 } as const;
+const GIT_FLOOR = { major: 2, minor: 40 } as const;
 
 export const belowGitFloor = (major: number, minor: number) =>
   major < GIT_FLOOR.major ||
@@ -126,7 +127,7 @@ export const launcherProgram = (
 
 // A label as one shell word, for a fix line meant to be pasted.
 export const shellWord = (text: string) =>
-  /[ \t'"$`\\]/.test(text) ? `'${text.replaceAll("'", `'\\''`)}'` : text;
+  /[ \t'"$`\\]/.test(text) ? shellQuote(text) : text;
 
 const MONTHS = [
   "Jan",
@@ -210,25 +211,25 @@ export const parseSemver = (raw: string): Semver | undefined => {
   return { core: [major, minor, patch], pre };
 };
 
-const compareNumbers = (a: number, b: number) => (a < b ? -1 : a > b ? 1 : 0);
-const compareText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+// Code-unit order for text, numeric order for numbers, as Go compares.
+const compare = <T extends number | string>(a: T, b: T) =>
+  a < b ? -1 : a > b ? 1 : 0;
 
 // Numeric identifiers compare numerically and rank below alphanumeric
 // ones, which compare as ASCII.
 const compareIdentifier = (a: string, b: string) => {
   const aNumeric = isNumeric(a);
   const bNumeric = isNumeric(b);
-  if (aNumeric && bNumeric) {
-    return compareNumbers(a.length, b.length) || compareText(a, b);
-  }
+  if (aNumeric && bNumeric) return compare(a.length, b.length) || compare(a, b);
   if (aNumeric) return -1;
   if (bNumeric) return 1;
-  return compareText(a, b);
+  return compare(a, b);
 };
 
-const compareSemver = (a: Semver, b: Semver): number => {
+// Semver precedence: below zero when `a` is older than `b`.
+export const compareVersions = (a: Semver, b: Semver): number => {
   for (let i = 0; i < 3; i++) {
-    const order = compareNumbers(a.core[i] ?? 0, b.core[i] ?? 0);
+    const order = compare(a.core[i] ?? 0, b.core[i] ?? 0);
     if (order !== 0) return order;
   }
   // A prerelease ranks below the full release it precedes.
@@ -239,15 +240,7 @@ const compareSemver = (a: Semver, b: Semver): number => {
     const order = compareIdentifier(a.pre[i] ?? "", b.pre[i] ?? "");
     if (order !== 0) return order;
   }
-  return compareNumbers(a.pre.length, b.pre.length);
-};
-
-// Whether `candidate` is a newer version than `current`. False when
-// either doesn't parse.
-export const newerThan = (candidate: string, current: string) => {
-  const a = parseSemver(candidate);
-  const b = parseSemver(current);
-  return a !== undefined && b !== undefined && compareSemver(a, b) > 0;
+  return compare(a.pre.length, b.pre.length);
 };
 
 // --- the shell hook ---
@@ -262,7 +255,7 @@ export type HookNames = { readonly binary: string; readonly alias: string };
 export const hookBeginMarker = ({ alias }: HookNames) =>
   `# >>> ${alias} shell integration >>>`;
 
-export const hookEndMarker = ({ alias }: HookNames) =>
+const hookEndMarker = ({ alias }: HookNames) =>
   `# <<< ${alias} shell integration <<<`;
 
 // The fenced block in a zsh or bash rc file.
@@ -292,7 +285,7 @@ const hookLineOurs = (names: HookNames, line: string) => {
 
 // The fenced block in an rc file's lines: where it is and whether its
 // content is ours, `broken` for a begin marker with no end.
-export type HookSpan =
+type HookSpan =
   | { readonly kind: "none" }
   | { readonly kind: "broken" }
   | {

@@ -176,6 +176,8 @@ export class Config extends Context.Service<
       scope: ConfigScope,
       payload: ConfigDoc,
     ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
+    // The ids of the projects that have settings stored.
+    readonly storedProjectIds: Effect.Effect<ReadonlyArray<string>>;
   }
 >()("sm/engine/Config") {}
 
@@ -489,7 +491,22 @@ const make = Effect.gen(function* () {
     yield* update(scope, (doc) => mergeConfigDoc(keysOf(scope), doc, payload));
   });
 
-  return Config.of({ list, get, read, set, unset, write });
+  const storedProjectIds = sql<{ project_id: string }>`
+    SELECT DISTINCT project_id FROM project_config`.pipe(
+    Effect.map((rows) => rows.map(({ project_id }) => project_id)),
+    Effect.orDie,
+    Effect.withSpan("Config.storedProjectIds"),
+  );
+
+  return Config.of({
+    list,
+    get,
+    read,
+    set,
+    unset,
+    write,
+    storedProjectIds,
+  });
 });
 
 export const layer = Layer.effect(Config, make);

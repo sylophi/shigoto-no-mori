@@ -788,6 +788,8 @@ export class Worktrees extends Context.Service<
       ProjectRow,
       RelocateRefused | Registry.UnknownProject | Registry.ProjectPathTaken
     >;
+    // The ids the shelf holds a snapshot for.
+    readonly snapshotted: Effect.Effect<ReadonlySet<string>>;
   }
 >()("sm/engine/Worktrees") {}
 
@@ -852,7 +854,7 @@ const nonEmpty = <K extends string, V extends string | number>(
   };
 
 // A project's setup or teardown script, empty when it has none.
-const scriptOf = (
+export const scriptOf = (
   settings: Readonly<Record<string, unknown>> | null,
   key: "setup" | "teardown",
 ) => {
@@ -1063,22 +1065,9 @@ const make = Effect.gen(function* () {
   // When the linked worktree was added, epoch ms: the mtime of its admin
   // dir's commondir file, which `git worktree add` writes once. Zero for
   // the primary checkout, whose .git is a directory.
-  const adminDirOf = (worktreePath: string) =>
-    fs.readFileString(path.join(worktreePath, ".git")).pipe(
-      Effect.map((text) => {
-        const trimmed = text.trim();
-        if (!trimmed.startsWith("gitdir: ")) return Option.none<string>();
-        const dir = trimmed.slice("gitdir: ".length);
-        return Option.some(
-          path.isAbsolute(dir) ? dir : path.join(worktreePath, dir),
-        );
-      }),
-      Effect.orElseSucceed(() => Option.none<string>()),
-    );
-
   const createdAtOf = (worktreePath: string) =>
     Effect.gen(function* () {
-      const admin = yield* adminDirOf(worktreePath);
+      const admin = yield* git.adminDirOf(worktreePath);
       if (Option.isNone(admin)) return 0;
       const info = yield* fs.stat(path.join(admin.value, "commondir"));
       return Math.max(
@@ -2312,7 +2301,7 @@ const make = Effect.gen(function* () {
   // entry was there before and is gone after.
   const removeCheckout = (repo: string, worktreePath: string, force: boolean) =>
     Effect.gen(function* () {
-      const admin = yield* adminDirOf(worktreePath);
+      const admin = yield* git.adminDirOf(worktreePath);
       const removed = yield* git
         .removeWorktree({ repo, path: worktreePath, force })
         .pipe(Effect.result);
@@ -2899,6 +2888,12 @@ const make = Effect.gen(function* () {
     move,
     rekey,
     relocateProject,
+    snapshotted: sql<{ worktree_id: string }>`
+      SELECT worktree_id FROM shelf_snapshots`.pipe(
+      Effect.map((rows) => new Set(rows.map(({ worktree_id }) => worktree_id))),
+      Effect.orDie,
+      Effect.withSpan("Worktrees.snapshotted"),
+    ),
     checkRemovable: (located, force) => removable(located.worktree, force),
     primaryTarget: (project) =>
       primaryRefOf(project).pipe(
