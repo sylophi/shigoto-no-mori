@@ -15,7 +15,9 @@
 // those only a peer holds too, and they go above the worktrees when the
 // query names a project best. A project's owner names it (alone or
 // ahead of the repo) and all of that owner's projects, and its
-// worktrees too. A query turns into a branch name
+// worktrees too. A query names the app's pages, a section of Settings
+// by its name or under "settings", and they lead the worktrees the
+// same way. A query turns into a branch name
 // git takes (a pasted path or URL never does), and a new worktree goes to
 // the project on screen first. The matched letters are the ones the
 // ranking matched.
@@ -28,11 +30,15 @@ import {
   initialPaletteKey,
   isProjectSource,
   newBranchName,
+  leadingPageCount,
   leadingProjectCount,
   rankPaletteEntries,
+  rankPalettePages,
   rankPaletteProjects,
   type PaletteEntry,
+  type PalettePage,
 } from "@/components/palette/buildPaletteEntries";
+import { Radio } from "lucide-react";
 import { matchPositions } from "@/lib/fuzzyMatch";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
@@ -152,6 +158,14 @@ function palette(
 }
 
 const entries = (visits?: Record<string, number>) => palette(visits).entries;
+
+const page = (label: string, extra: Partial<PalettePage> = {}) => ({
+  key: label,
+  label,
+  icon: Radio,
+  open: () => {},
+  ...extra,
+});
 
 const keys = (list: readonly PaletteEntry[]) => list.map((entry) => entry.key);
 const ids = (projects: readonly Project[]) => projects.map((p) => p.id);
@@ -425,6 +439,36 @@ try {
       1,
       "letters scattered through a name trail a worktree that spells them",
     );
+  });
+
+  await proof.check("a query names the app's pages", () => {
+    const pages: PalettePage[] = [
+      page("Live"),
+      page("Account", { aliases: ["Devices"] }),
+      page("Appearance", { parent: "Settings" }),
+      page("General", { parent: "Settings" }),
+    ];
+    const named = (query: string) =>
+      rankPalettePages(query, pages).map((p) => p.label);
+    assert.deepEqual(named(""), [], "only asked");
+    assert.equal(named("live")[0], "Live");
+    assert.equal(named("devices")[0], "Account", "by another name");
+    assert.equal(named("appear")[0], "Appearance");
+    assert.deepEqual(
+      named("settings").toSorted(),
+      ["Appearance", "General"],
+      "a section under Settings",
+    );
+    assert.equal(named("settings gen")[0], "General");
+    const list = entries();
+    const leading = (query: string) =>
+      leadingPageCount(
+        query,
+        rankPalettePages(query, pages),
+        rankPaletteEntries(query, list),
+      );
+    assert.equal(leading("live"), 1, "its name");
+    assert.equal(leading("oak"), 0, "a branch");
   });
 
   await proof.check("a query as a new branch", () => {

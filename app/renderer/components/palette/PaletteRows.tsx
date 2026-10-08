@@ -19,13 +19,18 @@ import {
   worktreeLastActivityAt,
   type Project,
 } from "@shared/schemas";
-import type { PaletteEntry, PaletteProject } from "./buildPaletteEntries";
+import type {
+  PaletteEntry,
+  PalettePage,
+  PaletteProject,
+} from "./buildPaletteEntries";
 
-// Everything the list can hold: the worktrees, the projects a query
-// names, and, for a query, the worktree it could make.
+// Everything the list can hold: the worktrees, the projects and pages a
+// query names, and, for a query, the worktree it could make.
 export type PaletteRow =
   | { kind: "worktree"; key: string; entry: PaletteEntry }
   | { kind: "project"; key: string; item: PaletteProject }
+  | { kind: "page"; key: string; page: PalettePage }
   | {
       kind: "create";
       key: string;
@@ -50,6 +55,8 @@ export function PaletteRowView({
       return <WorktreeRow entry={row.entry} query={query} now={now} />;
     case "project":
       return <ProjectRow item={row.item} query={query} />;
+    case "page":
+      return <PageRow page={row.page} query={query} />;
     case "create":
       return <CreateRow row={row} creating={creating} />;
   }
@@ -165,6 +172,19 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
   );
 }
 
+function PageRow({ page, query }: { page: PalettePage; query: string }) {
+  const Icon = page.icon;
+  return (
+    <RowLayout
+      icon={
+        <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+      }
+      title={<Highlight text={page.label} query={query} />}
+      detail={page.parent}
+    />
+  );
+}
+
 function CreateRow({
   row,
   creating,
@@ -206,7 +226,7 @@ function RowLayout({
 }: {
   icon: ReactNode;
   title: ReactNode;
-  detail: ReactNode;
+  detail?: ReactNode;
   dim?: boolean;
   children?: ReactNode;
 }) {
@@ -220,9 +240,11 @@ function RowLayout({
       {icon}
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-xs">{title}</span>
-        <span className="truncate text-3xs text-muted-foreground">
-          {detail}
-        </span>
+        {detail && (
+          <span className="truncate text-3xs text-muted-foreground">
+            {detail}
+          </span>
+        )}
       </div>
       {children}
     </div>

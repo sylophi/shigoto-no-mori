@@ -3,6 +3,7 @@ import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import { rankByScore, scoreFields } from "@/lib/fuzzyMatch";
+import type { LucideIcon } from "lucide-react";
 import { isCloneableRemote } from "@shared/cloneUrl";
 import { sanitizeBranchName } from "@shared/git/branches";
 import { isAnchoredPath } from "@shared/projectPaths";
@@ -322,13 +323,62 @@ export function leadingProjectCount(
   projects: readonly PaletteProject[],
   shown: readonly PaletteEntry[],
 ): number {
+  return leadingCount(query, projects, (p) => projectFields(p.project), shown);
+}
+
+// The same for the pages: "live" finds the page ahead of a worktree
+// whose letters merely scatter it.
+export function leadingPageCount(
+  query: string,
+  pages: readonly PalettePage[],
+  shown: readonly PaletteEntry[],
+): number {
+  return leadingCount(query, pages, pageFields, shown);
+}
+
+function leadingCount<T>(
+  query: string,
+  ranked: readonly T[],
+  fields: (item: T) => readonly string[],
+  shown: readonly PaletteEntry[],
+): number {
   const [entry] = shown;
-  if (!entry) return projects.length;
+  if (!entry) return ranked.length;
   const top = scoreFields(query, entryFields(entry)) * entryWeight(entry);
-  const trailing = projects.findIndex(
-    (p) => scoreFields(query, projectFields(p.project)) < top,
+  const trailing = ranked.findIndex(
+    (item) => scoreFields(query, fields(item)) < top,
   );
-  return trailing < 0 ? projects.length : trailing;
+  return trailing < 0 ? ranked.length : trailing;
+}
+
+// A page of the app the query names: one the sidebar's footer leads to,
+// or a section of Settings.
+export interface PalettePage {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  // Settings, for a section of it: where the row says it is, and what
+  // the query can name it by too ("settings appearance").
+  parent?: string;
+  // What else it goes by ("Devices" for the account).
+  aliases?: readonly string[];
+  open: () => void;
+}
+
+const pageFields = ({ label, parent, aliases = [] }: PalettePage) => [
+  label,
+  ...aliases,
+  parent ? `${parent} ${label}` : "",
+];
+
+// The pages the query names, best first. Only for a query: unasked,
+// the list is the worktrees.
+export function rankPalettePages(
+  query: string,
+  pages: readonly PalettePage[],
+): readonly PalettePage[] {
+  if (!query) return [];
+  return rankByScore(query, pages, pageFields);
 }
 
 // A query as the branch a new worktree would take: the branch inputs'

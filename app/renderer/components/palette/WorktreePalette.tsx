@@ -38,21 +38,24 @@ import {
   initialPaletteKey,
   isProjectSource,
   newBranchName,
+  leadingPageCount,
   leadingProjectCount,
   rankPaletteEntries,
+  rankPalettePages,
   rankPaletteProjects,
 } from "./buildPaletteEntries";
 import { PaletteGroup, PaletteItem, PaneKeysProvider } from "./PaletteItem";
 import { PaletteRowView, type PaletteRow } from "./PaletteRows";
 import { PaletteVerbs, type GoTo, type PaletteActions } from "./PaletteVerbs";
+import { usePalettePages } from "./usePalettePages";
 
 // ⌘K: every worktree on every machine, one fuzzy list, and beside it
 // what the highlighted one offers. ↩ jumps to it, ⌘↩ opens its
 // changes, ⌘1..⌘9 open it in a launch tool, and ⇥ (or → at the end of
 // the query) hands the keys to the rest: its pages, tools, git move and
-// package scripts. A query also finds the projects it names, ahead of
-// the worktrees when it names a project best, and offers a worktree on
-// a branch of that name. A peer's worktree or project is one keystroke
+// package scripts. A query also finds the projects and the app's pages
+// it names, ahead of the worktrees when it names one best, and offers a
+// worktree on a branch of that name. A peer's worktree or project is one keystroke
 // away like a local one and drawn the same, its device a badge on the
 // row.
 export function WorktreePalette() {
@@ -124,6 +127,7 @@ export function WorktreePalette() {
 const GROUP_HEADINGS: Record<PaletteRow["kind"], string> = {
   worktree: "Worktrees",
   project: "Projects",
+  page: "Pages",
   create: "Create",
 };
 
@@ -165,6 +169,7 @@ function PaletteDialog({
   const deviceBadges = useDeviceBadges();
   const hiddenPrefixes = useWorktreePrefixes("hidden");
   const allowAgentWorking = useAllowAgentWorking();
+  const pages = usePalettePages();
   const { entries, entryKeyOf } = buildPaletteEntries({
     projects,
     worktreeQueries,
@@ -177,11 +182,10 @@ function PaletteDialog({
     visits,
   });
 
-  // The list for a query: its worktrees and the projects it names, the
-  // projects it names best above the worktrees, then the worktree it
-  // could make. A
-  // branch a worktree here already has is found, not offered again, and
-  // a pasted path or URL is no branch at all.
+  // The list for a query: its worktrees and the projects and pages it
+  // names, those it names best above the worktrees, then the worktree
+  // it could make. A branch a worktree here already has is found, not
+  // offered again, and a pasted path or URL is no branch at all.
   const rowsFor = (listQuery: string): PaletteRow[] => {
     const shown = rankPaletteEntries(listQuery, entries);
     const worktreeRows: PaletteRow[] = shown.map((entry) => ({
@@ -197,18 +201,27 @@ function PaletteDialog({
       item,
     }));
     const leading = leadingProjectCount(listQuery, named, shown);
+    const namedPages = rankPalettePages(listQuery, pages);
+    const pageRows: PaletteRow[] = namedPages.map((page) => ({
+      kind: "page",
+      key: page.key,
+      page,
+    }));
+    const leadingPages = leadingPageCount(listQuery, namedPages, shown);
     const rows = [
       ...projectRows.slice(0, leading),
+      ...pageRows.slice(0, leadingPages),
       ...worktreeRows,
       ...projectRows.slice(leading),
+      ...pageRows.slice(leadingPages),
     ];
     if (isProjectSource(listQuery)) return rows;
     const branch = newBranchName(listQuery);
     const [target, ...others] = hasLocalHost
       ? createTargets(projects, shown, entries, pageProjectId)
       : [];
-    // A project's, owner's or device's own name is a lookup, not a
-    // branch.
+    // A project's, owner's, page's or device's own name is a lookup,
+    // not a branch.
     const isQuery = (name: string | undefined) =>
       name?.toLowerCase() === listQuery.toLowerCase();
     if (
@@ -218,6 +231,7 @@ function PaletteDialog({
         (item) =>
           isQuery(item.project.name) || isQuery(ownerOf(item.project)?.label),
       ) &&
+      !namedPages.some((page) => isQuery(page.label) || isQuery(page.parent)) &&
       !entries.some(
         (e) =>
           (!e.device && e.worktree.branch === branch) ||
@@ -299,6 +313,10 @@ function PaletteDialog({
       onClose();
       openCreateForm(projectId, deviceId);
     },
+    openPage: (page) => {
+      onClose();
+      page.open();
+    },
   };
 
   // What ↩ does on the list: the first of the row's verbs.
@@ -312,6 +330,8 @@ function PaletteDialog({
           ? go(lead, "detail")
           : actions.openCreateForm(project.id, device?.deviceId);
       }
+      case "page":
+        return actions.openPage(row.page);
       case "create":
         return actions.create(row.targets[0].id, row.branch);
     }
@@ -616,6 +636,8 @@ function PickedLabel({ row }: { row: PaletteRow }) {
     }
     case "project":
       return <span className="truncate">{row.item.project.name}</span>;
+    case "page":
+      return <span className="truncate">{row.page.label}</span>;
     case "create":
       return <span className="truncate font-mono">{row.branch}</span>;
   }
