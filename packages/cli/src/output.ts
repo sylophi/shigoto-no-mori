@@ -3,7 +3,6 @@
 // terminal, never under --json, NO_COLOR or TERM=dumb.
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 
 export class Output extends Context.Service<
   Output,
@@ -21,12 +20,6 @@ export const emit = (doc: unknown) => Console.log(JSON.stringify(doc));
 export const out = (line: string) => Console.log(line);
 
 export const note = (line: string) => Console.error(line);
-
-// The JSON document under --json, the person's line otherwise.
-export const emitOrOut = (doc: unknown, line: string) =>
-  Effect.flatMap(Effect.service(Output), ({ json }) =>
-    json ? emit(doc) : out(line),
-  );
 
 const paint = (text: string, code: string, enabled: boolean) =>
   enabled && text !== "" ? `\u001b[${code}m${text}\u001b[0m` : text;

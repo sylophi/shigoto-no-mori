@@ -17,7 +17,7 @@ export const warnTerrier = Effect.gen(function* () {
   );
 });
 
-export const here = Effect.gen(function* () {
+const here = Effect.gen(function* () {
   yield* warnTerrier;
   return yield* (yield* Worktrees.Worktrees).here(process.cwd());
 });
