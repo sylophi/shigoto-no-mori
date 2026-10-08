@@ -8,7 +8,7 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "typecheck": "$(effect-tsgo get-exe-path)",
+    "typecheck": "$(effect-tsgo get-exe-path) && $(effect-tsgo get-exe-path) -p test",
     "test": "vitest run"
   },
   "dependencies": {

@@ -35,6 +35,9 @@
 //      from source (the Pick list, and buildApi's return object joined
 //      with each contract's defineContract scope), so the rule fails
 //      when either side drifts.
+//   8. The contracts package imports nothing from the app: no app
+//      alias, no relative path out of the package. Every side compiles
+//      it, the hub included, which has no app to reach.
 //
 // covers: app/host/** app/main/** app/renderer/** app/shared/** app/web/** packages/contracts/src/**
 import assert from "node:assert/strict";
@@ -120,6 +123,21 @@ for (const { dir, root, contractLayer } of LAYERS) {
       failures.push(
         `${rel} imports from main/ -- ${dir}/ must not depend on the Electron binding layer`,
       );
+    }
+
+    // 8. The contracts stand alone.
+    if (root === contractsDir) {
+      const leaves = specifiers.some(
+        (spec) =>
+          /^@(shared|host)?\//.test(spec) ||
+          (spec.startsWith(".") &&
+            !resolve(fileDir, spec).startsWith(contractsDir + sep)),
+      );
+      if (leaves) {
+        failures.push(
+          `${rel} imports from outside packages/contracts -- the contracts must not depend on the app`,
+        );
+      }
     }
 
     // 6. main/core stays drivable by plain node.

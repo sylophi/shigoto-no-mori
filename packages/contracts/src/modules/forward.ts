@@ -43,11 +43,6 @@ export const FORWARD_CONNECT_FAILED = "connect-failed";
 export function isForwardConnectFailedError(error: unknown): boolean {
   return errorMessageOf(error).startsWith(FORWARD_CONNECT_FAILED);
 }
-// The channel layer's refusal when a connection holds too many streams
-// (host/socket/channelStreams.ts), matched by the forward UI
-// (renderer/hooks/remote/usePortForwards.ts).
-export const FORWARD_TOO_MANY_CONNS = "too-many-conns";
-
 const ForwardOpenPayloadSchema = strict(
   Schema.Struct({
     port: PortNumberSchema,

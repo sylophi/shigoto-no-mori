@@ -1,5 +1,5 @@
 // Barrel: each domain owns its schemas in a sibling file; this index
-// re-exports them so consumers can keep importing from "./index.ts"
+// re-exports them so consumers import @shigomori/contracts/schemas
 // without caring about the split.
 //
 // host/lib/** should `import type` from this barrel. Schemas are part of

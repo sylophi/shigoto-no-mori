@@ -97,12 +97,6 @@ function encodeChannelFrame(
 // (main/core/mirror/gateway.ts).
 export const MAX_CHANNELS_PER_CONNECTION = 32;
 
-// The refusal markers a byte-stream open answers with, stable strings
-// rather than prose (Electron IPC and the device wires preserve only
-// the message), so the client side and the UI can match on them.
-export const CHANNEL_OPEN_NO_CHANNELS = "no-byte-channels";
-export const CHANNEL_OPEN_TAKEN = "channel-taken";
-
 function decodeChannelFrame(bytes: Uint8Array): ChannelFrame | null {
   if (bytes.length < CHANNEL_HEADER_BYTES) return null;
   const kind = bytes[0] as number;
