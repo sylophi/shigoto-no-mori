@@ -507,7 +507,7 @@ const primaryFirst = <A extends { readonly isPrimary: boolean }>(
   ...items.filter((item) => !item.isPrimary),
 ];
 
-// The primary checkout and the managed worktrees keep data; a checkout
+// The primary checkout and the managed worktrees keep data. A checkout
 // outside the layout keeps none.
 const hasWorktreeData = (worktree: WorktreeIdentity) =>
   !worktree.isExternal || worktree.isPrimary;
