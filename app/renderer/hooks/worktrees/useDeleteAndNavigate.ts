@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { isWorktreeSettingUpError } from "@shigomori/contracts/errors";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import { isCommandRefusedError } from "@shigomori/contracts/errors";
 import { inboxShowing } from "@/components/sidebar/inbox/inboxOrder";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";

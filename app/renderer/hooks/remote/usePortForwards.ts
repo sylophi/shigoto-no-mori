@@ -18,7 +18,7 @@ import type {
   PortForwardSummary,
   PortForwardWorktree,
 } from "@shigomori/contracts/modules/portForward";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import { isCommandRefusedError } from "@shigomori/contracts/errors";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";

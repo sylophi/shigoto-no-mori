@@ -9,7 +9,7 @@ import type {
   Worktree,
 } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import { isCommandRefusedError } from "@shigomori/contracts/errors";
 import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackCleanup";
 import {
   type QueryKeyRegistry,

@@ -1,4 +1,4 @@
-// The fake host's window.api: the same surface the preload exposes,
+// The fake host's window.api: the same surface the desktop builds,
 // served entirely from fixtures.ts. The real renderer
 // boots on top of it unmodified: startRemoteDeviceSync, HostScope, the
 // sidebar tree and every remote view all derive from these answers
@@ -1713,8 +1713,8 @@ export function installFakeHostBridge(
     isElectron: !WEB_SHELL,
     ...buildApi({ host: localHost.transport, client: client.transport }),
   };
-  // The renderer's window.d.ts types window.api off the preload, so
-  // this assignment is the proof the fake host bridge has the same surface.
+  // The renderer's window.d.ts types window.api, so this assignment is
+  // the proof the fake host bridge has the same surface.
   window.api = api;
 
   const pushHub = () => client.emit("hub:statusChanged", hubSnapshot());

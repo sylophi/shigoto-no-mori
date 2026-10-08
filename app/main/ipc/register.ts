@@ -26,6 +26,7 @@ import {
   type HandlerContext,
   isRemoteCaller,
   type ServerTransport,
+  settle,
 } from "@shared/ipc/transport";
 import type {
   BroadcastKeys,
@@ -114,7 +115,9 @@ function contextFor(sender: WebContents): HandlerContext {
 
 const electronServer: ServerTransport = {
   handle(channel, fn) {
-    ipcMain.handle(channel, (event, raw) => fn(contextFor(event.sender), raw));
+    ipcMain.handle(channel, (event, raw) =>
+      settle(fn(contextFor(event.sender), raw)),
+    );
   },
   // Payloads arrive already parsed from the shared fan-out path.
   broadcastAll(channel, payload) {

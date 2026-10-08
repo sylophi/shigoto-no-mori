@@ -10,7 +10,7 @@
 // cancel left (nothing landed) in place of an error.
 import { AlertCircle, Ban, Check, type LucideIcon, Minus } from "lucide-react";
 import type { ReactNode } from "react";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import { isCommandRefusedError } from "@shigomori/contracts/errors";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import type { CreatePhase, Worktree } from "@shigomori/contracts/schemas";

@@ -26,7 +26,10 @@
 import type { IncomingMessage } from "node:http";
 import { deflateRaw } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import {
+  CommandRefusedError,
+  errorMessageOf,
+} from "@shigomori/contracts/errors";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,
@@ -36,7 +39,6 @@ import {
   CLOSE_OVER_CAPACITY,
   ClientFrameSchema,
   COMMAND_REFUSED_CODE,
-  COMMAND_REFUSED_MESSAGE,
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
@@ -49,6 +51,7 @@ import {
   type ServerFrame,
   TERMINATE_GRACE_MS,
   resError,
+  resHandlerError,
 } from "@shared/ipc/socket/frames";
 import {
   handshakeProof,
@@ -551,7 +554,11 @@ export function createWsServerBinding(
       } else if (!auth.isCommandGranted()) {
         send(
           socket,
-          resError(frame.id, COMMAND_REFUSED_MESSAGE, COMMAND_REFUSED_CODE),
+          resError(
+            frame.id,
+            new CommandRefusedError().message,
+            COMMAND_REFUSED_CODE,
+          ),
         );
         return;
       }
@@ -560,10 +567,7 @@ export function createWsServerBinding(
       const result = await fn(call, frame.input);
       send(socket, { t: "res", id: frame.id, ok: true, result });
     } catch (error) {
-      // Message text only, mirroring what survives Electron's IPC
-      // error serialization, so the packages/contracts/src/errors.ts matchers behave
-      // the same on both wires.
-      send(socket, resError(frame.id, errorMessageOf(error)));
+      send(socket, resHandlerError(frame.id, error));
     }
   }
 

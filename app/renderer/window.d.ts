@@ -1,8 +1,15 @@
-// Renderer-side declaration for the `api` surface exposed by preload.ts.
-import type { RendererApi } from "../main/preload";
+// Renderer-side declarations for the bridges on window: the preload's
+// (main/preload.ts) and the `api` surface built over it, which the web
+// and lab bridges provide as well.
+import type { buildApi } from "@shared/ipc/client";
+import type { ElectronBridge } from "../main/preload";
+
+type RendererApi = Omit<ElectronBridge, "invoke" | "subscribe"> &
+  ReturnType<typeof buildApi>;
 
 declare global {
   interface Window {
+    electronBridge: ElectronBridge;
     api: RendererApi;
   }
 

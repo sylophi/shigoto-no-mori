@@ -5,7 +5,7 @@
 // auto-pull sweep decides on right before it pulls, and the prune
 // after a data dir wipe.
 import { createHash } from "node:crypto";
-import { unknownWorktreeError } from "@shigomori/contracts/errors";
+import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import {
   type CommitSummary,
   isCommitHash,
@@ -60,7 +60,7 @@ export async function findWorktreeIdentityOrThrow(
     { projectId, worktreeId },
     opts,
   );
-  if (!identity) throw unknownWorktreeError(worktreeId);
+  if (!identity) throw new UnknownWorktreeError({ worktreeId });
   return identity;
 }
 

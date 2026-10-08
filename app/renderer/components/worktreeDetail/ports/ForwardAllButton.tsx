@@ -13,7 +13,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Loader2, Power, PowerOff } from "lucide-react";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import { isCommandRefusedError } from "@shigomori/contracts/errors";
 import type { WorktreePort } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";

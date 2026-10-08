@@ -52,7 +52,7 @@ import {
   stackCleanupFor,
   trunkOf,
 } from "@shared/pullRequestStack";
-import { unknownWorktreeError } from "@shigomori/contracts/errors";
+import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import {
   moveMirrorsOfWorktree,
@@ -223,7 +223,7 @@ export const worktreesHandlers: Handlers<
       refreshProjectPullRequests(project.path),
     ]);
     const own = identities.find((identity) => identity.id === worktreeId);
-    if (!own) throw unknownWorktreeError(worktreeId);
+    if (!own) throw new UnknownWorktreeError({ worktreeId });
     const stack = pullRequestStackFor(
       Object.fromEntries(prs),
       own.branch,

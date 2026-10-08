@@ -45,7 +45,6 @@ import {
   CLOSE_GOING_AWAY,
   CLOSE_HELLO_FAILED,
   COMMAND_REFUSED_CODE,
-  CommandRefusedError,
   encodeFrame,
   MAX_IN_FLIGHT_PER_PEER,
   type ClientFrame,
@@ -58,6 +57,10 @@ import {
   type ConnectDeviceOptions,
 } from "@shared/ipc/socket/wsClientTransport";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
+import {
+  CommandRefusedError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import { VoidSchema } from "@shigomori/contracts/schemas";
 import { defineContract, invoke } from "@shigomori/contracts/contract";
 import { safeDecode } from "@shigomori/contracts/codec";
@@ -165,6 +168,15 @@ function registerTestHandlers(binding: WsServerBinding) {
     "test:fail",
     async () => {
       throw new Error("boom");
+    },
+    { gated: false },
+  );
+  // A handler failing with a contract error, which the client must get
+  // back as its class with its fields.
+  binding.handle(
+    "test:gone",
+    async () => {
+      throw new UnknownWorktreeError({ worktreeId: "wt-gone" });
     },
     { gated: false },
   );
@@ -783,6 +795,15 @@ it("typed refusal client-side: the client transport maps the code to CommandRefu
       error instanceof Error &&
       !(error instanceof CommandRefusedError) &&
       error.message === "boom",
+  );
+  // A contract error crosses as its tag and fields and decodes back
+  // into its class, message and all.
+  await assert.rejects(
+    () => connection.transport.invoke("test:gone", undefined),
+    (error) =>
+      error instanceof UnknownWorktreeError &&
+      error.worktreeId === "wt-gone" &&
+      error.message === "Unknown worktree: wt-gone",
   );
   connection.close();
 });

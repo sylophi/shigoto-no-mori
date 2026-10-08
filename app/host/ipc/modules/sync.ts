@@ -52,7 +52,7 @@ import {
   peerWorktreeOrUndefined,
   peerWorktreesApiFor,
 } from "@host/ipc/peerSync";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import { isCommandRefusedError } from "@shigomori/contracts/errors";
 import { deleteAnyLocalBranch, listBranches } from "@host/lib/git/branches";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
 import {

@@ -59,10 +59,10 @@ import {
 } from "@shigomori/contracts/modules/cli";
 import { safeDecode } from "@shigomori/contracts/codec";
 import {
-  convertRefusedError,
+  ConvertRefusedError,
   isEntityGoneError,
-  unknownProjectError,
-  unknownWorktreeError,
+  UnknownProjectError,
+  UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
 import {
@@ -152,9 +152,9 @@ const decodePhase = Schema.decodeUnknownSync(
 );
 
 // The failure for a run that produced no ok result. The CLI's --json
-// error document carries a stable `code` for entity-gone failures;
-// mapping it onto the shared constructors here means the renderer's
-// matcher keys on the code, not on the CLI's prose.
+// error document carries a stable `code` for entity-gone failures,
+// which become the contract's error classes here, so the renderer
+// branches on their tag, not on the CLI's prose.
 function cliFailure(
   result: CliResult,
   fallback: string,
@@ -162,22 +162,21 @@ function cliFailure(
 ): Error {
   const code = result.docs.find(isErrorDoc)?.["code"];
   if (code === "unknown-project" && ids.projectId !== undefined) {
-    return unknownProjectError(ids.projectId);
+    return new UnknownProjectError({ projectId: ids.projectId });
   }
   if (code === "unknown-worktree" && ids.worktreeId !== undefined) {
-    return unknownWorktreeError(ids.worktreeId);
+    return new UnknownWorktreeError({ worktreeId: ids.worktreeId });
   }
   return new Error(runner().cliFailureMessage(result, fallback));
 }
 
 // An unforced `sm adopt` stopped by its guard (cli/cmd_rm.go
 // requireClean), the only run on the streaming runner that sends these
-// codes. Electron's IPC keeps only an error's message, so the code
-// becomes packages/contracts/src/errors.ts' convert refusal here.
+// codes, which become the contract's ConvertRefusedError here.
 function guardRefusal(result: CliResult): Error | null {
   const code = result.docs.find(isErrorDoc)?.["code"];
   if (code === "uncommitted-changes" || code === "status-unreadable") {
-    return convertRefusedError(code);
+    return new ConvertRefusedError({ refusal: code });
   }
   return null;
 }
