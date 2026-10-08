@@ -1,4 +1,5 @@
 import type React from "react";
+import { SimpleTooltip, type WithoutTitle } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // The four raw families the doubutsu overlay remaps, plus slate for an
@@ -42,22 +43,27 @@ export const TONE_PILL: Record<StatusTone, string> = {
 // A tiny status indicator: a tinted dot with an optional inline label.
 // Not interactive, so a plain span carries no data-slot. Shared by the
 // hosting chip and the remote device status so the dot lives in one place.
+// The rest of the props land on the root span, so a SimpleTooltip can
+// wrap the dot directly.
 export function StatusDot({
   tone,
   label,
   pulse = false,
   className,
-}: {
+  ...props
+}: WithoutTitle<React.ComponentProps<"span">> & {
   tone: StatusTone;
   label?: React.ReactNode;
   // A soft breathing halo in the dot's own tone, for a state that is
   // live right now (a server answering on a port) rather than merely
   // recorded.
   pulse?: boolean;
-  className?: string;
 }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-sm", className)}>
+    <span
+      className={cn("inline-flex items-center gap-1.5 text-sm", className)}
+      {...props}
+    >
       <span className="relative flex size-1.5 shrink-0">
         {pulse && (
           <span
@@ -86,17 +92,18 @@ export function UpdateMark({
   version?: string;
   className?: string;
 }) {
+  const label =
+    version === undefined
+      ? "Update available"
+      : `Update to v${version} available`;
+  // A bare dot doesn't say what it marks, so it says it on hover.
   return (
-    <StatusDot
-      tone="sky"
-      className={className}
-      label={
-        <span className="sr-only">
-          {version === undefined
-            ? "update available"
-            : `update to v${version} available`}
-        </span>
-      }
-    />
+    <SimpleTooltip tip={label}>
+      <StatusDot
+        tone="sky"
+        className={className}
+        label={<span className="sr-only">{label}</span>}
+      />
+    </SimpleTooltip>
   );
 }

@@ -6,6 +6,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { formatBytes } from "@/lib/formatBytes";
 import type { TidySummary } from "./tidyModel";
 import { TidyEntryTitle } from "./TidyEntryTitle";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface TidyConfirmProps {
   summary: TidySummary;
@@ -56,9 +57,11 @@ export function TidyConfirm({
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <TidyEntryTitle entry={entry} showProject className="text-sm" />
-                <span className="truncate text-xs text-muted-foreground">
-                  {entry.verdict.reason}
-                </span>
+                <SimpleTooltip whenTruncated tip={entry.verdict.reason}>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {entry.verdict.reason}
+                  </span>
+                </SimpleTooltip>
               </div>
               <span className="shrink-0 pt-0.5 text-xs text-muted-foreground tabular-nums">
                 {entry.disk ? formatBytes(entry.disk.reclaimableBytes) : "—"}

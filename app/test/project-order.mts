@@ -13,7 +13,9 @@
 // them in over every device, so the filter never reorders them either
 // (by name under the alphabetical sort), the projects with no
 // remote last, a shut owner is its header alone, and a list of one
-// owner draws no header at all.
+// owner draws no header at all. Pinned projects lead the list, above
+// the owners when it is split, keep their sort among themselves, and
+// are parted from the rest.
 //
 // Run: pnpm test project-order.
 import assert from "node:assert/strict";
@@ -99,6 +101,7 @@ function treeRows({
   stored = local,
   peers = remote,
   shut,
+  pinned = new Set(),
   openKey = null,
 }: {
   sortMode: ProjectSortMode;
@@ -106,6 +109,7 @@ function treeRows({
   stored?: Project[];
   peers?: RemoteForestItem[];
   shut?: ReadonlySet<string>;
+  pinned?: ReadonlySet<string>;
   openKey?: string | null;
 }) {
   const ordered = sortProjects(stored, sortMode);
@@ -127,7 +131,12 @@ function treeRows({
     })),
     openKey,
     worktreeSort: "name",
-    order: projectGroupOrder({ projects: ordered, remote: peers, sortMode }),
+    order: projectGroupOrder({
+      projects: ordered,
+      remote: peers,
+      sortMode,
+      pinned,
+    }),
     openShelves: noShelves(),
     hiddenPrefixes: [],
     allowAgentWorking: false,
@@ -154,13 +163,15 @@ const headerRows = (
 
 // The rows as one line each: an owner's header as `# label`, with its
 // count when shut, a project header as its name, any other row as its
-// kind.
+// kind. The gap under the pinned projects is a "---".
 const outline = (rows: SidebarRow[]) =>
-  rows.map((r) =>
+  rows.flatMap((r) =>
     r.kind === "owner-header"
       ? `# ${r.label}${r.expanded ? "" : ` (${r.count})`}`
       : r.kind === "project"
-        ? r.project.name
+        ? r.pinnedEnd
+          ? [r.project.name, "---"]
+          : r.project.name
         : r.kind,
   );
 
@@ -250,7 +261,7 @@ it("by owner: owners in the projects' sort", () => {
     "# acme",
     "alder",
     "birch",
-    "# gitlab.com/zed",
+    "# zed",
     "dogwood",
     "# No remote",
     "cedar",
@@ -261,7 +272,7 @@ it("by owner: alphabetical goes by owner name", () => {
   // dogwood is the most recently used, so its owner leads the recent
   // sort, and the alphabetical one puts it back by name.
   assert.deepEqual(ownerOutline("recent"), [
-    "# gitlab.com/zed",
+    "# zed",
     "dogwood",
     "# acme",
     "alder",
@@ -273,7 +284,7 @@ it("by owner: alphabetical goes by owner name", () => {
     "# acme",
     "alder",
     "birch",
-    "# gitlab.com/zed",
+    "# zed",
     "dogwood",
     "# No remote",
     "cedar",
@@ -283,7 +294,7 @@ it("by owner: alphabetical goes by owner name", () => {
 it("by owner: a shut owner is its header alone", () => {
   assert.deepEqual(ownerOutline("manual", new Set(["github.com/acme"])), [
     "# acme (2)",
-    "# gitlab.com/zed",
+    "# zed",
     "dogwood",
     "# No remote",
     "cedar",
@@ -311,6 +322,46 @@ it("by owner: the filter drops owners, never reorders", () => {
     );
   assert.deepEqual(narrowed(), ["# acme", "alder", "elm", "# beta", "birch"]);
   assert.deepEqual(narrowed(PEER), ["# acme", "elm", "# beta", "birch"]);
+});
+
+it("by owner: one name on two hosts shows its hosts", () => {
+  // acme on GitLab too, through abies at the peer, which leads the
+  // alphabetical sort of projects. The headers go by what they read,
+  // and narrowed to this machine, its acme keeps its host.
+  const peers = [
+    ...ownedRemote,
+    onPeer(
+      owned(project("abies", "repo/abies", 0, 0), "gitlab.com/Acme/abies"),
+    ),
+  ];
+  const twoHosts = (filter?: string) =>
+    outline(
+      treeRows({
+        sortMode: "alphabetical",
+        filter,
+        stored: ownedLocal,
+        peers,
+        shut: new Set(),
+      }),
+    );
+  assert.deepEqual(twoHosts(), [
+    "# github.com/acme",
+    "alder",
+    "birch",
+    "# gitlab.com/Acme",
+    "abies",
+    "# zed",
+    "dogwood",
+    "# No remote",
+    "cedar",
+  ]);
+  assert.deepEqual(twoHosts("local"), [
+    "# github.com/acme",
+    "alder",
+    "birch",
+    "# No remote",
+    "cedar",
+  ]);
 });
 
 it("by owner: a single owner draws no header", () => {
@@ -342,4 +393,62 @@ it("by owner: an open project draws no owners", () => {
   // Its header pins over the rows, and it holds no worktrees here:
   // nothing at all, owner headers included.
   assert.deepEqual(outline(rows), []);
+});
+
+it("pinned: lead the list, in the sort", () => {
+  // cedar has no identity, so it goes by its id. dogwood is a peer's.
+  const pinned = new Set(["id-cedar", "repo/dogwood", "repo/alder"]);
+  for (const sortMode of ["manual", "frequent"] as const)
+    assert.deepEqual(outline(treeRows({ sortMode, pinned })), [
+      "alder",
+      "cedar",
+      "dogwood",
+      "---",
+      "birch",
+    ]);
+  assert.deepEqual(
+    outline(treeRows({ sortMode: "manual", pinned, filter: PEER })),
+    ["alder", "dogwood", "---", "birch"],
+  );
+});
+
+it("pinned: lead the owners, which stay put", () => {
+  // zed's only project is pinned, and acme keeps the lead.
+  const pinned = new Set(["repo/birch", "repo/dogwood"]);
+  const rows = (shut: ReadonlySet<string>) =>
+    outline(
+      treeRows({
+        sortMode: "manual",
+        stored: ownedLocal,
+        peers: ownedRemote,
+        shut,
+        pinned,
+      }),
+    );
+  assert.deepEqual(rows(new Set()), [
+    "birch",
+    "dogwood",
+    "---",
+    "# acme",
+    "alder",
+    "# No remote",
+    "cedar",
+  ]);
+  // A shut owner keeps its pinned projects out.
+  assert.deepEqual(rows(new Set(["github.com/acme"])), [
+    "birch",
+    "dogwood",
+    "---",
+    "# acme (1)",
+    "# No remote",
+    "cedar",
+  ]);
+});
+
+it("pinned: all of them pinned leaves no gap", () => {
+  const pinned = new Set(["repo/alder", "repo/birch", "id-cedar"]);
+  assert.deepEqual(
+    outline(treeRows({ sortMode: "manual", pinned, peers: [] })),
+    ["alder", "birch", "cedar"],
+  );
 });

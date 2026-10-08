@@ -12,3 +12,9 @@
 // EHOSTUNREACH and nothing tells the user why.
 export const LOCAL_NETWORK_USAGE_DESCRIPTION =
   "Shigoto no Mori connects directly to your other devices on this network to show and manage their worktrees.";
+
+// The Automation prompt's sentence, shown the first time a terminal
+// tool (Claude Code, Neovim, …) opens in the user's terminal, which
+// the CLI drives over AppleScript (cli/terminals.go).
+export const APPLE_EVENTS_USAGE_DESCRIPTION =
+  "Shigoto no Mori opens terminal tools like Claude Code in a new window of your terminal.";

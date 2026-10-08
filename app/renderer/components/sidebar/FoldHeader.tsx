@@ -1,5 +1,6 @@
 import { ChevronDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface FoldHeaderProps {
   label: string;
@@ -12,7 +13,8 @@ interface FoldHeaderProps {
 // A header that folds the rows under it: label, hairline rule, chevron.
 // Shut, the count stands for what it folds away. The inbox's shelves
 // (InboxShelfRow), the owners on the list of projects split by owner,
-// and a project's prefix groups all head their rows with it.
+// and the prefix groups, a project's and the inbox's, all head their
+// rows with it.
 export function FoldHeader({
   label,
   count,
@@ -20,6 +22,7 @@ export function FoldHeader({
   onToggle,
   Icon,
 }: FoldHeaderProps) {
+  const text = expanded ? label : `${label} (${count})`;
   return (
     <button
       type="button"
@@ -28,9 +31,9 @@ export function FoldHeader({
       className="mt-2 flex w-full items-center gap-2 px-2 py-1 text-left text-muted-foreground transition-colors hover:text-foreground"
     >
       {Icon && <Icon aria-hidden className="size-3 shrink-0" />}
-      <span className="min-w-0 truncate text-2xs font-medium">
-        {expanded ? label : `${label} (${count})`}
-      </span>
+      <SimpleTooltip whenTruncated tip={text}>
+        <span className="min-w-0 truncate text-2xs font-medium">{text}</span>
+      </SimpleTooltip>
       <span aria-hidden className="h-px flex-1 bg-border" />
       <ChevronDown
         aria-hidden

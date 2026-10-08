@@ -1,5 +1,6 @@
 [
   "git:sweep",
+  "githubCli:owners",
   "githubCli:projectPullRequests",
   "githubCli:pullRequestCandidates",
   "githubCli:pullRequestDiff",

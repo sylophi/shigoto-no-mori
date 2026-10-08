@@ -48,7 +48,6 @@ import { PeerTransferActions } from "./PeerTransferActions";
 import { FilesButton } from "./FilesButton";
 import { PortsSection } from "./ports/PortsSection";
 import { RemoteTransferActions } from "./RemoteWorktreeActions";
-import { PullRequestHeader } from "./pullRequests/PullRequestHeader";
 import { PullRequestLead } from "./pullRequests/PullRequestLead";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
@@ -57,7 +56,7 @@ import {
   type WorktreeFooterActions,
   type WorktreeFooterState,
 } from "./WorktreeDetailFooter";
-import { BranchTitle } from "./branch/BranchTitle";
+import { WorktreeHeader } from "./WorktreeHeader";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { CommitsSection } from "./commits/CommitsSection";
 import { DescriptionSection } from "./DescriptionSection";
@@ -272,20 +271,11 @@ export function WorktreeDetailInner({
         <div className="flex min-w-0 items-center gap-3">
           <ResidentFace resident={resident} party={party !== null} />
           <div className="min-w-0 flex-1">
-            {pullRequest ? (
-              <PullRequestHeader worktree={worktree} pr={pullRequest} />
-            ) : (
-              <>
-                {title !== null && (
-                  <SimpleTooltip whenTruncated tip={title}>
-                    <h1 className="mb-0.5 line-clamp-2 text-2xl font-medium tracking-tight wrap-anywhere">
-                      {title}
-                    </h1>
-                  </SimpleTooltip>
-                )}
-                <BranchTitle worktree={worktree} subtitle={title !== null} />
-              </>
-            )}
+            <WorktreeHeader
+              worktree={worktree}
+              title={title}
+              pr={pullRequest}
+            />
           </div>
         </div>
         <MirrorPill worktree={worktree} />
@@ -302,22 +292,21 @@ export function WorktreeDetailInner({
         aria-disabled={locked}
       >
         <div className="flex flex-col gap-10 phone:gap-8">
-          {/* Under a PR's header, what the work is and what to do about
-              the PR lead the page. */}
-          {pullRequest && (
-            <PullRequestLead worktree={worktree} description={description} />
-          )}
+          {/* What the work is leads the page, and under a PR's header
+              what to do about the PR. Hidden while neither has come,
+              so it takes no gap. */}
+          <div className="space-y-5 empty:hidden">
+            {description !== null && (
+              <DescriptionSection
+                // Folded again for another worktree or a new text.
+                key={`${worktree.id}:${description}`}
+                description={description}
+              />
+            )}
+            {pullRequest && <PullRequestLead worktree={worktree} />}
+          </div>
 
           <LaunchSection worktree={worktree} />
-
-          {/* Under the launchers, so a description that arrives with
-              the PR lookup doesn't move the buttons people reach for. */}
-          {!pullRequest && description !== null && (
-            <DescriptionSection
-              key={`${worktree.id}:${description}`}
-              description={description}
-            />
-          )}
 
           {!pullRequest && <PullRequestSection worktree={worktree} />}
 

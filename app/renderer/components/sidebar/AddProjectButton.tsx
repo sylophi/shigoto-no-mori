@@ -1,6 +1,5 @@
 import { FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { hasLocalHost } from "@/lib/localHost";
 import { PROJECT_ACTION_HOOKS, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
@@ -15,8 +14,6 @@ import { PROJECT_ACTION_HOOKS, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 // ⌘N is a native menu accelerator, so only the desktop app has it.
 export function AddProjectButton({ outline = false }: { outline?: boolean }) {
   const { openAddProject } = useOverlays();
-  // aria-keyshortcuts restores the AT-audible shortcut hints the old
-  // native titles carried; Base UI tooltips are visual-only.
   const props = {
     type: "button",
     onClick: () => openAddProject(),
@@ -24,21 +21,17 @@ export function AddProjectButton({ outline = false }: { outline?: boolean }) {
     "aria-keyshortcuts": hasLocalHost ? "Meta+N" : undefined,
   } as const;
   const icon = <FolderPlus className="size-3.5" />;
-  return (
-    <SimpleTooltip tip={hasLocalHost ? "Add project (⌘N)" : "Add project"}>
-      {outline ? (
-        <Button variant="outline" size="icon-sm" {...props}>
-          {icon}
-        </Button>
-      ) : (
-        <button
-          className={SIDEBAR_ICON_BUTTON}
-          {...PROJECT_ACTION_HOOKS}
-          {...props}
-        >
-          {icon}
-        </button>
-      )}
-    </SimpleTooltip>
+  return outline ? (
+    <Button variant="outline" size="icon-sm" {...props}>
+      {icon}
+    </Button>
+  ) : (
+    <button
+      className={SIDEBAR_ICON_BUTTON}
+      {...PROJECT_ACTION_HOOKS}
+      {...props}
+    >
+      {icon}
+    </button>
   );
 }

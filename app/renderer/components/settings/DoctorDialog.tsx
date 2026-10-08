@@ -45,6 +45,7 @@ import {
   FlowFooter,
   FlowHeader,
 } from "../worktreeDetail/flow/FlowChrome";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // `sm doctor` for the scoped device, behind Settings' health check
 // button: the same checklist a terminal prints (install, data folder,
@@ -253,9 +254,11 @@ function ProblemCluster({ cluster }: { cluster: Cluster }) {
     <li className="space-y-1.5 px-3 py-2.5">
       <div className="flex items-center gap-2">
         <StatusIcon status={failed ? "fail" : "warn"} />
-        <span className="min-w-0 truncate text-sm font-medium">
-          {cluster.title}
-        </span>
+        <SimpleTooltip whenTruncated tip={cluster.title}>
+          <span className="min-w-0 truncate text-sm font-medium">
+            {cluster.title}
+          </span>
+        </SimpleTooltip>
         {cluster.findings.length > 1 && (
           <span className="text-xs text-muted-foreground">
             {pluralize(cluster.findings.length, "problem")}
@@ -334,7 +337,9 @@ function PassingList({ checks }: { checks: DoctorFinding[] }) {
                     <CircleCheck
                       className={cn("size-3 shrink-0", TONE_TEXT.emerald)}
                     />
-                    <span className="truncate">{check.title}</span>
+                    <SimpleTooltip whenTruncated tip={check.title}>
+                      <span className="truncate">{check.title}</span>
+                    </SimpleTooltip>
                   </dt>
                   <dd className="min-w-0 break-words text-muted-foreground select-text">
                     <CliText text={check.detail} />
@@ -351,11 +356,14 @@ function PassingList({ checks }: { checks: DoctorFinding[] }) {
 function StatusIcon({ status }: { status: string }) {
   const failed = status === "fail";
   const Icon = failed ? CircleAlert : AlertTriangle;
+  const label = failed ? "Failed" : "Warning";
   return (
-    <Icon
-      aria-label={failed ? "Failed" : "Warning"}
-      className={cn("size-4 shrink-0", TONE_TEXT[statusTone(status)])}
-    />
+    <SimpleTooltip tip={label}>
+      <Icon
+        aria-label={label}
+        className={cn("size-4 shrink-0", TONE_TEXT[statusTone(status)])}
+      />
+    </SimpleTooltip>
   );
 }
 

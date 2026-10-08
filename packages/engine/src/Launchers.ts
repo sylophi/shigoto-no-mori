@@ -1,5 +1,6 @@
 import { WEB_GITHUB_ID } from "@shigomori/contracts/schemas/launchers";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -13,13 +14,18 @@ import * as Usage from "./Usage.ts";
 
 // One app the launcher row knows, as the catalog lists it: found by its
 // bundle name in the app folders (or "__finder__", always there), or by
-// its command line tool on PATH. A deep link with {path} opens it.
+// its command line tool on PATH. A deep link with {path} opens it, and
+// openArgs are the launch arguments of one that takes the folder that
+// way. A terminal tool is the command line inTerminal runs in the
+// user's terminal, found by its first word on PATH.
 type CatalogApp = {
   readonly id: string;
   readonly label: string;
-  readonly bundleNames: ReadonlyArray<string>;
+  readonly bundleNames?: ReadonlyArray<string>;
   readonly cli?: string;
   readonly deepLink?: string;
+  readonly openArgs?: ReadonlyArray<string>;
+  readonly inTerminal?: string;
 };
 
 export type CatalogEntry = {
@@ -152,6 +158,9 @@ const make = Effect.gen(function* () {
   const git = yield* Git.Git;
   const usage = yield* Usage.Usage;
   const appFolders = appFoldersOf(path, home);
+  // The provider the engine was built with, not the caller's: a fiber
+  // with none set reads a copy of the environment taken once.
+  const configProvider = yield* ConfigProvider.ConfigProvider;
 
   const exists = (file: string) =>
     fs.exists(file).pipe(Effect.orElseSucceed(() => false));
@@ -163,6 +172,7 @@ const make = Effect.gen(function* () {
       const searchPath = yield* Config.String("PATH").pipe(
         Config.withDefault(""),
         Effect.orElseSucceed(() => ""),
+        Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
       );
       for (const dir of searchPath.split(":")) {
         if (dir === "") continue;
@@ -179,13 +189,15 @@ const make = Effect.gen(function* () {
 
   const available = (app: CatalogApp) =>
     Effect.gen(function* () {
-      for (const bundle of app.bundleNames) {
+      for (const bundle of app.bundleNames ?? []) {
         if (bundle === "__finder__") return true;
         for (const folder of appFolders) {
           if (yield* exists(path.join(folder, bundle))) return true;
         }
       }
-      return app.cli !== undefined && (yield* onPath(app.cli));
+      if (app.cli !== undefined && (yield* onPath(app.cli))) return true;
+      const tool = app.inTerminal?.trim().split(/\s+/)[0];
+      return tool !== undefined && (yield* onPath(tool));
     });
 
   const listCatalog = Effect.forEach(

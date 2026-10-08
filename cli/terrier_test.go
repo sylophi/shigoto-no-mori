@@ -53,3 +53,18 @@ func TestAppendTerrierProjectsNoListings(t *testing.T) {
 		t.Errorf("appendTerrierProjects with no listings = %+v, want the registry untouched", merged)
 	}
 }
+
+func TestParseTerrierListings(t *testing.T) {
+	got, err := parseTerrierListings([]byte(`{"projects":[{"path":"/repos/a","slug":"o/a"},{"path":"relative"}],"extra":1}`))
+	if err != nil {
+		t.Fatalf("parseTerrierListings: %v", err)
+	}
+	if want := []terrierListing{{Path: "/repos/a"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("parseTerrierListings = %+v, want %+v", got, want)
+	}
+	for _, changed := range []string{`{"repos":[]}`, `{"projects":[{"dir":"/repos/a"}]}`, `[]`, `not json`} {
+		if _, err := parseTerrierListings([]byte(changed)); err == nil {
+			t.Errorf("parseTerrierListings(%s) succeeded, want an error", changed)
+		}
+	}
+}

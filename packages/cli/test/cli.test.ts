@@ -266,9 +266,13 @@ describe("projects", () => {
 
   it("warns when terrier can't be read", async () => {
     projects();
-    box.fakeBin("terrier", "echo v0.2.0");
     box.write("config.json", { terrier: true });
-    await same("projects", "list");
+    // Not JSON, JSON in another shape, and a failed run.
+    for (const answer of ["echo v0.2.0", `echo '{"repos":[]}'`, "exit 3"]) {
+      box.fakeBin("terrier", answer);
+      // oxlint-disable-next-line no-await-in-loop -- one terrier at a time
+      await same("projects", "list");
+    }
     await same("--json", "projects", "list");
   });
 
