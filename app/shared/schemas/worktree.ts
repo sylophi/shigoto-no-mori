@@ -128,6 +128,11 @@ export const WorktreeSchema = z.object({
   // Meant for the primary checkout and other branches only ever read
   // here.
   autoPull: z.boolean(),
+  // Agent-driven "come back later" flag (`sm agent-working`): an agent
+  // is working here, so once agents are allowed to (isAgentWorking) the
+  // sidebar files it on its own shelf until the agent clears it and
+  // hands the work back.
+  agentWorking: z.boolean(),
   // What `sm describe` set (WorktreeDescriptionSchema): the work's
   // name and summary, until a pull request's take their place
   // (renderer/lib/worktreeTitle.ts). Absent when unset.
@@ -153,6 +158,7 @@ export const WorktreeIdentitySchema = WorktreeSchema.pick({
   detached: true,
   shelved: true,
   autoPull: true,
+  agentWorking: true,
   primaryRef: true,
   primaryBranch: true,
 });
@@ -257,6 +263,16 @@ export function isManagedWorktree(
   worktree: Pick<Worktree, "isPrimary" | "isExternal">,
 ): boolean {
   return !worktree.isPrimary && !worktree.isExternal;
+}
+
+// Whether the agent-working mark counts: only once the window allows
+// agents to mark worktrees as working (useAllowAgentWorking). Otherwise
+// the mark is ignored everywhere.
+export function isAgentWorking(
+  worktree: Pick<Worktree, "agentWorking">,
+  allowAgentWorking: boolean,
+): boolean {
+  return allowAgentWorking && worktree.agentWorking;
 }
 
 // Whether the worktree has a data file (title, custom ports) of its own.
@@ -408,6 +424,10 @@ export const SetShelvedPayloadSchema = WorktreeScopedPayloadSchema.extend({
 
 export const SetAutoPullPayloadSchema = WorktreeScopedPayloadSchema.extend({
   autoPull: z.boolean(),
+});
+
+export const SetAgentWorkingPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  agentWorking: z.boolean(),
 });
 
 export const CheckoutBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({

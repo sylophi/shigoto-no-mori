@@ -399,7 +399,7 @@ export function useIsDeletingWorktree(
 // accurate without an N-git-call round trip), and a rollback to truth
 // on error. Optimistic writes change a row and never add or drop one:
 // the villager news reads those as moves (lib/villagers/moves.ts).
-function useSetWorktreeFlag<K extends "shelved" | "autoPull">(
+function useSetWorktreeFlag<K extends "shelved" | "autoPull" | "agentWorking">(
   field: K,
   call: (
     api: HostApi,
@@ -451,6 +451,14 @@ export function useSetShelved() {
     "shelved",
     (api, input) => api.worktrees.setShelved(input),
     "Couldn't update shelved state",
+  );
+}
+
+export function useSetAgentWorking() {
+  return useSetWorktreeFlag(
+    "agentWorking",
+    (api, input) => api.worktrees.setAgentWorking(input),
+    "Couldn't clear agent working",
   );
 }
 

@@ -63,6 +63,7 @@ import {
   doneViaCli,
   moveViaCli,
   setAutoPullViaCli,
+  setAgentWorkingViaCli,
   setShelvedViaCli,
 } from "../cliDelegate";
 
@@ -283,6 +284,13 @@ export const worktreesHandlers: Handlers<
       await findProjectOrThrow(projectId),
       worktreeId,
       autoPull,
+    ),
+
+  setAgentWorking: async ({ projectId, worktreeId, agentWorking }) =>
+    setAgentWorkingViaCli(
+      await findProjectOrThrow(projectId),
+      worktreeId,
+      agentWorking,
     ),
 
   renameBranch: (input) =>

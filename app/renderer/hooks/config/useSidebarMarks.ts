@@ -22,6 +22,8 @@ const markTerrierProjects = (config: ClientConfig) =>
   config.markTerrierProjects === true;
 const showDeviceBadges = (config: ClientConfig) =>
   config.showDeviceBadges !== false;
+const allowAgentWorking = (config: ClientConfig) =>
+  config.allowAgentWorking === true;
 
 // Terrier's paw on the projects it lists. Off unless switched on, and
 // then shown only where terrierMarksHere holds too.
@@ -50,4 +52,11 @@ export function useTerrierMarksHere(): boolean {
 // switched off.
 export function useShowDeviceBadges(): boolean {
   return useClientFlag(showDeviceBadges);
+}
+
+// Whether agents may mark worktrees as working (`sm agent-working`),
+// which then files them on their own shelf (isAgentWorking). Off unless
+// switched on.
+export function useAllowAgentWorking(): boolean {
+  return useClientFlag(allowAgentWorking);
 }

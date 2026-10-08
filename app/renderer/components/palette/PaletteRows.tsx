@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
+import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { DeviceBadge, MirrorBadge } from "@/components/sidebar/DeviceBadge";
 import { PullRequestPill } from "@/components/sidebar/PullRequestPill";
@@ -12,7 +13,11 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import { worktreeTitle } from "@/lib/worktreeTitle";
-import { worktreeLastActivityAt, type Project } from "@shared/schemas";
+import {
+  isAgentWorking,
+  worktreeLastActivityAt,
+  type Project,
+} from "@shared/schemas";
 import type { PaletteEntry, PaletteProject } from "./buildPaletteEntries";
 
 // Everything the list can hold: the worktrees, the projects a query
@@ -64,14 +69,17 @@ function WorktreeRow({
   now: number;
 }) {
   const { worktree, project, device, mirror, pr } = entry;
+  const allowAgentWorking = useAllowAgentWorking();
   const activeAt = worktreeLastActivityAt(worktree);
   // The sidebar's line: what the work is called, the branch without.
   const title = worktreeTitle(worktree, pr);
   const status = worktree.mergedIntoPrimary
     ? "merged"
-    : worktree.shelved
-      ? "shelved"
-      : undefined;
+    : isAgentWorking(worktree, allowAgentWorking)
+      ? "agent working"
+      : worktree.shelved
+        ? "shelved"
+        : undefined;
   return (
     <RowLayout
       dim={device !== undefined && !device.reachable}

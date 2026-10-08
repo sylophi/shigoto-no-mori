@@ -414,6 +414,12 @@ export const ClientConfigSchema = z.object({
   // (or is mirrored with) on its row. On by default (absent = on),
   // explicit `false` hides them, on every device this window shows.
   showDeviceBadges: z.boolean().optional(),
+  // Allow agents to mark worktrees as working: file the worktrees an
+  // agent marked with `sm agent-working` on their own folded shelf, on
+  // every device this window shows, and offer to clear the mark on the
+  // worktree page. Off by default (absent = off), explicit `true` is
+  // the opt-in. Off, the mark is ignored.
+  allowAgentWorking: z.boolean().optional(),
   // Pause the doubutsu wallpaper drift while this machine runs on
   // battery, the same pause an unfocused window gets. On by default
   // (absent = on), explicit `false` keeps it drifting on battery.

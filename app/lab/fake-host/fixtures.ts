@@ -138,6 +138,7 @@ export function worktree(
     detached: false,
     shelved: false,
     autoPull: false,
+    agentWorking: false,
     ...base,
   };
 }

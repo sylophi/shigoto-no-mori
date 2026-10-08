@@ -92,9 +92,9 @@ export function WorktreeEntry({
         "hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring data-popup-open:bg-accent/60",
         isSelected && "bg-accent text-accent-foreground",
         // One fade, the strongest that applies: a delete in flight, then
-        // an unreachable device's last known state, then a row the user
-        // filed away, shelved or behind a hidden prefix. Merged is git's
-        // call, not theirs, so it keeps full strength.
+        // an unreachable device's last known state, then a row filed
+        // away: agent working, shelved or behind a hidden prefix. Merged
+        // is git's call, not theirs, so it keeps full strength.
         isDeleting
           ? "opacity-50"
           : device && !device.reachable
@@ -170,9 +170,9 @@ export function WorktreeEntry({
   );
 }
 
-// The worktree's own name, led by its kind glyph. Shelved is the one
-// kind left out: it would restate the shelf the row already sits
-// under. The primary's house glyph stays, since it's what tells the
+// The worktree's own name, led by its kind glyph when it's the primary
+// or external. A shelf kind (agent working, shelved) would restate the
+// shelf the row already sits under. The primary's house glyph stays, since it's what tells the
 // root apart from a worktree named after the project. Under Village
 // life, the villager whose home this is sits beside the name, as their
 // face sits beside the title on the worktree page. It's decoration
@@ -181,7 +181,7 @@ function EntryName({ worktree }: { worktree: Worktree }) {
   const resident = useResident(worktree);
   return (
     <>
-      {!worktree.shelved && (
+      {(worktree.isPrimary || worktree.isExternal) && (
         <WorktreeKindIcon worktree={worktree} showTooltip={false} />
       )}
       {resident?.face && (

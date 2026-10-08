@@ -257,16 +257,17 @@ type scriptsJSON struct {
 // so a --json consumer can read a status card and a list row with the
 // same code.
 type statusJSON struct {
-	ID          string `json:"id"`
-	ProjectID   string `json:"projectId"`
-	ProjectName string `json:"projectName"`
-	Name        string `json:"name"`
-	Branch      string `json:"branch"`
-	Path        string `json:"path"`
-	IsPrimary   bool   `json:"isPrimary"`
-	IsExternal  bool   `json:"isExternal"`
-	Detached    bool   `json:"detached"`
-	Shelved     bool   `json:"shelved"`
+	ID           string `json:"id"`
+	ProjectID    string `json:"projectId"`
+	ProjectName  string `json:"projectName"`
+	Name         string `json:"name"`
+	Branch       string `json:"branch"`
+	Path         string `json:"path"`
+	IsPrimary    bool   `json:"isPrimary"`
+	IsExternal   bool   `json:"isExternal"`
+	Detached     bool   `json:"detached"`
+	Shelved      bool   `json:"shelved"`
+	AgentWorking bool   `json:"agentWorking"`
 	// What `describe` set, as on a `list` row.
 	Title       string        `json:"title,omitempty"`
 	Description string        `json:"description,omitempty"`
@@ -418,7 +419,7 @@ func statusCard(status statusJSON, accent string) string {
 		project = codeOut(project, accent)
 	}
 	header := project + dimOut("/") + title
-	flags := worktreeFlags(status.IsPrimary, status.IsExternal, status.Shelved, status.AutoPull)
+	flags := worktreeFlags(status.IsPrimary, status.IsExternal, status.Shelved, status.AutoPull, status.AgentWorking)
 	if status.Detached {
 		flags = append(flags, "detached HEAD")
 	}
@@ -558,18 +559,19 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 	wg.Wait()
 
 	status := statusJSON{
-		ID:          id.ID,
-		ProjectID:   id.ProjectID,
-		ProjectName: proj.Name,
-		Name:        id.Name,
-		Branch:      id.Branch,
-		Path:        id.Path,
-		IsPrimary:   id.IsPrimary,
-		IsExternal:  id.IsExternal,
-		Detached:    id.Detached,
-		Shelved:     shelvedFlag(id, build),
-		Title:       desc.Title,
-		Description: desc.Description,
+		ID:           id.ID,
+		ProjectID:    id.ProjectID,
+		ProjectName:  proj.Name,
+		Name:         id.Name,
+		Branch:       id.Branch,
+		Path:         id.Path,
+		IsPrimary:    id.IsPrimary,
+		IsExternal:   id.IsExternal,
+		Detached:     id.Detached,
+		Shelved:      shelvedFlag(id, build),
+		AgentWorking: agentWorkingFlag(id, build),
+		Title:        desc.Title,
+		Description:  desc.Description,
 		Git: gitStatusJSON{
 			Base:         base,
 			changeCounts: counts,
