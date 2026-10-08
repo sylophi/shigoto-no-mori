@@ -1006,8 +1006,10 @@ const make = Effect.gen(function* () {
               for (const entry of entries.toSorted((a, b) =>
                 a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
               )) {
-                // A folder the walk couldn't read may hold what must go.
+                // A unit that never landed has nothing to prune. A folder
+                // the walk couldn't read may hold what must go.
                 if (Darwin.isFailed(entry)) {
+                  if (entry.error.code === "ENOENT") continue;
                   return Effect.fail(entry.error);
                 }
                 const rel = entry.path === "." ? unit : `${unit}/${entry.path}`;
