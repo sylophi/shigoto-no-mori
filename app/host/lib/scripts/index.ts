@@ -8,7 +8,7 @@
 // The spawn/signal mechanics live in ./process.ts. This file only
 // runs the SIGTERM -> grace -> SIGKILL escalation over them.
 //
-// On app quit (see index.ts) we kill every running script the same way
+// On app quit (main/hostLayer.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";

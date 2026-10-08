@@ -160,9 +160,8 @@ const directWsServer = createWsServerBinding({
 // re-provisions, a stopped listener stops the child), and sign-out, an
 // account switch and directConnections off land here as
 // reconcile(null) through the same path. Quit alone calls stop() (the
-// runner's terminal latch, main/index.ts before-quit via
-// stopDirectHost). The connector token stays inside the runner, never
-// here.
+// runner's terminal latch, via stopDirectHost in main/hostLayer.ts).
+// The connector token stays inside the runner, never here.
 const tunnelRunner = createCloudflaredRunner({
   // Resolved fresh per start attempt: the probe is one bounded
   // execFile, already rate-limited by the runner's ladder and its
@@ -474,8 +473,6 @@ export async function refreshHubConnection(): Promise<void> {
   await refreshDirectHost();
 }
 
-// Teardown for before-quit: closes the hub socket so the DO sees a
-// clean departure instead of waiting out a dead connection.
 // Tickets are account-scoped where the listener is not: the account
 // change restarts the listener (dropping every authed socket), and
 // this drops what could still auth one. Called from the account
@@ -484,6 +481,8 @@ export function clearDirectTickets(): void {
   directTickets.clear();
 }
 
+// Closes the hub socket at quit, so the DO sees a clean departure
+// instead of waiting out a dead connection.
 export function stopHubConnection(): Promise<void> {
   return hubServer.stop();
 }
@@ -499,7 +498,7 @@ export function probeRemoteConnections(): void {
   directPlane.probe();
 }
 
-// Teardown for before-quit, alongside stopHubConnection: closes the
+// Quit's teardown, alongside stopHubConnection: closes the
 // direct listener so connected peers see a clean going-away instead of
 // a dead socket, AND the cached outbound direct sessions, or each
 // remote host would keep a dead socket in its per-device slot and land
