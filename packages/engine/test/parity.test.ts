@@ -7,30 +7,54 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  copyFileSync,
   linkSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { createServer, type Server } from "node:http";
+import { dirname, join } from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  it,
+} from "vitest";
 import * as Config from "../src/Config.ts";
+import { errorDocument } from "../src/errorDocument.ts";
+import type { Flavor } from "../src/flavor.ts";
 import type * as GitHub from "../src/GitHub.ts";
 import * as Landing from "../src/Landing.ts";
 import * as Hygiene from "../src/Hygiene.ts";
 import * as Icons from "../src/Icons.ts";
 import * as Launchers from "../src/Launchers.ts";
+import * as Paths from "../src/Paths.ts";
 import * as Registry from "../src/Registry.ts";
 import type { RegisteredProject } from "../src/Registry.ts";
 import * as Scripts from "../src/Scripts.ts";
+import * as Updater from "../src/Updater.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import * as Worktrees from "../src/Worktrees.ts";
-import { type Engine, goSm, type Sandbox, sandbox } from "./lib/sandbox.ts";
+import {
+  type Engine,
+  goSm,
+  goSmRelease,
+  type Sandbox,
+  sandbox,
+} from "./lib/sandbox.ts";
 
 // A cold build of cli/ takes longer than a test's timeout.
 beforeAll(() => {
@@ -2138,5 +2162,286 @@ describe("projects reorder", () => {
       () => reorder(["G", "A"]),
       list,
     ]);
+  });
+});
+
+const check = (
+  updater: Updater.Updater["Service"],
+  input: Updater.UpdateInput,
+) => updater.check(input);
+
+describe("update", () => {
+  // The two feeds both sides ask, a local stand-in passed as Go's
+  // --feed-url and --releases-url. Each case says what each path answers.
+  type Served = {
+    readonly status: number;
+    readonly body?: unknown;
+    readonly headers?: Record<string, string>;
+  };
+  let served: Record<string, Served> = {};
+  let server: Server;
+  let base = "";
+
+  beforeAll(async () => {
+    goSmRelease("1.0.0");
+    goSmRelease("2.0.0-beta.2");
+    server = createServer((request, response) => {
+      const answer = served[request.url ?? ""] ?? { status: 404 };
+      response.writeHead(answer.status, {
+        "content-type": "application/json",
+        ...answer.headers,
+      });
+      response.end(
+        answer.body === undefined ? undefined : JSON.stringify(answer.body),
+      );
+    });
+    await new Promise<void>((listening) =>
+      server.listen(0, "127.0.0.1", listening),
+    );
+    const address = server.address();
+    assert.ok(address !== null && typeof address === "object");
+    base = `http://127.0.0.1:${address.port}`;
+  }, 600_000);
+  afterAll(() => {
+    server.close();
+  });
+  beforeEach(() => {
+    served = {};
+  });
+
+  // The app installed in the sandbox, with `version`'s Go sm inside it
+  // where a release puts the terminal command.
+  const installed = (version: string) => {
+    const binary = join(
+      box.home,
+      "Applications",
+      "Shigoto no Mori.app",
+      "Contents",
+      "Resources",
+      "sm",
+    );
+    mkdirSync(dirname(binary), { recursive: true });
+    copyFileSync(goSmRelease(version), binary);
+    return binary;
+  };
+
+  type Build = {
+    readonly flavor: Flavor;
+    readonly version: string;
+    readonly binary: string;
+  };
+
+  // A mode run on each side: Go's documents (one, with no download) and
+  // the engine's answer, or its failure as the terminal prints it.
+  // A prerelease build asks the release list only without a feed
+  // stand-in, so `feed` leaves that one out.
+  const sameUpdate = async (
+    build: Build,
+    args: ReadonlyArray<string>,
+    run: (
+      updater: Updater.Updater["Service"],
+      input: Updater.UpdateInput,
+    ) => Effect.Effect<unknown, unknown>,
+    feed = true,
+  ) => {
+    const flags = [
+      ...(feed ? ["--feed-url", `${base}/feed`] : []),
+      "--releases-url",
+      `${base}/list`,
+    ];
+    const go = await box.runAt(build.binary, "go", box.home, [
+      "--json",
+      "update",
+      ...args,
+      ...flags,
+    ]);
+    const input: Updater.UpdateInput = {
+      running: {
+        version: build.version,
+        arch: process.arch,
+        executable: build.binary,
+        pid: process.pid,
+      },
+      feedUrl: feed ? `${base}/feed` : undefined,
+      releasesUrl: `${base}/list`,
+    };
+    const engine = await Effect.runPromise(
+      Effect.flatMap(Updater.Updater, (updater) => run(updater, input)).pipe(
+        Effect.match({
+          onSuccess: (doc) => doc,
+          onFailure: (error) => ({ ok: false, ...errorDocument(error) }),
+        }),
+        Effect.provide(
+          Updater.layer(build.flavor).pipe(
+            Layer.provideMerge(Paths.layer("prod")),
+            Layer.provide(FetchHttpClient.layer),
+            Layer.provide(NodeServices.layer),
+            Layer.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({
+                  env: {
+                    HOME: box.home,
+                    SHIGOMORI_DATA_DIR: box.side("engine"),
+                  },
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    assert.equal(go.docs.length, 1, go.stderr);
+    assert.deepStrictEqual(engine, go.doc);
+    return go.doc;
+  };
+
+  const release = (version: string): Build => ({
+    flavor: "prod",
+    version,
+    binary: installed(version),
+  });
+
+  const feedAnswers = (version: string) => ({
+    status: 200,
+    body: {
+      url: `${base}/zip`,
+      name: `v${version}`,
+      notes: `notes for ${version}`,
+      pub_date: "Tue, 15 Sep 2026 12:00:00 -0700",
+    },
+  });
+
+  it("refuses in a dev build", async () => {
+    const dev: Build = { flavor: "dev", version: "dev", binary: goSm() };
+    await sameUpdate(dev, ["--check"], (u, input) => u.check(input));
+    await sameUpdate(dev, ["--stage"], (u, input) => u.stage(input));
+    await sameUpdate(dev, [], (u, input) => u.update(input));
+  });
+
+  it("checks against the update server", async () => {
+    const build = release("1.0.0");
+    served["/feed"] = { status: 204 };
+    await sameUpdate(build, ["--check"], check);
+    served["/feed"] = feedAnswers("1.2.0");
+    await sameUpdate(build, ["--check"], check);
+    served["/feed"] = { status: 500 };
+    await sameUpdate(build, ["--check"], check);
+    served["/feed"] = { status: 200, body: { name: "v1.2.0" } };
+    await sameUpdate(build, ["--check"], check);
+  });
+
+  it("stages nothing when up to date, and clears what a confirmed answer outdates", async () => {
+    box.write("updates/staged/manifest.json", {
+      version: "0.9.0",
+      bundleName: "Shigoto no Mori.app",
+    });
+    box.write("updates/staged/Shigoto no Mori.app/Contents/info.json", {});
+    const build = release("1.0.0");
+    served["/feed"] = { status: 204 };
+    assert.deepEqual(
+      await sameUpdate(build, ["--stage"], (u, input) => u.stage(input)),
+      { ok: true, status: "up-to-date", version: "1.0.0" },
+    );
+    for (const side of ["go", "engine"]) {
+      assert.deepEqual(readdirSync(join(box.side(side), "updates")), [], side);
+    }
+    // The full update stops at the same answer.
+    await sameUpdate(build, [], (u, input) => u.update(input));
+  });
+
+  it("answers with the bundle already staged for the release", async () => {
+    box.write("updates/staged/manifest.json", {
+      version: "1.2.0",
+      bundleName: "Shigoto no Mori.app",
+      notes: "notes for 1.2.0",
+      releaseDate: "2026-09-15T19:00:00Z",
+    });
+    box.write("updates/staged/Shigoto no Mori.app/Contents/info.json", {});
+    served["/feed"] = feedAnswers("1.2.0");
+    assert.deepEqual(
+      await sameUpdate(release("1.0.0"), ["--stage"], (u, input) =>
+        u.stage(input),
+      ),
+      {
+        ok: true,
+        status: "staged",
+        version: "1.2.0",
+        installed: "1.0.0",
+        notes: "notes for 1.2.0",
+        releaseDate: "2026-09-15T19:00:00Z",
+      },
+    );
+  });
+
+  it("refuses outside an app bundle, and while another update runs", async () => {
+    served["/feed"] = { status: 204 };
+    const stray: Build = {
+      flavor: "prod",
+      version: "1.0.0",
+      binary: goSmRelease("1.0.0"),
+    };
+    await sameUpdate(stray, ["--stage"], (u, input) => u.stage(input));
+    // The sides exist by now, so each gets the lock in its own data dir.
+    for (const side of ["go", "engine"]) {
+      mkdirSync(join(box.side(side), "updates"), { recursive: true });
+      writeFileSync(
+        join(box.side(side), "updates", "staging.pid"),
+        `${process.pid}\n`,
+      );
+    }
+    const doc = await sameUpdate(release("1.0.0"), ["--stage"], (u, input) =>
+      u.stage(input),
+    );
+    assert.deepEqual(doc, {
+      ok: false,
+      error: `Another update is already in progress (pid ${process.pid}).`,
+      code: "update-in-progress",
+    });
+  });
+
+  it("follows a prerelease channel through the release list", async () => {
+    const build = release("2.0.0-beta.2");
+    const asset = (tag: string) => ({
+      tag_name: tag,
+      prerelease: true,
+      body: `notes for ${tag}`,
+      published_at: "2026-09-15T12:00:00Z",
+      assets: [
+        {
+          name: `Shigoto.no.Mori-darwin-${process.arch}-${tag.slice(1)}.zip`,
+          browser_download_url: `${base}/zip`,
+        },
+      ],
+    });
+    // GitHub's budget spent, and no copy to answer from.
+    const reset = Math.floor(Date.now() / 1000) + 30 * 60;
+    served["/list"] = {
+      status: 403,
+      headers: {
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-reset": String(reset),
+      },
+    };
+    await sameUpdate(build, ["--check"], check, false);
+    served["/list"] = {
+      status: 200,
+      body: [asset("v2.0.0-beta.3"), asset("v2.1.0-beta.1")],
+    };
+    await sameUpdate(build, ["--check"], check, false);
+    // Each side then answers from the copy the other one kept.
+    served["/list"] = { status: 500 };
+    const kept = (side: string) =>
+      join(box.side(side), "updates", "release-list.json");
+    const fromGo = readFileSync(kept("go"));
+    copyFileSync(kept("engine"), kept("go"));
+    writeFileSync(kept("engine"), fromGo);
+    assert.equal(
+      (
+        (await sameUpdate(build, ["--check"], check, false)) as {
+          version: string;
+        }
+      ).version,
+      "2.0.0-beta.3",
+    );
   });
 });
