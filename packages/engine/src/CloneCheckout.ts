@@ -37,6 +37,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Darwin from "./Darwin.ts";
 import * as Git from "./Git.ts";
+import { splitZ } from "./gitParse.ts";
 import {
   ancestors,
   blobBytes,
@@ -214,13 +215,6 @@ const sameConversions = (a: Conversions, b: Conversions) =>
   JSON.stringify(a.config) === JSON.stringify(b.config) &&
   JSON.stringify(a.sourceConfig) === JSON.stringify(b.sourceConfig);
 
-// The NUL-separated fields of `text`, the trailing empty ones dropped.
-const nulFields = (text: string) => {
-  const fields = text.split("\0");
-  while (fields.at(-1) === "") fields.pop();
-  return fields;
-};
-
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
   const darwin = yield* Darwin.Darwin;
@@ -253,24 +247,6 @@ const make = Effect.gen(function* () {
   );
 
   // lstat of many absolute paths in one helper call, by path.
-  const lstatAll = (files: ReadonlyArray<string>) =>
-    files.length === 0
-      ? Effect.succeed(new Map<string, Darwin.LstatEntry>())
-      : darwin
-          .lstat({ root: "/", paths: files.map((file) => file.slice(1)) })
-          .pipe(
-            Stream.runCollect,
-            Effect.map(
-              (entries) =>
-                new Map(
-                  entries.flatMap((entry) =>
-                    Darwin.isFailed(entry) ? [] : [[`/${entry.path}`, entry]],
-                  ),
-                ),
-            ),
-            Effect.orElseSucceed(() => new Map<string, Darwin.LstatEntry>()),
-          );
-
   // lstat of paths relative to a root, by relative path.
   const lstatUnder = (root: string, relative: ReadonlyArray<string>) =>
     relative.length === 0
@@ -287,6 +263,20 @@ const make = Effect.gen(function* () {
           ),
         );
 
+  // lstat of absolute paths, by path. Best effort: a path it can't answer
+  // for reads as absent.
+  const lstatAll = (files: ReadonlyArray<string>) =>
+    lstatUnder(
+      "/",
+      files.map((file) => file.slice(1)),
+    ).pipe(
+      Effect.map(
+        (found) =>
+          new Map([...found].map(([rel, entry]) => [`/${rel}`, entry])),
+      ),
+      Effect.orElseSucceed(() => new Map<string, Darwin.LstatEntry>()),
+    );
+
   const gitPath = (checkout: string, name: string) =>
     git
       .run(checkout, [
@@ -302,6 +292,12 @@ const make = Effect.gen(function* () {
       Effect.map((out) => Option.some(out.trim().toLowerCase())),
       // Unset reads as an exit code 1 with no output.
       Effect.orElseSucceed(() => Option.none<string>()),
+    );
+
+  // A boolean setting git reads as true.
+  const configBool = (checkout: string, key: string) =>
+    configValue(checkout, ["--bool", key]).pipe(
+      Effect.map((value) => Option.contains(value, "true")),
     );
 
   const readCheckoutConfig = (checkout: string) =>
@@ -418,18 +414,20 @@ const make = Effect.gen(function* () {
     return sql
       .withTransaction(
         Effect.gen(function* () {
-          const stored = yield* recordsOf(source);
-          for (const [file, record] of stored) {
-            if (!current(file, record)) {
-              yield* sql`DELETE FROM clone_verified
-                WHERE source_id = ${sourceId} AND path = ${file}`;
-            }
+          const stale = [...(yield* recordsOf(source))]
+            .filter(([file, record]) => !current(file, record))
+            .map(([file]) => file);
+          if (stale.length > 0) {
+            yield* sql`DELETE FROM clone_verified WHERE source_id = ${sourceId}
+              AND ${sql.in("path", stale)}`;
           }
-          for (const [file, record] of added) {
-            yield* sql`INSERT INTO clone_verified (source_id, path, record)
-              VALUES (${sourceId}, ${file}, ${record})
-              ON CONFLICT (source_id, path) DO UPDATE SET record = excluded.record`;
-          }
+          yield* sql`INSERT INTO clone_verified ${sql.insert(
+            [...added].map(([file, record]) => ({
+              source_id: sourceId,
+              path: file,
+              record,
+            })),
+          )} ON CONFLICT (source_id, path) DO UPDATE SET record = excluded.record`;
         }),
       )
       .pipe(Effect.ignore);
@@ -492,11 +490,8 @@ const make = Effect.gen(function* () {
       ) {
         return yield* new CloneFailed({ reason: "index-changed" });
       }
-      return {
-        listed,
-        sec: indexStatOf(before).mtimeSec,
-        nsec: indexStatOf(before).mtimeNsec,
-      };
+      const { mtimeSec: sec, mtimeNsec: nsec } = indexStatOf(before);
+      return { listed, sec, nsec };
     });
 
     // Where the attributes outside the tree live, as git looks for them,
@@ -695,11 +690,12 @@ const make = Effect.gen(function* () {
         if (parent !== ".") parents.add(parent);
       }
     }
-    for (const parent of parents) {
-      yield* fs
-        .makeDirectory(path.join(worktree, parent), { recursive: true })
-        .pipe(Effect.mapError(fail("clone")));
-    }
+    yield* Effect.forEach(
+      parents,
+      (parent) =>
+        fs.makeDirectory(path.join(worktree, parent), { recursive: true }),
+      { concurrency: 8, discard: true },
+    ).pipe(Effect.mapError(fail("clone")));
     const unitList = [...units].toSorted();
     const cloned = yield* darwin
       .clone({ from: source, to: worktree, paths: unitList })
@@ -965,38 +961,60 @@ const make = Effect.gen(function* () {
     dirMode: number,
   ) =>
     Effect.gen(function* () {
-      const keep: string[] = [];
-      for (const unit of dirs) {
-        const entries = yield* darwin
-          .lstat({ root: path.join(worktree, unit) })
-          .pipe(Stream.runCollect);
-        const gone = new Set<string>();
-        for (const entry of entries.toSorted((a, b) =>
-          a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
-        )) {
-          if (Darwin.isFailed(entry)) continue;
-          const rel = entry.path === "." ? unit : `${unit}/${entry.path}`;
-          if ([...ancestors(rel)].some((dir) => gone.has(dir))) continue;
-          const isDir = (entry.mode & S_IFMT) === S_IFDIR;
-          if (isDir ? targetDirs.has(rel) : tracked.has(rel)) {
-            if (isDir) {
-              keep.push(rel);
-              if ((entry.mode & 0o7777) !== dirMode) {
-                yield* fs.chmod(path.join(worktree, rel), dirMode);
+      // What each unit's walk finds: folders to keep and the mode they
+      // need, and entries to remove. A child of a removed entry goes with
+      // it.
+      const plans = yield* Effect.forEach(
+        dirs,
+        (unit) =>
+          darwin.lstat({ root: path.join(worktree, unit) }).pipe(
+            Stream.runCollect,
+            Effect.map((entries) => {
+              const keep: Array<{ rel: string; chmod: boolean }> = [];
+              const gone: string[] = [];
+              for (const entry of entries.toSorted((a, b) =>
+                a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+              )) {
+                if (Darwin.isFailed(entry)) continue;
+                const rel = entry.path === "." ? unit : `${unit}/${entry.path}`;
+                if ([...ancestors(rel)].some((dir) => gone.includes(dir))) {
+                  continue;
+                }
+                const isDir = (entry.mode & S_IFMT) === S_IFDIR;
+                if (isDir ? targetDirs.has(rel) : tracked.has(rel)) {
+                  if (isDir) {
+                    keep.push({
+                      rel,
+                      chmod: (entry.mode & 0o7777) !== dirMode,
+                    });
+                  }
+                } else {
+                  gone.push(rel);
+                }
               }
-            }
-            continue;
-          }
-          gone.add(rel);
-          yield* forceRemove(path.join(worktree, rel));
-        }
-      }
+              return { keep, gone };
+            }),
+          ),
+        { concurrency: 4 },
+      );
+      const keep = plans.flatMap((plan) => plan.keep);
+      yield* Effect.forEach(
+        plans.flatMap((plan) => plan.gone),
+        (rel) => forceRemove(path.join(worktree, rel)),
+        { concurrency: 8, discard: true },
+      );
+      yield* Effect.forEach(
+        keep.filter((dir) => dir.chmod),
+        ({ rel }) => fs.chmod(path.join(worktree, rel), dirMode),
+        { concurrency: 8, discard: true },
+      );
       if (keep.length > 0) {
+        const folders = keep.map(({ rel }) => rel);
         yield* darwin
-          .flags({ root: worktree, paths: keep, clear: true })
+          .flags({ root: worktree, paths: folders, clear: true })
           .pipe(Stream.runDrain);
         yield* darwin
-          .xattrs({ root: worktree, paths: keep, strip: true })
+          .xattrs({ root: worktree, paths: folders, strip: true })
           .pipe(Stream.runDrain);
       }
     });
@@ -1045,7 +1063,9 @@ const make = Effect.gen(function* () {
   const runPostCheckoutHook = (worktree: string, head: string) =>
     Effect.gen(function* () {
       const args = ["0".repeat(head.length), head, "1"];
-      const hooksDir = yield* gitPath(worktree, "hooks");
+      // Most repos have no hooks: `hook list` says so before anything else
+      // is asked.
+      const hooksDir = yield* Effect.cached(gitPath(worktree, "hooks"));
       const listed = yield* git
         .run(worktree, ["hook", "list", "-z", "post-checkout"])
         .pipe(Effect.result);
@@ -1060,13 +1080,15 @@ const make = Effect.gen(function* () {
         // A git without `hook list` has no config hooks either, only the
         // hooks folder's, which runs when it's executable.
         const hook = yield* fs
-          .stat(path.join(hooksDir, "post-checkout"))
+          .stat(path.join(yield* hooksDir, "post-checkout"))
           .pipe(Effect.option);
         list =
           Option.isSome(hook) && (hook.value.mode & 0o111) !== 0
             ? "hook from hookdir"
             : "";
       }
+      const names = splitZ(list);
+      if (names.length === 0) return;
       const execPath = (yield* git.run(worktree, ["--exec-path"])).trim();
       const dir = yield* fs
         .realPath(worktree)
@@ -1130,11 +1152,13 @@ const make = Effect.gen(function* () {
       // Like git, every hook runs even after one fails, and the first
       // failure is the result.
       let first: HookFailed | undefined;
-      for (const name of nulFields(list)) {
-        if (name === "") continue;
+      for (const name of names) {
         let failed: Option.Option<HookFailed>;
         if (name === "hook from hookdir") {
-          failed = yield* run(path.join(hooksDir, "post-checkout"), args);
+          failed = yield* run(
+            path.join(yield* hooksDir, "post-checkout"),
+            args,
+          );
         } else {
           // A config hook's command goes through the shell with the hook's
           // arguments after it, as git runs it. The last value wins.
@@ -1147,7 +1171,7 @@ const make = Effect.gen(function* () {
             ])
             .pipe(Effect.option);
           if (Option.isNone(commands)) continue;
-          const values = nulFields(commands.value);
+          const values = splitZ(commands.value);
           const command = values.at(-1) ?? "";
           failed = yield* run("/bin/sh", [
             "-c",
@@ -1186,12 +1210,10 @@ const make = Effect.gen(function* () {
   // index's own.
   const sparseOrSplit = (checkout: string) =>
     Effect.gen(function* () {
-      const sparse = yield* configValue(checkout, [
-        "--bool",
-        "core.sparseCheckout",
-      ]);
-      const split = yield* configValue(checkout, ["--bool", "core.splitIndex"]);
-      return Option.contains(sparse, "true") || Option.contains(split, "true");
+      return (
+        (yield* configBool(checkout, "core.sparseCheckout")) ||
+        (yield* configBool(checkout, "core.splitIndex"))
+      );
     });
 
   const projectBlocked = (repo: string) =>

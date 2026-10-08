@@ -27,14 +27,9 @@ import * as Paths from "../../src/Paths.ts";
 import { nodeStore } from "./nodeStore.ts";
 import { macfs } from "./sandbox.ts";
 
-// Commits need an identity and fixed dates, and the user's config must
-// stay out.
-for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
-}
+// Commits need an identity and fixed dates. The sandbox module this
+// imports has already kept git's variables and the user's config out.
 Object.assign(process.env, {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
   GIT_AUTHOR_NAME: "t",
   GIT_AUTHOR_EMAIL: "t@t",
   GIT_COMMITTER_NAME: "t",

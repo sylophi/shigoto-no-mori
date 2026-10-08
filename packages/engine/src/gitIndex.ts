@@ -18,7 +18,7 @@ export type IndexStat = {
   readonly size: number;
 };
 
-export const NO_STAT: IndexStat = {
+const NO_STAT: IndexStat = {
   ctimeSec: 0,
   ctimeNsec: 0,
   mtimeSec: 0,

@@ -260,7 +260,6 @@ export type Reporter = {
   readonly color: boolean;
 };
 
-// A new worktree, and the lifecycle scripts that failed on it.
 // How a new worktree's files were cloned: from which checkout, and how
 // the clone went or why it gave way to git's own checkout.
 export type Cloned = {
