@@ -27,7 +27,6 @@ import {
   ReadWorktreeFilePayloadSchema,
   RestoreDiscardPayloadSchema,
   SetAutoPullPayloadSchema,
-  SetAgentWorkingPayloadSchema,
   SetShelvedPayloadSchema,
   SetStagedPayloadSchema,
   WorktreeCarryOverCompleteSchema,
@@ -107,9 +106,11 @@ export const worktreesContract = defineContract("host", {
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
-  setAgentWorking: invoke(
-    "worktrees:setAgentWorking",
-    SetAgentWorkingPayloadSchema,
+  // Every agent session bound to the worktree goes idle, for a turn
+  // whose end no hook reported.
+  idleAgents: invoke(
+    "worktrees:idleAgents",
+    WorktreeScopedPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),

@@ -6,7 +6,9 @@ interface CopyButtonProps {
   label?: string;
 }
 
-export function CopyButton({ value, label = "Copy" }: CopyButtonProps) {
+// Copies a value and says so for a moment: the check a copy control
+// swaps its icon for.
+export function useCopied(value: string): [copied: boolean, copy: () => void] {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     void navigator.clipboard.writeText(value).then(() => {
@@ -14,6 +16,11 @@ export function CopyButton({ value, label = "Copy" }: CopyButtonProps) {
       window.setTimeout(() => setCopied(false), 1200);
     });
   };
+  return [copied, copy];
+}
+
+export function CopyButton({ value, label = "Copy" }: CopyButtonProps) {
+  const [copied, copy] = useCopied(value);
   return (
     <button
       type="button"

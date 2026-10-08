@@ -150,6 +150,11 @@ if (!app.isPackaged) {
 // other Electron project started from here would silently boot our
 // binary instead of its own.
 delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
+// An agent session's id, when an agent started the app (a dev run):
+// nothing the app spawns is that session, and an `sm` it runs would
+// bind the session wherever it runs (cli/agents.go).
+delete process.env.CLAUDE_CODE_SESSION_ID;
+delete process.env.CODEX_THREAD_ID;
 takeUpdateEndpointOverrides();
 
 // One live instance per data dir. A second copy (typically a fresh

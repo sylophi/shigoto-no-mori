@@ -335,8 +335,9 @@ func listIdentities(ctx cliContext, scope []project, withPrimaryRef bool) (int, 
 // The --identities document (one JSON array across every group), or a
 // NAME/BRANCH/flags table.
 func emitIdentities(ctx cliContext, groups []identityGroup) (int, error) {
-	sets := readWorktreeMarkSets()
-	marks := buildContext{shelved: sets[shelvedKey], autoPull: sets[autoPullKey], agentWorking: sets[agentWorkingKey]}
+	all := readRegistryHints()
+	sets := worktreeMarkSetsFrom(all)
+	marks := buildContext{shelved: sets[shelvedKey], autoPull: sets[autoPullKey], agentSessions: agentSessionsFrom(all)}
 	flat := []worktreeIdentityJSON{}
 	for _, group := range groups {
 		for _, id := range group.identities {

@@ -36,8 +36,6 @@ type registryMark struct {
 	key   string
 	verb  string
 	label string
-	// Only the worktrees a shelf takes can carry it (shelfable).
-	shelf bool
 }
 
 // sm autopull: the app's "follow the remote" mark. While it is set, the
@@ -45,12 +43,6 @@ type registryMark struct {
 // background fetch. The CLI only owns the mark. Any checkout can carry
 // it, the primary most of all.
 var autoPullMark = registryMark{key: autoPullKey, verb: "autopull", label: "auto-pull"}
-
-// sm agent-working: the mark an agent sets on a worktree it is working
-// in, and clears when it hands the work back. Once the app allows agents
-// to mark worktrees as working, it keeps the worktree on its own folded
-// shelf until then.
-var agentWorkingMark = registryMark{key: agentWorkingKey, verb: "agent-working", label: "agent working", shelf: true}
 
 func cmdRegistryMark(ctx cliContext, args []string, mark registryMark) (int, error) {
 	parsed, err := parseCmdArgs(args, worktreeTargetSpec())
@@ -70,12 +62,6 @@ func cmdRegistryMark(ctx cliContext, args []string, mark registryMark) (int, err
 		return exitCodeOf(err), err
 	}
 	id := target.worktree
-	if mode == "on" && mark.shelf && id.IsPrimary {
-		return 1, errf("The primary checkout can't be marked as %s", mark.label)
-	}
-	if mode == "on" && mark.shelf && id.IsExternal {
-		return 1, errf("External worktrees can't be marked as %s", mark.label)
-	}
 	if mode != "" {
 		if err := setRegistryMark(mark.key, id.ID, mode == "on"); err != nil {
 			return 1, err

@@ -62,7 +62,7 @@ interface BuildPaletteEntriesArgs {
   mirrors: readonly MirrorLink[];
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   hiddenPrefixes: readonly string[];
-  // Whether the agent-working mark counts (isAgentWorking).
+  // Whether a working agent session shelves its worktree (isAgentWorking).
   allowAgentWorking: boolean;
   // recordWorktreeVisit's record by row key, read once per open.
   visits: Record<string, number>;

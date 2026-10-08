@@ -70,8 +70,8 @@ var worktreeItems = []helpItem{
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
 		"Like cd without the project menu. Exit the shell to return, or cd in place with shell integration."},
 	{"worktrees path [<name>]", "Print a worktree's directory", ""},
-	{"worktrees create [<name>] [-b <branch-name>] [--base <ref>] [--no-cd] [--no-setup] [--no-clone] [--agent-working]", "Create a worktree",
-		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Tracked files are cloned (copy-on-write) from an existing checkout wherever it has them unchanged, and git writes the rest (--no-clone has git write them all). --agent-working sets the agent-working mark (see agent-working) from the start. Runs carry-over, the setup script (--no-setup skips it), and port provision, then drops into the new worktree: a subshell, or your own shell with shell integration (--no-cd, --json, and scripts skip it)."},
+	{"worktrees create [<name>] [-b <branch-name>] [--base <ref>] [--no-cd] [--no-setup] [--no-clone]", "Create a worktree",
+		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Tracked files are cloned (copy-on-write) from an existing checkout wherever it has them unchanged, and git writes the rest (--no-clone has git write them all). Run from an agent's shell, it binds the agent's session to the new worktree (see agents). Runs carry-over, the setup script (--no-setup skips it), and port provision, then drops into the new worktree: a subshell, or your own shell with shell integration (--no-cd, --json, and scripts skip it)."},
 	{"worktrees rm [<name>] [--stack] [-f] [--keep-branch]", "Remove a worktree",
 		"Teardown, release port, delete the branch per app settings. --stack also removes the worktrees of the merged layers under it in its PR stack (the cleanup half of land --stack, for a stack that has landed, and an open PR is refused). The removal guards cover all of them first."},
 	{"worktrees done [<name>] [-f]", "Post-merge cleanup",
@@ -110,14 +110,12 @@ var worktreeItems = []helpItem{
 		"A shelved worktree comes back off the shelf on its own once it is worked in: the next full listing (the app's sidebar, `worktrees list`) that finds an edit, a new or deleted file or a commit made since the shelve unshelves it."},
 	{"worktrees describe [<name>] [-t|--title <title>] [-d|--description <text> | --description-file <path|->]", "Set or show a worktree's title and description",
 		"What the work is, like a pull request's title and body, for before there is one: the app shows the title in place of the branch, and the description on the worktree page. Set them once the work has a purpose and again whenever it changes. Each flag replaces only its own field, and an empty value clears it. --description-file - reads stdin. With no flags it prints the worktree's own, or its open pull request's. While the branch has an open pull request from this repository (not a fork's branch of the same name), its title and body are the worktree's, and describe refuses a change: edit the PR instead. With --json, that error's code is pull-request-open. External worktrees have none (adopt one first). They travel with send, bring and mirror. --json prints {ok, worktree: <row>}, or {ok, title, description, pullRequest} with no flags, where title and description are the worktree's own and pullRequest the open PR that overrides them."},
-	{"worktrees agent-working [on|off] [<name>]", "Set or show the agent-working mark",
-		"For an agent working in the worktree: once the app allows agents to mark worktrees as working (a sidebar setting), it keeps the worktree on its own folded shelf, out of the way, until the mark is cleared. Set it when starting a stretch of work and clear it when handing the work back. The primary checkout and external worktrees can't carry it. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
 	{"worktrees autopull [on|off] [<name>]", "Set or show the app's auto-pull mark",
 		"While on, the running app fast-forwards the worktree onto its upstream after each background fetch, as long as it has no local commits, changes or running scripts. Any checkout can carry it, the primary included. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
 	{"worktrees move [<name>] <new-path>", "Move a worktree's checkout",
-		"git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf, auto-pull and agent-working marks, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
+		"git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, bound agent sessions, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
 	{"worktrees rekey --project-id <id> --from-id <id> --to-path <path>", "Re-key a worktree ahead of a move",
-		"App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf, auto-pull and agent-working marks, the per-worktree data file and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}."},
+		"App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf and auto-pull marks, the bound agent sessions, the per-worktree data file and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}."},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 		"Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
 			"App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher."},
@@ -171,6 +169,23 @@ var configItems = []helpItem{
 		"$VISUAL/$EDITOR in a terminal, the OS opener otherwise."},
 }
 
+var agentItems = []helpItem{
+	{"agents install [<harness>...]", "Install the hooks that report agent sessions",
+		"Adds hook entries that run `agents event` to each named harness's own hooks file (claude: Claude Code's settings.json, codex: Codex's hooks.json), every harness found on this machine by default. Leaves the rest of the file alone, and replaces entries an earlier build wrote. Codex runs a hook only once it is trusted: review them with /hooks in Codex. --json prints {ok, harnesses: [<status>]}, every harness's, like status."},
+	{"agents uninstall [<harness>...]", "Remove those hooks",
+		"Only entries it recognizably wrote. --json prints {ok, harnesses: [<status>]}, every harness's."},
+	{"agents status", "Show each harness's hooks",
+		"--json prints {ok, harnesses: [{id, label, detected, path, hooks, trusted?}]}: detected says the harness's config dir exists, path is its hooks file, hooks is installed, outdated (install again) or missing, and trusted (Codex, once installed) whether it trusts every one of them."},
+	{"agents bind [<name>] [--harness <id> --session <id>]", "Bind an agent session to a worktree",
+		"A session is bound to one worktree at a time, and binding it elsewhere moves it. Without the flags it binds the session whose shell runs the command (CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID). That also happens on its own: any command run inside a managed worktree from such a shell binds the session there, and `create` binds it to the new worktree. The primary checkout and external worktrees can't be bound. --json prints {ok, worktree: <row>}."},
+	{"agents unbind [--harness <id> --session <id>]", "Unbind an agent session",
+		"Without the flags, the session whose shell runs the command. It stays unbound until a command, or the session's next hook event from inside a managed worktree, binds it again (see bind). --json prints {ok, unbound}, unbound false when it wasn't bound."},
+	{"agents idle [<name>]", "Mark a worktree's agent sessions idle",
+		"For a turn whose end no hook reported (Claude Code reports none when it is interrupted). --json prints {ok, worktree: <row>}."},
+	{"agents event --harness <id>", "Report a session's lifecycle event (stdin)",
+		"What the installed hooks run, and what any other harness can call the same way: one JSON object on stdin with hook_event_name and session_id (and cwd, which binds an unbound session started in a managed worktree). UserPromptSubmit sets the session working, PermissionRequest waiting on the user, PostToolUse (or PostToolUseFailure) for the tool it asked about working again once no prompt is open, Stop, StopFailure, Interrupt and an idle_prompt Notification idle, and SessionEnd unbinds it. With agent_id (a Codex subagent) the event is that subagent's, and its SubagentStop unbinds it. Prints nothing and exits 0 whatever happens."},
+}
+
 var shellItems = []helpItem{
 	{"shell install [<shell>]", "Hook shell integration into your shell config",
 		"A guarded eval line in .zshrc/.bashrc (marker-fenced) or a fish conf.d drop-in. Defaults to your login shell."},
@@ -218,6 +233,12 @@ var helpNamespaces = []struct {
 			"and current values: `" + binaryName + " config list`. Per-project " +
 			"settings live under `" + binaryName + " projects config`.",
 		configItems, nil},
+	{"agents", "Agent integrations: which session works where", "",
+		"Coding agents' sessions bound to worktrees, and the state their " +
+			"harness's hooks report (working, waiting on you, idle). While a " +
+			"bound session works, the app keeps the worktree on the Agent " +
+			"working shelf (a sidebar setting).",
+		agentItems, nil},
 	{"shell", "Shell integration: cd without subshells", "",
 		"Shell integration makes cd and create move your current shell " +
 			"into the worktree instead of nesting a subshell. install " +
@@ -236,6 +257,7 @@ var helpGroups = []helpGroup{
 	{"Worktrees", worktreeItems},
 	{"Projects", projectItems},
 	{"Config", configItems},
+	{"Agents", agentItems},
 	{"Shell integration", shellItems},
 	{"Flags", flagItems},
 	{"Environment", envItems},
@@ -478,8 +500,6 @@ var commands = []command{
 	{name: "describe", worktree: true, run: cmdDescribe},
 	{name: "autopull", aliases: []string{"auto-pull"}, worktree: true,
 		run: func(ctx cliContext, args []string) (int, error) { return cmdRegistryMark(ctx, args, autoPullMark) }},
-	{name: "agent-working", worktree: true,
-		run: func(ctx cliContext, args []string) (int, error) { return cmdRegistryMark(ctx, args, agentWorkingMark) }},
 	{name: "move", aliases: []string{"mv"}, worktree: true, run: cmdMove},
 	{name: "launchers", aliases: []string{"launcher"}, run: cmdLaunchers},
 	{name: "shelve", worktree: true,
@@ -492,6 +512,11 @@ var commands = []command{
 	// initialization cycle.
 	{name: "worktrees", aliases: []string{"worktree", "wt", "w"}},
 	{name: "projects", aliases: []string{"project", "p"}, run: cmdProject},
+	// noContext: the hooks run `agents event` on every turn, and it
+	// needs the projects only for a session it hasn't seen (cmdAgents).
+	// That also keeps run()'s automatic binding out of the commands
+	// that change bindings themselves.
+	{name: "agents", aliases: []string{"agent"}, noContext: true, run: cmdAgents},
 	{name: "app", noContext: true, run: cmdApp},
 	{name: "update", noContext: true, run: cmdUpdate},
 	{name: "config", noContext: true, run: cmdConfigGlobal},
@@ -741,33 +766,48 @@ func run() int {
 	seedFreshInstall()
 	var ctx cliContext
 	if !cmd.noContext {
-		// An unreadable or malformed registry.json fails here rather
-		// than running the command against an empty project list: every
-		// command that writes the registry would otherwise rebuild the
-		// file from that empty picture. This is also where an
-		// old-format data dir gets its registry drained out of state.json.
-		projects, order, err := loadProjectsAndOrder()
-		if err != nil {
+		var err error
+		if ctx, err = loadContext(); err != nil {
 			reportError(err)
 			return 1
 		}
-		// Terrier-registered repos join the list here, so every resolver
-		// and command sees them as first-class projects, and the manual
-		// order goes over the merged list so it can place them too.
-		// Registry writes are untouched: they re-read registry.json under
-		// its lock.
-		projects = orderProjects(mergeTerrierProjects(projects), order)
-		cwd, err := os.Getwd()
-		if err != nil {
-			cwd = "."
-		}
-		ctx = resolveContext(cwd, projects)
+		autoBindAgentSession(ctx)
 	}
 	code, err := cmd.run(ctx, args)
 	if err != nil {
 		reportError(err)
 	}
 	return code
+}
+
+// The registered projects and where cwd sits among them. An unreadable
+// or malformed registry.json fails here rather than running the command
+// against an empty project list: every command that writes the registry
+// would otherwise rebuild the file from that empty picture. This is
+// also where an old-format data dir gets its registry drained out of
+// state.json.
+func loadContext() (cliContext, error) {
+	projects, err := loadMergedProjects()
+	if err != nil {
+		return cliContext{}, err
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	return resolveContext(cwd, projects), nil
+}
+
+// Terrier-registered repos join the list here, so every resolver and
+// command sees them as first-class projects, and the manual order goes
+// over the merged list so it can place them too. Registry writes are
+// untouched: they re-read registry.json under its lock.
+func loadMergedProjects() ([]project, error) {
+	projects, order, err := loadProjectsAndOrder()
+	if err != nil {
+		return nil, err
+	}
+	return orderProjects(mergeTerrierProjects(projects), order), nil
 }
 
 func reportError(err error) {

@@ -36,6 +36,19 @@ export const CommitSummarySchema = z.object({
 });
 export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 
+// An agent harness's session bound to a worktree (cli/agents.go):
+// working through a turn, waiting on the user mid-turn (a permission
+// prompt), or idle once the turn ended. harness is "claude", "codex",
+// or whatever a harness without built-in support calls itself. at is
+// when the state last changed, in ms.
+export const AgentSessionSchema = z.object({
+  harness: z.string(),
+  session: z.string(),
+  state: z.enum(["working", "waiting", "idle"]),
+  at: z.number(),
+});
+export type AgentSession = z.infer<typeof AgentSessionSchema>;
+
 export const WorktreeSchema = z.object({
   id: z.string(),
   projectId: z.string().min(1),
@@ -128,11 +141,13 @@ export const WorktreeSchema = z.object({
   // Meant for the primary checkout and other branches only ever read
   // here.
   autoPull: z.boolean(),
-  // Agent-driven "come back later" flag (`sm agent-working`): an agent
-  // is working here, so once agents are allowed to (isAgentWorking) the
-  // sidebar files it on its own shelf until the agent clears it and
-  // hands the work back.
+  // Whether an agent session bound here is working (`sm agents`): once
+  // agents are allowed to (isAgentWorking) the sidebar files the
+  // worktree on its own shelf until every session's turn ends.
   agentWorking: z.boolean(),
+  // The agent sessions bound here, which their harness's hooks keep up
+  // to date. Absent from a peer on an older build.
+  agentSessions: z.array(AgentSessionSchema).optional(),
   // What `sm describe` set (WorktreeDescriptionSchema): the work's
   // name and summary, until a pull request's take their place
   // (renderer/lib/worktreeTitle.ts). Absent when unset.
@@ -265,9 +280,9 @@ export function isManagedWorktree(
   return !worktree.isPrimary && !worktree.isExternal;
 }
 
-// Whether the agent-working mark counts: only once the window allows
-// agents to mark worktrees as working (useAllowAgentWorking). Otherwise
-// the mark is ignored everywhere.
+// Whether a working agent session files the worktree on its shelf:
+// only once the window allows it (useAllowAgentWorking). Otherwise the
+// shelf ignores it everywhere.
 export function isAgentWorking(
   worktree: Pick<Worktree, "agentWorking">,
   allowAgentWorking: boolean,
@@ -424,10 +439,6 @@ export const SetShelvedPayloadSchema = WorktreeScopedPayloadSchema.extend({
 
 export const SetAutoPullPayloadSchema = WorktreeScopedPayloadSchema.extend({
   autoPull: z.boolean(),
-});
-
-export const SetAgentWorkingPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  agentWorking: z.boolean(),
 });
 
 export const CheckoutBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
