@@ -35,6 +35,14 @@ import {
   sandbox,
 } from "../../engine/test/lib/sandbox.ts";
 import { ghScript, pr, settingsRule } from "../../engine/test/lib/gh.ts";
+import {
+  type FakeApp,
+  type Frame,
+  fakeApp,
+  progress,
+  refusal,
+  success,
+} from "../../engine/test/lib/fakeApp.ts";
 
 let built: string;
 let buildDir: string;
@@ -1114,6 +1122,174 @@ describe("update", () => {
     };
     await refused("SHIGOMORI_UPDATE_FEED_URL");
     await refused("SHIGOMORI_UPDATE_RELEASES_URL");
+  });
+});
+
+// What the app answers a transfer of "fox".
+const moved = {
+  worktree: { name: "fox", branch: "fox", path: "/there/fox" },
+  captured: true,
+  dirtyApplied: true,
+  device: { deviceId: "d1", name: "Studio Mac" },
+  copySide: "remote",
+  files: { crossed: true },
+  source: { fate: "shelve", done: true },
+};
+// A transfer that reports its steps, then answers `result`.
+const answer = (result: unknown) => (request: Frame) => [
+  progress({ step: "capture" }),
+  progress({ step: "transfer", sent: 1 }),
+  progress({ step: "transfer", sent: 2 }),
+  progress({ step: "create", createPhase: "checkout" }),
+  success(request, result),
+];
+
+describe("transfer", () => {
+  let app: FakeApp | undefined;
+  afterEach(async () => {
+    await app?.close();
+    app = undefined;
+  });
+
+  // The app on the control wire, answering each call as `reply` says,
+  // and a project "alpha" with the worktree "fox".
+  const serve = async (
+    reply: (request: Frame) => ReadonlyArray<Frame>,
+  ): Promise<string> => {
+    app = await fakeApp(reply);
+    box.write("control.json", app.file());
+    const alpha = box.repo("alpha");
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    return `${box.home}/fox`;
+  };
+
+  it("sends, brings and mirrors, saying each step", async () => {
+    const fox = await serve(answer(moved));
+    await sameAt(fox, "send", "--to", "Studio");
+    await same("--json", "send", "fox", "--to", "Studio", "--no-setup");
+    await same("mirror", "fox");
+    await same(
+      "--json",
+      "wt",
+      "mirror",
+      "owl",
+      "--from",
+      "Studio",
+      "-p",
+      "alpha",
+    );
+  });
+
+  it("brings a copy here, and exits 3 with a caveat", async () => {
+    await serve(
+      answer({
+        ...moved,
+        copySide: "local",
+        worktree: { name: "owl", branch: "owl", path: "/here/owl" },
+        dirtyApplied: false,
+        cloned: { name: "alpha", path: "/there/alpha" },
+        files: { crossed: false, error: "disk full" },
+        source: { fate: "teardown", done: false, error: "busy" },
+      }),
+    );
+    await same("bring", "owl", "--from", "Studio", "-p", "alpha");
+    await same("--json", "bring", "owl", "--from", "Studio", "-p", "alpha");
+  });
+
+  it("refuses what Go refuses before asking the app", async () => {
+    const fox = await serve(() => []);
+    await sameAt(fox, "send", "--to", " ");
+    await sameAt(fox, "send", "--from", "Studio");
+    await sameAt(fox, "bring", "--to", "Studio");
+    await sameAt(fox, "mirror", "--to", "a", "--from", "b");
+    await sameAt(fox, "bring", "--from", "Studio");
+    await sameAt(fox, "send", "--leave-out", "all");
+    await sameAt(fox, "--json", "send", "--setup", "--no-setup");
+    await sameAt(fox, "mirror", "--source", "keep");
+    await sameAt(fox, "send", "--source", "burn");
+    await sameAt(fox, "bring", "owl", "--clone-into", "/x");
+    await sameAt(fox, "send", "--clone-into", " ");
+    await same("mirrors", "extra");
+    assert.deepStrictEqual(app?.received(), []);
+  });
+
+  it("stops a mirror, or says why it won't", async () => {
+    let unconfirmed = false;
+    const fox = await serve((request) => [
+      unconfirmed
+        ? refusal(request, "The copy has changes.", "stop-unconfirmed")
+        : success(request, {
+            mirror: {
+              device: { deviceId: "d1", name: "Studio Mac" },
+              localRoot: "/here/fox",
+              copySide: "remote",
+            },
+          }),
+    ]);
+    await sameAt(fox, "unmirror");
+    await same("--json", "unmirror", "fox");
+    unconfirmed = true;
+    await same("unmirror", "fox");
+    await same("--json", "unmirror", "fox");
+  });
+
+  it("lists mirrors, devices and the other devices' worktrees", async () => {
+    const fox = await serve((request) => {
+      switch (request["channel"]) {
+        case "control:mirrors":
+          return [
+            success(request, {
+              daemon: "stopped",
+              mirrors: [
+                {
+                  device: { deviceId: "d1", name: "Studio Mac" },
+                  localRoot: "/here/fox",
+                  copySide: "local",
+                  paused: false,
+                  status: "watching",
+                  conflicts: 2,
+                },
+              ],
+            }),
+          ];
+        case "control:devices":
+          return [
+            success(request, {
+              thisDevice: { deviceId: "d0", name: "Laptop" },
+              devices: [
+                { name: "Studio Mac", platform: "darwin" },
+                { name: "Box", platform: "linux", block: "no-project" },
+                { name: "Pi", platform: "linux", block: "sideways" },
+              ],
+            }),
+          ];
+        default:
+          return [
+            success(request, {
+              worktrees: [
+                {
+                  device: { deviceId: "d1", name: "Studio Mac" },
+                  worktree: { name: "owl", branch: "owl", path: "/there/owl" },
+                },
+              ],
+              unreachable: ["Pi"],
+            }),
+          ];
+      }
+    });
+    await same("mirrors");
+    await same("--json", "wt", "mirrors");
+    await same("devices");
+    await sameAt(fox, "devices");
+    await same("--json", "devices", "-p", "alpha");
+    await sameAt(fox, "list", "--remote");
+    await same("--json", "ls", "--from", "Studio", "-p", "alpha");
+    await sameAt(fox, "list", "--from", "");
+    await sameAt(fox, "list", "--remote", "-a");
+    await sameAt(fox, "list", "--remote", "--identities");
   });
 });
 
