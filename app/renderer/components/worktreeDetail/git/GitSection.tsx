@@ -59,14 +59,6 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
           {canSyncFromPrimary(worktree) && (
             <WorktreePrimarySyncPill worktree={worktree} />
           )}
-          <button
-            type="button"
-            onClick={() => nav.toDiff(projectId, worktreeId)}
-            className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            Open
-            <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-          </button>
         </div>
       </div>
       <OperationBanner worktree={worktree} />
