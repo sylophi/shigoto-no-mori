@@ -581,42 +581,55 @@ interface ProjectGroup {
   remote: RemoteForestItem[];
 }
 
+type Owner = { key: string; host: string; name: string };
+
 // Who a project belongs to, off its remote's `host/owner/repo`: the
 // org or user account, keyed by host too (one name on two hosts is two
-// owners) and case-folded (hosts treat owner names that way). The host
-// is left off the label for github.com, where nearly every remote is.
-// Null when the project has no network remote, or its path has no
-// owner segment.
-export function ownerOf(
-  project: Project,
-): { key: string; label: string } | null {
+// owners) and case-folded (hosts treat owner names that way). Null when
+// the project has no network remote, or its path has no owner segment.
+export function ownerOf(project: Project): Owner | null {
   const [host, owner, ...repo] = project.remote?.split("/") ?? [];
   if (!host || !owner || repo.length === 0) return null;
-  return {
-    key: `${host}/${owner}`.toLowerCase(),
-    label: host === "github.com" ? owner : `${host}/${owner}`,
-  };
+  return { key: `${host}/${owner}`.toLowerCase(), host, name: owner };
 }
 
 // The list of projects' rows under a header per owner, the owners in
 // `order`. Projects with no owner trail the rest under a header of
-// their own, as the order leaves them out. All of one owner (or none),
-// there is nothing to tell apart, so the list stays one run with no
-// header.
+// their own, as the order leaves them out. A header is the owner's
+// name, with its host only when the name is an owner on another host
+// too. All of one owner (or none), there is nothing to tell apart, so
+// the list stays one run with no header.
 function ownerSections(
   rows: SidebarRow[],
   order: ReadonlyMap<string, number>,
   shut: ReadonlySet<string>,
 ): SidebarRow[] {
-  const sections = new Map<string, { label: string; rows: SidebarRow[] }>();
+  const sections = new Map<
+    string,
+    { owner: Owner | null; rows: SidebarRow[] }
+  >();
   for (const row of rows) {
     const owner = row.kind === "project" ? ownerOf(row.project) : null;
     const key = owner?.key ?? NO_OWNER_KEY;
     const section = sections.get(key);
     if (section) section.rows.push(row);
-    else sections.set(key, { label: owner?.label ?? "No remote", rows: [row] });
+    else sections.set(key, { owner, rows: [row] });
   }
   if (sections.size < 2) return rows;
+  const seen = new Set<string>();
+  const onTwoHosts = new Set<string>();
+  for (const { owner } of sections.values()) {
+    if (!owner) continue;
+    const name = owner.name.toLowerCase();
+    if (seen.has(name)) onTwoHosts.add(name);
+    seen.add(name);
+  }
+  const labelOf = (owner: Owner | null) => {
+    if (!owner) return "No remote";
+    return onTwoHosts.has(owner.name.toLowerCase())
+      ? `${owner.host}/${owner.name}`
+      : owner.name;
+  };
   const rankOf = (key: string) => order.get(key) ?? order.size;
   const drawn: SidebarRow[] = [];
   for (const [ownerKey, section] of [...sections].toSorted(
@@ -627,7 +640,7 @@ function ownerSections(
       kind: "owner-header",
       key: `o:${ownerKey}`,
       ownerKey,
-      label: section.label,
+      label: labelOf(section.owner),
       count: section.rows.length,
       expanded,
     });
@@ -747,7 +760,7 @@ export function projectGroupOrder({
     });
   }
   const groups = new Map<string, number>();
-  // Owner labels by key, in the order their projects lead them in.
+  // Owner names by key, in the order their projects lead them in.
   const owners = new Map<string, string>();
   sortByProject(entries, sortMode, (entry) => entry.project).forEach(
     (entry, rank) => {
@@ -755,7 +768,7 @@ export function projectGroupOrder({
       for (const id of entry.groupIds)
         if (!groups.has(id)) groups.set(id, rank);
       const owner = ownerOf(entry.project);
-      if (owner && !owners.has(owner.key)) owners.set(owner.key, owner.label);
+      if (owner && !owners.has(owner.key)) owners.set(owner.key, owner.name);
     },
   );
   const ranked =
