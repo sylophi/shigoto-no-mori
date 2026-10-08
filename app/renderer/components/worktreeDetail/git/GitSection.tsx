@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
+import { DiffStats } from "@/components/ui/diff-stats";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -9,29 +11,42 @@ import { pluralize } from "@/lib/pluralize";
 import { canSyncFromPrimary } from "@/lib/syncState";
 import { cn } from "@/lib/utils";
 import { getBrowseLeafSegment } from "@shared/projectPaths";
-import type { Worktree } from "@shared/schemas";
+import type { CommitSummary, Worktree } from "@shared/schemas";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { OperationBanner } from "./OperationBanner";
+import { CommitDot } from "./TimelineRow";
 
 // How many changed files the Changes row names before it just counts.
 const NAMED_FILES = 3;
+// How many of the newest commits the History row lists.
+const SHOWN_COMMITS = 3;
 
 // The worktree page's way into the Git page, where git is done: a row
 // per tab of it (Changes, Stashes, History), each saying what is there
 // and opening it, and in the heading the moves worth a click from here,
 // pushing and syncing from the primary branch. A merge or rebase
 // stopped on conflicts shows above, since nothing else moves until it
-// is settled.
+// is settled. Everything here reads, and opens the Git page to act.
 export function GitSection({ worktree }: { worktree: Worktree }) {
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
   const { data: files = [] } = useWorktreeChanges(projectId, worktreeId);
   const { data: stashes = [] } = useWorktreeStashes(worktree);
-  const last = worktree.recentCommits[0];
+  const { data: history } = useBranchHistory(
+    projectId,
+    worktreeId,
+    worktree.recentCommits[0]?.hash,
+  );
+  const commits = (history?.commits ?? worktree.recentCommits).slice(
+    0,
+    SHOWN_COMMITS,
+  );
   const named = files.slice(0, NAMED_FILES);
   const unnamed = worktree.changedCount - named.length;
   const newestStash = stashes[0];
+  const sum = (side: "additions" | "deletions") =>
+    files.reduce((n, file) => n + (file.counts?.[side] ?? 0), 0);
 
   return (
     <section className="space-y-2">
@@ -59,70 +74,89 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
         <EntryRow
           label="Changes"
           onOpen={() => nav.toDiff(projectId, worktreeId)}
+          trailing={
+            files.length > 0 && (
+              <DiffStats
+                additions={sum("additions")}
+                deletions={sum("deletions")}
+              />
+            )
+          }
         >
           {worktree.changedCount > 0 ? (
             <>
               {pluralize(worktree.changedCount, "file")} changed
               {named.length > 0 && (
-                <Detail>
+                <Muted>
+                  {" · "}
                   {named.map((f) => getBrowseLeafSegment(f.path)).join(", ")}
                   {unnamed > 0 && ` and ${unnamed} more`}
-                </Detail>
+                </Muted>
               )}
             </>
           ) : (
-            <span className="text-muted-foreground">
-              No uncommitted changes
-            </span>
+            <Muted>No uncommitted changes</Muted>
           )}
         </EntryRow>
         {newestStash && (
           <EntryRow
             label="Stashes"
             onOpen={() => nav.toStash(projectId, worktreeId, newestStash.hash)}
+            trailing={
+              <Muted>
+                <RelativeDate date={newestStash.date} />
+              </Muted>
+            }
           >
             {pluralize(stashes.length, "stash", "stashes")}
-            <Detail>
-              {newestStash.named ? newestStash.message : "Stashed changes"}
-              {", "}
-              <RelativeDate date={newestStash.date} />
-            </Detail>
+            <Muted>
+              {" · "}
+              {newestStash.named
+                ? newestStash.message
+                : `On top of ${newestStash.message}`}
+            </Muted>
           </EntryRow>
         )}
-        <EntryRow
-          label="History"
-          onOpen={
-            last
-              ? () => nav.toCommit(projectId, worktreeId, last.hash)
-              : undefined
-          }
-        >
-          {last ? (
-            <>
-              {last.subject}
-              <Detail>
-                <RelativeDate date={last.date} />
-              </Detail>
-            </>
-          ) : (
-            <span className="text-muted-foreground">No commits yet</span>
-          )}
-        </EntryRow>
+        {commits.length === 0 ? (
+          <EntryRow label="History" onOpen={undefined}>
+            <Muted>No commits yet</Muted>
+          </EntryRow>
+        ) : (
+          commits.map((commit, index) => (
+            <CommitRow
+              key={commit.hash}
+              label={index === 0 ? "History" : ""}
+              commit={commit}
+              local={index < worktree.unpushedCount}
+              onOpen={() => nav.toCommit(projectId, worktreeId, commit.hash)}
+            />
+          ))
+        )}
+        {history?.base && history.commits.length > 0 && (
+          <BranchLine
+            worktree={worktree}
+            base={history.base.ref}
+            own={history.commits.length}
+            more={history.more}
+          />
+        )}
       </div>
     </section>
   );
 }
 
-// One way into the Git page: the tab's name, what it holds, and the
-// chevron that says where the row leads. Without `onOpen` (no commits
-// for History) it only says.
+// One way into the Git page: the tab's name (on its first row), what
+// it holds, a trailing figure, and the chevron that says where the row
+// leads. Without `onOpen` it only says.
 function EntryRow({
   label,
   onOpen,
+  trailing,
   children,
 }: {
   label: string;
   onOpen: (() => void) | undefined;
+  trailing?: ReactNode;
   children: ReactNode;
 }) {
   const body = (
@@ -131,12 +165,18 @@ function EntryRow({
         {label}
       </span>
       <span className="min-w-0 flex-1 truncate text-sm">{children}</span>
-      {onOpen && (
-        <ChevronRight
-          aria-hidden
-          className="size-3.5 shrink-0 text-muted-foreground/40"
-        />
+      {trailing && (
+        <span className="flex shrink-0 items-center gap-3 text-xs">
+          {trailing}
+        </span>
       )}
+      <ChevronRight
+        aria-hidden
+        className={cn(
+          "size-3.5 shrink-0 text-muted-foreground/40",
+          !onOpen && "invisible",
+        )}
+      />
     </>
   );
   const shape =
@@ -156,11 +196,84 @@ function EntryRow({
   );
 }
 
-function Detail({ children }: { children: ReactNode }) {
+// A commit under History: whether a remote has it yet, its subject,
+// and in fixed columns its hash, age and size, so they line up.
+function CommitRow({
+  label,
+  commit,
+  local,
+  onOpen,
+}: {
+  label: string;
+  commit: CommitSummary;
+  local: boolean;
+  onOpen: () => void;
+}) {
   return (
-    <span className="text-muted-foreground">
-      {" · "}
-      {children}
-    </span>
+    <EntryRow
+      label={label}
+      onOpen={onOpen}
+      trailing={
+        <span className="grid grid-cols-[4.5rem_4.5rem_4.5rem] items-center text-muted-foreground phone:grid-cols-[4.5rem_4.5rem]">
+          <span className="font-mono phone:hidden">{commit.hash}</span>
+          <span className="truncate">
+            <RelativeDate date={commit.date} />
+          </span>
+          <span className="flex justify-end">
+            {(commit.additions > 0 || commit.deletions > 0) && (
+              <DiffStats
+                additions={commit.additions}
+                deletions={commit.deletions}
+              />
+            )}
+          </span>
+        </span>
+      }
+    >
+      <span className="mr-2 inline-flex align-middle">
+        <CommitDot local={local} />
+      </span>
+      {commit.subject}
+    </EntryRow>
   );
+}
+
+// Under the newest commits: where the branch began, how much it holds
+// (more than the rows above show), how far the primary branch has moved
+// since, and the way to all of it at once.
+function BranchLine({
+  worktree,
+  base,
+  own,
+  more,
+}: {
+  worktree: Worktree;
+  base: string;
+  own: number;
+  // More commits than the history read returned.
+  more: boolean;
+}) {
+  const nav = useWorktreeNav();
+  const behind = worktree.behindPrimary;
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 pl-[4.75rem] text-xs text-muted-foreground">
+      <span>
+        {more ? `${own}+ commits` : pluralize(own, "commit")} since{" "}
+        <span className="font-mono">{base}</span>
+        {behind > 0 && ` · it has ${pluralize(behind, "new commit")}`}
+      </span>
+      <button
+        type="button"
+        onClick={() => nav.toBranchDiff(worktree.projectId, worktree.id)}
+        className="inline-flex items-center gap-0.5 hover:text-foreground"
+      >
+        All branch changes
+        <ChevronRight aria-hidden className="size-3.5 opacity-60" />
+      </button>
+    </div>
+  );
+}
+
+function Muted({ children }: { children: ReactNode }) {
+  return <span className="text-muted-foreground">{children}</span>;
 }
