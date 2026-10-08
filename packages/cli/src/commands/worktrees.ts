@@ -22,11 +22,11 @@ import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 type Styles = ReturnType<typeof styles>;
 
 // A title cut to fit a terminal line.
-const truncate = (text: string, max: number) => {
-  const chars = [...text];
-  return max < 2 || chars.length <= max
-    ? text
-    : `${chars.slice(0, max - 1).join("")}…`;
+const titleCell = (title: string | undefined) => {
+  const chars = [...(title ?? "")];
+  return chars.length <= 50
+    ? chars.join("")
+    : `${chars.slice(0, 49).join("")}…`;
 };
 
 // The ↑ahead ↓behind cell, "synced" with no divergence.
@@ -69,6 +69,12 @@ const flagsCell = (
       .join(", "),
   );
 
+class NoProjects extends Schema.TaggedError<NoProjects>()("NoProjects", {}) {
+  override get message(): string {
+    return "No projects are registered yet. Add a repo in the Shigoto no Mori app first.";
+  }
+}
+
 // The projects a listing covers: the one --project-id or -p names, the
 // one at the cwd, or with --all (or outside any) every project.
 const scopeOf = (input: {
@@ -100,12 +106,6 @@ const scopeOf = (input: {
     }
     return { at, scope: at.projects };
   });
-
-class NoProjects extends Schema.TaggedError<NoProjects>()("NoProjects", {}) {
-  override get message(): string {
-    return "No projects are registered yet. Add a repo in the Shigoto no Mori app first.";
-  }
-}
 
 // A project the listing couldn't read, said and skipped.
 const warnSkipped = (skipped: Worktrees.Listing<unknown>["skipped"]) =>
@@ -144,51 +144,34 @@ const list = Command.make(
       const paint = styles(stdoutColor);
       const options = { primaryRef: input.primaryRef };
 
-      // One worktree, as the app asks after changing it.
+      // One worktree, as the app asks after changing it: no marker
+      // column, as in Go.
       if (Option.isSome(given(input.worktreeId))) {
-        const { located } = yield* resolveWorktree({
-          ...input,
-          ref: Option.none(),
-        });
+        const located = yield* resolveWorktree(input);
         if (input.identities) {
           const row = yield* worktrees.identityRow(located, options);
           return yield* json
             ? emit([row])
-            : identityTable(paint, [row], {
-                names: new Map(),
-                multi: false,
-                current: "",
-              });
+            : identityTable(paint, [row], { names: new Map(), multi: false });
         }
         const row = yield* worktrees.row(located, { settle: true });
-        if (json) return yield* emit([row]);
-        return yield* out(
-          renderTable(
-            ["NAME", "BRANCH", "SYNC", "CHANGES", "", "TITLE"],
-            [
-              [
-                row.name,
-                row.branch,
-                syncCell(paint, row),
-                changesCell(paint, row),
-                flagsCell(paint, row),
-                truncate(row.title ?? "", 50),
-              ],
-            ],
-            stdoutColor,
-          ),
-        );
+        return yield* json
+          ? emit([row])
+          : rowTable(paint, [row], { multi: false });
       }
 
       const { at, scope } = yield* scopeOf(input);
       const current = at.current?.worktree.id ?? "";
+      // A project column once more than one project listed.
+      const listed = (skipped: Worktrees.Listing<unknown>["skipped"]) =>
+        scope.length - skipped.length > 1;
       if (input.identities) {
         const listing = yield* worktrees.identityList(scope, options);
         yield* warnSkipped(listing.skipped);
         if (json) return yield* emit(listing.rows);
         return yield* identityTable(paint, listing.rows, {
           names: new Map(scope.map((project) => [project.id, project.name])),
-          multi: scope.length - listing.skipped.length > 1,
+          multi: listed(listing.skipped),
           current,
         });
       }
@@ -196,32 +179,49 @@ const list = Command.make(
       yield* warnSkipped(listing.skipped);
       if (json) return yield* emit(listing.rows);
       if (listing.rows.length === 0) return yield* note("No worktrees found.");
-      // A project column once more than one project listed.
-      const multi = scope.length - listing.skipped.length > 1;
-      const rows = listing.rows.map((row) =>
-        [row.id === current ? paint.cyan("@") : ""].concat(
-          multi ? [row.projectName] : [],
-          [
+      yield* rowTable(paint, listing.rows, {
+        multi: listed(listing.skipped),
+        current,
+      });
+    }),
+).pipe(Command.withDescription("The worktrees, with their sync and changes"));
+
+// The full table: sync, changes, flags and title, with the marker
+// column (`@` at the cwd's worktree) when there is a cwd to mark.
+const rowTable = (
+  paint: Styles,
+  rows: ReadonlyArray<Worktrees.WorktreeRow>,
+  table: { readonly multi: boolean; readonly current?: string },
+) =>
+  Effect.flatMap(Effect.service(Output), ({ stdoutColor }) => {
+    const marked = table.current !== undefined;
+    return out(
+      renderTable(
+        (marked ? [""] : []).concat(table.multi ? ["PROJECT"] : [], [
+          "NAME",
+          "BRANCH",
+          "SYNC",
+          "CHANGES",
+          "",
+          "TITLE",
+        ]),
+        rows.map((row) =>
+          (marked
+            ? [row.id === table.current ? paint.cyan("@") : ""]
+            : []
+          ).concat(table.multi ? [row.projectName] : [], [
             row.name,
             row.branch,
             syncCell(paint, row),
             changesCell(paint, row),
             flagsCell(paint, row),
-            truncate(row.title ?? "", 50),
-          ],
+            titleCell(row.title),
+          ]),
         ),
-      );
-      yield* out(
-        renderTable(
-          multi
-            ? ["", "PROJECT", "NAME", "BRANCH", "SYNC", "CHANGES", "", "TITLE"]
-            : ["", "NAME", "BRANCH", "SYNC", "CHANGES", "", "TITLE"],
-          rows,
-          stdoutColor,
-        ),
-      );
-    }),
-).pipe(Command.withDescription("The worktrees, with their sync and changes"));
+        stdoutColor,
+      ),
+    );
+  });
 
 // The --identities table: NAME, BRANCH and the flags.
 const identityTable = (
@@ -230,21 +230,18 @@ const identityTable = (
   table: {
     readonly names: ReadonlyMap<string, string>;
     readonly multi: boolean;
-    readonly current: string;
+    readonly current?: string;
   },
 ) =>
   Effect.gen(function* () {
     if (rows.length === 0) return yield* note("No worktrees found.");
-    const { names, multi, current } = table;
     const { stdoutColor } = yield* Effect.service(Output);
     yield* out(
       renderTable(
-        multi
-          ? ["", "PROJECT", "NAME", "BRANCH", ""]
-          : ["", "NAME", "BRANCH", ""],
+        [""].concat(table.multi ? ["PROJECT"] : [], ["NAME", "BRANCH", ""]),
         rows.map((row) =>
-          [row.id === current ? paint.cyan("@") : ""].concat(
-            multi ? [names.get(row.projectId) ?? ""] : [],
+          [row.id === table.current ? paint.cyan("@") : ""].concat(
+            table.multi ? [table.names.get(row.projectId) ?? ""] : [],
             [row.name, row.branch, flagsCell(paint, row)],
           ),
         ),
@@ -261,8 +258,7 @@ const path = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const { located } = yield* resolveWorktree(input);
-      const { worktree, project } = located;
+      const { worktree, project } = yield* resolveWorktree(input);
       const { json } = yield* Effect.service(Output);
       yield* json
         ? emit({
@@ -294,7 +290,8 @@ const destination = Command.make(
         });
       }
       const project = yield* resolveProject(input);
-      const dest = yield* (yield* Worktrees.Worktrees).destination(
+      const worktrees = yield* Worktrees.Worktrees;
+      const dest = yield* worktrees.destination(
         project,
         Option.getOrElse(input.name, () => "").trim(),
       );

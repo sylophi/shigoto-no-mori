@@ -62,18 +62,17 @@ export const worktreeFlags = {
 
 // The worktree a command names, else the one at the cwd.
 export const resolveWorktree = (ref: {
-  readonly ref: Option.Option<string>;
+  readonly ref?: Option.Option<string>;
   readonly project: Option.Option<string>;
   readonly projectId: Option.Option<string>;
   readonly worktreeId: Option.Option<string>;
 }) =>
   Effect.gen(function* () {
     const at = yield* here;
-    const located = yield* (yield* Worktrees.Worktrees).resolve(at, {
-      ref: Option.getOrUndefined(given(ref.ref)),
+    return yield* (yield* Worktrees.Worktrees).resolve(at, {
+      ref: Option.getOrUndefined(given(ref.ref ?? Option.none())),
       project: Option.getOrUndefined(given(ref.project)),
       projectId: Option.getOrUndefined(given(ref.projectId)),
       worktreeId: Option.getOrUndefined(given(ref.worktreeId)),
     });
-    return { at, located };
   });

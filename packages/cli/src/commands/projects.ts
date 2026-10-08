@@ -302,7 +302,6 @@ const reorder = Command.make(
 ).pipe(Command.withDescription("Put projects first in the given order"));
 
 export const projectsCommand = Command.make("projects").pipe(
-  Command.withAlias("p"),
   Command.withDescription("Project commands"),
   Command.withSubcommands([list, add, remove, reorder, icon, projectConfig]),
 );

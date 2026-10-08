@@ -51,15 +51,13 @@ const withoutHue = (doc: unknown) =>
     ? doc.map((row: unknown) => Object.assign({}, row, { hue: null }))
     : doc;
 
-// What differs by side: a new project's id, random on each, and each
-// side's own data dir, where managed worktrees go.
-const withoutIds = (seen: object) =>
+// What differs by side: a new project's id, random on each, and the
+// side's own data dir, where managed worktrees go. Only the run's own
+// dir is masked, so one side using the other's still shows.
+const withoutSideDetails = (seen: object, side: string) =>
   JSON.parse(
-    ["go", "cli"]
-      .reduce(
-        (text, side) => text.replaceAll(`${box.home}/${side}/`, "<data>/"),
-        JSON.stringify(seen),
-      )
+    JSON.stringify(seen)
+      .replaceAll(`${box.home}/${side}/`, "<data>/")
       .replaceAll(
         /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
         "<id>",
@@ -75,8 +73,8 @@ const sameAt = async (cwd: string, ...args: string[]) => {
     box.runAt(goSm(), "go", cwd, args),
     box.runAt(built, "cli", cwd, args),
   ]);
-  const seen = (run: typeof go) =>
-    withoutIds(
+  const seen = (run: typeof go, side: string) =>
+    withoutSideDetails(
       args.includes("--json")
         ? {
             code: run.code,
@@ -84,8 +82,9 @@ const sameAt = async (cwd: string, ...args: string[]) => {
             stderr: run.stderr,
           }
         : { code: run.code, stdout: run.stdout, stderr: run.stderr },
+      side,
     );
-  assert.deepStrictEqual(seen(ours), seen(go), args.join(" "));
+  assert.deepStrictEqual(seen(ours, "cli"), seen(go, "go"), args.join(" "));
 };
 
 const same = (...args: string[]) => sameAt(box.home, ...args);

@@ -42,11 +42,11 @@ function globalFlags(args: ReadonlyArray<string>) {
   };
 }
 
-// Go's aliases for the command and the worktree verb, folded before
-// parsing: effect/cli takes one alias per command.
-const COMMANDS: Readonly<Record<string, string>> = {
-  ls: "list",
-  l: "list",
+// Go's aliases, folded before parsing, since effect/cli takes one per
+// command: a verb's, at the top level and after `worktrees`, and a
+// namespace's.
+const VERBS: Readonly<Record<string, string>> = { ls: "list", l: "list" };
+const NAMESPACES: Readonly<Record<string, string>> = {
   worktree: "worktrees",
   wt: "worktrees",
   w: "worktrees",
@@ -54,18 +54,14 @@ const COMMANDS: Readonly<Record<string, string>> = {
   p: "projects",
   launcher: "launchers",
 };
-const WORKTREE_VERBS: Readonly<Record<string, string>> = {
-  ls: "list",
-  l: "list",
-};
 
 function canonical(args: ReadonlyArray<string>) {
   const [first, ...more] = args;
   if (first === undefined) return args;
-  const command = COMMANDS[first] ?? first;
+  const command = NAMESPACES[first] ?? VERBS[first] ?? first;
   const [verb, ...after] = more;
   return command === "worktrees" && verb !== undefined
-    ? [command, WORKTREE_VERBS[verb] ?? verb, ...after]
+    ? [command, VERBS[verb] ?? verb, ...after]
     : [command, ...more];
 }
 
