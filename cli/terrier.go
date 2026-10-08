@@ -2,9 +2,9 @@ package main
 
 // Terrier integration (github.com/dittofleet/terrier): an external
 // registry of repo paths, merged into the project list when the global
-// `terrier` toggle is on. Terrier's stable surface is `terrier ls
-// --json` plus the rule that a minor version bump is the compatibility
-// signal, so that is all this file consumes. The CLI owns the merge:
+// `terrier` toggle is on. `terrier ls --json` is all this file
+// consumes, so terrier's version doesn't matter, only whether that
+// output still has the shape read here. The CLI owns the merge:
 // every command sees the merged list (main.go), and the app reads it
 // through `sm projects list --json`. The app does no merge of its own;
 // host/lib/terrier.ts only checks terrier's readiness for Settings.
@@ -21,7 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -42,17 +42,6 @@ func terrierOutput(args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, terrierBinary, args...).Output()
 }
 
-// The registry-read contract this build understands. Terrier's README:
-// "a tool checks the minor version and nothing else". A minor bump
-// means something a tool could be relying on has changed, so an
-// unknown minor deactivates the merge rather than guessing. The app's
-// readiness check (host/lib/terrier.ts) applies the same contract, so
-// Settings calls the integration ready exactly when this merges.
-const (
-	terrierSupportedMajor = 0
-	terrierSupportedMinor = 1
-)
-
 // One row of `terrier ls --json`.
 type terrierListing struct {
 	Path string `json:"path"`
@@ -67,48 +56,45 @@ func terrierEnabled(global globalConfig) bool {
 	return global.Terrier != nil && *global.Terrier
 }
 
-// "" when the binary is missing or the spawn fails.
-var terrierVersion = sync.OnceValue(func() string {
-	stdout, err := terrierOutput("version")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(stdout))
-})
-
-func terrierCompatible() (ok bool, version string) {
-	version = terrierVersion()
-	var major, minor int
-	if n, _ := fmt.Sscanf(version, "v%d.%d", &major, &minor); n < 2 {
-		return false, version
-	}
-	return major == terrierSupportedMajor && minor == terrierSupportedMinor, version
-}
-
 var terrierListings = sync.OnceValues(func() ([]terrierListing, error) {
 	stdout, err := terrierOutput("ls", "--json")
 	if err != nil {
 		return nil, err
 	}
+	return parseTerrierListings(stdout)
+})
+
+// A missing `projects` or a row without `path` is an error rather than
+// an empty list, so a terrier whose output changed shape says so
+// instead of quietly listing nothing.
+func parseTerrierListings(stdout []byte) ([]terrierListing, error) {
 	var doc struct {
-		Projects []terrierListing `json:"projects"`
+		Projects *[]struct {
+			Path *string `json:"path"`
+		} `json:"projects"`
 	}
 	if err := json.Unmarshal(stdout, &doc); err != nil {
 		return nil, err
+	}
+	if doc.Projects == nil {
+		return nil, errors.New("no projects list in its output")
 	}
 	// Home-expanded and required to be absolute, never resolved
 	// against cwd: that differs between the app's spawn and a shell, so
 	// the same relative row could mint different ids.
 	var listings []terrierListing
-	for _, t := range doc.Projects {
-		path := expandHome(t.Path)
+	for _, t := range *doc.Projects {
+		if t.Path == nil {
+			return nil, errors.New("a project without a path in its output")
+		}
+		path := expandHome(*t.Path)
 		if path == "" || !filepath.IsAbs(path) {
 			continue
 		}
 		listings = append(listings, terrierListing{Path: path})
 	}
 	return listings, nil
-})
+}
 
 // Deterministic id for a terrier-sourced project: UUID-shaped from
 // sha256(path), so every process mints the same id for the same path
@@ -123,7 +109,7 @@ func terrierProjectID(path string) string {
 }
 
 // Why the registry can't be read right now, or nil when it can. The
-// one walk of the installed -> compatible -> readable ladder, feeding
+// one walk of the installed -> readable ladder, feeding
 // the merge's stderr warning and doctor's finding with the same words
 // so the two can never explain the same "off" state differently.
 // Assumes the caller already checked terrierEnabled: an off toggle is
@@ -140,17 +126,10 @@ var terrierTroubleFor = sync.OnceValue(func() *terrierTrouble {
 			advice:  "Install terrier, or turn the toggle off in the app's Settings.",
 		}
 	}
-	if ok, version := terrierCompatible(); !ok {
-		return &terrierTrouble{
-			summary: fmt.Sprintf("%s isn't a version this build understands (wants v%d.%d), so no terrier projects are listed",
-				describeTerrierVersion(version), terrierSupportedMajor, terrierSupportedMinor),
-			advice: "Update " + binaryName + " and terrier to versions that agree.",
-		}
-	}
 	if _, err := terrierListings(); err != nil {
 		return &terrierTrouble{
-			summary: "`terrier ls --json` failed: " + err.Error(),
-			advice:  "Run `terrier ls` by hand to see what it says.",
+			summary: "`terrier ls --json` failed (" + err.Error() + "), so no terrier projects are listed",
+			advice:  "Run `terrier ls --json` by hand to see what it says, and update " + binaryName + " if its output changed.",
 		}
 	}
 	return nil
@@ -218,8 +197,4 @@ func appendTerrierProjects(projects []project, listings []terrierListing) []proj
 		return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(a.Path, b.Path))
 	})
 	return append(projects, extras...)
-}
-
-func describeTerrierVersion(version string) string {
-	return cmp.Or(version, "(version unreadable)")
 }

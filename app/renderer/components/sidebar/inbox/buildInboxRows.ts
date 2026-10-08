@@ -1,4 +1,5 @@
 import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
+import { groupPrefixOf } from "@shared/sharedSettings";
 import {
   showPrimaryInInbox,
   type ProjectShigomoriConfigQueries,
@@ -47,6 +48,11 @@ interface BuildInboxRowsArgs {
   openShelves: Set<InboxShelf>;
   // Worktrees starting with one of these go on the Hidden shelf.
   hiddenPrefixes: readonly string[];
+  // The live worktrees starting with one of these gather under a
+  // header per prefix (groupPrefixOf), the ones in `shutGroups` drawn
+  // as their header alone.
+  groupedPrefixes: readonly string[];
+  shutGroups: ReadonlySet<string>;
   // Whether the agent-working mark counts (isAgentWorking).
   allowAgentWorking: boolean;
 }
@@ -108,7 +114,8 @@ function worktreeRow(entry: Entry): SidebarRow {
 
 // Flattens every project's worktrees (this machine's and every peer's)
 // into the inbox view's boxes: live work at the top with no header,
-// then the Agent working, Shelved, Merged and Hidden shelves. Primary
+// the live work a grouped prefix gathers under its header, then the
+// Agent working, Shelved, Merged and Hidden shelves. Primary
 // checkouts are left out unless the project opts in
 // (ShigomoriConfigSchema.showPrimaryInInbox). They're a project's
 // root, not a piece of in-flight work, and one per project would crowd
@@ -126,6 +133,8 @@ export function buildInboxRows({
   deviceBadges,
   openShelves,
   hiddenPrefixes,
+  groupedPrefixes,
+  shutGroups,
   allowAgentWorking,
 }: BuildInboxRowsArgs): SidebarViewModel {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
@@ -236,7 +245,42 @@ export function buildInboxRows({
     (sum, entries) => sum + entries.length,
     live.length,
   );
-  const rows: SidebarRow[] = live.toSorted(byRecency).map(worktreeRow);
+  // The prefixes' headers in their (sorted) order, after the rest. A
+  // stack's layers file one by one: the inbox orders by recency, so
+  // there is no rail to keep in one piece.
+  const rest: Entry[] = [];
+  const grouped = new Map<string, Entry[]>();
+  // Each grouped worktree's prefix, open group or not, like shelfOf.
+  const groupOf = new Map<string, string>();
+  for (const entry of live) {
+    const prefix = groupPrefixOf(entry.worktree, groupedPrefixes);
+    if (prefix === null) {
+      rest.push(entry);
+      continue;
+    }
+    const entries = grouped.get(prefix) ?? [];
+    grouped.set(prefix, entries);
+    entries.push(entry);
+    groupOf.set(
+      worktreeRowKey(entry.device?.deviceId, entry.worktree.id),
+      prefix,
+    );
+  }
+  const rows: SidebarRow[] = rest.toSorted(byRecency).map(worktreeRow);
+  for (const prefix of groupedPrefixes) {
+    const entries = grouped.get(prefix);
+    if (!entries) continue;
+    const expanded = !shutGroups.has(prefix);
+    rows.push({
+      kind: "inbox-group",
+      key: `group:${prefix}`,
+      prefix,
+      count: entries.length,
+      expanded,
+    });
+    if (!expanded) continue;
+    rows.push(...entries.toSorted(byRecency).map(worktreeRow));
+  }
   for (const shelf of [
     "agentWorking",
     "shelved",
@@ -280,6 +324,8 @@ export function buildInboxRows({
         local === undefined ? peerKey : worktreeRowKey(undefined, local);
       const shelf = shelfOf.get(key);
       if (shelf && !openShelves.has(shelf)) return `shelf:${shelf}`;
+      const group = groupOf.get(key);
+      if (group !== undefined && shutGroups.has(group)) return `group:${group}`;
       return rows.some((r) => r.key === key) ? key : null;
     },
   };

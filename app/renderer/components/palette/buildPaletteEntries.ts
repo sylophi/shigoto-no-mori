@@ -235,7 +235,7 @@ export function projectNames(project: Project): string[] {
 
 function ownerNames(project: Project): string[] {
   const owner = ownerOf(project);
-  return owner ? [owner.label, `${owner.label}/${owner.repo}`] : [];
+  return owner ? [owner.name, `${owner.name}/${owner.repo}`] : [];
 }
 
 // The few projects the query names, best first, and all of an owner's
@@ -304,7 +304,7 @@ export function rankPaletteProjects(
   const owner = query.toLowerCase();
   return ranked.filter(
     (p, i) =>
-      i < PROJECTS_SHOWN || ownerOf(p.project)?.label.toLowerCase() === owner,
+      i < PROJECTS_SHOWN || ownerOf(p.project)?.name.toLowerCase() === owner,
   );
 }
 

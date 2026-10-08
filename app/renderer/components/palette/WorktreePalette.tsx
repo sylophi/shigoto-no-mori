@@ -5,6 +5,8 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { KbdHint } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
+  EMPTY_CLASS,
+  INPUT_CLASS,
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
 } from "@/components/ui/cmdk-classes";
@@ -573,11 +575,6 @@ function PaletteDialog({
     </ModalShell>
   );
 }
-
-const EMPTY_CLASS = "p-3 text-center text-xs text-muted-foreground";
-
-const INPUT_CLASS =
-  "min-w-0 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground";
 
 // The list's input. Not cmdk's own: cmdk moves the highlight to the
 // first row on every change of its query, including the one that puts

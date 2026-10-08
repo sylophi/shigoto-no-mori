@@ -157,7 +157,7 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
         <>
           {owner && (
             <>
-              <Highlight text={owner.label} query={query} /> ·{" "}
+              <Highlight text={owner.name} query={query} /> ·{" "}
             </>
           )}
           {worktreeCount > 0

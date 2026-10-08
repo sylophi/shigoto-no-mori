@@ -396,7 +396,7 @@ try {
     assert.equal(named("gro").length, 3, "the few, for less than its name");
     assert.deepEqual(named("grove/fir"), ["fir"], "ahead of the repo");
     assert.deepEqual(named("fir-tree"), ["fir"], "the repo's own name");
-    assert.deepEqual(named("gitlab.com/vines"), ["ivy"], "another host's");
+    assert.deepEqual(named("vines"), ["ivy"], "on another host too");
     const grove = { ...lantern, remote: "github.com/grove/lantern" };
     const { entries: list } = buildPaletteEntries({
       projects: [forest, grove],

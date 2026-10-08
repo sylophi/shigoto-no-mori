@@ -19,6 +19,8 @@ export interface RowHandlers {
   onToggleOwner: (ownerKey: string) => void;
   // A prefix's group in the open project opened or shut.
   onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
+  // A prefix's group in the inbox opened or shut.
+  onToggleInboxGroup: (prefix: string) => void;
   // The group key of the project the page on screen belongs to.
   currentGroupKey: string | undefined;
   arrangeMode: boolean;
@@ -76,6 +78,7 @@ function projectIdForRow(row: SidebarRow): string | null {
   if (
     row.kind === "inbox-worktree" ||
     row.kind === "inbox-shelf" ||
+    row.kind === "inbox-group" ||
     row.kind === "owner-header"
   )
     return null;
