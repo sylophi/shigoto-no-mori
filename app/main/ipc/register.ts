@@ -8,6 +8,8 @@
 import { bundledBinaryPath } from "../electron/bundledBinary";
 import { devDialKinds } from "../electron/devDialKinds";
 import { coalesce } from "@host/lib/util/coalesce";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
@@ -39,10 +41,8 @@ import {
 import { getDeviceId } from "@host/lib/config/deviceId";
 import { readGlobalConfig } from "@host/lib/config/global";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
-import {
-  createCloudflaredRunner,
-  resolveCloudflaredBinary,
-} from "@host/direct/cloudflared";
+import * as TunnelService from "@host/direct/cloudflared";
+import { resolveCloudflaredBinary, tunnel } from "@host/direct/cloudflared";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { createWsServerBinding } from "@host/socket/server";
@@ -153,39 +153,47 @@ const directWsServer = createWsServerBinding({
   isInvited: mirrorInviteAdmits,
 });
 
-// The tunnel endpoint: a supervised cloudflared
-// child fronting the direct listener's loopback port through this
-// device's named Cloudflare tunnel. Reconciled from refreshDirectHost
-// so it follows the listener exactly (a new ephemeral port
-// re-provisions, a stopped listener stops the child), and sign-out, an
-// account switch and directConnections off land here as
-// reconcile(null) through the same path. Quit alone calls stop() (the
-// runner's terminal latch, via stopDirectHost in main/hostLayer.ts).
-// The connector token stays inside the runner, never here.
-const tunnelRunner = createCloudflaredRunner({
-  // Resolved fresh per start attempt: the probe is one bounded
-  // execFile, already rate-limited by the runner's ladder and its
-  // reconcile no-op rules, and any memo here would leave the
-  // install-cloudflared recovery path (any config write re-probes)
-  // dead for the PATH case.
-  resolveBinary: async () => {
-    const config = await readGlobalConfig();
-    // The connector the app ships (shared/packaging/cloudflaredDist.mts,
-    // fetched by `pnpm start` in dev).
-    return resolveCloudflaredBinary(
-      config.cloudflaredPath,
-      bundledBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
-    );
-  },
-  provision: (port) => provisionDeviceTunnel(port),
-  // Orphan-reap bookkeeping: the live child's pid, recorded so a
-  // crashed Electron's leftover connector is killed on the next
-  // launch. A getter because userData is an app-ready fact.
-  pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
-  // Tunnel state rides the same status snapshot the device hub and
-  // direct transitions feed, so the account page updates live.
-  onChange: () => directPlane.notifyStatusChanged(),
-});
+// The tunnel endpoint: a supervised cloudflared child fronting the
+// direct listener's loopback port through this device's named
+// Cloudflare tunnel. Reconciled from refreshDirectHost so it follows
+// the listener exactly (a new ephemeral port re-provisions, a stopped
+// listener stops the child), and sign-out, an account switch and
+// directConnections off land here as reconcile(null) through the same
+// path. The connector token stays inside the Tunnel, never here.
+export const tunnelLayer = TunnelService.adapter.pipe(
+  Layer.provideMerge(
+    TunnelService.layer({
+      // Resolved fresh per start attempt: the probe is one bounded
+      // spawn, already rate-limited by the restart ladder and the
+      // reconcile no-op rules, and any memo here would leave the
+      // install-cloudflared recovery path (any config write re-probes)
+      // dead for the PATH case.
+      resolveBinary: Effect.promise(readGlobalConfig).pipe(
+        Effect.flatMap((config) =>
+          // The connector the app ships
+          // (shared/packaging/cloudflaredDist.mts, fetched by `pnpm
+          // start` in dev).
+          resolveCloudflaredBinary(
+            config.cloudflaredPath,
+            bundledBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
+          ),
+        ),
+      ),
+      provision: (port) =>
+        Effect.tryPromise({
+          try: () => provisionDeviceTunnel(port),
+          catch: (cause) => new TunnelService.TunnelProvisionError({ cause }),
+        }),
+      // Orphan-reap bookkeeping: the live child's pid, recorded so a
+      // crashed Electron's leftover connector is killed on the next
+      // launch. A getter because userData is an app-ready fact.
+      pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
+      // Tunnel state rides the same status snapshot the device hub and
+      // direct transitions feed, so the account page updates live.
+      onChange: () => directPlane.notifyStatusChanged(),
+    }),
+  ),
+);
 
 // The control wire: the loopback listener the CLI drives the
 // cross-device verbs through (main/core/control/server.ts). A wire of
@@ -233,7 +241,7 @@ const directPlane = createDirectPlane({
   dialableKinds: devDialKinds(),
   host: {
     closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
-    tunnelState: () => tunnelRunner.status().state,
+    tunnelState: () => tunnel.state(),
   },
 });
 
@@ -253,7 +261,7 @@ const serveConnectInfo = makeConnectInfo({
   mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
   // The tunnel candidate, advertised only while
   // the cloudflared child is currently healthy (probed routable).
-  tunnelUrl: () => tunnelRunner.tunnelUrl(),
+  tunnelUrl: () => tunnel.tunnelUrl(),
   acceptsCommands: acceptsPeerCommands,
 });
 
@@ -507,11 +515,7 @@ export function probeRemoteConnections(): void {
 // and the session close, in the order that matters).
 export function stopDirectHost(): Promise<void> {
   directPlane.stop();
-  // The cloudflared child stops with the listener it fronts, so quit
-  // never leaves an orphan tunnel process behind.
-  return Promise.all([tunnelRunner.stop(), directWsServer.stop()]).then(
-    () => undefined,
-  );
+  return directWsServer.stop();
 }
 
 // Reconciles the direct data-plane listener with the account and
@@ -562,7 +566,7 @@ export async function refreshDirectHost(): Promise<void> {
   // the config write or account change that triggered the refresh.
   await logFailure("[tunnel] reconcile failed", () => {
     const listener = directWsServer.status();
-    return tunnelRunner.reconcile(
+    return tunnel.reconcile(
       listener.listening && listener.port !== null
         ? { port: listener.port }
         : null,
