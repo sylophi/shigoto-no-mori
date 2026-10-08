@@ -22,7 +22,8 @@ export function sanitizeBranchForPath(branch: string): string {
   const slashed = branch
     .replace(PATH_SEPARATOR, "-")
     .replace(CONTROL_CHARS, "");
-  const trimmed = slashed.replace(/^[.\s-]+|[.\s-]+$/g, "");
+  // Dots, dashes and ASCII whitespace (Go's \s, which the CLI trims).
+  const trimmed = slashed.replace(/^[.\t\n\f\r -]+|[.\t\n\f\r -]+$/g, "");
   if (!trimmed || RESERVED_NAMES.has(trimmed.toLowerCase())) return "";
   return trimmed;
 }
