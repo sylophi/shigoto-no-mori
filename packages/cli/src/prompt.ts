@@ -14,9 +14,12 @@ export const interactive = Effect.map(
 export const confirm = (question: string) =>
   Effect.gen(function* () {
     const answer = yield* Effect.callback<string | undefined>((resume) => {
+      // A plain line, as Go reads it: the terminal stays cooked, so
+      // Ctrl-C stops the command rather than answering no.
       const lines = createInterface({
         input: process.stdin,
         output: process.stderr,
+        terminal: false,
       });
       let answered = false;
       lines.question(`${question} [y/N] `, (line) => {

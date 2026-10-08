@@ -1,7 +1,7 @@
 // sm projects <list|add|remove|reorder|icon|config>: the registered
 // projects, terrier's included, and each one's settings.
-import { basename, resolve } from "node:path";
-import { errorDocument } from "@shigomori/engine/errorDocument";
+import { basename, isAbsolute, resolve } from "node:path";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Projects from "@shigomori/engine/Projects";
@@ -131,11 +131,19 @@ const projectConfig = settingsOf.pipe(
   ),
 );
 
-// A typed path, home-expanded and made absolute against the cwd.
+// A typed path, home-expanded and made absolute against the cwd, as
+// Go's toAbsolute: an absolute path stays as typed, and without a cwd
+// the path stays relative.
 const absolute = (raw: string) =>
-  Effect.map(Effect.service(Paths.Paths), ({ expandHome }) =>
-    resolve(expandHome(raw)),
-  );
+  Effect.map(Effect.service(Paths.Paths), ({ expandHome }) => {
+    const expanded = expandHome(raw);
+    if (isAbsolute(expanded)) return expanded;
+    try {
+      return resolve(process.cwd(), expanded);
+    } catch {
+      return expanded;
+    }
+  });
 
 const yesFlag = Flag.Boolean("yes").pipe(
   Flag.withAlias("y"),
@@ -187,11 +195,9 @@ const addAll = (root: string, yes: boolean) =>
     if (!yes) yield* confirmAll(root, found);
     const added: Registry.RegisteredProject[] = [];
     for (const repo of found.repos) {
-      const project = yield* projects.add(repo).pipe(Effect.result);
+      const project = yield* projects.register(repo).pipe(Effect.result);
       if (Result.isFailure(project)) {
-        yield* note(
-          `warning: skipping ${repo}: ${errorDocument(project.failure).error}`,
-        );
+        yield* note(`warning: skipping ${repo}: ${messageOf(project.failure)}`);
         continue;
       }
       added.push(project.success);
@@ -244,8 +250,8 @@ const remove = Command.make(
           : yield* new UsageError({
               problem: `Specify a project to remove (see \`${binaryName} projects list\`).`,
             });
-      const left = yield* projects.leftovers(project);
       if (!input.yes) {
+        const left = yield* projects.leftovers(project);
         if (!(yield* interactive)) {
           return yield* new UsageError({
             problem: `Refusing to remove ${project.name} without confirmation. Re-run with --yes, or interactively.`,

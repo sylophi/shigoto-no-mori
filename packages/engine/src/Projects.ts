@@ -69,6 +69,13 @@ export class Projects extends Context.Service<
       Registry.RegisteredProject,
       NotARepository | Registry.ProjectAlreadyAdded
     >;
+    // Adds a repository at its primary checkout, as `scan` found it.
+    readonly register: (
+      primaryPath: string,
+    ) => Effect.Effect<
+      Registry.RegisteredProject,
+      Registry.ProjectAlreadyAdded
+    >;
     // The outermost repositories six levels under `root`, the way the
     // app's folder scan finds them, less the registered ones.
     readonly scan: (root: string) => Effect.Effect<Found, NotADirectory>;
@@ -102,6 +109,11 @@ const SKIPPED = new Set([
 
 const SCAN_DEPTH = 6;
 
+// A step that only adds to what a project starts with: its failure,
+// or a defect under it, leaves the project as added.
+const bestEffort = <A, E, R>(step: Effect.Effect<A, E, R>) =>
+  step.pipe(Effect.catchCause(() => Effect.void));
+
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -121,8 +133,8 @@ const make = Effect.gen(function* () {
 
   // What a project starts with: auto-pull on its primary per the
   // autoPullNew setting, its default branch, and a `<pm> install` setup
-  // script per autoPopulateInstall. Best effort: a repo without a
-  // default branch stays unconfigured until its first setting.
+  // script per autoPopulateInstall. A repo without a default branch
+  // stays unconfigured until its first setting.
   const seed = (project: Registry.RegisteredProject) =>
     Effect.gen(function* () {
       const [autoPull, install, branch, manager] = yield* Effect.all(
@@ -135,10 +147,8 @@ const make = Effect.gen(function* () {
         { concurrency: "unbounded" },
       );
       if (autoPull) {
-        yield* registry.setMark(
-          "autoPull",
-          worktreeIdFromPath(project.path),
-          true,
+        yield* bestEffort(
+          registry.setMark("autoPull", worktreeIdFromPath(project.path), true),
         );
       }
       const scope = {
@@ -147,23 +157,30 @@ const make = Effect.gen(function* () {
         path: project.path,
       } as const;
       if (Option.isSome(branch)) {
-        yield* config.set(scope, "defaultBranch", branch.value);
+        yield* bestEffort(config.set(scope, "defaultBranch", branch.value));
       }
       if (install && Option.isSome(manager)) {
-        yield* config.set(scope, "scripts.setup", `${manager.value} install`);
+        yield* bestEffort(
+          config.set(scope, "scripts.setup", `${manager.value} install`),
+        );
       }
-    }).pipe(Effect.ignore);
+    }).pipe(bestEffort);
 
-  const add = Effect.fn("Projects.add")(function* (at: string) {
-    const repo = yield* git.locate(at);
-    if (Option.isNone(repo)) return yield* new NotARepository({ path: at });
-    const primaryPath = repo.value.primaryPath;
+  const register = Effect.fn("Projects.register")(function* (
+    primaryPath: string,
+  ) {
     const project = yield* registry.register({
       name: path.basename(primaryPath),
       path: primaryPath,
     });
     yield* seed(project);
     return project;
+  });
+
+  const add = Effect.fn("Projects.add")(function* (at: string) {
+    const repo = yield* git.locate(at);
+    if (Option.isNone(repo)) return yield* new NotARepository({ path: at });
+    return yield* register(repo.value.primaryPath);
   });
 
   // A folder, not a link to one: readLink answers only for a link.
@@ -199,10 +216,10 @@ const make = Effect.gen(function* () {
         (name) => isFolder(path.join(dir, name)),
         { concurrency: 16 },
       );
-      const nested = yield* Effect.forEach(
-        folders,
-        (name) => walk(path.join(dir, name), depth + 1),
-        { concurrency: 4 },
+      // One folder at a time, as Go walks: a wide tree can't run out of
+      // file handles, which would read as folders with nothing in them.
+      const nested = yield* Effect.forEach(folders, (name) =>
+        walk(path.join(dir, name), depth + 1),
       );
       return nested.flat();
     });
@@ -217,21 +234,24 @@ const make = Effect.gen(function* () {
     const registered = new Set(
       (yield* registry.projects).map((project) => project.path),
     );
-    const repos: string[] = [];
-    let known = 0;
     // Folded to the primary checkout like a single add, so a spelling of
-    // `root` that isn't the registered one still matches it.
-    for (const found of (yield* walk(root, 0)).toSorted()) {
-      const primary = registered.has(found)
-        ? found
-        : Option.match(yield* git.locate(found), {
-            onNone: () => found,
-            onSome: ({ primaryPath }) => primaryPath,
-          });
-      if (registered.has(primary)) known++;
-      else repos.push(primary);
-    }
-    return { repos, known };
+    // `root` that isn't the registered one still matches it. A repo git
+    // can't read stays as found.
+    const primaries = yield* Effect.forEach(
+      (yield* walk(root, 0)).toSorted(),
+      (found) =>
+        registered.has(found)
+          ? Effect.succeed(found)
+          : Effect.map(git.locate(found), (repo) =>
+              Option.match(repo, {
+                onNone: () => found,
+                onSome: ({ primaryPath }) => primaryPath,
+              }),
+            ),
+      { concurrency: 8 },
+    );
+    const repos = primaries.filter((primary) => !registered.has(primary));
+    return { repos, known: primaries.length - repos.length };
   });
 
   const refuseTerrier = (project: Registry.ListedProject) =>
@@ -265,7 +285,7 @@ const make = Effect.gen(function* () {
     yield* registry.unregister(project.id);
   });
 
-  return Projects.of({ add, scan, leftovers, remove });
+  return Projects.of({ add, register, scan, leftovers, remove });
 });
 
 export const layer = Layer.effect(Projects, make);
