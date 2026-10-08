@@ -14,6 +14,7 @@ export function captureConsoleToFile(): void {
   log.transports.console.format = "{text}";
   Object.assign(console, log.functions);
   trace.transports.console.level = false;
+  trace.transports.ipc.level = false;
   trace.transports.file.fileName = "trace.log";
   trace.transports.file.format = "{text}";
 }

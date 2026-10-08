@@ -14,10 +14,10 @@ const traced = (step: "start" | "stop", name: string) =>
 
 const started = (name: string, start: Effect.Effect<void>) =>
   start.pipe(
+    traced("start", name),
     Effect.catchCause((cause) =>
       Effect.logError(`[boot] ${name} failed to start:`, Cause.squash(cause)),
     ),
-    traced("start", name),
   );
 
 // Started with the app and never stopped.

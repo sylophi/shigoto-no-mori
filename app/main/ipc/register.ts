@@ -11,7 +11,6 @@ import { coalesce } from "@host/lib/util/coalesce";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
-
 import { type ContractModule, scopeOf } from "@shigomori/contracts/contract";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { projectsContract } from "@shigomori/contracts/modules/projects";

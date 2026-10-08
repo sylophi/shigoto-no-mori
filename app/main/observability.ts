@@ -1,11 +1,14 @@
 // What the process's layer graph logs and traces through. A line goes
 // to the app's logger (shared/log.ts), and one logged inside a span is
 // also an event on it. Every span that ends is a JSON line in this
-// device's trace.log (electron/logFile.ts). A dev build also streams its
-// spans to the Effect devtools when they listen on their default port.
+// device's trace.log (electron/logFile.ts). A dev build run with
+// SHIGOMORI_DEVTOOLS=1 also streams its spans to the Effect devtools on
+// their default port.
 import { app } from "electron";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as DevTools from "effect/devtools/DevTools";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -26,6 +29,22 @@ function outcome(exit: Exit.Exit<unknown, unknown>) {
   };
 }
 
+// An attribute that cannot be written (a cycle) costs the line its
+// attributes, never the span's end.
+function serialize(line: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(line, (_key, value: unknown) =>
+      typeof value === "bigint" ? value.toString() : value,
+    );
+  } catch {
+    return JSON.stringify({
+      ...line,
+      attributes: "unserializable",
+      events: undefined,
+    });
+  }
+}
+
 const fileTracer = Tracer.make({
   span(options) {
     const span = new Tracer.NativeSpan(options);
@@ -34,37 +53,47 @@ const fileTracer = Tracer.make({
       end.call(this, endTime, exit);
       const startTime = millis(span.status.startTime);
       writeTraceLine(
-        JSON.stringify(
-          {
-            name: span.name,
-            traceId: span.traceId,
-            spanId: span.spanId,
-            parentId: Option.getOrUndefined(span.parent)?.spanId,
-            start: new Date(startTime).toISOString(),
-            durationMs: millis(endTime) - startTime,
-            ...outcome(exit),
-            attributes: Object.fromEntries(span.attributes),
-            events:
-              span.events.length > 0
-                ? span.events.map(([name, at, attributes]) => ({
-                    name,
-                    at: millis(at),
-                    attributes,
-                  }))
-                : undefined,
-          },
-          (_key, value: unknown) =>
-            typeof value === "bigint" ? value.toString() : value,
-        ),
+        serialize({
+          name: span.name,
+          traceId: span.traceId,
+          spanId: span.spanId,
+          parentId: Option.getOrUndefined(span.parent)?.spanId,
+          start: new Date(startTime).toISOString(),
+          durationMs: millis(endTime) - startTime,
+          ...outcome(exit),
+          attributes: Object.fromEntries(span.attributes),
+          events:
+            span.events.length > 0
+              ? span.events.map(([name, at, attributes]) => ({
+                  name,
+                  at: millis(at),
+                  attributes,
+                }))
+              : undefined,
+        }),
       );
     };
     return span;
   },
 });
 
-export const layer = Layer.mergeAll(
-  Logger.layer([logger, Logger.tracerLogger]),
-  Layer.succeed(Tracer.Tracer, fileTracer),
-).pipe((base) =>
-  app.isPackaged ? base : Layer.provideMerge(DevTools.layer(), base),
+// Opt-in, since the client waits up to a second for the devtools at
+// boot and queues every span while they are not listening.
+const devTools = Layer.unwrap(
+  Config.Boolean("SHIGOMORI_DEVTOOLS").pipe(
+    Config.withDefault(false),
+    Effect.map((on) =>
+      on && !app.isPackaged ? DevTools.layer() : Layer.empty,
+    ),
+    Effect.orElseSucceed(() => Layer.empty),
+  ),
+);
+
+export const layer = devTools.pipe(
+  Layer.provideMerge(
+    Layer.mergeAll(
+      Logger.layer([logger, Logger.tracerLogger]),
+      Layer.succeed(Tracer.Tracer, fileTracer),
+    ),
+  ),
 );
