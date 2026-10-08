@@ -25,6 +25,7 @@ import {
 import { emit, note, out, Output, styles } from "../output.ts";
 import { interactive } from "../prompt.ts";
 import { reporter } from "../reporter.ts";
+import { removeStack } from "./landing.ts";
 import { enter } from "./shell.ts";
 
 // A setup script failed, which its own lines said.
@@ -231,10 +232,18 @@ export const rm = Command.make(
     force: force("Remove it with uncommitted changes"),
     keepBranch: flag("keep-branch", "Keep its branch"),
     skipCleanup: flag("skip-cleanup", "Skip its teardown and port release"),
+    stack: flag("stack", "The worktrees of the landed stack under it too"),
   },
   (input) =>
     Effect.gen(function* () {
       const { located } = yield* resolveWorktree(input);
+      if (input.stack) {
+        return yield* removeStack(located, {
+          force: input.force,
+          keepBranch: input.keepBranch,
+          skipCleanup: input.skipCleanup,
+        });
+      }
       const { json, stdoutColor } = yield* Effect.service(Output);
       const removed = yield* (yield* Worktrees.Worktrees)
         .remove(

@@ -18,6 +18,7 @@ import { flavor, version } from "./build.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { runCommand } from "./commands/run.ts";
 import { adopt, create, move, rekey, rm, setup } from "./commands/changes.ts";
+import { done, land, merge, pr } from "./commands/landing.ts";
 import { cdCommand, shellCommand } from "./commands/shell.ts";
 import {
   destination,
@@ -119,6 +120,10 @@ const sm = Command.make("sm").pipe(
     adopt.pipe(Command.provide(services)),
     setup.pipe(Command.provide(services)),
     rekey.pipe(Command.provide(services)),
+    pr.pipe(Command.provide(services)),
+    merge.pipe(Command.provide(services)),
+    land.pipe(Command.provide(services)),
+    done.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(services)),
   ]),
 );
