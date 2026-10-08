@@ -7,6 +7,8 @@ export const flavorNames = (flavor: Flavor) =>
   flavor === "prod"
     ? {
         binaryName: "sm",
+        // What the shell hook's markers and fish drop-in are named for.
+        alias: "shigomori",
         dataDir: ".sm",
         legacyDataDir: "shigomori",
         configDir: "shigomori",
@@ -15,6 +17,7 @@ export const flavorNames = (flavor: Flavor) =>
       }
     : {
         binaryName: "smd",
+        alias: "shigomori-dev",
         dataDir: ".smd",
         legacyDataDir: "shigomori-dev",
         configDir: "shigomori-dev",

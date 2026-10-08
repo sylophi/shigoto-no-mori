@@ -54,7 +54,7 @@ export type Source = {
   readonly detached: boolean;
 };
 
-const WORKTREE_INCLUDE = ".worktreeinclude";
+export const WORKTREE_INCLUDE = ".worktreeinclude";
 
 export class CarryOver extends Context.Service<
   CarryOver,

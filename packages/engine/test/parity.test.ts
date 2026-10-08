@@ -5,12 +5,13 @@
 // whatever the engine's own tests say. A case reads as the terminal
 // command will: the service's answer wrapped the way the verb prints it.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   linkSync,
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
@@ -20,6 +21,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
+import * as Doctor from "../src/Doctor.ts";
 import type * as GitHub from "../src/GitHub.ts";
 import * as Landing from "../src/Landing.ts";
 import * as Hygiene from "../src/Hygiene.ts";
@@ -2138,5 +2140,246 @@ describe("projects reorder", () => {
       () => reorder(["G", "A"]),
       list,
     ]);
+  });
+});
+
+// Each finding as "<id>:<status>".
+const ids = (doc: Doctor.DoctorDocument) =>
+  doc.checks.map(({ id, status }) => `${id}:${status}`);
+
+describe("doctor", () => {
+  // The one thing that differs between the sides: each has its own data
+  // dir, whose path the document and its lines name.
+  const sideNeutral = (doc: unknown): unknown => {
+    if (typeof doc === "string") {
+      return ["go", "engine"].reduce(
+        (text, side) =>
+          text
+            .replaceAll(`${box.home}/${side}`, "<data>")
+            .replace(new RegExp(`~/${side}(?![\\w-])`, "g"), "<data>"),
+        doc,
+      );
+    }
+    if (Array.isArray(doc)) return doc.map(sideNeutral);
+    if (typeof doc === "object" && doc !== null) {
+      return Object.fromEntries(
+        Object.entries(doc).map(([key, value]) => [key, sideNeutral(value)]),
+      );
+    }
+    return doc;
+  };
+
+  // `sm doctor --json`, and with `fix` its `--fix --yes`, on each side
+  // against the same repos. The version is the Go build's own, "dev".
+  const sameDoctor = async (fix = false) => {
+    const [go, engine] = await box.changeBoth(
+      () => box.go("doctor", ...(fix ? ["--fix", "--yes"] : [])),
+      () =>
+        box.engine(
+          Effect.flatMap(Effect.service(Doctor.Doctor), (doctor) =>
+            doctor.run({
+              version: "dev",
+              executable: "",
+              terminal: false,
+              ...(fix ? { fix: { approve: () => Effect.succeed(true) } } : {}),
+            }),
+          ),
+        ),
+    );
+    assert.deepStrictEqual(sideNeutral(engine), sideNeutral(go));
+    return go as Doctor.DoctorDocument;
+  };
+
+  // A gh that is signed in, so the line reads the same on any machine.
+  beforeEach(() => {
+    box.fakeBin(
+      "gh",
+      'case "$1" in auth) exit 0;; --version) echo "gh version 9.9.9 (2026-01-01)";; esac',
+    );
+  });
+
+  // Backdates a file the seed holds, past any staleness window.
+  const backdate = (file: string) => {
+    const old = new Date("2020-01-02T03:04:05Z");
+    utimesSync(join(box.home, "seed", file), old, old);
+  };
+
+  it("reports a healthy project, then deletes the stale locks", async () => {
+    inProject();
+    box.write("state.json.lock", 1);
+    box.write("iconCache/index.json.lock", 1);
+    box.write("projects/P1/project.json.lock", 1);
+    box.write("updates/old.lock", 1);
+    for (const lock of [
+      "state.json.lock",
+      "iconCache/index.json.lock",
+      "projects/P1/project.json.lock",
+      "updates/old.lock",
+    ]) {
+      backdate(lock);
+    }
+    box.write("fresh.lock", 1);
+    const before = await sameDoctor();
+    assert.ok(ids(before).includes("locks:warn"));
+    assert.ok(ids(before).includes("project:ok"));
+    const after = await sameDoctor(true);
+    assert.deepEqual(after.repaired, ["deleted 3 stale lock files"]);
+    assert.ok(ids(after).includes("locks:ok"));
+  });
+
+  it("unregisters a project whose repo is gone, and keeps the one that's there", async () => {
+    const repo = box.repo("repo");
+    box.write("registry.json", {
+      projects: [
+        { id: "P1", name: "repo", path: repo },
+        { id: "P2", name: "ghost", path: join(box.home, "ghost") },
+      ],
+    });
+    box.write("projects/P1/project.json", { defaultBranch: "main" });
+    box.write("projects/P2/project.json", { defaultBranch: "main" });
+    const before = await sameDoctor();
+    assert.ok(ids(before).includes("project-path:fail"));
+    const after = await sameDoctor(true);
+    assert.deepEqual(after.repaired, ["unregistered ghost"]);
+  });
+
+  it("re-links a moved worktree, prunes one that's gone, and leaves a stray and a locked one", async () => {
+    const { repo, tree } = inProject();
+    const base = join(repo, ".shigomori", "worktrees");
+    const outside = join(box.home, "elsewhere", "feat");
+    box.git(repo, "worktree", "add", "-q", "-b", "feat", outside);
+    const gone = tree("gone");
+    const locked = tree("locked");
+    box.git(repo, "worktree", "lock", locked);
+    box.write("registry.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+      shelvedWorktrees: { [worktreeIdFromPath(outside)]: true },
+      autoPullWorktrees: {
+        [worktreeIdFromPath(gone)]: true,
+        deadbeef1234: true,
+      },
+    });
+    box.write(`projects/P1/worktrees/${worktreeIdFromPath(gone)}.json`, {
+      title: "gone",
+    });
+    renameSync(outside, join(base, "feat"));
+    rmSync(gone, { recursive: true });
+    rmSync(locked, { recursive: true });
+    mkdirSync(join(base, "stray"));
+    const before = await sameDoctor();
+    assert.ok(ids(before).includes("project-moved:warn"));
+    assert.ok(ids(before).includes("project-worktrees:warn"));
+    assert.ok(ids(before).includes("project-strays:warn"));
+    const after = await sameDoctor(true);
+    assert.deepEqual(after.repaired, [
+      "re-linked 1 moved worktree for repo",
+      "pruned git's worktree metadata for repo",
+    ]);
+    assert.ok(ids(after).includes("project-strays:warn"));
+  });
+
+  it("names launchers, carry-over, scripts and an include that point at nothing", async () => {
+    const { repo } = inProject(
+      { "a.txt": "a\n", "scripts/present.sh": "true\n" },
+      {
+        defaultBranch: "release/never-existed",
+        carryOver: [
+          { path: ".env", mode: "copy" },
+          { path: ".env.local", mode: "copy" },
+          { path: "my file", mode: "copy" },
+        ],
+        launchers: [
+          { id: "c", label: "My Tool", command: "/no/such/binary ." },
+          { id: "d", label: "shell", command: "sh -c true" },
+        ],
+        scripts: {
+          setup: "bash scripts/present.sh && bash ./scripts/absent.sh --ci",
+          teardown: "curl https://example.com/x.sh | sh",
+        },
+      },
+    );
+    writeFileSync(join(repo, ".env"), "X=1\n");
+    mkdirSync(join(repo, ".worktreeinclude"));
+    const empty = join(box.home, "empty");
+    mkdirSync(empty);
+    box.git(empty, "init", "-q", "-b", "main");
+    box.write("registry.json", {
+      projects: [
+        { id: "P1", name: "repo", path: repo },
+        { id: "E1", name: "empty", path: empty },
+      ],
+    });
+    box.fakeBin(
+      "port-pool",
+      `echo "  3038 -> ${repo} (8/15/2026)"; echo "  4000 -> ${box.home}/gone (8/15/2026)"`,
+    );
+    box.write("config.json", {
+      portPool: true,
+      launchers: [
+        { id: "a", label: "Ghost", command: "no-such-program-9f3a --flag" },
+        { id: "b", label: "env", command: "$EDITOR ." },
+      ],
+    });
+    const doc = await sameDoctor();
+    for (const id of [
+      "launchers:warn",
+      "project-carryover:warn",
+      "project-launchers:warn",
+      "project-scripts:warn",
+      "project-include:warn",
+      "project-branch:warn",
+      "ports:warn",
+    ]) {
+      assert.ok(ids(doc).includes(id), id);
+    }
+  });
+
+  it("finds what a crash left: update files, a staging lock, landing refs and a running script", async () => {
+    const { repo } = inProject();
+    box.write("updates/staging.pid", 999999);
+    mkdirSync(join(box.home, "seed", "updates", "extract"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(box.home, "seed", "updates", "download.zip"),
+      "x".repeat(2048),
+    );
+    writeFileSync(join(box.home, "seed", "updates", "extract", "a"), "x");
+    box.git(repo, "update-ref", "refs/shigomori/incoming/fresh", "HEAD");
+    box.git(repo, "update-ref", "refs/shigomori/incoming/feat", "HEAD");
+    box.git(repo, "update-ref", "refs/shigomori/incoming/packed", "HEAD");
+    box.git(repo, "pack-refs", "--include", "refs/shigomori/incoming/packed");
+    const old = new Date("2020-01-02T03:04:05Z");
+    utimesSync(
+      join(repo, ".git", "refs", "shigomori", "incoming", "feat"),
+      old,
+      old,
+    );
+    const sleeper = spawn("sleep", ["60"], { stdio: "ignore" });
+    try {
+      box.write("running-scripts.json", {
+        ownerPid: 999999,
+        scripts: [
+          { pid: sleeper.pid, startedAt: Date.now(), command: "pnpm dev" },
+        ],
+      });
+      const before = await sameDoctor();
+      for (const id of [
+        "staging-lock:warn",
+        "update-leftovers:warn",
+        "scripts:warn",
+        "project-incoming:warn",
+      ]) {
+        assert.ok(ids(before).includes(id), id);
+      }
+      const after = await sameDoctor(true);
+      assert.deepEqual(after.repaired, [
+        "deleted the stale update staging lock",
+        "deleted 2 KB of leftover update files",
+        "deleted 2 leftover landing refs in repo",
+      ]);
+    } finally {
+      sleeper.kill();
+    }
   });
 });

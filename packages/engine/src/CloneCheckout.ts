@@ -20,7 +20,6 @@
 // Any failure resets the worktree to a plain checkout, so the worst a
 // clone checkout does is cost the time it took.
 import * as Clock from "effect/Clock";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -37,6 +36,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as SqlClient from "effect/sql/SqlClient";
 import { orderSources } from "./CarryOver.ts";
 import * as Darwin from "./Darwin.ts";
+import { envVar } from "./environment.ts";
 import * as Git from "./Git.ts";
 import { splitZ } from "./gitParse.ts";
 import {
@@ -193,10 +193,6 @@ const maxOf = (...values: bigint[]) =>
 // instead.
 const LEFT_TO_GIT = new Set(["ENOENT", "ENOTDIR", "EACCES", "EPERM"]);
 
-// An environment variable, empty when unset.
-const env = (name: string) =>
-  Config.String(name).pipe(Effect.orElseSucceed(() => ""));
-
 // What decided the conversions, read once and read again.
 type Conversions = {
   readonly attr: string;
@@ -232,7 +228,7 @@ const make = Effect.gen(function* () {
   const paths = yield* Paths.Paths;
 
   const configHome = Effect.gen(function* () {
-    const xdg = yield* env("XDG_CONFIG_HOME");
+    const xdg = yield* envVar("XDG_CONFIG_HOME");
     return xdg !== "" ? xdg : path.join(paths.home, ".config");
   });
 
@@ -1131,7 +1127,7 @@ const make = Effect.gen(function* () {
       const dir = yield* fs
         .realPath(worktree)
         .pipe(Effect.orElseSucceed(() => worktree));
-      const searched = yield* env("PATH");
+      const searched = yield* envVar("PATH");
       // The environment git gives its hooks: its exec path exported and
       // first on PATH, no prefix.
       const hookEnv = {
@@ -1257,12 +1253,12 @@ const make = Effect.gen(function* () {
       if (yield* sparseOrSplit(repo)) return true;
       // Replacement objects change what a blob reads as, so the source's
       // files needn't hold what a checkout writes now.
-      if ((yield* env("GIT_NO_REPLACE_OBJECTS")) !== "") return false;
+      if ((yield* envVar("GIT_NO_REPLACE_OBJECTS")) !== "") return false;
       const useReplace = yield* configValue(repo, [
         "--bool",
         "core.useReplaceRefs",
       ]);
-      const base = yield* env("GIT_REPLACE_REF_BASE");
+      const base = yield* envVar("GIT_REPLACE_REF_BASE");
       const refs = yield* git
         .run(repo, [
           "for-each-ref",
