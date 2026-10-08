@@ -3,36 +3,76 @@
 // mirroring. One child for the app's whole life, spoken to over its
 // stdin/stdout in NDJSON: requests carry an id the response echoes,
 // and the daemon streams a full state snapshot every time any session
-// moves. The child dies when its stdin closes, so stopping is closing
-// the pipe, and a crash is met with a restart on a short ladder
-// (persisted sessions come back on their own when it does). The
-// engine never outlives this process: besides the pipe, it exits on
-// the quit-time SIGTERM and on seeing its parent pid change
-// (file-sync/main.go, watchParent), so a host that dies uncleanly
-// takes its daemon and every serve child down with it.
+// moves. A crash is met with a restart on a short ladder (persisted
+// sessions come back on their own when it does), and closing the layer
+// ends the child. The engine never outlives this process: besides the
+// layer's close, it exits when its stdin closes and on seeing its
+// parent pid change (file-sync/main.go, watchParent), so a host that
+// dies uncleanly takes its daemon and every serve child down with it.
 //
-// Electron-free on purpose: the spawn is injected (main/electron owns
-// the binary path and the quit-time reaping), so the mirror check
-// drives this exact supervisor against a freshly built engine.
+// Electron-free on purpose: the binary comes through the FileSync
+// service, so the mirror check drives this exact supervisor against a
+// freshly built engine.
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import type { StreamChild } from "@host/fileSync/spawn";
+import * as Stream from "effect/Stream";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import * as FileSync from "@host/fileSync/FileSync";
 import type { MirrorCreateInput } from "@host/ipc/modules/mirror";
-import { lineSplitter } from "@host/lib/util/ndjson";
+import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 import {
   mirrorEngineBlocker,
   type MirrorDaemonStatus,
   type MirrorSessionRaw,
   MirrorSessionRawSchema,
 } from "@shigomori/contracts/modules/mirror";
+import { BACKOFF_LADDER_MS } from "@shared/remote/supervisor";
+import { restartSchedule } from "@shared/remote/restartSchedule";
 import { MIRROR_GATEWAY_TOKEN_ENV } from "./gateway";
-import {
-  BACKOFF_LADDER_MS,
-  backoffDelayMs,
-  STABLE_CONNECTION_MS,
-} from "@shared/remote/supervisor";
-import { log } from "@shared/log";
+
+// A request the daemon did not answer with its session. `detail` is the
+// engine's own refusal, or why the engine cannot take requests, both
+// words a person reads.
+export class MirrorDaemonError extends Schema.TaggedError<MirrorDaemonError>()(
+  "MirrorDaemonError",
+  {
+    op: Schema.String,
+    reason: Schema.Literals([
+      "not-running",
+      "exited",
+      "stopped",
+      "timed-out",
+      "malformed",
+      "refused",
+    ]),
+    detail: Schema.optional(Schema.String),
+  },
+) {
+  override get message(): string {
+    switch (this.reason) {
+      case "not-running":
+        return this.detail ?? "The mirror daemon is not running yet.";
+      case "exited":
+        return "mirror daemon exited";
+      case "stopped":
+        return "mirror daemon stopped";
+      case "timed-out":
+        return `mirror ${this.op} timed out`;
+      case "malformed":
+        return "mirror daemon sent a malformed response";
+      case "refused":
+        return this.detail ?? `mirror ${this.op} failed`;
+    }
+  }
+}
 
 // The lines the daemon writes (file-sync/engine.go, the daemon control
 // protocol): an event, or a response echoing its request's id. Each is
@@ -67,11 +107,6 @@ const DaemonResponseSchema = Schema.Struct({
 type DaemonResponse = typeof DaemonResponseSchema.Type;
 const decodeDaemonResponse = Schema.decodeUnknownResult(DaemonResponseSchema);
 
-type Pending = {
-  resolve: (response: DaemonResponse) => void;
-  reject: (error: Error) => void;
-};
-
 // Restart ladder after an unexpected exit: the house backoff plus a
 // slow top rung, so a daemon that keeps dying (a broken build, a
 // locked data directory) settles into a slow retry instead of a hot
@@ -81,291 +116,387 @@ const RESTART_LADDER_MS: readonly [number, ...number[]] = [
   ...BACKOFF_LADDER_MS,
   30_000,
 ];
-const STABLE_RUN_MS = STABLE_CONNECTION_MS;
 // A create blocks on two endpoint connects (the peer side spawns a
 // process and Mutagen handshakes), so requests get a generous ceiling.
 const REQUEST_TIMEOUT_MS = 120_000;
 
-export function createMirrorDaemon(deps: {
-  // Spawns `file-sync daemon ...` with the given args, or returns null
-  // when no engine binary is available (a dev run before
-  // file-sync:build), in which case the daemon reports "unavailable"
-  // and retries later.
-  spawn: (args: string[], env?: NodeJS.ProcessEnv) => StreamChild | null;
+export class MirrorDaemon extends Context.Service<
+  MirrorDaemon,
+  {
+    readonly status: Effect.Effect<MirrorDaemonStatus>;
+    readonly sessions: Effect.Effect<readonly MirrorSessionRaw[]>;
+    readonly create: (
+      input: MirrorCreateInput,
+    ) => Effect.Effect<string, MirrorDaemonError>;
+    readonly terminate: (
+      session: string,
+    ) => Effect.Effect<string, MirrorDaemonError>;
+    readonly pause: (
+      session: string,
+    ) => Effect.Effect<string, MirrorDaemonError>;
+    readonly resume: (
+      session: string,
+    ) => Effect.Effect<string, MirrorDaemonError>;
+  }
+>()("sm/host/MirrorDaemon") {}
+
+export interface Options {
   // The gateway address the daemon dials peers through, read at each
   // spawn (throwing when the gateway is not listening yet, which puts
   // the daemon on the restart ladder until it is).
-  gatewayAddress: () => string;
+  readonly gatewayAddress: () => string;
   // The gateway's per-bind token, passed through the environment and
   // read at each spawn, so a rebound gateway's daemon carries the
   // token that gateway accepts.
-  gatewayToken: () => string;
+  readonly gatewayToken: () => string;
   // Where the engine persists sessions (a directory under the host's
   // data dir), read at each spawn.
-  dataDir: () => string;
+  readonly dataDir: () => string;
   // Fires on every state snapshot and every status transition.
-  onChange?: () => void;
-  log?: (message: string) => void;
-}) {
-  let child: StreamChild | null = null;
-  let status: MirrorDaemonStatus = "stopped";
-  let sessions: readonly MirrorSessionRaw[] = [];
-  let stopping = false;
-  let restartTimer: ReturnType<typeof setTimeout> | null = null;
-  let restarts = 0;
-  let nextRequestId = 1;
-  const pending = new Map<string, Pending>();
-  const warn = deps.log ?? ((message: string) => log.warn(message));
+  readonly onChange?: () => void;
+}
 
-  function setStatus(next: MirrorDaemonStatus): void {
-    if (status === next) return;
-    status = next;
-    deps.onChange?.();
-  }
+const encoder = new TextEncoder();
 
-  function rejectAllPending(reason: string): void {
-    for (const [id, entry] of pending) {
-      pending.delete(id);
-      entry.reject(new Error(reason));
-    }
-  }
-
-  // The last rejection logged per kind of line (an event's name, or
-  // "response"), so a daemon that keeps writing the same bad line
-  // (every snapshot, once the contract has drifted) logs it once until
-  // a line of that kind reads again. The requests in between do not
-  // count.
-  const lastRejection = new Map<string, string>();
-
-  function handleLine(line: string): void {
-    let doc: unknown;
-    try {
-      doc = JSON.parse(line);
-    } catch {
-      warn(`[mirror] daemon emitted a non-JSON line: ${line.slice(0, 200)}`);
-      return;
-    }
-    if (typeof doc !== "object" || doc === null) {
-      rejectLine("other", line, "not an object");
-      return;
-    }
-    if (
-      "event" in doc &&
-      typeof doc.event === "string" &&
-      !KNOWN_EVENTS.has(doc.event)
-    ) {
-      return;
-    }
-    const kind = "event" in doc ? String(doc.event) : "response";
-    const parsed: Result.Result<
-      DaemonEvent | DaemonResponse,
-      Schema.SchemaError
-    > = "event" in doc ? decodeDaemonEvent(doc) : decodeDaemonResponse(doc);
-    if (Result.isFailure(parsed)) {
-      const reason = parsed.failure.message.replaceAll("\n", " ");
-      rejectLine(kind, line, reason);
-      // A request the line names is answered now, not at the timeout.
-      if ("id" in doc && typeof doc.id === "string") {
-        takePending(doc.id)?.reject(
-          new Error("mirror daemon sent a malformed response"),
-        );
+const make = (options: Options) =>
+  Effect.gen(function* () {
+    const fileSync = yield* FileSync.FileSync;
+    const status = yield* Ref.make<MirrorDaemonStatus>("stopped");
+    const sessions = yield* Ref.make<readonly MirrorSessionRaw[]>([]);
+    // The running child's stdin, for the requests.
+    const stdin = yield* Ref.make(Option.none<Queue.Queue<Uint8Array>>());
+    // The requests waiting on a response, by id. One fiber at a time
+    // touches it, as everything here runs on the main thread.
+    const pending = new Map<
+      string,
+      {
+        readonly op: string;
+        readonly response: Deferred.Deferred<DaemonResponse, MirrorDaemonError>;
       }
-      return;
-    }
-    lastRejection.delete(kind);
-    if ("event" in parsed.success) handleEvent(parsed.success);
-    else handleResponse(parsed.success);
-  }
+    >();
+    let nextRequestId = 1;
 
-  function rejectLine(kind: string, line: string, reason: string): void {
-    if (lastRejection.get(kind) === reason) return;
-    lastRejection.set(kind, reason);
-    warn(
-      `[mirror] daemon line dropped, off the protocol: ${reason}: ${line.slice(0, 200)}`,
+    // The owner's listener runs the app's bookkeeping. One that throws
+    // is logged, never taken for the daemon failing.
+    const changed = Effect.try(() => options.onChange?.()).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `[mirror] a daemon change listener failed: ${errorMessageOf(error)}`,
+        ),
+      ),
     );
-  }
 
-  // The request waiting on an id, taken off the list to be settled.
-  function takePending(id: string): Pending | undefined {
-    const entry = pending.get(id);
-    pending.delete(id);
-    return entry;
-  }
-
-  function handleEvent(event: DaemonEvent): void {
-    switch (event.event) {
-      case "ready":
-        setStatus("running");
-        return;
-      case "state":
-        sessions = event.sessions;
-        deps.onChange?.();
-        return;
-      case "error":
-        warn(`[mirror] daemon error: ${event.error}`);
-        return;
-    }
-  }
-
-  function handleResponse(response: DaemonResponse): void {
-    // mirrorResponse always writes its id, so a request the daemon
-    // could not read comes back with an empty one. Nothing to match.
-    if (response.id === "") {
-      warn(`[mirror] daemon refused a request: ${response.error ?? "unknown"}`);
-      return;
-    }
-    takePending(response.id)?.resolve(response);
-  }
-
-  function spawnNow(): void {
-    if (stopping) return;
-    // The gateway binds on its own retry schedule. Until it has, the
-    // daemon has nothing to dial and waits, which is not the engine
-    // being missing.
-    let gateway: string;
-    try {
-      gateway = deps.gatewayAddress();
-    } catch (error) {
-      warn(`[mirror] daemon waiting for the gateway: ${errorMessageOf(error)}`);
-      setStatus("starting");
-      scheduleRestart();
-      return;
-    }
-    let spawned: StreamChild | null;
-    try {
-      spawned = deps.spawn(
-        ["daemon", "--gateway", gateway, "--data-dir", deps.dataDir()],
-        {
-          ...process.env,
-          [MIRROR_GATEWAY_TOKEN_ENV]: deps.gatewayToken(),
-        },
-      );
-    } catch (error) {
-      warn(`[mirror] daemon spawn failed: ${errorMessageOf(error)}`);
-      spawned = null;
-    }
-    if (spawned === null) {
-      setStatus("unavailable");
-      scheduleRestart();
-      return;
-    }
-    child = spawned;
-    const spawnedAt = Date.now();
-    setStatus("starting");
-    spawned.stream.on("data", lineSplitter(handleLine));
-    spawned.stream.on("error", () => {});
-    spawned.stderr?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8").trim();
-      if (text !== "") warn(`[mirror] daemon: ${text}`);
-    });
-    spawned.onExit((code) => {
-      if (child !== spawned) return;
-      child = null;
-      sessions = [];
-      rejectAllPending("mirror daemon exited");
-      if (stopping) {
-        setStatus("stopped");
-        return;
-      }
-      warn(`[mirror] daemon exited unexpectedly (code ${code}), restarting`);
-      if (Date.now() - spawnedAt >= STABLE_RUN_MS) restarts = 0;
-      setStatus("starting");
-      deps.onChange?.();
-      scheduleRestart();
-    });
-  }
-
-  function scheduleRestart(): void {
-    if (stopping || restartTimer !== null) return;
-    const delay = backoffDelayMs(RESTART_LADDER_MS, restarts);
-    restarts++;
-    restartTimer = setTimeout(() => {
-      restartTimer = null;
-      spawnNow();
-    }, delay);
-    restartTimer.unref?.();
-  }
-
-  function start(): void {
-    stopping = false;
-    if (child !== null || restartTimer !== null) return;
-    spawnNow();
-  }
-
-  // Closes the control pipe (the daemon's exit signal) and, as a
-  // backstop, kills a child that ignores it. Idempotent.
-  function stop(): void {
-    stopping = true;
-    if (restartTimer !== null) {
-      clearTimeout(restartTimer);
-      restartTimer = null;
-    }
-    const current = child;
-    child = null;
-    sessions = [];
-    rejectAllPending("mirror daemon stopped");
-    if (current !== null) {
-      current.stream.end();
-      const killer = setTimeout(() => current.kill(), 2_000);
-      killer.unref?.();
-      current.onExit(() => clearTimeout(killer));
-    }
-    setStatus("stopped");
-  }
-
-  function request(
-    op: string,
-    fields: Record<string, unknown>,
-  ): Promise<DaemonResponse> {
-    const current = child;
-    if (current === null || status !== "running") {
-      return Promise.reject(
-        new Error(
-          mirrorEngineBlocker(status) ??
-            "The mirror daemon is not running yet.",
+    const setStatus = (next: MirrorDaemonStatus) =>
+      Ref.getAndSet(status, next).pipe(
+        Effect.flatMap((previous) =>
+          previous === next ? Effect.void : changed,
         ),
       );
-    }
-    const id = String(nextRequestId++);
-    return new Promise<DaemonResponse>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`mirror ${op} timed out`));
-      }, REQUEST_TIMEOUT_MS);
-      timer.unref?.();
-      pending.set(id, {
-        resolve: (response) => {
-          clearTimeout(timer);
-          resolve(response);
+
+    const failAllPending = (reason: "exited" | "stopped") =>
+      Effect.forEach(
+        [...pending],
+        ([id, { op, response }]) => {
+          pending.delete(id);
+          return Deferred.fail(response, new MirrorDaemonError({ op, reason }));
         },
-        reject: (error) => {
-          clearTimeout(timer);
-          reject(error);
-        },
+        { discard: true },
+      );
+
+    // The last rejection logged per kind of line (an event's name, or
+    // "response"), so a daemon that keeps writing the same bad line
+    // (every snapshot, once the contract has drifted) logs it once until
+    // a line of that kind reads again. The requests in between do not
+    // count.
+    const lastRejection = new Map<string, string>();
+
+    const rejectLine = (kind: string, line: string, reason: string) =>
+      Effect.suspend(() => {
+        if (lastRejection.get(kind) === reason) return Effect.void;
+        lastRejection.set(kind, reason);
+        return Effect.logWarning(
+          `[mirror] daemon line dropped, off the protocol: ${reason}: ${line.slice(0, 200)}`,
+        );
       });
-      current.stream.write(JSON.stringify({ id, op, ...fields }) + "\n");
+
+    const handleEvent = (event: DaemonEvent) => {
+      switch (event.event) {
+        case "ready":
+          return setStatus("running");
+        case "state":
+          return Ref.set(sessions, event.sessions).pipe(
+            Effect.andThen(changed),
+          );
+        case "error":
+          return Effect.logWarning(`[mirror] daemon error: ${event.error}`);
+      }
+    };
+
+    const handleResponse = (response: DaemonResponse) => {
+      // mirrorResponse always writes its id, so a request the daemon
+      // could not read comes back with an empty one. Nothing to match.
+      if (response.id === "") {
+        return Effect.logWarning(
+          `[mirror] daemon refused a request: ${response.error ?? "unknown"}`,
+        );
+      }
+      const waiting = pending.get(response.id);
+      return waiting === undefined
+        ? Effect.void
+        : Deferred.succeed(waiting.response, response);
+    };
+
+    const handleLine = (line: string) =>
+      Effect.suspend(() => {
+        let doc: unknown;
+        try {
+          doc = JSON.parse(line);
+        } catch {
+          return Effect.logWarning(
+            `[mirror] daemon emitted a non-JSON line: ${line.slice(0, 200)}`,
+          );
+        }
+        if (typeof doc !== "object" || doc === null) {
+          return rejectLine("other", line, "not an object");
+        }
+        if (
+          "event" in doc &&
+          typeof doc.event === "string" &&
+          !KNOWN_EVENTS.has(doc.event)
+        ) {
+          return Effect.void;
+        }
+        const kind = "event" in doc ? String(doc.event) : "response";
+        const parsed: Result.Result<
+          DaemonEvent | DaemonResponse,
+          Schema.SchemaError
+        > = "event" in doc ? decodeDaemonEvent(doc) : decodeDaemonResponse(doc);
+        if (Result.isFailure(parsed)) {
+          const reason = parsed.failure.message.replaceAll("\n", " ");
+          // A request the line names is answered now, not at the timeout.
+          const waiting =
+            "id" in doc && typeof doc.id === "string"
+              ? pending.get(doc.id)
+              : undefined;
+          return rejectLine(kind, line, reason).pipe(
+            Effect.andThen(
+              waiting === undefined
+                ? Effect.void
+                : Deferred.fail(
+                    waiting.response,
+                    new MirrorDaemonError({
+                      op: waiting.op,
+                      reason: "malformed",
+                    }),
+                  ),
+            ),
+          );
+        }
+        lastRejection.delete(kind);
+        return "event" in parsed.success
+          ? handleEvent(parsed.success)
+          : handleResponse(parsed.success);
+      });
+
+    // One life of the child, from its spawn to its exit. Answers how
+    // long it ran, which the restart ladder reads.
+    const runOnce = Effect.gen(function* () {
+      // The gateway binds on its own retry schedule. Until it has, the
+      // daemon has nothing to dial and waits, which is not the engine
+      // being missing.
+      const gateway = yield* Effect.try(() => options.gatewayAddress()).pipe(
+        Effect.option,
+      );
+      if (Option.isNone(gateway)) {
+        yield* Effect.logWarning(
+          "[mirror] daemon waiting for the gateway: mirror gateway is not listening",
+        );
+        yield* setStatus("starting");
+        return;
+      }
+      const input = yield* Queue.unbounded<Uint8Array>();
+      const spawned = yield* Effect.try(() => ({
+        args: [
+          "daemon",
+          "--gateway",
+          gateway.value,
+          "--data-dir",
+          options.dataDir(),
+        ],
+        token: options.gatewayToken(),
+      })).pipe(
+        Effect.flatMap(({ args, token }) =>
+          fileSync.spawn(args, {
+            env: { [MIRROR_GATEWAY_TOKEN_ENV]: token },
+            stdin: Stream.fromQueue(input),
+          }),
+        ),
+        Effect.tapError((error) =>
+          FileSync.isFileSyncUnavailable(error)
+            ? Effect.void
+            : Effect.logWarning(
+                `[mirror] daemon spawn failed: ${errorMessageOf(error)}`,
+              ),
+        ),
+        Effect.option,
+      );
+      if (Option.isNone(spawned)) {
+        yield* setStatus("unavailable");
+        return;
+      }
+      const child = spawned.value;
+      yield* Ref.set(stdin, Option.some(input));
+      yield* setStatus("starting");
+      yield* child.stderr.pipe(
+        Stream.decodeText(),
+        Stream.splitLines,
+        Stream.filter((line) => line.trim() !== ""),
+        Stream.runForEach((line) =>
+          Effect.logWarning(`[mirror] daemon: ${line.trim()}`),
+        ),
+        Effect.ignore,
+        Effect.forkScoped,
+      );
+      yield* child.stdout.pipe(
+        Stream.decodeText(),
+        Stream.splitLines,
+        Stream.runForEach(handleLine),
+        Effect.ignore,
+      );
+      const code = yield* child.exitCode.pipe(
+        Effect.map((exit): number | null => exit),
+        Effect.orElseSucceed(() => null),
+      );
+      yield* Ref.set(stdin, Option.none());
+      yield* Ref.set(sessions, []);
+      yield* failAllPending("exited");
+      yield* Effect.logWarning(
+        `[mirror] daemon exited unexpectedly (code ${code}), restarting`,
+      );
+      yield* setStatus("starting");
+      yield* changed;
+    }).pipe(
+      Effect.scoped,
+      // Anything this run did not expect ends it like an exit, onto the
+      // restart ladder, never the supervisor with it.
+      Effect.catchDefect((defect) =>
+        Effect.logWarning(
+          `[mirror] daemon run failed, restarting: ${errorMessageOf(defect)}`,
+        ),
+      ),
+      Effect.timed,
+      Effect.map(([duration]) => Duration.toMillis(duration)),
+    );
+
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        yield* Ref.set(stdin, Option.none());
+        yield* Ref.set(sessions, []);
+        yield* failAllPending("stopped");
+        yield* setStatus("stopped");
+      }),
+    );
+    yield* runOnce.pipe(
+      Effect.repeat(restartSchedule(RESTART_LADDER_MS)),
+      Effect.forkScoped,
+    );
+
+    const request = (op: string, fields: Record<string, unknown>) =>
+      Effect.gen(function* () {
+        // Booked before the daemon is looked at, so an exit from here on
+        // fails it with the rest.
+        const id = String(nextRequestId++);
+        const deferred = yield* Deferred.make<
+          DaemonResponse,
+          MirrorDaemonError
+        >();
+        pending.set(id, { op, response: deferred });
+        const current = yield* Ref.get(status);
+        const input = yield* Ref.get(stdin);
+        if (Option.isNone(input) || current !== "running") {
+          pending.delete(id);
+          return yield* new MirrorDaemonError({
+            op,
+            reason: "not-running",
+            detail: mirrorEngineBlocker(current),
+          });
+        }
+        yield* Queue.offer(
+          input.value,
+          encoder.encode(JSON.stringify({ id, op, ...fields }) + "\n"),
+        );
+        const response = yield* Deferred.await(deferred).pipe(
+          Effect.timeoutOrElse({
+            duration: REQUEST_TIMEOUT_MS,
+            orElse: () =>
+              Effect.fail(new MirrorDaemonError({ op, reason: "timed-out" })),
+          }),
+          Effect.ensuring(Effect.sync(() => pending.delete(id))),
+        );
+        if (!response.ok) {
+          return yield* new MirrorDaemonError({
+            op,
+            reason: "refused",
+            detail: response.error,
+          });
+        }
+        return response.session ?? "";
+      });
+
+    return MirrorDaemon.of({
+      status: Ref.get(status),
+      sessions: Ref.get(sessions),
+      create: Effect.fn("MirrorDaemon.create")((input: MirrorCreateInput) =>
+        request("create", { ...input }),
+      ),
+      terminate: Effect.fn("MirrorDaemon.terminate")((session: string) =>
+        request("terminate", { session }),
+      ),
+      pause: Effect.fn("MirrorDaemon.pause")((session: string) =>
+        request("pause", { session }),
+      ),
+      resume: Effect.fn("MirrorDaemon.resume")((session: string) =>
+        request("resume", { session }),
+      ),
     });
-  }
+  });
 
-  async function expectOk(
-    op: string,
-    fields: Record<string, unknown>,
-  ): Promise<string> {
-    const response = await request(op, fields);
-    if (!response.ok) {
-      throw new Error(response.error ?? `mirror ${op} failed`);
-    }
-    return response.session ?? "";
-  }
+export const layer = (options: Options) =>
+  Layer.effect(MirrorDaemon, make(options));
 
-  return {
-    start,
-    stop,
-    status: () => status,
-    sessions: () => sessions,
-    create: (input: MirrorCreateInput) => expectOk("create", { ...input }),
-    terminate: (session: string) => expectOk("terminate", { session }),
-    pause: (session: string) => expectOk("pause", { session }),
-    resume: (session: string) => expectOk("resume", { session }),
-  };
-}
+// The Promise face, for the mirror bookkeeping in main/ipc/handlers.ts.
+const {
+  layer: adapterLayer,
+  run,
+  runSyncOr,
+} = PromiseAdapter.make<MirrorDaemon>("The mirror daemon");
+export const adapter = adapterLayer;
+
+// The daemon's own effect, for a caller holding a runtime of its own
+// (the proofs) or the adapter below.
+export const onDaemon = <A, E>(
+  f: (daemon: MirrorDaemon["Service"]) => Effect.Effect<A, E>,
+) =>
+  Effect.gen(function* () {
+    return yield* f(yield* MirrorDaemon);
+  });
+
+export const mirrorDaemon = {
+  status: (): MirrorDaemonStatus =>
+    runSyncOr(
+      onDaemon((daemon) => daemon.status),
+      () => "stopped",
+    ),
+  sessions: (): readonly MirrorSessionRaw[] =>
+    runSyncOr(
+      onDaemon((daemon) => daemon.sessions),
+      () => [],
+    ),
+  create: (input: MirrorCreateInput) =>
+    run(onDaemon((daemon) => daemon.create(input))),
+  terminate: (session: string) =>
+    run(onDaemon((daemon) => daemon.terminate(session))),
+  pause: (session: string) => run(onDaemon((daemon) => daemon.pause(session))),
+  resume: (session: string) =>
+    run(onDaemon((daemon) => daemon.resume(session))),
+};

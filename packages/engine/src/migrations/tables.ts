@@ -99,4 +99,15 @@ export const tables = Effect.gen(function* () {
     source_path TEXT,
     updated_at INTEGER NOT NULL
   ) STRICT`;
+  // What clone checkouts proved about a source checkout's files, by the
+  // source's worktree id: path to "<oid> <stat>" as the source's index
+  // entry had it. A file hashed against its blob holds that blob's bytes
+  // while its stat stays the same, so it is read once, not on every
+  // clone. Losing a record only costs reading the file again.
+  yield* sql`CREATE TABLE clone_verified (
+    source_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    record TEXT NOT NULL,
+    PRIMARY KEY (source_id, path)
+  ) STRICT`;
 });

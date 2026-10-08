@@ -114,7 +114,9 @@ overrides:
 # marketing keeps TypeScript 6 on its own (marketing/README.md has why),
 # and the hub vitest 4.1 (hub/README.md has why).
 catalog:
+  "@effect/platform-bun": 4.0.2
   "@effect/platform-node": 4.0.2
+  "@effect/sql-sqlite-bun": 4.0.2
   "@effect/sql-sqlite-node": 4.0.2
   "@effect/tsgo": 0.51.1
   "@types/node": ^24.13.5

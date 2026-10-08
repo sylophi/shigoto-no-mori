@@ -6,7 +6,7 @@
 // command will: the service's answer wrapped the way the verb prints it.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -15,6 +15,7 @@ import * as Config from "../src/Config.ts";
 import * as Icons from "../src/Icons.ts";
 import * as Launchers from "../src/Launchers.ts";
 import * as Registry from "../src/Registry.ts";
+import type { RegisteredProject } from "../src/Registry.ts";
 import * as Scripts from "../src/Scripts.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import * as Worktrees from "../src/Worktrees.ts";
@@ -1041,5 +1042,454 @@ describe("launchers", () => {
       [["custom:a", "web:github"], 1],
     );
     assert.ok(row.entries.some(({ id }) => id === "custom:b"));
+  });
+});
+
+// --- verbs that change the worktrees --------------------------------------
+
+// What differs from run to run, made steady: run ids numbered in order,
+// no pids, times as a placeholder, and a script's output joined, since
+// each side reads its pipe in chunks of its own.
+const steady = (docs: ReadonlyArray<unknown>): unknown[] => {
+  const runs = new Map<string, string>();
+  const runOf = (id: string) => {
+    if (!runs.has(id)) runs.set(id, `run-${runs.size + 1}`);
+    return runs.get(id);
+  };
+  const walk = (value: unknown, key = ""): unknown => {
+    if (Array.isArray(value)) return value.map((item) => walk(item));
+    if (typeof value === "object" && value !== null) {
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([field]) => field !== "pid")
+          .map(([field, item]) => [field, walk(item, field)]),
+      );
+    }
+    if (key === "runId" && typeof value === "string") return runOf(value);
+    if (
+      (key === "createdAt" || key === "lastChangeAt") &&
+      typeof value === "number"
+    ) {
+      return "<time>";
+    }
+    return value;
+  };
+  const joined: Array<Record<string, unknown>> = [];
+  for (const doc of docs.map((item) => walk(item) as Record<string, unknown>)) {
+    const last = joined.at(-1);
+    if (
+      doc["kind"] === "data" &&
+      last?.["kind"] === "data" &&
+      last["runId"] === doc["runId"]
+    ) {
+      last["data"] = `${String(last["data"])}${String(doc["data"])}`;
+    } else {
+      joined.push({ ...doc });
+    }
+  }
+  return joined;
+};
+
+// A verb that changes the worktrees, run on each side against the same
+// starting point, and its documents compared along with `after`, a look
+// at what it left. The engine's side reports its events and ends in the
+// document the verb prints, or the error it fails with.
+const sameChange = async <A, E>(
+  go: { readonly args: ReadonlyArray<string>; readonly cwd?: string },
+  engine: (reporter: Worktrees.Reporter) => Effect.Effect<A, E, Engine>,
+  done: (value: A) => unknown,
+  after: () => unknown = () => null,
+) => {
+  const [goSide, engineSide] = await box.changeBoth(
+    async () => ({
+      docs: steady(await box.goDocs(go.cwd ?? box.home, ...go.args)),
+      after: after(),
+    }),
+    async () => {
+      const events: unknown[] = [];
+      const reporter: Worktrees.Reporter = {
+        report: (event) => Effect.sync(() => void events.push(event)),
+        color: true,
+      };
+      const last = await box.engine(engine(reporter).pipe(Effect.map(done)));
+      return { docs: steady([...events, last]), after: after() };
+    },
+  );
+  assert.deepStrictEqual(engineSide, goSide);
+};
+
+// A project configured for the in-project layout, so its new worktrees
+// land in the repo both sides share whatever data dir each has.
+const inProject = (
+  files: Record<string, string> = { "a.txt": "a\n" },
+  settings: Record<string, unknown> = {},
+) => {
+  const seeded = seedProject(files);
+  box.write("projects/P1/project.json", {
+    defaultBranch: "main",
+    worktreeLayout: "in-project",
+    ...settings,
+  });
+  return seeded;
+};
+
+const project1 = (repo: string): RegisteredProject => ({
+  id: "P1",
+  name: "repo",
+  path: repo,
+});
+
+// The repo's branches and worktrees, as git lists them.
+const repoState = (repo: string) => () => ({
+  branches: box.git(repo, "branch", "--format=%(refname:short)"),
+  worktrees: box.git(repo, "worktree", "list", "--porcelain"),
+});
+
+describe("worktrees destination", () => {
+  it("says where a new worktree goes and whether the place is taken", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    const destination = (name: string) =>
+      same(
+        ["worktrees", "destination", "--name", name, "-p", "repo"],
+        worktrees.pipe(
+          Effect.flatMap((service) =>
+            service.destination(project1(repo), name),
+          ),
+          Effect.map((found) => ({ ok: true, ...found })),
+        ),
+      );
+    mkdirSync(join(repo, ".shigomori", "worktrees", "squatted"));
+    await destination("owl");
+    await destination("FOX");
+    await destination("squatted");
+    await destination("primary");
+    await destination("a:b");
+  });
+});
+
+const createVerb = (
+  repo: string,
+  name: string,
+  flags: ReadonlyArray<string> = [],
+  input: Parameters<Worktrees.Worktrees["Service"]["create"]>[1] = {},
+) =>
+  sameChange(
+    { args: ["worktrees", "create", name, "--no-cd", "-p", "repo", ...flags] },
+    (reporter) =>
+      worktrees.pipe(
+        Effect.flatMap((service) =>
+          service.create(project1(repo), { name, ...input }, reporter),
+        ),
+      ),
+    ({ worktree, failures }) => ({
+      event: "done",
+      ok: failures.length === 0,
+      path: worktree.path,
+      worktree,
+      failures,
+    }),
+    repoState(repo),
+  );
+
+describe("worktrees create", () => {
+  it("makes a worktree on a new branch, from a base, or on an existing branch", async () => {
+    const { repo } = inProject();
+    box.git(repo, "branch", "existing");
+    await createVerb(repo, "fox");
+    await createVerb(repo, "owl", ["-b", "feat/owl", "--base", "main"], {
+      branch: "feat/owl",
+      base: "main",
+    });
+    await createVerb(repo, "kept", ["--checkout", "--base", "existing"], {
+      checkout: true,
+      base: "existing",
+    });
+    await createVerb(repo, "written", ["--no-clone"], { clone: false });
+  });
+
+  it("refuses a taken name, an occupied place, a reserved name and checkout without a base", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    mkdirSync(join(repo, ".shigomori", "worktrees", "squatted"));
+    await createVerb(repo, "FOX");
+    await createVerb(repo, "squatted");
+    await createVerb(repo, "root");
+    await createVerb(repo, "lone", ["--checkout"], { checkout: true });
+  });
+
+  it("marks a new worktree for auto-pull and agent work when asked", async () => {
+    const { repo } = inProject();
+    box.write("config.json", { autoPullNew: true });
+    await createVerb(repo, "fox", ["--agent-working"], { agentWorking: true });
+  });
+
+  it("carries files over and runs the setup script, reporting each step", async () => {
+    const { repo } = inProject(
+      {
+        "a.txt": "a\n",
+        ".gitignore": ".env\nnode_modules/\nbuild/\n",
+        ".worktreeinclude": "build/\n",
+      },
+      {
+        carryOver: [
+          { path: ".env", mode: "copy" },
+          { path: "node_modules", mode: "symlink" },
+          { path: "missing.txt", mode: "copy" },
+        ],
+        scripts: { setup: 'echo "setting up $SHIGOMORI_WORKTREE_NAME"' },
+      },
+    );
+    writeFileSync(join(repo, ".env"), "SECRET=1\n");
+    mkdirSync(join(repo, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(join(repo, "node_modules", "pkg", "index.js"), "1\n");
+    mkdirSync(join(repo, "build"));
+    writeFileSync(join(repo, "build", "out.js"), "built\n");
+    await createVerb(repo, "fox");
+  });
+
+  it("reports a failing setup script and leaves the worktree", async () => {
+    const { repo } = inProject(undefined, {
+      scripts: { setup: "echo nope >&2; exit 7" },
+    });
+    await createVerb(repo, "fox");
+    await createVerb(repo, "owl", ["--no-setup"], { skipSetup: true });
+  });
+});
+
+const rmVerb = (
+  repo: string,
+  ref: string,
+  flags: ReadonlyArray<string> = [],
+  options: Partial<{
+    force: boolean;
+    keepBranch: boolean;
+    skipCleanup: boolean;
+  }> = {},
+) =>
+  sameChange(
+    { args: ["worktrees", "rm", ref, ...flags] },
+    (reporter) =>
+      onTarget(box.home, { ref }, (service, located) =>
+        service
+          .remove(
+            located,
+            {
+              force: false,
+              keepBranch: false,
+              skipCleanup: false,
+              ...options,
+            },
+            reporter,
+          )
+          .pipe(
+            Effect.map((removed) => ({ ok: true, removed })),
+            Effect.catchTags({
+              CleanupFailed: ({ phase, exitCode, runId }) =>
+                Effect.succeed({
+                  ok: false,
+                  cleanupError: { phase, exitCode, runId },
+                }),
+            }),
+          ),
+      ),
+    (doc) => doc,
+    repoState(repo),
+  );
+
+describe("worktrees rm", () => {
+  it("removes a worktree and its branch, keeps the branch when asked, refuses the primary", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    tree("owl");
+    await rmVerb(repo, "fox");
+    await rmVerb(repo, "owl", ["--keep-branch"], { keepBranch: true });
+    await rmVerb(repo, "repo/root");
+  });
+
+  it("refuses uncommitted changes unless forced, an untracked file included", async () => {
+    const { repo, tree } = inProject();
+    const fox = tree("fox");
+    writeFileSync(join(fox, "new.txt"), "new\n");
+    await rmVerb(repo, "fox");
+    await rmVerb(repo, "fox", ["-f"], { force: true });
+  });
+
+  it("runs the teardown first, keeping the worktree when it fails", async () => {
+    const { repo, tree } = inProject(undefined, {
+      scripts: {
+        teardown: 'echo "tearing down $SHIGOMORI_WORKTREE_NAME"; exit 3',
+      },
+    });
+    tree("fox");
+    await rmVerb(repo, "fox");
+    await rmVerb(repo, "fox", ["--skip-cleanup"], { skipCleanup: true });
+  });
+
+  it("leaves the branch of an external worktree, and its teardown unrun", async () => {
+    const { repo } = inProject(undefined, {
+      scripts: { teardown: "exit 3" },
+    });
+    box.git(
+      repo,
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "outside",
+      join(box.home, "outside"),
+    );
+    await rmVerb(repo, "outside");
+  });
+});
+
+describe("worktrees move and rekey", () => {
+  it("moves a worktree, carrying its title and marks to its new id", async () => {
+    const { repo, tree } = inProject();
+    const fox = tree("fox");
+    box.write("registry.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+      autoPullWorktrees: { [worktreeIdFromPath(fox)]: true },
+    });
+    const moveTo = (ref: string, to: string) =>
+      sameChange(
+        { args: ["worktrees", "move", ref, to] },
+        () =>
+          onTarget(box.home, { ref }, (service, located) =>
+            service.move(located, to),
+          ).pipe(Effect.map((moved) => ({ ok: true, ...moved }))),
+        (doc) => doc,
+        repoState(repo),
+      );
+    await moveTo("fox", join(repo, ".shigomori", "worktrees", "renamed"));
+    mkdirSync(join(box.home, "taken"));
+    await moveTo("renamed", join(box.home, "taken"));
+    await moveTo("renamed", join(box.home, "elsewhere", "fox"));
+    await moveTo("repo/root", join(box.home, "nowhere"));
+  });
+
+  it("re-keys ahead of a move", async () => {
+    const { repo } = inProject();
+    await same(
+      [
+        "worktrees",
+        "rekey",
+        "--project-id",
+        "P1",
+        "--from-id",
+        "abc",
+        "--to-path",
+        join(box.home, "later"),
+      ],
+      worktrees.pipe(
+        Effect.flatMap((service) =>
+          service.rekey(project1(repo), "abc", join(box.home, "later")),
+        ),
+        Effect.map((id) => ({ ok: true, id })),
+      ),
+    );
+  });
+});
+
+describe("worktrees adopt and setup", () => {
+  const adoptVerb = (repo: string, ref: string, force = false) =>
+    sameChange(
+      { args: ["worktrees", "adopt", ref, ...(force ? ["-f"] : [])] },
+      (reporter) =>
+        onTarget(box.home, { ref }, (service, located) =>
+          service.adopt(located, { force }, reporter),
+        ),
+      ({ worktree, failures }) => ({
+        event: "done",
+        ok: failures.length === 0,
+        path: worktree.path,
+        worktree,
+        failures,
+      }),
+      repoState(repo),
+    );
+
+  it("makes an external worktree managed, refusing a managed one and uncommitted changes", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    const outside = join(box.home, "outside");
+    box.git(repo, "worktree", "add", "-q", "-b", "feat/outside", outside);
+    await adoptVerb(repo, "fox");
+    writeFileSync(join(outside, "new.txt"), "new\n");
+    await adoptVerb(repo, outside);
+    await adoptVerb(repo, outside, true);
+  });
+
+  const setupVerb = () =>
+    sameChange(
+      { args: ["worktrees", "setup", "fox"] },
+      (reporter) =>
+        onTarget(box.home, { ref: "fox" }, (service, located) =>
+          service.setup(located, reporter),
+        ),
+      ({ ran, failures }) =>
+        ran.length === 0
+          ? { ok: true, ran }
+          : { ok: failures.length === 0, ran, failures },
+    );
+
+  it("says there is no setup to run", async () => {
+    inProject().tree("fox");
+    await setupVerb();
+  });
+
+  it("runs the setup script again", async () => {
+    inProject(undefined, { scripts: { setup: "echo again; exit 2" } }).tree(
+      "fox",
+    );
+    await setupVerb();
+  });
+});
+
+describe("projects relocate", () => {
+  const relocateVerb = (ref: string, to: string) =>
+    sameChange(
+      { args: ["projects", "relocate", ref, to] },
+      () =>
+        Effect.gen(function* () {
+          const service = yield* worktrees;
+          const here = yield* service.here(box.home);
+          const project = yield* service.resolveProject(here, ref);
+          return yield* service.relocateProject(project, to);
+        }),
+      (project) => ({ ok: true, project }),
+    );
+
+  it("follows a repo renamed by hand, its worktrees and their marks along", async () => {
+    const { repo, tree } = inProject();
+    const fox = tree("fox");
+    box.write("registry.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+      projectOrder: [repo],
+      shelvedWorktrees: { [worktreeIdFromPath(fox)]: true },
+    });
+    const renamed = join(box.home, "renamed");
+    renameSync(repo, renamed);
+    await relocateVerb("repo", join(renamed, ".shigomori"));
+    await same(
+      ["worktrees", "list", "--identities", "--all"],
+      worktrees.pipe(
+        Effect.flatMap((service) =>
+          Effect.flatMap(service.here(box.home), (here) =>
+            service.identityList(here.projects, { primaryRef: false }),
+          ),
+        ),
+        Effect.map(({ rows }) => rows),
+      ),
+    );
+  });
+
+  it("refuses a repo that is still there, and a path that is no repo", async () => {
+    const { repo } = inProject();
+    const other = box.repo("other");
+    await relocateVerb("repo", other);
+    renameSync(repo, join(box.home, "gone"));
+    mkdirSync(join(box.home, "plain"));
+    await relocateVerb("repo", join(box.home, "plain"));
   });
 });
