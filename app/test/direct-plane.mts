@@ -114,10 +114,10 @@
 //     crash restart reusing the cached provision only after a
 //     probe-passed child, re-provision on port change / a never-ready
 //     child, stable reset, reconcile no-op that preserves backoff, a
-//     denied provision parking with no timed retry, and the
-//     pre-empting stop whose terminal latch also swallows queued
-//     reconciles) against stub deps and a fake clock, with the
-//     connector token never in any status object.
+//     denied provision parking with no timed retry, and the layer's
+//     close pre-empting an in-flight provision) against a stub
+//     spawner, stub deps and a TestClock, with the connector token
+//     never in any status object.
 //
 // The listener's own hardening (framing, the Origin gate, frame and
 // in-flight caps, the generation guard) is pinned by
@@ -130,6 +130,17 @@ import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as TestClock from "effect/testing/TestClock";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Stream from "effect/Stream";
+import * as Sink from "effect/Sink";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Logger from "effect/Logger";
+import * as Layer from "effect/Layer";
+import * as Effect from "effect/Effect";
+import * as Deferred from "effect/Deferred";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import { it } from "vitest";
 import { CommandRefusedError } from "@shigomori/contracts/errors";
@@ -172,8 +183,9 @@ import {
 import {
   cloudflaredArgs,
   cloudflaredEnv,
-  createCloudflaredRunner,
   resolveCloudflaredBinary,
+  Tunnel,
+  TunnelProvisionError,
   TUNNEL_BACKOFF_LADDER_MS,
   TUNNEL_PROBE_DEADLINE_FRESH_MS,
   TUNNEL_PROBE_DEADLINE_MS,
@@ -182,9 +194,9 @@ import {
   TUNNEL_PROBE_DELAYS_MS,
   TUNNEL_PROBE_DELAYS_REUSED_MS,
   TUNNEL_STABLE_MS,
-  type TunnelChild,
   type TunnelProvision,
 } from "@host/direct/cloudflared";
+import * as Tunnels from "@host/direct/cloudflared";
 import {
   type ConnectTicketStore,
   createConnectTicketStore,
@@ -472,13 +484,6 @@ function heldDial() {
     changes: () => changes,
   };
 }
-
-// A stub cloudflared child for the runner scenarios: `exit` plays the
-// child dying, through the observer the runner registered with onExit.
-type StubTunnelChild = TunnelChild & {
-  killed: boolean;
-  exit: (detail: string) => void;
-};
 
 it("brokering: connectInfo over the device hub carries fully dialable candidates with one ticket each while the listener is up, and available:false when it is down", async () => {
   const stub = await startStubHub(trackTest);
@@ -2032,6 +2037,16 @@ it("keeper parks on terminal verdicts with NO timer (the lockout-protection rule
   keeper.stop();
 });
 
+const resolveBinary = (
+  configured: string | undefined,
+  bundled: string | null,
+) =>
+  Effect.runPromise(
+    resolveCloudflaredBinary(configured, bundled).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+
 it("cloudflared deciders are pure and disciplined: the tunnel ladder caps through the supervisor's shared lookup, and the token rides env only, never argv", async () => {
   // The shared lookup clamps at both ends of the tunnel ladder.
   assert.equal(
@@ -2065,42 +2080,152 @@ it("cloudflared deciders are pure and disciplined: the tunnel ladder caps throug
     args.every((arg) => !arg.includes(token)),
     "the token leaked into argv",
   );
-  const env = cloudflaredEnv({ PATH: "/usr/bin" }, token);
-  assert.equal(env.TUNNEL_TOKEN, token);
-  assert.equal(env.PATH, "/usr/bin");
+  assert.deepEqual(cloudflaredEnv(token), { TUNNEL_TOKEN: token });
   // Resolution order: the configured override, then the copy the
   // app ships, then PATH. A stand-in that answers --version plays
   // both the override and the bundled copy.
   const fake = join(tmpdir(), `sm-fake-cloudflared-${process.pid}`);
   writeFileSync(fake, "#!/bin/sh\necho fake 0.0.0\n", { mode: 0o755 });
   trackTest(() => rmSync(fake, { force: true }));
-  assert.equal(await resolveCloudflaredBinary(undefined, fake), fake);
+  assert.equal(await resolveBinary(undefined, fake), fake);
   assert.equal(
-    await resolveCloudflaredBinary(fake, "/nonexistent/cloudflared"),
+    await resolveBinary(fake, "/nonexistent/cloudflared"),
     fake,
     "the configured override must beat the bundled copy",
   );
   assert.notEqual(
-    await resolveCloudflaredBinary(undefined, "/nonexistent/cloudflared"),
+    await resolveBinary(undefined, "/nonexistent/cloudflared"),
     "/nonexistent/cloudflared",
     "a missing bundled copy must fall through, never be returned",
   );
 });
 
+// A cloudflared child the stub spawner started: what it was given, and
+// `exit` to play it dying. `killed` is its scope closing while it ran.
+type StubTunnelChild = {
+  readonly args: readonly string[];
+  readonly env: Record<string, string | undefined> | undefined;
+  killed: boolean;
+  exit: () => void;
+};
+
+const onTunnel = <A, E>(
+  f: (tunnel: Tunnel["Service"]) => Effect.Effect<A, E>,
+) =>
+  Effect.gen(function* () {
+    return yield* f(yield* Tunnel);
+  });
+
+// Lets the supervision fiber act on what just happened: a few turns of
+// the event loop.
+const settleTunnel = () =>
+  [1, 2, 3, 4, 5, 6, 7, 8].reduce<Promise<void>>(
+    (turns) =>
+      turns.then(() => new Promise((resolve) => setImmediate(resolve))),
+    Promise.resolve(),
+  );
+
+// The Tunnel over a stub spawner and a TestClock, with the provision
+// and the probe the scenario plays.
+async function tunnelHarness(deps: {
+  readonly resolveBinary?: () => string | null;
+  readonly provision: (port: number) => Promise<TunnelProvision>;
+  readonly probe?: (hostname: string) => boolean;
+  readonly onChange?: () => void;
+}) {
+  const spawned: StubTunnelChild[] = [];
+  const spawner = ChildProcessSpawner.make((command) =>
+    Effect.gen(function* () {
+      if (!ChildProcess.isStandardCommand(command)) {
+        return yield* Effect.die("a piped command");
+      }
+      const exit = yield* Deferred.make<number>();
+      const child: StubTunnelChild = {
+        args: command.args,
+        env: command.options.env,
+        killed: false,
+        exit: () => Effect.runSync(Deferred.succeed(exit, 1)),
+      };
+      spawned.push(child);
+      yield* Effect.addFinalizer(() =>
+        Deferred.isDone(exit).pipe(
+          Effect.map((done) => {
+            if (!done) child.killed = true;
+          }),
+        ),
+      );
+      return ChildProcessSpawner.makeHandle({
+        pid: ChildProcessSpawner.ProcessId(1000 + spawned.length),
+        exitCode: Deferred.await(exit).pipe(
+          Effect.map(ChildProcessSpawner.ExitCode),
+        ),
+        isRunning: Deferred.isDone(exit).pipe(Effect.map((done) => !done)),
+        kill: () => Effect.void,
+        stdin: Sink.drain,
+        stdout: Stream.empty,
+        stderr: Stream.empty,
+        all: Stream.empty,
+        getInputFd: () => Sink.drain,
+        getOutputFd: () => Stream.empty,
+        unref: Effect.succeed(Effect.void),
+      });
+    }),
+  );
+  const runtime = ManagedRuntime.make(
+    Tunnels.layer({
+      resolveBinary: Effect.sync(() =>
+        (deps.resolveBinary ?? (() => "/stub/cloudflared"))(),
+      ),
+      provision: (port) =>
+        Effect.tryPromise({
+          try: () => deps.provision(port),
+          catch: (cause) => new TunnelProvisionError({ cause }),
+        }),
+      probe: (hostname) =>
+        Effect.sync(() => (deps.probe ? deps.probe(hostname) : true)),
+      onChange: deps.onChange,
+    }).pipe(
+      Layer.provide(
+        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      ),
+      Layer.provide(NodeServices.layer),
+      Layer.provide(Logger.layer([])),
+      Layer.provideMerge(TestClock.layer()),
+    ),
+  );
+  let disposed = false;
+  const dispose = async () => {
+    disposed = true;
+    await runtime.dispose();
+  };
+  trackTest(() => (disposed ? undefined : runtime.dispose()));
+  await runtime.context();
+  return {
+    spawned,
+    reconcile: async (wanted: { port: number } | null) => {
+      await runtime.runPromise(onTunnel((tunnel) => tunnel.reconcile(wanted)));
+      await settleTunnel();
+    },
+    status: () => runtime.runSync(onTunnel((tunnel) => tunnel.status)),
+    tunnelUrl: () => runtime.runSync(onTunnel((tunnel) => tunnel.tunnelUrl)),
+    advance: async (ms: number) => {
+      await runtime.runPromise(TestClock.adjust(ms));
+      await settleTunnel();
+    },
+    dispose,
+  };
+}
+
 it("cloudflared runner: no-binary and unconfigured are typed terminal states, and the unconfigured verdict is cached for the process lifetime", async () => {
-  const clock = fakeClock();
   // Missing binary: reported, and provisioning never even runs.
   let binaryPath: string | null = null;
   let provisions = 0;
-  const noBinary = createCloudflaredRunner({
-    resolveBinary: async () => binaryPath,
+  const noBinary = await tunnelHarness({
+    resolveBinary: () => binaryPath,
     provision: async () => {
       provisions += 1;
       return { hostname: "h.example.test", connectorToken: "t" };
     },
-    spawnTunnel: () => ({ onExit() {}, kill() {} }),
-    probeTunnel: async () => true,
-    clock,
   });
   await noBinary.reconcile({ port: 40100 });
   assert.equal(noBinary.status().state, "no-binary");
@@ -2115,26 +2240,23 @@ it("cloudflared runner: no-binary and unconfigured are typed terminal states, an
   assert.equal(provisions, 1);
   await noBinary.reconcile(null);
   // Worker unconfigured: the typed error parks the runner without
-  // a retry timer, so time passing changes nothing.
+  // a retry, so time passing changes nothing.
   let unconfiguredCalls = 0;
-  const unconfigured = createCloudflaredRunner({
-    resolveBinary: async () => "/stub/cloudflared",
+  const unconfigured = await tunnelHarness({
     provision: async () => {
       unconfiguredCalls += 1;
       throw new TunnelUnconfiguredError();
     },
-    spawnTunnel: () => assert.fail("spawned while unconfigured"),
-    probeTunnel: async () => true,
-    clock,
   });
   await unconfigured.reconcile({ port: 40100 });
   assert.equal(unconfigured.status().state, "unconfigured");
-  await clock.advance(10 * 60_000);
+  await unconfigured.advance(10 * 60_000);
   assert.equal(
     unconfiguredCalls,
     1,
     "an unconfigured worker was retried on a timer",
   );
+  assert.equal(unconfigured.spawned.length, 0, "spawned while unconfigured");
   assert.equal(unconfigured.status().state, "unconfigured");
   // A deployment fact does not change with the port: even a
   // port-changing reconcile skips the provision round trip for the
@@ -2148,15 +2270,13 @@ it("cloudflared runner: no-binary and unconfigured are typed terminal states, an
   assert.equal(unconfigured.status().state, "unconfigured");
 });
 
-it("cloudflared runner: the readiness probe gates advertising (a failed attempt retries on the probe ladder), a post-ready crash restarts from the cached provision on the capped backoff, a port change re-provisions, stop kills the child cleanly, and the token never reaches a status object", async () => {
-  const clock = fakeClock();
+it("cloudflared runner: the readiness probe gates advertising (a failed attempt retries on the probe ladder), a post-ready crash restarts from the cached provision on the capped backoff, a port change re-provisions, a stop kills the child cleanly, and the token never reaches a status object", async () => {
   const token = "connector-token-must-not-leak";
-  const spawned: StubTunnelChild[] = [];
   const provisionPorts: number[] = [];
   const probeAnswers = [false, true];
   let statusChanges = 0;
-  const runner = createCloudflaredRunner({
-    resolveBinary: async () => "/stub/cloudflared",
+  let snapshot: (() => unknown) | null = null;
+  const runner = await tunnelHarness({
     provision: async (port) => {
       provisionPorts.push(port);
       return {
@@ -2164,23 +2284,7 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
         connectorToken: token,
       };
     },
-    spawnTunnel: (binaryPath, connectorToken) => {
-      assert.equal(binaryPath, "/stub/cloudflared");
-      assert.equal(connectorToken, token);
-      const child: StubTunnelChild = {
-        killed: false,
-        exit: notYetSet,
-        onExit(handler) {
-          this.exit = handler;
-        },
-        kill() {
-          this.killed = true;
-        },
-      };
-      spawned.push(child);
-      return child;
-    },
-    probeTunnel: async (hostname) => {
+    probe: (hostname) => {
       assert.equal(hostname, "sm-feedfacecafe.sm.example.test");
       return probeAnswers.shift() ?? true;
     },
@@ -2188,24 +2292,28 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
       statusChanges += 1;
       // The secret must never surface on ANY observable snapshot.
       assert.ok(
-        !JSON.stringify(runner.status()).includes(token),
+        !JSON.stringify(snapshot?.()).includes(token),
         "the connector token leaked into a status object",
       );
     },
-    clock,
   });
+  snapshot = runner.status;
+  const { spawned } = runner;
   await runner.reconcile({ port: 40100 });
   assert.deepEqual(provisionPorts, [40100]);
   assert.equal(spawned.length, 1);
+  // The token rides the child's env, never its argv.
+  assert.equal(entryAt(spawned, 0).env?.["TUNNEL_TOKEN"], token);
+  assert.ok(entryAt(spawned, 0).args.every((arg) => !arg.includes(token)));
   // Probing: starting, NOT advertised yet.
   assert.equal(runner.status().state, "starting");
   assert.equal(runner.tunnelUrl(), null);
   // First probe attempt answers not-routable: still starting, the
   // chain retries on the next rung instead of advertising.
-  await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
   assert.equal(runner.status().state, "starting");
   assert.equal(runner.tunnelUrl(), null);
-  await clock.advance(entryAt(TUNNEL_PROBE_DELAYS_REUSED_MS, 1));
+  await runner.advance(entryAt(TUNNEL_PROBE_DELAYS_REUSED_MS, 1));
   assert.equal(runner.status().state, "up");
   assert.equal(runner.tunnelUrl(), "wss://sm-feedfacecafe.sm.example.test");
   assert.ok(statusChanges > 0);
@@ -2213,10 +2321,10 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
   await runner.reconcile({ port: 40100 });
   assert.equal(spawned.length, 1);
   assert.deepEqual(provisionPorts, [40100]);
-  // The child dies: not advertised anymore, restart scheduled on
+  // The child dies: not advertised anymore, a restart scheduled on
   // the ladder.
-  entryAt(spawned, 0).exit("cloudflared exited (code 1)");
-  await clock.settle();
+  entryAt(spawned, 0).exit();
+  await runner.advance(0);
   assert.equal(runner.status().state, "error");
   assert.equal(runner.tunnelUrl(), null);
   // A same-port reconcile while the retry is scheduled is a no-op
@@ -2224,7 +2332,7 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
   await runner.reconcile({ port: 40100 });
   assert.equal(runner.status().state, "error");
   assert.deepEqual(provisionPorts, [40100]);
-  await clock.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
+  await runner.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
   assert.equal(spawned.length, 2, "no respawn after the backoff delay");
   // The crash restart reused the cached provision (the dead child
   // HAD passed the probe): no Worker round trip for an unchanged
@@ -2234,7 +2342,7 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
     [40100],
     "a post-ready crash restart re-provisioned an unchanged port",
   );
-  await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
   assert.equal(runner.status().state, "up");
   // A listener restart on a NEW ephemeral port kills the old child
   // and re-provisions against the new port.
@@ -2249,17 +2357,14 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
   assert.equal(spawned[2]?.killed, true);
   assert.equal(runner.status().state, "off");
   assert.equal(runner.tunnelUrl(), null);
-  await clock.advance(10 * 60_000);
+  await runner.advance(10 * 60_000);
   assert.equal(spawned.length, 3, "a stopped runner respawned");
 });
 
 it("cloudflared runner: a never-ready child's restart re-provisions (its token may be dead), a probed-ready child's crash reuses the cache, a stable run resets the ladder, and a not-yet-routable child of a FRESH record is kept and probed on until the long deadline, while a reused tunnel that never routes is killed and re-provisioned at the short one", async () => {
-  const clock = fakeClock();
-  const spawned: StubTunnelChild[] = [];
   let provisions = 0;
   let routable = false;
-  const runner = createCloudflaredRunner({
-    resolveBinary: async () => "/stub/cloudflared",
+  const runner = await tunnelHarness({
     provision: async () => {
       provisions += 1;
       return {
@@ -2267,30 +2372,17 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
         connectorToken: "stub-token",
       };
     },
-    spawnTunnel: () => {
-      const child: StubTunnelChild = {
-        exit: notYetSet,
-        killed: false,
-        onExit(handler) {
-          this.exit = handler;
-        },
-        kill() {
-          this.killed = true;
-        },
-      };
-      spawned.push(child);
-      return child;
-    },
-    probeTunnel: async () => routable,
-    clock,
+    probe: () => routable,
   });
+  const { spawned } = runner;
   await runner.reconcile({ port: 40100 });
   assert.equal(provisions, 1);
   // The child dies BEFORE any probe passed: the cached provision
   // is not trusted (the token may be dead), so the restart pays a
   // fresh Worker round trip.
-  lastOf(spawned).exit("cloudflared exited (code 1)");
-  await clock.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
+  lastOf(spawned).exit();
+  await runner.advance(0);
+  await runner.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
   assert.equal(spawned.length, 2, "no respawn after the backoff");
   assert.equal(
     provisions,
@@ -2301,11 +2393,12 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   // restart reuses the cache (no third provision) and starts from
   // the ladder's bottom rung again.
   routable = true;
-  await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
   assert.equal(runner.status().state, "up");
-  await clock.advance(TUNNEL_STABLE_MS);
-  lastOf(spawned).exit("cloudflared exited (code 1)");
-  await clock.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
+  await runner.advance(TUNNEL_STABLE_MS);
+  lastOf(spawned).exit();
+  await runner.advance(0);
+  await runner.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
   assert.equal(
     spawned.length,
     3,
@@ -2323,12 +2416,9 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   // for as long as the child lives. It is never killed, nothing is
   // re-provisioned, the status stays "starting", and the moment a
   // probe passes the tunnel is advertised on the same child.
-  const lateClock = fakeClock();
-  const lateSpawns: Array<Omit<StubTunnelChild, "exit">> = [];
   let lateProvisions = 0;
   let lateRoutable = false;
-  const notYetRoutable = createCloudflaredRunner({
-    resolveBinary: async () => "/stub/cloudflared",
+  const notYetRoutable = await tunnelHarness({
     provision: async () => {
       lateProvisions += 1;
       return {
@@ -2337,41 +2427,33 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
         dnsCreated: true,
       };
     },
-    spawnTunnel: () => {
-      const child = {
-        killed: false,
-        onExit() {},
-        kill() {
-          this.killed = true;
-        },
-      };
-      lateSpawns.push(child);
-      return child;
-    },
-    probeTunnel: async () => lateRoutable,
-    clock: lateClock,
+    probe: () => lateRoutable,
   });
   await notYetRoutable.reconcile({ port: 40100 });
-  assert.equal(lateSpawns.length, 1);
+  assert.equal(notYetRoutable.spawned.length, 1);
   // Walk well past the warning threshold: the capped rung up to it,
   // the slow rung after, where the child is still alive and probed.
   const step = lastOf(TUNNEL_PROBE_DELAYS_MS);
   for (let walked = 0; walked <= TUNNEL_PROBE_WARN_MS; walked += step) {
     // oxlint-disable-next-line no-await-in-loop -- the probe chain advances serially by design
-    await lateClock.advance(step);
+    await notYetRoutable.advance(step);
   }
   for (let i = 0; i < 3; i += 1) {
     // oxlint-disable-next-line no-await-in-loop -- see above
-    await lateClock.advance(TUNNEL_PROBE_SLOW_MS);
+    await notYetRoutable.advance(TUNNEL_PROBE_SLOW_MS);
   }
   assert.equal(notYetRoutable.status().state, "starting");
   assert.equal(notYetRoutable.tunnelUrl(), null);
   assert.equal(
-    lateSpawns[0]?.killed,
+    notYetRoutable.spawned[0]?.killed,
     false,
     "a not-yet-routable child was killed",
   );
-  assert.equal(lateSpawns.length, 1, "a not-yet-routable child was respawned");
+  assert.equal(
+    notYetRoutable.spawned.length,
+    1,
+    "a not-yet-routable child was respawned",
+  );
   assert.equal(
     lateProvisions,
     1,
@@ -2380,67 +2462,58 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   // DNS catches up: the next (slow-rung) probe advertises the same
   // child.
   lateRoutable = true;
-  await lateClock.advance(TUNNEL_PROBE_SLOW_MS);
+  await notYetRoutable.advance(TUNNEL_PROBE_SLOW_MS);
   assert.equal(notYetRoutable.status().state, "up");
   assert.equal(notYetRoutable.tunnelUrl(), "wss://h.example.test");
-  assert.equal(lateSpawns.length, 1);
-  await notYetRoutable.stop();
+  assert.equal(notYetRoutable.spawned.length, 1);
+  await notYetRoutable.dispose();
 
   // A reused tunnel that NEVER becomes routable (a deleted record,
   // a stale ingress): past the short deadline it is killed and the
   // restart re-provisions, since it never reached readiness.
-  const deadClock = fakeClock();
-  const deadSpawns: Array<Omit<StubTunnelChild, "exit">> = [];
   let deadProvisions = 0;
-  const neverRoutable = createCloudflaredRunner({
-    resolveBinary: async () => "/stub/cloudflared",
+  const neverRoutable = await tunnelHarness({
     provision: async () => {
       deadProvisions += 1;
       return { hostname: "h.example.test", connectorToken: "t" };
     },
-    spawnTunnel: () => {
-      const child = {
-        killed: false,
-        onExit() {},
-        kill() {
-          this.killed = true;
-        },
-      };
-      deadSpawns.push(child);
-      return child;
-    },
-    probeTunnel: async () => false,
-    clock: deadClock,
+    probe: () => false,
   });
   await neverRoutable.reconcile({ port: 40100 });
+  // A second at a time, so the walk stops at the kill and not past
+  // the restart one rung later.
   for (
     let walked = 0;
     walked <= TUNNEL_PROBE_DEADLINE_MS + step &&
     neverRoutable.status().state === "starting";
-    walked += step
+    walked += 1_000
   ) {
     // oxlint-disable-next-line no-await-in-loop -- see above
-    await deadClock.advance(step);
+    await neverRoutable.advance(1_000);
   }
   assert.ok(
     TUNNEL_PROBE_DEADLINE_FRESH_MS > TUNNEL_PROBE_DEADLINE_MS,
     "a fresh record must get the longer deadline",
   );
   assert.equal(neverRoutable.status().state, "error");
-  assert.equal(deadSpawns[0]?.killed, true, "not killed at the deadline");
-  await deadClock.advance(lastOf(TUNNEL_BACKOFF_LADDER_MS));
-  assert.equal(deadSpawns.length, 2, "no respawn after the deadline");
+  assert.equal(
+    neverRoutable.spawned[0]?.killed,
+    true,
+    "not killed at the deadline",
+  );
+  await neverRoutable.advance(lastOf(TUNNEL_BACKOFF_LADDER_MS));
+  assert.equal(
+    neverRoutable.spawned.length,
+    2,
+    "no respawn after the deadline",
+  );
   assert.equal(deadProvisions, 2, "the deadline restart reused the provision");
-  await neverRoutable.stop();
 });
 
 it("cloudflared runner: a denied provision (401/404) parks with NO scheduled retry, and the next reconcile trigger is its recovery path", async () => {
-  const clock = fakeClock();
   let provisions = 0;
   let denied = true;
-  const spawns: TunnelChild[] = [];
-  const runner = createCloudflaredRunner({
-    resolveBinary: async () => "/stub/cloudflared",
+  const runner = await tunnelHarness({
     provision: async () => {
       provisions += 1;
       if (denied) {
@@ -2448,72 +2521,41 @@ it("cloudflared runner: a denied provision (401/404) parks with NO scheduled ret
       }
       return { hostname: "h.example.test", connectorToken: "t" };
     },
-    spawnTunnel: () => {
-      const child = { onExit() {}, kill() {} };
-      spawns.push(child);
-      return child;
-    },
-    probeTunnel: async () => true,
-    clock,
   });
   await runner.reconcile({ port: 40100 });
   assert.equal(runner.status().state, "error");
   assert.equal(provisions, 1);
   // Parked: time passing schedules NOTHING (a timed retry would
   // re-present the same refused request forever).
-  await clock.advance(30 * 60_000);
+  await runner.advance(30 * 60_000);
   assert.equal(provisions, 1, "a denied provision retried on a timer");
-  assert.equal(spawns.length, 0);
+  assert.equal(runner.spawned.length, 0);
   // The next reconcile trigger re-enters even on the same port:
   // that is exactly when the inputs (a re-sign-in, a Worker
   // redeploy) can have changed.
   denied = false;
   await runner.reconcile({ port: 40100 });
   assert.equal(provisions, 2, "the reconcile trigger did not re-enter");
-  assert.equal(spawns.length, 1);
+  assert.equal(runner.spawned.length, 1);
   assert.equal(runner.status().state, "starting");
   await runner.reconcile(null);
 });
 
-it("cloudflared runner: stop pre-empts an in-flight provision AND latches, so a reconcile queued behind that provision spawns nothing during quit", async () => {
-  const clock = fakeClock();
+it("cloudflared runner: closing the layer pre-empts an in-flight provision, so nothing spawns during the quit", async () => {
   let releaseProvision: (provisioned: TunnelProvision) => void = notYetSet;
-  const spawns: TunnelChild[] = [];
-  const hung = createCloudflaredRunner({
-    resolveBinary: async () => "/stub/cloudflared",
+  const hung = await tunnelHarness({
     provision: () =>
       new Promise((resolve) => {
         releaseProvision = resolve;
       }),
-    spawnTunnel: () => {
-      const child = { onExit() {}, kill() {} };
-      spawns.push(child);
-      return child;
-    },
-    probeTunnel: async () => true,
-    clock,
   });
-  const reconciling = hung.reconcile({ port: 40100 });
-  await clock.settle();
-  // A second reconcile queues behind the in-flight provision. Its
-  // slot drains AFTER stop below: without the terminal latch it
-  // would re-set wantedPort and respawn mid-quit.
-  const queued = hung.reconcile({ port: 40200 });
-  const stopping = hung.stop();
-  assert.equal(
-    hung.status().state,
-    "off",
-    "stop did not mark the runner off synchronously",
-  );
+  await hung.reconcile({ port: 40100 });
+  await hung.dispose();
   releaseProvision({ hostname: "h.example.test", connectorToken: "t" });
-  await reconciling;
-  await queued;
-  await stopping;
-  assert.equal(spawns.length, 0, "a queued reconcile spawned after stop");
-  assert.equal(hung.status().state, "off");
-  // The latch is terminal (quit is stop's only caller): even a
-  // later reconcile does nothing.
-  await hung.reconcile({ port: 40300 });
-  assert.equal(spawns.length, 0, "a post-stop reconcile spawned");
-  assert.equal(hung.status().state, "off");
+  await settleTunnel();
+  assert.equal(
+    hung.spawned.length,
+    0,
+    "a provision that outran the quit spawned",
+  );
 });

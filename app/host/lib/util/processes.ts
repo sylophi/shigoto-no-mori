@@ -111,7 +111,11 @@ export const exec = Effect.fn("exec")(function* (
   command: string,
   args: readonly string[],
   options: ExecOptions = {},
-) {
+): Effect.fn.Return<
+  { readonly stdout: string; readonly stderr: string },
+  CommandError,
+  ChildProcessSpawner.ChildProcessSpawner
+> {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const name = command.slice(command.lastIndexOf("/") + 1);
   yield* Effect.annotateCurrentSpan({ command: name });
