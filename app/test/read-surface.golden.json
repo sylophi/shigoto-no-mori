@@ -42,5 +42,6 @@
   "worktrees:fileDiff",
   "worktrees:list",
   "worktrees:listCommits",
+  "worktrees:operation",
   "worktrees:stashes"
 ]

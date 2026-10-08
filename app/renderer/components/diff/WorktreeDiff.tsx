@@ -13,7 +13,10 @@ import {
 } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
-import { useStashChanges } from "@/hooks/worktrees/useGitHistory";
+import {
+  useResolveConflict,
+  useStashChanges,
+} from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
@@ -95,6 +98,7 @@ function ChangesView({
   const { mutate: restore, isPending: restoring } = useRestoreDiscard();
   const undo = useUndoCommits(worktree);
   const stash = useStashChanges();
+  const resolve = useResolveConflict();
   const [draft, setDraft] = useCommitDraft(projectId, worktreeId);
 
   // The last commit is only up for rewriting while no remote has it. A
@@ -108,7 +112,8 @@ function ChangesView({
     discarding ||
     restoring ||
     undo.pending ||
-    stash.isPending;
+    stash.isPending ||
+    resolve.isPending;
   const resetAmendDraft = useAmendDraft({
     projectId,
     worktreeId,
@@ -222,6 +227,8 @@ function ChangesView({
         onSetStaged: (paths, staged) =>
           stage({ projectId, worktreeId, paths, staged }),
         onDiscard,
+        onResolve: (path, side) =>
+          resolve.mutate({ projectId, worktreeId, path, side }),
         onStash: () => {
           const count = list.length;
           stash.mutate(

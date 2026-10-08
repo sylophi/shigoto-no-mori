@@ -14,6 +14,9 @@ interface SyncWorktreeInput {
 function useSyncMutation(
   apiMethod: (api: HostApi, input: SyncWorktreeInput) => Promise<Worktree>,
   errorTitle: string,
+  // The caller reports failures itself (the primary sync pill, which
+  // offers a way on from a conflict).
+  silentError = false,
 ) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
@@ -31,10 +34,13 @@ function useSyncMutation(
       void queryClient.invalidateQueries({
         queryKey: keys.worktreeChanges(vars.projectId, vars.worktreeId),
       });
+      void queryClient.invalidateQueries({
+        queryKey: keys.worktreeOperation(vars.projectId, vars.worktreeId),
+      });
       // PR queries refresh via the refs-changed broadcast that the push
       // itself triggers, so no PR invalidation is needed here.
     },
-    meta: { errorTitle },
+    meta: silentError ? { silentError } : { errorTitle },
   });
 }
 
@@ -66,6 +72,12 @@ export const useSyncWithPrimaryWorktree = () =>
   useSyncMutation(
     (api, i) => api.worktrees.syncWithPrimary(i),
     "Couldn't sync from primary",
+    true,
+  );
+export const useMergePrimaryWorktree = () =>
+  useSyncMutation(
+    (api, i) => api.worktrees.mergePrimary(i),
+    "Couldn't merge from primary",
   );
 
 // The safe moves by their key (lib/syncState), for the pill and the

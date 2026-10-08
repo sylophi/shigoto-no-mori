@@ -36,7 +36,7 @@
 // working tree is never touched (the engine owns it). read-tree plus
 // an index refresh is what makes the staged view match without
 // rewriting a single file.
-import { copyFile, mkdtemp, readdir, stat } from "node:fs/promises";
+import { copyFile, mkdtemp, stat } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { watch } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,6 +44,7 @@ import { join } from "node:path";
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { run, runLenient } from "@host/lib/git/core";
+import { operationInProgress } from "@host/lib/git/operation";
 import {
   deleteRef,
   hasCommit,
@@ -105,40 +106,6 @@ export function operationInRefusal(text: string): string | null {
   if (at === -1) return null;
   const rest = text.slice(at + GIT_OPERATION_IN_PROGRESS.length + 2);
   return rest.split("\n")[0]?.trim() || "git operation";
-}
-
-// The files git leaves in a worktree's own git dir while an operation
-// waits on the user, in the order they are named when several are
-// there (a cherry-pick sequence has both CHERRY_PICK_HEAD and the
-// sequencer directory, and the first says more). rebase-apply is also
-// `git am`'s, which marks itself with an `applying` file inside.
-const OPERATION_MARKERS: { path: string; operation: string }[] = [
-  { path: "rebase-merge", operation: "rebase" },
-  { path: join("rebase-apply", "applying"), operation: "git am" },
-  { path: "rebase-apply", operation: "rebase" },
-  { path: "MERGE_HEAD", operation: "merge" },
-  { path: "CHERRY_PICK_HEAD", operation: "cherry-pick" },
-  { path: "REVERT_HEAD", operation: "revert" },
-  { path: "sequencer", operation: "cherry-pick or revert" },
-  { path: "BISECT_LOG", operation: "bisect" },
-];
-
-// The operation under way in the worktree whose git dir this is, or
-// null. One listing of the git dir answers all of them, bar the one
-// marker inside rebase-apply, looked at only when that is there.
-async function operationInProgress(gitDir: string): Promise<string | null> {
-  const names = new Set(await readdir(gitDir).catch((): string[] => []));
-  if (names.has("rebase-apply")) {
-    names.add(
-      await stat(join(gitDir, "rebase-apply", "applying")).then(
-        () => join("rebase-apply", "applying"),
-        () => "",
-      ),
-    );
-  }
-  return (
-    OPERATION_MARKERS.find(({ path }) => names.has(path))?.operation ?? null
-  );
 }
 
 // HEAD, the tip, the tip's tree and the git dir in one spawn, and the

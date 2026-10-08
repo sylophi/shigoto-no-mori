@@ -16,6 +16,8 @@ export interface DiffChangesControls {
   onDiscard: (paths: string[]) => void;
   // Every change, untracked files included, into a stash.
   onStash: () => void;
+  // Settle a conflicted file with one side's version.
+  onResolve: (path: string, side: "mine" | "theirs") => void;
   // The row whose diff is in the pane (patchFiles.changeKey), and how
   // to change it. The page owns this because the page fetches that
   // file's diff.

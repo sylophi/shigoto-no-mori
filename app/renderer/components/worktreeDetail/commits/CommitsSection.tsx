@@ -9,6 +9,7 @@ import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { BranchHistoryDrawer } from "../branch/BranchHistoryDrawer";
 import { CommitRow } from "./CommitRow";
+import { GitOperationBanner } from "./GitOperationBanner";
 import { StashRows } from "./StashRows";
 import { useCommitActions } from "./useCommitActions";
 
@@ -51,6 +52,7 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
           )}
         </div>
       </div>
+      <GitOperationBanner worktree={worktree} />
       {commits.length === 0 ? (
         <div className="text-sm text-muted-foreground">No commits yet.</div>
       ) : (

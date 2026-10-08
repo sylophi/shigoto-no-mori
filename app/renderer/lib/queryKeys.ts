@@ -89,6 +89,9 @@ function buildQueryKeys(deviceId: string) {
       host("worktreeChanges", projectId, worktreeId),
     worktreeStashes: (projectId: string, worktreeId: string) =>
       host("worktreeStashes", projectId, worktreeId),
+    // The git operation a worktree is stopped in, if any.
+    worktreeOperation: (projectId: string, worktreeId: string) =>
+      host("worktreeOperation", projectId, worktreeId),
     // The ignored files a transfer leaves behind on a source worktree
     // (sync:ignoredPaths), read by the transplant dialog.
     worktreeIgnored: (projectId: string, worktreeId: string) =>

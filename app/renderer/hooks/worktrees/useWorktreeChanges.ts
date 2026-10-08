@@ -105,7 +105,8 @@ export function useSetStaged() {
 }
 
 // Everything derived from the working tree: the sidebar's count and
-// recent commits, the patch, and the per-file index state.
+// recent commits, the patch, the per-file index state, and the
+// operation it may be stopped in.
 function invalidateWorkingTree(
   queryClient: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
@@ -120,6 +121,9 @@ function invalidateWorkingTree(
   });
   void queryClient.invalidateQueries({
     queryKey: keys.worktreeChanges(projectId, worktreeId),
+  });
+  void queryClient.invalidateQueries({
+    queryKey: keys.worktreeOperation(projectId, worktreeId),
   });
 }
 

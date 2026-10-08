@@ -1,9 +1,13 @@
-// Durable proof for the Git section's commit menu and stashes
-// (host/lib/git/history.ts, host/lib/git/stash.ts) against a REAL
+// Durable proof for the Git section's commit menu, stashes and
+// conflicts (host/lib/git/history.ts, stash.ts, operation.ts, and the
+// sync from primary in sync.ts) against a REAL
 // repository: revert and cherry-pick with their conflict abort, reword
 // and squash of local commits leaving the working tree alone with every
-// refusal (moved HEAD, a merge, a commit off the line), and stashes
-// listed per branch, applied, popped and dropped by hash.
+// refusal (moved HEAD, a merge, a commit off the line), stashes listed
+// per branch, applied, popped and dropped by hash, and a sync that
+// conflicts: refused clean, then merged anyway, settled file by file
+// and continued, or a rebase settled with the sides the right way round,
+// or aborted.
 //
 // Run: pnpm test git-history.
 import assert from "node:assert/strict";
@@ -32,6 +36,12 @@ const { cherryPickCommit, revertCommit, rewordCommit, squashIntoParent } =
   await import("../host/lib/git/history.ts");
 const { applyStash, dropStash, listStashes, restoreStash, stashChanges } =
   await import("../host/lib/git/stash.ts");
+
+const { abortOperation, continueOperation, readOperation, resolveConflict } =
+  await import("../host/lib/git/operation.ts");
+const { mergePrimaryKeepingConflicts, syncWithPrimary } =
+  await import("../host/lib/git/sync.ts");
+const { isSyncConflictsError } = await import("../shared/errors.ts");
 
 const git = sandboxGit(gitEnv);
 
@@ -264,6 +274,82 @@ async function main() {
       const [stash] = await listStashes(repo, "main");
       await assert.rejects(applyStash(repo, stash?.hash ?? "", true), /kept/);
       assert.equal((await listStashes(repo, "main")).length, 1);
+    },
+  );
+
+  // main and a side branch that both edited a.txt.
+  function seedConflict(track: Track): string {
+    const repo = seedRepo(track);
+    git(repo, "checkout", "-q", "-b", "side");
+    commit(repo, "a.txt", "side\n", "Side edit");
+    git(repo, "checkout", "-q", "main");
+    commit(repo, "a.txt", "main\n", "Main edit");
+    git(repo, "checkout", "-q", "side");
+    return repo;
+  }
+
+  await check(
+    "a sync from primary that conflicts is refused with the tree as it was",
+    async (track) => {
+      const repo = seedConflict(track);
+      const head = rev(repo, "HEAD");
+      await assert.rejects(syncWithPrimary(repo, repo, "main"), (err) =>
+        isSyncConflictsError(err),
+      );
+      assert.equal(rev(repo, "HEAD"), head);
+      assert.deepEqual(await readOperation(repo), {
+        operation: null,
+        continuable: false,
+        conflicted: 0,
+      });
+    },
+  );
+
+  await check(
+    "merged anyway, the conflict is settled with this branch's side and the merge continues",
+    async (track) => {
+      const repo = seedConflict(track);
+      await mergePrimaryKeepingConflicts(repo, repo, "main");
+      assert.deepEqual(await readOperation(repo), {
+        operation: "merge",
+        continuable: true,
+        conflicted: 1,
+      });
+      await assert.rejects(continueOperation(repo), /Resolve/);
+      await resolveConflict(repo, "a.txt", "mine");
+      assert.equal(read(repo, "a.txt"), "side\n");
+      assert.equal((await readOperation(repo)).conflicted, 0);
+      await continueOperation(repo);
+      assert.equal(
+        git(repo, "rev-list", "--parents", "-n", "1", "HEAD").trim().split(" ")
+          .length,
+        3,
+      );
+      assert.equal((await readOperation(repo)).operation, null);
+    },
+  );
+
+  await check(
+    "in a rebase, mine is the worktree's own commit, and abort puts it back",
+    async (track) => {
+      const repo = seedConflict(track);
+      const head = rev(repo, "HEAD");
+      assert.throws(() => git(repo, "rebase", "main"));
+      assert.equal((await readOperation(repo)).operation, "rebase");
+      await resolveConflict(repo, "a.txt", "mine");
+      assert.equal(read(repo, "a.txt"), "side\n");
+      await abortOperation(repo);
+      assert.equal(rev(repo, "HEAD"), head);
+      assert.equal((await readOperation(repo)).operation, null);
+
+      assert.throws(() => git(repo, "rebase", "main"));
+      await resolveConflict(repo, "a.txt", "theirs");
+      assert.equal(read(repo, "a.txt"), "main\n");
+      // Taking main's side leaves the commit empty, and the continue
+      // drops it: the branch ends up on main.
+      await continueOperation(repo);
+      assert.equal((await readOperation(repo)).operation, null);
+      assert.equal(rev(repo, "HEAD"), rev(repo, "main"));
     },
   );
 

@@ -27,6 +27,13 @@ import {
   stashChanges,
 } from "@host/lib/git/stash";
 import {
+  abortOperation,
+  continueOperation,
+  readOperation,
+  resolveConflict,
+} from "@host/lib/git/operation";
+import {
+  mergePrimaryKeepingConflicts,
   overwriteFromUpstream,
   publishCurrentBranch,
   pullFastForward,
@@ -414,29 +421,55 @@ export const worktreesHandlers: Handlers<
     mutateAndDescribe(input, (wt) => pullRebaseOrMergeAndPush(wt.path)),
   syncWithPrimary: (input) =>
     mutateAndDescribe(input, async (target, project) => {
-      if (target.isPrimary) {
-        throw new Error("The primary checkout can't be synced from itself");
-      }
-      if (target.detached) {
-        throw new Error(
-          "Detached worktrees can't be synced with the primary branch",
-        );
-      }
-      const { primaryRef } = await findWorktreeIdentityOrThrow(
-        project.id,
-        target.id,
-        { primaryRef: true },
-      );
-      if (primaryRef === undefined) {
-        throw new Error(`No primary branch resolves in ${project.path}`);
-      }
+      const primaryRef = await primaryRefToSync(target, project);
       await syncWithPrimary(target.path, project.path, primaryRef);
     }),
+  mergePrimary: (input) =>
+    mutateAndDescribe(input, async (target, project) => {
+      const primaryRef = await primaryRefToSync(target, project);
+      await mergePrimaryKeepingConflicts(target.path, project.path, primaryRef);
+    }),
+
+  operation: async (input) =>
+    readOperation(await findWorktreePathOrThrow(input)),
+  resolveConflict: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      resolveConflict(wt.path, input.path, input.side),
+    ),
+  continueOperation: (input) =>
+    mutateAndDescribe(input, (wt) => continueOperation(wt.path)),
+  abortOperation: (input) =>
+    mutateAndDescribe(input, (wt) => abortOperation(wt.path)),
   switchToPrimaryAndDeleteBranch: async (input) => {
     const project = await findProjectOrThrow(input.projectId);
     return doneViaCli(project, input.worktreeId);
   },
 };
+
+// The ref a sync from primary takes in, refusing the worktrees it has
+// no meaning for.
+async function primaryRefToSync(
+  target: WorktreeIdentity,
+  project: Project,
+): Promise<string> {
+  if (target.isPrimary) {
+    throw new Error("The primary checkout can't be synced from itself");
+  }
+  if (target.detached) {
+    throw new Error(
+      "Detached worktrees can't be synced with the primary branch",
+    );
+  }
+  const { primaryRef } = await findWorktreeIdentityOrThrow(
+    project.id,
+    target.id,
+    { primaryRef: true },
+  );
+  if (primaryRef === undefined) {
+    throw new Error(`No primary branch resolves in ${project.path}`);
+  }
+  return primaryRef;
+}
 
 // Worktree mutations (remote syncs, local branch ops, commits) all share
 // the same shape: resolve the worktree, run a git action, return the

@@ -2,6 +2,7 @@
 // and lets `git` surface any failure as a non-zero exit (which `run`
 // turns into a thrown Error, whose message the IPC layer relays
 // verbatim into the renderer's toast).
+import { syncConflictsError } from "@shared/errors";
 import { chunked, run, runLenient, splitZ } from "./core";
 import { fetchAllRemotes, listRemotes } from "./remotes";
 
@@ -157,8 +158,10 @@ async function rebaseOrMergeAgainst(
     try {
       await run(worktreePath, ["merge", "--end-of-options", ref]);
     } catch (err) {
+      // Git reports conflicts on stdout, so the files say it instead.
+      const conflicted = (await unmergedPaths(worktreePath)) !== "";
       await runLenient(worktreePath, ["merge", "--abort"]);
-      throw err;
+      throw conflicted ? syncConflictsError(ref, err) : err;
     }
   }
 }
@@ -188,4 +191,35 @@ export async function syncWithPrimary(
 ): Promise<void> {
   await fetchAllRemotes(projectPath);
   await rebaseOrMergeAgainst(worktreePath, primaryRef);
+}
+
+// The way on from a sync that conflicts: the merge, left stopped on its
+// conflicts for the changes page to settle and the Git section's banner
+// to continue or abort. Any other refusal (local edits in the way)
+// still throws.
+export async function mergePrimaryKeepingConflicts(
+  worktreePath: string,
+  projectPath: string,
+  primaryRef: string,
+): Promise<void> {
+  await fetchAllRemotes(projectPath);
+  try {
+    await run(worktreePath, [
+      "merge",
+      "--no-edit",
+      "--end-of-options",
+      primaryRef,
+    ]);
+  } catch (err) {
+    if ((await unmergedPaths(worktreePath)) === "") throw err;
+  }
+}
+
+async function unmergedPaths(worktreePath: string): Promise<string> {
+  const out = await run(worktreePath, [
+    "diff",
+    "--name-only",
+    "--diff-filter=U",
+  ]);
+  return out.trim();
 }

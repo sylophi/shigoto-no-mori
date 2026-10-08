@@ -20,10 +20,12 @@ import {
   DiscardChangesResultSchema,
   DropStashPayloadSchema,
   FileDiffPayloadSchema,
+  GitOperationStateSchema,
   ListCommitsPayloadSchema,
   ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
+  ResolveConflictPayloadSchema,
   ResetSoftPayloadSchema,
   ResetSoftResultSchema,
   ReadWorktreeFilePayloadSchema,
@@ -260,6 +262,25 @@ export const worktreesContract = defineContract("host", {
     z.void(),
     { remote: true, gated: true },
   ),
+  // A merge, rebase, cherry-pick or revert stopped on conflicts
+  // (host/lib/git/operation.ts), and the moves that see it through.
+  operation: invoke(
+    "worktrees:operation",
+    WorktreeScopedPayloadSchema,
+    GitOperationStateSchema,
+    { remote: true, gated: false },
+  ),
+  resolveConflict: invoke(
+    "worktrees:resolveConflict",
+    ResolveConflictPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  continueOperation: worktreeMutation("worktrees:continueOperation"),
+  abortOperation: worktreeMutation("worktrees:abortOperation"),
+  // The way on from a sync from primary that conflicts: merge anyway
+  // and stop on the conflicts.
+  mergePrimary: worktreeMutation("worktrees:mergePrimary"),
   push: worktreeMutation("worktrees:push"),
   pull: worktreeMutation("worktrees:pull"),
   pushForce: worktreeMutation("worktrees:pushForce"),

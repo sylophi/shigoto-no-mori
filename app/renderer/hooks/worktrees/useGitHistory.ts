@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { StashEntry, Worktree } from "@shared/schemas";
+import type { GitOperationState, StashEntry, Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorkingTreeMutation } from "./useWorktreeChanges";
 
@@ -143,4 +143,43 @@ export function useRestoreStash() {
     onSettled: (_data, _err, input) => invalidateStashes(input),
     meta: { errorTitle: "Couldn't bring the stash back" },
   });
+}
+
+// The operation the worktree is stopped in, and how many files still
+// conflict. Refetched with the working tree after every move here.
+export function useWorktreeOperation(worktree: Worktree) {
+  const { api, keys } = useHostScope();
+  const { projectId, id: worktreeId } = worktree;
+  return useQuery<GitOperationState>({
+    queryKey: keys.worktreeOperation(projectId, worktreeId),
+    queryFn: () => api.worktrees.operation({ projectId, worktreeId }),
+    meta: { errorTitle: "Couldn't read the git state" },
+  });
+}
+
+export function useResolveConflict() {
+  return useWorkingTreeMutation<
+    Scope & { path: string; side: "mine" | "theirs" },
+    Worktree
+  >(
+    (api, input) => api.worktrees.resolveConflict(input),
+    (worktree) => worktree,
+    "Couldn't resolve the conflict",
+  );
+}
+
+export function useContinueOperation() {
+  return useWorkingTreeMutation<Scope, Worktree>(
+    (api, input) => api.worktrees.continueOperation(input),
+    (worktree) => worktree,
+    "Couldn't continue",
+  );
+}
+
+export function useAbortOperation() {
+  return useWorkingTreeMutation<Scope, Worktree>(
+    (api, input) => api.worktrees.abortOperation(input),
+    (worktree) => worktree,
+    "Couldn't abort",
+  );
 }

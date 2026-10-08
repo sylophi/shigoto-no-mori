@@ -192,3 +192,20 @@ export const RestoreStashPayloadSchema = WorktreeScopedPayloadSchema.extend({
   message: z.string(),
   named: z.boolean(),
 });
+
+// A git operation the worktree is stopped in (host/lib/git/operation.ts
+// names them: "merge", "rebase", "cherry-pick", "revert", "git am",
+// "bisect"), whether the app can continue it, and how many files still
+// conflict. Conflicts can stand without an operation too, after a stash
+// applied with them.
+export const GitOperationStateSchema = z.object({
+  operation: z.string().nullable(),
+  continuable: z.boolean(),
+  conflicted: z.number().int().nonnegative(),
+});
+export type GitOperationState = z.infer<typeof GitOperationStateSchema>;
+
+export const ResolveConflictPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  path: RepoRelPathSchema,
+  side: z.enum(["mine", "theirs"]),
+});

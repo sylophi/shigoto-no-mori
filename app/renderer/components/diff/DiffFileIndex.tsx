@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Archive,
+  ArrowLeftToLine,
+  ArrowRightToLine,
   Check,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -608,7 +610,33 @@ function FileMenu({
   const staged = row?.staged;
   return (
     <ContextMenuContent className="min-w-48">
-      {row && changes && (
+      {row?.conflicted && changes && (
+        <>
+          <DropdownMenuItem
+            disabled={changes.busy}
+            onClick={() => changes.onResolve(row.path, "mine")}
+          >
+            <ArrowLeftToLine />
+            Keep mine
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={changes.busy}
+            onClick={() => changes.onResolve(row.path, "theirs")}
+          >
+            <ArrowRightToLine />
+            Take theirs
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={changes.busy}
+            onClick={() => changes.onSetStaged(changedFilePaths(row), true)}
+          >
+            <Check />
+            Mark as resolved
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+        </>
+      )}
+      {row && changes && !row.conflicted && (
         <DropdownMenuItem
           disabled={changes.busy}
           onClick={() =>
