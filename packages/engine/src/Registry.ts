@@ -247,16 +247,20 @@ const make = Effect.gen(function* () {
             Effect.map((info) => info.type === "Directory"),
             Effect.orElseSucceed(() => false),
           );
-          const repo = pathExists
-            ? yield* identity.of(project.path)
-            : { identity: null, remote: null };
-          const icon = pathExists
-            ? Option.getOrNull(
-                yield* icons.of(project.path, {
-                  rescanMisses: options?.rescanIconMisses === true,
-                }),
+          const [repo, icon] = pathExists
+            ? yield* Effect.all(
+                [
+                  identity.of(project.path),
+                  Effect.map(
+                    icons.of(project.path, {
+                      rescanMisses: options?.rescanIconMisses === true,
+                    }),
+                    Option.getOrNull,
+                  ),
+                ],
+                { concurrency: 2 },
               )
-            : null;
+            : [{ identity: null, remote: null }, null];
           return {
             ...project,
             pathExists,

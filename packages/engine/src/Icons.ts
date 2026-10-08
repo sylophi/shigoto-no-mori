@@ -50,23 +50,11 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const git = yield* Git.Git;
 
-  // A regular file's size and mtime, none when it isn't one.
-  const fileInfo = (file: string) =>
+  const isFile = (file: string) =>
     fs.stat(file).pipe(
-      Effect.map((info) =>
-        info.type === "File"
-          ? Option.some({
-              size: Number(info.size),
-              mtimeMs: Option.match(info.mtime, {
-                onNone: () => 0,
-                onSome: (date) => date.getTime(),
-              }),
-            })
-          : Option.none(),
-      ),
-      Effect.orElseSucceed(() => Option.none()),
+      Effect.map((info) => info.type === "File"),
+      Effect.orElseSucceed(() => false),
     );
-  const isFile = (file: string) => Effect.map(fileInfo(file), Option.isSome);
 
   // Files git can see: tracked, and untracked but not ignored. None
   // when git can't say, which falls back to the folder as it is.
@@ -161,23 +149,11 @@ const make = Effect.gen(function* () {
 
   const remember = (projectPath: string, source: Option.Option<string>) =>
     Effect.gen(function* () {
-      const info = yield* Option.match(source, {
-        onNone: () => Effect.succeed(Option.none()),
-        onSome: fileInfo,
-      });
-      const updatedAt = yield* Clock.currentTimeMillis;
-      const entry = {
-        source_path: Option.getOrNull(source),
-        size: Option.getOrNull(Option.map(info, ({ size }) => size)),
-        mtime_ms: Option.getOrNull(Option.map(info, ({ mtimeMs }) => mtimeMs)),
-        updated_at: updatedAt,
-      };
-      yield* sql`INSERT INTO icon_cache ${sql.insert({
+      yield* sql`INSERT OR REPLACE INTO icon_cache ${sql.insert({
         project_path: projectPath,
-        ...entry,
-      })} ON CONFLICT (project_path) DO UPDATE SET
-        source_path = excluded.source_path, size = excluded.size,
-        mtime_ms = excluded.mtime_ms, updated_at = excluded.updated_at`;
+        source_path: Option.getOrNull(source),
+        updated_at: yield* Clock.currentTimeMillis,
+      })}`;
     });
 
   const of = Effect.fn("Icons.of")(function* (
@@ -186,32 +162,21 @@ const make = Effect.gen(function* () {
   ) {
     const [cached] = yield* sql<{
       source_path: string | null;
-      size: number | null;
-      mtime_ms: number | null;
       updated_at: number;
-    }>`SELECT source_path, size, mtime_ms, updated_at FROM icon_cache
+    }>`SELECT source_path, updated_at FROM icon_cache
       WHERE project_path = ${projectPath}`;
     const now = yield* Clock.currentTimeMillis;
-    if (cached !== undefined) {
-      if (cached.source_path === null) {
-        if (!options?.rescanMisses && now - cached.updated_at < MISS_TTL_MS) {
-          return Option.none<IconRef>();
-        }
-      } else {
-        const info = yield* fileInfo(cached.source_path);
-        if (Option.isSome(info)) {
-          const unchanged =
-            info.value.size === cached.size &&
-            Math.abs(info.value.mtimeMs - (cached.mtime_ms ?? 0)) < 0.001;
-          if (!unchanged) {
-            yield* remember(projectPath, Option.some(cached.source_path));
-          }
-          return Option.some({
-            path: cached.source_path,
-            mime: mimeOf(cached.source_path),
-          });
-        }
+    // A remembered icon stands while it is still a file. A remembered
+    // miss stands for a day, unless asked to look again.
+    if (cached?.source_path === null) {
+      if (!options?.rescanMisses && now - cached.updated_at < MISS_TTL_MS) {
+        return Option.none<IconRef>();
       }
+    } else if (cached !== undefined && (yield* isFile(cached.source_path))) {
+      return Option.some({
+        path: cached.source_path,
+        mime: mimeOf(cached.source_path),
+      });
     }
     const found = yield* scan(projectPath);
     yield* remember(projectPath, found);

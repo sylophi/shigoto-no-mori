@@ -9,8 +9,6 @@ export const iconCache = Effect.gen(function* () {
   yield* sql`CREATE TABLE icon_cache (
     project_path TEXT PRIMARY KEY,
     source_path TEXT,
-    size INTEGER,
-    mtime_ms REAL,
     updated_at INTEGER NOT NULL
   ) STRICT`;
 });
