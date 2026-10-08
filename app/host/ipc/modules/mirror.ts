@@ -54,7 +54,6 @@ import {
   SyncPullProgressSchema,
   syncContract,
 } from "@shigomori/contracts/modules/sync";
-import { DeleteWorktreeResultSchema } from "@shigomori/contracts/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -322,12 +321,8 @@ async function stopAndRemoveCopy(
       force: true,
     })
     .then(
-      (result) => {
-        const removed = Schema.decodeSync(DeleteWorktreeResultSchema)(result);
-        return removed.ok
-          ? null
-          : `its ${removed.cleanupError.phase} step failed`;
-      },
+      (removed) =>
+        removed.ok ? null : `its ${removed.cleanupError.phase} step failed`,
       // A forced stop of a copy that was already gone has nothing left
       // to remove.
       async (error: unknown) =>

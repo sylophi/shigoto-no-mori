@@ -141,6 +141,7 @@ export function createLoopbackWire(scope: ContractScope): LoopbackWire {
   };
 
   const client: ClientTransport = {
+    local: true,
     invoke(channel, input) {
       const handler = handlers.get(channel);
       if (handler !== undefined) {

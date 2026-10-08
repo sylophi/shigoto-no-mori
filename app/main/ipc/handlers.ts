@@ -170,7 +170,6 @@ import {
 // remote-forest query is riding, since the host keeps one authed
 // socket per device.
 const peerTransportFor = (deviceId: string): ClientTransport => ({
-  remote: true,
   invoke: (channel: string, input: unknown) =>
     Promise.resolve(
       hubHandlers.invokePeer({ deviceId, channel, input }, undefined),
