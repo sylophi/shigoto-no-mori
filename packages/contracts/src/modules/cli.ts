@@ -82,41 +82,34 @@ export type DoctorReport = typeof DoctorReportSchema.Type;
 // files. None of them pings viewers: links and rc hooks are no part of
 // the forest state a ping re-reads, and the caller seeds its own cache
 // from each reply.
-const gated = { remote: true, gated: true, movesHostState: false };
+const gated = {
+  remote: true,
+  gated: true,
+  grant: "changeApp",
+  movesHostState: false,
+} as const;
 
-export const cliContract = defineContract("host", {
-  status: invoke("cli:status", VoidSchema, CliStatusSchema, gated),
-  install: invoke(
-    "cli:install",
+export const cliContract = defineContract(
+  "cli",
+  "host",
+  invoke("status", VoidSchema, CliStatusSchema, gated),
+  invoke(
+    "install",
     Schema.Struct({ force: Schema.Boolean }),
     CliStatusSchema,
     gated,
   ),
-  uninstall: invoke("cli:uninstall", VoidSchema, CliStatusSchema, gated),
-  shellStatus: invoke(
-    "cli:shellStatus",
-    VoidSchema,
-    ShellIntegrationStatusSchema,
-    gated,
-  ),
-  shellInstall: invoke(
-    "cli:shellInstall",
-    VoidSchema,
-    ShellIntegrationStatusSchema,
-    gated,
-  ),
-  shellUninstall: invoke(
-    "cli:shellUninstall",
-    VoidSchema,
-    ShellIntegrationStatusSchema,
-    gated,
-  ),
+  invoke("uninstall", VoidSchema, CliStatusSchema, gated),
+  invoke("shellStatus", VoidSchema, ShellIntegrationStatusSchema, gated),
+  invoke("shellInstall", VoidSchema, ShellIntegrationStatusSchema, gated),
+  invoke("shellUninstall", VoidSchema, ShellIntegrationStatusSchema, gated),
   // The checklist names the host's paths, so it rides the grant like
   // the status reads. The repair run can unregister a project, which
   // is forest state, so unlike the rest it pings viewers.
-  doctor: invoke("cli:doctor", VoidSchema, DoctorReportSchema, gated),
-  doctorFix: invoke("cli:doctorFix", VoidSchema, DoctorReportSchema, {
+  invoke("doctor", VoidSchema, DoctorReportSchema, gated),
+  invoke("doctorFix", VoidSchema, DoctorReportSchema, {
     remote: true,
     gated: true,
+    grant: "changeApp",
   }),
-});
+);

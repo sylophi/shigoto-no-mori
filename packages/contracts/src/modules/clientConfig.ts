@@ -10,14 +10,12 @@ import {
 // showing the window even once the host goes remote. Same shape as the
 // globalConfig module: read/write, loose on the way out, strict on the
 // way in.
-export const clientConfigContract = defineContract("client", {
-  read: invoke("clientConfig:read", VoidSchema, StoredClientConfigSchema),
+export const clientConfigContract = defineContract(
+  "clientConfig",
+  "client",
+  invoke("read", VoidSchema, StoredClientConfigSchema),
   // Pure persistence. Applying the theme to the native window chrome is
   // the window module's previewTheme, which the renderer has always
   // fired by the time a save lands.
-  write: invoke(
-    "clientConfig:write",
-    WriteClientConfigPayloadSchema,
-    VoidSchema,
-  ),
-});
+  invoke("write", WriteClientConfigPayloadSchema, VoidSchema),
+);
