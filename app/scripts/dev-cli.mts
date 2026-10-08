@@ -1,11 +1,11 @@
-// Runs before `pnpm dev`: compiles the dev-flavor CLI into dist-cli/
-// and the file-sync engine into dist-file-sync/ so the app can
-// delegate to them. Installing the `smd` PATH link is
-// NOT done here; the app prompts for that on launch, same as the
+// Runs before `pnpm dev`: compiles the dev-flavor CLI into dist-cli/,
+// the file-sync engine into dist-file-sync/ and the darwin helper into
+// dist-macfs/ so the app can delegate to them. Installing the `smd`
+// PATH link is NOT done here; the app prompts for that on launch, same as the
 // packaged app does for `sm` (main/electron/cliInstall.ts). The CLI is
 // the app's only engine, so a failed build (missing Go toolchain)
-// aborts the dev run. The two Go builds are independent and run side
-// by side.
+// aborts the dev run. The Go builds are independent and run side by
+// side.
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { appRoot } from "./lib/appRoot.mts";
@@ -24,10 +24,11 @@ function build(script: string, ...args: string[]): Promise<void> {
   });
 }
 
-// The file-sync engine ships beside the CLI and the app spawns it the
-// same way, so a dev run builds it here too (one flavor, see
-// shared/packaging/fileSyncDist.mts).
+// The file-sync engine and the darwin helper ship beside the CLI, so a
+// dev run builds them here too (one flavor each, see
+// shared/packaging/fileSyncDist.mts and macfsDist.mts).
 await Promise.all([
   build("build-cli.mts", "--dev"),
   build("build-file-sync.mts"),
+  build("build-macfs.mts"),
 ]);

@@ -91,13 +91,14 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       # The notices also cover the Go modules linked into the bundled
-      # CLI and file-sync engine.
+      # CLI, file-sync engine and darwin helper.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: |
             cli/go.sum
             file-sync/go.sum
+            macfs/go.sum
 
       # license-checker only reads package metadata, so no install
       # scripts.
@@ -160,7 +161,8 @@ jobs:
 
   # The Go modules' tests, on macOS, the one platform sm and the
   # file-sync engine ship for: cli/ has darwin-only halves (clonefile
-  # copies, disk usage) and file-sync watches through FSEvents.
+  # copies, disk usage), macfs/ is darwin-only, and file-sync watches
+  # through FSEvents.
   go:
     runs-on: macos-latest
     timeout-minutes: 20
@@ -177,6 +179,7 @@ jobs:
           cache-dependency-path: |
             cli/go.sum
             file-sync/go.sum
+            macfs/go.sum
 
       - name: Go tests
         run: pnpm run check:go
@@ -206,6 +209,7 @@ jobs:
           cache-dependency-path: |
             cli/go.sum
             file-sync/go.sum
+            macfs/go.sum
 
       # No install scripts, so no Electron download (no proof opens a
       # window). The app's own postinstall still runs: the proofs that
