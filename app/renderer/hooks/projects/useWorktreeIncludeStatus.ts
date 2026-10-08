@@ -1,5 +1,5 @@
 import { useQuery, skipToken } from "@tanstack/react-query";
-import type { WorktreeIncludeStatus } from "@shared/schemas";
+import type { WorktreeIncludeStatus } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useWorktreeIncludeStatus(projectId: string | null) {

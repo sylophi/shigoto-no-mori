@@ -3,7 +3,10 @@
 // and per project where its tile lands and what its work comes to.
 // Kept apart from the page so the proof can drive it
 // (test/project-grid.mts).
-import { worktreeLastActivityAt, type Project } from "@shared/schemas";
+import {
+  worktreeLastActivityAt,
+  type Project,
+} from "@shigomori/contracts/schemas";
 import {
   buildPaletteEntries,
   projectLead,

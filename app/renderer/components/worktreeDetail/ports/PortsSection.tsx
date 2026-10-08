@@ -2,7 +2,7 @@
 // between the branch and the scripts. Gone when there is nothing to
 // show and nothing to add: no ports on a worktree the viewer cannot
 // edit.
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PortActions, PortList, usePortList } from "./PortList";
 

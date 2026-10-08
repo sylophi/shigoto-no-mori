@@ -16,7 +16,7 @@ import {
   type PullRequestDetail,
   type PullRequestMergeState,
   type PullRequestReviews,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 
 const slim = (over: Partial<PullRequest> = {}): PullRequest => ({

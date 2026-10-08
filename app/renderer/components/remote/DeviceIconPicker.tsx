@@ -1,6 +1,6 @@
 // A device's icon, picked in place: the mark on its account page row
 // is the trigger, and the menu lays out every icon the catalog has
-// (shared/account/deviceIcon.ts) as one grid of tiles: the device
+// (packages/contracts/src/deviceIcon.ts) as one grid of tiles: the device
 // shapes as the first row, with what the device detected about itself
 // named as such, then under a hairline the marks that are only ever
 // picked (a leaf, a cat, a rocket), which tell two laptops apart the
@@ -17,7 +17,7 @@ import {
   DEVICE_MARKS,
   DEVICE_SHAPES,
   type DeviceIcon,
-} from "@shared/account/deviceIcon";
+} from "@shigomori/contracts/deviceIcon";
 import { DeviceGlyph, DeviceMark } from "@/components/shared/DeviceGlyph";
 import {
   DropdownMenu,

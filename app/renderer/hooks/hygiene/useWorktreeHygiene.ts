@@ -3,7 +3,7 @@ import type {
   Project,
   WorktreeDiskUsage,
   WorktreeHygiene,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Git-derived staleness and merge facts, asked one project at a time and

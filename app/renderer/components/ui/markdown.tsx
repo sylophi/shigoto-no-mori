@@ -1,6 +1,6 @@
+import { isWebUrl } from "@shigomori/contracts/predicates/webUrl";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { isWebUrl } from "@shared/webUrl";
 import { openExternalUrl } from "@/lib/openExternal";
 import { cn } from "@/lib/utils";
 

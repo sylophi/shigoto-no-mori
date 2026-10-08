@@ -15,7 +15,7 @@ import {
   hubTextWithinLimit,
   HUB_PING,
   HUB_PONG,
-} from "../../app/shared/hub/protocol.ts";
+} from "@shigomori/contracts/hubProtocol";
 import { deleteDevice } from "../src/db.ts";
 import { buildTicket } from "../src/ticket.ts";
 import {

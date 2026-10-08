@@ -11,7 +11,10 @@
 // the peer's removals. Main is the source of truth. A store only
 // reflects the events its device broadcasts.
 import { useSyncExternalStore } from "react";
-import type { CreatePhase, WorktreeRemoval } from "@shared/schemas";
+import type {
+  CreatePhase,
+  WorktreeRemoval,
+} from "@shigomori/contracts/schemas";
 import { localDeviceId } from "@/lib/queryKeys";
 import {
   apiFor,
@@ -22,7 +25,7 @@ import { toast } from "@/lib/toast";
 import type { RendererApi } from "@/window";
 import { KeyedSubscribers } from "./keyedSubscribers";
 
-export type { CreatePhase } from "@shared/schemas";
+export type { CreatePhase } from "@shigomori/contracts/schemas";
 
 // The phase as the detail page's banner reads it. The pull dialogs
 // word the same phases as steps of their own run (transplant/

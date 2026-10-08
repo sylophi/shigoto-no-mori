@@ -1,5 +1,5 @@
-import { villagersContract } from "@shared/ipc/modules/villagers";
-import type { Handlers } from "@shared/ipc/types";
+import { villagersContract } from "@shigomori/contracts/modules/villagers";
+import type { Handlers } from "@shigomori/contracts/types";
 import { villagerData } from "@host/lib/villagers";
 
 export const villagersHandlers: Handlers<typeof villagersContract> = {

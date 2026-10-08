@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@clerk/backend": "^3.16.0",
-    "effect": "catalog:",
-    "zod": "catalog:"
+    "@shigomori/contracts": "workspace:*",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.21.0",

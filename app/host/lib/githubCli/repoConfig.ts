@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import type { RepoMergeConfig } from "@shared/schemas";
+import type { RepoMergeConfig } from "@shigomori/contracts/schemas";
 import { ttlMapCache } from "../util/ttlCache";
 import { execGh } from "./exec";
 import { ghReadyForRepo } from "./remote";

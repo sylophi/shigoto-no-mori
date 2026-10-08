@@ -6,7 +6,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import type { CloneProjectPayload, Project } from "@shared/schemas";
+import type {
+  CloneProjectPayload,
+  Project,
+} from "@shigomori/contracts/schemas";
 import { reorderProjects } from "@shared/reorder";
 import {
   hostKeyDeviceId,

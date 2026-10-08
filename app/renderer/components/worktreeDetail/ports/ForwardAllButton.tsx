@@ -11,10 +11,10 @@
 import type { ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Power, PowerOff } from "lucide-react";
-import { errorMessageOf } from "@shared/errors";
-import type { PortForwardWorktree } from "@shared/ipc/modules/portForward";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
-import type { WorktreePort } from "@shared/schemas";
+import type { WorktreePort } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useClientConfig } from "@/hooks/config/useClientConfig";

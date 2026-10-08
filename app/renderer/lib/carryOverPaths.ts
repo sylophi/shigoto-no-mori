@@ -5,7 +5,10 @@
 // rule, so the Configure page and the transplant review agree on what
 // a new worktree gets.
 import { normalizeRelPath } from "@shared/git/gitPaths";
-import type { CarryOverEntry, WorktreeIncludeStatus } from "@shared/schemas";
+import type {
+  CarryOverEntry,
+  WorktreeIncludeStatus,
+} from "@shigomori/contracts/schemas";
 
 export function worktreeIncludeExtras(
   entries: readonly CarryOverEntry[],

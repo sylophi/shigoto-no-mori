@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { GithubCliReadiness } from "@shared/schemas";
+import type { GithubCliReadiness } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useGithubCliReadiness() {

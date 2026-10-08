@@ -14,8 +14,8 @@
 // label -- "last seen 3h ago" already says offline -- never the rose
 // an error would earn. Amber is the dial in flight (connecting,
 // reconnecting), so a row wearing it is one that is trying.
-import type { HubStatus, TunnelState } from "@shared/ipc/modules/hub";
-import type { DeviceInfo } from "@shared/hub/protocol";
+import type { HubStatus, TunnelState } from "@shigomori/contracts/modules/hub";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shared/remote/supervisor";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import {

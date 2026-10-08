@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { errorMessageOf } from "@shared/errors";
-import type { GlobalConfig } from "@shared/schemas";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import type { GlobalConfig } from "@shigomori/contracts/schemas";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";

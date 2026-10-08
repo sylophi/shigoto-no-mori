@@ -6,7 +6,7 @@
 // the chip opens instead, with what each side did to them and the one
 // sentence that clears them.
 import { FolderOpen, RefreshCw } from "lucide-react";
-import type { MirrorSession } from "@shared/ipc/modules/mirror";
+import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import { ChipButton } from "@/components/ui/chip-button";
 import {
   DropdownMenu,

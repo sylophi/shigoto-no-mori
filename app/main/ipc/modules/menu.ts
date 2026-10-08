@@ -1,6 +1,6 @@
-import { menuContract } from "@shared/ipc/modules/menu";
-import type { Handlers } from "@shared/ipc/types";
-import type { LaunchToolMenuEntry } from "@shared/schemas";
+import { menuContract } from "@shigomori/contracts/modules/menu";
+import type { Handlers } from "@shigomori/contracts/types";
+import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 
 // The electron layer injects the actual menu-rebuild function at boot.
 // Keeps the handler module free of Electron imports while still letting

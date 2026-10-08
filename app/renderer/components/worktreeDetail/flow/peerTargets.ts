@@ -10,7 +10,7 @@
 // so this gate is UX.
 import { only } from "@shared/util/only";
 import { useState } from "react";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { useDeviceTabs } from "@/components/shared/DeviceTabs";
 import {
   type DeviceTarget,

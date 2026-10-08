@@ -1,7 +1,7 @@
 import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { fsContract } from "@shared/ipc/modules/fs";
-import type { Handlers } from "@shared/ipc/types";
+import { fsContract } from "@shigomori/contracts/modules/fs";
+import type { Handlers } from "@shigomori/contracts/types";
 import { isGitRepo } from "@host/lib/git/core";
 import { toAbsolute } from "@host/lib/util/paths";
 

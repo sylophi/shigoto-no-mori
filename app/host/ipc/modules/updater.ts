@@ -1,7 +1,7 @@
-import { updaterContract } from "@shared/ipc/modules/updater";
+import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
-import type { UpdaterState } from "@shared/schemas";
+import type { Handlers } from "@shigomori/contracts/types";
+import type { UpdaterState } from "@shigomori/contracts/schemas";
 
 // The electron layer owns the updater wiring (the CLI-driven pipeline
 // in main/electron/updater.ts) and injects the concrete state machine

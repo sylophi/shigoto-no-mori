@@ -1,6 +1,6 @@
 import { Archive, FolderTree, House } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 
 const KINDS = {
   primary: { Icon: House, label: "Primary checkout" },

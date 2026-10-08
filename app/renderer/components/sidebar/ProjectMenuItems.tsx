@@ -1,4 +1,4 @@
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import {
   DropdownMenuItem,
@@ -14,7 +14,7 @@ import {
   type ProjectPage,
 } from "@/hooks/projects/useProjectNav";
 import { useRemoveProject } from "@/hooks/projects/useProjects";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 
 interface ProjectMenuItemsProps {
   project: Project;

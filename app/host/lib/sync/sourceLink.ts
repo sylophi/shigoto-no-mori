@@ -17,7 +17,7 @@
 //     {"bundle":{"bytes":n}}        then exactly n raw bytes
 //
 // Three calls open one, each on the device whose grant gates it
-// (shared/ipc/modules/sync.ts): openSource (a pull, and the git
+// (packages/contracts/src/modules/sync.ts): openSource (a pull, and the git
 // follower fetching: the destination opens the source's link),
 // receiveWorktree (a send: the source opens a link on the destination,
 // which lands the worktree asking back over it) and receiveBundle (the
@@ -36,14 +36,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   type SyncCapture,
   SyncCaptureSchema,
   SyncBundleRefSchema,
   SyncPullProgressSchema,
   SyncPullWorktreePayloadSchema,
-} from "@shared/ipc/modules/sync";
+} from "@shigomori/contracts/modules/sync";
 import {
   CHANNEL_MAX_FRAME_BYTES,
   type ChannelEndpoint,
@@ -54,8 +54,8 @@ import {
   CommitHashSchema,
   GitRefNameSchema,
   type Project,
-} from "@shared/schemas";
-import { strict } from "@shared/schemas/strict";
+} from "@shigomori/contracts/schemas";
+import { strict } from "@shigomori/contracts/schemas/strict";
 import {
   bundleCreateViaCli,
   bundleUnpackViaCli,

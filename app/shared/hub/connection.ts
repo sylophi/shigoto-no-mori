@@ -11,7 +11,7 @@
 // host-boundary): everything platform specific lives in the injected
 // adapter, and everything account flavored (deviceId, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts.
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isDeviceRevoked, isHubRefusal } from "@shared/account/service";
 import {
   HELLO_TIMEOUT_MS,
@@ -39,7 +39,7 @@ import {
   HUB_PING,
   HUB_PONG,
   HUB_ROUTES,
-} from "@shared/hub/protocol";
+} from "@shigomori/contracts/hubProtocol";
 import {
   type CloseClassifier,
   type ConnectFn,

@@ -12,8 +12,8 @@
 // since the fix (pick another local port) is right here.
 import { useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
-import type { PortForwardWorktree } from "@shared/ipc/modules/portForward";
-import { digitsOnly, parsePortNumber } from "@shared/schemas";
+import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
+import { digitsOnly, parsePortNumber } from "@shigomori/contracts/schemas";
 import { Input } from "@/components/ui/input";
 import { TONE_TEXT } from "@/components/ui/status-dot";
 import { Switch } from "@/components/ui/switch";

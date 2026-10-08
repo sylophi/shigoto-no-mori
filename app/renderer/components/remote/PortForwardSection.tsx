@@ -30,7 +30,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { parsePortNumber } from "@shared/schemas";
+import { parsePortNumber } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { Chip, ChipButton } from "@/components/ui/chip-button";
 import { ExternalLink } from "@/components/ui/external-link";

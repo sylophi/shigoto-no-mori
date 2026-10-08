@@ -9,8 +9,8 @@ import {
   bringIgnores,
   MIRROR_IGNORES_LIMIT,
   type MirrorIgnoreMode,
-} from "@shared/ipc/modules/mirror";
-import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
+} from "@shigomori/contracts/modules/mirror";
+import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
 import type {
   LeaveOutPreset,
   LeaveOutPresetBase,

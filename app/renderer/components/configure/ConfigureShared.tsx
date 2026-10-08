@@ -4,7 +4,7 @@
 // moment they are picked (no Save, unlike the device tabs' form) and
 // travel straight between the devices, so a device that is off takes
 // them up when it is next online with another.
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { CreateOnSection } from "./CreateOnSection";
 import { LeaveOutSection } from "./LeaveOutSection";
 import { PAGE_BODY } from "@/components/shared/PageShell";

@@ -20,7 +20,11 @@ import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import { worktreeSyncView } from "@/lib/syncState";
-import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
+import {
+  changeKey,
+  isUntracked,
+  type Worktree,
+} from "@shigomori/contracts/schemas";
 import { changedFilePaths, includedFiles } from "./changesControls";
 import { BranchBar } from "./BranchBar";
 import { CommitComposer } from "./CommitComposer";

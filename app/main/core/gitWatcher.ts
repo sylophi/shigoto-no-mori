@@ -31,7 +31,7 @@
 // own root writes: their callers already invalidate their targets.
 import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { loadProjects } from "@host/lib/projects";
 
 const DEBOUNCE_MS = 300;

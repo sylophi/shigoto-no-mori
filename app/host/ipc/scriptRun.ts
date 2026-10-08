@@ -3,11 +3,11 @@
 // notifier, and for the configured scripts, the context startScript
 // needs to set the SHIGOMORI_* env (package.json scripts run through
 // `sm run`, which sets it itself).
-import { unknownWorktreeError } from "@shared/errors";
-import { hasWorktreeData } from "@shared/schemas";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
+import { unknownWorktreeError } from "@shigomori/contracts/errors";
+import { hasWorktreeData } from "@shigomori/contracts/schemas";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Project, ShigomoriConfig } from "@shared/schemas";
+import type { Project, ShigomoriConfig } from "@shigomori/contracts/schemas";
 import {
   readShigomoriConfig,
   readWorktreeData,

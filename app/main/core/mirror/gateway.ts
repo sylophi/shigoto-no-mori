@@ -19,10 +19,10 @@
 // check drives this exact gateway over a real direct wire.
 import { createServer, type Server, type Socket } from "node:net";
 import * as Schema from "effect/Schema";
-import { errorMessageOf } from "@shared/errors";
-import type { mirrorContract } from "@shared/ipc/modules/mirror";
-import type { Client } from "@shared/ipc/types";
-import { WorktreeIdSchema } from "@shared/schemas";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import type { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import type { Client } from "@shigomori/contracts/types";
+import { WorktreeIdSchema } from "@shigomori/contracts/schemas";
 import { mintHexId } from "@host/lib/hexId";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import { MAX_CONNS_PER_DEVICE } from "../portForward/engine";

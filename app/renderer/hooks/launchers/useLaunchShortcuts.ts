@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { LauncherEntry } from "@shared/schemas";
+import type { LauncherEntry } from "@shigomori/contracts/schemas";
 import { useLaunch } from "./useLaunchers";
 
 interface LaunchTarget {

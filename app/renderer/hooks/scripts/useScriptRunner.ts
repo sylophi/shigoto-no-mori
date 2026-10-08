@@ -12,7 +12,10 @@ import {
   type ScriptRunState,
   type ScriptSlot,
 } from "@/store/scriptRuns";
-import { lifecycleScriptName, type Worktree } from "@shared/schemas";
+import {
+  lifecycleScriptName,
+  type Worktree,
+} from "@shigomori/contracts/schemas";
 import { useScriptRuns, useScriptRunState } from "./useScriptRuns";
 
 export interface ScriptRunner {

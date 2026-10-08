@@ -1,5 +1,8 @@
-import { branchNotMergedError, errorMessageOf } from "@shared/errors";
-import type { BranchList } from "@shared/schemas";
+import {
+  branchNotMergedError,
+  errorMessageOf,
+} from "@shigomori/contracts/errors";
+import type { BranchList } from "@shigomori/contracts/schemas";
 import { run, splitZ } from "./core";
 import {
   listRemotes,

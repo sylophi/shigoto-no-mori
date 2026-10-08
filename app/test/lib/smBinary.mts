@@ -19,7 +19,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { ProjectSchema, type Project } from "@shared/schemas/project";
+import {
+  ProjectSchema,
+  type Project,
+} from "@shigomori/contracts/schemas/project";
 import {
   cliFailureMessage,
   createCliRunner,

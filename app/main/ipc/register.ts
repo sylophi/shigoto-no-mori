@@ -11,12 +11,12 @@ import { coalesce } from "@host/lib/util/coalesce";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
-import { logFailure } from "@shared/errors";
-import type { ContractModule } from "@shared/ipc/contract";
-import { gitContract } from "@shared/ipc/modules/git";
-import { projectsContract } from "@shared/ipc/modules/projects";
-import { hubContract } from "@shared/ipc/modules/hub";
-import type { HubPeerPush } from "@shared/ipc/modules/hub";
+import { logFailure } from "@shigomori/contracts/errors";
+import type { ContractModule } from "@shigomori/contracts/contract";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { hubContract } from "@shigomori/contracts/modules/hub";
+import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
 import {
   broadcastAll as broadcastAllCore,
   registerContract as registerContractCore,
@@ -31,7 +31,7 @@ import type {
   BroadcastKeys,
   BroadcastProducerPayload,
   Handlers,
-} from "@shared/ipc/types";
+} from "@shigomori/contracts/types";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,

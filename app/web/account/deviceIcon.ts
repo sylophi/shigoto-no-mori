@@ -5,7 +5,7 @@
 // purpose: a phone, a tablet, or a browser on something bigger is all
 // the device list needs to tell apart, and the owner can pick another
 // icon afterwards.
-import type { DeviceShape } from "@shared/account/deviceIcon";
+import type { DeviceShape } from "@shigomori/contracts/deviceIcon";
 
 export function defaultWebDeviceShape(userAgent: string): DeviceShape {
   if (/iPad/.test(userAgent)) return "tablet";

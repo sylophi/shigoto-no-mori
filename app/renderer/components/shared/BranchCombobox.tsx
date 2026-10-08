@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBranches } from "@/hooks/git/useBranches";
-import type { BranchList } from "@shared/schemas";
+import type { BranchList } from "@shigomori/contracts/schemas";
 
 interface BranchComboboxProps {
   projectId: string | null;

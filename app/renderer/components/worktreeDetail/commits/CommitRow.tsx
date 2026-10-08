@@ -13,7 +13,7 @@ import { RelativeDate } from "@/components/ui/relative-date";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
-import type { CommitSummary, Worktree } from "@shared/schemas";
+import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 
 interface CommitRowProps {
   worktree: Worktree;

@@ -232,7 +232,7 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	// Under the create's own ignores: a build folder and a log stay put.
 	writeFileT(t, filepath.Join(local, "dist", "bundle.js"), "built\n")
 	writeFileT(t, filepath.Join(local, "debug.log"), "noise\n")
-	// The bring rule's shape (shared/mirrorIgnores.ts bringIgnores): a
+	// The bring rule's shape (packages/contracts/src/mirrorIgnores.ts bringIgnores): a
 	// rule ignores the folder and, past the marker, a trailing pair
 	// takes it back out, whole, a log inside included. A pair for a
 	// file inside a folder that stays ignored does nothing, since the

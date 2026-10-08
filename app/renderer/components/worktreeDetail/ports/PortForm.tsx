@@ -5,14 +5,14 @@
 // reason rather than silently merged.
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   digitsOnly,
   PORT_LABEL_MAX,
   parsePortNumber,
   type CustomPort,
   type WorktreePort,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TONE_TEXT } from "@/components/ui/status-dot";

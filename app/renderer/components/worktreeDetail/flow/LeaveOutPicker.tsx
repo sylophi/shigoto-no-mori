@@ -18,8 +18,8 @@ import {
   BRING_PATHS_LIMIT,
   bringRulesRoom,
   MIRROR_IGNORES_LIMIT,
-} from "@shared/ipc/modules/mirror";
-import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
+} from "@shigomori/contracts/modules/mirror";
+import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
 import {
   PathPickerModal,
   type PathPickerModalProps,

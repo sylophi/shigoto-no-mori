@@ -7,7 +7,11 @@ import {
   titledByPullRequest,
   worktreeTitle,
 } from "@/lib/worktreeTitle";
-import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
+import type {
+  PullRequest,
+  PullRequestDetail,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 
 // The open worktree's title and description, its open PR's while it
 // has one (worktreeTitle). The project map knows a PR's title before

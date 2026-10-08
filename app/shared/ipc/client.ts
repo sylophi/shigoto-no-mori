@@ -1,39 +1,42 @@
 import { buildClient } from "@shared/ipc/buildClient";
-import type { ContractModule, ContractScope } from "@shared/ipc/contract";
-import type { ChannelHandlers } from "@shared/ipc/types";
-import { accountContract } from "@shared/ipc/modules/account";
-import { branchesContract } from "@shared/ipc/modules/branches";
-import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
-import { dialogContract } from "@shared/ipc/modules/dialog";
-import { forwardContract } from "@shared/ipc/modules/forward";
-import { fsContract } from "@shared/ipc/modules/fs";
-import { gitContract } from "@shared/ipc/modules/git";
-import { githubCliContract } from "@shared/ipc/modules/githubCli";
-import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
-import { hygieneContract } from "@shared/ipc/modules/hygiene";
-import { launchersContract } from "@shared/ipc/modules/launchers";
-import { menuContract } from "@shared/ipc/modules/menu";
-import { mirrorContract } from "@shared/ipc/modules/mirror";
-import { navContract } from "@shared/ipc/modules/nav";
-import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
-import { portForwardContract } from "@shared/ipc/modules/portForward";
-import { portPoolContract } from "@shared/ipc/modules/portPool";
-import { portsContract } from "@shared/ipc/modules/ports";
-import { projectsContract } from "@shared/ipc/modules/projects";
-import { releasesContract } from "@shared/ipc/modules/releases";
-import { hubContract } from "@shared/ipc/modules/hub";
-import { runtimeContract } from "@shared/ipc/modules/runtime";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
-import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
-import { cliContract } from "@shared/ipc/modules/cli";
-import { shellContract } from "@shared/ipc/modules/shell";
-import { terrierContract } from "@shared/ipc/modules/terrier";
-import { shigomoriContract } from "@shared/ipc/modules/shigomori";
-import { syncContract } from "@shared/ipc/modules/sync";
-import { updaterContract } from "@shared/ipc/modules/updater";
-import { villagersContract } from "@shared/ipc/modules/villagers";
-import { windowContract } from "@shared/ipc/modules/window";
-import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import type {
+  ContractModule,
+  ContractScope,
+} from "@shigomori/contracts/contract";
+import type { ChannelHandlers } from "@shigomori/contracts/types";
+import { accountContract } from "@shigomori/contracts/modules/account";
+import { branchesContract } from "@shigomori/contracts/modules/branches";
+import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
+import { dialogContract } from "@shigomori/contracts/modules/dialog";
+import { forwardContract } from "@shigomori/contracts/modules/forward";
+import { fsContract } from "@shigomori/contracts/modules/fs";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
+import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
+import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
+import { launchersContract } from "@shigomori/contracts/modules/launchers";
+import { menuContract } from "@shigomori/contracts/modules/menu";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import { navContract } from "@shigomori/contracts/modules/nav";
+import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
+import { portForwardContract } from "@shigomori/contracts/modules/portForward";
+import { portPoolContract } from "@shigomori/contracts/modules/portPool";
+import { portsContract } from "@shigomori/contracts/modules/ports";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { releasesContract } from "@shigomori/contracts/modules/releases";
+import { hubContract } from "@shigomori/contracts/modules/hub";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
+import { cliContract } from "@shigomori/contracts/modules/cli";
+import { shellContract } from "@shigomori/contracts/modules/shell";
+import { terrierContract } from "@shigomori/contracts/modules/terrier";
+import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import { syncContract } from "@shigomori/contracts/modules/sync";
+import { updaterContract } from "@shigomori/contracts/modules/updater";
+import { villagersContract } from "@shigomori/contracts/modules/villagers";
+import { windowContract } from "@shigomori/contracts/modules/window";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type {
   ClientConfig,
@@ -46,7 +49,7 @@ import type {
   ShigomoriConfig,
   ShigomoriWorktreeData,
   Theme,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 // Every contract module the api surface is built from, in one list, so
 // a platform binding that needs the full channel inventory (the web

@@ -25,7 +25,7 @@
 // residents of the day, a device not heard from yet included, stay
 // before it, and a copy is still found against what it copied.
 import type { QueryClient } from "@tanstack/react-query";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { readStored, readStoredJson, writeStored } from "@/lib/localStorage";
 import {
   hostKeyDeviceId,

@@ -10,6 +10,7 @@
 // the same literal: the two implementations cannot drift apart.
 //
 // covers: app/shared/fixtures/repo-identity-*.json
+import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import * as Schema from "effect/Schema";
 import * as Result from "effect/Result";
 import assert from "node:assert/strict";
@@ -24,13 +25,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { errorMessageOf } from "../shared/errors.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { resolveDefaultRef } from "../shared/git/defaultBranch.mts";
-import {
-  computeRepoIdentity,
-  normalizeRemoteUrl,
-} from "../shared/git/repoIdentity.mts";
-import { ProjectRowSchema } from "../shared/schemas/project.ts";
+import { computeRepoIdentity } from "../shared/git/repoIdentity.mts";
+import { ProjectRowSchema } from "@shigomori/contracts/schemas/project";
 import { it } from "vitest";
 import { createCliRunner, scrubbedGitEnv } from "./lib/checkKit.mts";
 import { builtSm } from "./lib/smBinary.mts";

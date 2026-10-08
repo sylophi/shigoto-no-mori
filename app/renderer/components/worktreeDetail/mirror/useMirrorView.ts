@@ -3,7 +3,7 @@
 // ranks off the session and what is known beside it (the runner out of
 // reach, its engine restarting), and the root this machine can reveal
 // the session's paths under, when it holds either side.
-import type { MirrorSession } from "@shared/ipc/modules/mirror";
+import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { WorktreeMirrorLink } from "@/hooks/remote/useMirrors";
 import { useDeviceProperName } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";

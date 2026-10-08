@@ -12,7 +12,7 @@ import {
   type Project,
   type PullRequest,
   type Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { ActivityIcon } from "../ActivityIcon";
 import {
   MirrorBadge,

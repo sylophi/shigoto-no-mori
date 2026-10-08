@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
-import type { HubStatus, TunnelState } from "@shared/ipc/modules/hub";
+import type { HubStatus, TunnelState } from "@shigomori/contracts/modules/hub";
 
 // The hub bridge's live status snapshot as a module-scope store with
 // ONE writer: remoteDeviceSync (renderer/lib/remote/remoteDeviceSync.ts)

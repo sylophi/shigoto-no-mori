@@ -2,7 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { TerrierMark } from "./TerrierMark";
 

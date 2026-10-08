@@ -7,19 +7,19 @@
 // sessions the renderer uses, and registers the lot in
 // registerIpcHandlers, which main/index.ts calls once at boot.
 import { join } from "node:path";
-import { accountContract } from "@shared/ipc/modules/account";
-import { branchesContract } from "@shared/ipc/modules/branches";
-import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
-import { dialogContract } from "@shared/ipc/modules/dialog";
-import { forwardContract } from "@shared/ipc/modules/forward";
-import { fsContract } from "@shared/ipc/modules/fs";
-import { gitContract } from "@shared/ipc/modules/git";
-import { githubCliContract } from "@shared/ipc/modules/githubCli";
-import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
-import { hygieneContract } from "@shared/ipc/modules/hygiene";
-import { launchersContract } from "@shared/ipc/modules/launchers";
-import { menuContract } from "@shared/ipc/modules/menu";
-import { navContract } from "@shared/ipc/modules/nav";
+import { accountContract } from "@shigomori/contracts/modules/account";
+import { branchesContract } from "@shigomori/contracts/modules/branches";
+import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
+import { dialogContract } from "@shigomori/contracts/modules/dialog";
+import { forwardContract } from "@shigomori/contracts/modules/forward";
+import { fsContract } from "@shigomori/contracts/modules/fs";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
+import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
+import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
+import { launchersContract } from "@shigomori/contracts/modules/launchers";
+import { menuContract } from "@shigomori/contracts/modules/menu";
+import { navContract } from "@shigomori/contracts/modules/nav";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -29,29 +29,33 @@ import {
   MirrorEventSchema,
   MirrorWorktreePayloadSchema,
   mirrorContract,
-} from "@shared/ipc/modules/mirror";
-import { errorMessageOf, isEntityGoneError, logFailure } from "@shared/errors";
-import type { ContractModule } from "@shared/ipc/contract";
-import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
-import { portForwardContract } from "@shared/ipc/modules/portForward";
-import { portPoolContract } from "@shared/ipc/modules/portPool";
-import { portsContract } from "@shared/ipc/modules/ports";
-import { projectsContract } from "@shared/ipc/modules/projects";
-import { hubContract } from "@shared/ipc/modules/hub";
-import { runtimeContract } from "@shared/ipc/modules/runtime";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
-import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
-import { cliContract } from "@shared/ipc/modules/cli";
-import { controlContract } from "@shared/ipc/modules/control";
-import { releasesContract } from "@shared/ipc/modules/releases";
-import { shellContract } from "@shared/ipc/modules/shell";
-import { terrierContract } from "@shared/ipc/modules/terrier";
-import { shigomoriContract } from "@shared/ipc/modules/shigomori";
-import { syncContract } from "@shared/ipc/modules/sync";
-import { updaterContract } from "@shared/ipc/modules/updater";
-import { villagersContract } from "@shared/ipc/modules/villagers";
-import { windowContract } from "@shared/ipc/modules/window";
-import { worktreesContract } from "@shared/ipc/modules/worktrees";
+} from "@shigomori/contracts/modules/mirror";
+import {
+  errorMessageOf,
+  isEntityGoneError,
+  logFailure,
+} from "@shigomori/contracts/errors";
+import type { ContractModule } from "@shigomori/contracts/contract";
+import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
+import { portForwardContract } from "@shigomori/contracts/modules/portForward";
+import { portPoolContract } from "@shigomori/contracts/modules/portPool";
+import { portsContract } from "@shigomori/contracts/modules/ports";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { hubContract } from "@shigomori/contracts/modules/hub";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
+import { cliContract } from "@shigomori/contracts/modules/cli";
+import { controlContract } from "@shigomori/contracts/modules/control";
+import { releasesContract } from "@shigomori/contracts/modules/releases";
+import { shellContract } from "@shigomori/contracts/modules/shell";
+import { terrierContract } from "@shigomori/contracts/modules/terrier";
+import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import { syncContract } from "@shigomori/contracts/modules/sync";
+import { updaterContract } from "@shigomori/contracts/modules/updater";
+import { villagersContract } from "@shigomori/contracts/modules/villagers";
+import { windowContract } from "@shigomori/contracts/modules/window";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { branchesHandlers } from "@host/ipc/modules/branches";
 import { clientConfigHandlers } from "./modules/clientConfig";
 import { dialogHandlers } from "./modules/dialog";
@@ -130,7 +134,7 @@ import {
   readJsonOrNullSync,
   withSchemaVersion,
 } from "@host/lib/util/jsonFile";
-import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
+import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
@@ -141,7 +145,7 @@ import {
 } from "./modules/account";
 import { hubConnectInputs } from "./modules/account";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
-import { withoutPeerState } from "@shared/schemas/config";
+import { withoutPeerState } from "@shigomori/contracts/schemas/config";
 import {
   readClientConfigSync,
   writeClientConfig,
@@ -716,7 +720,7 @@ export function registerIpcHandlers(): void {
   registerContract(sharedSettingsContract, sharedSettingsHandlers);
   registerContract(cliContract, cliHandlers);
   // The CLI's cross-device verbs, on the control wire alone
-  // (shared/ipc/modules/control.ts). The device registry rides the
+  // (packages/contracts/src/modules/control.ts). The device registry rides the
   // stored credential and the peer reach is peerTransportFor above,
   // the one cached session per peer everything else rides.
   setControlImpl({

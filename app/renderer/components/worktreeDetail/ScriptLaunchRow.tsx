@@ -8,7 +8,7 @@ import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { hasLocalHost } from "@/lib/localHost";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   pinnedEntries,
   type SortableEntry,

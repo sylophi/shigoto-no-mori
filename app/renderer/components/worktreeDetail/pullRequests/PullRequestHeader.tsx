@@ -13,7 +13,11 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
-import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
+import type {
+  PullRequest,
+  PullRequestDetail,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import { BranchTitle } from "../branch/BranchTitle";
 import { DiffButton } from "../DiffButton";
 import { PullRequestStateLabel } from "./PullRequestStateLabel";

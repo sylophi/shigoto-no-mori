@@ -1,9 +1,9 @@
 import type {
   CliStatus,
   ShellIntegrationStatus,
-} from "@shared/ipc/modules/cli";
-import { cliContract } from "@shared/ipc/modules/cli";
-import type { Handlers } from "@shared/ipc/types";
+} from "@shigomori/contracts/modules/cli";
+import { cliContract } from "@shigomori/contracts/modules/cli";
+import type { Handlers } from "@shigomori/contracts/types";
 import { doctorViaCli } from "@host/ipc/cliDelegate";
 import { loadProjects, refreshProjects } from "@host/lib/projects";
 import { killScriptsForProject } from "@host/lib/scripts";

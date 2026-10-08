@@ -29,7 +29,7 @@ import type {
   PullRequest,
   Worktree,
   WorktreeSortMode,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { it } from "vitest";
 

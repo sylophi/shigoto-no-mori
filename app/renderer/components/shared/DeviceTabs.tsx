@@ -13,7 +13,7 @@
 // the row with one tab for it, ahead of the machines it spans.
 import { Fragment, useState, type ReactNode } from "react";
 import { ArrowRight, MonitorSmartphone } from "lucide-react";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { EmptyPanel } from "@/components/ui/empty-panel";

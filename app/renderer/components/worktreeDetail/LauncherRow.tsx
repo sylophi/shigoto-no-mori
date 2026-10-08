@@ -10,7 +10,7 @@ import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
-import type { LauncherEntry, Worktree } from "@shared/schemas";
+import type { LauncherEntry, Worktree } from "@shigomori/contracts/schemas";
 import {
   LAUNCH_TAB,
   selectSettingsTab,

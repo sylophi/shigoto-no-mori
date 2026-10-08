@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { LauncherCommand } from "@shared/schemas";
+import type { LauncherCommand } from "@shigomori/contracts/schemas";
 
 // Mutates `launchers` on whatever form shape contains it. Used by both
 // the project config and the global settings forms, which carry their

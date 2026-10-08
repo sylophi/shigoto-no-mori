@@ -2,7 +2,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptLaunchRow, useScriptLaunchCandidates } from "./ScriptLaunchRow";
 

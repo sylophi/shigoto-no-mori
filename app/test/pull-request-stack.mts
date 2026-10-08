@@ -16,7 +16,7 @@ import {
   stackMergeSet,
   trunkOf,
 } from "@shared/pullRequestStack";
-import type { PullRequest } from "@shared/schemas";
+import type { PullRequest } from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 
 let n = 100;

@@ -1,3 +1,4 @@
+import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import {
   useEffect,
   useRef,
@@ -9,7 +10,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import { Folder, FolderGit2, FolderSearch, GitBranch } from "lucide-react";
 import { repoNameFromUrl, stripUrlCredentials } from "@shared/cloneUrl";
-import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
 import {
   canNavigateUp,
   ensureTrailingSep,
@@ -36,7 +36,7 @@ import { fsIsGitRepoQueryOptions } from "@/hooks/fs/useFsIsGitRepo";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { notifyError, toast } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";

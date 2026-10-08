@@ -14,7 +14,7 @@ import {
   type DirectCandidateKind,
   type DirectConnectInfo,
   DirectConnectInfoInputSchema,
-} from "@shared/ipc/modules/direct";
+} from "@shigomori/contracts/modules/direct";
 import { candidateAddresses } from "@host/direct/addresses";
 
 const decodeConnectInfoInput = Schema.decodeUnknownSync(

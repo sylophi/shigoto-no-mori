@@ -15,8 +15,8 @@ import type {
   UpdateRequest,
   UpdaterState,
   UpdaterStatus,
-} from "@shared/schemas";
-import { UpdateRequestSchema } from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
+import { UpdateRequestSchema } from "@shigomori/contracts/schemas";
 import {
   atomicWriteJson,
   readJsonOrNull,

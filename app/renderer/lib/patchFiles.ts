@@ -3,8 +3,12 @@
 // row shows, and the two ways a rail's rows are built (from a patch on
 // a read-only diff, from git status on the changes page).
 import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
-import { changeKey } from "@shared/schemas";
-import type { ChangeCounts, ChangedFile, ChangeKind } from "@shared/schemas";
+import { changeKey } from "@shigomori/contracts/schemas";
+import type {
+  ChangeCounts,
+  ChangedFile,
+  ChangeKind,
+} from "@shigomori/contracts/schemas";
 
 // Stable identity for one file inside one patch. `name` alone collides
 // on a rename pair (the old path can still appear as another entry), so

@@ -8,8 +8,11 @@ import {
   type SyncPullProgress,
   type SyncPullStep,
   SyncPullStepSchema,
-} from "@shared/ipc/modules/sync";
-import { type CreatePhase, CreatePhaseSchema } from "@shared/schemas";
+} from "@shigomori/contracts/modules/sync";
+import {
+  type CreatePhase,
+  CreatePhaseSchema,
+} from "@shigomori/contracts/schemas";
 
 // The run as one ordered line: the pull's steps, with the create's
 // lifecycle phases slotted in right after the create itself. Both

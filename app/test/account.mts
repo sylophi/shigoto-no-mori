@@ -47,7 +47,7 @@ import {
   isHubRefusal,
 } from "../shared/account/service.ts";
 import { deriveAccountId } from "../shared/account/token.ts";
-import type { DeviceIcon } from "../shared/account/deviceIcon.ts";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import {
   createAccountStore,
   type AccountStore,
@@ -64,13 +64,13 @@ import {
 import {
   AccountStatusSchema,
   accountContract,
-} from "@shared/ipc/modules/account";
-import { safeDecode } from "@shared/ipc/schema";
+} from "@shigomori/contracts/modules/account";
+import { safeDecode } from "@shigomori/contracts/codec";
 import {
   DeviceInfoSchema,
   HUB_ROUTES,
   type DeviceInfo,
-} from "@shared/hub/protocol";
+} from "@shigomori/contracts/hubProtocol";
 import { entryAt, fakeSessionJwt, notYetSet } from "./lib/checkKit.mts";
 
 // A resolved config that isConfigured accepts, for the flows that need

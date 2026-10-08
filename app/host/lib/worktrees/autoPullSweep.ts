@@ -15,7 +15,7 @@
 // the upstream now tracks, refuse on. A worktree with a script the
 // app started in it is left alone too: the tree moving under a running
 // dev server is the one way a pull the user never clicked could bite.
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { fastForwardToUpstream, hasUncommittedOrUntracked } from "../git/sync";
 import {
   getUpstreamCounts,

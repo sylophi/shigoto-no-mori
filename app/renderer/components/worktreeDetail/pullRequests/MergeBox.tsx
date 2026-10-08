@@ -18,7 +18,7 @@ import type {
   PullRequestDetail,
   RepoMergeConfig,
   Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { ChecksPopover } from "./ChecksPopover";
 import { MergeStatus } from "./MergeStatus";
 import { ReviewsPopover } from "./ReviewsPopover";

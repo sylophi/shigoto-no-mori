@@ -7,13 +7,13 @@
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
 import { diskUsageViaCli } from "@host/ipc/cliDelegate";
-import { unknownWorktreeError } from "@shared/errors";
+import { unknownWorktreeError } from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
   isRealBranch,
   type WorktreeDiskUsage,
   type WorktreeHygiene,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { run, runLenient } from "../git/core";
 import { treeOf } from "../git/refs";
 import {

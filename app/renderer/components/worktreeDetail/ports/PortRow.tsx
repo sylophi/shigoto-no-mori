@@ -9,8 +9,8 @@
 // in under the label instead.
 import { useState } from "react";
 import { Pencil, X } from "lucide-react";
-import type { PortForwardWorktree } from "@shared/ipc/modules/portForward";
-import type { CustomPort, WorktreePort } from "@shared/schemas";
+import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
+import type { CustomPort, WorktreePort } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
 import { StatusDot } from "@/components/ui/status-dot";

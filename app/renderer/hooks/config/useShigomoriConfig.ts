@@ -3,7 +3,7 @@ import {
   PROJECT_CONFIG_DEFAULTS,
   type Project,
   type ShigomoriConfig,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   combineFanOut,

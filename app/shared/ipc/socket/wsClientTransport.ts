@@ -11,7 +11,7 @@
 // by a monotonic id, with push frames fanned out to local subscribers.
 // It owns exactly one socket. Redials live one layer up in the direct
 // keeper, which is the single owner of retry.
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   CLOSE_AUTH_FAILED,
   COMMAND_REFUSED_CODE,
@@ -63,7 +63,7 @@ export class RemoteConnectError extends Error {
 // The socket closed while invokes were in flight (or an invoke was made
 // after close). Every pending invoke rejects with this so a caller sees
 // a disconnect distinctly from a handler error. Message text stays
-// generic: the shared/errors.ts matchers key on host handler messages,
+// generic: the packages/contracts/src/errors.ts matchers key on host handler messages,
 // which this is not.
 class RemoteDisconnectedError extends Error {
   readonly code: number | null;
@@ -602,7 +602,7 @@ export function openDevice(
         entry.reject(new CommandRefusedError(frame.message));
       } else {
         // A plain Error carrying the host's message text, so the
-        // shared/errors.ts matchers degrade a remote handler failure
+        // packages/contracts/src/errors.ts matchers degrade a remote handler failure
         // exactly as they do an Electron IPC one.
         entry.reject(new Error(frame.message));
       }

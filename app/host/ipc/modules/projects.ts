@@ -1,8 +1,8 @@
 import { pickCloneUrl, repoNameFromUrl } from "@shared/cloneUrl";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { reorderProjects } from "@shared/reorder";
-import type { Handlers } from "@shared/ipc/types";
-import { projectsContract } from "@shared/ipc/modules/projects";
+import type { Handlers } from "@shigomori/contracts/types";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
 import { isGitRepo } from "@host/lib/git/core";

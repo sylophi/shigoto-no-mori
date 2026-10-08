@@ -41,8 +41,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Project } from "@shared/schemas";
-import { errorMessageOf } from "@shared/errors";
+import type { Project } from "@shigomori/contracts/schemas";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { run, runLenient } from "@host/lib/git/core";
 import {
   deleteRef,

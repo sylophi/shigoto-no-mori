@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { TONE_TEXT } from "@/components/worktreeDetail/pullRequests/pullRequestShared";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 import type { GroupShelf } from "./sidebarRow";
-import type { PullRequest, Worktree } from "@shared/schemas";
+import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
 import type { StackPosition, StackRail } from "@shared/pullRequestStack";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 import { WorktreeEntry } from "./WorktreeEntry";

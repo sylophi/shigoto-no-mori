@@ -239,7 +239,7 @@ func resolveWorktreeByDir(ctx cliContext, ref string) (*located, error) {
 
 // App plumbing: exact addressing by the ids the app's IPC layer holds.
 // The --json error document carries a stable code ("unknown-project" /
-// "unknown-worktree") that the delegate maps onto shared/errors.ts's
+// "unknown-worktree") that the delegate maps onto packages/contracts/src/errors.ts's
 // entity-gone constructors, so neither side's prose is load-bearing.
 func unknownProjectErr(id string) error {
 	return codedErrf("unknown-project", "Unknown project: %s", id)

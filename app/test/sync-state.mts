@@ -7,7 +7,7 @@
 // Run: pnpm test sync-state.
 import assert from "node:assert/strict";
 import { worktreeSyncView } from "@/lib/syncState";
-import type { RemoteSyncState, Worktree } from "@shared/schemas";
+import type { RemoteSyncState, Worktree } from "@shigomori/contracts/schemas";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { it } from "vitest";
 

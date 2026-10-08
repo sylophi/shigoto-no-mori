@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { DirectoryListing } from "@shared/schemas";
+import type { DirectoryListing } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useFsListDirectory(path: string, enabled = true) {

@@ -17,7 +17,7 @@ import {
   isManagedWorktree,
   type CleanupError,
   type Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import {
   CollapsedThroughProvider,

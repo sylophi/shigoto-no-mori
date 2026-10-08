@@ -3,7 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { DeviceBadgeCluster, type SidebarDeviceBadge } from "./DeviceBadge";
 import { useLocateProject } from "./LocateProjectPicker";
 import {

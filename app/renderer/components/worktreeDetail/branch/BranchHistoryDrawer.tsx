@@ -11,7 +11,7 @@ import {
 import { useBranchCommits } from "@/hooks/git/useBranchCommits";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { commitRewriteAt } from "@/lib/commitRewrite";
-import type { CommitSummary, Worktree } from "@shared/schemas";
+import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { CommitRow } from "../commits/CommitRow";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 

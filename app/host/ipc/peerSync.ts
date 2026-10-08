@@ -7,14 +7,14 @@
 // authed socket per deviceId, and a second dial silently supersedes
 // the session every remote-forest query is riding on.
 import * as Schema from "effect/Schema";
-import type { mirrorContract } from "@shared/ipc/modules/mirror";
-import type { shigomoriContract } from "@shared/ipc/modules/shigomori";
+import type { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import type { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
 import type { ChannelMux } from "@shared/ipc/socket/channels";
-import type { syncContract } from "@shared/ipc/modules/sync";
-import type { worktreesContract } from "@shared/ipc/modules/worktrees";
+import type { syncContract } from "@shigomori/contracts/modules/sync";
+import type { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { implSlot } from "@host/lib/util/implSlot";
-import type { Client } from "@shared/ipc/types";
-import { type Worktree, WorktreeSchema } from "@shared/schemas";
+import type { Client } from "@shigomori/contracts/types";
+import { type Worktree, WorktreeSchema } from "@shigomori/contracts/schemas";
 
 const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
 

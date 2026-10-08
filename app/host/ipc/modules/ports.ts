@@ -1,10 +1,10 @@
-// A worktree's ports (shared/ipc/modules/ports.ts): port-pool's
+// A worktree's ports (packages/contracts/src/modules/ports.ts): port-pool's
 // allocation for the directory when the integration is on, then the
 // user-added entries from the worktree data file, each probed on this
 // machine's loopback.
 import { parseWorktreeKey, worktreeKey } from "@host/lib/config/project";
-import { portsContract } from "@shared/ipc/modules/ports";
-import type { Handlers } from "@shared/ipc/types";
+import { portsContract } from "@shigomori/contracts/modules/ports";
+import type { Handlers } from "@shigomori/contracts/types";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { readWorktreeData } from "@host/lib/config/project";
 import { isLoopbackPortListening } from "@host/lib/net";

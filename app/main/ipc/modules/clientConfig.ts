@@ -1,6 +1,6 @@
-import { keepReachableOn } from "@shared/schemas/config";
-import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
-import type { Handlers } from "@shared/ipc/types";
+import { keepReachableOn } from "@shigomori/contracts/schemas/config";
+import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
+import type { Handlers } from "@shigomori/contracts/types";
 import {
   readClientConfigSync,
   writeClientConfig,

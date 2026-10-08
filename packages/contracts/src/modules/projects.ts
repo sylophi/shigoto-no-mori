@@ -1,0 +1,115 @@
+import * as Schema from "effect/Schema";
+import { broadcast, defineContract, invoke } from "../contract.ts";
+import {
+  BranchListSchema,
+  CloneProjectPayloadSchema,
+  PathPayloadSchema,
+  ProjectIconSchema,
+  ProjectSchema,
+  ProjectScopedPayloadSchema,
+  RelocateProjectPayloadSchema,
+  RemoveProjectPayloadSchema,
+  ReorderProjectsPayloadSchema,
+  CarryOverCandidateSchema,
+  CarryOverListingPayloadSchema,
+  CarryOverStatSchema,
+  CarryOverStatsPayloadSchema,
+  VoidSchema,
+  WorktreeIncludeStatusSchema,
+} from "../schemas/index.ts";
+
+export const projectsContract = defineContract("host", {
+  list: invoke("projects:list", VoidSchema, Schema.Array(ProjectSchema), {
+    remote: true,
+    gated: false,
+  }),
+  add: invoke("projects:add", PathPayloadSchema, ProjectSchema, {
+    remote: true,
+    gated: true,
+  }),
+  // Runs for as long as the clone does. The wire has no per-call
+  // timeout, and the device doing the clone uses its own credentials.
+  clone: invoke("projects:clone", CloneProjectPayloadSchema, ProjectSchema, {
+    remote: true,
+    gated: true,
+  }),
+  remove: invoke("projects:remove", RemoveProjectPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+  }),
+  // For a project whose repo was moved or renamed by hand. Answers the
+  // project at its new path.
+  relocate: invoke(
+    "projects:relocate",
+    RelocateProjectPayloadSchema,
+    ProjectSchema,
+    { remote: true, gated: true },
+  ),
+  reorder: invoke(
+    "projects:reorder",
+    ReorderProjectsPayloadSchema,
+    VoidSchema,
+    {
+      remote: true,
+      gated: true,
+    },
+  ),
+  // Emitted after an action bumps a project's usage so the renderer can
+  // refresh its usage-sorted sidebar list.
+  usageBumped: broadcast("projects:usageBumped", ProjectScopedPayloadSchema, {
+    remote: true,
+  }),
+  defaultBranch: invoke(
+    "projects:defaultBranch",
+    ProjectScopedPayloadSchema,
+    Schema.String,
+    { remote: true, gated: false },
+  ),
+  // The remote another device would clone to get this repo, or null
+  // when it has none. Credentials never ride along (shared/cloneUrl.ts).
+  cloneUrl: invoke(
+    "projects:cloneUrl",
+    ProjectScopedPayloadSchema,
+    Schema.NullOr(Schema.String),
+    { remote: true, gated: false },
+  ),
+  listBranches: invoke(
+    "projects:listBranches",
+    ProjectScopedPayloadSchema,
+    BranchListSchema,
+    { remote: true, gated: false },
+  ),
+  pickWorktreeName: invoke(
+    "projects:pickWorktreeName",
+    ProjectScopedPayloadSchema,
+    Schema.String,
+    { remote: true, gated: false },
+  ),
+  worktreeIncludeStatus: invoke(
+    "projects:worktreeIncludeStatus",
+    ProjectScopedPayloadSchema,
+    WorktreeIncludeStatusSchema,
+    { remote: true, gated: false },
+  ),
+  // Named for its first caller. The leave-out preset's picker reads it
+  // too, on every device holding the repo, so the name stays for the
+  // peers that know it.
+  carryOverListing: invoke(
+    "projects:carryOverListing",
+    CarryOverListingPayloadSchema,
+    Schema.Array(CarryOverCandidateSchema),
+    { remote: true, gated: false },
+  ),
+  carryOverStats: invoke(
+    "projects:carryOverStats",
+    CarryOverStatsPayloadSchema,
+    Schema.Record(Schema.String, CarryOverStatSchema),
+    { remote: true, gated: false },
+  ),
+  icon: invoke(
+    "projects:icon",
+    ProjectScopedPayloadSchema,
+    Schema.NullOr(ProjectIconSchema),
+    { remote: true, gated: false },
+  ),
+});

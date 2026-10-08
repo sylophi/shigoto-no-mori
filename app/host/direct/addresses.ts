@@ -11,7 +11,7 @@
 // This file must stay Electron free (pnpm test host-boundary). Node
 // builtins are fine here.
 import { networkInterfaces } from "node:os";
-import { MAX_DIRECT_CANDIDATES } from "@shared/ipc/modules/direct";
+import { MAX_DIRECT_CANDIDATES } from "@shigomori/contracts/modules/direct";
 
 // The dialer races candidates on a fixed budget, so a host with many
 // virtual interfaces (Docker bridges, VPNs, VMs) must not fan out

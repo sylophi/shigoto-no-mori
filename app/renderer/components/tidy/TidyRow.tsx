@@ -9,7 +9,7 @@ import { useNow } from "@/hooks/ui/useNow";
 import { formatBytes } from "@/lib/formatBytes";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
-import type { WorktreeDiskUsage } from "@shared/schemas";
+import type { WorktreeDiskUsage } from "@shigomori/contracts/schemas";
 import type { TidyEntry } from "./tidyModel";
 import { TidyEntryTitle } from "./TidyEntryTitle";
 

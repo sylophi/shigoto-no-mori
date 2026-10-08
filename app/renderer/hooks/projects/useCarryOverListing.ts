@@ -1,5 +1,5 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import type { CarryOverCandidate } from "@shared/schemas";
+import type { CarryOverCandidate } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   resolveForestScope,

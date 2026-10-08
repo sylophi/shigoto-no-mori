@@ -6,7 +6,10 @@
 // reads this machine, so callers sit under LocalHostScope. Under a
 // project not there yet (the pull clones it first) every answer is
 // empty: nobody has configured the checkout its create goes into.
-import { PROJECT_CONFIG_DEFAULTS, type Project } from "@shared/schemas";
+import {
+  PROJECT_CONFIG_DEFAULTS,
+  type Project,
+} from "@shigomori/contracts/schemas";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { worktreeIncludeExtras } from "@/lib/carryOverPaths";

@@ -3,7 +3,7 @@
 // state.json keyed by projectId (not the user-editable per-project
 // config). The use log the "Most used" sort ranks by is the CLI's:
 // `sm run` counts every run and reports the stats with the list.
-import type { PackageScriptSortMode } from "@shared/schemas";
+import type { PackageScriptSortMode } from "@shigomori/contracts/schemas";
 import { withLaunchRowScript } from "@shared/launchRow";
 import { stateStore } from "../config/store";
 

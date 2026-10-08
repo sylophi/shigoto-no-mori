@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { type RowStatus } from "@/components/ui/row-status";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { holdVillagerMoves } from "@/lib/villagers/moves";
 
 // Drives the "run a mutation over a set of worktrees one at a time"

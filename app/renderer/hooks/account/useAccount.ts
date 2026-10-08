@@ -10,12 +10,12 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { AccountStatus } from "@shared/ipc/modules/account";
-import type { DeviceInfo } from "@shared/hub/protocol";
+import type { AccountStatus } from "@shigomori/contracts/modules/account";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import {
   MACHINE_FALLBACK_ICON,
   type DeviceIcon,
-} from "@shared/account/deviceIcon";
+} from "@shigomori/contracts/deviceIcon";
 import { hasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 

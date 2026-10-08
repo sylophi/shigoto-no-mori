@@ -3,7 +3,7 @@ import type {
   PullRequestDetail,
   RepoMergeConfig,
   Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { ClosedPullRequestBox } from "./ClosedPullRequestBox";
 import { MergedPrimaryBranchBox } from "./MergedPrimaryBranchBox";

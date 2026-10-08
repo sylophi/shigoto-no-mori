@@ -26,7 +26,7 @@ const { cloneRepo } = await import("../host/lib/git/clone.ts");
 const { pickCloneUrl, repoNameFromUrl, stripUrlCredentials } =
   await import("../shared/cloneUrl.ts");
 const { CloneProjectPayloadSchema } =
-  await import("../shared/schemas/project.ts");
+  await import("@shigomori/contracts/schemas/project");
 
 const git = sandboxGit(gitEnv);
 

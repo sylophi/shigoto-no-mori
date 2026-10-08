@@ -8,9 +8,10 @@
 //
 // window.fakeHost carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
+import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import type * as Types from "effect/Types";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
-import type { DeviceInfo } from "@shared/hub/protocol";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { buildApi, type AllChannelHandlers } from "@shared/ipc/client";
 import { stackCleanupForWorktree } from "@shared/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
@@ -20,32 +21,31 @@ import type {
   SharedSettingsDoc,
   ShigomoriWorktreeData,
   Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { repoNameFromUrl } from "@shared/cloneUrl";
-import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
-import type { ContractScope } from "@shared/ipc/contract";
-import { decode } from "@shared/ipc/schema";
-import { WEB_PLATFORM } from "@shared/account/platform";
-import type { HubStatus } from "@shared/ipc/modules/hub";
+import type { ContractScope } from "@shigomori/contracts/contract";
+import { decode } from "@shigomori/contracts/codec";
+import { WEB_PLATFORM } from "@shigomori/contracts/platform";
+import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
   MIRROR_HISTORY_LIMIT,
   summarizeIgnores,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import {
   MOVE_CANCELLED,
   pullBringsIgnoredFiles,
-} from "@shared/ipc/modules/sync";
-import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
+} from "@shigomori/contracts/modules/sync";
+import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
 import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import type {
   MirrorEvent,
   MirrorServing,
   MirrorSession,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import {

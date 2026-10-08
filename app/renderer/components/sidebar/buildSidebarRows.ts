@@ -3,8 +3,8 @@ import {
   pullRequestStackFor,
   trunkOf,
 } from "@shared/pullRequestStack";
-import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
-import { peerProjectKey } from "@shared/schemas/config";
+import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
+import { peerProjectKey } from "@shigomori/contracts/schemas/config";
 import { groupPrefixOf, isHiddenByPrefix } from "@shared/sharedSettings";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
@@ -16,7 +16,7 @@ import type {
   PullRequest,
   Worktree,
   WorktreeSortMode,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 import {
   GROUP_SHELVES,

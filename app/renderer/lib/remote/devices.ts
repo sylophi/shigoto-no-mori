@@ -14,7 +14,7 @@ import { createExternalStore } from "@/store/externalStore";
 import type { buildApi } from "@shared/ipc/client";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
 // The per-device api buildApi returns. Same shape as window.api's
 // contract methods, minus the bridge-only extras (deviceId, appVersion).

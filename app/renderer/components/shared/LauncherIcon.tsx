@@ -14,7 +14,7 @@ import {
   parseLauncherId,
   WEB_GITHUB_ID,
   type LauncherEntry,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 interface LauncherIconProps {
   entry: LauncherEntry;

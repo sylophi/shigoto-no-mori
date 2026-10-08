@@ -24,16 +24,17 @@
     },
     "hub": {
       "ignoreDependencies": [
-        // The app's shared modules the hub imports resolve zod from
-        // app/node_modules, and the hub declares it too so the catalog
-        // keeps both on one zod (hub/README.md).
-        "zod",
         // cloudflare:test and cloudflare:workers are workerd's built-in
         // modules, provided by @cloudflare/vitest-pool-workers.
         "cloudflare",
       ],
     },
     "marketing": {},
+    // Its exports map makes every module an entry, and an entry's
+    // exports count as used unless this says otherwise.
+    "packages/contracts": {
+      "includeEntryExports": true,
+    },
   },
   "ignoreBinaries": [
     // System tools and the owner's own port-pool, not npm packages.

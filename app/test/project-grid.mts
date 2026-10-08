@@ -20,7 +20,11 @@ import {
 } from "@/components/sidebar/buildSidebarRows";
 import { buildGrid } from "@/components/home/gridModel";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import type { Project, PullRequest, Worktree } from "@shared/schemas";
+import type {
+  Project,
+  PullRequest,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { it } from "vitest";
 

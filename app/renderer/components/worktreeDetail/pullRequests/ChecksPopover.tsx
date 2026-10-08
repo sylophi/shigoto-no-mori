@@ -12,7 +12,7 @@ import {
   sortChecksWorstFirst,
 } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
-import type { PullRequestDetail } from "@shared/schemas";
+import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { CheckEntry } from "./CheckEntry";
 import { ChecksSummaryIcon } from "./ChecksSummaryIcon";
 

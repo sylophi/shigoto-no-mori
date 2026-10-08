@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 
 export const WORKTREE_DELETED_MESSAGE = "This worktree was deleted.";
 

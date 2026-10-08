@@ -148,8 +148,8 @@ import {
   type DirectCandidateKind,
   type DirectConnectInfo,
   DirectConnectInfoSchema,
-} from "@shared/ipc/modules/direct";
-import type { HubPeerPush, HubStatus } from "@shared/ipc/modules/hub";
+} from "@shigomori/contracts/modules/direct";
+import type { HubPeerPush, HubStatus } from "@shigomori/contracts/modules/hub";
 import { createChannelMux } from "@shared/ipc/socket/channels";
 import { type HubHandlers, makeHubHandlers } from "@shared/hub/bridgeHandlers";
 import {

@@ -30,11 +30,11 @@
 // renderer retry loop can pace one. The rejection folds in the
 // keeper's last failure so the renderer surfaces the honest cause
 // rather than a bare "not connected".
-import type { hubContract, HubStatus } from "@shared/ipc/modules/hub";
+import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
 import type { ChannelMux } from "@shared/ipc/socket/channels";
-import type { Handlers } from "@shared/ipc/types";
+import type { Handlers } from "@shigomori/contracts/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
-import { NO_DIRECT_CONNECTION_PREFIX } from "@shared/errors";
+import { NO_DIRECT_CONNECTION_PREFIX } from "@shigomori/contracts/errors";
 
 type HubHandlerDeps = {
   status(): HubStatus;

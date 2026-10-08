@@ -3,7 +3,7 @@
 // same list in its Ports section (PortsSection). In the frame the
 // mirror and transplant dialogs use.
 import { Cable } from "lucide-react";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TONE_PILL } from "@/components/ui/status-dot";

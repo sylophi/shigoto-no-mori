@@ -8,7 +8,7 @@
 // on one machine alone. The list of what git ignores stays the scoped
 // device's primary checkout, as a sample of what the rule covers.
 import { useState } from "react";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import {
   useLeaveOutPreset,
   useSaveLeaveOutPreset,

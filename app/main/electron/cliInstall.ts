@@ -23,7 +23,7 @@ import {
   cliBinaryName,
   cliUserBinDir,
 } from "@shared/packaging/cliDist.mts";
-import type { CliStatus } from "@shared/ipc/modules/cli";
+import type { CliStatus } from "@shigomori/contracts/modules/cli";
 import { app } from "electron";
 import { cliBinaryPath } from "./cliRunner";
 import { uninstallShellIntegration } from "./cliShell";

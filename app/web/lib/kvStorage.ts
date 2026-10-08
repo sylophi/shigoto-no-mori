@@ -10,7 +10,7 @@ import {
   type ContractSchema,
   type Decoded,
   safeDecode,
-} from "@shared/ipc/schema";
+} from "@shigomori/contracts/codec";
 
 export type KeyValueStorage = {
   getItem(key: string): string | null;

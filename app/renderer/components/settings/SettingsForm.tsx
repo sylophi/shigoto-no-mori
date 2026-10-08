@@ -28,7 +28,11 @@ import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
-import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
+import type {
+  ClientConfig,
+  GlobalConfig,
+  Theme,
+} from "@shigomori/contracts/schemas";
 import type { DarkTheme, LightTheme } from "@shared/themes";
 import { AppearanceSection } from "./AppearanceSection";
 import { WorktreePrefixesSection } from "./WorktreePrefixesSection";

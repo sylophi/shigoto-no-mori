@@ -514,7 +514,7 @@ const (
 	logFormat   = logSentinel + "%h%x00%an%x00%aI%x00%s"
 )
 
-// Mirrors COMMIT_HASH_RE in shared/schemas/worktree.ts: hex only, so a
+// Mirrors COMMIT_HASH_RE in packages/contracts/src/schemas/worktree.ts: hex only, so a
 // hash can never occupy a flag position when it travels back into git
 // argv.
 var commitHashRe = regexp.MustCompile(`^[0-9a-f]{4,64}$`)

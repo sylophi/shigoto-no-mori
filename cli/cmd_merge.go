@@ -302,7 +302,7 @@ func mergeResultFields(pr *prSummary, branch, method string) map[string]any {
 }
 
 // How a merge ended, in the app's spelling (MergeOutcomeSchema,
-// shared/schemas/pullRequest.ts). The PR landed, or a merge queue took
+// packages/contracts/src/schemas/pullRequest.ts). The PR landed, or a merge queue took
 // it (a GitHub stack's, or a base branch with a queue), or auto-merge
 // is armed and GitHub lands it once its requirements are met. The last
 // two leave the PR open, which land reads as "nothing to clean up yet".

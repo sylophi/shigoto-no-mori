@@ -16,7 +16,7 @@
 // watched exist. Nothing outlives the run it came from, and nothing is
 // held per project.
 import { existsSync } from "node:fs";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { listWorktreeIdentities } from "../git/worktrees";
 import { loadProjects } from "../projects";
 import {

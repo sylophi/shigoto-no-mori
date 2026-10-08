@@ -2,7 +2,7 @@ import { Copy as CopyIcon, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useCarryOverListing } from "@/hooks/projects/useCarryOverListing";
-import type { CarryOverEntry } from "@shared/schemas";
+import type { CarryOverEntry } from "@shigomori/contracts/schemas";
 import { OnlyInWorktrees } from "./OnlyInWorktrees";
 import { PathPickerModal } from "@/components/shared/PathPickerModal";
 

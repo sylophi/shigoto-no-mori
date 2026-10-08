@@ -7,8 +7,8 @@
 //
 // Kept dependency-free so it can run in either environment.
 
-import type { RuntimeInfo, WorktreeLayout } from "../schemas";
-import { PROJECT_CONFIG_DEFAULTS } from "../schemas/projectConfigDefaults";
+import type { RuntimeInfo, WorktreeLayout } from "@shigomori/contracts/schemas";
+import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
 
 // Project-relative directory used by the "in-project" layout. Top-level
 // component (`.shigomori`) is also the path appended to the primary's

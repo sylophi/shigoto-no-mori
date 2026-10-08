@@ -11,7 +11,7 @@ import {
 } from "@/hooks/projects/useProjects";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { getBrowseParentPath } from "@shared/projectPaths";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import type { GroupMember } from "./ProjectGroupActions";
 
 // Locate for a project group's header, the sidebar's row and the home

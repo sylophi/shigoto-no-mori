@@ -7,7 +7,7 @@
 // and so does the pre-flight: a branch that device already holds fails
 // the pull at step 2, so the review says so here and keeps Start off.
 import { Check } from "lucide-react";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { DiffStats } from "@/components/ui/diff-stats";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";

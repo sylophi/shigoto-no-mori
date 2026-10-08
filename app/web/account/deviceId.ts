@@ -7,7 +7,7 @@
 // data re-enrolls it as a brand new device, exactly like a registry
 // reset does on desktop.
 import * as Schema from "effect/Schema";
-import { DeviceIdSchema } from "@shared/hub/protocol";
+import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
 import { readKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 
 const DEVICE_ID_KEY = "sm.web.deviceId";

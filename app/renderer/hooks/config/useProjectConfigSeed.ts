@@ -1,5 +1,5 @@
-import { errorMessageOf } from "@shared/errors";
-import type { ShigomoriConfig } from "@shared/schemas";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 

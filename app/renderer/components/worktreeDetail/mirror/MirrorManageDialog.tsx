@@ -28,13 +28,13 @@ import type {
   MirrorEvent,
   MirrorEventKind,
   MirrorSession,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import {
   isHaltedStatus,
   mirrorStopRefusalReason,
   mirrorFilesSettled,
   mirrorStopBlocker,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";

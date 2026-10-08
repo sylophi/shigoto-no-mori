@@ -3,7 +3,7 @@
 // its managedOnProjectDrive setting keeps managed worktrees on the
 // project's drive. With its home, for the paths the callers tildify.
 // Null until both the runtime paths and the settings are read.
-import { DEVICE_SETTINGS_DEFAULTS } from "@shared/schemas";
+import { DEVICE_SETTINGS_DEFAULTS } from "@shigomori/contracts/schemas";
 import type { DeviceLayoutInputs } from "@shared/git/worktreeLayout";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";

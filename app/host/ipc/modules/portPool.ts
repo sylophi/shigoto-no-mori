@@ -1,5 +1,5 @@
-import { portPoolContract } from "@shared/ipc/modules/portPool";
-import type { Handlers } from "@shared/ipc/types";
+import { portPoolContract } from "@shigomori/contracts/modules/portPool";
+import type { Handlers } from "@shigomori/contracts/types";
 import {
   isPortPoolActive,
   isPortPoolEnabled,

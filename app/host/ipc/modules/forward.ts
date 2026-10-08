@@ -9,13 +9,13 @@
 // clean end from both sides, or the socket dying tears it down. No
 // registry, no idle sweep, nothing to leak past the connection.
 import type { Socket } from "node:net";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   FORWARD_CONNECT_FAILED,
   forwardContract,
-} from "@shared/ipc/modules/forward";
+} from "@shigomori/contracts/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
+import type { Handlers } from "@shigomori/contracts/types";
 import { dialLoopback } from "@host/lib/net";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 

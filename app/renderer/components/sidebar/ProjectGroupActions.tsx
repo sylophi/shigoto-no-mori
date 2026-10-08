@@ -30,7 +30,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
@@ -38,7 +38,7 @@ import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDev
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { AddToDeviceSubmenu } from "./AddToDeviceSubmenu";
 import {
   ProjectCreateMenuItems,

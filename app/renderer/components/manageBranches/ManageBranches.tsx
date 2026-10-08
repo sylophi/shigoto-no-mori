@@ -9,7 +9,11 @@ import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { cn } from "@/lib/utils";
-import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
+import {
+  isRealBranch,
+  type Project,
+  type Worktree,
+} from "@shigomori/contracts/schemas";
 import { BranchRow } from "./BranchRow";
 import { NewBranchForm } from "./NewBranchForm";
 import { PAGE_BODY } from "@/components/shared/PageShell";

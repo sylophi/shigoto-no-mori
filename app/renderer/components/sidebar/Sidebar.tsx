@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import type { SidebarView } from "@shared/schemas";
+import type { SidebarView } from "@shigomori/contracts/schemas";
 import {
   DndContext,
   DragOverlay,

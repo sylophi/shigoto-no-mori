@@ -9,7 +9,7 @@ import { app } from "electron";
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
   type DirectCandidateKind,
-} from "@shared/ipc/modules/direct";
+} from "@shigomori/contracts/modules/direct";
 
 export function devDialKinds(): DirectCandidateKind[] | undefined {
   const raw = process.env.SHIGOMORI_DIAL_KINDS;

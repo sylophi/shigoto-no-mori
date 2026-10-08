@@ -13,12 +13,12 @@
 // (registry.ts mirrorSessions). Nothing here fails the pull: the
 // worktree is real either way, and the outcome (crossed, with how
 // many conflicts, or why not) rides the pull's result.
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   isHaltedStatus,
   MIRROR_LABEL_TRANSFER,
-} from "@shared/ipc/modules/mirror";
-import { MOVE_CANCELLED } from "@shared/ipc/modules/sync";
+} from "@shigomori/contracts/modules/mirror";
+import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
 import { abortable, throwIfCancelled } from "@host/lib/sync/moves";
 import {
   beginTransfer,

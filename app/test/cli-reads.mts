@@ -59,8 +59,8 @@ import {
 } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import { addProject, wireHostCli } from "./lib/smBinary.mts";
-import type { DoctorReport } from "@shared/ipc/modules/cli";
-import type { ShigomoriConfig } from "@shared/schemas/config";
+import type { DoctorReport } from "@shigomori/contracts/modules/cli";
+import type { ShigomoriConfig } from "@shigomori/contracts/schemas/config";
 import doubutsuNames from "../../cli/embed/doubutsu-names.json" with { type: "json" };
 
 // The host runs git in this process's environment, so a hook's GIT_*
@@ -105,13 +105,13 @@ const { invalidateProjectConfigCache } =
 const { layoutInputsFor, worktreeBaseFor, worktreePathFor } =
   await import("@shared/git/worktreeLayout");
 const { readRegistry } = await import("./lib/cliSandbox.mts");
-const { isConvertRefusedError } = await import("@shared/errors");
+const { isConvertRefusedError } = await import("@shigomori/contracts/errors");
 const {
   DEVICE_SETTINGS_DEFAULTS,
   modeledKeyPaths,
   PROJECT_CONFIG_DEFAULTS,
   ShigomoriConfigSchema,
-} = await import("@shared/schemas/config");
+} = await import("@shigomori/contracts/schemas/config");
 
 // What the handlers get from the wire. None of the ones driven here
 // streams back or cares who called.

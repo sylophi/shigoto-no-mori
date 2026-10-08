@@ -19,6 +19,7 @@
 
 /* oxlint-disable no-await-in-loop -- one request at a time on purpose,
    to go easy on a community wiki's API. */
+import { isValidWorktreeDirName } from "@shigomori/contracts/predicates/worktreeDirName";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -26,8 +27,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { isValidWorktreeDirName } from "../shared/git/branches.ts";
-import { VillagerSlugSchema } from "../shared/schemas/villagers.ts";
+import { VillagerSlugSchema } from "@shigomori/contracts/schemas/villagers";
 import {
   CHARACTER_CATEGORIES,
   namesOnPage,

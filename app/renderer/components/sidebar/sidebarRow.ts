@@ -1,6 +1,10 @@
 import type { StackPosition, StackRail } from "@shared/pullRequestStack";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
-import type { Project, PullRequest, Worktree } from "@shared/schemas";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
+import type {
+  Project,
+  PullRequest,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 
 // The shelves the inbox view folds shut by default. The live box has

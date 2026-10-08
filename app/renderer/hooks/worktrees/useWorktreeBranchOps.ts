@@ -1,4 +1,4 @@
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { useBranchMutation } from "@/hooks/git/useBranches";
 
 interface RenameBranchInput {

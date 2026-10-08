@@ -52,15 +52,18 @@ import {
   WorktreeLifecyclePhaseSchema,
   type WorktreeLifecyclePhase,
   WorktreeSchema,
-} from "@shared/schemas";
-import { type DoctorReport, DoctorReportSchema } from "@shared/ipc/modules/cli";
-import { safeDecode } from "@shared/ipc/schema";
+} from "@shigomori/contracts/schemas";
+import {
+  type DoctorReport,
+  DoctorReportSchema,
+} from "@shigomori/contracts/modules/cli";
+import { safeDecode } from "@shigomori/contracts/codec";
 import {
   convertRefusedError,
   isEntityGoneError,
   unknownProjectError,
   unknownWorktreeError,
-} from "@shared/errors";
+} from "@shigomori/contracts/errors";
 import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
 import {
   clearCreateInflight,
@@ -170,7 +173,7 @@ function cliFailure(
 // An unforced `sm adopt` stopped by its guard (cli/cmd_rm.go
 // requireClean), the only run on the streaming runner that sends these
 // codes. Electron's IPC keeps only an error's message, so the code
-// becomes shared/errors' convert refusal here.
+// becomes packages/contracts/src/errors.ts' convert refusal here.
 function guardRefusal(result: CliResult): Error | null {
   const code = result.docs.find(isErrorDoc)?.["code"];
   if (code === "uncommitted-changes" || code === "status-unreadable") {

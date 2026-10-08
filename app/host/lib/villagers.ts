@@ -41,14 +41,14 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
-import { errorMessageOf } from "@shared/errors";
-import { type ContractSchema, type Decoded } from "@shared/ipc/schema";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import { type ContractSchema, type Decoded } from "@shigomori/contracts/codec";
 import {
   type VillagerDataStatus,
   type VillagerProfile,
   type VillagerProfiles,
   VillagerProfilesSchema,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { createLimiter } from "@shared/util/limit";
 import {
   type VillagerManifest,

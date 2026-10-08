@@ -1,4 +1,4 @@
-// Host side of continuous worktree mirroring (shared/ipc/modules/
+// Host side of continuous worktree mirroring (packages/contracts/src/modules/
 // mirror.ts). The daemon that owns the sessions lives in main
 // (main/core/mirror/daemon.ts, spawned and supervised there), so it arrives
 // through an injected impl following the setPortForwardEngine
@@ -49,12 +49,15 @@ import {
   MirrorStartToResultSchema,
   mirrorContract,
   summarizeIgnores,
-} from "@shared/ipc/modules/mirror";
-import { SyncPullProgressSchema, syncContract } from "@shared/ipc/modules/sync";
-import { DeleteWorktreeResultSchema } from "@shared/schemas";
+} from "@shigomori/contracts/modules/mirror";
+import {
+  SyncPullProgressSchema,
+  syncContract,
+} from "@shigomori/contracts/modules/sync";
+import { DeleteWorktreeResultSchema } from "@shigomori/contracts/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
-import { errorMessageOf } from "@shared/errors";
+import type { Handlers } from "@shigomori/contracts/types";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
 import {

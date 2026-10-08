@@ -282,7 +282,7 @@ type project struct {
 	// "terrier" on entries merged from the terrier registry
 	// (terrier.go). Never persisted: registry.json rows always leave it
 	// empty, and the merge layer decorates at read time, mirroring
-	// ProjectSchema's source field (shared/schemas/project.ts).
+	// ProjectSchema's source field (packages/contracts/src/schemas/project.ts).
 	Source string `json:"source,omitempty"`
 }
 

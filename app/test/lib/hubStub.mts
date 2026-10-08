@@ -14,7 +14,7 @@ import {
   HUB_PONG,
   hubTextWithinLimit,
   type ServerEnvelope,
-} from "@shared/hub/protocol";
+} from "@shigomori/contracts/hubProtocol";
 import { toText } from "@host/socket/rawData";
 import { boundPort, type Track } from "./checkKit.mts";
 

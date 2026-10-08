@@ -8,7 +8,7 @@
 // from useRemoteForests, the sidebar's merged-tree fan-out, for the
 // same reason: the registry can never disagree with the tree because it
 // is reading the tree's data.
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";

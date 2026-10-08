@@ -6,13 +6,16 @@
 // shared/account/ (every dependency is an injected seam:
 // AccountService, AccountStore, AccountServiceConfig), so the
 // account check script drives both paths with stubs.
-import { errorMessageOf } from "../errors";
-import type { DeviceInfo, EnrollResponse } from "../hub/protocol";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import type {
+  DeviceInfo,
+  EnrollResponse,
+} from "@shigomori/contracts/hubProtocol";
 import { HubRequestError, isHubRefusal, type AccountService } from "./service";
 import type { AccountStore, StoredAccount } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
 import { deriveAccountId } from "./token";
-import type { DeviceIcon } from "./deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
 type EnrollDeviceDeps = {
   config: AccountServiceConfig;

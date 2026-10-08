@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import type {
   CliStatus,
   ShellIntegrationStatus,
-} from "@shared/ipc/modules/cli";
+} from "@shigomori/contracts/modules/cli";
 
 // Install/uninstall of the CLI symlink lives here, not in a launch
 // prompt: the app runs its bundled binary directly and never needs the

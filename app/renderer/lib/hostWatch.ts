@@ -21,18 +21,18 @@
 // stores that keep a stream (store/scriptRuns.ts,
 // store/worktreeLifecycle.ts).
 import type { QueryClient } from "@tanstack/react-query";
-import type { BroadcastDef } from "@shared/ipc/contract";
-import { gitContract } from "@shared/ipc/modules/git";
-import { githubCliContract } from "@shared/ipc/modules/githubCli";
-import { mirrorContract } from "@shared/ipc/modules/mirror";
-import { projectsContract } from "@shared/ipc/modules/projects";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
-import { updaterContract } from "@shared/ipc/modules/updater";
+import type { BroadcastDef } from "@shigomori/contracts/contract";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import { updaterContract } from "@shigomori/contracts/modules/updater";
 import {
   type ContractSchema,
   type Decoded,
   safeDecode,
-} from "@shared/ipc/schema";
+} from "@shigomori/contracts/codec";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
 import { noteGitFetchActive } from "@/hooks/git/useProjectGitFetching";
 import { syncProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";

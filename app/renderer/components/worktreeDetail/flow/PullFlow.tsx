@@ -8,8 +8,8 @@
 // cancelled stage, not a failure.
 import { useState, type ReactNode } from "react";
 import { Ban, Check, Loader2, X, type LucideIcon } from "lucide-react";
-import { isMoveCancelledError } from "@shared/ipc/modules/sync";
-import type { Project, Worktree } from "@shared/schemas";
+import { isMoveCancelledError } from "@shigomori/contracts/modules/sync";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TONE_PILL } from "@/components/ui/status-dot";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";

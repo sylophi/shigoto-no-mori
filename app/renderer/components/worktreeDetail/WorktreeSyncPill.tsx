@@ -6,7 +6,7 @@ import {
   useSyncMoveMutations,
 } from "@/hooks/worktrees/useWorktreeSync";
 import { worktreeSyncView } from "@/lib/syncState";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { assertNever, cn } from "@/lib/utils";
 import { SYNC_PILL_SHAPE, SyncActionButton } from "./SyncActionButton";

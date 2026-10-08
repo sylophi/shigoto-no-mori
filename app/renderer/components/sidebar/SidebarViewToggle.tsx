@@ -1,5 +1,5 @@
 import { Inbox, ListTree } from "lucide-react";
-import type { SidebarView } from "@shared/schemas";
+import type { SidebarView } from "@shigomori/contracts/schemas";
 import {
   SegmentedControl,
   type SegmentedOption,

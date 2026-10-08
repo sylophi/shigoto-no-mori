@@ -1,5 +1,8 @@
 import { useMutation, useQuery, skipToken } from "@tanstack/react-query";
-import type { DetectedLauncher, LauncherEntry } from "@shared/schemas";
+import type {
+  DetectedLauncher,
+  LauncherEntry,
+} from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useDetectedLaunchers() {

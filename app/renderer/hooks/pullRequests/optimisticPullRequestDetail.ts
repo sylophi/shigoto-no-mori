@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { PullRequestDetail } from "@shared/schemas";
+import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
 // The variables every PR action carries. The branch isn't on the wire

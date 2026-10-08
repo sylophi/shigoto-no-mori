@@ -3,7 +3,7 @@ import {
   type Worktree,
   type WorktreeSortMode,
   worktreeLastActivityAt,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 // Orders an open project's worktrees for the tree, every device's
 // together: a worktree on another machine sorts among this one's, not

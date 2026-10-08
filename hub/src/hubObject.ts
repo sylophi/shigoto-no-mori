@@ -24,7 +24,7 @@ import {
   HUB_PING,
   HUB_PONG,
   hubTextWithinLimit,
-} from "../../app/shared/hub/protocol.ts";
+} from "@shigomori/contracts/hubProtocol";
 import type { Env } from "./env.ts";
 import { deleteDevice, getDeviceById, touchLastSeen } from "./db.ts";
 import { randomBase64url } from "./crypto.ts";
@@ -90,7 +90,7 @@ export class DeviceHub implements DurableObject {
   constructor(ctx: DurableObjectState, env: Env) {
     this.ctx = ctx;
     this.env = env;
-    // The devices' liveness pings (shared/hub/protocol.ts) are answered
+    // The devices' liveness pings (packages/contracts/src/hubProtocol.ts) are answered
     // by the runtime itself, without waking a hibernated object: a
     // device heartbeating every few seconds must not cost a request or
     // an eviction each time, and a ping that reaches webSocketMessage

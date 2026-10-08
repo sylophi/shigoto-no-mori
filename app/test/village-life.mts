@@ -16,8 +16,11 @@ import assert from "node:assert/strict";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { FRESH_CONFIG_SEED } from "@host/lib/bootstrap";
-import { ClientConfigSchema, DeviceSettingsPatchSchema } from "@shared/schemas";
-import type { VillagerDataStatus } from "@shared/schemas/villagers";
+import {
+  ClientConfigSchema,
+  DeviceSettingsPatchSchema,
+} from "@shigomori/contracts/schemas";
+import type { VillagerDataStatus } from "@shigomori/contracts/schemas/villagers";
 import {
   doubutsuNamesEnabled,
   villageLifeEnabled,

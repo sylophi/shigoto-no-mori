@@ -12,7 +12,7 @@ import {
   type PullRequestStack,
   stackCleanupFor,
 } from "@shared/pullRequestStack";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";

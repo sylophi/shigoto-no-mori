@@ -18,7 +18,7 @@
 // been judged harmless) may pass fabricateArms to opt back in.
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
-import { type ContractSchema, safeDecode } from "@shared/ipc/schema";
+import { type ContractSchema, safeDecode } from "@shigomori/contracts/codec";
 
 // Distinct from every legal stub value (undefined included), so the
 // caller can tell "no safe stub exists" from "the stub is undefined".
@@ -59,7 +59,7 @@ function stubFromAst(
   ast: SchemaAST.AST,
   opts: StubOptions,
 ): unknown | typeof NO_STRUCTURAL_STUB {
-  // A strict struct (shared/schemas/strict.ts) is stubbed as the
+  // A strict struct (packages/contracts/src/schemas/strict.ts) is stubbed as the
   // struct it wraps.
   if (
     SchemaAST.isDeclaration(ast) &&

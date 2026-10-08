@@ -10,7 +10,7 @@ import {
   type GlobalConfig,
   type LauncherCommand,
   type Theme,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   type DarkTheme,
   DEFAULT_DARK_THEME,
@@ -18,7 +18,7 @@ import {
   type LightTheme,
   resolveDoubutsuPicks,
 } from "@shared/themes";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 

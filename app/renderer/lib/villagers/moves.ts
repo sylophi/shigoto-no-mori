@@ -25,7 +25,7 @@
 // mirror) quiets its moves (quietVillagerMoves), so one action is one
 // piece of news.
 import type { QueryClient } from "@tanstack/react-query";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { toastVillagerMove } from "@/components/villagers/toasts";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
 import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";

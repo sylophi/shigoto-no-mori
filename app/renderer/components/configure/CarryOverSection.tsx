@@ -8,7 +8,7 @@ import { useCarryOverStats } from "@/hooks/projects/useCarryOverStats";
 import { worktreeIncludeExtras } from "@/lib/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
-import type { CarryOverEntry } from "@shared/schemas";
+import type { CarryOverEntry } from "@shigomori/contracts/schemas";
 import { CarryOverPickerModal } from "./CarryOverPickerModal";
 import { CarryOverRow } from "./CarryOverRow";
 

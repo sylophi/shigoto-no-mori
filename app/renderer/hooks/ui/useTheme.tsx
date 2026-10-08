@@ -1,5 +1,5 @@
 import { createContext, use, useEffect, useState, type ReactNode } from "react";
-import type { Theme } from "@shared/schemas";
+import type { Theme } from "@shigomori/contracts/schemas";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { useClientConfig } from "../config/useClientConfig";
 

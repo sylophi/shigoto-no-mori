@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { RepoMergeConfig } from "@shared/schemas";
+import type { RepoMergeConfig } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Per-repo "which merge methods are allowed" settings. Cached

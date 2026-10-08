@@ -1,4 +1,4 @@
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 
 interface ProjectDragPreviewProps {
   project: Project;

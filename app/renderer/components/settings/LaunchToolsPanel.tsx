@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Plus } from "lucide-react";
-import type { DetectedLauncher } from "@shared/schemas";
+import type { DetectedLauncher } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";

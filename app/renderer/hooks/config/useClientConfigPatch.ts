@@ -17,7 +17,7 @@
 // preferences) would otherwise have the first's snapshot erase the
 // second's key.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ClientConfig } from "@shared/schemas";
+import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 

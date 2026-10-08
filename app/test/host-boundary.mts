@@ -1,7 +1,8 @@
 // Enforces the host/client split at the source level, so the split
 // can't erode one convenient import at a time. host/ is the code that
-// will one day serve a remote client, shared/ is the contract layer
-// both sides compile, and neither may know Electron exists. Remoteness
+// will one day serve a remote client, shared/ and the contracts
+// package are what both sides compile, and none may know Electron
+// exists. Remoteness
 // itself lives in the transport a connection is built on -- feature
 // modules never branch on where they run.
 //
@@ -10,18 +11,19 @@
 // rules for its directory:
 //   1. No electron import (value, type, require, dynamic, bare side
 //      effect, export-from, and subpaths like "electron/main" or
-//      cousins like "electron-updater") anywhere under host/ or
-//      shared/.
-//   2. No import from main/ anywhere under host/ or shared/. main/ is
+//      cousins like "electron-updater") anywhere under host/, shared/
+//      or the contracts package.
+//   2. No import from main/ anywhere under host/, shared/ or the
+//      contracts package. main/ is
 //      the Electron binding layer, so depending on it drags Electron in
 //      transitively.
-//   3. Every file under shared/ipc/modules that exports a contract
+//   3. Every file under the contracts package's modules/ that exports a contract
 //      declares its side through defineContract with a literal "host"
 //      or "client" scope. Schema-only helpers pass free. Zero
 //      contract-exporting files found means the predicate rotted, and
 //      that fails too.
 //   4. Canary: the `isRemote` identifier must not appear under host/,
-//      shared/, or renderer/.
+//      shared/, renderer/ or the contracts package.
 //   5. ipcRenderer appears only in main/preloadTransport.ts, the one
 //      sanctioned ClientTransport binding.
 //   6. main/core is the Electron-free half of the desktop binding: the
@@ -33,13 +35,16 @@
 //      from source (the Pick list, and buildApi's return object joined
 //      with each contract's defineContract scope), so the rule fails
 //      when either side drifts.
+//   8. The contracts package imports nothing from the app: no app
+//      alias, no relative path out of the package. Every side compiles
+//      it, the hub included, which has no app to reach.
 //
-// covers: app/host/** app/main/** app/renderer/** app/shared/** app/web/**
+// covers: app/host/** app/main/** app/renderer/** app/shared/** app/web/** packages/contracts/src/**
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { it } from "vitest";
-import { appRoot, stripComments, walk } from "./lib/checkKit.mts";
+import { appRoot, repoRoot, stripComments, walk } from "./lib/checkKit.mts";
 
 const failures: string[] = [];
 
@@ -56,7 +61,8 @@ const IPC_RENDERER = /\bipcRenderer\b/;
 
 const mainDir = join(appRoot, "main");
 const mainCoreDir = join(mainDir, "core");
-const modulesDir = join(appRoot, "shared", "ipc", "modules");
+const contractsDir = join(repoRoot, "packages", "contracts", "src");
+const modulesDir = join(contractsDir, "modules");
 const IPC_RENDERER_ALLOWLIST = new Set(["main/preloadTransport.ts"]);
 
 const isElectronSpecifier = (spec: string) =>
@@ -80,14 +86,23 @@ const isMainSpecifier = (spec: string, fileDir: string) =>
 const visitedAllowlisted = new Set<string>();
 let contractModuleCount = 0;
 
-for (const dir of ["host", "main", "renderer", "shared", "web"]) {
-  for (const file of walk(join(appRoot, dir), SOURCE_EXTENSIONS)) {
+// The folders walked, and whether each must stay Electron free and off
+// the main/ binding layer. web/ is the browser client platform, so it
+// is held to that like host/, shared/ and the contracts.
+const LAYERS = [
+  { dir: "host", root: join(appRoot, "host"), contractLayer: true },
+  { dir: "main", root: mainDir, contractLayer: false },
+  { dir: "renderer", root: join(appRoot, "renderer"), contractLayer: false },
+  { dir: "shared", root: join(appRoot, "shared"), contractLayer: true },
+  { dir: "web", root: join(appRoot, "web"), contractLayer: true },
+  { dir: "packages/contracts/src", root: contractsDir, contractLayer: true },
+];
+
+for (const { dir, root, contractLayer } of LAYERS) {
+  for (const file of walk(root, SOURCE_EXTENSIONS)) {
     const rel = relative(appRoot, file);
     const src = stripComments(readFileSync(file, "utf8"));
     const fileDir = dirname(file);
-    // web/ is the browser client platform: like host/ and shared/ it must
-    // stay Electron free and must not reach into the main/ binding layer.
-    const contractLayer = dir === "host" || dir === "shared" || dir === "web";
     if (IPC_RENDERER_ALLOWLIST.has(rel)) visitedAllowlisted.add(rel);
 
     const specifiers = [...src.matchAll(IMPORT_SPECIFIER)].flatMap(
@@ -108,6 +123,21 @@ for (const dir of ["host", "main", "renderer", "shared", "web"]) {
       failures.push(
         `${rel} imports from main/ -- ${dir}/ must not depend on the Electron binding layer`,
       );
+    }
+
+    // 8. The contracts stand alone.
+    if (root === contractsDir) {
+      const leaves = specifiers.some(
+        (spec) =>
+          /^@(shared|host)?\//.test(spec) ||
+          (spec.startsWith(".") &&
+            !resolve(fileDir, spec).startsWith(contractsDir + sep)),
+      );
+      if (leaves) {
+        failures.push(
+          `${rel} imports from outside packages/contracts -- the contracts must not depend on the app`,
+        );
+      }
     }
 
     // 6. main/core stays drivable by plain node.
@@ -162,7 +192,7 @@ for (const dir of ["host", "main", "renderer", "shared", "web"]) {
 // nothing.
 if (contractModuleCount === 0) {
   failures.push(
-    `no contract-exporting files (matching ${CONTRACT_EXPORT}) found under shared/ipc/modules -- the scope rule's predicate no longer matches anything`,
+    `no contract-exporting files (matching ${CONTRACT_EXPORT}) found under packages/contracts/src/modules -- the scope rule's predicate no longer matches anything`,
   );
 }
 

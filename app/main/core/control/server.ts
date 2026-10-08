@@ -20,8 +20,8 @@ import { createServer, type Server, type Socket } from "node:net";
 import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { errorCodeOf, errorMessageOf } from "@shared/errors";
-import { isControlErrorCode } from "@shared/ipc/modules/control";
+import { errorCodeOf, errorMessageOf } from "@shigomori/contracts/errors";
+import { isControlErrorCode } from "@shigomori/contracts/modules/control";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   decodeFrame,

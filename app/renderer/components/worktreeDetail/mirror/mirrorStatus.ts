@@ -11,7 +11,7 @@ import {
   type MirrorDaemonStatus,
   type MirrorSession,
   type MirrorStatus,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { pluralize } from "@/lib/pluralize";
 

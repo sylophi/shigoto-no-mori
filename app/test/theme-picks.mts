@@ -7,7 +7,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DARK_THEME_IDS, LIGHT_THEME_IDS } from "@shared/schemas/config";
+import {
+  DARK_THEME_IDS,
+  LIGHT_THEME_IDS,
+} from "@shigomori/contracts/schemas/config";
 import {
   activeTheme,
   DARK_THEMES,

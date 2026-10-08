@@ -3,7 +3,7 @@ import type {
   MergeMethod,
   MergePullRequestResult,
   PullRequestDetail,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateBranchState } from "../git/useBranches";
 import {

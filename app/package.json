@@ -49,6 +49,7 @@
     "@fontsource-variable/geist": "^5.2.9",
     "@fontsource/zen-maru-gothic": "^5.2.8",
     "@pierre/diffs": "^1.4.3",
+    "@shigomori/contracts": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "1.170.17",
     "@tanstack/react-virtual": "^3.14.5",

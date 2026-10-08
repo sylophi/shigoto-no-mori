@@ -6,7 +6,7 @@
 import { FolderSearch } from "lucide-react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { FooterActionButton } from "./FooterActionButton";
 import { LABEL_RANK } from "./footerFit";
 

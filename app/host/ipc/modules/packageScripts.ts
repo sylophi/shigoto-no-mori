@@ -1,5 +1,5 @@
-import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
-import type { Handlers } from "@shared/ipc/types";
+import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
+import type { Handlers } from "@shigomori/contracts/types";
 import { findProjectOrThrow } from "@host/lib/projects";
 import { startScript } from "@host/lib/scripts";
 import {

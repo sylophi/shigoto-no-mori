@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Flame } from "lucide-react";
-import type { NukeProgress } from "@shared/schemas";
+import type { NukeProgress } from "@shigomori/contracts/schemas";
 import { BlockingOverlay } from "@/components/ui/blocking-overlay";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";

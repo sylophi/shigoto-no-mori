@@ -13,7 +13,7 @@
 import * as Schema from "effect/Schema";
 import { useEffect } from "react";
 import { getRouteApi } from "@tanstack/react-router";
-import { SidebarViewSchema } from "@shared/schemas";
+import { SidebarViewSchema } from "@shigomori/contracts/schemas";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import {

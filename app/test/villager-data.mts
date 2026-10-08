@@ -36,7 +36,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createVillagerData, type VillagerData } from "@host/lib/villagers";
-import type { VillagerDataStatus, VillagerKind } from "@shared/schemas";
+import type {
+  VillagerDataStatus,
+  VillagerKind,
+} from "@shigomori/contracts/schemas";
 import type { VillagerManifest } from "@shared/villagers/manifest";
 import {
   villagerProfile,

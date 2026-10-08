@@ -43,7 +43,7 @@ import (
 	"time"
 )
 
-// The subset of UpdaterStatus (shared/schemas/runtime.ts) the CLI
+// The subset of UpdaterStatus (packages/contracts/src/schemas/runtime.ts) the CLI
 // reads: pid/appVersion to tell whether a live instance has to be
 // restarted around the swap, and the state's error kind so an
 // app-side install failure surfaces immediately (waitForRestart)
@@ -124,7 +124,7 @@ const (
 )
 
 // NDJSON phase events for --json consumers, pinned by
-// UpdateStageEventSchema (shared/schemas/runtime.ts). The app's
+// UpdateStageEventSchema (packages/contracts/src/schemas/runtime.ts). The app's
 // check parses these as they stream, and names the version it found
 // from the first one, before the download finishes. A no-op for
 // humans, whose progress is the spinner.
@@ -227,7 +227,7 @@ func reportUpToDate() {
 // --stage: check + download + verify, stop short of installing. The
 // app's periodic check shells out to this with --json and mirrors the
 // event stream into its Settings state machine. The result document is
-// pinned by UpdateStageResultSchema (shared/schemas/runtime.ts).
+// pinned by UpdateStageResultSchema (packages/contracts/src/schemas/runtime.ts).
 func cmdUpdateStage() (int, error) {
 	spin := newSpinner()
 	defer spin.stop()

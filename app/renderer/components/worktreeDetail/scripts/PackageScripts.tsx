@@ -26,7 +26,10 @@ import {
 } from "@/hooks/scripts/usePackageScriptSort";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { cn } from "@/lib/utils";
-import type { PackageScriptsResult, Worktree } from "@shared/schemas";
+import type {
+  PackageScriptsResult,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import { ArrangeScriptRow, ScriptDragPreview } from "./ArrangeScriptRow";
 import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";

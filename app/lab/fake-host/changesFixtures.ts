@@ -3,7 +3,7 @@
 // is picked. Seeded from the fixture's `changedCount` the first time a
 // worktree is read, then kept, so ticking, committing and discarding
 // show their outcome and the commit → push flow runs end to end.
-import type { ChangedFile, CommitSummary } from "@shared/schemas";
+import type { ChangedFile, CommitSummary } from "@shigomori/contracts/schemas";
 import type { FakeWorktree } from "./fixtures";
 
 // The files a worktree's changes are drawn from: the first
@@ -179,7 +179,7 @@ export function createFakeChanges(
 const CODE = [
   'import { cn } from "@/lib/utils";',
   'import { pluralize } from "@/lib/pluralize";',
-  'import type { ChangedFile } from "@shared/schemas";',
+  'import type { ChangedFile } from "@shigomori/contracts/schemas";',
   "",
   "// What the button says it will do.",
   "export function label(count: number, amending: boolean): string {",

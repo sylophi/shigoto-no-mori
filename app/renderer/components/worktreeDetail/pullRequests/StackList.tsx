@@ -8,7 +8,7 @@ import { GitBranch } from "lucide-react";
 import { describePullRequest } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
 import type { PullRequestStack } from "@shared/pullRequestStack";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { PullRequestTitleLink } from "./PullRequestIdentity";
 import { TONE_TEXT } from "./pullRequestShared";
 

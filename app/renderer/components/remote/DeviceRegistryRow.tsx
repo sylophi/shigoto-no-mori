@@ -17,9 +17,9 @@
 // list cannot offer.
 import { useState } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
-import type { TunnelState } from "@shared/ipc/modules/hub";
-import type { DeviceInfo } from "@shared/hub/protocol";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { TunnelState } from "@shigomori/contracts/modules/hub";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";

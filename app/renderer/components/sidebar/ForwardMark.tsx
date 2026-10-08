@@ -3,7 +3,7 @@
 // live tone, the mappings in the tooltip. Worn in the tree's rows and
 // the inbox's, beside the device and mirror marks.
 import { Cable } from "lucide-react";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useWorktreeForwardTip } from "@/hooks/remote/usePortForwards";

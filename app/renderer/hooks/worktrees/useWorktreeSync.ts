@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { SyncMove } from "@/lib/syncState";
 

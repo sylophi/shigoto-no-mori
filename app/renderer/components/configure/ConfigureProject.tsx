@@ -1,7 +1,7 @@
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { LoadFailure } from "@/components/ui/load-failure";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { ConfigureForm } from "./ConfigureForm";
 import { ConfigureShared } from "./ConfigureShared";
 import { ConfigureSkeleton } from "./ConfigureSkeleton";

@@ -1,5 +1,5 @@
 import { queryOptions, skipToken, useQuery } from "@tanstack/react-query";
-import type { ProjectIcon } from "@shared/schemas";
+import type { ProjectIcon } from "@shigomori/contracts/schemas";
 import type { HostScope } from "@/hooks/remote/useHostScope";
 import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
 import { queryKeysFor } from "@/lib/queryKeys";

@@ -7,7 +7,7 @@ export interface DeviceRow {
   account_id: string;
   name: string;
   platform: string;
-  // What the device reports itself as (shared/account/deviceIcon.ts),
+  // What the device reports itself as (packages/contracts/src/deviceIcon.ts),
   // sent with every enrollment, so never NULL
   // (hub/migrations/0004_device_kind_required.sql).
   icon: string;

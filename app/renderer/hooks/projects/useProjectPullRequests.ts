@@ -11,7 +11,7 @@ import {
   type Project,
   type PullRequest,
   type PullRequestDetail,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   isWorktreePullRequestKey,
   queryKeysFor,

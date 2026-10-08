@@ -3,7 +3,7 @@
 // custom folder), spelled by the same rule the location page and the
 // create itself use, and tildified against that device's home. Null
 // until the device's runtime paths and settings are read.
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { layoutInputsFor, worktreeBaseFor } from "@shared/git/worktreeLayout";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";

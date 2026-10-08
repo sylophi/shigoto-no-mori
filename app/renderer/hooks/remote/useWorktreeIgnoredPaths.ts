@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
+import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // The ignored files on a worktree, which a transfer leaves behind

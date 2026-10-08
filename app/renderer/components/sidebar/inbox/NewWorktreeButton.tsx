@@ -13,7 +13,7 @@ import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { deviceBadgeOf } from "../buildSidebarRows";
 import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";

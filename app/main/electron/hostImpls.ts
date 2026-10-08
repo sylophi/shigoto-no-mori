@@ -4,8 +4,8 @@
 // Electron-backed capability they need arrives through a setter here.
 // Must run before registerIpcHandlers so the first renderer call never
 // lands on a throwing default.
-import { runtimeContract } from "@shared/ipc/modules/runtime";
-import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { onGlobalConfigChange } from "@host/lib/config/global";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";

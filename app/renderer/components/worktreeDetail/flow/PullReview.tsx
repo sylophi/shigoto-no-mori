@@ -16,7 +16,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
-import type { Project, PullRequestDetail, Worktree } from "@shared/schemas";
+import type {
+  Project,
+  PullRequestDetail,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import {
   pullBranchCollision,
   pullFolderCollision,

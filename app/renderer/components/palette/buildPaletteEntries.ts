@@ -1,9 +1,9 @@
+import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import { rankByScore, scoreFields, scoreMatch } from "@/lib/fuzzyMatch";
-import { isCloneableRemote } from "@shared/cloneUrl";
 import { sanitizeBranchName } from "@shared/git/branches";
 import { isAnchoredPath } from "@shared/projectPaths";
 import { isHiddenByPrefix } from "@shared/sharedSettings";
@@ -12,7 +12,7 @@ import {
   type Project,
   type PullRequest,
   type Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   deviceBadgeOf,
   mirrorBadgeLookup,

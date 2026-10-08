@@ -1,11 +1,15 @@
-import type { CallDef, ContractModule, InvokeDef } from "./contract";
-import { decode, encode } from "./schema";
+import type {
+  CallDef,
+  ContractModule,
+  InvokeDef,
+} from "@shigomori/contracts/contract";
+import { decode, encode } from "@shigomori/contracts/codec";
 import type { HandlerContext, ServerTransport } from "./transport";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
   Handlers,
-} from "./types";
+} from "@shigomori/contracts/types";
 
 type RegisterContractOpts<Ctx = HandlerContext> = {
   // Gates OUTPUT validation only, never input parsing. Bindings pass a

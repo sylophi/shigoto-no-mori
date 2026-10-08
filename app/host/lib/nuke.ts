@@ -7,8 +7,8 @@
 // The original project repos on disk are untouched. We only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
-import type { NukeProgress, Project } from "@shared/schemas";
-import { errorMessageOf } from "@shared/errors";
+import type { NukeProgress, Project } from "@shigomori/contracts/schemas";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { forceRemoveViaCli } from "@host/ipc/cliDelegate";
 import { ensureDataDir } from "./bootstrap";
 import { invalidateGlobalConfigCache } from "./config/global";

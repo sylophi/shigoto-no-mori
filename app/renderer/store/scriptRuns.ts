@@ -20,14 +20,14 @@ import {
   type RunningScript,
   type ScriptEvent,
   scriptErrorLine,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { localDeviceId } from "@/lib/queryKeys";
 import { apiFor, onAccountLeft } from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
 import { assertNever } from "@/lib/utils";
 import type { RendererApi } from "@/window";
 import { scriptKey, type ScriptKey, type ScriptSlot } from "./scriptSlot";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { KeyedSubscribers } from "./keyedSubscribers";
 
 // Re-export the slot codec so existing importers from "@/store/scriptRuns"

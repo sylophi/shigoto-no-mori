@@ -59,8 +59,8 @@
 // slow periodic sweep as the backstop. Reconciles are coalesced per
 // session: one in flight, one queued.
 import * as Schema from "effect/Schema";
-import type { Project } from "@shared/schemas";
-import { errorMessageOf, isEntityGoneError } from "@shared/errors";
+import type { Project } from "@shigomori/contracts/schemas";
+import { errorMessageOf, isEntityGoneError } from "@shigomori/contracts/errors";
 import type { followDescription } from "@host/lib/sync/worktreeDescription";
 import {
   GitStateSchema,
@@ -70,9 +70,9 @@ import {
   MirrorApplyGitStateResultSchema,
   mirrorOnMirrorBranch,
   type MirrorStatus,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import { mirrorBranchFor, originalBranchOf } from "@shared/git/branches";
-import { SyncHasCommitsResultSchema } from "@shared/ipc/modules/sync";
+import { SyncHasCommitsResultSchema } from "@shigomori/contracts/modules/sync";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { findProjectOrThrow } from "@host/lib/projects";
 import { offerSource, withPeerSource } from "@host/lib/sync/sourceLink";

@@ -9,7 +9,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { CommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
-import type { ChangedFile } from "@shared/schemas";
+import type { ChangedFile } from "@shigomori/contracts/schemas";
 import { includedFiles } from "./changesControls";
 
 // Past this a summary is cut off in `git log --oneline`, on GitHub and

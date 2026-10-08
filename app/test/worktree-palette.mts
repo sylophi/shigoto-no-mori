@@ -35,7 +35,11 @@ import { matchPositions } from "@/lib/fuzzyMatch";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import type { Project, PullRequest, Worktree } from "@shared/schemas";
+import type {
+  Project,
+  PullRequest,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
 import { it } from "vitest";
 

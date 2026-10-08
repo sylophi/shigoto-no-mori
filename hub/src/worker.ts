@@ -34,7 +34,7 @@ import {
   TUNNEL_UNCONFIGURED_STATUS,
   type TunnelProvisionResponse,
   TunnelProvisionRequestSchema,
-} from "../../app/shared/hub/protocol.ts";
+} from "@shigomori/contracts/hubProtocol";
 import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,

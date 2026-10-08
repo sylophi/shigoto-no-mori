@@ -2,7 +2,7 @@ import {
   canRewriteCommits,
   type CommitSummary,
   type Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 // What may be done to the commit at `index` of a newest-first list:
 // amend it (HEAD only), or undo back to it. Undoing HEAD resets to the

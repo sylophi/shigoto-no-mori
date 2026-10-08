@@ -12,7 +12,10 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import { worktreeTitle } from "@/lib/worktreeTitle";
-import { worktreeLastActivityAt, type Project } from "@shared/schemas";
+import {
+  worktreeLastActivityAt,
+  type Project,
+} from "@shigomori/contracts/schemas";
 import type { PaletteEntry, PaletteProject } from "./buildPaletteEntries";
 
 // Everything the list can hold: the worktrees, the projects a query

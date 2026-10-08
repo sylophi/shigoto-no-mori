@@ -1,3 +1,4 @@
+import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import { useEffect, useState } from "react";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,6 @@ import {
   pullRequestFolderName,
 } from "@/lib/pullRequest";
 import {
-  sanitizeBranchForPath,
   sanitizeBranchName,
   sanitizeWorktreeNameInput,
   localBranchOf,
@@ -40,7 +40,7 @@ import {
   type Project,
   type PullRequestCandidate,
   type Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { PullRequestSource } from "./PullRequestPicker";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 import { cn } from "@/lib/utils";

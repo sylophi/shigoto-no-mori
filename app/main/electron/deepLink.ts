@@ -6,7 +6,7 @@
 // window, and the renderer takes the link once it can navigate
 // (renderer/hooks/ui/useDeepLinks.ts).
 import type { WebContents } from "electron";
-import { navContract } from "@shared/ipc/modules/nav";
+import { navContract } from "@shigomori/contracts/modules/nav";
 import { DEEP_LINK_HOST } from "@shared/packaging/rendererScheme.mts";
 import { broadcast } from "../ipc/register";
 import { rendererScheme } from "./clerk";

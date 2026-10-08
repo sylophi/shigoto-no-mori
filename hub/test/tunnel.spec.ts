@@ -6,13 +6,12 @@
 // instances), the tunnel calls ride a helper-made worker with the CF
 // stub injected.
 import * as Schema from "effect/Schema";
-import { only } from "../../app/shared/util/only.ts";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
   TUNNEL_UNCONFIGURED_STATUS,
   TunnelProvisionResponseSchema,
-} from "../../app/shared/hub/protocol.ts";
+} from "@shigomori/contracts/hubProtocol";
 import { sha256Hex } from "../src/crypto.ts";
 import type { Env } from "../src/env.ts";
 import {
@@ -180,8 +179,10 @@ describe("POST /tunnel", () => {
     );
     // Deterministic name: sm- plus 32 hex under the configured domain.
     expect(body.hostname).toMatch(/^sm-[0-9a-f]{32}\.sm\.example\.test$/);
-    const tunnel = only(stub.liveTunnels());
-    if (tunnel === undefined) throw new Error("one live tunnel expected");
+    const [tunnel, ...others] = stub.liveTunnels();
+    if (tunnel === undefined || others.length > 0) {
+      throw new Error("one live tunnel expected");
+    }
     expect(body.hostname).toBe(`${tunnel.name}.sm.example.test`);
     expect(body.connectorToken).toBe(`connector-token-for-${tunnel.id}`);
     // The remotely managed ingress fronts loopback ONLY, with the
@@ -236,8 +237,10 @@ describe("POST /tunnel", () => {
     expect(stub.liveTunnels()).toHaveLength(1);
     expect(stub.dnsRecords).toHaveLength(1);
     // The ingress now names the new port.
-    const tunnel = only(stub.liveTunnels());
-    if (tunnel === undefined) throw new Error("one live tunnel expected");
+    const [tunnel, ...others] = stub.liveTunnels();
+    if (tunnel === undefined || others.length > 0) {
+      throw new Error("one live tunnel expected");
+    }
     expect(stub.configs.get(tunnel.id)).toEqual({
       config: {
         ingress: [

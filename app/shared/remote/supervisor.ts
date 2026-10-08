@@ -18,6 +18,7 @@
 // (the renderer runtime forbids Math.random anyway), and time is read
 // through an injected clock so a test can advance it and assert the
 // ladder and the reset without sleeping real seconds.
+import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
   type DeviceConnection,
   RemoteConnectError,
@@ -39,13 +40,9 @@ export const STABLE_CONNECTION_MS = 30_000;
 // registry's "tunnel starting" note quotes the same figure.
 export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
 
-export type SupervisorStatus =
-  | { phase: "idle" }
-  | { phase: "connecting" }
-  | { phase: "connected"; remoteDeviceId: string; remoteAppVersion: string }
-  | { phase: "backoff"; attempt: number; delayMs: number }
-  | { phase: "blocked"; reason: BlockReason; message: string }
-  | { phase: "stopped" };
+// Defined by the hub contract, whose schema validates it on the
+// Electron wire.
+export type SupervisorStatus = HubStatus["socket"];
 
 // Opaque timer handle: a number in the browser, a Timeout object under
 // node. The supervisor only ever hands it back to clearTimeout.
@@ -97,7 +94,7 @@ export type ConnectFn = (
 // hub produces for every device at once and which recovers on its own.
 // "superseded" is another instance of this device taking the socket
 // over.
-type BlockReason = "revoked" | "superseded" | "refused";
+type BlockReason = Extract<SupervisorStatus, { phase: "blocked" }>["reason"];
 
 // The one block a device acts on by leaving the account.
 export function credentialRevoked(status: SupervisorStatus): boolean {

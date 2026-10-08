@@ -3,7 +3,7 @@ import { useBranches } from "@/hooks/git/useBranches";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useSwitchToPrimaryAndDeleteBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { localBranchOf } from "@shared/git/branches";
-import { isRealBranch, type Worktree } from "@shared/schemas";
+import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 
 // Primary-worktree analog of ClosedPullRequestBox's "Delete worktree":

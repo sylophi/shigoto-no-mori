@@ -1,6 +1,6 @@
 import { describePullRequest } from "@/lib/pullRequest";
 import type { StackPosition } from "@shared/pullRequestStack";
-import type { PullRequest } from "@shared/schemas";
+import type { PullRequest } from "@shigomori/contracts/schemas";
 import { StatusPill } from "./StatusPill";
 
 interface PullRequestPillProps {

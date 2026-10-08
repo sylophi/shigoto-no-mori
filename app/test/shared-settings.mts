@@ -46,7 +46,7 @@ import {
   MAX_SHARED_SETTING_ENTRIES,
   SharedSettingsDocSchema,
   type SharedSettingsDoc,
-} from "@shared/schemas/sharedSettings";
+} from "@shigomori/contracts/schemas/sharedSettings";
 import { initDataDirAt } from "@host/lib/util/paths";
 import {
   onSharedSettingsChange,

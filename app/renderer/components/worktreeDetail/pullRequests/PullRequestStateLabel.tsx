@@ -1,6 +1,6 @@
 import { describePullRequest } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
-import type { PullRequest } from "@shared/schemas";
+import type { PullRequest } from "@shigomori/contracts/schemas";
 import { STATE_LABEL, TONE_FILL, TONE_TEXT } from "./pullRequestShared";
 
 // The PR's state in its tone: as text in a row, or as a pill that

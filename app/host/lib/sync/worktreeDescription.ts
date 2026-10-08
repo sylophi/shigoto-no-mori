@@ -10,7 +10,7 @@
 import type {
   ShigomoriWorktreeData,
   WorktreeDescription,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   readWorktreeData,
   writeWorktreeDescription,

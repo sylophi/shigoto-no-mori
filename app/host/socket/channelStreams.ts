@@ -21,14 +21,16 @@
 // reset destroys it.
 import type { Duplex } from "node:stream";
 import {
-  CHANNEL_OPEN_NO_CHANNELS,
-  CHANNEL_OPEN_TAKEN,
-  CHANNEL_OPEN_TOO_MANY,
   type ChannelEndpoint,
   type ChannelHandle,
   MAX_CHANNELS_PER_CONNECTION,
 } from "@shared/ipc/socket/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
+import {
+  CHANNEL_OPEN_NO_CHANNELS,
+  CHANNEL_OPEN_TAKEN,
+  CHANNEL_OPEN_TOO_MANY,
+} from "@shigomori/contracts/channelRefusals";
 
 export type DuplexChannelOpts = {
   // Fires exactly once when the channel is gone for any reason: both

@@ -7,7 +7,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useProjectGitFetching } from "@/hooks/git/useProjectGitFetching";
 import { cn } from "@/lib/utils";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 
 // The page's one refresh, in the header's top row. It spins through
 // whatever the page is waiting on (a ref fetch, the worktree or branch

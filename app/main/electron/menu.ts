@@ -8,13 +8,13 @@ import {
   type MenuItemConstructorOptions,
   type BrowserWindow,
 } from "electron";
-import type { ContractModule } from "@shared/ipc/contract";
-import { navContract } from "@shared/ipc/modules/nav";
+import type { ContractModule } from "@shigomori/contracts/contract";
+import { navContract } from "@shigomori/contracts/modules/nav";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
-} from "@shared/ipc/types";
-import type { LaunchToolMenuEntry } from "@shared/schemas";
+} from "@shigomori/contracts/types";
+import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
 

@@ -12,7 +12,7 @@
 // back into the cache. An undefined patch value omits its key, matching
 // the store's omit-on-default serialization.
 import type { QueryClient } from "@tanstack/react-query";
-import type { ClientConfig } from "@shared/schemas";
+import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
 export async function mergeClientConfigWrite(

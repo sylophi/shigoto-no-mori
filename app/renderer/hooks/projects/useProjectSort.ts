@@ -5,7 +5,7 @@
 // order is stored as nothing. A hostless client's menu offers no
 // sort, so it stays on the manual order: the tree it draws is the
 // peers', which the merge orders.
-import type { ProjectSortMode } from "@shared/schemas";
+import type { ProjectSortMode } from "@shigomori/contracts/schemas";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
 
