@@ -18,7 +18,7 @@ export const warnTerrier = Effect.gen(function* () {
   );
 });
 
-const here = Effect.gen(function* () {
+export const here = Effect.gen(function* () {
   yield* warnTerrier;
   // A folder removed under the shell has no cwd, which reads as Go's ".".
   const cwd = yield* Effect.try(() => process.cwd()).pipe(

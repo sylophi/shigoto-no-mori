@@ -6,6 +6,7 @@ import * as Predicate from "effect/Predicate";
 import { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
+import { UnknownProject } from "./Registry.ts";
 import {
   DirtyWorktree,
   PullRequestOwnsDescription,
@@ -37,6 +38,7 @@ export const codeOf = (error: unknown): string | undefined => {
       ? "uncommitted-changes"
       : "status-unreadable";
   }
+  if (error instanceof UnknownProject) return "unknown-project";
   if (error instanceof UnknownWorktree) return "unknown-worktree";
   if (error instanceof PullRequestOwnsDescription) return "pull-request-open";
   // A tag, not the class: Landing imports this module.
@@ -49,6 +51,11 @@ export const codeOf = (error: unknown): string | undefined => {
   }
   return undefined;
 };
+
+// Whether the command line was what was wrong, which the terminal exits
+// 2 for: the error says so itself.
+export const isUsage = (error: unknown): boolean =>
+  Predicate.hasProperty(error, "usage") && error.usage === true;
 
 export const errorDocument = (error: unknown): ErrorDocument => {
   const code = codeOf(error);

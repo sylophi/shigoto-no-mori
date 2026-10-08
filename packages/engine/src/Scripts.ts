@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -77,6 +78,11 @@ export class Scripts extends Context.Service<
       projectId: string,
       arranged: ReadonlyArray<string>,
     ) => Effect.Effect<void>;
+    // The manager the folder's lockfile picks, none without a
+    // package.json.
+    readonly packageManager: (
+      dir: string,
+    ) => Effect.Effect<Option.Option<PackageManager>>;
     // The scripts put on the launch row by hand.
     readonly launchRow: (
       projectId: string,
@@ -278,6 +284,14 @@ const make = Effect.gen(function* () {
 
   return Scripts.of({
     list,
+    packageManager: (dir) =>
+      present(path.join(dir, "package.json")).pipe(
+        Effect.flatMap((found) =>
+          found
+            ? Effect.map(packageManager(dir), Option.some)
+            : Effect.succeed(Option.none()),
+        ),
+      ),
     recordRun,
     setSort,
     arrange,
