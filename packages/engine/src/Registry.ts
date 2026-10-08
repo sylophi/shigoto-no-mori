@@ -38,6 +38,12 @@ export class UnknownProject extends Schema.TaggedError<UnknownProject>()(
   "UnknownProject",
   { projectId: Schema.String },
 ) {
+  // The code a --json failure carries, which the app maps to an entity
+  // that is gone.
+  get jsonCode(): string {
+    return "unknown-project";
+  }
+
   override get message(): string {
     return `Unknown project: ${this.projectId}`;
   }
