@@ -215,7 +215,7 @@ function commandMatches(recorded: string, live: string): boolean {
 
 // The identity proof. A live pid says nothing on its own, so three
 // independent facts have to agree before the sweep signals anything:
-// the process leads its own group (spawnScript always detaches, and
+// the process leads its own group (a script's PTY child leads a session of its own, and
 // setsid survives an exec), it started when we recorded that it
 // started, and its command line still looks like the one we launched.
 function isSameProcess(

@@ -24,9 +24,10 @@ import { rendererDevServerAnswers } from "./lib/portsEnvFile.mts";
 // The launch and everything under it: pnpm does not forward a signal
 // to its children.
 function signalPidTree(root: number, signal: NodeJS.Signals): void {
-  const table = spawnSync("ps", ["-A", "-o", "pid=,ppid="], {
-    encoding: "utf8",
-  }).stdout;
+  const table =
+    spawnSync("ps", ["-A", "-o", "pid=,ppid="], {
+      encoding: "utf8",
+    }).stdout ?? "";
   for (const pid of [root, ...descendantsIn(table, root)]) {
     try {
       process.kill(pid, signal);

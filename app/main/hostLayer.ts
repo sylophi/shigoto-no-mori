@@ -66,7 +66,7 @@ const scripts = (hurried: () => boolean) =>
     "the scripts",
     Effect.suspend(() => {
       if (hurried()) {
-        return Effect.sync(() => signalAllScriptsBestEffort("SIGTERM"));
+        return Effect.sync(() => signalAllScriptsBestEffort());
       }
       return Effect.forEach(
         getInflightDeleteIds(),

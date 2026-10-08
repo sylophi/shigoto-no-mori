@@ -25,6 +25,7 @@ import { type IPty, spawn as spawnPty } from "node-pty";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as PromiseAdapter from "../util/promiseAdapter";
 import { envSetting } from "../../../shared/config.ts";
+import { log } from "@shared/log";
 import { signalTree, signalTreeBestEffort } from "./process";
 
 // No process could be started: a missing login shell, or a PTY that
@@ -141,14 +142,23 @@ const pty = Effect.fn("Pty.spawn")(function* (
   // whole tree is signaled through -pid.
   const child = yield* Effect.acquireRelease(
     Effect.try({
-      try: (): IPty =>
-        spawnPty(shell, [...shellArgs, opts.command], {
+      try: (): IPty => {
+        const spawned = spawnPty(shell, [...shellArgs, opts.command], {
           name: "xterm-256color",
           cols: opts.cols,
           rows: opts.rows,
           cwd: opts.cwd,
           env,
-        }),
+        });
+        // node-pty's type leaves the emitter out (the terminal has one
+        // of its own, not node's), so the method onError needs is
+        // checked for, not assumed.
+        if (!("on" in spawned) || typeof spawned.on !== "function") {
+          spawned.kill();
+          throw new Error("node-pty's terminal no longer emits events");
+        }
+        return spawned;
+      },
       catch: (cause) => new PtySpawnError({ shell, reason: "failed", cause }),
     }),
     (spawned) =>
@@ -164,7 +174,7 @@ const pty = Effect.fn("Pty.spawn")(function* (
         yield* signalTree(spawned.pid, "SIGKILL");
         if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
         yield* Effect.logWarning(
-          `[scripts] pid ${spawned.pid} survived SIGKILL, giving up on it`,
+          `[scripts] "${opts.command}" (pid ${spawned.pid}) survived SIGKILL, giving up on it`,
         );
       }),
   );
@@ -174,16 +184,9 @@ const pty = Effect.fn("Pty.spawn")(function* (
   child.onExit(({ exitCode, signal }) => {
     Deferred.doneUnsafe(exited, Exit.succeed({ exitCode, signal }));
   });
-  // node-pty's type leaves the emitter out (the terminal has one of its
-  // own, not node's), so the method is checked for, not assumed.
-  if (!("on" in child) || typeof child.on !== "function") {
-    return yield* new PtySpawnError({
-      shell,
-      reason: "failed",
-      cause: new Error("node-pty's terminal no longer emits events"),
-    });
-  }
-  const on = child.on.bind(child) as (
+  const on = (child as IPty & { on: (...args: never[]) => void }).on.bind(
+    child,
+  ) as (
     event: "error",
     listener: (error: NodeJS.ErrnoException) => void,
   ) => void;
@@ -238,11 +241,13 @@ const make = Effect.gen(function* () {
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Effect.onError(() => Scope.close(run, Exit.void)),
     );
-    const close = (given: Stopping) =>
-      Effect.suspend(() => {
-        stopping = given;
-        return Scope.close(run, Exit.void);
-      });
+    // The stopping is taken when close is called, not when its effect
+    // runs: a hurried quit's close reaches the run through the adapter
+    // a moment later, and the layer's own close may come first.
+    const close = (given: Stopping) => {
+      stopping = given;
+      return Scope.close(run, Exit.void);
+    };
     return { pty: handle, close };
   });
   return ScriptRuns.of({ open });
@@ -273,7 +278,14 @@ export function openRun(opts: SpawnOptions): {
       throw new Error("The app is still starting; try the script again.");
     },
   );
-  if (Result.isFailure(opened)) throw opened.failure;
+  if (Result.isFailure(opened)) {
+    if (opened.failure.reason === "failed") {
+      log.warn(
+        `[scripts] the PTY did not start: ${errorMessageOf(opened.failure.cause)}`,
+      );
+    }
+    throw opened.failure;
+  }
   const { pty: handle, close } = opened.success;
   return {
     pty: handle,

@@ -28,7 +28,7 @@ import {
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
 import * as Processes from "../util/processes";
-import { signalPidTree, signalTreeBestEffort } from "./process";
+import { signalPidTree } from "./process";
 import { openRun, type PtyHandle, UNKILLABLE_WAIT_MS } from "./pty";
 import { log } from "@shared/log";
 
@@ -814,15 +814,13 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
   await killMatching(() => true, "App quit", opts);
 }
 
-// Synchronous best-effort kill for every running script's tree. Used
-// by the update-install quit path, where we can't await the full kill
-// chain (that would block the handoff to the detached installer waiting
-// on our exit) but still want well-behaved scripts to clean up before
-// Electron tears the main process down.
-export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
+// One SIGTERM to every running script's tree and no waiting, for the
+// update-install quit path: the full kill chain would block the handoff
+// to the detached installer waiting on our exit, but well-behaved
+// scripts still get to clean up.
+export function signalAllScriptsBestEffort(): void {
   for (const record of runningScripts.values()) {
     if (record.exited) continue;
-    signalTreeBestEffort(record.pid, signal);
     record.close({ graceMs: 0, wait: false }).catch(() => {});
   }
 }
