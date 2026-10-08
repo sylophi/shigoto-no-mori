@@ -8,6 +8,7 @@ import * as Darwin from "./Darwin.ts";
 import type { Flavor } from "./flavor.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
+import * as Hygiene from "./Hygiene.ts";
 import * as Icons from "./Icons.ts";
 import * as Identity from "./Identity.ts";
 import * as Launchers from "./Launchers.ts";
@@ -30,6 +31,7 @@ export const engineLayer = (options: {
   readonly macfs: string;
 }) =>
   Landing.layer.pipe(
+    Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(
       Layer.mergeAll(
