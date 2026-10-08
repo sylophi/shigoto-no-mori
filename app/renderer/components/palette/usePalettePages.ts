@@ -24,6 +24,15 @@ export function usePalettePages(): PalettePage[] {
       icon: Radio,
       open: () => void navigate({ to: "/live" }),
     },
+    // A hostless client's account page is its home, the footer's
+    // Devices.
+    {
+      key: "page:account",
+      label: hasLocalHost ? ACCOUNT_SECTION.label : "Devices",
+      icon: hasLocalHost ? ACCOUNT_SECTION.icon : MonitorSmartphone,
+      aliases: [ACCOUNT_SECTION.label, "Devices"],
+      open: () => void navigate({ to: "/account" }),
+    },
   ];
   if (hasLocalHost) {
     pages.push(
@@ -34,27 +43,12 @@ export function usePalettePages(): PalettePage[] {
         open: () => void navigate({ to: "/" }),
       },
       {
-        key: "page:account",
-        label: ACCOUNT_SECTION.label,
-        icon: ACCOUNT_SECTION.icon,
-        aliases: ["Devices"],
-        open: () => void navigate({ to: "/account" }),
-      },
-      {
         key: "page:tidy",
         label: TIDY_SECTION.label,
         icon: TIDY_SECTION.icon,
         open: () => void navigate({ to: "/tidy" }),
       },
     );
-  } else {
-    pages.push({
-      key: "page:account",
-      label: "Devices",
-      icon: MonitorSmartphone,
-      aliases: [ACCOUNT_SECTION.label],
-      open: () => void navigate({ to: "/account" }),
-    });
   }
   for (const section of [...client, ...host]) {
     pages.push({

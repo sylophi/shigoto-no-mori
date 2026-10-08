@@ -585,16 +585,17 @@ interface ProjectGroup {
 // org or user account, keyed by host too (one name on two hosts is two
 // owners) and case-folded (hosts treat owner names that way). The host
 // is left off the label for github.com, where nearly every remote is.
-// Null when the project has no network remote, or its path has no
-// owner segment.
+// `repo` is the rest of the path, the repo's own name. Null when the
+// project has no network remote, or its path has no owner segment.
 export function ownerOf(
   project: Project,
-): { key: string; label: string } | null {
+): { key: string; label: string; repo: string } | null {
   const [host, owner, ...repo] = project.remote?.split("/") ?? [];
   if (!host || !owner || repo.length === 0) return null;
   return {
     key: `${host}/${owner}`.toLowerCase(),
     label: host === "github.com" ? owner : `${host}/${owner}`,
+    repo: repo.join("/"),
   };
 }
 

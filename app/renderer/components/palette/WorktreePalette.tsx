@@ -11,7 +11,7 @@ import {
 import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { DeviceBadge, useDeviceBadges } from "@/components/sidebar/DeviceBadge";
-import { ownerOf, worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
+import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { rowDeviceId } from "@/lib/routePaths";
 import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
@@ -38,8 +38,9 @@ import {
   initialPaletteKey,
   isProjectSource,
   newBranchName,
-  leadingPageCount,
-  leadingProjectCount,
+  leadingCount,
+  pageFields,
+  projectNames,
   rankPaletteEntries,
   rankPalettePages,
   rankPaletteProjects,
@@ -200,14 +201,19 @@ function PaletteDialog({
       key: item.key,
       item,
     }));
-    const leading = leadingProjectCount(listQuery, named, shown);
+    const leading = leadingCount(
+      listQuery,
+      named,
+      (item) => projectNames(item.project),
+      shown,
+    );
     const namedPages = rankPalettePages(listQuery, pages);
     const pageRows: PaletteRow[] = namedPages.map((page) => ({
       kind: "page",
       key: page.key,
       page,
     }));
-    const leadingPages = leadingPageCount(listQuery, namedPages, shown);
+    const leadingPages = leadingCount(listQuery, namedPages, pageFields, shown);
     const rows = [
       ...projectRows.slice(0, leading),
       ...pageRows.slice(0, leadingPages),
@@ -220,18 +226,15 @@ function PaletteDialog({
     const [target, ...others] = hasLocalHost
       ? createTargets(projects, shown, entries, pageProjectId)
       : [];
-    // A project's, owner's, page's or device's own name is a lookup,
-    // not a branch.
+    // A name a project, page or device answers to is a lookup, not a
+    // branch.
     const isQuery = (name: string | undefined) =>
       name?.toLowerCase() === listQuery.toLowerCase();
     if (
       branch &&
       target &&
-      !named.some(
-        (item) =>
-          isQuery(item.project.name) || isQuery(ownerOf(item.project)?.label),
-      ) &&
-      !namedPages.some((page) => isQuery(page.label) || isQuery(page.parent)) &&
+      !named.some((item) => projectNames(item.project).some(isQuery)) &&
+      !namedPages.some((page) => pageFields(page).some(isQuery)) &&
       !entries.some(
         (e) =>
           (!e.device && e.worktree.branch === branch) ||

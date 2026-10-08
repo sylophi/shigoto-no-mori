@@ -190,7 +190,7 @@ const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
   worktree.name,
   `${project.name} ${worktree.branch}`,
   device?.label ?? "",
-  ownerOf(project)?.label ?? "",
+  ...ownerNames(project),
   pr ? `#${pr.number}` : "",
   pr?.title ?? "",
 ];
@@ -228,12 +228,14 @@ export function projectLead(
 
 // What a project answers to: its name, and its remote's owner (the
 // sidebar's owner headers, ownerOf), alone or ahead of the repo
-// ("sylophi/web").
-function projectFields(project: Project): string[] {
+// ("sylophi/web"). Its worktrees answer to the owner too.
+export function projectNames(project: Project): string[] {
+  return [project.name, ...ownerNames(project)];
+}
+
+function ownerNames(project: Project): string[] {
   const owner = ownerOf(project);
-  if (!owner) return [project.name];
-  const repo = project.remote?.split("/").slice(2).join("/");
-  return [project.name, owner.label, `${owner.label}/${repo}`];
+  return owner ? [owner.label, `${owner.label}/${owner.repo}`] : [];
 }
 
 // The few projects the query names, best first, and any it names as
@@ -299,44 +301,23 @@ export function rankPaletteProjects(
       deviceCount: devices.size,
     }),
   );
-  const ranked = rankByScore(query, items, (p) => projectFields(p.project));
+  const score = (p: PaletteProject) =>
+    scoreFields(query, projectNames(p.project));
+  const ranked = rankByScore(query, items, (p) => projectNames(p.project));
   const last = ranked[PROJECTS_SHOWN - 1];
-  if (!last) return [...ranked];
-  const floor = scoreFields(query, projectFields(last.project));
-  return ranked.filter(
-    (p, i) =>
-      i < PROJECTS_SHOWN ||
-      scoreFields(query, projectFields(p.project)) >= floor,
-  );
+  const floor = last ? score(last) : 0;
+  return ranked.filter((p) => score(p) >= floor);
 }
 
 const PROJECTS_SHOWN = 3;
 
-// How many of the ranked projects go above the worktrees: those the
-// query names at least as well as the top worktree, so typing a
-// project's name finds the project, not its first worktree, and a
-// project the letters only scatter through stays under a worktree that
-// spells them. A worktree's "project branch" field is the longer, so a
-// project name matching in both leads.
-export function leadingProjectCount(
-  query: string,
-  projects: readonly PaletteProject[],
-  shown: readonly PaletteEntry[],
-): number {
-  return leadingCount(query, projects, (p) => projectFields(p.project), shown);
-}
-
-// The same for the pages: "live" finds the page ahead of a worktree
-// whose letters merely scatter it.
-export function leadingPageCount(
-  query: string,
-  pages: readonly PalettePage[],
-  shown: readonly PaletteEntry[],
-): number {
-  return leadingCount(query, pages, pageFields, shown);
-}
-
-function leadingCount<T>(
+// How many of the ranked projects or pages go above the worktrees:
+// those the query names at least as well as the top worktree, so
+// typing a project's name finds the project, not its first worktree,
+// and a project the letters only scatter through stays under a
+// worktree that spells them. A worktree's "project branch" field is
+// the longer, so a project name matching in both leads.
+export function leadingCount<T>(
   query: string,
   ranked: readonly T[],
   fields: (item: T) => readonly string[],
@@ -365,7 +346,7 @@ export interface PalettePage {
   open: () => void;
 }
 
-const pageFields = ({ label, parent, aliases = [] }: PalettePage) => [
+export const pageFields = ({ label, parent, aliases = [] }: PalettePage) => [
   label,
   ...aliases,
   parent ? `${parent} ${label}` : "",

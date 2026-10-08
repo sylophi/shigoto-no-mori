@@ -30,8 +30,9 @@ import {
   initialPaletteKey,
   isProjectSource,
   newBranchName,
-  leadingPageCount,
-  leadingProjectCount,
+  leadingCount,
+  pageFields,
+  projectNames,
   rankPaletteEntries,
   rankPalettePages,
   rankPaletteProjects,
@@ -409,10 +410,16 @@ try {
     });
     const shown = rankPaletteEntries("grove", list);
     assert.deepEqual(keys(shown), [local("wick")], "its worktrees");
+    assert.deepEqual(
+      keys(rankPaletteEntries("grove/lantern", list)),
+      [local("wick")],
+      "and by its repo",
+    );
     assert.equal(
-      leadingProjectCount(
+      leadingCount(
         "grove",
         rankPaletteProjects("grove", list, [forest, grove], [peerForest]),
+        (item) => projectNames(item.project),
         shown,
       ),
       1,
@@ -423,9 +430,10 @@ try {
   await proof.check("projects lead when the query names one best", () => {
     const list = entries();
     const leading = (query: string, projects = [forest, lantern]) =>
-      leadingProjectCount(
+      leadingCount(
         query,
         rankPaletteProjects(query, list, projects, [peerForest]),
+        (item) => projectNames(item.project),
         rankPaletteEntries(query, list),
       );
     assert.equal(leading("forest"), 1, "its name");
@@ -462,9 +470,10 @@ try {
     assert.equal(named("settings gen")[0], "General");
     const list = entries();
     const leading = (query: string) =>
-      leadingPageCount(
+      leadingCount(
         query,
         rankPalettePages(query, pages),
+        pageFields,
         rankPaletteEntries(query, list),
       );
     assert.equal(leading("live"), 1, "its name");
