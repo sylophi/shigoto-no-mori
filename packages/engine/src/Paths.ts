@@ -42,6 +42,9 @@ export class Paths extends Context.Service<
     // The flavor's name for the data dir (.sm, .smd), which a managed
     // root on a project's own drive is named after.
     readonly dataDirName: string;
+    // The terminal command's name (sm, smd), which messages that point
+    // at a command spell.
+    readonly binaryName: string;
     // The store's database file, in the data dir.
     readonly store: string;
   }
@@ -155,6 +158,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     dataDir: resolved.dataDir,
     dataDirSource: resolved.source,
     dataDirName: names.dataDir,
+    binaryName: names.binaryName,
     store: path.join(resolved.dataDir, "store.db"),
   });
 });

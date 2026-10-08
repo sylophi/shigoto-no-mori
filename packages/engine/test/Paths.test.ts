@@ -42,6 +42,7 @@ it("defaults to the flavor's folder in the home directory", async () => {
   assert.equal(paths.dataDir, join(home, ".sm"));
   assert.equal(paths.dataDirSource, "default");
   assert.equal(paths.store, join(home, ".sm", "store.db"));
+  assert.equal(paths.binaryName, "sm");
 });
 
 it("takes SHIGOMORI_DATA_DIR over everything, home-expanded", async () => {

@@ -9,8 +9,10 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
+import * as Icons from "../src/Icons.ts";
 import * as Launchers from "../src/Launchers.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Scripts from "../src/Scripts.ts";
@@ -301,9 +303,16 @@ describe("projects config writes", () => {
   });
 });
 
+// The Go sm still works out an accent hue from the icon, which the
+// engine drops (V3.md, decision 12).
+const withoutHue = (doc: unknown) =>
+  (doc as Record<string, unknown>[]).map((row) =>
+    Object.assign({}, row, { hue: null }),
+  );
+
 describe("projects list", () => {
   const list = Effect.service(Registry.Registry).pipe(
-    Effect.flatMap((registry) => registry.rows),
+    Effect.flatMap((registry) => registry.rows()),
   );
 
   it("lists in the manual order, with paths, identities, remotes and use", async () => {
@@ -326,7 +335,7 @@ describe("projects list", () => {
       projectOrder: [beta, `${box.home}/elsewhere`, alpha],
     });
     box.write("state.json", { projectUseLog: { A: [1000, recent], G: [5] } });
-    await same(["projects", "list"], list);
+    await same(["projects", "list"], list, withoutHue);
   });
 
   // The scenarios the repo-identity fixture pins, each repo built with
@@ -381,11 +390,57 @@ describe("projects list", () => {
         path,
       })),
     });
-    await same(["projects", "list"], list);
+    await same(["projects", "list"], list, withoutHue);
     const rows = (await box.engine(list)) as { identity: string | null }[];
     assert.deepEqual(
       rows.map((row) => row.identity),
       checks.map(({ expected }) => expected),
+    );
+  });
+
+  it("finds each project's icon: conventional files, package roots, icon links", async () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#e33"/></svg>';
+    const atRoot = box.repo("at-root", { "public/favicon.svg": svg });
+    const inPackage = box.repo("in-package", {
+      "package.json": "{}",
+      "web/package.json": "{}",
+      "web/assets/icon.svg": svg,
+    });
+    const linked = box.repo("linked", {
+      "index.html": '<link rel="icon" href="/brand/mark.svg?v=2">',
+      "public/brand/mark.svg": svg,
+    });
+    const ignored = box.repo("ignored", {
+      ".gitignore": "dist\n",
+      "dist/favicon.svg": svg,
+    });
+    const none = box.repo("none");
+    box.write("registry.json", {
+      projects: [atRoot, inPackage, linked, ignored, none].map(
+        (path, index) => ({ id: `P${index}`, name: `p${index}`, path }),
+      ),
+    });
+    await same(["projects", "list"], list, withoutHue);
+    const rows = (await box.engine(list)) as {
+      icon: { path: string } | null;
+    }[];
+    assert.deepEqual(
+      rows.map(({ icon }) => icon?.path.slice(box.home.length) ?? null),
+      [
+        "/at-root/public/favicon.svg",
+        "/in-package/web/assets/icon.svg",
+        "/linked/public/brand/mark.svg",
+        null,
+        null,
+      ],
+    );
+    await same(
+      ["projects", "icon", "-p", "p2"],
+      Effect.service(Icons.Icons).pipe(
+        Effect.flatMap((icons) => icons.bytes(linked)),
+        Effect.map(Option.getOrNull),
+      ),
     );
   });
 });
