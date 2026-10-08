@@ -48,6 +48,11 @@ pre-commit:
           - name: engine
             glob: "{packages/engine/**,packages/contracts/**,macfs/**,cli/**,app/shared/fixtures/git-log.json}"
             run: pnpm run check:engine
+          # The terminal binary, built and run beside the Go sm
+          # (packages/cli/README.md).
+          - name: cli
+            glob: "{packages/cli/**,packages/engine/src/**,packages/contracts/**,cli/**}"
+            run: pnpm run check:cli
           - name: go-test
             glob: "{cli/**,app/shared/fixtures/git-log.json}"
             run: go test -C cli ./...

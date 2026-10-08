@@ -2,5 +2,22 @@
   "name": "@shigomori/cli",
   "private": true,
   "version": "0.0.0",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "typecheck": "$(effect-tsgo get-exe-path)",
+    "build": "node build.mts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/sql-sqlite-bun": "catalog:",
+    "@shigomori/engine": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
 }

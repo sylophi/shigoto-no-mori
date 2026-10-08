@@ -35,6 +35,10 @@
     "packages/contracts": {
       "includeEntryExports": true,
     },
+    "packages/cli": {
+      // The entrypoint Bun compiles.
+      "entry": ["src/main.ts"],
+    },
     "packages/engine": {
       // Run by path from the store's test, in a process of its own.
       "entry": ["test/fixtures/*.ts"],

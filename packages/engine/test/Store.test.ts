@@ -19,6 +19,7 @@ import { afterEach, beforeEach, it } from "vitest";
 import { StoreImportError } from "../src/migrations/importJson.ts";
 import * as Paths from "../src/Paths.ts";
 import * as Store from "../src/Store.ts";
+import { nodeStore } from "./lib/nodeStore.ts";
 
 const execFileP = promisify(execFile);
 
@@ -37,7 +38,7 @@ const write = (file: string, value: unknown) => {
 };
 
 const storeLayer = (dir: string) =>
-  Store.layer.pipe(
+  nodeStore.pipe(
     Layer.provide(Paths.layer("prod")),
     Layer.provide(NodeServices.layer),
     Layer.provide(
