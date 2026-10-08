@@ -112,24 +112,19 @@ async function main() {
 
       const changes: string[] = [];
       let projects = [{ id: "p1", name: "repo", path: repo }];
-      // (Re)start the watcher over the sandbox and let the platform
-      // watcher settle before producing events. On macOS a new watch is
-      // handed the writes made just before it opened (here the setup's
-      // commit and worktree add), so the settle outlasts a debounce and
-      // drops the ping those raise.
-      const restart = async (suppressed = false) => {
-        stopGitWatcher();
-        startGitWatcher({
-          onChange: (projectId) => changes.push(projectId),
-          suppressed: () => suppressed,
-          projects: () => projects,
-        });
-        const before = changes.length;
-        await delay(500);
-        changes.length = before;
-      };
+      let suppressed = false;
+      startGitWatcher({
+        onChange: (projectId) => changes.push(projectId),
+        suppressed: () => suppressed,
+        projects: () => projects,
+      });
       track(() => stopGitWatcher());
-      await restart();
+      // Let the platform watcher settle before producing events. On
+      // macOS a new watch is handed the writes made just before it
+      // opened (the setup's commit and worktree add), so the settle
+      // outlasts a debounce and drops the ping those raise.
+      await delay(500);
+      changes.length = 0;
 
       // Noise first: status refreshes, a working-tree edit, and the
       // objects a `git add` writes, none of which may ping.
@@ -163,7 +158,7 @@ async function main() {
       assert.deepEqual(changes, ["p1", "p1", "p1"]);
 
       // Suppressed events (a running sm CLI child) never ping.
-      await restart(true);
+      suppressed = true;
       writeFileSync(join(worktree, "c.txt"), "three\n");
       git(worktree, "add", "c.txt");
       git(worktree, "commit", "-q", "-m", "three");
@@ -172,7 +167,7 @@ async function main() {
 
       // The project leaves the registry: its watch closes and a later
       // commit is not observed.
-      await restart();
+      suppressed = false;
       projects = [];
       reconcileGitWatchers();
       writeFileSync(join(worktree, "d.txt"), "four\n");

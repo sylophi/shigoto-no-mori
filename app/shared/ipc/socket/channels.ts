@@ -147,6 +147,8 @@ export type ChannelEndpoint = {
   // The peer reset the channel (or the socket died). Both directions
   // are over and the channel is gone.
   onReset(): void;
+  // Both directions ended cleanly and the channel is gone.
+  onComplete?(): void;
   // The peer's credit let a paused source continue: every queued byte
   // has been sent, so the source may resume.
   onWritable(): void;
@@ -246,7 +248,9 @@ export function createChannelMux(deps: {
 
   // Both directions ended cleanly: the channel is complete.
   function maybeComplete(channelId: string, channel: Channel): void {
-    if (channel.sentEnd && channel.receivedEnd) remove(channelId, channel);
+    if (!channel.sentEnd || !channel.receivedEnd) return;
+    remove(channelId, channel);
+    channel.endpoint.onComplete?.();
   }
 
   function flush(channelId: string, channel: Channel): void {
@@ -376,10 +380,8 @@ export function createChannelMux(deps: {
         case CHANNEL_FRAME_END:
           if (channel.receivedEnd) return false;
           channel.receivedEnd = true;
-          // Completed first, so an endpoint that already ended its own
-          // direction reads the handle closed from inside onEnd.
-          maybeComplete(frame.channelId, channel);
           channel.endpoint.onEnd();
+          maybeComplete(frame.channelId, channel);
           return true;
         case CHANNEL_FRAME_RESET:
           remove(frame.channelId, channel);
