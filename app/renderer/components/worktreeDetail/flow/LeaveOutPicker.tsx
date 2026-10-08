@@ -64,7 +64,7 @@ export function browseWorktree(worktree: {
   return {
     rootPath: worktree.path,
     useListing: (relative) =>
-      useWorktreeFolder(worktree.projectId, worktree.id, relative),
+      useWorktreeFolder(worktree.projectId, worktree.id, relative, true),
     emptyRootLabel: "The worktree is empty.",
   };
 }

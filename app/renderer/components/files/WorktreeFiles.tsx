@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
-import { Files, RotateCw } from "lucide-react";
+import { EyeOff, Files, RotateCw } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 import { BackButton } from "@/components/ui/back-button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ChipButton } from "@/components/ui/chip-button";
+import { IconButton } from "@/components/ui/icon-button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -16,11 +17,15 @@ import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { peerFilesHiddenNote } from "@/lib/commandAccessCopy";
+import { readStored, writeStored } from "@/lib/localStorage";
 import { withMember } from "@/lib/toggleSet";
 import type { Worktree } from "@shared/schemas";
 import { ancestorsOf, FileTree } from "./FileTree";
 import { FileViewer } from "./FileViewer";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+
+// Kept across worktrees and launches, like the diff's line wrap.
+const HIDE_IGNORED_STORAGE_KEY = "files.hideIgnored";
 
 export function WorktreeFiles() {
   const { worktree, goBack, missing } = useRouteWorktree();
@@ -56,6 +61,14 @@ function FilesView({
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(selected === null ? [] : ancestorsOf(selected)),
   );
+  const [hideIgnored, setHideIgnored] = useState(
+    () => readStored(HIDE_IGNORED_STORAGE_KEY) !== "false",
+  );
+  const toggleHideIgnored = () => {
+    const next = !hideIgnored;
+    setHideIgnored(next);
+    writeStored(HIDE_IGNORED_STORAGE_KEY, String(next));
+  };
   const phone = usePhoneLayout();
   const backLabel = useWorktreeName(worktree);
   const [treeSheetOpen, setTreeSheetOpen] = useState(false);
@@ -82,9 +95,23 @@ function FilesView({
     worktreeId,
     selectedPath: selected,
     expanded,
+    hideIgnored,
     onToggleFolder: toggleFolder,
     onSelectFile: selectFile,
   };
+  // Beside the tree: the sidebar's back row, or the header on a phone,
+  // which has no sidebar.
+  const hideIgnoredToggle = (
+    <SimpleTooltip tip="Hide ignored files">
+      <IconButton
+        onClick={toggleHideIgnored}
+        aria-pressed={hideIgnored}
+        aria-label="Hide ignored files"
+      >
+        <EyeOff aria-hidden className="size-4" />
+      </IconButton>
+    </SimpleTooltip>
+  );
   // Reveal is this machine's Finder, so only a local page offers it.
   const viewer = selected !== null && (
     <FileViewer
@@ -97,7 +124,10 @@ function FilesView({
 
   return (
     <div className="flex h-full flex-col">
-      <SidebarTakeover back={{ label: backLabel, onClick: onBack }}>
+      <SidebarTakeover
+        back={{ label: backLabel, onClick: onBack }}
+        actions={canCommand && hideIgnoredToggle}
+      >
         {canCommand && <FileTree {...treeProps} className="min-h-0 flex-1" />}
       </SidebarTakeover>
       <header
@@ -127,6 +157,7 @@ function FilesView({
                   <Files aria-hidden className="size-3.5" />
                 </ChipButton>
               )}
+              {phone && hideIgnoredToggle}
               <ChipButton
                 onClick={refresh}
                 aria-label="Refresh files"

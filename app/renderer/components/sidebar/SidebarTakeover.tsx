@@ -44,14 +44,17 @@ export function SidebarTakeoverSlot() {
 
 // The page's half. The tree is gone while this is up, so the way out
 // is the first row. It spans the row like the rows below it, so the
-// whole width is the target and not just the word. The list arrives
+// whole width is the target and not just the word, less what `actions`
+// (the list's own controls) take at its end. The list arrives
 // from the right, a step in. Its box passes the slot's flex column on,
 // so a list sized with flex-1 still fills it.
 export function SidebarTakeover({
   back,
+  actions,
   children,
 }: {
   back: { label: string; onClick: () => void };
+  actions?: ReactNode;
   children?: ReactNode;
 }) {
   const phone = usePhoneLayout();
@@ -64,12 +67,13 @@ export function SidebarTakeover({
   if (phone || !target) return null;
   return createPortal(
     <div className={cn("flex min-h-0 flex-1 flex-col", ARRIVE_FROM.right)}>
-      <div className="px-2 pb-1">
+      <div className="flex items-center gap-1 px-2 pb-1">
         <BackButton
           label={back.label}
           onClick={back.onClick}
-          className="ml-0 w-full justify-start"
+          className="ml-0 min-w-0 flex-1 justify-start"
         />
+        {actions}
       </div>
       {children}
     </div>,
