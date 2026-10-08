@@ -21,6 +21,7 @@ import {
   useStashChanges,
 } from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
+import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
 import { Kbd } from "@/components/ui/kbd";
 import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
+import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { BranchBar } from "./BranchBar";
 import {
   changedFilePaths,
@@ -123,7 +125,17 @@ function ChangesView({
   // requested amend only takes effect while that holds (a push from
   // another window ends it).
   const lastCommit = worktree.recentCommits[0];
-  const rewrite = commitRewriteAt(worktree, worktree.recentCommits, 0);
+  const { data: history } = useBranchHistory(
+    projectId,
+    worktreeId,
+    lastCommit?.hash,
+  );
+  const rewrite = commitRewriteAt(
+    worktree,
+    worktree.recentCommits,
+    0,
+    new Map(history?.merges.map((m) => [m.hash, m.firstParent])),
+  );
   const amending = amendRequested && rewrite.canAmend;
   const busy =
     commit.isPending ||
@@ -299,7 +311,7 @@ function ChangesView({
           onAmend={() => setAmending(true)}
           onUndo={() => {
             const u = rewrite.undo;
-            if (u) undo.undoTo(u.target, u.count, u.head);
+            if (u) undo.undoTo(u);
           }}
         />
       )}
@@ -346,6 +358,7 @@ function ChangesView({
         )
       }
       changes={controls}
+      sidebarActions={<MergeButton worktree={worktree} />}
       renderSidebar={(fileList) => (
         <GitPageSidebar worktree={worktree} tab="changes" changes={fileList} />
       )}

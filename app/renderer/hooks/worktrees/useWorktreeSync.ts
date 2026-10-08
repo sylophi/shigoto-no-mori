@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Worktree } from "@shared/schemas";
+import type { MergeBranchResult, Worktree } from "@shared/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { SyncMove } from "@/lib/syncState";
 
@@ -74,6 +74,26 @@ export const useSyncWithPrimaryWorktree = () =>
     "Couldn't sync from primary",
     true,
   );
+// The split with the upstream merged, stopping on its conflicts.
+export function useMergeUpstreamWorktree() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<MergeBranchResult, Error, SyncWorktreeInput>({
+    mutationFn: (input) => api.worktrees.mergeUpstream(input),
+    onSuccess: (_data, vars) => {
+      for (const key of [
+        keys.worktrees(vars.projectId),
+        keys.worktreeDiff(vars.projectId, vars.worktreeId),
+        keys.worktreeChanges(vars.projectId, vars.worktreeId),
+        keys.worktreeOperation(vars.projectId, vars.worktreeId),
+      ]) {
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
+    },
+    meta: { errorTitle: "Couldn't merge" },
+  });
+}
+
 export const useMergePrimaryWorktree = () =>
   useSyncMutation(
     (api, i) => api.worktrees.mergePrimary(i),

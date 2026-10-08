@@ -369,7 +369,10 @@ function isAncestor(
 // caller to pin where HEAD must still be. Anything committed since
 // makes it a different branch and the redo is refused. Refused across a
 // merge too, since soft-resetting past one stages the whole other side
-// as edits, which is nothing anyone means by "undo".
+// as edits, which is nothing anyone means by "undo". A merge on top,
+// undone to its first parent, comes off whole instead (`reset --keep`,
+// which refuses rather than lose a local edit), and its redo puts it
+// back.
 //
 // Returns where HEAD was, for the redo.
 export function resetSoft(
@@ -396,6 +399,22 @@ export function resetSoft(
       throw new Error("That commit isn't on this branch's history.");
     }
     const [older, newer] = backwards ? [target, head] : [head, target];
+    // One merge, stepped over to its first parent and back: the merge
+    // comes off (or goes back on) whole.
+    const firstParent = await verifyRev(worktreePath, `${newer}^1`).catch(
+      () => undefined,
+    );
+    const wholeMerge =
+      firstParent !== undefined &&
+      (await verifyRev(worktreePath, older)) === firstParent &&
+      (await verifyRev(worktreePath, `${newer}^2`).then(
+        () => true,
+        () => false,
+      ));
+    if (wholeMerge) {
+      await run(worktreePath, ["reset", "--keep", "--end-of-options", target]);
+      return head;
+    }
     const merges = (
       await run(worktreePath, [
         "rev-list",

@@ -15,16 +15,17 @@ const STOPPED: Record<string, string> = {
   rebase: "Rebase",
   "cherry-pick": "Cherry-pick",
   revert: "Revert",
+  squash: "Squash",
   "git am": "git am",
   bisect: "Bisect",
   "cherry-pick or revert": "Cherry-pick",
 };
 
-// A merge, rebase, cherry-pick or revert the worktree is stopped in,
-// from the app or a terminal, or conflicts a stash left behind. Shown on
-// the worktree page's Git section, where Resolve leads to the Git page,
-// and atop the Git page's Changes tab, where the conflicted files are
-// settled. Once none is left, the operation can be continued. Nothing
+// A merge, rebase, squash, cherry-pick or revert the worktree is
+// stopped in, from the app or a terminal, or conflicts a stash left
+// behind. Shown on the worktree page's Git section, where Resolve leads
+// to the Git page, and atop the Git page's Changes tab, where the
+// conflicted files are settled. Once none is left, the operation can be continued. Nothing
 // while the worktree is in none.
 export function OperationBanner({
   worktree,

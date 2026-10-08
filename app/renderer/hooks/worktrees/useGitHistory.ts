@@ -4,9 +4,19 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { GitOperationState, StashEntry, Worktree } from "@shared/schemas";
+import type {
+  GitOperationState,
+  MergeBranchResult,
+  IntegrateMethod,
+  MergePreview,
+  StashEntry,
+  Worktree,
+} from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useWorkingTreeMutation } from "./useWorktreeChanges";
+import {
+  invalidateWorkingTree,
+  useWorkingTreeMutation,
+} from "./useWorktreeChanges";
 
 type Scope = { projectId: string; worktreeId: string };
 
@@ -182,4 +192,40 @@ export function useAbortOperation() {
     (worktree) => worktree,
     "Couldn't abort",
   );
+}
+
+// How the worktree's branch and `ref` stand, for the merge dialog. A
+// ref that names nothing is the dialog's to say, not a toast's.
+export function useMergePreview(worktree: Worktree, ref: string) {
+  const { api, keys } = useHostScope();
+  const { projectId, id: worktreeId } = worktree;
+  return useQuery<MergePreview>({
+    queryKey: keys.mergePreview(
+      projectId,
+      worktreeId,
+      ref,
+      worktree.recentCommits[0]?.hash,
+    ),
+    queryFn: ref
+      ? () => api.worktrees.mergePreview({ projectId, worktreeId, ref })
+      : skipToken,
+    retry: false,
+    meta: { silentError: true },
+  });
+}
+
+// The dialog says a failure in place, so no toast.
+export function useMergeBranch() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<
+    MergeBranchResult,
+    Error,
+    Scope & { ref: string; method: IntegrateMethod; message?: string }
+  >({
+    mutationFn: (input) => api.worktrees.mergeBranch(input),
+    onSuccess: (data, vars) =>
+      invalidateWorkingTree(queryClient, keys, vars, data.worktree),
+    meta: { silentError: true },
+  });
 }

@@ -211,10 +211,7 @@ export function CommitMenuItems({
         </DropdownMenuItem>
       )}
       {undo && (
-        <DropdownMenuItem
-          disabled={busy}
-          onClick={() => actions.undoTo(undo.target, undo.count, undo.head)}
-        >
+        <DropdownMenuItem disabled={busy} onClick={() => actions.undoTo(undo)}>
           <Undo2 />
           {canAmend
             ? "Undo this commit"

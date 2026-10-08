@@ -108,13 +108,14 @@ function BranchCommits({
   const own = history.commits;
   const base = history.base;
   const unpushed = new Set(history.unpushed);
+  const merges = new Map(history.merges.map((m) => [m.hash, m.firstParent]));
   // Past what the history read holds: past a branch longer than the
   // read, from its oldest commit shown, else from where the branch left
   // the primary branch. Without one (the primary checkout), only when
   // there is more than the read held.
   const earlierFrom = history.more ? own.at(-1)?.hash : base?.hash;
   const split = history.unpushed.length > 0 && history.incoming.length > 0;
-  const props = { worktree, history, unpushed, actions };
+  const props = { worktree, history, unpushed, merges, actions };
 
   return (
     <>
@@ -162,6 +163,7 @@ type RowsProps = {
   worktree: Worktree;
   history: BranchHistory;
   unpushed: ReadonlySet<string>;
+  merges: ReadonlyMap<string, string>;
   actions: CommitActions;
 };
 
@@ -181,7 +183,7 @@ function remoteName(worktree: Worktree, upstream: string | null): string {
 // began. Where the commits the remote lacks aren't the newest run (a
 // merge brought older ones in), the remote's line sits on top and those
 // rows carry a mark of their own.
-function LineRows({ worktree, history, unpushed, actions }: RowsProps) {
+function LineRows({ worktree, history, unpushed, merges, actions }: RowsProps) {
   const own = history.commits;
   const state = deriveRemoteSyncState(worktree);
   const pill = <WorktreeSyncPill worktree={worktree} compact />;
@@ -237,7 +239,7 @@ function LineRows({ worktree, history, unpushed, actions }: RowsProps) {
         key={commit.hash}
         worktree={worktree}
         commit={commit}
-        rewrite={commitRewriteAt(worktree, own, index)}
+        rewrite={commitRewriteAt(worktree, own, index, merges)}
         actions={actions}
         unpushed={!run && unpushed.has(commit.hash)}
       />,
@@ -260,7 +262,13 @@ function LineRows({ worktree, history, unpushed, actions }: RowsProps) {
 // is on both. Where they last agreed further back than where the branch
 // began (it was rebased after it was pushed), that line sits under the
 // primary branch's.
-function SplitRows({ worktree, history, unpushed, actions }: RowsProps) {
+function SplitRows({
+  worktree,
+  history,
+  unpushed,
+  merges,
+  actions,
+}: RowsProps) {
   const own = history.commits;
   const name = remoteName(worktree, history.upstream);
   const upstream = history.upstream ?? name;
@@ -323,7 +331,7 @@ function SplitRows({ worktree, history, unpushed, actions }: RowsProps) {
           key={commit.hash}
           worktree={worktree}
           commit={commit}
-          rewrite={commitRewriteAt(worktree, own, index)}
+          rewrite={commitRewriteAt(worktree, own, index, merges)}
           actions={actions}
         />,
       );
@@ -351,7 +359,7 @@ function SplitRows({ worktree, history, unpushed, actions }: RowsProps) {
           key={commit.hash}
           worktree={worktree}
           commit={commit}
-          rewrite={commitRewriteAt(worktree, own, sharedAt + i)}
+          rewrite={commitRewriteAt(worktree, own, sharedAt + i, merges)}
           actions={actions}
         />,
       );

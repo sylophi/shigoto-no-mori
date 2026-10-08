@@ -4,6 +4,7 @@ import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useBranchDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { pluralize } from "@/lib/pluralize";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
+import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { DiffView } from "./DiffView";
 
 // Everything the branch's commits change against where it left the
@@ -37,6 +38,7 @@ export function BranchDiff() {
           </span>
         </>
       }
+      sidebarActions={<MergeButton worktree={worktree} />}
       renderSidebar={() => (
         <GitPageSidebar worktree={worktree} tab="history" selected="branch" />
       )}

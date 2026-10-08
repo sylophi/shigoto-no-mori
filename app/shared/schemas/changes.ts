@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isSafeRelPath } from "../git/gitPaths";
 import { WorktreeScopedPayloadSchema } from "./payloads";
+import { GitRefNameSchema } from "./project";
 import { CommitHashSchema, WorktreeSchema } from "./worktree";
 
 // How much of a changed file is in the index, i.e. what a commit right
@@ -194,8 +195,8 @@ export const RestoreStashPayloadSchema = WorktreeScopedPayloadSchema.extend({
 });
 
 // A git operation the worktree is stopped in (host/lib/git/operation.ts
-// names them: "merge", "rebase", "cherry-pick", "revert", "git am",
-// "bisect"), whether the app can continue it, and how many files still
+// names them: "merge", "rebase", "cherry-pick", "revert", "squash",
+// "git am", "bisect"), whether the app can continue it, and how many files still
 // conflict. Conflicts can stand without an operation too, after a stash
 // applied with them.
 export const GitOperationStateSchema = z.object({
@@ -209,6 +210,48 @@ export const ResolveConflictPayloadSchema = WorktreeScopedPayloadSchema.extend({
   path: RepoRelPathSchema,
   side: z.enum(["mine", "theirs"]),
 });
+
+// The ways another branch's work comes into the worktree's branch
+// (host/lib/git/merge.ts): a merge commit, a fast-forward, one new
+// commit holding it all, or the branch's own commits replayed on top.
+export const IntegrateMethodSchema = z.enum([
+  "merge",
+  "fastForward",
+  "squash",
+  "rebase",
+]);
+export type IntegrateMethod = z.infer<typeof IntegrateMethodSchema>;
+
+export const MergePreviewPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  ref: GitRefNameSchema,
+});
+
+// How the branch and the one to bring in stand: the commits each has
+// that the other lacks, how many of the branch's own a remote has (a
+// rebase rewrites those), the files a merge of the two would leave
+// conflicted, and the one commit coming in's subject, when one is (a
+// squash's message to start from).
+export const MergePreviewSchema = z.object({
+  incoming: z.number().int().nonnegative(),
+  own: z.number().int().nonnegative(),
+  pushed: z.number().int().nonnegative(),
+  conflicts: z.array(z.string()),
+  incomingSubject: z.string().nullable(),
+});
+export type MergePreview = z.infer<typeof MergePreviewSchema>;
+
+export const MergeBranchPayloadSchema = MergePreviewPayloadSchema.extend({
+  method: IntegrateMethodSchema,
+  // The squash's commit message.
+  message: z.string().trim().min(1).optional(),
+});
+
+// `stopped` when it waits on conflicts, for the Changes tab to settle.
+export const MergeBranchResultSchema = z.object({
+  worktree: WorktreeSchema,
+  stopped: z.boolean(),
+});
+export type MergeBranchResult = z.infer<typeof MergeBranchResultSchema>;
 
 // One change of a zero-context diff of HEAD against the working tree,
 // by its line ranges (hunk-header numbers). Identifies a hunk of a

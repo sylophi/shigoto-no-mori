@@ -166,6 +166,13 @@ function buildQueryKeys(deviceId: string) {
     // What a branch changes against the primary branch.
     branchDiff: (projectId: string, worktreeId: string) =>
       host("branchDiff", projectId, worktreeId),
+    // How a branch and another to bring in stand, while HEAD is here.
+    mergePreview: (
+      projectId: string,
+      worktreeId: string,
+      ref: string,
+      headHash: string | undefined,
+    ) => host("mergePreview", projectId, worktreeId, ref, headHash),
 
     packageScripts: (projectId: string | null, worktreeId: string | null) =>
       host("packageScripts", projectId, worktreeId),

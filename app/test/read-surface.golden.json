@@ -46,6 +46,7 @@
   "worktrees:fileHunks",
   "worktrees:list",
   "worktrees:listCommits",
+  "worktrees:mergePreview",
   "worktrees:operation",
   "worktrees:stashDiff",
   "worktrees:stashes"

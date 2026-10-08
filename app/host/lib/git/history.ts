@@ -17,8 +17,25 @@ async function applyCommit(
   hash: string,
 ): Promise<void> {
   await onIndex(worktreePath, async () => {
+    // A merge is applied as what it brought into its first parent.
+    const parents = await run(worktreePath, [
+      "rev-list",
+      "--parents",
+      "-n",
+      "1",
+      "--end-of-options",
+      hash,
+    ]);
+    const mainline =
+      parents.trim().split(" ").length > 2 ? ["--mainline", "1"] : [];
     try {
-      await run(worktreePath, [verb, "--no-edit", "--end-of-options", hash]);
+      await run(worktreePath, [
+        verb,
+        "--no-edit",
+        ...mainline,
+        "--end-of-options",
+        hash,
+      ]);
     } catch (err) {
       const inProgress = await runLenient(worktreePath, [
         "rev-parse",

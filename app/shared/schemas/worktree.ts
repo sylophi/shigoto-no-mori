@@ -30,7 +30,9 @@ export const CommitSummarySchema = z.object({
   author: z.string(),
   date: z.string(),
   // Net additions/deletions across all files in this commit, parsed
-  // from `git log --shortstat`. Zero for empty/merge commits.
+  // from `git log --shortstat`. Zero for an empty commit, and for a
+  // merge from the CLI. The app's own reads count a merge against its
+  // first parent.
   additions: z.number().int().nonnegative(),
   deletions: z.number().int().nonnegative(),
 });
@@ -471,6 +473,9 @@ export const BranchHistorySchema = z.object({
   incoming: z.array(CommitSummarySchema),
   incomingMore: z.boolean(),
   upstreamFork: CommitHashSchema.nullable(),
+  merges: z.array(
+    z.object({ hash: CommitHashSchema, firstParent: CommitHashSchema }),
+  ),
 });
 export type BranchHistory = z.infer<typeof BranchHistorySchema>;
 

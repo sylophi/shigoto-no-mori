@@ -123,7 +123,7 @@ export function CommitDetails({
             variant="outline"
             size="xs"
             disabled={busy}
-            onClick={() => actions.undoTo(undo.target, undo.count, undo.head)}
+            onClick={() => actions.undoTo(undo)}
           >
             <Undo2 />
             {canAmend

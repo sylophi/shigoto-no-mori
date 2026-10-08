@@ -1,7 +1,7 @@
 // A worktree stopped in the middle of a git operation (a merge, a
-// rebase, a cherry-pick or a revert waiting on conflicts), and the
-// moves that see it through: settle each conflicted file one way or
-// the other, then continue or abort. The Git section's banner and the
+// rebase, a cherry-pick, a revert or a squash waiting on conflicts),
+// and the moves that see it through: settle each conflicted file one
+// way or the other, then continue or abort. The Git section's banner and the
 // changes page's conflicted rows drive these.
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,6 +22,9 @@ const OPERATION_MARKERS: { path: string; operation: string }[] = [
   { path: "CHERRY_PICK_HEAD", operation: "cherry-pick" },
   { path: "REVERT_HEAD", operation: "revert" },
   { path: "sequencer", operation: "cherry-pick or revert" },
+  // `merge --squash` leaves no MERGE_HEAD, only the message it made,
+  // which the commit that settles it (or a reset) clears.
+  { path: "SQUASH_MSG", operation: "squash" },
   { path: "BISECT_LOG", operation: "bisect" },
 ];
 
@@ -47,9 +50,15 @@ export async function operationInProgress(
 
 // The kinds the banner can continue. The rest (`git am`, a bisect, a
 // bare sequencer) it can only abort.
-const CONTINUABLE = new Set(["merge", "rebase", "cherry-pick", "revert"]);
+const CONTINUABLE = new Set([
+  "merge",
+  "rebase",
+  "cherry-pick",
+  "revert",
+  "squash",
+]);
 
-async function gitDirOf(worktreePath: string): Promise<string> {
+export async function gitDirOf(worktreePath: string): Promise<string> {
   return (await run(worktreePath, ["rev-parse", "--absolute-git-dir"])).trim();
 }
 
@@ -83,8 +92,21 @@ export function continueOperation(worktreePath: string): Promise<void> {
       throw new Error("Resolve the conflicted files first.");
     }
     switch (operation) {
+      // Strip, or the "# Conflicts:" list git adds to the message
+      // stays in it, as an editor would have dropped it.
       case "merge":
-        await run(worktreePath, ["commit", "--no-edit"], NO_EDITOR);
+        await run(
+          worktreePath,
+          ["commit", "--no-edit", "--cleanup=strip"],
+          NO_EDITOR,
+        );
+        return;
+      case "squash":
+        await run(worktreePath, [
+          "commit",
+          "--file",
+          join(await gitDirOf(worktreePath), "SQUASH_MSG"),
+        ]);
         return;
       case "rebase":
       case "cherry-pick":
@@ -109,6 +131,9 @@ export function abortOperation(worktreePath: string): Promise<void> {
         return;
       case "git am":
         await run(worktreePath, ["am", "--abort"]);
+        return;
+      case "squash":
+        await run(worktreePath, ["reset", "--merge"]);
         return;
       case "bisect":
         await run(worktreePath, ["bisect", "reset"]);

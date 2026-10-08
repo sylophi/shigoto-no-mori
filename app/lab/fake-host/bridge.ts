@@ -510,6 +510,7 @@ function hostHandlersFor(
         incoming: [],
         incomingMore: false,
         upstreamFork: null,
+        merges: [],
       };
     },
     "worktrees:stashes": ({ worktreeId }) =>

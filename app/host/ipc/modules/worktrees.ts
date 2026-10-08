@@ -42,8 +42,10 @@ import {
   readOperation,
   resolveConflict,
 } from "@host/lib/git/operation";
+import { mergeBranch, readMergePreview } from "@host/lib/git/merge";
 import {
   mergePrimaryKeepingConflicts,
+  mergeUpstreamKeepingConflicts,
   overwriteFromUpstream,
   publishCurrentBranch,
   pullFastForward,
@@ -490,12 +492,27 @@ export const worktreesHandlers: Handlers<
       await mergePrimaryKeepingConflicts(target.path, project.path, primaryRef);
     }),
 
+  mergeUpstream: async (input) => {
+    const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
+      mergeUpstreamKeepingConflicts(wt.path),
+    );
+    return { worktree, stopped: result };
+  },
+
   operation: async (input) =>
     readOperation(await findWorktreePathOrThrow(input)),
   resolveConflict: (input) =>
     mutateAndDescribe(input, (wt) =>
       resolveConflict(wt.path, input.path, input.side),
     ),
+  mergePreview: async (input) =>
+    readMergePreview(await findWorktreePathOrThrow(input), input.ref),
+  mergeBranch: async (input) => {
+    const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
+      mergeBranch(wt.path, input.ref, input.method, input.message),
+    );
+    return { worktree, stopped: result };
+  },
   continueOperation: (input) =>
     mutateAndDescribe(input, (wt) => continueOperation(wt.path)),
   abortOperation: (input) =>

@@ -6,6 +6,7 @@ import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { commitRewriteAt, NO_REWRITE } from "@/lib/commitRewrite";
 import { CommitDetails, CommitSteps } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
+import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { DiffView } from "./DiffView";
 
 export function CommitDiff() {
@@ -62,7 +63,14 @@ export function CommitDiff() {
             onlyOn={incoming ? (history?.upstream ?? undefined) : undefined}
             rewrite={
               index >= 0
-                ? commitRewriteAt(worktree, timeline, index)
+                ? commitRewriteAt(
+                    worktree,
+                    timeline,
+                    index,
+                    new Map(
+                      history?.merges.map((m) => [m.hash, m.firstParent]),
+                    ),
+                  )
                 : NO_REWRITE
             }
           />
@@ -78,6 +86,7 @@ export function CommitDiff() {
           />
         )
       }
+      sidebarActions={<MergeButton worktree={worktree} />}
       renderSidebar={() => (
         <GitPageSidebar
           worktree={worktree}
@@ -85,10 +94,7 @@ export function CommitDiff() {
           selected={`commit:${hash}`}
         />
       )}
-      // Merge commits show empty by default (git's combined diff is empty
-      // when --cc/-m aren't passed). Note it explicitly so the page
-      // doesn't look broken.
-      emptyMessage="No file changes to show. Merge commits render empty by default."
+      emptyMessage="This commit changes no files."
     />
   );
 }

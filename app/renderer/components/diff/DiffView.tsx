@@ -145,6 +145,7 @@ export function DiffView({
   details,
   steps,
   renderSidebar,
+  sidebarActions,
 }: {
   // The patch's read, whichever of the three pages asked for it.
   diff: UseQueryResult<string>;
@@ -169,6 +170,8 @@ export function DiffView({
   // file list: the Git page's tabs, its Changes tab around this list and
   // its History tab in place of it. Handed the list.
   renderSidebar?: (index: ReactNode) => ReactNode;
+  // At the end of the sidebar's back row: the Git page's Merge.
+  sidebarActions?: ReactNode;
 }) {
   const { data: patch, isLoading, error } = diff;
   const backLabel = useWorktreeName(worktree);
@@ -292,7 +295,10 @@ export function DiffView({
 
   return (
     <div className="flex h-full flex-col">
-      <SidebarTakeover back={{ label: backLabel, onClick: onBack }}>
+      <SidebarTakeover
+        back={{ label: backLabel, onClick: onBack }}
+        actions={sidebarActions}
+      >
         {sidebarWith(
           showIndex && (
             <DiffFileIndex

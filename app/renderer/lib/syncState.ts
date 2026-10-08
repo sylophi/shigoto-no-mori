@@ -75,7 +75,7 @@ interface SyncStateView {
 }
 
 const PULL_AND_PUSH_RUNS =
-  "git pull --rebase, falling back to a merge on conflict, then git push";
+  "git pull --rebase, or a merge where the branch holds one or a rebase conflicts, then git push";
 
 // "↑2↓3": both counts, for the states where both sides moved.
 const both = (ahead: number, behind: number) => `↑${ahead}↓${behind}`;
@@ -198,15 +198,15 @@ function syncStateView(state: RemoteSyncState): SyncStateView {
           tip: `Diverged: ${ahead} ahead, ${behind} behind`,
           label: `Diverged ${ahead}/${behind}`,
         },
-        // No safe move: a pull --rebase would almost certainly fail
-        // mid-flight, so only the pill's overwrites remain (PickSide).
+        // No one-click move: merging conflicts, so the pill offers the
+        // merge stopped on its conflicts, or the overwrites (PickSide).
         move: null,
         held: {
           label: `Diverged ${both(ahead, behind)}`,
           compactLabel: both(ahead, behind),
-          tip: `History has split: ${ahead} local, ${behind} remote. Commit or discard your changes to pick which side wins.`,
+          tip: `History has split: ${ahead} local, ${behind} remote. Commit or discard your changes to merge or pick which side wins.`,
         },
-        owed: "History has split from the remote. Pick which side wins below.",
+        owed: "History has split from the remote. Merge it or pick which side wins below.",
       };
     }
     default:

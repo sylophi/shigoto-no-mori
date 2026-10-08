@@ -186,7 +186,7 @@ export function useDiscardHunks() {
 // Everything derived from the working tree: the sidebar's count and
 // recent commits, the patch, the per-file index state, and the
 // operation it may be stopped in.
-function invalidateWorkingTree(
+export function invalidateWorkingTree(
   queryClient: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
   { projectId, worktreeId }: { projectId: string; worktreeId: string },

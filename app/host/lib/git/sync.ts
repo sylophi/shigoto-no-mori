@@ -141,28 +141,80 @@ export async function publishCurrentBranch(
   await run(worktreePath, ["push", "-u", first, "HEAD"]);
 }
 
-// Try rebase first for linear history; on a per-commit conflict abort
-// and fall back to a whole-tree merge. Both abort paths swallow the
-// abort failure so the worktree isn't left half-rebased or half-merged
-// when the action propagates an error. `--end-of-options` keeps the ref
-// out of the flag slot. Neither command accepts a trailing `--`, which
-// they would read as a second revision argument.
+async function countCommits(
+  worktreePath: string,
+  revs: string[],
+  flags: string[] = [],
+): Promise<number> {
+  const out = await run(worktreePath, [
+    "rev-list",
+    "--count",
+    ...flags,
+    "--end-of-options",
+    ...revs,
+  ]);
+  return Number(out.trim());
+}
+
+// Whether a rebase onto `ref` only replays commits that exist nowhere
+// else, in one line: none of them a merge (a rebase would flatten it)
+// or on the upstream already (replayed, the branch would split from its
+// pushed copy).
+async function rebaseIsSafe(
+  worktreePath: string,
+  ref: string,
+): Promise<boolean> {
+  const upstream = (
+    await runLenient(worktreePath, ["rev-parse", "--verify", "--quiet", "@{u}"])
+  ).trim();
+  const [own, merges, unpushed] = await Promise.all([
+    countCommits(worktreePath, [`${ref}..HEAD`]),
+    countCommits(worktreePath, [`${ref}..HEAD`], ["--merges"]),
+    upstream
+      ? countCommits(worktreePath, [`${ref}..HEAD`, `^${upstream}`])
+      : null,
+  ]);
+  return merges === 0 && (unpushed === null || unpushed === own);
+}
+
+// The upstream by its name ("origin/feature"), for a merge to say it
+// by in its message and its conflict markers rather than as "@{u}".
+async function upstreamName(worktreePath: string): Promise<string> {
+  return (
+    await run(worktreePath, [
+      "rev-parse",
+      "--abbrev-ref",
+      "--symbolic-full-name",
+      "@{u}",
+    ])
+  ).trim();
+}
+
+// A rebase for linear history where that is safe (rebaseIsSafe), and a
+// whole-tree merge otherwise or on a per-commit conflict. Both abort paths
+// swallow the abort failure so the worktree isn't left half-rebased or
+// half-merged when the action propagates an error. `--end-of-options`
+// keeps the ref out of the flag slot. Neither command accepts a
+// trailing `--`, which they would read as a second revision argument.
 async function rebaseOrMergeAgainst(
   worktreePath: string,
   ref: string,
 ): Promise<void> {
-  try {
-    await run(worktreePath, ["rebase", "--end-of-options", ref]);
-  } catch {
-    await runLenient(worktreePath, ["rebase", "--abort"]);
+  if (await rebaseIsSafe(worktreePath, ref)) {
     try {
-      await run(worktreePath, ["merge", "--end-of-options", ref]);
-    } catch (err) {
-      // Git reports conflicts on stdout, so the files say it instead.
-      const conflicted = (await unmergedPaths(worktreePath)) !== "";
-      await runLenient(worktreePath, ["merge", "--abort"]);
-      throw conflicted ? syncConflictsError(ref, err) : err;
+      await run(worktreePath, ["rebase", "--end-of-options", ref]);
+      return;
+    } catch {
+      await runLenient(worktreePath, ["rebase", "--abort"]);
     }
+  }
+  try {
+    await run(worktreePath, ["merge", "--end-of-options", ref]);
+  } catch (err) {
+    // Git reports conflicts on stdout, so the files say it instead.
+    const conflicted = (await unmergedPaths(worktreePath)) !== "";
+    await runLenient(worktreePath, ["merge", "--abort"]);
+    throw conflicted ? syncConflictsError(ref, err) : err;
   }
 }
 
@@ -175,7 +227,7 @@ export async function pullRebaseOrMergeAndPush(
 ): Promise<void> {
   // react-doctor-disable-next-line react-doctor/async-parallel -- fetch → rebase/merge → push is a sequential domain operation
   await run(worktreePath, ["fetch"]);
-  await rebaseOrMergeAgainst(worktreePath, "@{u}");
+  await rebaseOrMergeAgainst(worktreePath, await upstreamName(worktreePath));
   await run(worktreePath, ["push"]);
 }
 
@@ -191,6 +243,27 @@ export async function syncWithPrimary(
 ): Promise<void> {
   await fetchAllRemotes(projectPath);
   await rebaseOrMergeAgainst(worktreePath, primaryRef);
+}
+
+// The way on from a split with the upstream that conflicts: the merge
+// `git pull` would make, left stopped on its conflicts the same way.
+// Whether it stopped.
+export async function mergeUpstreamKeepingConflicts(
+  worktreePath: string,
+): Promise<boolean> {
+  await run(worktreePath, ["fetch"]);
+  try {
+    await run(worktreePath, [
+      "merge",
+      "--no-edit",
+      "--end-of-options",
+      await upstreamName(worktreePath),
+    ]);
+    return false;
+  } catch (err) {
+    if ((await unmergedPaths(worktreePath)) === "") throw err;
+    return true;
+  }
 }
 
 // The way on from a sync that conflicts: the merge, left stopped on its

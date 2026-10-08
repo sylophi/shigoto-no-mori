@@ -162,7 +162,11 @@ export async function listCommits(
         `--grep=${opts.query}`,
       );
     }
-    args.push(`--pretty=format:${LOG_FORMAT}`, "--shortstat");
+    args.push(
+      `--pretty=format:${LOG_FORMAT}`,
+      "--shortstat",
+      "--diff-merges=first-parent",
+    );
     // History from a commit other than HEAD: where a branch left its base,
     // for the history before the branch's own commits.
     if (opts.from) args.push("--end-of-options", opts.from, "--");
@@ -186,6 +190,10 @@ export async function listCommits(
 // (`incoming`, cut at `count` too), and where the two last agreed
 // (`upstreamFork`). Both sides holding commits of their own is a split
 // the tab shows a side of at a time. Without an upstream all are empty.
+// `merges` are the listed commits with more than one parent, with the
+// first: the commit menu won't rewrite across one, and a merge on top
+// is undone back to its first parent. Every commit's counts are against its
+// first parent, so a merge's are what it brought in.
 export async function readBranchHistory(
   worktreePath: string,
   opts: { base: string | undefined; count: number },
@@ -208,6 +216,7 @@ export async function readBranchHistory(
       "--topo-order",
       `--pretty=format:${LOG_FORMAT}`,
       "--shortstat",
+      "--diff-merges=first-parent",
       "--end-of-options",
       range,
       "--",
@@ -225,11 +234,21 @@ export async function readBranchHistory(
   ]);
   const upstream = upstreamOut.trim() || null;
   const baseHash = mergeBase.trim();
-  const [base, own, againstUpstream] = await Promise.all([
+  const range = baseHash ? `${baseHash}..HEAD` : "HEAD";
+  const [base, own, merges, againstUpstream] = await Promise.all([
     opts.base && baseHash
       ? short(baseHash).then((hash) => ({ ref: opts.base ?? "", hash }))
       : Promise.resolve(null),
-    log(baseHash ? `${baseHash}..HEAD` : "HEAD").then(parseLog),
+    log(range).then(parseLog),
+    runLenient(worktreePath, [
+      "log",
+      "--merges",
+      "--format=%h %p",
+      `-${opts.count}`,
+      "--end-of-options",
+      range,
+      "--",
+    ]),
     upstream
       ? Promise.all([
           runLenient(worktreePath, [
@@ -258,6 +277,12 @@ export async function readBranchHistory(
     incoming: incoming.slice(0, opts.count),
     incomingMore: incoming.length > opts.count,
     upstreamFork: upstreamFork || null,
+    merges: merges.split("\n").flatMap((line) => {
+      const [hash = "", firstParent = ""] = line.split(" ");
+      return isCommitHash(hash) && isCommitHash(firstParent)
+        ? [{ hash, firstParent }]
+        : [];
+    }),
   };
 }
 

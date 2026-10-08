@@ -42,7 +42,7 @@ export function WorktreePrimarySyncPill({
       }
       tip={
         disabledReason ??
-        `git fetch && git rebase ${branchName}, falling back to a merge on conflict`
+        `git fetch && git rebase ${branchName}, or a merge once commits here are pushed or a rebase conflicts`
       }
       disabled={disabledReason !== undefined}
       pending={sync.isPending || merge.isPending}

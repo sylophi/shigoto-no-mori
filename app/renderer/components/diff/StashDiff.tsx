@@ -1,6 +1,7 @@
 import { RelativeDate } from "@/components/ui/relative-date";
 import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
+import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { StashMoves } from "@/components/worktreeDetail/git/StashMoves";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
@@ -47,6 +48,7 @@ export function StashDiff() {
           />
         )
       }
+      sidebarActions={<MergeButton worktree={worktree} />}
       renderSidebar={() => (
         <GitPageSidebar worktree={worktree} tab="stashes" selected={hash} />
       )}

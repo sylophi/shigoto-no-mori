@@ -26,6 +26,10 @@ import {
   GitOperationStateSchema,
   HunkStatesSchema,
   ListCommitsPayloadSchema,
+  MergeBranchPayloadSchema,
+  MergeBranchResultSchema,
+  MergePreviewPayloadSchema,
+  MergePreviewSchema,
   ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
@@ -325,11 +329,33 @@ export const worktreesContract = defineContract("host", {
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
+  // Another branch brought into the worktree's (host/lib/git/merge.ts):
+  // first how the two stand, then the move.
+  mergePreview: invoke(
+    "worktrees:mergePreview",
+    MergePreviewPayloadSchema,
+    MergePreviewSchema,
+    { remote: true, gated: false },
+  ),
+  mergeBranch: invoke(
+    "worktrees:mergeBranch",
+    MergeBranchPayloadSchema,
+    MergeBranchResultSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
   continueOperation: worktreeMutation("worktrees:continueOperation"),
   abortOperation: worktreeMutation("worktrees:abortOperation"),
   // The way on from a sync from primary that conflicts: merge anyway
   // and stop on the conflicts.
   mergePrimary: worktreeMutation("worktrees:mergePrimary"),
+  // The way on from a split with the upstream that conflicts: merge it
+  // and stop on the conflicts.
+  mergeUpstream: invoke(
+    "worktrees:mergeUpstream",
+    WorktreeScopedPayloadSchema,
+    MergeBranchResultSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
   push: worktreeMutation("worktrees:push"),
   pull: worktreeMutation("worktrees:pull"),
   pushForce: worktreeMutation("worktrees:pushForce"),
