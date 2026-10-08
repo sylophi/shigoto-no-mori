@@ -227,15 +227,18 @@ export const MergePreviewPayloadSchema = WorktreeScopedPayloadSchema.extend({
 });
 
 // How the branch and the one to bring in stand: the commits each has
-// that the other lacks, how many of the branch's own a remote has (a
-// rebase rewrites those), the files a merge of the two would leave
-// conflicted, and the one commit coming in's subject, when one is (a
-// squash's message to start from).
+// that the other lacks, how many of the branch's own a remote has and
+// how many are merges (a rebase rewrites the one and flattens the
+// other), the files a merge of the two would leave conflicted, and the
+// one commit coming in's subject, when one is (a squash's message to
+// start from).
 export const MergePreviewSchema = z.object({
   incoming: z.number().int().nonnegative(),
   own: z.number().int().nonnegative(),
   pushed: z.number().int().nonnegative(),
-  conflicts: z.array(z.string()),
+  ownMerges: z.number().int().nonnegative(),
+  // Null where git can't merge the two at all.
+  conflicts: z.array(z.string()).nullable(),
   incomingSubject: z.string().nullable(),
 });
 export type MergePreview = z.infer<typeof MergePreviewSchema>;

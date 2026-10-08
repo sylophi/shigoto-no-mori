@@ -70,6 +70,25 @@ export async function verifyRev(cwd: string, rev: string): Promise<string> {
   ).trim();
 }
 
+// How many commits `revs` name, `flags` (rev-list's own) applied.
+export async function countCommits(
+  cwd: string,
+  revs: string[],
+  flags: string[] = [],
+): Promise<number> {
+  const out = await run(cwd, [
+    "rev-list",
+    "--count",
+    ...flags,
+    "--end-of-options",
+    ...revs,
+  ]);
+  return Number(out.trim());
+}
+
+// Leaves out what any remote has, as the CLI's unpushed count does.
+export const NOT_ON_A_REMOTE = ["--not", "--remotes", "--not"];
+
 export function treeOf(cwd: string, commit: string): Promise<string> {
   return verifyRev(cwd, `${commit}^{tree}`);
 }

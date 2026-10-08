@@ -7,7 +7,10 @@
 // continued after its conflicts keeps git's conflict list out of its
 // message. The merge commit made reads as one in the history, with
 // what it brought in as its diff and counts, and reverts. One on top
-// is undone whole, back to its first parent, and redone.
+// is undone whole, back to its first parent, and redone. A squash whose
+// commit a hook refuses keeps its message for the continue, a squash
+// message left over once its changes are gone is no squash, and a
+// `merge.ff` setting doesn't stand in the way.
 //
 // Run: pnpm test git-merge.
 import assert from "node:assert/strict";
@@ -94,6 +97,7 @@ async function main() {
         incoming: 1,
         own: 1,
         pushed: 0,
+        ownMerges: 0,
         conflicts: ["a.txt"],
         incomingSubject: "Main",
       });
@@ -117,6 +121,9 @@ async function main() {
       const preview = await readMergePreview(repo, "main");
       assert.equal(preview.own, 2);
       assert.equal(preview.pushed, 1);
+      // Pushed to a remote branch the branch doesn't track counts too.
+      git(repo, "update-ref", "refs/remotes/origin/elsewhere", "HEAD");
+      assert.equal((await readMergePreview(repo, "main")).pushed, 2);
     },
   );
 
@@ -296,6 +303,64 @@ async function main() {
         resetSoft(repo, before, rev(repo, "HEAD")),
         /across a merge/,
       );
+    },
+  );
+
+  await check(
+    "a squash whose commit a hook refuses waits with its message, and continues with it",
+    async (track) => {
+      const repo = seed(track, { diverge: true });
+      git(repo, "checkout", "-q", "main");
+      const hook = join(repo, ".git", "hooks", "pre-commit");
+      writeFileSync(hook, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+      await assert.rejects(
+        mergeBranch(repo, "feature", "squash", "Add the feature"),
+      );
+      assert.deepEqual(await readOperation(repo), {
+        operation: "squash",
+        continuable: true,
+        conflicted: 0,
+      });
+      writeFileSync(hook, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      await continueOperation(repo);
+      assert.equal(message(repo), "Add the feature");
+      await clean(repo);
+    },
+  );
+
+  await check(
+    "a squash message left over once its changes are gone is no squash",
+    async (track) => {
+      const repo = seed(track, { conflict: true });
+      await mergeBranch(repo, "main", "squash", "Take main");
+      git(repo, "reset", "-q", "--", "a.txt");
+      git(repo, "checkout", "--", "a.txt");
+      assert.equal(git(repo, "status", "--porcelain"), "");
+      assert.equal((await readOperation(repo)).operation, null);
+    },
+  );
+
+  await check("a merge.ff setting doesn't stand in the way", async (track) => {
+    const repo = seed(track, { diverge: true });
+    git(repo, "checkout", "-q", "main");
+    git(repo, "config", "merge.ff", "false");
+    await mergeBranch(repo, "feature", "squash", "Squashed");
+    assert.equal(message(repo), "Squashed");
+    const only = seed(track, { diverge: true });
+    git(only, "checkout", "-q", "main");
+    git(only, "config", "merge.ff", "only");
+    await mergeBranch(only, "feature", "squash", "Squashed");
+    assert.equal(parents(only), 1);
+  });
+
+  await check(
+    "the preview can't read conflicts where there is no merge to make",
+    async (track) => {
+      const repo = seed(track);
+      git(repo, "checkout", "-q", "--orphan", "other");
+      git(repo, "rm", "-q", "-rf", ".");
+      commit(repo, "o.txt", "o\n", "Unrelated");
+      assert.equal((await readMergePreview(repo, "main")).conflicts, null);
     },
   );
 

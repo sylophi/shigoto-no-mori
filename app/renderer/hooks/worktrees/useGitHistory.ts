@@ -214,7 +214,9 @@ export function useMergePreview(worktree: Worktree, ref: string) {
   });
 }
 
-// The dialog says a failure in place, so no toast.
+// The dialog says a failure in place, so no toast. A failure can leave
+// the branch moved too (a squash whose commit a hook refused), so the
+// worktree is read again either way.
 export function useMergeBranch() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
@@ -226,6 +228,16 @@ export function useMergeBranch() {
     mutationFn: (input) => api.worktrees.mergeBranch(input),
     onSuccess: (data, vars) =>
       invalidateWorkingTree(queryClient, keys, vars, data.worktree),
+    onError: (_err, { projectId, worktreeId }) => {
+      for (const key of [
+        keys.worktrees(projectId),
+        keys.worktreeDiff(projectId, worktreeId),
+        keys.worktreeChanges(projectId, worktreeId),
+        keys.worktreeOperation(projectId, worktreeId),
+      ]) {
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
+    },
     meta: { silentError: true },
   });
 }

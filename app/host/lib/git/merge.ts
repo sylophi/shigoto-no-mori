@@ -11,6 +11,7 @@ import type { IntegrateMethod, MergePreview } from "@shared/schemas";
 import { onIndex } from "./changes";
 import { run, runLenient, splitZ } from "./core";
 import { gitDirOf, readOperation } from "./operation";
+import { countCommits, NOT_ON_A_REMOTE } from "./refs";
 
 async function resolveCommit(
   worktreePath: string,
@@ -29,36 +30,19 @@ async function resolveCommit(
   return hash;
 }
 
-async function countCommits(
-  worktreePath: string,
-  revs: string[],
-): Promise<number> {
-  const out = await run(worktreePath, [
-    "rev-list",
-    "--count",
-    "--end-of-options",
-    ...revs,
-  ]);
-  return Number(out.trim());
-}
-
 export async function readMergePreview(
   worktreePath: string,
   ref: string,
 ): Promise<MergePreview> {
   const target = await resolveCommit(worktreePath, ref);
-  const upstream = (
-    await runLenient(worktreePath, ["rev-parse", "--verify", "--quiet", "@{u}"])
-  ).trim();
-  const [incoming, own, unpushed, merged] = await Promise.all([
+  const [incoming, own, ownMerges, unpushed, merged] = await Promise.all([
     countCommits(worktreePath, [`HEAD..${target}`]),
     countCommits(worktreePath, [`${target}..HEAD`]),
-    upstream
-      ? countCommits(worktreePath, [`${target}..HEAD`, `^${upstream}`])
-      : null,
+    countCommits(worktreePath, [`${target}..HEAD`], ["--merges"]),
+    countCommits(worktreePath, [`${target}..HEAD`], NOT_ON_A_REMOTE),
     // The tree a merge would make, then the paths it left conflicted.
     // Exit 1 on a conflict, so read leniently. Unrelated histories fail
-    // outright and read as none, and the merge itself says so.
+    // outright, and the merge itself says why.
     runLenient(worktreePath, [
       "merge-tree",
       "--write-tree",
@@ -78,8 +62,10 @@ export async function readMergePreview(
   return {
     incoming,
     own,
-    pushed: unpushed === null ? 0 : own - unpushed,
-    conflicts: splitZ(merged).slice(1),
+    pushed: own - unpushed,
+    ownMerges,
+    // Nothing printed, not even a tree: no merge to make at all.
+    conflicts: merged === "" ? null : splitZ(merged).slice(1),
     incomingSubject,
   };
 }
@@ -103,8 +89,8 @@ async function stopsOnConflict(
 }
 
 // Whether it stopped on conflicts. A squash commits with `message`
-// once its changes are in, and when they conflict the message waits in
-// SQUASH_MSG for the continue to commit with.
+// once its changes are in, the message kept in SQUASH_MSG for the
+// continue to commit with where the commit can't be made yet.
 export function mergeBranch(
   worktreePath: string,
   ref: string,
@@ -138,19 +124,19 @@ export function mergeBranch(
         ]);
       case "squash": {
         if (!message) throw new Error("A squash needs a commit message.");
+        // `--ff` over a `merge.ff` setting, which `--squash` can't take.
         const stopped = await stopsOnConflict(worktreePath, [
           "merge",
           "--squash",
+          "--ff",
           "--end-of-options",
           ref,
         ]);
-        if (stopped) {
-          await writeFile(
-            join(await gitDirOf(worktreePath), "SQUASH_MSG"),
-            `${message}\n`,
-          );
-          return true;
-        }
+        // The message waits where the continue reads it, should the
+        // commit stop too: on a conflict, or a hook refusing it.
+        const squashMessage = join(await gitDirOf(worktreePath), "SQUASH_MSG");
+        await writeFile(squashMessage, `${message}\n`);
+        if (stopped) return true;
         const staged = await run(worktreePath, [
           "diff",
           "--cached",
@@ -161,7 +147,7 @@ export function mergeBranch(
           await run(worktreePath, ["reset", "--merge"]);
           throw new Error(`Everything on ${ref} is already on this branch.`);
         }
-        await run(worktreePath, ["commit", "-m", message]);
+        await run(worktreePath, ["commit", "--file", squashMessage]);
         return false;
       }
     }

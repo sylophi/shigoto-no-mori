@@ -113,7 +113,14 @@ function MergeDialog({
   };
 
   return (
-    <ModalShell onClose={onClose} popoverClassName="max-w-md">
+    // Held open while the move runs: closed, its stop or its failure
+    // would go unsaid.
+    <ModalShell
+      onClose={() => {
+        if (!merge.isPending) onClose();
+      }}
+      popoverClassName="max-w-md"
+    >
       <form
         className="flex flex-col gap-4 p-5"
         onSubmit={(e) => {
@@ -169,8 +176,9 @@ function MergeDialog({
             onChange={(e) => setMessage(e.target.value)}
           />
         )}
-        {blocked !== null && <Warning>{blocked}</Warning>}
-        {blocked === null && merge.error && (
+        {/* The error first: a failure can leave the very state that
+            blocks another go (a squash whose commit a hook refused). */}
+        {merge.error ? (
           <Warning>
             <InlineError
               multiline
@@ -178,9 +186,17 @@ function MergeDialog({
               message={merge.error.message}
             />
           </Warning>
+        ) : (
+          blocked !== null && <Warning>{blocked}</Warning>
         )}
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={merge.isPending}
+          >
             Cancel
           </Button>
           <Button type="submit" size="sm" disabled={!ready}>
@@ -225,9 +241,11 @@ function Outcome({
   }
   const live = preview !== undefined && preview.incoming > 0;
   const conflicts = live && method !== "fastForward" ? preview.conflicts : null;
-  // A rebase rewrites the branch's own commits, the pushed ones too.
-  const pushed =
-    live && method === "rebase" && preview.own > 0 ? preview.pushed : 0;
+  // A rebase rewrites the branch's own commits, the pushed ones too,
+  // and replays a merge's commits in a line without it.
+  const rebasing = live && method === "rebase" && preview.own > 0;
+  const pushed = rebasing ? preview.pushed : 0;
+  const merges = rebasing ? preview.ownMerges : 0;
   return (
     <div className="space-y-1.5 text-sm">
       <p>{line}</p>
@@ -243,6 +261,14 @@ function Outcome({
             {nameConflicts(conflicts)}, to resolve before it finishes
           </Warning>
         ))}
+      {merges > 0 && (
+        <Warning>
+          {merges === 1
+            ? "The merge among them is flattened"
+            : `The ${merges} merges among them are flattened`}{" "}
+          into one line
+        </Warning>
+      )}
       {pushed > 0 && (
         <Warning>
           {pushed === preview?.own

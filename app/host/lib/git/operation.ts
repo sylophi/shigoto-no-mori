@@ -22,9 +22,6 @@ const OPERATION_MARKERS: { path: string; operation: string }[] = [
   { path: "CHERRY_PICK_HEAD", operation: "cherry-pick" },
   { path: "REVERT_HEAD", operation: "revert" },
   { path: "sequencer", operation: "cherry-pick or revert" },
-  // `merge --squash` leaves no MERGE_HEAD, only the message it made,
-  // which the commit that settles it (or a reset) clears.
-  { path: "SQUASH_MSG", operation: "squash" },
   { path: "BISECT_LOG", operation: "bisect" },
 ];
 
@@ -68,17 +65,45 @@ async function conflictedPaths(worktreePath: string): Promise<string[]> {
   );
 }
 
+// `merge --squash` leaves no MERGE_HEAD, only the message it made in
+// SQUASH_MSG, which a commit or a reset clears but a discard of the
+// files doesn't. So it is a squash under way only while the index holds
+// one: conflicted, or staged and not yet committed.
+async function squashPending(
+  worktreePath: string,
+  gitDir: string,
+  conflicted: number,
+): Promise<boolean> {
+  const message = await stat(join(gitDir, "SQUASH_MSG")).then(
+    () => true,
+    () => false,
+  );
+  if (!message) return false;
+  if (conflicted > 0) return true;
+  const staged = await run(worktreePath, [
+    "diff",
+    "--cached",
+    "--name-only",
+    "-z",
+  ]);
+  return staged !== "";
+}
+
 export async function readOperation(
   worktreePath: string,
 ): Promise<GitOperationState> {
-  const [operation, conflicted] = await Promise.all([
-    gitDirOf(worktreePath).then(operationInProgress),
+  const [gitDir, conflictedList] = await Promise.all([
+    gitDirOf(worktreePath),
     conflictedPaths(worktreePath),
   ]);
+  const conflicted = conflictedList.length;
+  const operation =
+    (await operationInProgress(gitDir)) ??
+    ((await squashPending(worktreePath, gitDir, conflicted)) ? "squash" : null);
   return {
     operation,
     continuable: operation !== null && CONTINUABLE.has(operation),
-    conflicted: conflicted.length,
+    conflicted,
   };
 }
 
@@ -121,7 +146,7 @@ export function continueOperation(worktreePath: string): Promise<void> {
 
 export function abortOperation(worktreePath: string): Promise<void> {
   return onIndex(worktreePath, async () => {
-    const operation = await operationInProgress(await gitDirOf(worktreePath));
+    const { operation } = await readOperation(worktreePath);
     switch (operation) {
       case "merge":
       case "rebase":

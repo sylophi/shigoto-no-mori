@@ -150,7 +150,15 @@ function PickSide({
     return (
       <span className="inline-flex shrink-0 items-center gap-0.5 self-center text-xs">
         {merge}
-        <DropdownMenu>
+        {/* Closing the menu disarms both, so a reopen never finds one
+            a click away from firing. */}
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (open) return;
+            confirmPushForce.reset();
+            confirmOverwrite.reset();
+          }}
+        >
           <DropdownMenuTrigger
             aria-label="Overwrite one side"
             disabled={busy}

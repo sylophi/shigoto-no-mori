@@ -423,6 +423,18 @@ async function main() {
       assert.equal(parentCount(repo), 2);
       assert.equal(rev(repo, "HEAD^1"), pushed);
 
+      // Pushed to a remote branch it doesn't track counts as pushed.
+      const elsewhere = seedRepo(track);
+      git(elsewhere, "checkout", "-q", "-b", "feature");
+      commit(elsewhere, "d.txt", "d\n", "Fourth");
+      git(elsewhere, "update-ref", "refs/remotes/origin/copy", "HEAD");
+      git(elsewhere, "checkout", "-q", "main");
+      commit(elsewhere, "m.txt", "m\n", "Main");
+      git(elsewhere, "checkout", "-q", "feature");
+      git(elsewhere, "config", "merge.ff", "only");
+      await syncWithPrimary(elsewhere, elsewhere, "main");
+      assert.equal(parentCount(elsewhere), 2);
+
       const fresh = seedRepo(track);
       git(fresh, "checkout", "-q", "-b", "feature");
       commit(fresh, "d.txt", "d\n", "Fourth");

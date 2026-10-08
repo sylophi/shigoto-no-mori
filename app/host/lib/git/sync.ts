@@ -4,6 +4,7 @@
 // verbatim into the renderer's toast).
 import { syncConflictsError } from "@shared/errors";
 import { chunked, run, runLenient, splitZ } from "./core";
+import { countCommits, NOT_ON_A_REMOTE } from "./refs";
 import { fetchAllRemotes, listRemotes } from "./remotes";
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
@@ -141,40 +142,20 @@ export async function publishCurrentBranch(
   await run(worktreePath, ["push", "-u", first, "HEAD"]);
 }
 
-async function countCommits(
-  worktreePath: string,
-  revs: string[],
-  flags: string[] = [],
-): Promise<number> {
-  const out = await run(worktreePath, [
-    "rev-list",
-    "--count",
-    ...flags,
-    "--end-of-options",
-    ...revs,
-  ]);
-  return Number(out.trim());
-}
-
 // Whether a rebase onto `ref` only replays commits that exist nowhere
 // else, in one line: none of them a merge (a rebase would flatten it)
-// or on the upstream already (replayed, the branch would split from its
+// or on a remote already (replayed, the branch would split from its
 // pushed copy).
 async function rebaseIsSafe(
   worktreePath: string,
   ref: string,
 ): Promise<boolean> {
-  const upstream = (
-    await runLenient(worktreePath, ["rev-parse", "--verify", "--quiet", "@{u}"])
-  ).trim();
   const [own, merges, unpushed] = await Promise.all([
     countCommits(worktreePath, [`${ref}..HEAD`]),
     countCommits(worktreePath, [`${ref}..HEAD`], ["--merges"]),
-    upstream
-      ? countCommits(worktreePath, [`${ref}..HEAD`, `^${upstream}`])
-      : null,
+    countCommits(worktreePath, [`${ref}..HEAD`], NOT_ON_A_REMOTE),
   ]);
-  return merges === 0 && (unpushed === null || unpushed === own);
+  return merges === 0 && unpushed === own;
 }
 
 // The upstream by its name ("origin/feature"), for a merge to say it
@@ -191,7 +172,9 @@ async function upstreamName(worktreePath: string): Promise<string> {
 }
 
 // A rebase for linear history where that is safe (rebaseIsSafe), and a
-// whole-tree merge otherwise or on a per-commit conflict. Both abort paths
+// whole-tree merge otherwise or on a per-commit conflict. Each merge
+// here passes `--ff`, git's own default, over a `merge.ff` setting that
+// would refuse it. Both abort paths
 // swallow the abort failure so the worktree isn't left half-rebased or
 // half-merged when the action propagates an error. `--end-of-options`
 // keeps the ref out of the flag slot. Neither command accepts a
@@ -209,7 +192,7 @@ async function rebaseOrMergeAgainst(
     }
   }
   try {
-    await run(worktreePath, ["merge", "--end-of-options", ref]);
+    await run(worktreePath, ["merge", "--ff", "--end-of-options", ref]);
   } catch (err) {
     // Git reports conflicts on stdout, so the files say it instead.
     const conflicted = (await unmergedPaths(worktreePath)) !== "";
@@ -256,6 +239,7 @@ export async function mergeUpstreamKeepingConflicts(
     await run(worktreePath, [
       "merge",
       "--no-edit",
+      "--ff",
       "--end-of-options",
       await upstreamName(worktreePath),
     ]);
@@ -280,6 +264,7 @@ export async function mergePrimaryKeepingConflicts(
     await run(worktreePath, [
       "merge",
       "--no-edit",
+      "--ff",
       "--end-of-options",
       primaryRef,
     ]);
