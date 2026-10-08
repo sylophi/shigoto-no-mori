@@ -3,7 +3,7 @@
 // and the moves that see it through: settle each conflicted file one
 // way or the other, then continue or abort. The Git section's banner and the
 // changes page's conflicted rows drive these.
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { GitOperationState } from "@shared/schemas";
 import { onIndex } from "./changes";
@@ -89,6 +89,21 @@ async function squashPending(
   return staged !== "";
 }
 
+// The branch a rebase replays, which git keeps in its state dir while
+// HEAD is detached for the replay.
+async function rebasingBranch(gitDir: string): Promise<string | null> {
+  const names = await Promise.all(
+    ["rebase-merge", "rebase-apply"].map((dir) =>
+      readFile(join(gitDir, dir, "head-name"), "utf8").then(
+        (text) => text.trim(),
+        () => "",
+      ),
+    ),
+  );
+  const name = names.find((n) => n.startsWith("refs/heads/"));
+  return name === undefined ? null : name.slice("refs/heads/".length);
+}
+
 export async function readOperation(
   worktreePath: string,
 ): Promise<GitOperationState> {
@@ -104,6 +119,7 @@ export async function readOperation(
     operation,
     continuable: operation !== null && CONTINUABLE.has(operation),
     conflicted,
+    rebasing: operation === "rebase" ? await rebasingBranch(gitDir) : null,
   };
 }
 

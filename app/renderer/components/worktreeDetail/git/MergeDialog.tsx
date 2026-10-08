@@ -230,9 +230,19 @@ function Outcome({
   preview: MergePreview | undefined;
   error: Error | null;
 }) {
+  if (ref !== "" && error) {
+    return (
+      <Warning>
+        <InlineError
+          multiline
+          title="Couldn't compare"
+          message={error.message}
+        />
+      </Warning>
+    );
+  }
   let line: string;
   if (ref === "") line = "Pick the branch to bring in.";
-  else if (error) line = error.message;
   else if (!preview) line = `Comparing with ${ref}…`;
   else if (preview.incoming === 0) {
     line = `${branch} already has everything on ${ref}.`;

@@ -203,6 +203,9 @@ export const GitOperationStateSchema = z.object({
   operation: z.string().nullable(),
   continuable: z.boolean(),
   conflicted: z.number().int().nonnegative(),
+  // The branch a rebase is replaying, while git holds HEAD detached
+  // for it. Null otherwise.
+  rebasing: z.string().nullable(),
 });
 export type GitOperationState = z.infer<typeof GitOperationStateSchema>;
 

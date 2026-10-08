@@ -478,6 +478,7 @@ async function main() {
         operation: "merge",
         continuable: true,
         conflicted: 1,
+        rebasing: null,
       });
     },
   );
@@ -506,6 +507,7 @@ async function main() {
         operation: null,
         continuable: false,
         conflicted: 0,
+        rebasing: null,
       });
     },
   );
@@ -519,6 +521,7 @@ async function main() {
         operation: "merge",
         continuable: true,
         conflicted: 1,
+        rebasing: null,
       });
       await assert.rejects(continueOperation(repo), /Resolve/);
       await resolveConflict(repo, "a.txt", "mine");
@@ -541,6 +544,7 @@ async function main() {
       const head = rev(repo, "HEAD");
       assert.throws(() => git(repo, "rebase", "main"));
       assert.equal((await readOperation(repo)).operation, "rebase");
+      assert.equal((await readOperation(repo)).rebasing, "side");
       await resolveConflict(repo, "a.txt", "mine");
       assert.equal(read(repo, "a.txt"), "side\n");
       await abortOperation(repo);

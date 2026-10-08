@@ -3,7 +3,9 @@ import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
-import { commitRewriteAt, NO_REWRITE } from "@/lib/commitRewrite";
+import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
+import { NO_REWRITE } from "@/lib/commitRewrite";
+import type { CommitSummary, Worktree } from "@shared/schemas";
 import { CommitDetails, CommitSteps } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
@@ -56,23 +58,12 @@ export function CommitDiff() {
       }
       details={
         commit && (
-          <CommitDetails
+          <TimelineCommitDetails
             worktree={worktree}
             commit={commit}
+            timeline={timeline}
             index={index}
             onlyOn={incoming ? (history?.upstream ?? undefined) : undefined}
-            rewrite={
-              index >= 0
-                ? commitRewriteAt(
-                    worktree,
-                    timeline,
-                    index,
-                    new Map(
-                      history?.merges.map((m) => [m.hash, m.firstParent]),
-                    ),
-                  )
-                : NO_REWRITE
-            }
           />
         )
       }
@@ -95,6 +86,33 @@ export function CommitDiff() {
         />
       )}
       emptyMessage="This commit changes no files."
+    />
+  );
+}
+
+// The commit's details with what its place on the timeline allows; off
+// it (index -1), nothing that rewrites.
+function TimelineCommitDetails({
+  worktree,
+  commit,
+  timeline,
+  index,
+  onlyOn,
+}: {
+  worktree: Worktree;
+  commit: CommitSummary;
+  timeline: readonly CommitSummary[];
+  index: number;
+  onlyOn: string | undefined;
+}) {
+  const rewriteAt = useCommitRewrites(worktree, timeline);
+  return (
+    <CommitDetails
+      worktree={worktree}
+      commit={commit}
+      index={index}
+      onlyOn={onlyOn}
+      rewrite={index >= 0 ? rewriteAt(index) : NO_REWRITE}
     />
   );
 }

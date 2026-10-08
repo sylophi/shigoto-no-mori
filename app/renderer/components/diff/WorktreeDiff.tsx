@@ -21,12 +21,11 @@ import {
   useStashChanges,
 } from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
-import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
-import { commitRewriteAt } from "@/lib/commitRewrite";
+import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { worktreeSyncView } from "@/lib/syncState";
 import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
 import { Kbd } from "@/components/ui/kbd";
@@ -125,17 +124,7 @@ function ChangesView({
   // requested amend only takes effect while that holds (a push from
   // another window ends it).
   const lastCommit = worktree.recentCommits[0];
-  const { data: history } = useBranchHistory(
-    projectId,
-    worktreeId,
-    lastCommit?.hash,
-  );
-  const rewrite = commitRewriteAt(
-    worktree,
-    worktree.recentCommits,
-    0,
-    new Map(history?.merges.map((m) => [m.hash, m.firstParent])),
-  );
+  const rewrite = useCommitRewrites(worktree, worktree.recentCommits)(0);
   const amending = amendRequested && rewrite.canAmend;
   const busy =
     commit.isPending ||

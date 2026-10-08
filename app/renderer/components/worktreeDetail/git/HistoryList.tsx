@@ -16,8 +16,9 @@ import {
   useBranchCommits,
   useBranchHistory,
 } from "@/hooks/git/useBranchCommits";
+import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { commitRewriteAt, NO_REWRITE } from "@/lib/commitRewrite";
+import { NO_REWRITE, type CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import {
@@ -101,6 +102,7 @@ function BranchCommits({
     worktree.id,
     worktree.recentCommits[0]?.hash,
   );
+  const rewriteAt = useCommitRewrites(worktree, history?.commits ?? []);
   const [earlierOpen, setEarlierOpen] = useState(false);
   if (!history) {
     return <Note>Reading the history…</Note>;
@@ -108,14 +110,14 @@ function BranchCommits({
   const own = history.commits;
   const base = history.base;
   const unpushed = new Set(history.unpushed);
-  const merges = new Map(history.merges.map((m) => [m.hash, m.firstParent]));
+
   // Past what the history read holds: past a branch longer than the
   // read, from its oldest commit shown, else from where the branch left
   // the primary branch. Without one (the primary checkout), only when
   // there is more than the read held.
   const earlierFrom = history.more ? own.at(-1)?.hash : base?.hash;
   const split = history.unpushed.length > 0 && history.incoming.length > 0;
-  const props = { worktree, history, unpushed, merges, actions };
+  const props = { worktree, history, unpushed, rewriteAt, actions };
 
   return (
     <>
@@ -163,7 +165,7 @@ type RowsProps = {
   worktree: Worktree;
   history: BranchHistory;
   unpushed: ReadonlySet<string>;
-  merges: ReadonlyMap<string, string>;
+  rewriteAt: (index: number) => CommitRewrite;
   actions: CommitActions;
 };
 
@@ -183,7 +185,13 @@ function remoteName(worktree: Worktree, upstream: string | null): string {
 // began. Where the commits the remote lacks aren't the newest run (a
 // merge brought older ones in), the remote's line sits on top and those
 // rows carry a mark of their own.
-function LineRows({ worktree, history, unpushed, merges, actions }: RowsProps) {
+function LineRows({
+  worktree,
+  history,
+  unpushed,
+  rewriteAt,
+  actions,
+}: RowsProps) {
   const own = history.commits;
   const state = deriveRemoteSyncState(worktree);
   const pill = <WorktreeSyncPill worktree={worktree} compact />;
@@ -239,7 +247,7 @@ function LineRows({ worktree, history, unpushed, merges, actions }: RowsProps) {
         key={commit.hash}
         worktree={worktree}
         commit={commit}
-        rewrite={commitRewriteAt(worktree, own, index, merges)}
+        rewrite={rewriteAt(index)}
         actions={actions}
         unpushed={!run && unpushed.has(commit.hash)}
       />,
@@ -266,7 +274,7 @@ function SplitRows({
   worktree,
   history,
   unpushed,
-  merges,
+  rewriteAt,
   actions,
 }: RowsProps) {
   const own = history.commits;
@@ -331,7 +339,7 @@ function SplitRows({
           key={commit.hash}
           worktree={worktree}
           commit={commit}
-          rewrite={commitRewriteAt(worktree, own, index, merges)}
+          rewrite={rewriteAt(index)}
           actions={actions}
         />,
       );
@@ -359,7 +367,7 @@ function SplitRows({
           key={commit.hash}
           worktree={worktree}
           commit={commit}
-          rewrite={commitRewriteAt(worktree, own, sharedAt + i, merges)}
+          rewrite={rewriteAt(sharedAt + i)}
           actions={actions}
         />,
       );

@@ -529,6 +529,7 @@ function hostHandlersFor(
       operation: null,
       continuable: false,
       conflicted: 0,
+      rebasing: null,
     }),
     "worktrees:fileHunks": ({ worktreeId, path }) =>
       changes.hunks(worktreeId, path),

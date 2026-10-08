@@ -220,10 +220,15 @@ export function CommitMenuItems({
         </DropdownMenuItem>
       )}
       {(canAmend || reword || squash || undo) && <DropdownMenuSeparator />}
-      <DropdownMenuItem disabled={busy} onClick={() => actions.revert(commit)}>
-        <RotateCcw />
-        Revert
-      </DropdownMenuItem>
+      {actions.canRevert && (
+        <DropdownMenuItem
+          disabled={busy}
+          onClick={() => actions.revert(commit)}
+        >
+          <RotateCcw />
+          Revert
+        </DropdownMenuItem>
+      )}
       {actions.pickTargets.length > 0 && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger disabled={busy}>

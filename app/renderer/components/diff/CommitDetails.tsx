@@ -131,7 +131,7 @@ export function CommitDetails({
               : `Undo the ${pluralize(undo.count, "commit")} after it`}
           </Button>
         )}
-        {!onlyOn && (
+        {!onlyOn && actions.canRevert && (
           <Button
             variant="outline"
             size="xs"

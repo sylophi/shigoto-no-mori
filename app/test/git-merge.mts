@@ -191,6 +191,7 @@ async function main() {
         operation: "squash",
         continuable: true,
         conflicted: 1,
+        rebasing: null,
       });
       await resolveConflict(repo, "a.txt", "theirs");
       await continueOperation(repo);
@@ -320,6 +321,7 @@ async function main() {
         operation: "squash",
         continuable: true,
         conflicted: 0,
+        rebasing: null,
       });
       writeFileSync(hook, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
       await continueOperation(repo);
@@ -361,6 +363,64 @@ async function main() {
       git(repo, "rm", "-q", "-rf", ".");
       commit(repo, "o.txt", "o\n", "Unrelated");
       assert.equal((await readMergePreview(repo, "main")).conflicts, null);
+    },
+  );
+
+  await check("a tag or a hash brings its commits in too", async (track) => {
+    const repo = seed(track, { diverge: true });
+    git(repo, "tag", "v1", "main");
+    assert.equal((await readMergePreview(repo, "v1")).incoming, 1);
+    await mergeBranch(repo, "v1", "merge", undefined);
+    assert.equal(parents(repo), 2);
+    const other = seed(track, { diverge: true });
+    const hash = rev(other, "main");
+    await mergeBranch(other, hash, "squash", "From a hash");
+    assert.equal(message(other), "From a hash");
+  });
+
+  await check("a detached HEAD can bring a branch in", async (track) => {
+    const repo = seed(track, { diverge: true });
+    git(repo, "checkout", "-q", "--detach");
+    await mergeBranch(repo, "main", "rebase", undefined);
+    assert.equal(rev(repo, "HEAD~1"), rev(repo, "main"));
+    await clean(repo);
+  });
+
+  await check(
+    "a rebase that stops twice is continued commit by commit",
+    async (track) => {
+      const repo = seed(track, { conflict: true });
+      commit(repo, "a.txt", "feature again\n", "Feature again");
+      assert.equal(await mergeBranch(repo, "main", "rebase", undefined), true);
+      await resolveConflict(repo, "a.txt", "mine");
+      await continueOperation(repo);
+      const state = await readOperation(repo);
+      if (state.operation === "rebase") {
+        await resolveConflict(repo, "a.txt", "mine");
+        await continueOperation(repo);
+      }
+      await clean(repo);
+      assert.equal(read(repo, "a.txt"), "feature again\n");
+      assert.equal(rev(repo, "HEAD~2"), rev(repo, "main"));
+    },
+  );
+
+  await check(
+    "a merge with nothing to bring in or of unrelated histories says so",
+    async (track) => {
+      const repo = seed(track);
+      const head = rev(repo, "HEAD");
+      assert.equal((await readMergePreview(repo, "main")).incoming, 0);
+      await mergeBranch(repo, "main", "merge", undefined);
+      assert.equal(rev(repo, "HEAD"), head);
+      git(repo, "checkout", "-q", "--orphan", "other");
+      git(repo, "rm", "-q", "-rf", ".");
+      commit(repo, "o.txt", "o\n", "Unrelated");
+      await assert.rejects(
+        mergeBranch(repo, "main", "merge", undefined),
+        /unrelated histories/,
+      );
+      await clean(repo);
     },
   );
 

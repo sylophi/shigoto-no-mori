@@ -9,6 +9,7 @@ import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToa
 import {
   useCherryPick,
   useRevertCommit,
+  useWorktreeOperation,
   useRewordCommit,
   useSquashCommit,
 } from "@/hooks/worktrees/useGitHistory";
@@ -35,6 +36,7 @@ export function useCommitActions(
   const { quickCreate, isPending: creating } = useQuickCreateWorktree();
   const say = useWorktreeSuccessToast();
   const { data: siblings } = useWorktrees(projectId);
+  const { data: operation } = useWorktreeOperation(worktree);
   const [rewording, setRewording] = useState<{
     hash: string;
     head: string;
@@ -42,6 +44,9 @@ export function useCommitActions(
 
   return {
     undoTo: undo.undoTo,
+    // A revert is a commit of its own, which waits while a merge,
+    // rebase or squash does.
+    canRevert: operation?.operation == null,
     // The worktrees a commit can be cherry-picked onto: the project's
     // others on this device that hold a branch.
     pickTargets: (siblings ?? []).filter(
