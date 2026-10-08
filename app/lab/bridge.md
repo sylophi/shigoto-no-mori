@@ -42,7 +42,7 @@ the page, and a `js` step awaits what a call returns.
 - `hub.invokePeer` and the check scripts use the raw contract payload
   from `shared/ipc/modules/<module>.ts`.
 
-A rejection with a zod issue list means the payload shape matches the
+A rejection naming a missing or unexpected key means the payload shape matches the
 wrong convention.
 
 

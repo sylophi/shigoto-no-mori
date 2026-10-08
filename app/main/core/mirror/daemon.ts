@@ -14,7 +14,8 @@
 // Electron-free on purpose: the spawn is injected (main/electron owns
 // the binary path and the quit-time reaping), so the mirror check
 // drives this exact supervisor against a freshly built engine.
-import { z } from "zod";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { StreamChild } from "@host/fileSync/spawn";
 import { errorMessageOf } from "@shared/errors";
 import type { MirrorCreateInput } from "@host/ipc/modules/mirror";
@@ -42,26 +43,28 @@ import {
 // line or on a session, is stripped. The nested shapes (endpoint,
 // staging, conflict, problem, change) are the IPC contract's strict
 // ones, so a field added inside them still drops the line.
-const DaemonEventSchema = z.discriminatedUnion("event", [
-  z.object({ event: z.literal("ready") }),
-  z.object({
-    event: z.literal("state"),
-    sessions: z.array(MirrorSessionRawSchema),
+const DaemonEventSchema = Schema.Union([
+  Schema.Struct({ event: Schema.Literal("ready") }),
+  Schema.Struct({
+    event: Schema.Literal("state"),
+    sessions: Schema.Array(MirrorSessionRawSchema),
   }),
-  z.object({ event: z.literal("error"), error: z.string() }),
+  Schema.Struct({ event: Schema.Literal("error"), error: Schema.String }),
 ]);
-type DaemonEvent = z.infer<typeof DaemonEventSchema>;
+type DaemonEvent = typeof DaemonEventSchema.Type;
+const decodeDaemonEvent = Schema.decodeUnknownResult(DaemonEventSchema);
 const KNOWN_EVENTS: ReadonlySet<string> = new Set(
-  DaemonEventSchema.options.map((option) => option.shape.event.value),
+  DaemonEventSchema.members.map((member) => member.fields.event.literal),
 );
 
-const DaemonResponseSchema = z.object({
-  id: z.string(),
-  ok: z.boolean(),
-  session: z.string().optional(),
-  error: z.string().optional(),
+const DaemonResponseSchema = Schema.Struct({
+  id: Schema.String,
+  ok: Schema.Boolean,
+  session: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
 });
-type DaemonResponse = z.infer<typeof DaemonResponseSchema>;
+type DaemonResponse = typeof DaemonResponseSchema.Type;
+const decodeDaemonResponse = Schema.decodeUnknownResult(DaemonResponseSchema);
 
 type Pending = {
   resolve: (response: DaemonResponse) => void;
@@ -105,7 +108,7 @@ export function createMirrorDaemon(deps: {
 }) {
   let child: StreamChild | null = null;
   let status: MirrorDaemonStatus = "stopped";
-  let sessions: MirrorSessionRaw[] = [];
+  let sessions: readonly MirrorSessionRaw[] = [];
   let stopping = false;
   let restartTimer: ReturnType<typeof setTimeout> | null = null;
   let restarts = 0;
@@ -153,12 +156,12 @@ export function createMirrorDaemon(deps: {
       return;
     }
     const kind = "event" in doc ? String(doc.event) : "response";
-    const parsed =
-      "event" in doc
-        ? DaemonEventSchema.safeParse(doc)
-        : DaemonResponseSchema.safeParse(doc);
-    if (!parsed.success) {
-      const reason = z.prettifyError(parsed.error).replaceAll("\n", " ");
+    const parsed: Result.Result<
+      DaemonEvent | DaemonResponse,
+      Schema.SchemaError
+    > = "event" in doc ? decodeDaemonEvent(doc) : decodeDaemonResponse(doc);
+    if (Result.isFailure(parsed)) {
+      const reason = parsed.failure.message.replaceAll("\n", " ");
       rejectLine(kind, line, reason);
       // A request the line names is answered now, not at the timeout.
       if ("id" in doc && typeof doc.id === "string") {
@@ -169,8 +172,8 @@ export function createMirrorDaemon(deps: {
       return;
     }
     lastRejection.delete(kind);
-    if ("event" in parsed.data) handleEvent(parsed.data);
-    else handleResponse(parsed.data);
+    if ("event" in parsed.success) handleEvent(parsed.success);
+    else handleResponse(parsed.success);
   }
 
   function rejectLine(kind: string, line: string, reason: string): void {

@@ -8,6 +8,7 @@
 //
 // window.fakeHost carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
+import type * as Types from "effect/Types";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { buildApi, type AllChannelHandlers } from "@shared/ipc/client";
@@ -933,13 +934,15 @@ function fakeScriptTicker(
 // fact. Each forest's emitter is remembered so mirror:changed reaches
 // every page, a peer's riding the client wire's peer push
 // (installFakeHostBridge).
+// The posed sessions change in place as their fake engine cycles.
+type FakeMirrorSession = Types.Mutable<MirrorSession>;
 const fakeMirrors: {
-  sessions: MirrorSession[];
+  sessions: FakeMirrorSession[];
   serving: (MirrorServing & { deviceId: string })[];
   history: Record<string, MirrorEvent[]>;
 } = { sessions: [], serving: [], history: {} };
 // The forest running each session, the one holding the original.
-const fakeRunners = new WeakMap<MirrorSession, string>();
+const fakeRunners = new WeakMap<FakeMirrorSession, string>();
 const mirrorWires = new Map<string, FixtureWire["emit"]>();
 let pushFromPeer: (
   deviceId: string,
@@ -976,7 +979,7 @@ function posedMirrorEngine(): (typeof MIRROR_ENGINE_STATES)[number] {
   return MIRROR_ENGINE_STATES.find((state) => state === posed) ?? "running";
 }
 
-function findFakeSession(session: string): MirrorSession | undefined {
+function findFakeSession(session: string): FakeMirrorSession | undefined {
   return fakeMirrors.sessions.find((s) => s.session === session);
 }
 
@@ -1040,7 +1043,7 @@ async function fakeMirrorStartTo(
     runSetup: input.runSetup,
   });
   const tip = sourceWorktree.recentCommits[0]?.hash.slice(0, 7) ?? "58c21fe";
-  const session: MirrorSession = {
+  const session: FakeMirrorSession = {
     session: `sync_${fakeSessionSerial++}`,
     name: sourceWorktree.branch,
     labels: { copySide: "remote" },

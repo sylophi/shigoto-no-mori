@@ -30,7 +30,6 @@
 // names as one. Both primaries keep what they had.
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { z } from "zod";
 import { join } from "node:path";
 import {
   MIRROR_LABEL_COPY_SIDE,
@@ -46,7 +45,7 @@ import {
   type MirrorSession,
   MirrorSessionSchema,
   type MirrorStartFromPayload,
-  type MirrorStartToPayloadSchema,
+  type MirrorStartToPayload,
   MirrorStartToResultSchema,
   mirrorContract,
   summarizeIgnores,
@@ -103,6 +102,10 @@ import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
 import { rollBackSent, sendWorktree } from "./sync";
 
 const decodePullProgress = Schema.decodeOption(SyncPullProgressSchema);
+const decodeMirrorSession = Schema.decodeUnknownSync(MirrorSessionSchema);
+const decodeMirrorStartToResult = Schema.decodeUnknownSync(
+  MirrorStartToResultSchema,
+);
 
 // The daemon slot, the session labels and the raw session shapes live
 // in host/mirror/registry.ts, where the worktree delete can reach them
@@ -182,7 +185,7 @@ function annotateMirrorSession(
   raw: MirrorSessionRaw,
   git?: MirrorGitStatus,
 ): MirrorSession {
-  return MirrorSessionSchema.parse({
+  return decodeMirrorSession({
     ...raw,
     localProjectId: raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
     localWorktreeId: raw.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "",
@@ -392,7 +395,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // for the mirror) is the send's cancel while the send runs, and
   // past it the same rollback as a failed session open, the session
   // ended if the open outran the cancel.
-  startTo: async (input: z.infer<typeof MirrorStartToPayloadSchema>, ctx) => {
+  startTo: async (input: MirrorStartToPayload, ctx) => {
     const daemon = requireRunningEngine();
     refuseMirroredWorktree(daemon, input.worktreeId);
     const { ignoreMode, ignores, ...sendInput } = input;
@@ -523,7 +526,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
             .catch(() => {});
         });
         try {
-          return MirrorStartToResultSchema.parse(
+          return decodeMirrorStartToResult(
             await peerMirrorApiFor(sourceDeviceId).startTo({
               targetDeviceId: thisDeviceId(),
               projectId,

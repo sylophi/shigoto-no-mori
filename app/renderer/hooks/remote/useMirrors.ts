@@ -432,7 +432,7 @@ export function useStartMirror(move: Move) {
 // slow beat while it is on screen.
 export function useMirrorHistory(localWorktreeId: string) {
   const { api, keys } = useHostScope();
-  return useQuery<MirrorEvent[]>({
+  return useQuery<readonly MirrorEvent[]>({
     queryKey: keys.mirrorHistory(localWorktreeId),
     queryFn: async () => (await api.mirror.history({ localWorktreeId })).events,
     refetchInterval: 5_000,

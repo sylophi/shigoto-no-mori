@@ -20,8 +20,9 @@ import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
 import { navContract } from "@shared/ipc/modules/nav";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { z } from "zod";
 import { coalesce } from "@host/lib/util/coalesce";
 import {
   GitStateCoreSchema,
@@ -225,20 +226,29 @@ const broadcastMirrorChanged = coalesce(() => {
 const fileSyncDir = () => join(dataDir(), "file-sync");
 // The git follower's agreed states, one file beside the engine's data.
 const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
-const GitFollowStoreSchema = z.object({
-  agreed: z.record(z.string(), GitStateCoreSchema).default({}),
+const GitFollowStoreSchema = Schema.Struct({
+  agreed: Schema.Record(Schema.String, GitStateCoreSchema).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 // The mirrors' event threads (main/core/mirror/history.ts), one file
 // beside the follower's, fed by every daemon snapshot and follower
 // verdict below and by the handlers' control ops.
 const mirrorHistoryPath = () => join(fileSyncDir(), "mirror-history.json");
-const MirrorHistoryStoreSchema = z.object({
-  events: z.record(z.string(), z.array(MirrorEventSchema)).default({}),
+const MirrorHistoryStoreSchema = Schema.Struct({
+  events: Schema.Record(Schema.String, Schema.Array(MirrorEventSchema)).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 // The mirrors this device invited (host/mirror/invites.ts), beside them.
 const mirrorInvitesPath = () => join(fileSyncDir(), "mirror-invites.json");
-const MirrorInviteStoreSchema = z.object({
-  invites: z.array(MirrorInviteSchema).default([]),
+const decodeMirrorWorktreePayload = Schema.decodeUnknownOption(
+  MirrorWorktreePayloadSchema,
+);
+const MirrorInviteStoreSchema = Schema.Struct({
+  invites: Schema.Array(MirrorInviteSchema).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
 const mirrorHistory = createMirrorHistory({
   store: {
@@ -664,12 +674,12 @@ export function registerIpcHandlers(): void {
         gitFollower.onPeerProjectChanged(push.deviceId, payload.projectId);
       }
     } else if (push.channel === "mirror:gitChanged") {
-      const parsed = MirrorWorktreePayloadSchema.safeParse(push.payload);
-      if (parsed.success) {
+      const parsed = decodeMirrorWorktreePayload(push.payload);
+      if (Option.isSome(parsed)) {
         gitFollower.onPeerWorktreeChanged(
           push.deviceId,
-          parsed.data.projectId,
-          parsed.data.worktreeId,
+          parsed.value.projectId,
+          parsed.value.worktreeId,
         );
       }
     } else if (push.channel === "worktrees:removal") {

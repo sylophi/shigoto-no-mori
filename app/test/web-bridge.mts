@@ -183,36 +183,13 @@ it("stubs: read-classified channels answer structural defaults, the previewTheme
   const unsubscribe = bridge.api.git.onRefsRefreshed(() => {});
   assert.equal(typeof unsubscribe, "function");
   unsubscribe();
-  // The walker itself: without fabrication a union or bounded
-  // string yields the sentinel, with fabrication (allowlist only)
-  // it still parses.
-  const { z } = await import("zod");
-  const union = z.discriminatedUnion("t", [
-    z.object({ t: z.literal("a"), n: z.number().int() }),
-    z.object({ t: z.literal("b") }),
-  ]);
-  assert.equal(
-    stubValueFor(union, { fabricateArms: false }),
-    NO_STRUCTURAL_STUB,
-  );
-  assert.equal(
-    stubValueFor(z.string().min(1), { fabricateArms: false }),
-    NO_STRUCTURAL_STUB,
-  );
-  assert.equal(
-    union.safeParse(stubValueFor(union, { fabricateArms: true })).success,
-    true,
-  );
-  // A nested enum blocks the whole object structurally.
-  assert.equal(
-    stubValueFor(z.object({ state: z.enum(["granted", "denied"]) }), {
-      fabricateArms: false,
-    }),
-    NO_STRUCTURAL_STUB,
-  );
-  // The same rules over an Effect schema: optional fields are left
-  // out, required ones built, and an arm is only fabricated when
+  // The walker itself: optional fields are left out, required ones
+  // built, and an arm or a bounded string is only fabricated when
   // allowed.
+  assert.equal(
+    stubValueFor(Schema.NonEmptyString, { fabricateArms: false }),
+    NO_STRUCTURAL_STUB,
+  );
   const effectUnion = Schema.Union([
     Schema.Struct({ t: Schema.Literal("a"), n: Schema.Int }),
     Schema.Struct({ t: Schema.Literal("b") }),

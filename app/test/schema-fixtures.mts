@@ -11,7 +11,7 @@
 //               (a default filled in, an unknown key dropped)
 //   rejects     values that must fail to decode
 //
-// A schema already on Effect Schema must also encode its decoded value
+// Each schema must also encode its decoded value
 // back to the same JSON, and the decoded value itself must serialize
 // to it, since the wires send decoded values as they are.
 //
@@ -22,7 +22,6 @@ import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
-import type { z } from "zod";
 import * as hubProtocol from "@shared/hub/protocol";
 import * as schemas from "@shared/schemas";
 
@@ -47,7 +46,7 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
 
 const exported = Object.entries({ ...schemas, ...hubProtocol }).filter(
   ([name]) => name.endsWith("Schema"),
-) as [string, z.ZodType | Schema.Codec<unknown, unknown>][];
+) as [string, Schema.Codec<unknown, unknown>][];
 
 it("every exported schema has fixtures, and every fixture a schema", () => {
   const names = new Set(exported.map(([name]) => name));
@@ -64,23 +63,20 @@ it("every exported schema has fixtures, and every fixture a schema", () => {
 const json = (value: unknown) => JSON.stringify(value);
 
 // The JSON forms a value takes on its way through the schema: the
-// decoded value, and for an Effect schema its encoding as well.
+// decoded value and its encoding.
 function wireForms(
-  schema: z.ZodType | Schema.Codec<unknown, unknown>,
+  schema: Schema.Codec<unknown, unknown>,
   value: unknown,
 ): string[] {
-  if (!Schema.isSchema(schema)) return [json(schema.parse(value))];
   const decoded = Schema.decodeUnknownSync(schema)(value);
   return [json(decoded), json(Schema.encodeSync(schema)(decoded))];
 }
 
 function refuses(
-  schema: z.ZodType | Schema.Codec<unknown, unknown>,
+  schema: Schema.Codec<unknown, unknown>,
   value: unknown,
 ): boolean {
-  return Schema.isSchema(schema)
-    ? Option.isNone(Schema.decodeUnknownOption(schema)(value))
-    : !schema.safeParse(value).success;
+  return Option.isNone(Schema.decodeUnknownOption(schema)(value));
 }
 
 describe.each(exported)("%s", (name, schema) => {

@@ -80,7 +80,7 @@ export type MirrorCreateInput = {
 
 export type MirrorImpl = {
   status: () => MirrorDaemonStatus;
-  sessions: () => MirrorSessionRaw[];
+  sessions: () => readonly MirrorSessionRaw[];
   create: (input: MirrorCreateInput) => Promise<string>;
   // Ends a session and opens a fresh one in its place, whatever hangs
   // off the old id (the git follower's agreement) carried across.
@@ -95,7 +95,7 @@ export type MirrorImpl = {
   refreshGit: (session: string) => Promise<MirrorGitStatus | undefined>;
   // The mirror's thread of events, by local worktree (main/core/mirror/
   // history.ts), and the way a control op adds to it.
-  history: (localWorktreeId: string) => MirrorEvent[];
+  history: (localWorktreeId: string) => readonly MirrorEvent[];
   noteEvent: (
     localWorktreeId: string,
     kind: MirrorEventKind,
