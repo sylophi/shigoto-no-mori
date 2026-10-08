@@ -41,7 +41,7 @@ import {
 import { describe } from "./commands/describe.ts";
 import { agentWorking, autopull, shelve, unshelve } from "./commands/marks.ts";
 import { status } from "./commands/status.ts";
-import { engine } from "./engine.ts";
+import { doctor, engine } from "./engine.ts";
 import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
 
@@ -146,7 +146,7 @@ const sm = Command.make("sm").pipe(
     unmirror.pipe(Command.provide(services)),
     mirrors.pipe(Command.provide(services)),
     devices.pipe(Command.provide(services)),
-    doctorCommand.pipe(Command.provide(services)),
+    doctorCommand.pipe(Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
   ]),
 );
