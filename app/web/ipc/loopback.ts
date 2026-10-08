@@ -27,7 +27,17 @@
 //
 // A channel absent from the contract entirely also rejects, because
 // answering it would hide a real wiring bug.
-import type { ContractScope, InvokeDef } from "@shigomori/contracts/contract";
+import {
+  annotation,
+  callsOf,
+  channelOf,
+  type ContractCall,
+  type ContractScope,
+  Gated,
+  isBroadcast,
+  outputOf,
+  scopeOf,
+} from "@shigomori/contracts/contract";
 import { allContractModules } from "@shared/ipc/client";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import type {
@@ -59,12 +69,14 @@ export type LoopbackWire = {
 // fallback. Built from the same module list buildApi consumes so the
 // inventory cannot drift from the api surface. Exported for the fake host's
 // fixture wire (lab/fake-host/bridge.ts), which stubs the same way.
-export function invokeIndexFor(scope: ContractScope): Map<string, InvokeDef> {
-  const index = new Map<string, InvokeDef>();
+export function invokeIndexFor(
+  scope: ContractScope,
+): Map<string, ContractCall> {
+  const index = new Map<string, ContractCall>();
   for (const module of allContractModules) {
-    if (module.scope !== scope) continue;
-    for (const def of Object.values(module.calls)) {
-      if (def.kind === "invoke") index.set(def.channel, def);
+    if (scopeOf(module) !== scope) continue;
+    for (const [, call] of callsOf(module)) {
+      if (!isBroadcast(call)) index.set(channelOf(call), call);
     }
   }
   return index;
@@ -83,16 +95,19 @@ export function createLoopbackWire(scope: ContractScope): LoopbackWire {
   type FallbackVerdict = { stub: unknown } | { refusal: string };
   const verdictCache = new Map<string, FallbackVerdict>();
 
-  function fallbackVerdict(channel: string, def: InvokeDef): FallbackVerdict {
+  function fallbackVerdict(
+    channel: string,
+    call: ContractCall,
+  ): FallbackVerdict {
     const allowlisted = STUB_ALLOWED.has(channel);
-    if (def.gated !== false && !allowlisted) {
+    if (annotation(call, Gated) !== false && !allowlisted) {
       // Mutations, and local channels that never classified themselves
       // as reads, must not pretend to succeed.
       return {
         refusal: `${channel} is not available in the browser`,
       };
     }
-    const stub = stubValueFor(def.output, { fabricateArms: allowlisted });
+    const stub = stubValueFor(outputOf(call), { fabricateArms: allowlisted });
     if (stub === NO_STRUCTURAL_STUB) {
       // A read whose output demands a fabricated arm (an enum, a union,
       // a bounded scalar) gets no invented answer either.

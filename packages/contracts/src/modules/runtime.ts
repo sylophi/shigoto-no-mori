@@ -19,23 +19,26 @@ import {
 // command grant like the fs reads (it names the host's homedir and
 // data dir, which a peer this host has not granted control to has no
 // use for). It moves no state, so it never pings viewers.
-export const runtimeContract = defineContract("host", {
-  info: invoke("runtime:info", VoidSchema, RuntimeInfoSchema, {
+export const runtimeContract = defineContract(
+  "runtime",
+  "host",
+  invoke("info", VoidSchema, RuntimeInfoSchema, {
     remote: true,
     gated: true,
+    grant: "changeApp",
     movesHostState: false,
   }),
-  nuke: invoke("runtime:nuke", VoidSchema, VoidSchema, { remote: false }),
-  moveDataDir: invoke(
-    "runtime:moveDataDir",
+  invoke("nuke", VoidSchema, VoidSchema, { remote: false }),
+  invoke(
+    "moveDataDir",
     MoveDataDirPayloadSchema,
     VoidSchema,
     // The host restarts right after, and the session that comes back
     // refetches everything, so the viewer ping would only race the
     // quit.
-    { remote: true, gated: true, movesHostState: false },
+    { remote: true, gated: true, grant: "changeApp", movesHostState: false },
   ),
-  nukeProgress: broadcast("runtime:nukeProgress", NukeProgressSchema, {
+  broadcast("nukeProgress", NukeProgressSchema, {
     remote: true,
   }),
-});
+);

@@ -92,12 +92,14 @@ const HubPeerPushSchema = Schema.Struct({
 });
 export type HubPeerPush = typeof HubPeerPushSchema.Type;
 
-export const hubContract = defineContract("client", {
+export const hubContract = defineContract(
+  "hub",
+  "client",
   // The remote-plane snapshot (HubStatusSchema above): the hub
   // socket's phase and roster plus the direct sessions and tunnel
   // state. Cheap: main reads its in-memory snapshot, nothing touches
   // the network.
-  status: invoke("hub:status", VoidSchema, HubStatusSchema),
+  invoke("status", VoidSchema, HubStatusSchema),
   // Forward one sm invoke to a peer device over its DIRECT session.
   // Sessions are supervised desired state (shared/hub/directKeeper.ts):
   // the owner dials every rostered peer eagerly and redials forever,
@@ -105,8 +107,8 @@ export const hubContract = defineContract("client", {
   // (joining an in-flight dial), and with none it rejects at once with
   // the keeper's last failure folded in. Errors ride each wire's error
   // serialization.
-  invokePeer: invoke(
-    "hub:invokePeer",
+  invoke(
+    "invokePeer",
     Schema.Struct({
       // Routed to a peer session keyed by this id (M6), so it carries the
       // shared device-id bound.
@@ -118,8 +120,8 @@ export const hubContract = defineContract("client", {
   ),
   // Fan-out on every supervisor or presence transition, carrying the
   // fresh snapshot so listeners never need a follow-up status call.
-  statusChanged: broadcast("hub:statusChanged", HubStatusSchema),
+  broadcast("statusChanged", HubStatusSchema),
   // Fan-out of every push frame received from any peer, see
   // HubPeerPushSchema.
-  peerPush: broadcast("hub:peerPush", HubPeerPushSchema),
-});
+  broadcast("peerPush", HubPeerPushSchema),
+);

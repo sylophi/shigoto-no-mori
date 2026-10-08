@@ -17,8 +17,8 @@ import { strict } from "../schemas/strict.ts";
 // orchestrators its own dialogs do, which shell the CLI back for each
 // git step.
 //
-// Served on the control wire ONLY (main/ipc/handlers.ts), so no call
-// carries a remote tag. Its caller is a local process of this user and
+// Served on the control wire ONLY (main/ipc/handlers.ts), so every call
+// says remote: false. Its caller is a local process of this user and
 // commands this machine without a grant. `gated` is what pings the
 // app's windows and the remote viewers once an op moved state.
 //
@@ -179,11 +179,13 @@ const ControlMirrorTargetSchema = Schema.Struct({
   worktreeId: WorktreeIdSchema,
 });
 
-export const controlContract = defineContract("host", {
+export const controlContract = defineContract(
+  "control",
+  "host",
   // The account's other project-hosting devices. With a project, each
   // says whether it could take a send of it or serve a bring.
-  devices: invoke(
-    "control:devices",
+  invoke(
+    "devices",
     strict(
       Schema.Struct({ projectId: Schema.optional(Schema.NonEmptyString) }),
     ),
@@ -193,11 +195,12 @@ export const controlContract = defineContract("host", {
         devices: Schema.Array(ControlDeviceSchema),
       }),
     ),
+    { remote: false },
   ),
   // The repo's worktrees on the other devices, the candidates for a
   // bring. Primary checkouts are left out: only a worktree moves.
-  peerWorktrees: invoke(
-    "control:peerWorktrees",
+  invoke(
+    "peerWorktrees",
     strict(
       Schema.Struct({
         projectId: Schema.NonEmptyString,
@@ -213,27 +216,24 @@ export const controlContract = defineContract("host", {
         unreachable: Schema.Array(Schema.String),
       }),
     ),
+    { remote: false },
   ),
   // One of this device's worktrees to a peer: a transplant, or with
   // `mirror` a mirror whose copy is there. A peer with no checkout of
   // the repo clones it first. Progress streams to the caller as
   // sync:pullProgress frames, keyed by the local worktree.
-  send: invoke(
-    "control:send",
-    ControlSendPayloadSchema,
-    ControlTransferResultSchema,
-    { gated: true },
-  ),
+  invoke("send", ControlSendPayloadSchema, ControlTransferResultSchema, {
+    remote: false,
+    gated: true,
+  }),
   // A peer's worktree to this device, the same two ways. Progress is
   // keyed by the peer's worktree id.
-  bring: invoke(
-    "control:bring",
-    ControlBringPayloadSchema,
-    ControlTransferResultSchema,
-    { gated: true },
-  ),
-  mirrors: invoke(
-    "control:mirrors",
+  invoke("bring", ControlBringPayloadSchema, ControlTransferResultSchema, {
+    remote: false,
+    gated: true,
+  }),
+  invoke(
+    "mirrors",
     VoidSchema,
     strict(
       Schema.Struct({
@@ -241,12 +241,13 @@ export const controlContract = defineContract("host", {
         mirrors: Schema.Array(ControlMirrorSchema),
       }),
     ),
+    { remote: false },
   ),
   // Ends the mirror the worktree is part of and removes the copy,
   // wherever it is. Refused unless the follower reports "synced", as
   // mirror:stop is, until `force`.
-  mirrorStop: invoke(
-    "control:mirrorStop",
+  invoke(
+    "mirrorStop",
     strict(
       Schema.Struct({
         ...ControlMirrorTargetSchema.fields,
@@ -261,9 +262,9 @@ export const controlContract = defineContract("host", {
         copyStayed: Schema.optional(Schema.String),
       }),
     ),
-    { gated: true },
+    { remote: false, gated: true },
   ),
-});
+);
 
 // The failure codes a control op's refusal carries across the wire, so
 // the CLI keys its exit handling on the code and not on the prose.

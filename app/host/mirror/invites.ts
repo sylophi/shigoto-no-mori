@@ -30,7 +30,13 @@ import type * as Types from "effect/Types";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
 import { allContractModules } from "@shared/ipc/client";
-import type { InvitableScope } from "@shigomori/contracts/contract";
+import {
+  annotation,
+  callsOf,
+  channelOf,
+  Invitable,
+  type InvitableScope,
+} from "@shigomori/contracts/contract";
 import {
   type MirrorWorktreePayload,
   MirrorWorktreePayloadSchema,
@@ -185,15 +191,14 @@ export async function reconcileMirrorInvites(
 }
 
 // What an invitation admits, by the scope the call's contract entry
-// declares (InvokeDef.invitable). The input is the raw frame's, read
+// declares (its Invitable annotation). The input is the raw frame's, read
 // through the shared scoping schemas, so a shape that does not parse
 // admits nothing.
 const invitable = new Map<string, InvitableScope>();
 for (const module of allContractModules) {
-  for (const def of Object.values(module.calls)) {
-    if (def.kind === "invoke" && def.invitable !== undefined) {
-      invitable.set(def.channel, def.invitable);
-    }
+  for (const [, call] of callsOf(module)) {
+    const scope = annotation(call, Invitable);
+    if (scope !== undefined) invitable.set(channelOf(call), scope);
   }
 }
 export const invitableChannels = (): ReadonlyMap<string, InvitableScope> =>

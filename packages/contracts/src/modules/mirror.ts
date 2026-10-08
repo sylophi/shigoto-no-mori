@@ -660,96 +660,99 @@ const MirrorHistoryResultSchema = strict(
   }),
 );
 
-export const mirrorContract = defineContract("host", {
-  list: invoke("mirror:list", VoidSchema, MirrorListResultSchema, {
+export const mirrorContract = defineContract(
+  "mirror",
+  "host",
+  invoke("list", VoidSchema, MirrorListResultSchema, {
     remote: true,
     gated: false,
   }),
   // Served to peers on the command grant: the copy's device asks the
   // original's to start the mirror into it (see the payload's note).
-  startTo: invoke(
-    "mirror:startTo",
-    MirrorStartToPayloadSchema,
-    MirrorStartToResultSchema,
-    { remote: true, gated: true },
-  ),
+  invoke("startTo", MirrorStartToPayloadSchema, MirrorStartToResultSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
   // The ask from the copy's side, local-only like sync:pullWorktree:
   // invites the mirror, then runs the peer's startTo towards here and
   // relays its progress (sync:pullProgress, keyed by the peer's
   // worktree).
-  startFrom: invoke(
-    "mirror:startFrom",
-    MirrorStartFromPayloadSchema,
-    MirrorStartToResultSchema,
-    { remote: false, gated: true },
-  ),
+  invoke("startFrom", MirrorStartFromPayloadSchema, MirrorStartToResultSchema, {
+    remote: false,
+    gated: true,
+  }),
   // The controls, served to peers on the command grant: the device at
   // the far end of a mirror drives the session from its own page
   // through the device running it (renderer/hooks/remote/useMirrors.ts
   // useWorktreeMirrorLinks). Stop moves a worktree (the copy goes),
   // and every one of them moves the list, so all keep the host-state
   // ping.
-  stop: invoke("mirror:stop", MirrorStopPayloadSchema, MirrorStopResultSchema, {
+  invoke("stop", MirrorStopPayloadSchema, MirrorStopResultSchema, {
     remote: true,
     gated: true,
+    grant: "changeCode",
   }),
   // A copy here is no longer mirrored (its runner ended the session and
   // kept it): the invitation this device left for that peer goes, so
   // the peer's calls on the worktree need the grant again. Invitable,
   // since an invited mirror's runner is exactly who says so.
-  release: invoke("mirror:release", MirrorWorktreePayloadSchema, VoidSchema, {
+  invoke("release", MirrorWorktreePayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
+    grant: "changeCode",
     movesHostState: false,
     invitable: "copy",
   }),
-  pause: invoke("mirror:pause", MirrorSessionPayloadSchema, VoidSchema, {
+  invoke("pause", MirrorSessionPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
+    grant: "changeCode",
   }),
-  resume: invoke("mirror:resume", MirrorSessionPayloadSchema, VoidSchema, {
+  invoke("resume", MirrorSessionPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
+    grant: "changeCode",
   }),
-  setIgnores: invoke(
-    "mirror:setIgnores",
+  invoke(
+    "setIgnores",
     MirrorSetIgnoresPayloadSchema,
     strict(Schema.Struct({ session: MirrorSessionIdSchema })),
-    { remote: true, gated: true },
+    { remote: true, gated: true, grant: "changeCode" },
   ),
   // Host-scoped like list: a peer viewing this device's mirror reads
   // the same thread. Nothing here moves state.
-  history: invoke(
-    "mirror:history",
-    MirrorHistoryPayloadSchema,
-    MirrorHistoryResultSchema,
-    { remote: true, gated: false },
-  ),
+  invoke("history", MirrorHistoryPayloadSchema, MirrorHistoryResultSchema, {
+    remote: true,
+    gated: false,
+  }),
   // Grant-gated like every byte-stream open. The stream changes nothing
   // a viewer caches (the serving set fans out on `changed` below).
-  openStream: invoke(
-    "mirror:openStream",
-    MirrorOpenStreamPayloadSchema,
-    VoidSchema,
-    { remote: true, gated: true, movesHostState: false, invitable: "copy" },
-  ),
+  invoke("openStream", MirrorOpenStreamPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+    movesHostState: false,
+    invitable: "copy",
+  }),
   // The git half, served to the device mirroring FROM here: read a
   // worktree's git state (minting the index carrier ref, hence
   // gated) and apply one. Both ride the command grant, or the
   // invitation of a mirror asked for from here (invitable).
-  gitState: invoke(
-    "mirror:gitState",
-    MirrorWorktreePayloadSchema,
-    GitStateSchema,
-    { remote: true, gated: true, movesHostState: false, invitable: "copy" },
-  ),
+  invoke("gitState", MirrorWorktreePayloadSchema, GitStateSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+    movesHostState: false,
+    invitable: "copy",
+  }),
   // Moves refs and the index here, which every viewer of this host
   // caches, so it keeps the host-state ping.
-  applyGitState: invoke(
-    "mirror:applyGitState",
+  invoke(
+    "applyGitState",
     MirrorApplyGitStatePayloadSchema,
     MirrorApplyGitStateResultSchema,
-    { remote: true, gated: true, invitable: "copy" },
+    { remote: true, gated: true, grant: "changeCode", invitable: "copy" },
   ),
   // Fired on every daemon snapshot and every serving-set change, so
   // the list query refreshes without polling, locally and on the
@@ -759,19 +762,15 @@ export const mirrorContract = defineContract("host", {
   // Optional because the host may have none to send (no daemon yet, or
   // a list that failed to build or to validate): it then announces the
   // change bare, and a reader re-asks.
-  changed: broadcast(
-    "mirror:changed",
-    Schema.UndefinedOr(MirrorListResultSchema),
-    {
-      remote: true,
-    },
-  ),
+  broadcast("changed", Schema.UndefinedOr(MirrorListResultSchema), {
+    remote: true,
+  }),
   // A served worktree's index was rewritten (something staged or
   // unstaged there). Refs and HEAD already ping through
   // git:projectChanged. The index is the one git fact that watcher
   // ignores on purpose, so the mirror announces it itself for the
   // follower on the other device.
-  gitChanged: broadcast("mirror:gitChanged", MirrorWorktreePayloadSchema, {
+  broadcast("gitChanged", MirrorWorktreePayloadSchema, {
     remote: true,
   }),
-});
+);

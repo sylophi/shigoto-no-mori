@@ -52,6 +52,7 @@
 // holding two projects (source and target, one repo identity), as in
 // test/sync-transfer.mts: what separates them is the direct wire.
 // Run: pnpm test control.
+import { callOf } from "@shigomori/contracts/contract";
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
@@ -83,6 +84,7 @@ import {
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
@@ -107,7 +109,10 @@ import {
 import { setCliRunnerImpl, type CliResult } from "@host/ipc/cliDelegate";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
-import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
+import {
+  shigomoriHandlers,
+  worktreeDataHandlers,
+} from "@host/ipc/modules/shigomori";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import {
   setWorktreeRemovalBroadcaster,
@@ -147,25 +152,25 @@ const okFields = { ok: Schema.Literal(true) };
 const caveatFields = { ...okFields, caveats: Schema.Array(Schema.String) };
 const DevicesDocSchema = strict(
   Schema.Struct({
-    ...controlContract.calls.devices.output.struct.fields,
+    ...callOf(controlContract, "devices").successSchema.struct.fields,
     ...okFields,
   }),
 );
 const TransferDocSchema = strict(
   Schema.Struct({
-    ...controlContract.calls.send.output.struct.fields,
+    ...callOf(controlContract, "send").successSchema.struct.fields,
     ...caveatFields,
   }),
 );
 const MirrorsDocSchema = strict(
   Schema.Struct({
-    ...controlContract.calls.mirrors.output.struct.fields,
+    ...callOf(controlContract, "mirrors").successSchema.struct.fields,
     ...okFields,
   }),
 );
 const StopDocSchema = strict(
   Schema.Struct({
-    ...controlContract.calls.mirrorStop.output.struct.fields,
+    ...callOf(controlContract, "mirrorStop").successSchema.struct.fields,
     ...caveatFields,
   }),
 );
@@ -465,6 +470,7 @@ it("control.json is owner-only, a bad or missing hello is refused, only the cont
       [projectsContract, projectsHandlers],
       [mirrorContract, mirrorOnA],
       [shigomoriContract, shigomoriHandlers],
+      [worktreeDataContract, worktreeDataHandlers],
       // The peer's home, which a send's default clone place reads.
       // The data-dir facts beside it need a booted data dir, which
       // the sandbox's seeded one is not, and are not read here.
@@ -489,7 +495,8 @@ it("control.json is owner-only, a bad or missing hello is refused, only the cont
     }),
     worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
     mirrorApiFor: () => buildClient(mirrorContract, peerA.transport),
-    shigomoriApiFor: () => buildClient(shigomoriContract, peerA.transport),
+    worktreeDataApiFor: () =>
+      buildClient(worktreeDataContract, peerA.transport),
     thisDeviceId: () => "B",
   });
   // The account as the hub would list it: this device, the peer, a

@@ -5,15 +5,9 @@ import {
   VoidSchema,
 } from "../schemas/index.ts";
 
-export const shellContract = defineContract("client", {
-  openExternal: invoke(
-    "shell:openExternal",
-    ShellOpenExternalPayloadSchema,
-    VoidSchema,
-  ),
-  showItemInFolder: invoke(
-    "shell:showItemInFolder",
-    PathPayloadSchema,
-    VoidSchema,
-  ),
-});
+export const shellContract = defineContract(
+  "shell",
+  "client",
+  invoke("openExternal", ShellOpenExternalPayloadSchema, VoidSchema),
+  invoke("showItemInFolder", PathPayloadSchema, VoidSchema),
+);

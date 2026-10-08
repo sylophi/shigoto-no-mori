@@ -61,9 +61,28 @@ import {
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import { VoidSchema } from "@shigomori/contracts/schemas";
-import { defineContract, invoke } from "@shigomori/contracts/contract";
+import {
+  annotation,
+  callOf,
+  callsOf,
+  channelOf,
+  defineContract,
+  Gated,
+  Grant,
+  invoke,
+  isBroadcast,
+  MovesHostState,
+  payloadOf,
+  Remote,
+  scopeOf,
+} from "@shigomori/contracts/contract";
+import { GRANTS } from "@shigomori/contracts/grants";
+import { controlContract } from "@shigomori/contracts/modules/control";
 import { safeDecode } from "@shigomori/contracts/codec";
-import { registerContract } from "@shared/ipc/registerContract";
+import {
+  classificationGap,
+  registerContract,
+} from "@shared/ipc/registerContract";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import type { WsServerBinding, WsServerStartOpts } from "@host/socket/server";
@@ -942,27 +961,20 @@ it("registrar: onMutationResolved fires after a mutating invoke resolves, never 
     handle: (channel, fn) => handlers.set(channel, fn),
     broadcastAll: () => {},
   };
-  const pingContract = defineContract("host", {
-    mutate: invoke("pingtest:mutate", VoidSchema, VoidSchema, {
-      remote: true,
-      gated: true,
-    }),
-    read: invoke("pingtest:read", VoidSchema, VoidSchema, {
-      remote: true,
-      gated: false,
-    }),
-    failMutate: invoke("pingtest:failMutate", VoidSchema, VoidSchema, {
-      remote: true,
-      gated: true,
-    }),
+  const command = { remote: true, gated: true, grant: "changeCode" } as const;
+  const pingContract = defineContract(
+    "pingtest",
+    "host",
+    invoke("mutate", VoidSchema, VoidSchema, command),
+    invoke("read", VoidSchema, VoidSchema, { remote: true, gated: false }),
+    invoke("failMutate", VoidSchema, VoidSchema, command),
     // A command whose effects are invisible to remote viewers, the
     // forward-verb shape: still grant-gated, never pinged.
-    shuttle: invoke("pingtest:shuttle", VoidSchema, VoidSchema, {
-      remote: true,
-      gated: true,
+    invoke("shuttle", VoidSchema, VoidSchema, {
+      ...command,
       movesHostState: false,
     }),
-  });
+  );
   let resolved = 0;
   let resolvedCtx: HandlerContext | null = null;
   registerContract(
@@ -1008,12 +1020,12 @@ it("registrar: onMutationResolved fires after a mutating invoke resolves, never 
   );
 });
 
-it("contract invariant: every host-scoped invoke is explicitly tagged remote true or false", async () => {
+it("contract invariant: every host invoke classifies itself, and every remote gated one names its consent line", async () => {
   // Derive the host modules from the authoritative registry rather
   // than a hand-maintained list, so a newly added host contract module
   // is covered here automatically. A module that forgot to tag a call
   // remote can no longer skip this check by never appearing in a list.
-  const hostModules = allContractModules.filter((m) => m.scope === "host");
+  const hostModules = allContractModules.filter((m) => scopeOf(m) === "host");
   // The known host-module count at authoring time. The derived set must
   // cover every host module: an empty or shrunken set means the
   // registry import or the scope filter drifted and the invariant
@@ -1023,75 +1035,73 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
     hostModules.length >= KNOWN_HOST_MODULE_COUNT,
     `host-module coverage shrank: derived ${hostModules.length} host modules, expected at least ${KNOWN_HOST_MODULE_COUNT}`,
   );
-  for (const module of hostModules) {
-    // The channel namespace stands in for the module name in messages.
-    const firstChannel = Object.values(module.calls)[0]?.channel ?? "?";
-    const name = firstChannel.split(":")[0];
-    for (const [key, def] of Object.entries(module.calls)) {
-      if (def.kind !== "invoke") continue;
-      assert.equal(
-        typeof def.remote,
-        "boolean",
-        `${name}.${key} (${def.channel}) is not explicitly tagged remote`,
-      );
-      // Every remote:true invoke also classifies itself as a command
-      // or a read, so a new remote call cannot silently join the wire
-      // without declaring whether the command-access gate covers it.
-      // remote:false invokes never reach the gate, so theirs
-      // may stay undefined.
-      if (def.remote === true) {
-        assert.equal(
-          typeof def.gated,
-          "boolean",
-          `${name}.${key} (${def.channel}) is remote but not explicitly tagged mutating`,
-        );
-      }
-      // movesHostState opts a mutating def out of the remote-viewer
-      // cache ping. On a non-mutating def it is meaningless, so its
+  // Every group the app serves, the CLI's control contract included.
+  const covered = new Set<string>();
+  for (const module of [...allContractModules, controlContract]) {
+    for (const [, call] of callsOf(module)) {
+      // The registrar's fail-closed rule: a host invoke says whether it
+      // is remote, a remote one whether it is gated, and a remote gated
+      // one which consent line covers it.
+      assert.equal(classificationGap(module, call), null);
+      const grant = annotation(call, Grant);
+      if (grant !== undefined) covered.add(grant);
+      // movesHostState opts a gated call out of the remote-viewer
+      // cache ping. On an ungated call it is meaningless, so its
       // presence there is a tagging mistake.
-      if (def.movesHostState !== undefined) {
+      if (annotation(call, MovesHostState) !== undefined) {
         assert.equal(
-          def.gated,
+          annotation(call, Gated),
           true,
-          `${name}.${key} (${def.channel}) tags movesHostState without gated:true`,
+          `${channelOf(call)} tags movesHostState without gated:true`,
         );
       }
     }
   }
+  // Every consent line the switch shows covers some call.
+  assert.deepEqual(
+    Object.keys(GRANTS).filter((grant) => !covered.has(grant)),
+    [],
+  );
   // Spot-check the load-bearing decisions so a silent flip is caught.
-  assert.equal(runtimeContract.calls.nuke.remote, false);
+  assert.equal(annotation(callOf(runtimeContract, "nuke"), Remote), false);
   // A peer may relocate the data folder, but only as a command.
-  assert.equal(runtimeContract.calls.moveDataDir.remote, true);
-  assert.equal(runtimeContract.calls.moveDataDir.gated, true);
+  assert.equal(
+    annotation(callOf(runtimeContract, "moveDataDir"), Remote),
+    true,
+  );
+  assert.equal(annotation(callOf(runtimeContract, "moveDataDir"), Gated), true);
   // info is the one runtime call a peer may make: the project pages
   // under a device twin spell worktree paths off its data dir. It
   // rides the command grant like the fs reads, since it names the
   // host's paths.
-  assert.equal(runtimeContract.calls.info.remote, true);
-  assert.equal(runtimeContract.calls.info.gated, true);
-  assert.equal(runtimeContract.calls.info.movesHostState, false);
-  assert.equal(launchersContract.calls.launch.remote, false);
+  assert.equal(annotation(callOf(runtimeContract, "info"), Remote), true);
+  assert.equal(annotation(callOf(runtimeContract, "info"), Gated), true);
+  assert.equal(
+    annotation(callOf(runtimeContract, "info"), MovesHostState),
+    false,
+  );
+  assert.equal(annotation(callOf(launchersContract, "launch"), Remote), false);
   // The cli module rides the wire wholly behind the grant: even
   // its status reads name host paths, so none of it is ungated.
-  for (const def of Object.values(cliContract.calls)) {
-    assert.equal(def.remote, true);
-    assert.equal(def.gated, true);
+  for (const [, call] of callsOf(cliContract)) {
+    assert.equal(annotation(call, Remote), true);
+    assert.equal(annotation(call, Gated), true);
   }
-  assert.equal(globalConfigContract.calls.read.remote, true);
-  assert.equal(worktreesContract.calls.create.remote, true);
+  assert.equal(annotation(callOf(globalConfigContract, "read"), Remote), true);
+  assert.equal(annotation(callOf(worktreesContract, "create"), Remote), true);
   // Spot-check the mutating classification so a read cannot silently
   // become a command (served ungated to every peer) or a command a
   // read (served ungated too).
-  assert.equal(worktreesContract.calls.create.gated, true);
-  assert.equal(worktreesContract.calls.list.gated, false);
-  assert.equal(worktreesContract.calls.push.gated, true);
-  assert.equal(scriptsContract.calls.run.gated, true);
-  assert.equal(gitContract.calls.refreshProject.gated, true);
+  assert.equal(annotation(callOf(worktreesContract, "create"), Gated), true);
+  assert.equal(annotation(callOf(worktreesContract, "list"), Gated), false);
+  assert.equal(annotation(callOf(worktreesContract, "push"), Gated), true);
+  assert.equal(annotation(callOf(scriptsContract, "run"), Gated), true);
+  assert.equal(annotation(callOf(gitContract, "refreshProject"), Gated), true);
   // The sweep is the host's own scheduled pass. A peer's request
   // only decides when it runs, so it is read-class despite the git
   // and gh it spawns.
-  assert.equal(gitContract.calls.sweep.gated, false);
-  assert.equal(globalConfigContract.calls.read.gated, false);
+  assert.equal(annotation(callOf(gitContract, "sweep"), Gated), false);
+  assert.equal(annotation(callOf(globalConfigContract, "read"), Gated), false);
   // The step-6 flips (v2 slice B). Every fs call is remote AND
   // gated: they read, but they disclose arbitrary absolute
   // paths, so they ride the command grant rather than the ungated
@@ -1101,9 +1111,13 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
     "scanForGitRepos",
     "isGitRepo",
   ] as const) {
-    assert.equal(fsContract.calls[key].remote, true, `fs.${key} remote`);
     assert.equal(
-      fsContract.calls[key].gated,
+      annotation(callOf(fsContract, key), Remote),
+      true,
+      `fs.${key} remote`,
+    );
+    assert.equal(
+      annotation(callOf(fsContract, key), Gated),
       true,
       `fs.${key} must require the command grant`,
     );
@@ -1112,18 +1126,24 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
   // write are commands on the remote surface now.
   for (const key of ["add", "remove", "reorder"] as const) {
     assert.equal(
-      projectsContract.calls[key].remote,
+      annotation(callOf(projectsContract, key), Remote),
       true,
       `projects.${key} remote`,
     );
     assert.equal(
-      projectsContract.calls[key].gated,
+      annotation(callOf(projectsContract, key), Gated),
       true,
       `projects.${key} mutating`,
     );
   }
-  assert.equal(packageScriptsContract.calls.setSort.remote, true);
-  assert.equal(packageScriptsContract.calls.setSort.gated, true);
+  assert.equal(
+    annotation(callOf(packageScriptsContract, "setSort"), Remote),
+    true,
+  );
+  assert.equal(
+    annotation(callOf(packageScriptsContract, "setSort"), Gated),
+    true,
+  );
   // The sync surface a peer drives: every call is a command, so the
   // whole transfer path rides the command grant. The source links
   // (openSource, receiveWorktree, receiveBundle) are the only way
@@ -1137,9 +1157,13 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
     "receiveBundle",
     "cancelMove",
   ] as const) {
-    assert.equal(syncContract.calls[key].remote, true, `sync.${key} remote`);
     assert.equal(
-      syncContract.calls[key].gated,
+      annotation(callOf(syncContract, key), Remote),
+      true,
+      `sync.${key} remote`,
+    );
+    assert.equal(
+      annotation(callOf(syncContract, key), Gated),
       true,
       `sync.${key} must require the command grant`,
     );
@@ -1157,14 +1181,14 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
     "cancelMove",
   ] as const) {
     assert.equal(
-      syncContract.calls[key].movesHostState,
+      annotation(callOf(syncContract, key), MovesHostState),
       false,
       `sync.${key} must opt out of the viewer cache ping`,
     );
   }
   for (const key of ["receiveWorktree", "receiveBundle"] as const) {
     assert.notEqual(
-      syncContract.calls[key].movesHostState,
+      annotation(callOf(syncContract, key), MovesHostState),
       false,
       `sync.${key} lands refs and must keep the viewer cache ping`,
     );
@@ -1174,13 +1198,17 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
   // viewer caches, so both opt out of the mutation cache ping. The
   // bytes themselves ride binary channel frames, never invokes.
   for (const [name, call] of [
-    ["forward.open", forwardContract.calls.open],
-    ["mirror.openStream", mirrorContract.calls.openStream],
+    ["forward.open", callOf(forwardContract, "open")],
+    ["mirror.openStream", callOf(mirrorContract, "openStream")],
   ] as const) {
-    assert.equal(call.remote, true, `${name} remote`);
-    assert.equal(call.gated, true, `${name} must require the command grant`);
+    assert.equal(annotation(call, Remote), true, `${name} remote`);
     assert.equal(
-      call.movesHostState,
+      annotation(call, Gated),
+      true,
+      `${name} must require the command grant`,
+    );
+    assert.equal(
+      annotation(call, MovesHostState),
       false,
       `${name} must opt out of the viewer cache ping`,
     );
@@ -1195,48 +1223,54 @@ it("contract invariant: every host-scoped invoke is explicitly tagged remote tru
     "sendWorktree",
     "teardownSource",
   ] as const) {
-    assert.equal(syncContract.calls[name].remote, false);
-    assert.equal(syncContract.calls[name].gated, true);
+    assert.equal(annotation(callOf(syncContract, name), Remote), false);
+    assert.equal(annotation(callOf(syncContract, name), Gated), true);
   }
   // The pull's progress frames go back to the invoking renderer
   // only: an untagged broadcast never reaches a remote wire.
-  assert.notEqual(syncContract.calls.pullProgress.remote, true);
+  assert.notEqual(
+    annotation(callOf(syncContract, "pullProgress"), Remote),
+    true,
+  );
   // The command-access switch reaches peers as a push carrying it:
   // the one client-scoped broadcast tagged remote. The switch's
   // read and write stay client-scoped and untagged, so neither is
   // ever served to a peer.
-  const { commandAccessChanged, acceptsCommands, setAcceptsCommands } =
-    accountContract.calls;
-  assert.equal(accountContract.scope, "client");
-  assert.equal(commandAccessChanged.remote, true);
-  assert.equal(safeDecode(commandAccessChanged.payload, true).success, true);
-  assert.notEqual(acceptsCommands.remote, true);
-  assert.notEqual(setAcceptsCommands.remote, true);
+  const commandAccessChanged = callOf(accountContract, "commandAccessChanged");
+  assert.equal(scopeOf(accountContract), "client");
+  assert.equal(annotation(commandAccessChanged, Remote), true);
+  assert.equal(safeDecode(payloadOf(commandAccessChanged), true).success, true);
+  for (const key of ["acceptsCommands", "setAcceptsCommands"] as const) {
+    assert.notEqual(annotation(callOf(accountContract, key), Remote), true);
+  }
   // The device-settings write, the only settings write: a command,
   // and its STRICT patch schema must reject every key the Settings
   // form does not manage, so a peer cannot stop this device serving
   // peers or point it at another connector binary. The rejection is
   // structural (unknown key -> parse error), not a strip.
-  const writeDeviceSettings = globalConfigContract.calls.writeDeviceSettings;
-  assert.equal(writeDeviceSettings.remote, true);
-  assert.equal(writeDeviceSettings.gated, true);
+  const writeDeviceSettings = callOf(
+    globalConfigContract,
+    "writeDeviceSettings",
+  );
+  assert.equal(annotation(writeDeviceSettings, Remote), true);
+  assert.equal(annotation(writeDeviceSettings, Gated), true);
   for (const patch of [
     { directConnections: false },
     { cloudflaredPath: "/tmp/not-cloudflared" },
   ]) {
     assert.equal(
-      safeDecode(writeDeviceSettings.input, { patch }).success,
+      safeDecode(writeDeviceSettings.payloadSchema, { patch }).success,
       false,
       `writeDeviceSettings accepted ${JSON.stringify(patch)}`,
     );
   }
   assert.equal(
-    safeDecode(writeDeviceSettings.input, { patch: {} }).success,
+    safeDecode(writeDeviceSettings.payloadSchema, { patch: {} }).success,
     true,
     "an empty patch must parse",
   );
   assert.equal(
-    safeDecode(writeDeviceSettings.input, {
+    safeDecode(writeDeviceSettings.payloadSchema, {
       patch: { githubCli: false, portPool: true },
     }).success,
     true,
@@ -1252,13 +1286,15 @@ it("golden read surface: the ungated read channels match read-surface.golden.jso
   // committed golden file turns any such flip into a reviewed diff.
   const goldenPath = join(import.meta.dirname, "read-surface.golden.json");
   const derived = allContractModules
-    .filter((module) => module.scope === "host")
-    .flatMap((module) => Object.values(module.calls))
+    .filter((module) => scopeOf(module) === "host")
+    .flatMap((module) => callsOf(module).map(([, call]) => call))
     .filter(
-      (def) =>
-        def.kind === "invoke" && def.remote === true && def.gated === false,
+      (call) =>
+        !isBroadcast(call) &&
+        annotation(call, Remote) === true &&
+        annotation(call, Gated) === false,
     )
-    .map((def) => def.channel)
+    .map((call) => channelOf(call))
     .toSorted();
   // `-u` rewrites the golden from the derived surface. Otherwise a
   // mismatch fails with the channels that drifted, named against the

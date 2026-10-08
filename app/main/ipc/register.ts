@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
 import { logFailure } from "@shigomori/contracts/errors";
-import type { ContractModule } from "@shigomori/contracts/contract";
+import { type ContractModule, scopeOf } from "@shigomori/contracts/contract";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { hubContract } from "@shigomori/contracts/modules/hub";
@@ -302,7 +302,7 @@ const hostServer: ServerTransport = {
 };
 
 const serverFor = (module: ContractModule): ServerTransport =>
-  module.scope === "host" ? hostServer : electronServer;
+  scopeOf(module) === "host" ? hostServer : electronServer;
 
 // App-driven host mutations never reach viewers through the fs
 // watcher: its self-write suppression exists precisely so the app's own
@@ -372,7 +372,7 @@ export function registerContract<M extends ContractModule>(
     // Only host-scoped modules can move host state a viewer caches.
     // Client-scoped defs never tag mutating anyway, so this gate is
     // belt and braces.
-    onMutationResolved: module.scope === "host" ? pingViewers : undefined,
+    onMutationResolved: scopeOf(module) === "host" ? pingViewers : undefined,
   });
 }
 

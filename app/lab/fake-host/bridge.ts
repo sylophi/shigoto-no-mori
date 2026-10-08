@@ -31,7 +31,11 @@ import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
-import type { ContractScope } from "@shigomori/contracts/contract";
+import {
+  type ContractScope,
+  inputOf,
+  outputOf,
+} from "@shigomori/contracts/contract";
 import { decode } from "@shigomori/contracts/codec";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
@@ -167,10 +171,10 @@ function createFixtureWire(
           // and change them in place later: a cached answer that is the
           // same object as the next one would never look changed.
           return Promise.resolve()
-            .then(() => handler(decode(def.input, input)))
+            .then(() => handler(decode(inputOf(def), input)))
             .then((answer) => structuredClone(answer));
         }
-        const stub = stubValueFor(def.output, { fabricateArms: true });
+        const stub = stubValueFor(outputOf(def), { fabricateArms: true });
         if (stub === NO_STRUCTURAL_STUB) {
           return Promise.reject(
             new Error(`[fake-host] no stub for ${channel}`),

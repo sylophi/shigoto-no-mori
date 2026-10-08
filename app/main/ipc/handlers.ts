@@ -51,6 +51,7 @@ import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
 import { terrierContract } from "@shigomori/contracts/modules/terrier";
 import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { villagersContract } from "@shigomori/contracts/modules/villagers";
@@ -111,7 +112,10 @@ import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import { releasesHandlers } from "./modules/releases";
 import { shellHandlers } from "./modules/shell";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
-import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
+import {
+  shigomoriHandlers,
+  worktreeDataHandlers,
+} from "@host/ipc/modules/shigomori";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
@@ -543,7 +547,7 @@ export function registerIpcHandlers(): void {
     syncApiFor: peerSyncClient,
     worktreesApiFor: peerClient(worktreesContract),
     mirrorApiFor: peerMirrorClient,
-    shigomoriApiFor: peerClient(shigomoriContract),
+    worktreeDataApiFor: peerClient(worktreeDataContract),
     thisDeviceId: getDeviceId,
   });
   // The mirrors this device asked peers for (host/mirror/invites.ts),
@@ -733,6 +737,7 @@ export function registerIpcHandlers(): void {
   });
   registerControlContract(controlContract, controlHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
+  registerContract(worktreeDataContract, worktreeDataHandlers);
   registerContract(syncContract, syncHandlers);
   // Host side of the port-forward wire: host-scoped, so it mounts on
   // the Electron wire and the direct listener, whose command-access

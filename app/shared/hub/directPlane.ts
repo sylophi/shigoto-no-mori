@@ -22,7 +22,8 @@
 // The peer's command-access switch flipping, as its direct listener
 // pushes it. The bridge records it on the peer's session so the status
 // snapshot's peerAcceptsCommands follows the switch live.
-const COMMAND_ACCESS_CHANGED = accountContract.calls.commandAccessChanged;
+const COMMAND_ACCESS_CHANGED = callOf(accountContract, "commandAccessChanged");
+import { callOf, channelOf, payloadOf } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { safeDecode } from "@shigomori/contracts/codec";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
@@ -140,8 +141,11 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       // peer's deviceId and fanned through the owner's peerPush sink
       // so the renderer's subscriber registry stays wire-agnostic.
       onAnyPush: (deviceId, channel, payload) => {
-        if (channel === COMMAND_ACCESS_CHANGED.channel) {
-          const accepts = safeDecode(COMMAND_ACCESS_CHANGED.payload, payload);
+        if (channel === channelOf(COMMAND_ACCESS_CHANGED)) {
+          const accepts = safeDecode(
+            payloadOf(COMMAND_ACCESS_CHANGED),
+            payload,
+          );
           if (accepts.success) {
             handlers.setPeerAcceptsCommands(deviceId, accepts.data);
           }

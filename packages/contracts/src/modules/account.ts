@@ -36,22 +36,24 @@ export const AccountStatusSchema = Schema.Struct({
 });
 export type AccountStatus = typeof AccountStatusSchema.Type;
 
-export const accountContract = defineContract("client", {
+export const accountContract = defineContract(
+  "account",
+  "client",
   // Reads local state only: the resolved service config is cached, but
   // the stored credential metadata is a readFileSync plus an OS-keychain
   // decrypt on EVERY call, so invoke this on account events, not on a
   // poll. The device list is a separate call so a status read never
   // hits the device hub.
-  status: invoke("account:status", VoidSchema, AccountStatusSchema),
+  invoke("status", VoidSchema, AccountStatusSchema),
   // Enrolls this device on the device hub under a fresh Clerk session
   // token (the renderer owns the Clerk sign-in UI and mints the token)
   // and stores the returned device credential. Resolves to the
   // post-enrollment status.
-  enroll: invoke("account:enroll", Schema.NonEmptyString, AccountStatusSchema),
+  invoke("enroll", Schema.NonEmptyString, AccountStatusSchema),
   // Best-effort revokes THIS device on the device hub, then clears the
   // stored credential locally. The revoke is best-effort so local
   // sign-out always succeeds even offline.
-  signOut: invoke("account:signOut", VoidSchema, VoidSchema),
+  invoke("signOut", VoidSchema, VoidSchema),
   // Removes a device from the ACCOUNT on the device hub, under this
   // device's credential: the target's credential stops working the
   // moment it next calls, and it disappears from every other device's
@@ -65,21 +67,17 @@ export const accountContract = defineContract("client", {
   // instead, which ends the Clerk session first -- with the session
   // still live ClerkAccountSync would see "signed in, not enrolled" and
   // silently re-enroll, undoing the revoke).
-  revokeDevice: invoke("account:revokeDevice", DeviceIdSchema, VoidSchema),
+  invoke("revokeDevice", DeviceIdSchema, VoidSchema),
   // The account's device registry from the device hub, under the stored
   // credential. Element shape is the shared hub DeviceInfo so the app
   // and the Worker cannot drift. Empty when signed out or unconfigured.
-  listDevices: invoke(
-    "account:listDevices",
-    VoidSchema,
-    Schema.Array(DeviceInfoSchema),
-  ),
+  invoke("listDevices", VoidSchema, Schema.Array(DeviceInfoSchema)),
   // Renames any device of the account, this one or a peer, online or
   // not: the device hub's registry holds the name (shared/account/
   // enroll.ts updateDevice). Throws when the hub did not take it.
   // Resolves to the updated status.
-  setDeviceName: invoke(
-    "account:setDeviceName",
+  invoke(
+    "setDeviceName",
     Schema.Struct({
       deviceId: DeviceIdSchema,
       // Bounded to match EnrollRequestSchema.name so a stored name can
@@ -91,8 +89,8 @@ export const accountContract = defineContract("client", {
   // Picks the icon of any device of the account (drawn for it
   // everywhere), the rename's twin. Picking a device's detected icon
   // puts it back to its default. Resolves to the updated status.
-  setDeviceIcon: invoke(
-    "account:setDeviceIcon",
+  invoke(
+    "setDeviceIcon",
     Schema.Struct({ deviceId: DeviceIdSchema, icon: DeviceIconSchema }),
     AccountStatusSchema,
   ),
@@ -102,25 +100,17 @@ export const accountContract = defineContract("client", {
   // One switch for the whole account, made on the machine being
   // driven and enforced there alone, by the listener's dispatch gate.
   // False when signed out.
-  acceptsCommands: invoke(
-    "account:acceptsCommands",
-    VoidSchema,
-    Schema.Boolean,
-  ),
+  invoke("acceptsCommands", VoidSchema, Schema.Boolean),
   // Flips the switch above. Idempotent. Throws if signed out, since
   // the switch is kept on the signed-in account's record.
-  setAcceptsCommands: invoke(
-    "account:setAcceptsCommands",
-    Schema.Boolean,
-    VoidSchema,
-  ),
+  invoke("setAcceptsCommands", Schema.Boolean, VoidSchema),
   // Fan-out after any sign-in, sign-out or rename so every window
   // re-reads status and the device list. Client-scoped, so it stays on
   // the Electron wire only. Carries the account now signed in (null
   // when signed out) so a listener can tell a rename from a sign-out
   // or an account switch without a status read of its own.
-  changed: broadcast(
-    "account:changed",
+  broadcast(
+    "changed",
     Schema.Struct({ accountId: Schema.NullOr(Schema.String) }),
   ),
   // Fan-out after the command-access switch flips (or the account
@@ -131,11 +121,7 @@ export const accountContract = defineContract("client", {
   // switch is this host's answer to its peers: the direct listener
   // pushes it to every connected peer too, whose bridge records it as
   // HubStatus.peerAcceptsCommands (shared/hub/directPlane.ts).
-  commandAccessChanged: broadcast(
-    "account:commandAccessChanged",
-    Schema.Boolean,
-    {
-      remote: true,
-    },
-  ),
-});
+  broadcast("commandAccessChanged", Schema.Boolean, {
+    remote: true,
+  }),
+);
