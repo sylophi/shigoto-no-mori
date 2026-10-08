@@ -9,7 +9,8 @@ type RendererApi = Omit<ElectronBridge, "invoke" | "subscribe"> &
 
 declare global {
   interface Window {
-    electronBridge: ElectronBridge;
+    // Only the desktop preload sets it.
+    electronBridge?: ElectronBridge;
     api: RendererApi;
   }
 

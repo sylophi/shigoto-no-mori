@@ -235,9 +235,8 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
 
     invokePeer: async ({ deviceId, channel, input }) => {
       const peer = await requirePeer(deviceId);
-      // Disconnect and no-session errors reject through here, and
-      // their messages ride each wire's error serialization to the
-      // renderer unchanged.
+      // Disconnect and no-session errors reject through here, and a
+      // peer's contract error reaches the renderer as its class.
       return peer.transport.invoke(channel, input);
     },
 

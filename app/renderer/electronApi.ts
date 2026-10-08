@@ -8,7 +8,9 @@ import { buildApi } from "@shared/ipc/client";
 import { type ClientTransport, unsettle } from "@shared/ipc/transport";
 
 export function installElectronApi(): void {
-  const { invoke, subscribe, ...facts } = window.electronBridge;
+  const bridge = window.electronBridge;
+  if (bridge === undefined) throw new Error("the preload's bridge is missing");
+  const { invoke, subscribe, ...facts } = bridge;
   const transport: ClientTransport = {
     invoke: async (channel, input) => unsettle(await invoke(channel, input)),
     subscribe,

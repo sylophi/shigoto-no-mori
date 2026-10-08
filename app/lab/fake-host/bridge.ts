@@ -9,6 +9,10 @@
 // window.fakeHost carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
 import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
+import {
+  UnknownProjectError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import type * as Types from "effect/Types";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
@@ -286,7 +290,7 @@ function hostHandlersFor(
   ): Promise<Worktree> => {
     await sleep(700);
     const worktree = findWorktree(worktreeId);
-    if (!worktree) throw new Error("Unknown worktree");
+    if (!worktree) throw new UnknownWorktreeError({ worktreeId });
     move(worktree);
     return worktree;
   };
@@ -341,7 +345,8 @@ function hostHandlersFor(
       }
       const at = forest.projects.findIndex((entry) => entry.id === id);
       const before = forest.projects[at];
-      if (before === undefined) throw new Error(`Unknown project: ${id}`);
+      if (before === undefined)
+        throw new UnknownProjectError({ projectId: id });
       // New objects, not edits: the query cache holds the old ones, and
       // an edit in place would read to it as nothing changed.
       const project = {

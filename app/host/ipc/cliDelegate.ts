@@ -305,7 +305,10 @@ function runStreamingCreate(
           if (created === null) {
             reject(
               guardRefusal(result) ??
-                cliFailure(result, failureLabel, { worktreeId }),
+                cliFailure(result, failureLabel, {
+                  projectId: project.id,
+                  worktreeId,
+                }),
             );
             return;
           }
@@ -395,7 +398,7 @@ export async function deleteViaCli(
   if (input.skipCleanup) args.push("--skip-cleanup");
   const { ok, cleanupError } = await runRemoval(
     args,
-    input.worktreeId,
+    { projectId: project.id, worktreeId: input.worktreeId },
     notify,
     opts,
   );
@@ -418,7 +421,7 @@ export async function deleteStackViaCli(
   if (input.skipCleanup) args.push("--skip-cleanup");
   const { ok, cleanupError, final } = await runRemoval(
     args,
-    input.worktreeId,
+    { projectId: project.id, worktreeId: input.worktreeId },
     notify,
   );
   const removed = removedIdsOf(final);
@@ -431,7 +434,7 @@ export async function deleteStackViaCli(
 // cancelled move's rollback puts the run on a clock (opts.timeoutMs).
 async function runRemoval(
   args: string[],
-  worktreeId: string,
+  ids: { projectId: string; worktreeId: string },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
   opts: Pick<CliRunOpts, "timeoutMs"> = {},
 ): Promise<
@@ -458,7 +461,7 @@ async function runRemoval(
       final,
     };
   }
-  throw cliFailure(result, `sm ${args[0]} failed`, { worktreeId });
+  throw cliFailure(result, `sm ${args[0]} failed`, ids);
 }
 
 const RemovedIdSchema = Schema.Struct({ id: Schema.String });
@@ -524,7 +527,10 @@ export async function doneViaCli(
     ...worktreeArgv(["done"], project, worktreeId),
     "--force",
   ]);
-  const final = finalOkDoc(result, "sm done failed", { worktreeId });
+  const final = finalOkDoc(result, "sm done failed", {
+    projectId: project.id,
+    worktreeId,
+  });
   return decodeWorktree(final["worktree"]);
 }
 
@@ -571,7 +577,7 @@ export async function setShelvedViaCli(
   const result = await runner().runCli(
     worktreeArgv([shelved ? "shelve" : "unshelve"], project, worktreeId),
   );
-  finalOkDoc(result, "sm shelve failed", { worktreeId });
+  finalOkDoc(result, "sm shelve failed", { projectId: project.id, worktreeId });
 }
 
 export async function projectsAddViaCli(path: string): Promise<Project> {
@@ -719,7 +725,10 @@ export async function dirtyCaptureViaCli(
   const result = await runner().runCli(
     worktreeArgv(["dirty", "capture"], project, worktreeId),
   );
-  const final = finalOkDoc(result, "sm dirty capture failed", { worktreeId });
+  const final = finalOkDoc(result, "sm dirty capture failed", {
+    projectId: project.id,
+    worktreeId,
+  });
   const doc = decodeDirtyCaptured(final);
   return doc.captured
     ? { captured: true, commit: doc.commit }
@@ -745,7 +754,10 @@ export async function dirtyApplyViaCli(
   const result = await runner().runCli(
     worktreeArgv(["dirty", "apply"], project, worktreeId),
   );
-  const final = finalOkDoc(result, "sm dirty apply failed", { worktreeId });
+  const final = finalOkDoc(result, "sm dirty apply failed", {
+    projectId: project.id,
+    worktreeId,
+  });
   return decodeDirtyApplied(final);
 }
 
@@ -865,6 +877,7 @@ export async function setAutoPullViaCli(
     ),
   );
   const final = finalOkDoc(result, "sm worktrees autopull failed", {
+    projectId: project.id,
     worktreeId,
   });
   return decodeWorktree(final["worktree"]);
@@ -885,6 +898,7 @@ export async function moveViaCli(
     destinationPath,
   ]);
   const final = finalOkDoc(result, "sm worktrees move failed", {
+    projectId: project.id,
     worktreeId,
   });
   return decodeWorktree(final["worktree"]);
@@ -938,7 +952,7 @@ export async function openLauncherViaCli(
     "--",
     launcherId,
   ]);
-  finalOkDoc(result, "sm open failed", { worktreeId });
+  finalOkDoc(result, "sm open failed", { projectId: project.id, worktreeId });
 }
 
 // ---- Reads ----

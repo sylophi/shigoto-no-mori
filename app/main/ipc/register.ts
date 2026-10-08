@@ -116,7 +116,14 @@ function contextFor(sender: WebContents): HandlerContext {
 const electronServer: ServerTransport = {
   handle(channel, fn) {
     ipcMain.handle(channel, (event, raw) =>
-      settle(fn(contextFor(event.sender), raw)),
+      settle(
+        fn(contextFor(event.sender), raw).catch((error: unknown) => {
+          // What Electron logged for a rejected handler before the
+          // failure became a settled value.
+          console.error(`Error occurred in handler for '${channel}':`, error);
+          throw error;
+        }),
+      ),
     );
   },
   // Payloads arrive already parsed from the shared fan-out path.

@@ -148,6 +148,8 @@ export const ContractErrorSchema = Schema.Union([
   CommandRefusedError,
 ]);
 
+export const isContractError = Schema.is(ContractErrorSchema);
+
 const encodeContractError = Schema.encodeUnknownOption(ContractErrorSchema);
 const decodeContractError = Schema.decodeUnknownOption(ContractErrorSchema);
 
