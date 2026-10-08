@@ -426,6 +426,11 @@ export const ClientConfigSchema = z.object({
   // every device this window shows. Off by default (absent = off),
   // explicit `true` is the opt-in.
   allowAgentWorking: z.boolean().optional(),
+  // Show every project's worktrees under it on the sidebar's list of
+  // projects, each project folding in place, rather than one project
+  // at a time. Off by default (absent = off), explicit `true` is the
+  // opt-in.
+  inlineWorktrees: z.boolean().optional(),
   // Pause the doubutsu wallpaper drift while this machine runs on
   // battery, the same pause an unfocused window gets. On by default
   // (absent = on), explicit `false` keeps it drifting on battery.
@@ -471,10 +476,10 @@ export const ClientConfigSchema = z.object({
   // Kept like the sort above. On by default (absent = on), explicit
   // `false` is the opt-out (renderer/hooks/projects/useProjectSort.ts).
   groupProjectsByOwner: z.boolean().optional(),
-  // Legacy: the sidebar's folded projects, by group key, from when its
-  // tree folded project by project. Nothing reads it. Still modeled
-  // because a doc can carry it and its keys name peers and repos, so
-  // withoutPeerState has to be able to see it to drop it.
+  // The projects folded on the inline list, by group key
+  // (projectGroupKey in renderer/components/sidebar/buildSidebarRows.ts).
+  // Absence == expanded (renderer/hooks/projects/useCollapsedProjects.ts
+  // is the only reader and writer).
   collapsedProjects: z.array(z.string()).optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
@@ -490,7 +495,7 @@ export const peerProjectKey = (deviceId: string, projectId: string) =>
 // The client config without what was keyed by the account's peers:
 // a device leaving the account (a sign-out, a sign-in under another)
 // leaves the local port picks, the legacy create-device picks and the
-// legacy fold list behind, since all three name devices or repos of
+// folded projects behind, since all three name devices or repos of
 // the account that is gone, and a later account on this machine or
 // browser must not inherit them.
 export function withoutPeerState(config: ClientConfig): ClientConfig {

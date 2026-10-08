@@ -43,6 +43,7 @@ export function RowContent({
           groupKey={row.groupKey}
           pinned={row.pinned}
           expanded={row.expanded}
+          folded={row.folded}
           current={row.groupKey === currentGroupKey}
           branches={row.branches}
           devices={row.devices}
