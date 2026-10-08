@@ -1,7 +1,6 @@
 // Keeps a relative path inside the project root: no absolute paths, no
-// ".." traversal, no NUL. Single source of truth for CarryOverEntrySchema
-// and for main-side filtering of resolved .worktreeinclude paths (host/lib
-// may only `import type` from the schemas barrel, so this lives here).
+// ".." traversal, no NUL. The one definition the path schemas (config,
+// changes, sync) and the shared-settings merge all check.
 export function isSafeRelPath(p: string): boolean {
   return (
     !p.startsWith("/") && !p.split(/[\\/]/).includes("..") && !p.includes("\0")

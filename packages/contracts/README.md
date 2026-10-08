@@ -10,6 +10,6 @@ What crosses a wire or sits on disk, described once for every side: the app's ma
 
 Consumers import a module by its path under `src/`, without the extension: `@shigomori/contracts/modules/sync`, `@shigomori/contracts/predicates/webUrl`. The schemas also come as one barrel, `@shigomori/contracts/schemas`. Inside the package, imports are relative with the `.ts` extension.
 
-The package has no runtime dependency besides `effect` and imports nothing from the app, so every side can compile it: no node builtins, no DOM, no Electron.
+The package has no runtime dependency besides `effect` and imports nothing from the app, so every side can compile it.
 
 `fixtures/` holds the JSON each schema module accepts, produces and refuses, one file per module, so a rewrite of a schema cannot change what crosses a wire or sits on disk. `test/fixtures.test.ts` checks it (`pnpm run check:contracts` from the root).

@@ -41,7 +41,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { it } from "vitest";
-import { appRoot, stripComments, walk } from "./lib/checkKit.mts";
+import { appRoot, repoRoot, stripComments, walk } from "./lib/checkKit.mts";
 
 const failures: string[] = [];
 
@@ -58,7 +58,7 @@ const IPC_RENDERER = /\bipcRenderer\b/;
 
 const mainDir = join(appRoot, "main");
 const mainCoreDir = join(mainDir, "core");
-const contractsDir = join(appRoot, "..", "packages", "contracts", "src");
+const contractsDir = join(repoRoot, "packages", "contracts", "src");
 const modulesDir = join(contractsDir, "modules");
 const IPC_RENDERER_ALLOWLIST = new Set(["main/preloadTransport.ts"]);
 
@@ -83,19 +83,23 @@ const isMainSpecifier = (spec: string, fileDir: string) =>
 const visitedAllowlisted = new Set<string>();
 let contractModuleCount = 0;
 
-for (const dir of ["host", "main", "renderer", "shared", "web", "contracts"]) {
-  const root = dir === "contracts" ? contractsDir : join(appRoot, dir);
+// The folders walked, and whether each must stay Electron free and off
+// the main/ binding layer. web/ is the browser client platform, so it
+// is held to that like host/, shared/ and the contracts.
+const LAYERS = [
+  { dir: "host", root: join(appRoot, "host"), contractLayer: true },
+  { dir: "main", root: mainDir, contractLayer: false },
+  { dir: "renderer", root: join(appRoot, "renderer"), contractLayer: false },
+  { dir: "shared", root: join(appRoot, "shared"), contractLayer: true },
+  { dir: "web", root: join(appRoot, "web"), contractLayer: true },
+  { dir: "packages/contracts/src", root: contractsDir, contractLayer: true },
+];
+
+for (const { dir, root, contractLayer } of LAYERS) {
   for (const file of walk(root, SOURCE_EXTENSIONS)) {
     const rel = relative(appRoot, file);
     const src = stripComments(readFileSync(file, "utf8"));
     const fileDir = dirname(file);
-    // web/ is the browser client platform: like host/ and shared/ it must
-    // stay Electron free and must not reach into the main/ binding layer.
-    const contractLayer =
-      dir === "host" ||
-      dir === "shared" ||
-      dir === "web" ||
-      dir === "contracts";
     if (IPC_RENDERER_ALLOWLIST.has(rel)) visitedAllowlisted.add(rel);
 
     const specifiers = [...src.matchAll(IMPORT_SPECIFIER)].flatMap(

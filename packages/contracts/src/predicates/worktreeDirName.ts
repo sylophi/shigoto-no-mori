@@ -28,7 +28,8 @@ export function sanitizeBranchForPath(branch: string): string {
 }
 
 // Submit-time check for user-typed worktree folder names: valid exactly
-// when sanitizing is a no-op. The live input filter above allows
+// when sanitizing is a no-op. The live input filter
+// (sanitizeWorktreeNameInput in app/shared/git/branches.ts) allows
 // individually-legal characters that combine into names we refuse
 // ("..", "root", a trailing dot).
 export function isValidWorktreeDirName(name: string): boolean {
