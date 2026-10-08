@@ -2,6 +2,7 @@
 // builds once: its store over the process's SQLite driver, its flavor,
 // and where the darwin helper (macfs) is.
 import * as CarryOver from "./CarryOver.ts";
+import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import * as Darwin from "./Darwin.ts";
 import type { Flavor } from "./flavor.ts";
@@ -38,6 +39,7 @@ export const engineLayer = (options: {
         GitHub.layer,
         Lifecycle.layer,
         CarryOver.layer,
+        CloneCheckout.layer,
       ),
     ),
     Layer.provideMerge(Terrier.layer),
