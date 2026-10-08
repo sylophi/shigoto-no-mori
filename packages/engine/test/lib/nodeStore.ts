@@ -2,6 +2,7 @@
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import * as Store from "../../src/Store.ts";
 
-export const nodeStore = Store.layer((filename) =>
-  SqliteClient.make({ filename }),
-);
+export const openNode: Store.OpenDatabase = (filename) =>
+  SqliteClient.make({ filename });
+
+export const nodeStore = Store.layer(openNode);

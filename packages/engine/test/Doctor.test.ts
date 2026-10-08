@@ -58,6 +58,7 @@ const run = (
   options: {
     readonly fix?: boolean;
     readonly approve?: (repair: Doctor.Repair) => boolean;
+    readonly failed?: (line: string) => void;
   } = {},
 ) =>
   box.engine(
@@ -71,6 +72,8 @@ const run = (
               fix: {
                 approve: (repair: Doctor.Repair) =>
                   Effect.succeed(options.approve?.(repair) ?? true),
+                failed: (line: string) =>
+                  Effect.sync(() => options.failed?.(line)),
               },
             }
           : {}),
@@ -491,8 +494,22 @@ describe("a project", () => {
     chmodSync(join(admin, "gitdir"), 0o444);
     chmodSync(admin, 0o555);
     try {
-      const fixed = await run({ fix: true });
+      const heard: string[] = [];
+      const fixed = await run({
+        fix: true,
+        approve: (repair) => {
+          heard.push(`asked: ${repair.label}`);
+          return true;
+        },
+        failed: (line) => heard.push(line),
+      });
       assert.deepEqual(fixed.repaired, []);
+      // Each failure is heard as it happens, between the questions.
+      assert.deepEqual(heard, [
+        fixed.repairFailed[0],
+        "asked: pruned git's worktree metadata for alpha",
+        fixed.repairFailed[1],
+      ]);
       assert.equal(fixed.repairFailed.length, 2);
       assert.equal(
         fixed.repairFailed[1],
@@ -692,6 +709,46 @@ describe("the run", () => {
       doc.checks.length,
     );
     assert.equal(doc.summary.fail, 1);
+  });
+});
+
+describe("a store that can't open", () => {
+  const standalone = () =>
+    box.doctor({ version: "dev", executable: "", terminal: false });
+
+  it("reads the files it refused, telling bad JSON from a file it can't read", async () => {
+    alpha();
+    const settings = join(box.home, "seed", "projects", "A1", "project.json");
+    writeFileSync(settings, "{not json");
+    const bad = await standalone();
+    only(bad, "registry", "ok");
+    const refused = only(bad, "project-config", "fail");
+    assert.equal(refused.title, "alpha");
+    assert.match(refused.fix ?? "", /^Repair the JSON in /);
+    assert.ok(bad.checks.every(({ fix }) => fix !== ""));
+  });
+
+  it("names a project.json it can't read by the error", async () => {
+    alpha();
+    const settings = join(box.home, "seed", "projects", "A1", "project.json");
+    rmSync(settings);
+    // Copied as it is, where a file without read permission wouldn't be.
+    mkdirSync(settings);
+    const refused = only(await standalone(), "project-config", "fail");
+    assert.match(refused.detail, /: is a directory\)/);
+    assert.match(refused.fix ?? "", /^Fix the permissions on /);
+  });
+
+  it("runs only what needs no state when the store itself won't open", async () => {
+    alpha();
+    writeFileSync(join(box.home, "seed", "store.db"), "not a database");
+    const doc = await standalone();
+    only(doc, "store", "fail");
+    assert.deepEqual(findingsFor(doc, "registry"), []);
+    assert.deepEqual(
+      doc.checks.filter(({ group }) => group === "Projects"),
+      [],
+    );
   });
 });
 

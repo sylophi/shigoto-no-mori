@@ -51,6 +51,12 @@ const approve = (yes: boolean) =>
       }).pipe(Effect.provideService(Output, output));
   });
 
+// Says each repair that failed as it happens, between the questions.
+const failed = Effect.map(Effect.service(Output), ({ stderrColor }) => {
+  const { yellow } = styles(stderrColor);
+  return (line: string) => note(yellow(line));
+});
+
 // The checklist as a person reads it: a header, each group's lines with
 // their fixes, what was repaired, and the counts.
 const render = (doc: Doctor.DoctorDocument, fix: boolean) =>
@@ -136,12 +142,11 @@ export const doctorCommand = Command.make(
         version,
         executable: process.execPath,
         terminal: yield* interactive,
-        ...(fix ? { fix: { approve: yield* approve(yes) } } : {}),
+        ...(fix
+          ? { fix: { approve: yield* approve(yes), failed: yield* failed } }
+          : {}),
       });
-      const { json, stderrColor } = yield* Effect.service(Output);
-      for (const line of doc.repairFailed) {
-        yield* note(styles(stderrColor).yellow(line));
-      }
+      const { json } = yield* Effect.service(Output);
       yield* json ? emit(doc) : render(doc, fix);
       // Every failure is on the checklist already.
       if (!doc.ok) return yield* new ExitCode({ code: 1 });

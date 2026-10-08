@@ -9,7 +9,11 @@ import type * as Scope from "effect/Scope";
 import * as Migrator from "effect/sql/Migrator";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
-import { importJson, StoreImportError } from "./migrations/importJson.ts";
+import {
+  importFiles,
+  importJson,
+  StoreImportError,
+} from "./migrations/importJson.ts";
 import { tables } from "./migrations/tables.ts";
 import * as Paths from "./Paths.ts";
 
@@ -84,4 +88,40 @@ export const layer = (
       );
       return Context.make(SqlClient.SqlClient, sql);
     }),
+  ).pipe(Layer.provide(Reactivity.layer));
+
+// The data dir's 2.x files in a database in memory, imported leniently:
+// what the store would refuse is skipped, as the Go sm reads around it.
+// The doctor reads them this way while the store can't import them.
+export const fromFiles = (
+  open: OpenDatabase,
+): Layer.Layer<
+  SqlClient.SqlClient,
+  StoreOpenError,
+  Paths.Paths | FileSystem.FileSystem | Path.Path
+> =>
+  Layer.effectContext(
+    Effect.gen(function* () {
+      const platform = yield* Effect.context<
+        Paths.Paths | FileSystem.FileSystem | Path.Path
+      >();
+      const client = yield* open(":memory:");
+      yield* migrate({
+        loader: Migrator.fromRecord({
+          "1_tables": tables,
+          "2_import_json": Effect.provideContext(importFiles(true), platform),
+        }),
+      }).pipe(
+        Effect.provideService(SqlClient.SqlClient, client),
+        Effect.mapError(
+          (cause) => new StoreOpenError({ path: ":memory:", cause }),
+        ),
+      );
+      return Context.make(SqlClient.SqlClient, client);
+    }).pipe(
+      Effect.catchTags({
+        SqlError: (cause) =>
+          Effect.fail(new StoreOpenError({ path: ":memory:", cause })),
+      }),
+    ),
   ).pipe(Layer.provide(Reactivity.layer));

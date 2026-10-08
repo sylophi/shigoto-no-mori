@@ -2882,21 +2882,25 @@ describe("doctor", () => {
   };
 
   // `sm doctor --json`, and with `fix` its `--fix --yes`, on each side
-  // against the same repos. The version is the Go build's own, "dev".
+  // against the same repos, the engine's as the terminal runs it. The
+  // version is the Go build's own, "dev".
   const sameDoctor = async (fix = false) => {
     const [go, engine] = await box.changeBoth(
       () => box.go("doctor", ...(fix ? ["--fix", "--yes"] : [])),
       () =>
-        box.engine(
-          Effect.flatMap(Effect.service(Doctor.Doctor), (doctor) =>
-            doctor.run({
-              version: "dev",
-              executable: "",
-              terminal: false,
-              ...(fix ? { fix: { approve: () => Effect.succeed(true) } } : {}),
-            }),
-          ),
-        ),
+        box.doctor({
+          version: "dev",
+          executable: "",
+          terminal: false,
+          ...(fix
+            ? {
+                fix: {
+                  approve: () => Effect.succeed(true),
+                  failed: () => Effect.void,
+                },
+              }
+            : {}),
+        }),
     );
     assert.deepStrictEqual(sideNeutral(engine), sideNeutral(go));
     return go as Doctor.DoctorDocument;
@@ -3044,6 +3048,43 @@ describe("doctor", () => {
     ]) {
       assert.ok(ids(doc).includes(id), id);
     }
+  });
+
+  // A file the store refuses to import, seeded before either side runs.
+  const corrupt = (file: string) =>
+    writeFileSync(join(box.home, "seed", file), "{not json");
+
+  it("still answers when the store can't import a registry that doesn't parse", async () => {
+    box.write("config.json", { portPool: false });
+    corrupt("registry.json");
+    box.write("old.lock", 1);
+    backdate("old.lock");
+    const doc = await sameDoctor();
+    assert.ok(ids(doc).includes("registry:fail"));
+    assert.ok(ids(doc).includes("config:ok"));
+    const after = await sameDoctor(true);
+    assert.deepEqual(after.repaired, ["deleted 1 stale lock file"]);
+  });
+
+  it("checks each registered project when the store can't import a config that doesn't parse", async () => {
+    inProject();
+    corrupt("config.json");
+    const doc = await sameDoctor();
+    assert.ok(ids(doc).includes("config:fail"));
+    assert.ok(ids(doc).includes("registry:ok"));
+    assert.ok(ids(doc).includes("project:ok"));
+  });
+
+  it("reads a pre-registry data dir's projects from state.json when the store can't import it", async () => {
+    const { repo } = inProject();
+    rmSync(join(box.home, "seed", "registry.json"));
+    box.write("state.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+    });
+    corrupt("config.json");
+    const doc = await sameDoctor();
+    assert.ok(ids(doc).includes("registry:ok"));
+    assert.ok(doc.checks.some(({ title }) => title === "repo"));
   });
 
   it("finds what a crash left: update files, a staging lock, landing refs and a running script", async () => {
