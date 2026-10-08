@@ -113,7 +113,10 @@ async function main() {
       const changes: string[] = [];
       let projects = [{ id: "p1", name: "repo", path: repo }];
       // (Re)start the watcher over the sandbox and let the platform
-      // watcher settle before producing events.
+      // watcher settle before producing events. On macOS a new watch is
+      // handed the writes made just before it opened (here the setup's
+      // commit and worktree add), so the settle outlasts a debounce and
+      // drops the ping those raise.
       const restart = async (suppressed = false) => {
         stopGitWatcher();
         startGitWatcher({
@@ -121,7 +124,9 @@ async function main() {
           suppressed: () => suppressed,
           projects: () => projects,
         });
-        await delay(150);
+        const before = changes.length;
+        await delay(500);
+        changes.length = before;
       };
       track(() => stopGitWatcher());
       await restart();
