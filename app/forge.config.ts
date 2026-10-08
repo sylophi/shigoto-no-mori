@@ -25,6 +25,10 @@ import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
 } from "./shared/packaging/fileSyncDist.mts";
+import {
+  MACFS_BINARY_NAME,
+  MACFS_DIST_DIR,
+} from "./shared/packaging/macfsDist.mts";
 import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "./shared/packaging/infoPlist.mts";
 import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 import { rendererSchemeName } from "./shared/packaging/rendererScheme.mts";
@@ -129,6 +133,9 @@ const config: ForgeConfig = {
       // The file-sync engine (continuous worktree mirroring), compiled
       // by the prePackage hook like the CLI and spawned only by main.
       `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
+      // The darwin helper (the filesystem calls Node lacks), compiled by
+      // the prePackage hook the same way.
+      `${MACFS_DIST_DIR}/${MACFS_BINARY_NAME}`,
     ],
     // The Local Network prompt's sentence (macOS 15+), shared with the
     // dev bundle. See shared/packaging/infoPlist.mts.
@@ -165,8 +172,12 @@ const config: ForgeConfig = {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
-      // And the file-sync engine, the same way.
+      // And the file-sync engine and the darwin helper, the same way.
       execFileSync("node", ["scripts/build-file-sync.mts"], {
+        cwd: import.meta.dirname,
+        stdio: "inherit",
+      });
+      execFileSync("node", ["scripts/build-macfs.mts"], {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });

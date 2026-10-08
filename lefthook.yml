@@ -51,3 +51,7 @@ pre-commit:
           - name: file-sync-test
             glob: "file-sync/**"
             run: CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./...
+          # The darwin helper (macfs/), likewise.
+          - name: macfs-test
+            glob: "macfs/**"
+            run: go test -C macfs ./...
