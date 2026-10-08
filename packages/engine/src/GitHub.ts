@@ -459,7 +459,8 @@ const make = Effect.gen(function* () {
         if (code !== 0) {
           return yield* new GitHubCliError({
             reason: reasonOfStderr(stderr),
-            cause: new Error(stderr.trim() || `gh exited with ${code}`),
+            // Go's wording when gh said nothing.
+            cause: new Error(stderr.trim() || `exit status ${code}`),
           });
         }
         return stdout;
@@ -498,6 +499,31 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => 0),
     );
 
+  // The first of a branch's PRs that is its own: not a fork's, or the
+  // fork's one it was checked out from. That is asked once, and only
+  // when gh returned a fork's PR.
+  const ownOf = <
+    A extends { readonly number: number; readonly isCrossRepository?: true },
+  >(
+    repo: string,
+    branch: string,
+    prs: ReadonlyArray<A>,
+  ) =>
+    Effect.gen(function* () {
+      const checkedOut = yield* Effect.cached(
+        checkedOutPullRequest(repo, branch),
+      );
+      for (const pr of prs) {
+        if (
+          pr.isCrossRepository !== true ||
+          pr.number === (yield* checkedOut)
+        ) {
+          return Option.some(pr);
+        }
+      }
+      return Option.none<A>();
+    });
+
   const cardFor = Effect.fn("GitHub.cardFor")(function* (
     repo: string,
     branch: string,
@@ -512,23 +538,19 @@ const make = Effect.gen(function* () {
     );
     if (Result.isFailure(rows))
       return { found: null, unavailable: rows.failure };
-    // Asked once, and only when gh returned a fork's PR.
-    const checkedOut = yield* Effect.cached(
-      checkedOutPullRequest(repo, branch),
+    const own = yield* ownOf(
+      repo,
+      branch,
+      rows.success.map((row) =>
+        Object.assign(summaryOf(row), { rollup: row["statusCheckRollup"] }),
+      ),
     );
-    for (const row of rows.success) {
-      if (
-        row["isCrossRepository"] === true &&
-        count(row["number"]) !== (yield* checkedOut)
-      ) {
-        continue;
-      }
-      const checks = rollupChecks(row["statusCheckRollup"]);
-      return {
-        found: { ...summaryOf(row), ...(checks.total > 0 ? { checks } : {}) },
-      };
-    }
-    return { found: null };
+    if (Option.isNone(own)) return { found: null };
+    const { rollup, ...summary } = own.value;
+    const checks = rollupChecks(rollup);
+    return {
+      found: { ...summary, ...(checks.total > 0 ? { checks } : {}) },
+    };
   });
 
   const owningPullRequest = Effect.fn("GitHub.owningPullRequest")(function* (
@@ -555,29 +577,6 @@ const make = Effect.gen(function* () {
             },
     };
   });
-
-  // The first of a branch's PRs that is its own: not a fork's, or the
-  // fork's one it was checked out from. That is asked once, and only
-  // when gh returned a fork's PR.
-  const ownOf = (
-    repo: string,
-    branch: string,
-    prs: ReadonlyArray<PullRequestSummary>,
-  ) =>
-    Effect.gen(function* () {
-      const checkedOut = yield* Effect.cached(
-        checkedOutPullRequest(repo, branch),
-      );
-      for (const pr of prs) {
-        if (
-          pr.isCrossRepository !== true ||
-          pr.number === (yield* checkedOut)
-        ) {
-          return Option.some(pr);
-        }
-      }
-      return Option.none<PullRequestSummary>();
-    });
 
   const prList = (repo: string, args: ReadonlyArray<string>) =>
     run(repo, args).pipe(
@@ -654,13 +653,17 @@ const make = Effect.gen(function* () {
 
   const hasMergedPullRequest = Effect.fn("GitHub.hasMergedPullRequest")(
     function* (repo: string, branch: string) {
-      const rows = yield* listed(
+      // No deadline, as in Go: unlike the status card, done waits for it.
+      const rows = yield* run(
         repo,
         lookupArgs(branch, "merged", ["number,isCrossRepository"]),
+      ).pipe(
+        Effect.map(rowsOf),
+        Effect.orElseSucceed(() => Option.none<ReadonlyArray<Row>>()),
       );
-      if (Result.isFailure(rows)) return false;
+      if (Option.isNone(rows)) return false;
       return Option.isSome(
-        yield* ownOf(repo, branch, rows.success.map(summaryOf)),
+        yield* ownOf(repo, branch, rows.value.map(summaryOf)),
       );
     },
   );

@@ -728,8 +728,8 @@ export class Worktrees extends Context.Service<
     }>;
     // Port-pool's release and the teardown script, the checkout, what is
     // kept under its id, and its branch when the device's setting says so.
-    // `preflighted` skips the guards a caller already ran with
-    // checkRemovable.
+    // `preflighted` skips the dirty check a caller already ran with
+    // checkRemovable. The primary checkout is refused regardless.
     readonly remove: (
       located: Located,
       options: {
@@ -973,14 +973,7 @@ const make = Effect.gen(function* () {
   const projectSettings = (project: RegisteredProject) =>
     config
       .read({ kind: "project", projectId: project.id, path: project.path })
-      .pipe(
-        Effect.map((doc) => {
-          const branch = doc?.["defaultBranch"];
-          return typeof branch === "string" && branch.trim() !== ""
-            ? { settings: doc, defaultBranch: branch }
-            : { settings: null, defaultBranch: undefined };
-        }),
-      );
+      .pipe(Effect.map(Config.projectSettingsOf));
 
   const identities = Effect.fn("Worktrees.identities")(function* (
     project: RegisteredProject,
@@ -2405,7 +2398,7 @@ const make = Effect.gen(function* () {
       }
     });
 
-  const removable = (worktree: WorktreeIdentity, force: boolean) =>
+  const notPrimary = (worktree: WorktreeIdentity) =>
     worktree.isPrimary
       ? Effect.fail(
           new WorktreeRefused({
@@ -2413,7 +2406,12 @@ const make = Effect.gen(function* () {
             subject: worktree.path,
           }),
         )
-      : requireClean(worktree, force, "remove", "");
+      : Effect.void;
+
+  const removable = (worktree: WorktreeIdentity, force: boolean) =>
+    notPrimary(worktree).pipe(
+      Effect.andThen(requireClean(worktree, force, "remove", "")),
+    );
 
   const remove = Effect.fn("Worktrees.remove")(function* (
     located: Located,
@@ -2426,7 +2424,9 @@ const make = Effect.gen(function* () {
     reporter: Reporter,
   ) {
     const { project, worktree } = located;
-    if (!options.preflighted) yield* removable(worktree, options.force);
+    yield* options.preflighted
+      ? notPrimary(worktree)
+      : removable(worktree, options.force);
     const deleteBranchOnRemove = (yield* config
       .get({ kind: "device" }, "deleteBranchOnRemove")
       .pipe(Effect.orDie)).value;
