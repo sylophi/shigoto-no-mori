@@ -27,7 +27,11 @@ import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import type { LauncherEntry } from "@shared/schemas";
 import { PaletteGroup, PaletteItem, usePaneHasKeys } from "./PaletteItem";
 import type { PaletteRow } from "./PaletteRows";
-import type { PaletteEntry, PaletteProject } from "./buildPaletteEntries";
+import type {
+  PaletteEntry,
+  PalettePage,
+  PaletteProject,
+} from "./buildPaletteEntries";
 
 export type GoTo = (
   entry: PaletteEntry,
@@ -44,6 +48,7 @@ export interface PaletteActions {
   create: (projectId: string, branch?: string) => void;
   // The new-worktree form, on the peer `deviceId` names, else here.
   openCreateForm: (projectId: string, deviceId?: string) => void;
+  openPage: (page: PalettePage) => void;
 }
 
 // The highlighted row's verbs: a preview beside the list, where a click
@@ -78,6 +83,8 @@ export function PaletteVerbs({
       );
     case "project":
       return <ProjectVerbs item={row.item} query={query} actions={actions} />;
+    case "page":
+      return <PageVerbs page={row.page} query={query} actions={actions} />;
     case "create":
       return <CreateVerbs row={row} query={query} actions={actions} />;
   }
@@ -412,6 +419,32 @@ function ProjectVerbs({
     run: () => actions.openCreateForm(project.id, device?.deviceId),
   });
   return <VerbGroup heading={project.name} query={query} verbs={verbs} />;
+}
+
+function PageVerbs({
+  page,
+  query,
+  actions,
+}: {
+  page: PalettePage;
+  query: string;
+  actions: PaletteActions;
+}) {
+  return (
+    <VerbGroup
+      heading={page.label}
+      query={query}
+      verbs={[
+        {
+          key: "open",
+          label: `Open ${page.label}`,
+          icon: iconOf(page.icon),
+          listKeys: "↩",
+          run: () => actions.openPage(page),
+        },
+      ]}
+    />
+  );
 }
 
 // Which project the new worktree goes into: the likeliest is ↩, the

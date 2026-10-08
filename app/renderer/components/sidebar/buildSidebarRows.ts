@@ -581,16 +581,22 @@ interface ProjectGroup {
   remote: RemoteForestItem[];
 }
 
-type Owner = { key: string; host: string; name: string };
+type Owner = { key: string; host: string; name: string; repo: string };
 
 // Who a project belongs to, off its remote's `host/owner/repo`: the
 // org or user account, keyed by host too (one name on two hosts is two
-// owners) and case-folded (hosts treat owner names that way). Null when
-// the project has no network remote, or its path has no owner segment.
+// owners) and case-folded (hosts treat owner names that way). `repo`
+// is the rest of the path, the repo's own name. Null when the project
+// has no network remote, or its path has no owner segment.
 export function ownerOf(project: Project): Owner | null {
   const [host, owner, ...repo] = project.remote?.split("/") ?? [];
   if (!host || !owner || repo.length === 0) return null;
-  return { key: `${host}/${owner}`.toLowerCase(), host, name: owner };
+  return {
+    key: `${host}/${owner}`.toLowerCase(),
+    host,
+    name: owner,
+    repo: repo.join("/"),
+  };
 }
 
 // The list of projects' rows under a header per owner, the owners in

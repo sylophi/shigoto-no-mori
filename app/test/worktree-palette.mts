@@ -13,7 +13,11 @@
 // one on screen, a mirrored peer's page counting as its local row. A
 // query names projects once across devices, those with no worktrees and
 // those only a peer holds too, and they go above the worktrees when the
-// query names a project best. A query turns into a branch name
+// query names a project best. A project's owner names it (alone or
+// ahead of the repo) and all of that owner's projects, and its
+// worktrees too. A query names the app's pages, a section of Settings
+// by its name or under "settings", and they lead the worktrees the
+// same way. A query turns into a branch name
 // git takes (a pasted path or URL never does), and a new worktree goes to
 // the project on screen first. The matched letters are the ones the
 // ranking matched.
@@ -26,11 +30,16 @@ import {
   initialPaletteKey,
   isProjectSource,
   newBranchName,
-  leadingProjectCount,
+  leadingCount,
+  pageFields,
+  projectNames,
   rankPaletteEntries,
+  rankPalettePages,
   rankPaletteProjects,
   type PaletteEntry,
+  type PalettePage,
 } from "@/components/palette/buildPaletteEntries";
+import { Radio } from "lucide-react";
 import { matchPositions } from "@/lib/fuzzyMatch";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
@@ -150,6 +159,14 @@ function palette(
 }
 
 const entries = (visits?: Record<string, number>) => palette(visits).entries;
+
+const page = (label: string, extra: Partial<PalettePage> = {}) => ({
+  key: label,
+  label,
+  icon: Radio,
+  open: () => {},
+  ...extra,
+});
 
 const keys = (list: readonly PaletteEntry[]) => list.map((entry) => entry.key);
 const ids = (projects: readonly Project[]) => projects.map((p) => p.id);
@@ -356,12 +373,68 @@ try {
     assert.equal(there?.deviceCount, 1);
   });
 
+  await proof.check("an owner names its projects and their work", () => {
+    const owned = (name: string, remote: string) => ({
+      ...project(name),
+      remote,
+    });
+    const projects = [
+      owned("birch", "github.com/grove/birch"),
+      owned("cedar", "github.com/grove/cedar"),
+      owned("elm", "github.com/grove/elm"),
+      owned("fir", "github.com/grove/fir-tree"),
+      owned("ivy", "gitlab.com/vines/ivy"),
+      project("loose"),
+    ];
+    const named = (query: string) =>
+      rankPaletteProjects(query, [], projects, []).map((p) => p.project.name);
+    assert.deepEqual(
+      named("grove").toSorted(),
+      ["birch", "cedar", "elm", "fir"],
+      "all of them, past the few a name finds",
+    );
+    assert.equal(named("gro").length, 3, "the few, for less than its name");
+    assert.deepEqual(named("grove/fir"), ["fir"], "ahead of the repo");
+    assert.deepEqual(named("fir-tree"), ["fir"], "the repo's own name");
+    assert.deepEqual(named("vines"), ["ivy"], "on another host too");
+    const grove = { ...lantern, remote: "github.com/grove/lantern" };
+    const { entries: list } = buildPaletteEntries({
+      projects: [forest, grove],
+      worktreeQueries: localTrees.map(loaded),
+      pullRequestQueries: localPullRequests.map(loaded),
+      remote: [],
+      mirrors: [],
+      deviceBadges: new Map(),
+      hiddenPrefixes: [],
+      allowAgentWorking: false,
+      visits: {},
+    });
+    const shown = rankPaletteEntries("grove", list);
+    assert.deepEqual(keys(shown), [local("wick")], "its worktrees");
+    assert.deepEqual(
+      keys(rankPaletteEntries("grove/lantern", list)),
+      [local("wick")],
+      "and by its repo",
+    );
+    assert.equal(
+      leadingCount(
+        "grove",
+        rankPaletteProjects("grove", list, [forest, grove], [peerForest]),
+        (item) => projectNames(item.project),
+        shown,
+      ),
+      1,
+      "above them",
+    );
+  });
+
   await proof.check("projects lead when the query names one best", () => {
     const list = entries();
     const leading = (query: string, projects = [forest, lantern]) =>
-      leadingProjectCount(
+      leadingCount(
         query,
         rankPaletteProjects(query, list, projects, [peerForest]),
+        (item) => projectNames(item.project),
         rankPaletteEntries(query, list),
       );
     assert.equal(leading("forest"), 1, "its name");
@@ -375,6 +448,37 @@ try {
       1,
       "letters scattered through a name trail a worktree that spells them",
     );
+  });
+
+  await proof.check("a query names the app's pages", () => {
+    const pages: PalettePage[] = [
+      page("Live"),
+      page("Account", { aliases: ["Devices"] }),
+      page("Appearance", { parent: "Settings" }),
+      page("General", { parent: "Settings" }),
+    ];
+    const named = (query: string) =>
+      rankPalettePages(query, pages).map((p) => p.label);
+    assert.deepEqual(named(""), [], "only asked");
+    assert.equal(named("live")[0], "Live");
+    assert.equal(named("devices")[0], "Account", "by another name");
+    assert.equal(named("appear")[0], "Appearance");
+    assert.deepEqual(
+      named("settings").toSorted(),
+      ["Appearance", "General"],
+      "a section under Settings",
+    );
+    assert.equal(named("settings gen")[0], "General");
+    const list = entries();
+    const leading = (query: string) =>
+      leadingCount(
+        query,
+        rankPalettePages(query, pages),
+        pageFields,
+        rankPaletteEntries(query, list),
+      );
+    assert.equal(leading("live"), 1, "its name");
+    assert.equal(leading("oak"), 0, "a branch");
   });
 
   await proof.check("a query as a new branch", () => {
