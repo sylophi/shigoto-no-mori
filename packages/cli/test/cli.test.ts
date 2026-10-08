@@ -86,6 +86,24 @@ describe("config", () => {
     );
   });
 
+  // The parser's words are effect/cli's, so only the outcome is Go's.
+  it("exits 2 on a command used wrongly, and 0 on help", async () => {
+    const misuses = [
+      ["--json", "config", "get"],
+      ["--json", "config", "bogus"],
+      ["--json", "config", "set", "--foo", "x", "y"],
+    ];
+    const runs = await Promise.all(
+      misuses.map((args) => box.runAt(built, "cli", box.home, args)),
+    );
+    for (const run of runs) {
+      assert.equal(run.code, 2, run.stdout);
+      assert.equal((run.doc as { ok?: unknown }).ok, false, run.stdout);
+    }
+    const help = await box.runAt(built, "cli", box.home, ["--help"]);
+    assert.equal(help.code, 0);
+  });
+
   it("sets, unsets and writes, then reads back the same", async () => {
     box.write("config.json", { portPool: true, fromNewerBuild: 1 });
     box.write("registry.json", { projects: [] });

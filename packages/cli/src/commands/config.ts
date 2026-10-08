@@ -118,13 +118,11 @@ const unset = Command.make(
     Effect.gen(function* () {
       const config = yield* Config.Config;
       yield* config.unset(device, key);
+      const { json, stdoutColor } = yield* Effect.service(Output);
+      if (json) return yield* emit({ ok: true, key });
       const { value } = yield* config.get(device, key);
-      const { stdoutColor } = yield* Effect.service(Output);
       const fallback = value === null ? "" : ` (default: ${rendered(value)})`;
-      yield* emitOrOut(
-        { ok: true, key },
-        styles(stdoutColor).green(`unset ${key}${fallback}`),
-      );
+      yield* out(styles(stdoutColor).green(`unset ${key}${fallback}`));
     }),
 ).pipe(Command.withDescription("Reset a setting to its default"));
 
@@ -138,7 +136,7 @@ const write = Command.make(
           problem: "write requires --data '<json>'.",
         });
       }
-      const payload = yield* Schema.decodeUnknownEffect(
+      const payload = yield* Schema.decodeEffect(
         Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
       )(data.value).pipe(
         Effect.mapError(

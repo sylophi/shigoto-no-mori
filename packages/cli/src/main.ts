@@ -9,9 +9,12 @@ import * as Git from "@shigomori/engine/Git";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Store from "@shigomori/engine/Store";
 import { flavorNames } from "@shigomori/engine/flavor";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as CliConfig from "effect/cli/CliConfig";
 import * as Command from "effect/cli/Command";
+import * as GlobalFlag from "effect/cli/GlobalFlag";
 import { configCommand } from "./commands/config.ts";
 import { report } from "./errors.ts";
 import { Output } from "./output.ts";
@@ -56,9 +59,16 @@ const sm = Command.make("sm").pipe(
 const program = Command.runWith(sm, { version: "dev", renderErrors: false })(
   rest,
 ).pipe(
-  Effect.provide(BunServices.layer),
+  // Only --help of effect/cli's built-in flags, as Go has no others.
+  Effect.provide(
+    Layer.merge(
+      BunServices.layer,
+      CliConfig.layer({ builtIns: [GlobalFlag.Help] }),
+    ),
+  ),
   Effect.as(0),
-  Effect.catch(report),
+  // A defect reports like any failure, so --json still ends in a document.
+  Effect.catchCause((cause) => report(Cause.squash(cause))),
   Effect.provideService(Output, {
     json,
     stdoutColor: !plain && process.stdout.isTTY === true,

@@ -2,6 +2,7 @@
 // error exits 2, anything else 1. Under --json the failure is a document,
 // {ok: false, error}. A person gets `sm: <message>` on stderr.
 import * as Effect from "effect/Effect";
+import * as CliError from "effect/cli/CliError";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { emit, note, Output, styles } from "./output.ts";
@@ -15,17 +16,9 @@ export class UsageError extends Schema.TaggedError<UsageError>()("UsageError", {
   }
 }
 
-// The failures that are the caller's mistake, by tag: the CLI parser's
-// and the engine's.
+// The engine's failures that are the caller's mistake, by tag.
 const USAGE = new Set([
   "UsageError",
-  "UnrecognizedOption",
-  "DuplicateOption",
-  "MissingOption",
-  "MissingArgument",
-  "UnexpectedArgument",
-  "InvalidValue",
-  "UnknownSubcommand",
   "UnknownConfigKey",
   "InvalidConfigValue",
   "StructuredConfigKey",
@@ -39,18 +32,25 @@ const tagOf = (error: unknown) => {
   return typeof tag === "string" ? tag : undefined;
 };
 
-// Reports the failure and answers the exit code. Help the parser shows
-// is not a failure.
+// Reports the failure and answers the exit code.
 export const report = (error: unknown) =>
   Effect.gen(function* () {
     const tag = tagOf(error);
-    if (tag === "ShowHelp") return 0;
+    // The parser shows help for --help and for a command used wrongly, and
+    // only the second is a failure.
+    const problems = error instanceof CliError.ShowHelp ? error.errors : [];
+    if (error instanceof CliError.ShowHelp && problems.length === 0) return 0;
     const { json, stderrColor, binaryName } = yield* Effect.service(Output);
-    const message = error instanceof Error ? error.message : String(error);
+    const message =
+      problems.length > 0
+        ? problems.map((problem) => problem.message).join("\n")
+        : error instanceof Error
+          ? error.message
+          : String(error);
     if (json) {
       yield* emit({ ok: false, error: message });
     } else {
       yield* note(`${styles(stderrColor).red(`${binaryName}:`)} ${message}`);
     }
-    return tag !== undefined && USAGE.has(tag) ? 2 : 1;
+    return problems.length > 0 || (tag !== undefined && USAGE.has(tag)) ? 2 : 1;
   });

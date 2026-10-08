@@ -205,7 +205,7 @@ export function sandbox(): Sandbox {
     cwd: string,
     args: ReadonlyArray<string>,
   ) =>
-    new Promise<Run>((resolve) => {
+    new Promise<Run>((resolve, reject) => {
       execFile(
         binary,
         [...args],
@@ -214,6 +214,11 @@ export function sandbox(): Sandbox {
           env: { ...gitEnv(), HOME: root, SHIGOMORI_DATA_DIR: sideDir(side) },
         },
         (error, stdout, stderr) => {
+          // A spawn failure or a signal has no exit code to compare.
+          if (error !== null && typeof error.code !== "number") {
+            reject(error);
+            return;
+          }
           const docs = stdout
             .split("\n")
             .filter((line) => line.startsWith("{") || line.startsWith("["))
