@@ -4,6 +4,7 @@ import {
   trunkOf,
 } from "@shared/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
+import { isAgentWorking } from "@shigomori/contracts/schemas";
 import { peerProjectKey } from "@shigomori/contracts/schemas/config";
 import { groupPrefixOf, isHiddenByPrefix } from "@shared/sharedSettings";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
@@ -54,6 +55,8 @@ interface BuildSidebarRowsArgs {
   openShelves: Record<GroupShelf, GroupIdSet>;
   // Worktrees starting with one of these fold away like shelved ones.
   hiddenPrefixes: readonly string[];
+  // Whether the agent-working mark counts (isAgentWorking).
+  allowAgentWorking: boolean;
   // Gathers the open project's worktrees starting with one of
   // `prefixes` under a header per prefix (groupPrefixOf), those `shut`
   // names drawn as their header alone. Null groups nothing.
@@ -124,13 +127,16 @@ export function mirrorBadgeLookup(
   };
 }
 
-// Which fold a worktree sits behind in its group, if any. Shelving is
-// the user's own call, so it outranks the prefixes. The inbox files by
-// the same rule.
+// Which fold a worktree sits behind in its group, if any. An agent's
+// working mark comes first, when it counts (isAgentWorking): it says
+// the worktree isn't ready to look at yet, wherever it was filed. Shelving is the user's own call, so it outranks the prefixes.
+// The inbox files by the same rule.
 export function groupShelfOf(
   worktree: Worktree,
   prefixes: readonly string[],
+  allowAgentWorking: boolean,
 ): GroupShelf | null {
+  if (isAgentWorking(worktree, allowAgentWorking)) return "agentWorking";
   if (worktree.shelved) return "shelved";
   return isHiddenByPrefix(worktree, prefixes) ? "hidden" : null;
 }
@@ -153,6 +159,7 @@ export function buildSidebarRows({
   worktreeSort,
   openShelves,
   hiddenPrefixes,
+  allowAgentWorking,
   byPrefix,
   arrangeMode,
   byOwner,
@@ -180,7 +187,7 @@ export function buildSidebarRows({
     // error row instead of it.
     if (!query || query.error) return;
     for (const worktree of (query.data ?? []) as readonly Worktree[]) {
-      const shelf = groupShelfOf(worktree, hiddenPrefixes);
+      const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
       listedLocal.set(worktree.id, {
         groupId: project.id,
         shelf,
@@ -305,6 +312,7 @@ export function buildSidebarRows({
         item,
         groupId,
         hiddenPrefixes,
+        allowAgentWorking,
         folded,
       );
       for (const row of peerRows) {
@@ -321,7 +329,7 @@ export function buildSidebarRows({
         : null;
     if (query && unlisted === null) {
       for (const worktree of (query.data ?? []) as readonly Worktree[]) {
-        const shelf = groupShelfOf(worktree, hiddenPrefixes);
+        const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
         (shelf === null ? localVisible : localShelves[shelf]).push(worktree);
       }
     }
@@ -547,6 +555,7 @@ const NO_PREFIX_GROUPS: NonNullable<BuildSidebarRowsArgs["byPrefix"]> = {
 };
 
 const emptyShelves = <T>(): Record<GroupShelf, T[]> => ({
+  agentWorking: [],
   shelved: [],
   hidden: [],
 });
@@ -821,12 +830,13 @@ function remoteWorktreeRows(
   item: RemoteForestItem,
   groupId: string,
   hiddenPrefixes: readonly string[],
+  allowAgentWorking: boolean,
   folded: (peerKey: string, shelf: GroupShelf | null) => boolean,
 ): RemoteRow[] {
   const rows: RemoteRow[] = [];
   for (const worktree of item.worktrees) {
     const key = remoteWorktreeKey(item.deviceId, worktree.id);
-    const shelf = groupShelfOf(worktree, hiddenPrefixes);
+    const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
     // The local row of a mirrored pair stands for both copies.
     if (folded(key, shelf)) continue;
     rows.push({

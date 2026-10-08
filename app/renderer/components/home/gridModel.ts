@@ -50,6 +50,7 @@ export interface GridInput {
   pullRequestQueries: ProjectPullRequestQueries;
   order: ProjectGroupOrder;
   hiddenPrefixes: readonly string[];
+  allowAgentWorking: boolean;
   byOwner: boolean;
   remote: RemoteForestItem[];
   mirrors: readonly MirrorLink[];
@@ -58,7 +59,11 @@ export interface GridInput {
   visits: Record<string, number>;
 }
 
-const NO_SHELVES = { shelved: new Set<string>(), hidden: new Set<string>() };
+const NO_SHELVES = {
+  agentWorking: new Set<string>(),
+  shelved: new Set<string>(),
+  hidden: new Set<string>(),
+};
 
 export function buildGrid({ visits, byOwner, ...forest }: GridInput): {
   sections: Section[];

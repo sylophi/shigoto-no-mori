@@ -61,17 +61,17 @@ var generalItems = []helpItem{
 var worktreeItems = []helpItem{
 	{"worktrees list [--all] [--remote] [--from <device>] [--identities]", "List worktrees",
 		"All projects when outside one, or with --all; -p <project> picks one from anywhere. --remote lists this project's worktrees on your other devices (--from narrows it to one), and needs the app open. " +
-			"--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, createdAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull, and title and description when `describe` set them (the worktree's own, not an open PR's). --worktree-id <id> narrows the array to that one row. " +
+			"--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, createdAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull, agentWorking, and title and description when `describe` set them (the worktree's own, not an open PR's). --worktree-id <id> narrows the array to that one row. " +
 			"Listing full rows also takes a shelved worktree back off the shelf once it has been worked in since it was shelved (an edit, a new or deleted file, a commit; not the changes it was shelved with, nor an auto-pull fast-forward), and the row says shelved: false. " +
-			"--identities is the cheap form, with no git probe per worktree (only git's worktree list and the registry marks): the same scope, order and array, each entry {id, projectId, name, branch, path, isPrimary, isExternal, detached, shelved, autoPull}. Add --primary-ref for each project's primaryRef and primaryBranch (left out when it has none), resolved once per project. " +
+			"--identities is the cheap form, with no git probe per worktree (only git's worktree list and the registry marks): the same scope, order and array, each entry {id, projectId, name, branch, path, isPrimary, isExternal, detached, shelved, autoPull, agentWorking}. Add --primary-ref for each project's primaryRef and primaryBranch (left out when it has none), resolved once per project. " +
 			"A bare repository has no primary checkout; otherwise the checkout at the project path is the primary (the first one listed when none sits there)."},
 	{"worktrees status [<name>] [--no-pr]", "Status card for one worktree",
 		"Where the worktree you're standing in stands: its title, branch, base, changes, stash, last commit, ports, scripts, PR. The PR lookup needs gh and degrades to a note rather than stalling the card. --no-pr skips it."},
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
 		"Like cd without the project menu. Exit the shell to return, or cd in place with shell integration."},
 	{"worktrees path [<name>]", "Print a worktree's directory", ""},
-	{"worktrees create [<name>] [-b <branch-name>] [--base <ref>] [--no-cd] [--no-setup] [--no-clone]", "Create a worktree",
-		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Tracked files are cloned (copy-on-write) from an existing checkout wherever it has them unchanged, and git writes the rest (--no-clone has git write them all). Runs carry-over, the setup script (--no-setup skips it), and port provision, then drops into the new worktree: a subshell, or your own shell with shell integration (--no-cd, --json, and scripts skip it)."},
+	{"worktrees create [<name>] [-b <branch-name>] [--base <ref>] [--no-cd] [--no-setup] [--no-clone] [--agent-working]", "Create a worktree",
+		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Tracked files are cloned (copy-on-write) from an existing checkout wherever it has them unchanged, and git writes the rest (--no-clone has git write them all). --agent-working sets the agent-working mark (see agent-working) from the start. Runs carry-over, the setup script (--no-setup skips it), and port provision, then drops into the new worktree: a subshell, or your own shell with shell integration (--no-cd, --json, and scripts skip it)."},
 	{"worktrees rm [<name>] [--stack] [-f] [--keep-branch]", "Remove a worktree",
 		"Teardown, release port, delete the branch per app settings. --stack also removes the worktrees of the merged layers under it in its PR stack (the cleanup half of land --stack, for a stack that has landed, and an open PR is refused). The removal guards cover all of them first."},
 	{"worktrees done [<name>] [-f]", "Post-merge cleanup",
@@ -110,12 +110,14 @@ var worktreeItems = []helpItem{
 		"A shelved worktree comes back off the shelf on its own once it is worked in: the next full listing (the app's sidebar, `worktrees list`) that finds an edit, a new or deleted file or a commit made since the shelve unshelves it."},
 	{"worktrees describe [<name>] [-t|--title <title>] [-d|--description <text> | --description-file <path|->]", "Set or show a worktree's title and description",
 		"What the work is, like a pull request's title and body, for before there is one: the app shows the title in place of the branch, and the description on the worktree page. Set them once the work has a purpose and again whenever it changes. Each flag replaces only its own field, and an empty value clears it. --description-file - reads stdin. With no flags it prints the worktree's own, or its open pull request's. While the branch has an open pull request from this repository (not a fork's branch of the same name), its title and body are the worktree's, and describe refuses a change: edit the PR instead. With --json, that error's code is pull-request-open. External worktrees have none (adopt one first). They travel with send, bring and mirror. --json prints {ok, worktree: <row>}, or {ok, title, description, pullRequest} with no flags, where title and description are the worktree's own and pullRequest the open PR that overrides them."},
+	{"worktrees agent-working [on|off] [<name>]", "Set or show the agent-working mark",
+		"For an agent working in the worktree: once the app allows agents to mark worktrees as working (a sidebar setting), it keeps the worktree on its own folded shelf, out of the way, until the mark is cleared. Set it when starting a stretch of work and clear it when handing the work back. The primary checkout and external worktrees can't carry it. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
 	{"worktrees autopull [on|off] [<name>]", "Set or show the app's auto-pull mark",
 		"While on, the running app fast-forwards the worktree onto its upstream after each background fetch, as long as it has no local commits, changes or running scripts. Any checkout can carry it, the primary included. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
 	{"worktrees move [<name>] <new-path>", "Move a worktree's checkout",
-		"git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
+		"git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf, auto-pull and agent-working marks, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
 	{"worktrees rekey --project-id <id> --from-id <id> --to-path <path>", "Re-key a worktree ahead of a move",
-		"App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf and auto-pull marks, the per-worktree data file and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}."},
+		"App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf, auto-pull and agent-working marks, the per-worktree data file and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}."},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 		"Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
 			"App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher."},
@@ -474,7 +476,10 @@ var commands = []command{
 	// App plumbing for the tidy page's sizes (diskusage.go), hidden too.
 	{name: "disk-usage", noContext: true, run: cmdDiskUsage},
 	{name: "describe", worktree: true, run: cmdDescribe},
-	{name: "autopull", aliases: []string{"auto-pull"}, worktree: true, run: cmdAutoPull},
+	{name: "autopull", aliases: []string{"auto-pull"}, worktree: true,
+		run: func(ctx cliContext, args []string) (int, error) { return cmdRegistryMark(ctx, args, autoPullMark) }},
+	{name: "agent-working", worktree: true,
+		run: func(ctx cliContext, args []string) (int, error) { return cmdRegistryMark(ctx, args, agentWorkingMark) }},
 	{name: "move", aliases: []string{"mv"}, worktree: true, run: cmdMove},
 	{name: "launchers", aliases: []string{"launcher"}, run: cmdLaunchers},
 	{name: "shelve", worktree: true,

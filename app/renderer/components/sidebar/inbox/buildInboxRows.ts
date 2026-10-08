@@ -47,6 +47,8 @@ interface BuildInboxRowsArgs {
   openShelves: Set<InboxShelf>;
   // Worktrees starting with one of these go on the Hidden shelf.
   hiddenPrefixes: readonly string[];
+  // Whether the agent-working mark counts (isAgentWorking).
+  allowAgentWorking: boolean;
 }
 
 interface Entry {
@@ -62,9 +64,10 @@ interface Entry {
   activityAt: number;
 }
 
-// A worktree lands in exactly one box. Shelving is an explicit user
-// decision, so it outranks mergedness: a shelved branch that also merged
-// stays where the user filed it. The hidden prefixes are one too, just
+// A worktree lands in exactly one box. An agent's working mark and
+// shelving are explicit decisions (groupShelfOf), so they outrank
+// mergedness: a shelved branch that also merged stays where the user
+// filed it. The hidden prefixes are one too, just
 // made ahead of time. A primary is always live: it can't be
 // shelved, and a merged PR on whatever branch it happens to have checked
 // out doesn't make the project's root "done".
@@ -72,9 +75,10 @@ function bucketFor(
   worktree: Worktree,
   pr: PullRequest | undefined,
   prefixes: readonly string[],
+  allowAgentWorking: boolean,
 ): InboxShelf | "live" {
   if (worktree.isPrimary) return "live";
-  const shelf = groupShelfOf(worktree, prefixes);
+  const shelf = groupShelfOf(worktree, prefixes, allowAgentWorking);
   if (shelf !== null) return shelf;
   if (worktree.mergedIntoPrimary || pr?.state === "MERGED") return "merged";
   return "live";
@@ -104,8 +108,8 @@ function worktreeRow(entry: Entry): SidebarRow {
 
 // Flattens every project's worktrees (this machine's and every peer's)
 // into the inbox view's boxes: live work at the top with no header,
-// then the Shelved, Merged and Hidden shelves. Primary checkouts are
-// left out unless the project opts in
+// then the Agent working, Shelved, Merged and Hidden shelves. Primary
+// checkouts are left out unless the project opts in
 // (ShigomoriConfigSchema.showPrimaryInInbox). They're a project's
 // root, not a piece of in-flight work, and one per project would crowd
 // out everything the list exists to show.
@@ -122,6 +126,7 @@ export function buildInboxRows({
   deviceBadges,
   openShelves,
   hiddenPrefixes,
+  allowAgentWorking,
 }: BuildInboxRowsArgs): SidebarViewModel {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
   // Failed listings, local or remote, hold the empty message back (the
@@ -134,6 +139,7 @@ export function buildInboxRows({
 
   const live: Entry[] = [];
   const shelves: Record<InboxShelf, Entry[]> = {
+    agentWorking: [],
     shelved: [],
     merged: [],
     hidden: [],
@@ -164,7 +170,7 @@ export function buildInboxRows({
         continue;
       }
       const pr = prs?.[worktree.branch];
-      const bucket = bucketFor(worktree, pr, hiddenPrefixes);
+      const bucket = bucketFor(worktree, pr, hiddenPrefixes, allowAgentWorking);
       const entry: Entry = {
         worktree,
         project,
@@ -212,7 +218,8 @@ export function buildInboxRows({
         if (local === undefined) return true;
         const pr = item.pullRequests[worktree.branch];
         if (
-          localBucket.get(local) !== bucketFor(worktree, pr, hiddenPrefixes)
+          localBucket.get(local) !==
+          bucketFor(worktree, pr, hiddenPrefixes, allowAgentWorking)
         ) {
           return true;
         }
@@ -230,7 +237,12 @@ export function buildInboxRows({
     live.length,
   );
   const rows: SidebarRow[] = live.toSorted(byRecency).map(worktreeRow);
-  for (const shelf of ["shelved", "merged", "hidden"] as const) {
+  for (const shelf of [
+    "agentWorking",
+    "shelved",
+    "merged",
+    "hidden",
+  ] as const) {
     const entries = shelves[shelf];
     if (entries.length === 0) continue;
     const expanded = openShelves.has(shelf);

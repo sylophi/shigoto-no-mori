@@ -2624,6 +2624,36 @@
       "autoPull": true
     }
   },
+  "worktrees:setAgentWorking": {
+    "payload": {
+      "projectId": "@\"",
+      "worktreeId": "C",
+      "agentWorking": false
+    },
+    "success": {
+      "id": "w{",
+      "projectId": "1\\",
+      "name": "0",
+      "branch": "-1",
+      "path": "",
+      "ahead": 0,
+      "behind": 4,
+      "hasUpstream": true,
+      "hasRemote": false,
+      "divergedClean": true,
+      "behindPrimary": 2,
+      "unpushedCount": 2,
+      "mergedIntoPrimary": false,
+      "changedCount": 1,
+      "recentCommits": [],
+      "isPrimary": false,
+      "isExternal": false,
+      "detached": true,
+      "shelved": true,
+      "autoPull": true,
+      "agentWorking": false
+    }
+  },
   "worktrees:setAutoPull": {
     "payload": {
       "projectId": "Fw",

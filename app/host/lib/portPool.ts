@@ -11,7 +11,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { PoolPort } from "@shared/ports/mergeWorktreePorts";
 import { readGlobalConfig } from "./config/global";
-import { binaryOnPath } from "./util/binaries";
+import * as Processes from "./util/processes";
 import { ttlMapCache, ttlValueCache } from "./util/ttlCache";
 import { envSetting } from "@shared/config";
 
@@ -22,8 +22,10 @@ const INSTALLED_CACHE_TTL_MS = 30_000;
 // fresh provision still shows within it.
 const STATE_CACHE_TTL_MS = 10_000;
 
-const installedCache = ttlValueCache(INSTALLED_CACHE_TTL_MS, () =>
-  binaryOnPath("port-pool"),
+const installedCache = ttlValueCache(
+  INSTALLED_CACHE_TTL_MS,
+  async () =>
+    (await Processes.run(Processes.resolveOnPath("port-pool"))) !== null,
 );
 
 export function isPortPoolInstalled(): Promise<boolean> {

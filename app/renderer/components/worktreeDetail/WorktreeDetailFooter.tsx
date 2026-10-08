@@ -1,6 +1,7 @@
 import {
   Archive,
   ArchiveRestore,
+  Hammer,
   RefreshCw,
   RefreshCwOff,
   Trash2,
@@ -11,9 +12,12 @@ import { InlineError } from "@/components/ui/inline-error";
 import {
   useSetAutoPull,
   useSetShelved,
+  useSetAgentWorking,
 } from "@/hooks/worktrees/useWorktreeMutations";
+import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { assertNever } from "@/lib/utils";
 import {
+  isAgentWorking,
   isManagedWorktree,
   type CleanupError,
   type Worktree,
@@ -237,12 +241,14 @@ function NormalRow({
 }) {
   const setShelved = useSetShelved();
   const setAutoPull = useSetAutoPull();
+  const setAgentWorking = useSetAgentWorking();
   // Offered wherever a fast-forward could ever happen. Once on, it
   // stays visible even if the upstream vanishes, so it can be turned
   // off again.
   const canAutoPull =
     worktree.autoPull || (worktree.hasUpstream && !worktree.detached);
   const autoPullUi = AUTO_PULL_UI[worktree.autoPull ? "on" : "off"];
+  const allowAgentWorking = useAllowAgentWorking();
 
   return (
     <div className="ml-auto flex items-center gap-3">
@@ -263,6 +269,27 @@ function NormalRow({
             })
           }
           tip={autoPullUi.tip}
+        />
+      )}
+      {/* Agents set the mark (`sm agent-working`). Here it can only be
+          cleared, for an agent that stopped without clearing it. */}
+      {isAgentWorking(worktree, allowAgentWorking) && (
+        <FooterVerb
+          rank={LABEL_RANK.agentWorking}
+          icon={<Hammer />}
+          label="Agent working"
+          variant="ghost"
+          className="shrink-0 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
+          aria-pressed
+          disabled={setAgentWorking.isPending || busy}
+          onClick={() =>
+            setAgentWorking.mutate({
+              projectId: worktree.projectId,
+              worktreeId: worktree.id,
+              agentWorking: false,
+            })
+          }
+          tip="An agent marked this worktree as working, so the sidebar keeps it on the Agent working shelf. Click to clear the mark."
         />
       )}
       {isManagedWorktree(worktree) && (

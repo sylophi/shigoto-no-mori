@@ -45,7 +45,7 @@ func syncCell(p palette, w worktreeJSON) string {
 // primary before external, and never both: the primary checkout isn't
 // under the managed base either, and calling it external would only
 // confuse. Shared with the status card's header.
-func worktreeFlags(isPrimary, isExternal, shelved, autoPull bool) []string {
+func worktreeFlags(isPrimary, isExternal, shelved, autoPull, agentWorking bool) []string {
 	var flags []string
 	if isPrimary {
 		flags = append(flags, "primary")
@@ -58,11 +58,14 @@ func worktreeFlags(isPrimary, isExternal, shelved, autoPull bool) []string {
 	if autoPull {
 		flags = append(flags, "auto-pull")
 	}
+	if agentWorking {
+		flags = append(flags, "agent working")
+	}
 	return flags
 }
 
 func flagsCell(p palette, w worktreeJSON) string {
-	return p.dim(strings.Join(worktreeFlags(w.IsPrimary, w.IsExternal, w.Shelved, w.AutoPull), ", "))
+	return p.dim(strings.Join(worktreeFlags(w.IsPrimary, w.IsExternal, w.Shelved, w.AutoPull, w.AgentWorking), ", "))
 }
 
 func changesCell(p palette, w worktreeJSON) string {
@@ -272,6 +275,7 @@ type worktreeIdentityJSON struct {
 	Detached      bool   `json:"detached"`
 	Shelved       bool   `json:"shelved"`
 	AutoPull      bool   `json:"autoPull"`
+	AgentWorking  bool   `json:"agentWorking"`
 	PrimaryRef    string `json:"primaryRef,omitempty"`
 	PrimaryBranch string `json:"primaryBranch,omitempty"`
 }
@@ -332,7 +336,7 @@ func listIdentities(ctx cliContext, scope []project, withPrimaryRef bool) (int, 
 // NAME/BRANCH/flags table.
 func emitIdentities(ctx cliContext, groups []identityGroup) (int, error) {
 	sets := readWorktreeMarkSets()
-	marks := buildContext{shelved: sets[shelvedKey], autoPull: sets[autoPullKey]}
+	marks := buildContext{shelved: sets[shelvedKey], autoPull: sets[autoPullKey], agentWorking: sets[agentWorkingKey]}
 	flat := []worktreeIdentityJSON{}
 	for _, group := range groups {
 		for _, id := range group.identities {
@@ -341,6 +345,7 @@ func emitIdentities(ctx cliContext, groups []identityGroup) (int, error) {
 				IsPrimary: id.IsPrimary, IsExternal: id.IsExternal, Detached: id.Detached,
 				Shelved:       shelvedFlag(id, marks),
 				AutoPull:      marks.autoPull[id.ID],
+				AgentWorking:  agentWorkingFlag(id, marks),
 				PrimaryRef:    group.primaryRef,
 				PrimaryBranch: group.primaryBranch,
 			})
@@ -373,7 +378,7 @@ func emitIdentities(ctx cliContext, groups []identityGroup) (int, error) {
 		if w.ID == currentID {
 			marker = cyanOut("@")
 		}
-		flags := dimOut(strings.Join(worktreeFlags(w.IsPrimary, w.IsExternal, w.Shelved, w.AutoPull), ", "))
+		flags := dimOut(strings.Join(worktreeFlags(w.IsPrimary, w.IsExternal, w.Shelved, w.AutoPull, w.AgentWorking), ", "))
 		rows[i] = []string{marker, w.Name, w.Branch, flags}
 		if multi {
 			rows[i] = []string{marker, names[w.ProjectID], w.Name, w.Branch, flags}

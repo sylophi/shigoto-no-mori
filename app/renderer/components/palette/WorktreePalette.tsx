@@ -20,6 +20,7 @@ import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullReques
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
+import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
 import { useNow } from "@/hooks/ui/useNow";
@@ -163,6 +164,7 @@ function PaletteDialog({
   const mirrors = useMirrorLinks();
   const deviceBadges = useDeviceBadges();
   const hiddenPrefixes = useWorktreePrefixes("hidden");
+  const allowAgentWorking = useAllowAgentWorking();
   const { entries, entryKeyOf } = buildPaletteEntries({
     projects,
     worktreeQueries,
@@ -171,6 +173,7 @@ function PaletteDialog({
     mirrors,
     deviceBadges,
     hiddenPrefixes,
+    allowAgentWorking,
     visits,
   });
 
