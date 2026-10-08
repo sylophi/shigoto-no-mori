@@ -37,6 +37,7 @@ import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { traced } from "@shared/trace";
 import {
   type SyncCapture,
   SyncCaptureSchema,
@@ -510,7 +511,11 @@ export async function serveSource(
       }
       try {
         // oxlint-disable-next-line no-await-in-loop -- one question at a time
-        await answerAsk(link, project, facts, request);
+        await traced(
+          "SourceLink.answer",
+          { ask: request.ask, "move.sourceWorktree": worktreeId },
+          () => answerAsk(link, project, facts, request),
+        );
       } catch (error) {
         if (error instanceof BrokenLink) throw error;
         if (opts.failure !== undefined) opts.failure.error ??= error;
