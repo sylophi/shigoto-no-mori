@@ -1,18 +1,11 @@
-// The wire samples (fixtures/wire/v<PROTOCOL_VERSION>.json): one encoded
-// payload and result per invoke, and one payload per push, for every
-// call of every contract module. Each must decode with its schema and
-// encode back to exactly itself, so a schema change that an older build
-// could not read fails here, and is a protocol version bump.
-//
-// `pnpm -F @shigomori/contracts wire-fixtures` adds a sample derived
-// from the schema for a call that has none and drops the samples of a
-// call that is gone. It never rewrites a sample that is there.
+// The wire samples (README.md, "Wire samples"): every call of every
+// contract module has an encoded sample of each part it sends, and each
+// sample still decodes and goes back to exactly itself.
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
 import type { ContractSchema } from "../src/codec.ts";
@@ -26,83 +19,95 @@ import {
   payloadOf,
 } from "../src/contract.ts";
 import { PROTOCOL_VERSION } from "../src/protocol.ts";
+import { VoidSchema } from "../src/schemas/void.ts";
+import { json, wireForms } from "./wireForms.ts";
 
-type Sample = { payload?: unknown; success?: unknown };
+type Part = "payload" | "success";
+type Sample = Partial<Record<Part, unknown>>;
 
-const fill = process.env["UPDATE_WIRE_FIXTURES"] === "1";
 const file = join(
   import.meta.dirname,
   `../fixtures/wire/v${PROTOCOL_VERSION}.json`,
 );
-let samples: Record<string, Sample> = existsSync(file)
-  ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, Sample>)
-  : {};
 
-// Every call, as its channel and the schemas its sample is read with.
+// A part with nothing to send has no sample.
+const isVoid = (schema: ContractSchema) =>
+  schema === VoidSchema || schema === Schema.Void;
+
+// Every call of every module, as its channel and the parts it sends.
 const modulesDir = join(import.meta.dirname, "../src/modules");
-const calls = new Map<string, Partial<Record<keyof Sample, ContractSchema>>>();
 const modules = (await Promise.all(
   readdirSync(modulesDir).map((name) => import(join(modulesDir, name))),
 )) as Record<string, unknown>[];
+const calls = new Map<string, [Part, ContractSchema][]>();
 for (const module of modules) {
   for (const [exported, value] of Object.entries(module)) {
     if (!exported.endsWith("Contract")) continue;
     for (const call of callsOf(value as ContractModule)) {
+      const channel = channelOf(call);
+      assert.ok(!calls.has(channel), `${channel} is defined twice`);
+      const parts: [Part, ContractSchema][] = isBroadcast(call)
+        ? [["payload", payloadOf(call)]]
+        : [
+            ["payload", inputOf(call)],
+            ["success", outputOf(call)],
+          ];
       calls.set(
-        channelOf(call),
-        isBroadcast(call)
-          ? { payload: payloadOf(call) }
-          : { payload: inputOf(call), success: outputOf(call) },
+        channel,
+        parts.filter(([, schema]) => !isVoid(schema)),
       );
     }
   }
 }
 
-// A schema with nothing to send (a void payload or result) has no
-// sample.
-const isVoid = (schema: ContractSchema) =>
-  Option.isSome(Schema.decodeUnknownOption(schema)(undefined));
+let samples: Record<string, Sample> = existsSync(file)
+  ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, Sample>)
+  : {};
 
-const json = (value: unknown) => JSON.stringify(value);
-
-// A sample derived from the schema: a small one when the schema's
-// checks allow it, a default-sized one when they need more room.
+// `pnpm -F @shigomori/contracts wire-fixtures`: a sample derived from
+// the schema for each part that has none, small when the schema's
+// checks allow it and never one that sends nothing, and the samples of
+// calls and parts that are gone dropped. A sample that is there stays.
 async function derive(schema: ContractSchema, seed: string): Promise<unknown> {
-  const sample = (size: number | undefined) =>
+  const sample = (at: string, size: number | undefined) =>
     Effect.runPromise(
       Arbitrary.sampleEffect(Arbitrary.schema(schema), {
-        seed,
+        seed: at,
         count: 1,
         size,
       }),
-    );
-  const [value] = await sample(2).catch(() => sample(undefined));
-  return Schema.encodeUnknownSync(schema)(value);
+    ).then(([value]) => Schema.encodeUnknownSync(schema)(value));
+  for (const attempt of [0, 1, 2, 3, 4, 5, 6, 7]) {
+    const at = `${seed}#${attempt}`;
+    // oxlint-disable-next-line no-await-in-loop -- each attempt only runs when the one before sent nothing
+    const encoded = await sample(at, 2).catch(() => sample(at, undefined));
+    if (encoded !== undefined) return encoded;
+  }
+  throw new Error(`${seed}: every sample derived sends nothing`);
 }
 
-if (fill) {
+if (process.env["UPDATE_WIRE_FIXTURES"] === "1") {
   const underived: string[] = [];
-  const derivedOrNoted = (schema: ContractSchema, at: string) =>
-    derive(schema, at).catch(() => {
-      underived.push(at);
-      return undefined;
-    });
   const entries = await Promise.all(
     [...calls]
       .toSorted(([a], [b]) => a.localeCompare(b))
-      .map(async ([channel, schemas]): Promise<[string, Sample]> => {
-        const sample: Sample = { ...samples[channel] };
-        const missing = (
-          Object.entries(schemas) as [keyof Sample, ContractSchema][]
-        ).filter(([part, schema]) => !isVoid(schema) && !(part in sample));
-        const derived = await Promise.all(
-          missing.map(([part, schema]) =>
-            derivedOrNoted(schema, `${channel} ${part}`),
-          ),
+      .map(async ([channel, parts]): Promise<[string, Sample]> => {
+        const kept = samples[channel] ?? {};
+        const sample: Sample = {};
+        await Promise.all(
+          parts.map(async ([part, schema]) => {
+            if (part in kept) {
+              sample[part] = kept[part];
+              return;
+            }
+            await derive(schema, `${channel}.${part}`).then(
+              (value) => {
+                sample[part] = value;
+              },
+              () => underived.push(`${channel} ${part}`),
+            );
+          }),
         );
-        missing.forEach(([part], i) => {
-          if (derived[i] !== undefined) sample[part] = derived[i];
-        });
         return [channel, sample];
       }),
   );
@@ -125,27 +130,22 @@ it(`every call has wire samples for protocol v${PROTOCOL_VERSION}, and every sam
   assert.deepEqual(
     Object.keys(samples).filter((channel) => !calls.has(channel)),
     [],
-    "samples of calls that are gone",
+    "samples of calls that are gone: run pnpm -F @shigomori/contracts wire-fixtures",
   );
 });
 
-describe.each([...calls])("%s", (channel, schemas) => {
-  it("decodes its samples and encodes them back unchanged", () => {
+describe.each([...calls])("%s", (channel, parts) => {
+  it("reads its samples back unchanged, decoded and encoded", () => {
     const sample = samples[channel] ?? {};
-    for (const [part, schema] of Object.entries(schemas) as [
-      keyof Sample,
-      ContractSchema,
-    ][]) {
-      if (isVoid(schema)) {
-        assert.ok(!(part in sample), `${part} is void but has a sample`);
-        continue;
+    assert.deepEqual(
+      Object.keys(sample).toSorted(),
+      parts.map(([part]) => part).toSorted(),
+      "the parts sampled are not the parts the call sends",
+    );
+    for (const [part, schema] of parts) {
+      for (const form of wireForms(schema, sample[part])) {
+        assert.equal(form, json(sample[part]), part);
       }
-      assert.ok(part in sample, `${part} has no sample`);
-      const decoded = Schema.decodeUnknownSync(schema)(sample[part]);
-      assert.equal(
-        json(Schema.encodeUnknownSync(schema)(decoded)),
-        json(sample[part]),
-      );
     }
   });
 });

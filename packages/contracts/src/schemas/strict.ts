@@ -38,10 +38,10 @@ export function strict<const Fields extends Schema.Struct.Fields>(
           return SchemaParser.decodeUnknownEffect(codec)(input, options);
         },
       {
-        // Read as the struct it wraps wherever a schema is derived from
-        // its codec, as the wire samples are (test/wire.test.ts).
-        toCodec: ([codec]) =>
-          Schema.link<Schema.Struct<Fields>["Encoded"]>()(
+        // Generated as the struct it wraps, as the wire samples are
+        // (test/wire.test.ts).
+        toCodecArbitrary: ({ typeParameters: [codec] }) =>
+          Schema.link<Schema.Struct<Fields>["Type"]>()(
             codec,
             SchemaTransformation.passthrough(),
           ),
