@@ -141,7 +141,15 @@ type MergeOutcome = { readonly method: MergeMethod; readonly outcome: Outcome };
 // Where a land's steps go: the merged layers of a stack, the scripts of
 // a removal.
 export type Reporter = Worktrees.Reporter & {
-  readonly merged?: (event: Document) => Effect.Effect<void>;
+  // A layer of a stack merged: its document, and the PR, whose title a
+  // person's line names.
+  readonly merged?: (
+    event: Document,
+    pr: PullRequestSummary,
+  ) => Effect.Effect<void>;
+  // The PR a merge by number is about to merge, whose title the
+  // document leaves out and a person's line names.
+  readonly target?: (pr: PullRequestSummary) => Effect.Effect<void>;
 };
 
 // What each verb can fail with. A stack land is the cleanup of
@@ -614,7 +622,7 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       const report = (pr: PullRequestSummary) =>
-        reporter.merged?.(mergedEvent(pr, method)) ?? Effect.void;
+        reporter.merged?.(mergedEvent(pr, method), pr) ?? Effect.void;
       if (Option.isSome(lookups.stack)) {
         const outcome = yield* github.mergeStackAsync(
           project.path,
@@ -1065,6 +1073,7 @@ const make = Effect.gen(function* () {
           ["", pr.state.toLowerCase()],
         );
       }
+      if (reporter.target !== undefined) yield* reporter.target(pr);
       const outcome = yield* execMerge(
         project,
         pr,

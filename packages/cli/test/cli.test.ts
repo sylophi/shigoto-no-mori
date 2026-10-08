@@ -34,6 +34,7 @@ import {
   type Sandbox,
   sandbox,
 } from "../../engine/test/lib/sandbox.ts";
+import { ghScript, pr, settingsRule } from "../../engine/test/lib/gh.ts";
 
 let built: string;
 let buildDir: string;
@@ -765,6 +766,162 @@ describe("making and removing worktrees", () => {
       "--to-path",
       "rel",
     );
+  });
+});
+
+describe("landing", () => {
+  // A project whose worktrees live in the repo both sides share.
+  const project = () => {
+    const repo = box.repo("repo", { "a.txt": "a\n" });
+    box.write("registry.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+    });
+    box.write("projects/P1/project.json", {
+      defaultBranch: "main",
+      worktreeLayout: "in-project",
+    });
+    const tree = (name: string) => {
+      const path = `${repo}/.shigomori/worktrees/${name}`;
+      box.git(repo, "worktree", "add", "-q", "-b", name, path);
+      return path;
+    };
+    return { repo, tree };
+  };
+
+  it("opens a worktree's pull request", async () => {
+    const { tree } = project();
+    tree("fox");
+    ghScript(box, [
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox")],
+      },
+    ]);
+    box.fakeBin("open", "exit 0");
+    await same("pr", "fox");
+    await same("--json", "wt", "pr", "fox");
+    await same("pr", "root");
+  });
+
+  it("merges a worktree's pull request, or arms auto-merge", async () => {
+    const { tree } = project();
+    tree("fox");
+    ghScript(box, [
+      settingsRule({ merge: true, squash: true }),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox", "main", { mergeStateStatus: "CLEAN" })],
+      },
+      { args: ["pr", "merge", "7"], out: "" },
+    ]);
+    await change("merge", "fox");
+    await change("--json", "merge", "fox", "-m", "squash");
+    await change("merge", "fox", "-m", "rebase");
+    await change("merge", "fox", "--method", "octopus");
+  });
+
+  it("arms auto-merge where the rules wait", async () => {
+    const { tree } = project();
+    tree("fox");
+    ghScript(box, [
+      settingsRule({ squash: true }, true),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox", "main", { mergeStateStatus: "BLOCKED" })],
+      },
+      { args: ["pr", "merge", "7", "--auto"], out: "" },
+      {
+        args: ["api", "graphql", "-F", "number=7"],
+        out: {
+          data: {
+            repository: {
+              pullRequest: { state: "OPEN", isInMergeQueue: false },
+            },
+          },
+        },
+      },
+    ]);
+    await change("merge", "fox");
+    await change("land", "fox");
+  });
+
+  it("merges a pull request by number, refusing a stranger's fork", async () => {
+    project();
+    ghScript(box, [
+      settingsRule({ merge: true }),
+      { args: ["pr", "view", "7"], out: pr(7, "fox") },
+      {
+        args: ["pr", "view", "8"],
+        out: pr(8, "theirs", "main", { isCrossRepository: true }),
+      },
+      { args: ["pr", "merge", "7"], out: "" },
+    ]);
+    await change("merge", "--project-id", "P1", "--number", "7");
+    await change("--json", "merge", "--project-id", "P1", "--number", "8");
+    await change("merge", "--project-id", "P1", "--number", "x");
+  });
+
+  it("lands: merges, then removes the worktree, or only cleans up once merged", async () => {
+    const { tree } = project();
+    tree("fox");
+    tree("owl");
+    ghScript(box, [
+      settingsRule({ squash: true }),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox")],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "owl"],
+        out: [pr(8, "owl", "main", { state: "MERGED" })],
+      },
+      { args: ["pr", "merge", "7"], out: "" },
+    ]);
+    await change("land", "fox");
+    await change("--json", "land", "owl");
+  });
+
+  it("refuses to land without an open pull request, or over local changes", async () => {
+    const { tree } = project();
+    tree("fox");
+    tree("owl");
+    const emu = tree("emu");
+    writeFileSync(`${emu}/scratch.txt`, "unsaved\n");
+    ghScript(box, [
+      settingsRule({ merge: true }),
+      { args: ["pr", "list", "--state", "all", "--head", "fox"], out: [] },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "owl"],
+        out: [pr(8, "owl", "main", { state: "CLOSED" })],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "emu"],
+        out: [pr(9, "emu")],
+      },
+    ]);
+    await change("land", "fox");
+    await change("--json", "land", "owl");
+    await change("land", "emu");
+    await change("rm", "fox", "--stack");
+  });
+
+  it("puts a checkout back on the primary branch once its branch is merged", async () => {
+    const { repo } = project();
+    ghScript(box, [
+      {
+        args: ["pr", "list", "--state", "merged", "--head", "unmerged"],
+        out: [],
+      },
+    ]);
+    box.git(repo, "checkout", "-q", "-b", "merged");
+    box.git(repo, "checkout", "-q", "main");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "on main");
+    box.git(repo, "checkout", "-q", "merged");
+    await change("done", "repo/root");
+    box.git(repo, "checkout", "-q", "-b", "unmerged");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "unmerged work");
+    await change("--json", "done", "repo/root");
+    await change("done", "repo/root", "-f");
   });
 });
 
