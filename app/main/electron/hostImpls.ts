@@ -54,8 +54,8 @@ export function installHostImpls(): void {
   // through invalidateGlobalConfigCache to this one subscriber, so the
   // directConnections opt-out applies without a relaunch. Registered
   // once here, and the refresh never rejects, so fire and forget is
-  // safe. The boot-time pass rides main/index.ts's refreshHubConnection,
-  // since this fires only on a subsequent change.
+  // safe. The boot-time pass is the host graph's refreshHubConnection
+  // (main/hostLayer.ts), since this fires only on a subsequent change.
   onGlobalConfigChange(() => {
     void refreshDirectHost();
   });
