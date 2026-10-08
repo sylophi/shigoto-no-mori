@@ -32,6 +32,14 @@ import { describe } from "./describe.ts";
 import { done, land, merge, pr } from "./landing.ts";
 import { open } from "./open.ts";
 import { dirty } from "./dirty.ts";
+import {
+  bring,
+  listRemote,
+  mirror,
+  mirrors,
+  send,
+  unmirror,
+} from "./transfer.ts";
 import { cdCommand } from "./shell.ts";
 import { agentWorking, autopull, shelve, unshelve } from "./marks.ts";
 import { status } from "./status.ts";
@@ -116,7 +124,7 @@ const list = Command.make(
       Flag.withDefault(false),
     ),
     remote: Flag.Boolean("remote").pipe(
-      Flag.withDescription("Another device's worktrees (not yet)"),
+      Flag.withDescription("The project's worktrees on the other devices"),
       Flag.withDefault(false),
     ),
     from: Flag.String("from").pipe(Flag.optional),
@@ -125,12 +133,6 @@ const list = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      if (input.remote || Option.isSome(given(input.from))) {
-        return yield* new UsageError({
-          problem:
-            "--remote and --from list another device's worktrees, which this build can't yet.",
-        });
-      }
       if (input.primaryRef && !input.identities) {
         return yield* new UsageError({
           problem:
@@ -160,6 +162,25 @@ const list = Command.make(
         return yield* json
           ? emit([row])
           : rowTable(paint, [row], { multi: false });
+      }
+
+      // The project's worktrees on the other devices. A blank --from is
+      // refused before anything else is asked.
+      if (input.remote || Option.isSome(input.from)) {
+        const blank = Option.exists(input.from, (from) => from.trim() === "");
+        if (!blank && input.identities) {
+          return yield* new UsageError({
+            problem:
+              "--identities lists this device's worktrees; it doesn't combine with --remote or --from.",
+          });
+        }
+        if (!blank && input.all) {
+          return yield* new UsageError({
+            problem:
+              "--remote lists one project's worktrees. Name it with -p, or run from inside it.",
+          });
+        }
+        return yield* listRemote(input);
       }
 
       const { at, scope } = yield* scopeOf(input);
@@ -337,5 +358,10 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     done,
     open,
     dirty,
+    send,
+    bring,
+    mirror,
+    unmirror,
+    mirrors,
   ]),
 );

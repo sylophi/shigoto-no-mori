@@ -23,6 +23,14 @@ import { dirty } from "./commands/dirty.ts";
 import { bundle } from "./commands/bundle.ts";
 import { open } from "./commands/open.ts";
 import { update } from "./commands/update.ts";
+import {
+  bring,
+  devices,
+  mirror,
+  mirrors,
+  send,
+  unmirror,
+} from "./commands/transfer.ts";
 import { cdCommand, shellCommand } from "./commands/shell.ts";
 import {
   destination,
@@ -132,6 +140,12 @@ const sm = Command.make("sm").pipe(
     dirty.pipe(Command.provide(services)),
     bundle.pipe(Command.provide(services)),
     open.pipe(Command.provide(services)),
+    send.pipe(Command.provide(services)),
+    bring.pipe(Command.provide(services)),
+    mirror.pipe(Command.provide(services)),
+    unmirror.pipe(Command.provide(services)),
+    mirrors.pipe(Command.provide(services)),
+    devices.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(services)),
     update.pipe(Command.provide(services)),
   ]),
