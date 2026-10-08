@@ -736,6 +736,12 @@ export class Worktrees extends Context.Service<
       | OrphanedWorktree
       | Git.GitError
     >;
+    // The guards every removal shares: never the primary checkout, and no
+    // uncommitted or unreadable worktree unless forced.
+    readonly checkRemovable: (
+      located: Located,
+      force: boolean,
+    ) => Effect.Effect<void, WorktreeRefused | DirtyWorktree>;
     // Moves the checkout to `destination` (absolute), across volumes too,
     // and carries what is kept under its id to the new one.
     readonly move: (
@@ -745,6 +751,15 @@ export class Worktrees extends Context.Service<
       { readonly worktree: WorktreeRow; readonly previousId: string },
       WorktreeRefused | Git.GitError
     >;
+    // The project's primary ref (the default-branch setting honored),
+    // its remote and local branch when it is a remote-tracking ref, and
+    // the remotes that resolved it. An empty ref when none resolves.
+    readonly primaryTarget: (project: RegisteredProject) => Effect.Effect<{
+      readonly remotes: ReadonlyArray<string>;
+      readonly primaryRef: string;
+      readonly remote: string;
+      readonly primaryBranch: string;
+    }>;
     // Carries what is kept under `from` to the id a checkout at `toPath`
     // (absolute) will have, ahead of moving it there. Answers that id.
     readonly rekey: (
@@ -2382,6 +2397,16 @@ const make = Effect.gen(function* () {
       }
     });
 
+  const removable = (worktree: WorktreeIdentity, force: boolean) =>
+    worktree.isPrimary
+      ? Effect.fail(
+          new WorktreeRefused({
+            reason: "remove-primary",
+            subject: worktree.path,
+          }),
+        )
+      : requireClean(worktree, force, "remove", "");
+
   const remove = Effect.fn("Worktrees.remove")(function* (
     located: Located,
     options: {
@@ -2392,13 +2417,7 @@ const make = Effect.gen(function* () {
     reporter: Reporter,
   ) {
     const { project, worktree } = located;
-    if (worktree.isPrimary) {
-      return yield* new WorktreeRefused({
-        reason: "remove-primary",
-        subject: worktree.path,
-      });
-    }
-    yield* requireClean(worktree, options.force, "remove", "");
+    yield* removable(worktree, options.force);
     const deleteBranchOnRemove = (yield* config
       .get({ kind: "device" }, "deleteBranchOnRemove")
       .pipe(Effect.orDie)).value;
@@ -2871,6 +2890,16 @@ const make = Effect.gen(function* () {
     move,
     rekey,
     relocateProject,
+    checkRemovable: (located, force) => removable(located.worktree, force),
+    primaryTarget: (project) =>
+      primaryRefOf(project).pipe(
+        Effect.map(({ remotes, primaryRef, primaryBranch }) => ({
+          remotes,
+          primaryRef,
+          remote: splitRemoteRef(primaryRef, remotes)?.remote ?? "",
+          primaryBranch,
+        })),
+      ),
   });
 });
 

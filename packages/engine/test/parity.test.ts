@@ -12,6 +12,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
+import type * as GitHub from "../src/GitHub.ts";
+import * as Landing from "../src/Landing.ts";
 import * as Icons from "../src/Icons.ts";
 import * as Launchers from "../src/Launchers.ts";
 import * as Registry from "../src/Registry.ts";
@@ -467,7 +469,7 @@ const onTarget = <A, E>(
   run: (
     service: Worktrees.Worktrees["Service"],
     located: Worktrees.Located,
-  ) => Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E, Engine>,
 ) =>
   Effect.gen(function* () {
     const service = yield* worktrees;
@@ -1491,5 +1493,428 @@ describe("projects relocate", () => {
     renameSync(repo, join(box.home, "gone"));
     mkdirSync(join(box.home, "plain"));
     await relocateVerb("repo", join(box.home, "plain"));
+  });
+});
+
+// --- landing --------------------------------------------------------------
+
+// A gh that answers each call with the first rule whose arguments start
+// with the rule's (`*` matches any one), and logs every call. Both sides
+// must ask GitHub the same things in the same order, so the log is part
+// of what a case compares.
+type GhRule = {
+  readonly args: ReadonlyArray<string>;
+  readonly out?: unknown;
+  readonly err?: string;
+  readonly code?: number;
+};
+
+const scriptedGh = (rules: ReadonlyArray<GhRule>) => {
+  const bin = join(box.home, "bin");
+  mkdirSync(bin, { recursive: true });
+  const rulesFile = join(bin, "gh-rules.json");
+  const logFile = join(bin, "gh-calls.log");
+  writeFileSync(rulesFile, JSON.stringify(rules));
+  writeFileSync(logFile, "");
+  writeFileSync(
+    join(bin, "fake-gh.mjs"),
+    `import { appendFileSync, readFileSync } from "node:fs";
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(logFile)}, JSON.stringify(args) + "\\n");
+const rules = JSON.parse(readFileSync(${JSON.stringify(rulesFile)}, "utf8"));
+const rule = rules.find((r) => r.args.every((a, i) => a === "*" || a === args[i]));
+if (!rule) { process.stderr.write("fake gh: unexpected " + args.join(" ")); process.exit(2); }
+if (rule.out !== undefined) process.stdout.write(typeof rule.out === "string" ? rule.out : JSON.stringify(rule.out));
+if (rule.err !== undefined) process.stderr.write(rule.err);
+process.exit(rule.code ?? 0);
+`,
+  );
+  box.fakeBin(
+    "gh",
+    `exec node ${JSON.stringify(join(bin, "fake-gh.mjs"))} "$@"`,
+  );
+  // The calls since the last look.
+  return () => {
+    const calls = readFileSync(logFile, "utf8");
+    writeFileSync(logFile, "");
+    return calls;
+  };
+};
+
+const pr = (
+  number: number,
+  head: string,
+  base = "main",
+  extra: Record<string, unknown> = {},
+) => ({
+  number,
+  title: `PR ${number}`,
+  state: "OPEN",
+  isDraft: false,
+  url: `https://github.com/me/repo/pull/${number}`,
+  baseRefName: base,
+  headRefName: head,
+  isCrossRepository: false,
+  ...extra,
+});
+
+const settingsRule = (
+  allowed: { merge?: boolean; squash?: boolean; rebase?: boolean },
+  autoMerge = false,
+): GhRule => ({
+  args: ["api", "graphql", "-F", "owner={owner}"],
+  out: {
+    data: {
+      repository: {
+        mergeCommitAllowed: allowed.merge ?? false,
+        squashMergeAllowed: allowed.squash ?? false,
+        rebaseMergeAllowed: allowed.rebase ?? false,
+        autoMergeAllowed: autoMerge,
+      },
+    },
+  },
+});
+
+const landing = Effect.service(Landing.Landing);
+
+// A landing verb run on each side, the document, the repo's state and
+// the gh calls compared. `merged` events a stack reports come before the
+// document, as the terminal prints them.
+const sameLanding = <E>(
+  args: ReadonlyArray<string>,
+  run: (reporter: Landing.Reporter) => Effect.Effect<unknown, E, Engine>,
+  repo: string,
+  calls: () => string,
+) =>
+  sameChange(
+    { args },
+    (reporter) =>
+      run({
+        ...reporter,
+        merged: (event) => reporter.report(event as never),
+      }),
+    (doc) => doc,
+    // Go asks some of these at once, so in no set order.
+    () => ({
+      ...repoState(repo)(),
+      gh: calls()
+        .split("\n")
+        .filter((line) => line !== "")
+        .toSorted(),
+    }),
+  );
+
+describe("landing", () => {
+  it("shows a worktree's pull request", async () => {
+    const calls = scriptedGh([
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox")],
+      },
+    ]);
+    const { tree } = inProject();
+    tree("fox");
+    await same(
+      ["worktrees", "pr", "fox"],
+      onTarget(box.home, { ref: "fox" }, (_, located) =>
+        Effect.flatMap(landing, (service) => service.pullRequest(located)),
+      ),
+    );
+    calls();
+  });
+
+  it("merges with the first method allowed, refuses one that isn't, and arms auto-merge where the rules wait", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    const mergeVerb = (
+      flags: ReadonlyArray<string>,
+      method?: GitHub.MergeMethod,
+    ) =>
+      sameLanding(
+        ["worktrees", "merge", "fox", ...flags],
+        (reporter) =>
+          onTarget(box.home, { ref: "fox" }, (_, located) =>
+            Effect.flatMap(landing, (service) =>
+              service.merge({ located }, { method, stack: false }, reporter),
+            ),
+          ),
+        repo,
+        calls,
+      );
+    let calls = scriptedGh([
+      settingsRule({ merge: true, squash: true }),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox", "main", { mergeStateStatus: "CLEAN" })],
+      },
+      { args: ["pr", "merge", "7"], out: "" },
+    ]);
+    await mergeVerb([]);
+    await mergeVerb(["-m", "rebase"], "rebase");
+    calls = scriptedGh([
+      settingsRule({ squash: true }, true),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox", "main", { mergeStateStatus: "BLOCKED" })],
+      },
+      { args: ["pr", "merge", "7", "--auto"], out: "" },
+      {
+        args: ["api", "graphql", "-F", "number=7"],
+        out: {
+          data: {
+            repository: {
+              pullRequest: { state: "OPEN", isInMergeQueue: false },
+            },
+          },
+        },
+      },
+    ]);
+    await mergeVerb([]);
+  });
+
+  it("merges a pull request by number, refusing a stranger's fork", async () => {
+    const { repo } = inProject();
+    const calls = scriptedGh([
+      settingsRule({ merge: true }),
+      { args: ["pr", "view", "7"], out: pr(7, "fox") },
+      {
+        args: ["pr", "view", "8"],
+        out: pr(8, "theirs", "main", { isCrossRepository: true }),
+      },
+      { args: ["pr", "merge", "7"], out: "" },
+    ]);
+    const byNumber = (number: number) =>
+      sameLanding(
+        [
+          "worktrees",
+          "merge",
+          "--project-id",
+          "P1",
+          "--number",
+          String(number),
+        ],
+        (reporter) =>
+          Effect.flatMap(landing, (service) =>
+            service.merge(
+              { project: { id: "P1", name: "repo", path: repo }, number },
+              { stack: false },
+              reporter,
+            ),
+          ),
+        repo,
+        calls,
+      );
+    await byNumber(7);
+    await byNumber(8);
+  });
+
+  const landVerb = (
+    repo: string,
+    ref: string,
+    calls: () => string,
+    flags: ReadonlyArray<string> = [],
+  ) =>
+    sameLanding(
+      ["worktrees", "land", ref, ...flags],
+      (reporter) =>
+        onTarget(box.home, { ref }, (_, located) =>
+          Effect.flatMap(landing, (service) =>
+            service.land(
+              located,
+              {
+                force: false,
+                keepBranch: false,
+                skipCleanup: false,
+                stack: flags.includes("--stack"),
+              },
+              reporter,
+            ),
+          ),
+        ),
+      repo,
+      calls,
+    );
+
+  it("lands: merges, then removes the worktree, or only cleans up once merged", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    tree("owl");
+    const calls = scriptedGh([
+      settingsRule({ squash: true }),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox")],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "owl"],
+        out: [pr(8, "owl", "main", { state: "MERGED" })],
+      },
+      { args: ["pr", "merge", "7"], out: "" },
+    ]);
+    await landVerb(repo, "fox", calls);
+    await landVerb(repo, "owl", calls);
+  });
+
+  it("refuses to land a pull request stacked on another open one", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    const calls = scriptedGh([
+      settingsRule({ merge: true }),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox", "owl")],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "owl"],
+        out: [pr(6, "owl")],
+      },
+    ]);
+    await landVerb(repo, "fox", calls);
+  });
+
+  it("lands a stack one layer at a time, each retargeted at the trunk, and removes every landed worktree", async () => {
+    const { repo, tree } = inProject();
+    tree("owl");
+    tree("fox");
+    const calls = scriptedGh([
+      settingsRule({ merge: true }),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox", "owl")],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--limit"],
+        out: [pr(7, "fox", "owl"), pr(6, "owl")],
+      },
+      {
+        args: ["api", "repos/{owner}/{repo}/stacks?pull_request=7"],
+        err: "gh: Not Found (HTTP 404)",
+        code: 1,
+      },
+      { args: ["pr", "edit", "7"], out: "" },
+      {
+        args: ["pr", "view", "7", "--json", "mergeStateStatus"],
+        out: { mergeStateStatus: "CLEAN" },
+      },
+      { args: ["pr", "merge"], out: "" },
+    ]);
+    await landVerb(repo, "fox", calls, ["--stack"]);
+  });
+
+  it("merges a stack GitHub knows through its own merge, every layer reported", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    const calls = scriptedGh([
+      settingsRule({ squash: true }),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox", "owl")],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--limit"],
+        out: [pr(7, "fox", "owl"), pr(6, "owl")],
+      },
+      {
+        args: ["api", "repos/{owner}/{repo}/stacks?pull_request=7"],
+        out: [
+          {
+            pull_requests: [
+              { number: 6, state: "open" },
+              { number: 7, state: "open" },
+            ],
+          },
+        ],
+      },
+      {
+        args: ["api", "-X", "PUT"],
+        out: { status: "merged", details: { uuid: "u" } },
+      },
+    ]);
+    await sameLanding(
+      ["worktrees", "merge", "fox", "--stack"],
+      (reporter) =>
+        onTarget(box.home, { ref: "fox" }, (_, located) =>
+          Effect.flatMap(landing, (service) =>
+            service.merge({ located }, { stack: true }, reporter),
+          ),
+        ),
+      repo,
+      calls,
+    );
+  });
+
+  it("cleans up a landed stack, and keeps the merge in the document when a teardown fails", async () => {
+    const { repo, tree } = inProject(undefined, {
+      scripts: { teardown: 'test "$SHIGOMORI_WORKTREE_NAME" != bad' },
+    });
+    tree("owl");
+    tree("fox");
+    tree("bad");
+    const calls = scriptedGh([
+      settingsRule({ merge: true }),
+      {
+        args: ["pr", "list", "--state", "all", "--head", "fox"],
+        out: [pr(7, "fox", "owl", { state: "MERGED" })],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "bad"],
+        out: [pr(9, "bad")],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--limit"],
+        out: [
+          pr(7, "fox", "owl", { state: "MERGED" }),
+          pr(6, "owl", "main", { state: "MERGED" }),
+        ],
+      },
+      { args: ["pr", "merge", "9"], out: "" },
+    ]);
+    await sameLanding(
+      ["worktrees", "rm", "fox", "--stack"],
+      (reporter) =>
+        onTarget(box.home, { ref: "fox" }, (_, located) =>
+          Effect.flatMap(landing, (service) =>
+            service.removeStack(
+              located,
+              { force: false, keepBranch: false, skipCleanup: false },
+              reporter,
+            ),
+          ),
+        ),
+      repo,
+      calls,
+    );
+    await landVerb(repo, "bad", calls);
+  });
+
+  it("lands a checkout back on the primary branch once its branch is merged", async () => {
+    const { repo } = inProject();
+    const calls = scriptedGh([
+      {
+        args: ["pr", "list", "--state", "merged", "--head", "unmerged"],
+        out: [],
+      },
+    ]);
+    box.git(repo, "checkout", "-q", "-b", "merged");
+    box.git(repo, "checkout", "-q", "main");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "on main");
+    box.git(repo, "checkout", "-q", "merged");
+    const doneVerb = (flags: ReadonlyArray<string> = []) =>
+      sameLanding(
+        ["worktrees", "done", "repo/root", ...flags],
+        () =>
+          onTarget(box.home, { ref: "repo/root" }, (_, located) =>
+            Effect.flatMap(landing, (service) =>
+              service.done(located, { force: flags.includes("-f") }),
+            ),
+          ),
+        repo,
+        calls,
+      );
+    await doneVerb();
+    box.git(repo, "checkout", "-q", "-b", "unmerged");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "unmerged work");
+    await doneVerb();
+    await doneVerb(["-f"]);
   });
 });

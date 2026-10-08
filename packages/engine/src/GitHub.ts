@@ -2,6 +2,7 @@
 // request a branch has. One runner under every lookup, so the install
 // check, the deadline and the reasons a lookup couldn't be made are the
 // same for each.
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -43,7 +44,7 @@ type AutoMergeRequest = { readonly mergeMethod: string };
 
 // A pull request as `sm --json` documents print it. The optional fields
 // are left out when empty, as Go's omitempty does.
-type PullRequestSummary = {
+export type PullRequestSummary = {
   readonly number: number;
   readonly title: string;
   readonly state: string;
@@ -78,6 +79,51 @@ export type OwningPullRequest = {
   readonly isCrossRepository: boolean;
 };
 
+// gh answered with something this build can't read.
+export class GitHubOutputError extends Schema.TaggedError<GitHubOutputError>()(
+  "GitHubOutputError",
+  { command: Schema.String },
+) {
+  override get message(): string {
+    return `unexpected gh ${this.command} output`;
+  }
+}
+
+// The merge methods GitHub knows, in the order a pick falls back on.
+export const MERGE_METHODS = ["merge", "squash", "rebase"] as const;
+export type MergeMethod = (typeof MERGE_METHODS)[number];
+
+// The repo's merge settings: the methods its merge button offers, in
+// MERGE_METHODS order, and whether auto-merge may be armed on its PRs.
+export type MergeSettings = {
+  readonly allowed: ReadonlyArray<MergeMethod>;
+  readonly autoMerge: boolean;
+};
+
+// A stack GitHub knows, bottom first. A merged PR is "closed".
+export type GitHubStack = ReadonlyArray<{
+  readonly number: number;
+  readonly state: string;
+}>;
+
+// How GitHub's own stack merge ended.
+export type AsyncMergeOutcome = "merged" | "enqueued";
+
+export class StackMergeFailed extends Schema.TaggedError<StackMergeFailed>()(
+  "StackMergeFailed",
+  {
+    number: Schema.Int,
+    reason: Schema.Literals(["timeout", "refused"]),
+    detail: Schema.String,
+  },
+) {
+  override get message(): string {
+    return this.reason === "timeout"
+      ? `GitHub is still merging the stack; check PR #${this.number}`
+      : `GitHub didn't merge the stack: ${this.detail}`;
+  }
+}
+
 // A lookup's answer: what it found (null for nothing), or why it
 // couldn't look.
 export type Lookup<A> = {
@@ -106,6 +152,68 @@ export class GitHub extends Context.Service<
       repo: string,
       branch: string,
     ) => Effect.Effect<Lookup<OwningPullRequest>>;
+    // The branch's pull request, any state, newest first: the first that
+    // isn't a fork's, or is the one the branch was checked out from.
+    // `extraFields` are asked for beside the summary.
+    readonly find: (
+      repo: string,
+      branch: string,
+      extraFields?: ReadonlyArray<string>,
+    ) => Effect.Effect<
+      Option.Option<PullRequestSummary>,
+      GitHubCliError | GitHubOutputError
+    >;
+    readonly findByNumber: (
+      repo: string,
+      number: number,
+      extraFields?: ReadonlyArray<string>,
+    ) => Effect.Effect<
+      Option.Option<PullRequestSummary>,
+      GitHubCliError | GitHubOutputError
+    >;
+    // Every PR of the repo, newest first, one page.
+    readonly list: (
+      repo: string,
+    ) => Effect.Effect<
+      ReadonlyArray<PullRequestSummary>,
+      GitHubCliError | GitHubOutputError
+    >;
+    // Whether the PR's branch here was checked out from it, the one way
+    // a fork's PR is the branch's own.
+    readonly checkedOutFrom: (
+      repo: string,
+      branch: string,
+      number: number,
+    ) => Effect.Effect<boolean>;
+    // A merged PR from this repository (or the fork's one the branch was
+    // checked out from) has the branch as its head. False on any failure.
+    readonly hasMergedPullRequest: (
+      repo: string,
+      branch: string,
+    ) => Effect.Effect<boolean>;
+    // A failed read means every method and no auto-merge: missing data
+    // doesn't block the merge, and --auto is only asked where GitHub is
+    // known to accept it.
+    readonly mergeSettings: (repo: string) => Effect.Effect<MergeSettings>;
+    // GitHub's stack holding the PR, none when there is none (or the
+    // host has no stacks API).
+    readonly stackFor: (
+      repo: string,
+      number: number,
+    ) => Effect.Effect<
+      Option.Option<GitHubStack>,
+      GitHubCliError | GitHubOutputError
+    >;
+    // GitHub's own stack merge: every PR of the stack up to `number`
+    // lands, or none does. Waits for the outcome.
+    readonly mergeStackAsync: (
+      repo: string,
+      number: number,
+      method: MergeMethod,
+    ) => Effect.Effect<
+      AsyncMergeOutcome,
+      GitHubCliError | GitHubOutputError | StackMergeFailed
+    >;
   }
 >()("sm/engine/GitHub") {}
 
@@ -113,6 +221,14 @@ export class GitHub extends Context.Service<
 // a wedged gh (no network, a credential helper waiting on a keychain)
 // can't hold a card or an agent's describe hostage.
 const PROBE_TIMEOUT = Duration.seconds(6);
+
+// On one line so the call logs as one.
+const REPO_MERGE_QUERY =
+  "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
+  "{ mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed } }";
+
+const ASYNC_MERGE_POLL = Duration.seconds(2);
+const ASYNC_MERGE_TIMEOUT_MS = 3 * 60 * 1000;
 
 const SUMMARY_FIELDS =
   "number,title,state,isDraft,url,baseRefName,headRefName,isCrossRepository";
@@ -123,7 +239,7 @@ const SUMMARY_FIELDS =
 // branch's own.
 const lookupArgs = (
   branch: string,
-  state: "all" | "open",
+  state: "all" | "open" | "merged",
   fields: ReadonlyArray<string>,
 ) => [
   "pr",
@@ -239,6 +355,15 @@ const summaryOf = (row: Row): PullRequestSummary => {
       ? { autoMergeRequest: { mergeMethod: text(autoMerge["mergeMethod"]) } }
       : {}),
   };
+};
+
+// JSON text, none when it isn't.
+const parseJson = (raw: string): Option.Option<unknown> => {
+  try {
+    return Option.some(JSON.parse(raw) as unknown);
+  } catch {
+    return Option.none();
+  }
 };
 
 // gh's JSON array of objects, none when it is something else.
@@ -389,7 +514,262 @@ const make = Effect.gen(function* () {
     };
   });
 
-  return GitHub.of({ run, cardFor, owningPullRequest });
+  const prList = (repo: string, args: ReadonlyArray<string>) =>
+    run(repo, args).pipe(
+      Effect.flatMap((stdout) =>
+        Option.match(rowsOf(stdout), {
+          onNone: () =>
+            Effect.fail(new GitHubOutputError({ command: "pr list" })),
+          onSome: (rows) => Effect.succeed(rows.map(summaryOf)),
+        }),
+      ),
+    );
+
+  const checkedOutFrom = Effect.fn("GitHub.checkedOutFrom")(function* (
+    repo: string,
+    branch: string,
+    number: number,
+  ) {
+    return (yield* checkedOutPullRequest(repo, branch)) === number;
+  });
+
+  const find = Effect.fn("GitHub.find")(function* (
+    repo: string,
+    branch: string,
+    extraFields: ReadonlyArray<string> = [],
+  ) {
+    const prs = yield* prList(
+      repo,
+      lookupArgs(branch, "all", [SUMMARY_FIELDS, ...extraFields]),
+    );
+    // Asked once, and only when gh returned a fork's PR.
+    const checkedOut = yield* Effect.cached(
+      checkedOutPullRequest(repo, branch),
+    );
+    for (const pr of prs) {
+      if (pr.isCrossRepository !== true || pr.number === (yield* checkedOut)) {
+        return Option.some(pr);
+      }
+    }
+    return Option.none<PullRequestSummary>();
+  });
+
+  const findByNumber = Effect.fn("GitHub.findByNumber")(function* (
+    repo: string,
+    number: number,
+    extraFields: ReadonlyArray<string> = [],
+  ) {
+    const answered = yield* run(repo, [
+      "pr",
+      "view",
+      String(number),
+      "--json",
+      [SUMMARY_FIELDS, ...extraFields].join(","),
+    ]).pipe(Effect.result);
+    if (Result.isFailure(answered)) {
+      const said =
+        answered.failure.cause instanceof Error
+          ? answered.failure.cause.message
+          : "";
+      if (
+        said.includes("Could not resolve") ||
+        said.includes("no pull requests found")
+      ) {
+        return Option.none<PullRequestSummary>();
+      }
+      return yield* answered.failure;
+    }
+    const parsed = parseJson(answered.success);
+    if (Option.isSome(parsed) && Predicate.isObject(parsed.value)) {
+      return Option.some(summaryOf(parsed.value));
+    }
+    return yield* new GitHubOutputError({ command: "pr view" });
+  });
+
+  const list = Effect.fn("GitHub.list")(function* (repo: string) {
+    return yield* prList(repo, [
+      "pr",
+      "list",
+      "--state",
+      "all",
+      "--limit",
+      "200",
+      "--json",
+      SUMMARY_FIELDS,
+    ]);
+  });
+
+  const hasMergedPullRequest = Effect.fn("GitHub.hasMergedPullRequest")(
+    function* (repo: string, branch: string) {
+      const rows = yield* listed(
+        repo,
+        lookupArgs(branch, "merged", ["number,isCrossRepository"]),
+      );
+      if (Result.isFailure(rows)) return false;
+      const checkedOut = yield* Effect.cached(
+        checkedOutPullRequest(repo, branch),
+      );
+      for (const row of rows.success) {
+        if (
+          row["isCrossRepository"] !== true ||
+          count(row["number"]) === (yield* checkedOut)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    },
+  );
+
+  // One GraphQL read, since `gh repo view --json` has the three method
+  // flags but not autoMergeAllowed. gh fills {owner} and {repo} from the
+  // repo's remote.
+  const mergeSettings = Effect.fn("GitHub.mergeSettings")(function* (
+    repo: string,
+  ) {
+    const everything: MergeSettings = {
+      allowed: MERGE_METHODS,
+      autoMerge: false,
+    };
+    const stdout = yield* run(repo, [
+      "api",
+      "graphql",
+      "-F",
+      "owner={owner}",
+      "-F",
+      "name={repo}",
+      "-f",
+      `query=${REPO_MERGE_QUERY}`,
+    ]).pipe(Effect.option);
+    if (Option.isNone(stdout)) return everything;
+    const parsed = Option.getOrUndefined(parseJson(stdout.value));
+    const data = Predicate.isObject(parsed) ? parsed["data"] : undefined;
+    const repository = Predicate.isObject(data)
+      ? data["repository"]
+      : undefined;
+    if (!Predicate.isObject(repository)) return everything;
+    const flags: Record<MergeMethod, unknown> = {
+      merge: repository["mergeCommitAllowed"],
+      squash: repository["squashMergeAllowed"],
+      rebase: repository["rebaseMergeAllowed"],
+    };
+    return {
+      allowed: MERGE_METHODS.filter((method) => flags[method] === true),
+      autoMerge: repository["autoMergeAllowed"] === true,
+    };
+  });
+
+  const stackFor = Effect.fn("GitHub.stackFor")(function* (
+    repo: string,
+    number: number,
+  ) {
+    const answered = yield* run(repo, [
+      "api",
+      `repos/{owner}/{repo}/stacks?pull_request=${number}`,
+    ]).pipe(Effect.result);
+    if (Result.isFailure(answered)) {
+      // A host without the stacks API (GHES, the feature off) answers
+      // 404: not an error, just not a GitHub stack.
+      const said =
+        answered.failure.cause instanceof Error
+          ? answered.failure.cause.message
+          : "";
+      if (said.includes("HTTP 404")) return Option.none<GitHubStack>();
+      return yield* answered.failure;
+    }
+    const stacks = Option.getOrUndefined(parseJson(answered.success));
+    if (!Array.isArray(stacks)) {
+      return yield* new GitHubOutputError({ command: "api stacks" });
+    }
+    for (const stack of stacks) {
+      const entries = Predicate.isObject(stack)
+        ? stack["pull_requests"]
+        : undefined;
+      if (!Array.isArray(entries)) continue;
+      const parsed = entries.map((entry) => ({
+        number: count(Predicate.isObject(entry) ? entry["number"] : undefined),
+        state: text(Predicate.isObject(entry) ? entry["state"] : undefined),
+      }));
+      if (parsed.some((entry) => entry.number === number)) {
+        return Option.some<GitHubStack>(parsed);
+      }
+    }
+    return Option.none<GitHubStack>();
+  });
+
+  const asyncTicket = (stdout: string) =>
+    Option.flatMap(parseJson(stdout), (parsed) => {
+      if (!Predicate.isObject(parsed)) return Option.none();
+      const details = Predicate.isObject(parsed["details"])
+        ? parsed["details"]
+        : {};
+      return Option.some({
+        status: text(parsed["status"]),
+        message: text(details["message"]),
+        uuid: text(details["uuid"]),
+      });
+    });
+
+  const mergeStackAsync = Effect.fn("GitHub.mergeStackAsync")(function* (
+    repo: string,
+    number: number,
+    method: MergeMethod,
+  ) {
+    const read = (stdout: string) =>
+      Option.match(asyncTicket(stdout), {
+        onNone: () =>
+          Effect.fail(new GitHubOutputError({ command: "merge-async" })),
+        onSome: Effect.succeed,
+      });
+    let ticket = yield* read(
+      yield* run(repo, [
+        "api",
+        "-X",
+        "PUT",
+        `repos/{owner}/{repo}/pulls/${number}/merge-async`,
+        "-f",
+        `merge_method=${method}`,
+      ]),
+    );
+    const deadline = (yield* Clock.currentTimeMillis) + ASYNC_MERGE_TIMEOUT_MS;
+    while (ticket.status === "pending") {
+      if ((yield* Clock.currentTimeMillis) > deadline) {
+        return yield* new StackMergeFailed({
+          number,
+          reason: "timeout",
+          detail: "",
+        });
+      }
+      yield* Effect.sleep(ASYNC_MERGE_POLL);
+      ticket = yield* read(
+        yield* run(repo, [
+          "api",
+          `repos/{owner}/{repo}/pulls/${number}/merge-async/${ticket.uuid}`,
+        ]),
+      );
+    }
+    if (ticket.status === "merged") return "merged" as const;
+    if (ticket.status === "enqueued") return "enqueued" as const;
+    return yield* new StackMergeFailed({
+      number,
+      reason: "refused",
+      detail: ticket.message,
+    });
+  });
+
+  return GitHub.of({
+    run,
+    cardFor,
+    owningPullRequest,
+    find,
+    findByNumber,
+    list,
+    checkedOutFrom,
+    hasMergedPullRequest,
+    mergeSettings,
+    stackFor,
+    mergeStackAsync,
+  });
 });
 
 export const layer = Layer.effect(GitHub, make);
