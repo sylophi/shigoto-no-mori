@@ -16,13 +16,19 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 export class DarwinHelperError extends Schema.TaggedError<DarwinHelperError>()(
   "DarwinHelperError",
   {
-    verb: Schema.String,
+    method: Schema.Literals([
+      "clone",
+      "flags",
+      "xattrs",
+      "privateSize",
+      "fsType",
+    ]),
     reason: Schema.Literals(["spawn", "exit", "output"]),
-    cause: Schema.optional(Schema.Defect()),
+    cause: Schema.Defect(),
   },
 ) {
   override get message(): string {
-    return `The darwin helper failed to ${this.verb} (${this.reason}).`;
+    return `The darwin helper failed (${this.method}, ${this.reason}).`;
   }
 }
 
@@ -119,21 +125,24 @@ const make = (binary: string) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
+    // `verb` and its flags, then the roots after a `--`, so a root that
+    // starts with a dash stays a root.
     const run = <A>(
-      verb: string,
-      args: readonly string[],
+      method: DarwinHelperError["method"],
+      verb: readonly string[],
+      roots: readonly string[],
       paths: readonly string[] | undefined,
       decodeLine: (line: string) => Effect.Effect<A, Schema.SchemaError>,
     ): Stream.Stream<A, DarwinHelperError> => {
       const fail = (reason: DarwinHelperError["reason"]) => (cause: unknown) =>
-        new DarwinHelperError({ verb, reason, cause });
+        new DarwinHelperError({ method, reason, cause });
       return Stream.unwrap(
         Effect.gen(function* () {
           const handle = yield* spawner
             .spawn(
               ChildProcess.make(
                 binary,
-                [verb, ...(paths ? ["-stdin"] : []), ...args],
+                [...verb, ...(paths ? ["-stdin"] : []), "--", ...roots],
                 {
                   stdin: paths
                     ? Stream.make(encoder.encode(paths.join("\0")))
@@ -169,29 +178,32 @@ const make = (binary: string) =>
             Stream.concat(Stream.fromEffectDrain(exited)),
           );
         }),
-      ).pipe(Stream.withSpan(`Darwin.${verb}`));
+      ).pipe(Stream.withSpan(`Darwin.${method}`));
     };
 
     return Darwin.of({
       clone: ({ from, to, paths }) =>
-        run("clone", [from, to], paths, lineOf(Cloned)),
+        run("clone", ["clone"], [from, to], paths, lineOf(Cloned)),
       flags: ({ root, paths, clear }) =>
         run(
           "flags",
-          [...(clear ? ["-clear"] : []), root],
+          ["flags", ...(clear ? ["-clear"] : [])],
+          [root],
           paths,
           lineOf(Flags),
         ),
       xattrs: ({ root, paths, strip }) =>
         run(
           "xattrs",
-          [...(strip ? ["-strip"] : []), root],
+          ["xattrs", ...(strip ? ["-strip"] : [])],
+          [root],
           paths,
           lineOf(Xattrs),
         ),
       privateSize: ({ root, paths }) =>
-        run("privsize", [root], paths, lineOf(PrivateSize)),
-      fsType: ({ root, paths }) => run("fstype", [root], paths, lineOf(FsType)),
+        run("privateSize", ["privsize"], [root], paths, lineOf(PrivateSize)),
+      fsType: ({ root, paths }) =>
+        run("fsType", ["fstype"], [root], paths, lineOf(FsType)),
     });
   });
 
