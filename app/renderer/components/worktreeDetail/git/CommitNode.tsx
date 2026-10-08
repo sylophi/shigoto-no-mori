@@ -115,7 +115,11 @@ export function CommitNode({
             {/* Fixed columns when wide, so the hashes, the times and the
                 counts line up down the timeline whatever each row holds. */}
             <span className="flex w-full items-center gap-2 text-xs text-muted-foreground @md/timeline:grid @md/timeline:w-auto @md/timeline:shrink-0 @md/timeline:grid-cols-[4.5rem_4rem_4.5rem] @md/timeline:gap-0">
-              <span className="font-mono">{commit.hash}</span>
+              {/* A column has no room for it, and the picked commit's
+                  pane says it. */}
+              <span className="font-mono @max-md/timeline:hidden">
+                {commit.hash}
+              </span>
               <span className="truncate">
                 <RelativeDate date={commit.date} />
               </span>

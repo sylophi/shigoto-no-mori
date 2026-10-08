@@ -1,5 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { ChevronRight, EllipsisVertical, Search, X } from "lucide-react";
+import {
+  ChevronRight,
+  EllipsisVertical,
+  Layers,
+  Search,
+  X,
+} from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
@@ -78,8 +84,8 @@ export function GitTimeline({
     <TimelineViewProvider value={view}>
       <section
         className={cn(
-          "@container/timeline space-y-2",
-          !view.onGitPage && "max-w-4xl",
+          "@container/timeline",
+          view.onGitPage ? "space-y-1" : "max-w-4xl space-y-2",
         )}
       >
         {!view.onGitPage && (
@@ -101,7 +107,13 @@ export function GitTimeline({
         {searchOpen && (
           <div
             data-slot="search-row"
-            className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5"
+            className={cn(
+              "flex items-center gap-1.5",
+              // The Changes tab's filter row, on the Git page.
+              view.onGitPage
+                ? "-mx-3 border-b border-border px-3.5 py-1.5"
+                : "rounded-md bg-muted/50 px-2 py-1.5",
+            )}
           >
             <Search
               aria-hidden
@@ -122,7 +134,10 @@ export function GitTimeline({
               placeholder="Search commit messages"
               aria-label="Search commit messages"
               spellCheck={false}
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
+              className={cn(
+                "min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground/70",
+                view.onGitPage ? "text-xs" : "text-sm",
+              )}
             />
           </div>
         )}
@@ -237,7 +252,9 @@ function Timeline({
   }
   const pastLinks = (
     <div className="flex flex-wrap items-center gap-x-3 pb-1 text-xs">
-      {base && own.length > 0 && <BranchChangesLink worktree={worktree} />}
+      {base && own.length > 0 && !onGitPage && (
+        <BranchChangesLink worktree={worktree} />
+      )}
       {earlierFrom && (
         <button
           type="button"
@@ -263,14 +280,20 @@ function Timeline({
 
   return (
     <div>
+      {/* On the Git page the branch's whole diff leads the History tab,
+          one row to pick like a commit, rather than a link under the
+          base marker. */}
+      {onGitPage && base && own.length > 0 && (
+        <BranchChangesRow worktree={worktree} base={base.ref} />
+      )}
       <Rail rows={rows} />
       {history === undefined && (
-        <div className="py-1.5 pl-7 text-sm text-muted-foreground">
+        <div className="py-1.5 pl-7 text-sm text-muted-foreground @max-md/timeline:pl-5">
           Reading the history…
         </div>
       )}
       {history && !base && earlierFrom && !earlierOpen && (
-        <div className="pl-7">{pastLinks}</div>
+        <div className="pl-7 @max-md/timeline:pl-5">{pastLinks}</div>
       )}
       {earlierOpen && earlierFrom && (
         <EarlierHistory
@@ -303,10 +326,42 @@ function BranchChangesLink({ worktree }: { worktree: Worktree }) {
           : "text-muted-foreground hover:text-foreground",
       )}
     >
-      Everything this branch changes
+      All branch changes
       {!onGitPage && (
         <ChevronRight aria-hidden className="size-3.5 opacity-60" />
       )}
+    </button>
+  );
+}
+
+// The History tab's first row: everything the branch changes since it
+// left the primary branch, picked like a commit.
+function BranchChangesRow({
+  worktree,
+  base,
+}: {
+  worktree: Worktree;
+  base: string;
+}) {
+  const nav = useWorktreeNav();
+  const selected = useRowSelection("branch");
+  return (
+    <button
+      type="button"
+      aria-current={selected || undefined}
+      onClick={() => nav.toBranchDiff(worktree.projectId, worktree.id, true)}
+      className={cn(
+        "-mx-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+        selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+      )}
+    >
+      <Layers aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">All branch changes</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          Since {base}
+        </span>
+      </span>
     </button>
   );
 }

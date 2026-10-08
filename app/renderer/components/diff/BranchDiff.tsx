@@ -28,7 +28,7 @@ export function BranchDiff() {
       diff={diff}
       onBack={goBack}
       worktree={worktree}
-      title="Everything this branch changes"
+      title="All branch changes"
       subtitle={
         <>
           {commits !== undefined && `${pluralize(commits, "commit")} since `}

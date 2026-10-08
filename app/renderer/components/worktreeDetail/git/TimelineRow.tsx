@@ -47,9 +47,14 @@ export function TimelineRow({
   const place = use(RailPlaceContext);
   const line = faded ? "bg-muted-foreground/20" : "bg-muted-foreground/35";
   return (
+    // A slimmer rail in a column (the Git page's sidebar), where every
+    // pixel of it comes off the subjects.
     <div
       data-slot="git-timeline-row"
-      className={cn("grid grid-cols-[1.25rem_1fr] gap-x-2", className)}
+      className={cn(
+        "grid grid-cols-[1.25rem_1fr] gap-x-2 @max-md/timeline:grid-cols-[0.875rem_1fr] @max-md/timeline:gap-x-1.5",
+        className,
+      )}
     >
       <div aria-hidden className="flex flex-col items-center">
         <span className={cn("mb-0.5 h-1.5 w-px", !place.first && line)} />
