@@ -105,7 +105,9 @@ export function buildApi(
 ): RendererContractApi {
   const api: Record<string, unknown> = {};
   for (const module of allContractModules) {
-    api[nameOf(module)] = buildClient(module, transports[scopeOf(module)]);
+    const name = nameOf(module);
+    if (name in api) throw new Error(`two contract modules are named ${name}`);
+    api[name] = buildClient(module, transports[scopeOf(module)]);
   }
   return api as RendererContractApi;
 }

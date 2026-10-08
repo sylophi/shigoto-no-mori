@@ -41,8 +41,8 @@ e.g. `portForward.stop({forwardId})` and
 `ports.list({projectId, worktreeId})`. A push subscribes as
 `on` and its capitalized name, e.g. `mirror.onChanged(handler)`.
 
-A rejection naming a missing or unexpected key means the payload shape matches the
-wrong convention.
+A rejection naming a missing or unexpected key means the payload does not
+match the call's contract schema.
 
 
 ## From a terminal
