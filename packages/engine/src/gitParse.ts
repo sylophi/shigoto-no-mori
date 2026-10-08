@@ -285,7 +285,7 @@ export const branchListOf = (refs: BranchRefs): BranchList => ({
 // Upstream first, then origin, then the rest alphabetically: the
 // precedence repo identity's remote rule applies too, so the default
 // ref and the identity key off the same canonical remote.
-function orderRemotesByPrecedence(remotes: readonly string[]): string[] {
+export function orderRemotesByPrecedence(remotes: readonly string[]): string[] {
   const preferred = ["upstream", "origin"].filter((name) =>
     remotes.includes(name),
   );
@@ -405,4 +405,13 @@ export function anchorRule(rule: string, folder: string): string {
     ? `/${folder}/${body.replace(/^\//, "")}`
     : `/${folder}/**/${body}`;
   return negated ? `!${anchored}` : anchored;
+}
+
+// A path as a gitignore pattern that matches that name and nothing
+// else: backslashes and the pattern characters escaped, and trailing
+// spaces, which git would strip, kept.
+export function escapeGitignorePattern(path: string): string {
+  const escaped = path.replaceAll("\\", "\\\\").replace(/([*?[\]#!])/g, "\\$1");
+  const trimmed = escaped.replace(/ +$/, "");
+  return trimmed + "\\ ".repeat(escaped.length - trimmed.length);
 }

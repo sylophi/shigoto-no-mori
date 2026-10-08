@@ -8,6 +8,7 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -24,13 +25,19 @@ import {
   mergeConfigDoc,
   settingKeys,
 } from "./configDoc.ts";
+import * as Git from "./Git.ts";
 import * as Paths from "./Paths.ts";
 
 // Which settings document a call reads or writes: the device's, or a
 // project's.
 export type ConfigScope =
   | { readonly kind: "device" }
-  | { readonly kind: "project"; readonly projectId: string };
+  | {
+      readonly kind: "project";
+      readonly projectId: string;
+      // The primary checkout, which a write asks git about.
+      readonly path: string;
+    };
 
 // One row of a settings listing: the key's effective value, and whether
 // the document sets it (a key it doesn't takes its default, or null).
@@ -238,6 +245,11 @@ const lookupKey = (scope: ConfigScope, name: string) => {
       );
 };
 
+const missingBranch = (doc: ConfigDoc) => {
+  const [branch] = docGet(doc, "defaultBranch");
+  return typeof branch !== "string" || branch.trim() === "";
+};
+
 const listedValue = (key: ConfigKey, doc: ConfigDoc): Setting => {
   const [value, set] = docGet(doc, key.name);
   return { key: key.name, value: set ? value : (key.default ?? null), set };
@@ -285,6 +297,7 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const { home } = yield* Paths.Paths;
   const path = yield* Path.Path;
+  const git = yield* Git.Git;
 
   const load = (scope: ConfigScope) =>
     (scope.kind === "device"
@@ -329,26 +342,54 @@ const make = Effect.gen(function* () {
     );
 
   // A read-modify-write of the scope's document in one transaction. A
-  // project's document must keep its default branch.
-  const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) =>
-    sql
-      .withTransaction(
+  // project's document keeps its default branch, from git when the
+  // write would leave it out, and one on the in-project layout hides
+  // `.shigomori/` from the primary's git status.
+  const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) => {
+    // One try at the write. Without a default branch it fails, unless
+    // git named one to fill in.
+    const attempt = (fallbackBranch: Option.Option<string>) =>
+      sql.withTransaction(
         Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
           const next = structuredClone(before);
           change(next);
-          if (scope.kind === "project") {
-            const [branch] = docGet(next, "defaultBranch");
-            if (typeof branch !== "string" || branch.trim() === "") {
+          if (scope.kind === "project" && missingBranch(next)) {
+            if (Option.isNone(fallbackBranch)) {
               return yield* new MissingDefaultBranch({
                 projectId: scope.projectId,
               });
             }
+            docSet(next, "defaultBranch", fallbackBranch.value);
           }
           yield* store(scope, before, next);
+          return docGet(next, "worktreeLayout")[0] === "in-project";
         }),
-      )
-      .pipe(Effect.catchTags({ SqlError: Effect.die }));
+      );
+    return attempt(Option.none()).pipe(
+      // Git is asked outside the write, which holds the store's lock.
+      Effect.catchTags({
+        MissingDefaultBranch: (missing) =>
+          scope.kind === "project"
+            ? git
+                .resolveDefaultBranch(scope.path)
+                .pipe(
+                  Effect.flatMap((found) =>
+                    Option.isSome(found)
+                      ? attempt(found)
+                      : Effect.fail(missing),
+                  ),
+                )
+            : Effect.fail(missing),
+      }),
+      Effect.tap((inProject) =>
+        scope.kind === "project" && inProject
+          ? git.appendExcludes(scope.path, [".shigomori"])
+          : Effect.void,
+      ),
+      Effect.catchTags({ SqlError: Effect.die }),
+    );
+  };
 
   // A `~/` path, joined to the home directory and cleaned as Go's
   // filepath.Join cleans it.
