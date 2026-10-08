@@ -75,11 +75,11 @@ export function CommitDiff() {
           />
         )
       }
-      renderSidebar={(files) => (
+      renderSidebar={() => (
         <GitPageSidebar
           worktree={worktree}
+          tab="history"
           selected={`commit:${hash}`}
-          files={files}
         />
       )}
       // Merge commits show empty by default (git's combined diff is empty

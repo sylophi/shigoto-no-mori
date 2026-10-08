@@ -6,6 +6,7 @@
 // type once here is what lets every typed Link and navigate in the
 // shared components check against the same tree whichever shell
 // mounts them.
+import { isCommitHash } from "@shared/schemas";
 import {
   createRootRoute,
   createRoute,
@@ -159,10 +160,6 @@ const BranchDiff = lazyRouteComponent(
   () => import("@/components/diff/BranchDiff"),
   "BranchDiff",
 );
-const StashDiff = lazyRouteComponent(
-  () => import("@/components/diff/StashDiff"),
-  "StashDiff",
-);
 
 // The files page shows code through the same highlighter the diffs
 // use, so it is lazy for the same reason.
@@ -181,9 +178,15 @@ function validateFilesSearch(search: Record<string, unknown>): {
 }
 
 // `amend` opens the changes page already set to rewrite the last
-// commit (a commit row's "Amend" lands here).
-function validateDiffSearch(search: Record<string, unknown>): { amend?: true } {
-  return search["amend"] === true ? { amend: true } : {};
+// commit (a commit row's "Amend" lands here), `stash` with that stash
+// shown beside the changes.
+function validateDiffSearch(search: Record<string, unknown>): {
+  amend?: true;
+  stash?: string;
+} {
+  if (search["amend"] === true) return { amend: true };
+  const stash = search["stash"];
+  return typeof stash === "string" && isCommitHash(stash) ? { stash } : {};
 }
 
 // The device pages: every worktree and project page, for this machine
@@ -223,12 +226,6 @@ const branchDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.branchDiff,
   component: withDeviceScope(BranchDiff),
-});
-
-const stashDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.stash,
-  component: withDeviceScope(StashDiff),
 });
 
 const commitDiffRoute = createRoute({
@@ -321,7 +318,6 @@ const routeTree = rootRoute.addChildren([
   worktreeDiffRoute,
   pullRequestDiffRoute,
   branchDiffRoute,
-  stashDiffRoute,
   commitDiffRoute,
   worktreeFilesRoute,
   scriptConsoleRoute,

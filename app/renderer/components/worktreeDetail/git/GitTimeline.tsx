@@ -22,7 +22,6 @@ import {
 import { CommitNode } from "./CommitNode";
 import { BaseMarker, RemoteMarker } from "./Markers";
 import { StashNode } from "./StashNodes";
-import { BranchSwitch } from "./BranchSwitch";
 import {
   Rail,
   TimelineRow,
@@ -43,7 +42,8 @@ type Row = { key: string; row: ReactNode };
 // The worktree's git as one line, read from now down to where the work
 // began: what is uncommitted (or a merge stopped on conflicts), what is
 // stashed, the branch's own commits, where the remote stands among them,
-// and where the branch left the primary branch. Each move sits on the
+// and where the branch left the primary branch. The worktree page draws
+// all of it. The Git page's History tab draws the commits and markers. Each move sits on the
 // thing it moves: commit and stash on the working tree, the push on the
 // remote's marker, the sync on the primary's, a commit's own on its row.
 // The history before the branch folds behind its marker, and a search
@@ -66,11 +66,14 @@ export function GitTimeline({
     setSearching(false);
     setSearch("");
   };
+  // The Git page's History tab is the history, so its search is always
+  // there, as GitHub Desktop's is. The overview opens one on demand.
+  const searchOpen = view.onGitPage || searching;
 
   // A reading width on a wide window, so a row's hash and counts stay
   // within reach of its subject. The rows lay out by the timeline's own
   // width (@container/timeline): one line on the worktree page, two in
-  // the Git page's sidebar. There the branch heads it, with its switch.
+  // the Git page's sidebar.
   return (
     <TimelineViewProvider value={view}>
       <section
@@ -79,30 +82,23 @@ export function GitTimeline({
           !view.onGitPage && "max-w-4xl",
         )}
       >
-        <div
-          className={cn(
-            "flex items-center justify-between gap-2",
-            view.onGitPage ? "min-h-7" : "h-4",
-          )}
-        >
-          {view.onGitPage ? (
-            <BranchSwitch worktree={worktree} />
-          ) : (
+        {!view.onGitPage && (
+          <div className="flex h-4 items-center justify-between gap-2">
             <SectionHeading>Git</SectionHeading>
-          )}
-          <IconButton
-            aria-label={searching ? "Close the search" : "Search the history"}
-            aria-pressed={searching}
-            onClick={() => (searching ? closeSearch() : setSearching(true))}
-          >
-            {searching ? (
-              <X aria-hidden className="size-3.5" />
-            ) : (
-              <Search aria-hidden className="size-3.5" />
-            )}
-          </IconButton>
-        </div>
-        {searching && (
+            <IconButton
+              aria-label={searching ? "Close the search" : "Search the history"}
+              aria-pressed={searching}
+              onClick={() => (searching ? closeSearch() : setSearching(true))}
+            >
+              {searching ? (
+                <X aria-hidden className="size-3.5" />
+              ) : (
+                <Search aria-hidden className="size-3.5" />
+              )}
+            </IconButton>
+          </div>
+        )}
+        {searchOpen && (
           <div
             data-slot="search-row"
             className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5"
@@ -113,13 +109,14 @@ export function GitTimeline({
             />
             <input
               // oxlint-disable-next-line jsx-a11y/no-autofocus -- opened to type into
-              autoFocus
+              autoFocus={!view.onGitPage}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   e.stopPropagation();
-                  closeSearch();
+                  if (view.onGitPage) setSearch("");
+                  else closeSearch();
                 }
               }}
               placeholder="Search commit messages"
@@ -129,7 +126,7 @@ export function GitTimeline({
             />
           </div>
         )}
-        {searching && query ? (
+        {searchOpen && query ? (
           <SearchResults worktree={worktree} query={query} actions={actions} />
         ) : (
           <Timeline worktree={worktree} history={history} actions={actions} />
@@ -140,11 +137,7 @@ export function GitTimeline({
   );
 }
 
-const OVERVIEW: TimelineView = {
-  onGitPage: false,
-  selected: null,
-  expanded: null,
-};
+const OVERVIEW: TimelineView = { onGitPage: false, selected: null };
 
 function Timeline({
   worktree,
@@ -179,16 +172,21 @@ function Timeline({
   // one, past the newest commits shown.
   const earlierFrom = base ? base.hash : own[shown]?.hash;
 
-  const rows: Row[] = [
-    {
-      key: "working-tree",
-      row: <WorkingTreeNode worktree={worktree} />,
-    },
-    ...stashes.map((stash) => ({
-      key: `stash:${stash.hash}`,
-      row: <StashNode worktree={worktree} stash={stash} />,
-    })),
-  ];
+  const { onGitPage } = useTimelineView();
+  // The Git page's History tab draws the commits alone: the changes and
+  // the stashes are its Changes tab.
+  const rows: Row[] = onGitPage
+    ? []
+    : [
+        {
+          key: "working-tree",
+          row: <WorkingTreeNode worktree={worktree} />,
+        },
+        ...stashes.map((stash) => ({
+          key: `stash:${stash.hash}`,
+          row: <StashNode worktree={worktree} stash={stash} />,
+        })),
+      ];
   const remoteRow: Row | null =
     remoteAt === null || history === undefined
       ? null
@@ -258,7 +256,6 @@ function Timeline({
       row: (
         <BaseMarker worktree={worktree} base={base.ref}>
           {pastLinks}
-          <BranchChangesExpanded />
         </BaseMarker>
       ),
     });
@@ -291,7 +288,7 @@ function Timeline({
 function BranchChangesLink({ worktree }: { worktree: Worktree }) {
   const nav = useWorktreeNav();
   const { onGitPage } = useTimelineView();
-  const { selected } = useRowSelection("branch");
+  const selected = useRowSelection("branch");
   return (
     <button
       type="button"
@@ -312,11 +309,6 @@ function BranchChangesLink({ worktree }: { worktree: Worktree }) {
       )}
     </button>
   );
-}
-
-// Its files, under the base marker while it is the selection.
-function BranchChangesExpanded() {
-  return useRowSelection("branch").expanded;
 }
 
 // The history before what the timeline shows, faded: the primary

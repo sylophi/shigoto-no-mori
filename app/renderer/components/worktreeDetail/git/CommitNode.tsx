@@ -64,7 +64,7 @@ export function CommitNode({
 }) {
   const nav = useWorktreeNav();
   const { onGitPage } = useTimelineView();
-  const { selected, expanded } = useRowSelection(`commit:${commit.hash}`);
+  const selected = useRowSelection(`commit:${commit.hash}`);
   const items = (
     <CommitMenuItems
       worktree={worktree}
@@ -148,7 +148,6 @@ export function CommitNode({
         </ContextMenuTrigger>
         <ContextMenuContent className="min-w-52">{items}</ContextMenuContent>
       </ContextMenu>
-      {expanded}
     </TimelineRow>
   );
 }

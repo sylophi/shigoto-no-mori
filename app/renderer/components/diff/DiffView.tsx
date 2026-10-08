@@ -166,10 +166,9 @@ export function DiffView({
   // Beside the view's own controls: a commit's steps to its neighbours.
   steps?: ReactNode;
   // What the sidebar (and a phone's sheet) shows in place of the bare
-  // file list: the Git page's timeline, which nests the list under the
-  // selected row and pins the footer under itself. Handed the list
-  // (without the footer) and the footer.
-  renderSidebar?: (index: ReactNode, footer: ReactNode) => ReactNode;
+  // file list: the Git page's tabs, its Changes tab around this list and
+  // its History tab in place of it. Handed the list.
+  renderSidebar?: (index: ReactNode) => ReactNode;
 }) {
   const { data: patch, isLoading, error } = diff;
   const backLabel = useWorktreeName(worktree);
@@ -285,11 +284,11 @@ export function DiffView({
     // control with its handler.
     onToggleAll: singleFile ? undefined : toggleAll,
     changes,
-    footer: renderSidebar ? undefined : footer,
+    footer,
   };
   // The list, framed by the page when it frames it.
   const sidebarWith = (index: ReactNode) =>
-    renderSidebar ? renderSidebar(index, footer) : index;
+    renderSidebar ? renderSidebar(index) : index;
 
   return (
     <div className="flex h-full flex-col">
@@ -299,7 +298,7 @@ export function DiffView({
             <DiffFileIndex
               {...indexProps}
               onSelect={selectFile}
-              className={renderSidebar ? undefined : "min-h-0 flex-1"}
+              className="min-h-0 flex-1"
             />
           ),
         )}
@@ -439,6 +438,7 @@ export function DiffView({
                       setFileSheetOpen(false);
                       selectFile(key);
                     }}
+                    className="min-h-0 flex-1"
                   />,
                 )}
               </div>

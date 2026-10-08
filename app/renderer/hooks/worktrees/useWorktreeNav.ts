@@ -72,18 +72,19 @@ export function useWorktreeNav() {
     },
 
     // `amend` opens the changes page already set to rewrite the last
-    // commit; it lives in the route's search so the page and the row
-    // menu that opens it agree on one source of truth.
+    // commit, and `stash` with that stash shown beside the changes; both
+    // live in the route's search so the page and what opens it agree on
+    // one source of truth.
     toDiff(
       projectId: string,
       worktreeId: string,
-      opts: { amend?: boolean; replace?: boolean } = {},
+      opts: { amend?: boolean; stash?: string; replace?: boolean } = {},
     ) {
       go(
         "diff",
         { projectId, worktreeId },
         opts.replace ?? false,
-        opts.amend ? { amend: true } : {},
+        opts.amend ? { amend: true } : opts.stash ? { stash: opts.stash } : {},
       );
     },
 
@@ -105,16 +106,6 @@ export function useWorktreeNav() {
     // Everything the branch changes against the primary branch.
     toBranchDiff(projectId: string, worktreeId: string, replace = false) {
       go("branchDiff", { projectId, worktreeId }, replace);
-    },
-
-    // One stash's contents.
-    toStash(
-      projectId: string,
-      worktreeId: string,
-      hash: string,
-      replace = false,
-    ) {
-      go("stash", { projectId, worktreeId, hash }, replace);
     },
 
     // The files page, opened on `path` when given (a file to show). A

@@ -37,8 +37,8 @@ export function BranchDiff() {
           </span>
         </>
       }
-      renderSidebar={(files) => (
-        <GitPageSidebar worktree={worktree} selected={"branch"} files={files} />
+      renderSidebar={() => (
+        <GitPageSidebar worktree={worktree} tab="history" selected="branch" />
       )}
       emptyMessage="This branch changes nothing yet."
     />

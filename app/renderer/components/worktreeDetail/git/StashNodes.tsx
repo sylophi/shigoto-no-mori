@@ -17,13 +17,12 @@ import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { StashEntry, Worktree } from "@shared/schemas";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { cn } from "@/lib/utils";
-import { TimelineRow, useRowSelection, useTimelineView } from "./TimelineRow";
+import { TimelineRow } from "./TimelineRow";
 
 // A stash made on this branch: work set aside, so it sits on the
-// timeline just under the working tree it came from. The row opens its
-// contents, and Restore puts it back and drops it once it applied
-// cleanly.
+// timeline just under the working tree it came from. The row opens it
+// beside the changes on the Git page, and Restore puts it back and
+// drops it once it applied cleanly.
 export function StashNode({
   worktree,
   stash,
@@ -32,8 +31,6 @@ export function StashNode({
   stash: StashEntry;
 }) {
   const nav = useWorktreeNav();
-  const { onGitPage } = useTimelineView();
-  const { selected, expanded } = useRowSelection(`stash:${stash.hash}`);
   const apply = useApplyStash();
   const drop = useDropStash();
   const restore = useRestoreStash();
@@ -65,19 +62,13 @@ export function StashNode({
     <TimelineRow
       node={<Archive aria-hidden className="size-3.5 text-muted-foreground" />}
     >
-      <div
-        className={cn(
-          "-mx-1.5 flex items-start gap-1 rounded-md transition-colors",
-          selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-        )}
-      >
+      <div className="-mx-1.5 flex items-start gap-1 rounded-md transition-colors hover:bg-accent/50">
         {/* Its message over its age in a column (the Git page's
             sidebar), one line where the timeline is wide. */}
         <button
           type="button"
-          aria-current={selected || undefined}
           onClick={() =>
-            nav.toStash(worktree.projectId, worktree.id, stash.hash, onGitPage)
+            nav.toDiff(worktree.projectId, worktree.id, { stash: stash.hash })
           }
           className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring @md/timeline:flex-row @md/timeline:items-center @md/timeline:gap-3"
         >
@@ -148,7 +139,6 @@ export function StashNode({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {expanded}
     </TimelineRow>
   );
 }

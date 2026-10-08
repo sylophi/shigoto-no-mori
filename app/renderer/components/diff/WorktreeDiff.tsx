@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
+import { useFileDiff, useStashDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
   useCommitChanges,
   useDiscardChanges,
@@ -19,6 +19,7 @@ import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
 import {
   useResolveConflict,
   useStashChanges,
+  useWorktreeStashes,
 } from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
@@ -28,8 +29,18 @@ import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import { worktreeSyncView } from "@/lib/syncState";
 import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
-import { changedFilePaths, includedFiles } from "./changesControls";
+import { RelativeDate } from "@/components/ui/relative-date";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
+import { StashList } from "@/components/worktreeDetail/git/StashList";
+import { StashMoves } from "@/components/worktreeDetail/git/StashMoves";
+import { changeEntries } from "@/lib/patchFiles";
+import { BranchBar } from "./BranchBar";
+import {
+  changedFilePaths,
+  includedFiles,
+  type DiffChangesControls,
+} from "./changesControls";
+import { DiffFileIndex } from "./DiffFileIndex";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
@@ -39,7 +50,10 @@ export function WorktreeDiff() {
   const { projectId, worktreeId, nav, worktree, goBack, missing } =
     useRouteWorktree();
   // Read non-strictly like the params, which the worktree pages share.
-  const { amend } = useSearch({ strict: false }) as { amend?: true };
+  const { amend, stash } = useSearch({ strict: false }) as {
+    amend?: true;
+    stash?: string;
+  };
   // Amend mode lives in the route's search param, so the page and the
   // row menu that opens it agree on one source of truth.
   const setAmending = (on: boolean) =>
@@ -55,6 +69,7 @@ export function WorktreeDiff() {
       onBack={goBack}
       amendRequested={amend === true}
       setAmending={setAmending}
+      stashHash={stash}
     />
   );
 }
@@ -68,11 +83,14 @@ function ChangesView({
   onBack,
   amendRequested,
   setAmending,
+  stashHash,
 }: {
   worktree: Worktree;
   onBack: () => void;
   amendRequested: boolean;
   setAmending: (on: boolean) => void;
+  // A stash picked from the list's foot, shown beside the changes.
+  stashHash: string | undefined;
 }) {
   const nav = useWorktreeNav();
   const { projectId, id: worktreeId } = worktree;
@@ -209,6 +227,136 @@ function ChangesView({
   // commit, which is where the next move (push, amend, undo) lives.
   const showComposer = (loading || list.length > 0 || amending) && !failed;
 
+  const controls: DiffChangesControls = {
+    files: list,
+    loading,
+    failed,
+    busy,
+    selectedKey: picked ? changeKey(picked) : null,
+    onSelect: setPickedKey,
+    onSetStaged: (paths, staged) =>
+      stage({ projectId, worktreeId, paths, staged }),
+    onDiscard,
+    hunks:
+      hunkPath && hunkStates
+        ? {
+            states: hunkStates,
+            onSetStaged: (changes, staged) =>
+              stageHunks({
+                projectId,
+                worktreeId,
+                path: hunkPath,
+                changes,
+                staged,
+              }),
+            onDiscard: (changes) =>
+              discardHunks(
+                { projectId, worktreeId, path: hunkPath, changes },
+                {
+                  onSuccess: ({ snapshot }) =>
+                    toast("Discarded the change", {
+                      description: "The file was snapshotted first.",
+                      duration: UNDO_TOAST_MS,
+                      action: {
+                        label: "Undo",
+                        onClick: () =>
+                          restore(
+                            { projectId, worktreeId, snapshot },
+                            {
+                              onSuccess: () => say(worktree, "Change restored"),
+                            },
+                          ),
+                      },
+                    }),
+                },
+              ),
+          }
+        : undefined,
+    onResolve: (path, side) =>
+      resolve.mutate({ projectId, worktreeId, path, side }),
+    onStash: () => {
+      const count = list.length;
+      stash.mutate(
+        { projectId, worktreeId },
+        {
+          onSuccess: () => say(worktree, `Stashed ${pluralize(count, "file")}`),
+        },
+      );
+    },
+  };
+
+  const footer = (
+    <div
+      data-slot="changes-footer"
+      className={cn(
+        "flex flex-col border-t border-border",
+        !showComposer && "pb-1.5",
+      )}
+    >
+      <StashList worktree={worktree} selected={stashHash} />
+      <BranchBar worktree={worktree} />
+      {lastCommit && rewrite.canAmend && (
+        <LastCommitStrip
+          commit={lastCommit}
+          amending={amending}
+          canUndo={rewrite.undo !== null}
+          busy={busy}
+          onAmend={() => setAmending(true)}
+          onUndo={() => {
+            const u = rewrite.undo;
+            if (u) undo.undoTo(u.target, u.count, u.head);
+          }}
+        />
+      )}
+      {showComposer && (
+        <CommitComposer
+          files={list}
+          draft={draft}
+          onDraftChange={setDraft}
+          pending={commit.isPending}
+          error={commit.error}
+          amend={
+            amending && lastCommit
+              ? {
+                  hash: lastCommit.hash,
+                  onCancel: () => setAmending(false),
+                }
+              : null
+          }
+          onCommit={onCommit}
+        />
+      )}
+    </div>
+  );
+
+  // A stash picked at the list's foot takes the pane. The list stays
+  // the changes', with no file picked, and a file picked from it takes
+  // the pane back.
+  if (stashHash) {
+    return (
+      <StashView
+        worktree={worktree}
+        hash={stashHash}
+        onBack={onBack}
+        changesList={
+          <DiffFileIndex
+            entries={changeEntries(list)}
+            activeKey={null}
+            collapsedKeys={NO_KEYS}
+            allCollapsed={false}
+            onSelect={(key) => {
+              setPickedKey(key);
+              nav.toDiff(projectId, worktreeId, { replace: true });
+            }}
+            changes={controls}
+            footer={footer}
+            className="min-h-0 flex-1"
+          />
+        }
+      />
+    );
+  }
+
   return (
     <DiffView
       diff={diff}
@@ -230,116 +378,57 @@ function ChangesView({
           <CleanTreeMessage worktree={worktree} />
         )
       }
-      changes={{
-        files: list,
-        loading,
-        failed,
-        busy,
-        selectedKey: picked ? changeKey(picked) : null,
-        onSelect: setPickedKey,
-        onSetStaged: (paths, staged) =>
-          stage({ projectId, worktreeId, paths, staged }),
-        onDiscard,
-        hunks:
-          hunkPath && hunkStates
-            ? {
-                states: hunkStates,
-                onSetStaged: (changes, staged) =>
-                  stageHunks({
-                    projectId,
-                    worktreeId,
-                    path: hunkPath,
-                    changes,
-                    staged,
-                  }),
-                onDiscard: (changes) =>
-                  discardHunks(
-                    { projectId, worktreeId, path: hunkPath, changes },
-                    {
-                      onSuccess: ({ snapshot }) =>
-                        toast("Discarded the change", {
-                          description: "The file was snapshotted first.",
-                          duration: UNDO_TOAST_MS,
-                          action: {
-                            label: "Undo",
-                            onClick: () =>
-                              restore(
-                                { projectId, worktreeId, snapshot },
-                                {
-                                  onSuccess: () =>
-                                    say(worktree, "Change restored"),
-                                },
-                              ),
-                          },
-                        }),
-                    },
-                  ),
-              }
-            : undefined,
-        onResolve: (path, side) =>
-          resolve.mutate({ projectId, worktreeId, path, side }),
-        onStash: () => {
-          const count = list.length;
-          stash.mutate(
-            { projectId, worktreeId },
-            {
-              onSuccess: () =>
-                say(worktree, `Stashed ${pluralize(count, "file")}`),
-            },
-          );
-        },
-      }}
-      renderSidebar={(fileList, footer) => (
-        <GitPageSidebar
-          worktree={worktree}
-          selected="changes"
-          files={fileList}
-          footer={footer}
-        />
+      changes={controls}
+      renderSidebar={(fileList) => (
+        <GitPageSidebar worktree={worktree} tab="changes" changes={fileList} />
       )}
-      footer={
-        (showComposer || (lastCommit && rewrite.canAmend)) && (
-          <div
-            data-slot="changes-footer"
-            className={cn(
-              "flex flex-col border-t border-border",
-              !showComposer && "pb-1.5",
-            )}
-          >
-            {lastCommit && rewrite.canAmend && (
-              <LastCommitStrip
-                commit={lastCommit}
-                amending={amending}
-                canUndo={rewrite.undo !== null}
-                busy={busy}
-                onAmend={() => setAmending(true)}
-                onUndo={() => {
-                  const u = rewrite.undo;
-                  if (u) undo.undoTo(u.target, u.count, u.head);
-                }}
-              />
-            )}
-            {showComposer && (
-              <CommitComposer
-                files={list}
-                draft={draft}
-                onDraftChange={setDraft}
-                pending={commit.isPending}
-                error={commit.error}
-                amend={
-                  amending && lastCommit
-                    ? {
-                        hash: lastCommit.hash,
-                        onCancel: () => setAmending(false),
-                      }
-                    : null
-                }
-                onCommit={onCommit}
-              />
-            )}
-          </div>
+      footer={footer}
+    />
+  );
+}
+
+const NO_KEYS: ReadonlySet<string> = new Set();
+
+// A stash beside the changes: what it holds, and its moves.
+function StashView({
+  worktree,
+  hash,
+  onBack,
+  changesList,
+}: {
+  worktree: Worktree;
+  hash: string;
+  onBack: () => void;
+  changesList: ReactNode;
+}) {
+  const diff = useStashDiff(worktree.projectId, worktree.id, hash);
+  const { data: stashes } = useWorktreeStashes(worktree);
+  const stash = stashes?.find((s) => s.hash === hash);
+  return (
+    <DiffView
+      diff={diff}
+      onBack={onBack}
+      worktree={worktree}
+      title={
+        stash ? (stash.named ? stash.message : "Stashed changes") : "Stash"
+      }
+      subtitle={
+        stash && (
+          <>
+            {!stash.named && `On top of ${stash.message} · `}
+            Stashed <RelativeDate date={stash.date} />
+          </>
         )
       }
+      details={stash && <StashMoves worktree={worktree} stash={stash} />}
+      renderSidebar={() => (
+        <GitPageSidebar
+          worktree={worktree}
+          tab="changes"
+          changes={changesList}
+        />
+      )}
+      emptyMessage="This stash holds no file changes."
     />
   );
 }

@@ -33,9 +33,7 @@ function MarkerRow({
           </span>
         )}
         {note && (
-          <span className="min-w-0 truncate text-xs text-muted-foreground">
-            {note}
-          </span>
+          <span className="min-w-0 text-xs text-muted-foreground">{note}</span>
         )}
         <span className="ml-auto flex shrink-0 items-center">{move}</span>
       </div>
