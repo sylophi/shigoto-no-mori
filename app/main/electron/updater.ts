@@ -72,11 +72,10 @@ let installWhenStaged: boolean | null = null;
 // may have asked before the release was out.
 let armedMidCheck = false;
 
-// The finish-install handoff calls app.quit(), which still emits
-// before-quit. The app-wide before-quit handler in index.ts intercepts
-// that to reap orphan scripts. If its cleanup ever stalls, the update
-// never lands. This flag lets that handler bail out and let the
-// natural quit through.
+// The finish-install handoff calls app.quit(), and the installer waits
+// for this process to exit. This flag makes that a hurried quit
+// (main/index.ts), which signals scripts instead of waiting them out,
+// so a slow cleanup cannot hold the update back.
 export function isInstallingUpdate(): boolean {
   return installing;
 }

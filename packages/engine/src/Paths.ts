@@ -39,6 +39,9 @@ export class Paths extends Context.Service<
     readonly home: string;
     readonly dataDir: string;
     readonly dataDirSource: DataDirSource;
+    // The flavor's name for the data dir (.sm, .smd), which a managed
+    // root on a project's own drive is named after.
+    readonly dataDirName: string;
     // The store's database file, in the data dir.
     readonly store: string;
   }
@@ -151,6 +154,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     home,
     dataDir: resolved.dataDir,
     dataDirSource: resolved.source,
+    dataDirName: names.dataDir,
     store: path.join(resolved.dataDir, "store.db"),
   });
 });
