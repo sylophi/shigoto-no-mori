@@ -376,8 +376,10 @@ export function createChannelMux(deps: {
         case CHANNEL_FRAME_END:
           if (channel.receivedEnd) return false;
           channel.receivedEnd = true;
-          channel.endpoint.onEnd();
+          // Completed first, so an endpoint that already ended its own
+          // direction reads the handle closed from inside onEnd.
           maybeComplete(frame.channelId, channel);
+          channel.endpoint.onEnd();
           return true;
         case CHANNEL_FRAME_RESET:
           remove(frame.channelId, channel);
