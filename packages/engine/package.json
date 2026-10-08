@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@shigomori/contracts": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
