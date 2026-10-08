@@ -2237,10 +2237,8 @@ describe("doctor", () => {
     });
     box.write("projects/P1/project.json", { defaultBranch: "main" });
     box.write("projects/P2/project.json", { defaultBranch: "main" });
-    box.write("projects/P3/project.json", { defaultBranch: "main" });
     const before = await sameDoctor();
     assert.ok(ids(before).includes("project-path:fail"));
-    assert.ok(ids(before).includes("dormant-state:warn"));
     const after = await sameDoctor(true);
     assert.deepEqual(after.repaired, ["unregistered ghost"]);
   });

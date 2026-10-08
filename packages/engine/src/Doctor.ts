@@ -58,12 +58,21 @@ import {
 import { envVar } from "./environment.ts";
 import { findExecutable } from "./executables.ts";
 import { flavorNames } from "./flavor.ts";
+import * as Darwin from "./Darwin.ts";
 import * as Git from "./Git.ts";
-import { decodedLaunchers } from "./Launchers.ts";
+import { appFoldersOf, decodedLaunchers } from "./Launchers.ts";
 import * as Layout from "./Layout.ts";
 import * as Paths from "./Paths.ts";
-import { isNotFound } from "./platformErrors.ts";
+import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
+import {
+  acquireStagingLock,
+  pidAlive,
+  StagingLockUnavailable,
+  stagingHolder,
+  stagingLockPath,
+  UpdateInProgress,
+} from "./stagingLock.ts";
 import type { ListedProject, RegisteredProject } from "./Registry.ts";
 import * as Terrier from "./Terrier.ts";
 import { terrierProjects } from "./Terrier.ts";
@@ -144,21 +153,12 @@ export class MovedWorktreePending extends Schema.TaggedError<MovedWorktreePendin
   }
 }
 
-// A stager is downloading an update, and owns the files in updates/.
-export class UpdateInProgress extends Schema.TaggedError<UpdateInProgress>()(
-  "UpdateInProgress",
-  { pid: Schema.Finite },
-) {
-  override get message(): string {
-    return `Another update is already in progress (pid ${this.pid}).`;
-  }
-}
-
 type RepairError =
   | Git.GitError
   | PlatformError.PlatformError
   | MovedWorktreePending
-  | UpdateInProgress;
+  | UpdateInProgress
+  | StagingLockUnavailable;
 
 export class Doctor extends Context.Service<
   Doctor,
@@ -219,6 +219,15 @@ const errorText = (error: { readonly message: string }) =>
   error instanceof Git.GitCommandError
     ? `git ${error.subcommand}: ${Git.stderrOf(error).trim()}`
     : error.message;
+
+const isDirMode = (mode: number) => (mode & Darwin.S_IFMT) === Darwin.S_IFDIR;
+
+// A stat's mtime, epoch ms.
+const lstatMtime = (entry: Darwin.LstatEntry) =>
+  entry.mtimeSec * 1000 + Math.floor(entry.mtimeNsec / 1e6);
+
+// Who holds the update stager's pidfile, read once a pass.
+type Holder = Effect.Success<ReturnType<typeof stagingHolder>>;
 
 const mtimeOf = (info: FileSystem.File.Info) =>
   Option.match(info.mtime, {
@@ -309,6 +318,7 @@ const make = Effect.gen(function* () {
   const worktrees = yield* Worktrees.Worktrees;
   const data = yield* WorktreeData.WorktreeData;
   const cloneCheckout = yield* CloneCheckout.CloneCheckout;
+  const darwin = yield* Darwin.Darwin;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
   const { home, dataDir, binaryName, flavor, configHome } = paths;
@@ -353,12 +363,23 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  // Whether a process with the pid exists, whoever owns it.
-  const pidAlive = (pid: number) =>
-    capture("ps", ["-p", String(pid), "-o", "pid="]).pipe(
-      Effect.map(({ code }) => code === 0),
-      Effect.orElseSucceed(() => false),
-    );
+  // lstat(2) of names in a folder, by name: a symlink's own, as Go's
+  // directory entries tell them. What it can't answer is absent.
+  const lstatIn = (dir: string, entries: ReadonlyArray<string>) =>
+    entries.length === 0
+      ? Effect.succeed(new Map<string, Darwin.LstatEntry>())
+      : darwin.lstat({ root: dir, paths: entries }).pipe(
+          Stream.runCollect,
+          Effect.map(
+            (found) =>
+              new Map(
+                found.flatMap((entry) =>
+                  Darwin.isFailed(entry) ? [] : [[entry.path, entry] as const],
+                ),
+              ),
+          ),
+          Effect.orElseSucceed(() => new Map<string, Darwin.LstatEntry>()),
+        );
 
   const statOf = (target: string) => fs.stat(target).pipe(Effect.option);
 
@@ -457,11 +478,7 @@ const make = Effect.gen(function* () {
     return line.ok(`${shown}, authenticated`);
   });
 
-  const appRoots = [
-    "/Applications",
-    path.join(home, "Applications"),
-    "/System/Applications",
-  ];
+  const appRoots = appFoldersOf(path, home);
 
   // The prod binary runs from <bundle>/Contents/Resources (the PATH
   // command is a symlink there), so its bundle is two folders up.
@@ -905,25 +922,27 @@ const make = Effect.gen(function* () {
     const stale: string[] = [];
     const scan = (dir: string) =>
       Effect.gen(function* () {
-        for (const name of yield* listDir(dir)) {
-          if (!name.endsWith(".lock")) continue;
-          const file = path.join(dir, name);
-          const info = yield* statOf(file);
+        const locks = (yield* listDir(dir)).filter((name) =>
+          name.endsWith(".lock"),
+        );
+        for (const [name, entry] of yield* lstatIn(dir, locks)) {
           if (
-            Option.isSome(info) &&
-            info.value.type !== "Directory" &&
-            now - mtimeOf(info.value) > LOCK_STALE_MS
+            !isDirMode(entry.mode) &&
+            now - lstatMtime(entry) > LOCK_STALE_MS
           ) {
-            stale.push(file);
+            stale.push(path.join(dir, name));
           }
         }
       });
     yield* scan(dataDir);
     yield* scan(path.join(dataDir, "iconCache"));
     const projectsDir = path.join(dataDir, "projects");
-    for (const name of yield* listDir(projectsDir)) {
+    for (const [name, entry] of yield* lstatIn(
+      projectsDir,
+      yield* listDir(projectsDir),
+    )) {
+      if (!isDirMode(entry.mode)) continue;
       const dir = path.join(projectsDir, name);
-      if (!(yield* isDirectory(dir))) continue;
       yield* scan(dir);
       yield* scan(path.join(dir, "worktrees"));
     }
@@ -955,27 +974,13 @@ const make = Effect.gen(function* () {
   });
 
   const updatesDir = path.join(dataDir, "updates");
-  const stagingLock = path.join(updatesDir, "staging.pid");
+  const stagingLock = stagingLockPath(path, dataDir);
   const stagedDir = path.join(updatesDir, "staged");
-
-  // Who holds the update stager's pidfile: none when there is none, and
-  // pid 0 when its content isn't one.
-  const stagingHolder = Effect.gen(function* () {
-    const raw = yield* readText(stagingLock);
-    if (Option.isNone(raw)) return Option.none();
-    const pid = atoi(raw.value.trim());
-    // kill(0) and kill(-1) always "succeed".
-    if (pid === undefined || pid < 2) {
-      return Option.some({ pid: 0, alive: false });
-    }
-    return Option.some({ pid, alive: yield* pidAlive(pid) });
-  });
 
   // The stager holds its pidfile for a whole download, so a crashed one
   // is told by its pid being dead, not by the file's age.
-  const checkStagingLock = Effect.gen(function* () {
+  const checkStagingLock = (holder: Holder) => {
     const line = check("Data dir", "staging-lock", "update staging");
-    const holder = yield* stagingHolder;
     if (Option.isNone(holder)) return [];
     const { pid, alive } = holder.value;
     if (alive) return [line.ok(`in progress (pid ${pid})`)];
@@ -993,7 +998,7 @@ const make = Effect.gen(function* () {
         },
       ),
     ];
-  });
+  };
 
   // The scratch a staging run left (the download and its extraction),
   // plus a staged bundle this build already is or is newer than. An
@@ -1028,30 +1033,24 @@ const make = Effect.gen(function* () {
     });
 
   // The bytes of the files under a path, the path itself when a file.
+  // A symlink counts as itself, never what it points at.
   const treeSize = (root: string) =>
-    Effect.gen(function* () {
-      const info = yield* statOf(root);
-      if (Option.isNone(info)) return 0;
-      if (info.value.type !== "Directory") return Number(info.value.size);
-      const entries = yield* fs
-        .readDirectory(root, { recursive: true })
-        .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
-      let size = 0;
-      for (const entry of entries) {
-        const item = yield* statOf(path.join(root, entry));
-        if (Option.isSome(item) && item.value.type !== "Directory") {
-          size += Number(item.value.size);
-        }
-      }
-      return size;
-    });
+    darwin.lstat({ root }).pipe(
+      Stream.runFold(
+        () => 0,
+        (size, entry) =>
+          Darwin.isFailed(entry) || isDirMode(entry.mode)
+            ? size
+            : size + entry.size,
+      ),
+      Effect.orElseSucceed(() => 0),
+    );
 
   // A crashed or superseded update leaves its scratch until the next
   // update sweeps it. Only while no stager holds the lock: mid-run,
   // these are its working files.
-  const checkUpdateLeftovers = (version: string) =>
+  const checkUpdateLeftovers = (version: string, holder: Holder) =>
     Effect.gen(function* () {
-      const holder = yield* stagingHolder;
       if (Option.isSome(holder) && holder.value.alive) return [];
       const found = yield* updateLeftovers(version);
       if (found.length === 0) return [];
@@ -1068,17 +1067,14 @@ const make = Effect.gen(function* () {
             prompt: `Delete ${shown} of leftover update files in ${collapseHome(updatesDir)}?`,
             label: `deleted ${shown} of leftover update files`,
             destructive: true,
-            // Listed again when it runs: a stager that started since, or
-            // staged something newer, keeps its files.
+            // Under the stager's own lock, and listed again once it is
+            // held: a run that staged something newer since keeps it.
             apply: Effect.gen(function* () {
-              const now = yield* stagingHolder;
-              if (Option.isSome(now) && now.value.alive) {
-                return yield* new UpdateInProgress({ pid: now.value.pid });
-              }
+              yield* acquireStagingLock(stagingLock);
               for (const item of yield* updateLeftovers(version)) {
                 yield* fs.remove(item, { recursive: true });
               }
-            }),
+            }).pipe(Effect.scoped, Effect.provideContext(platform)),
           },
         ),
       ];
@@ -1160,36 +1156,35 @@ const make = Effect.gen(function* () {
 
   // Terrier's registry is terrier's, and sm only merges it in, so this
   // says why merged projects might be missing.
-  const checkTerrier = (device: ConfigDoc) =>
-    Effect.gen(function* () {
-      if (device["terrier"] !== true) return [];
-      const line = check("Data dir", "terrier", "terrier");
-      const listing = yield* terrier.listing;
-      if (Option.isSome(listing.trouble)) {
-        const { summary, advice } = listing.trouble.value;
-        return [line.warn(summary, advice)];
-      }
-      const count = listing.paths.length;
-      return [
-        line.ok(
-          `${count} registered repo${plural(count)} merged into the project list`,
-        ),
-      ];
-    });
+  const checkTerrier = (device: ConfigDoc, listing: Terrier.TerrierListing) => {
+    if (device["terrier"] !== true) return [];
+    const line = check("Data dir", "terrier", "terrier");
+    if (Option.isSome(listing.trouble)) {
+      const { summary, advice } = listing.trouble.value;
+      return [line.warn(summary, advice)];
+    }
+    const count = listing.paths.length;
+    return [
+      line.ok(
+        `${count} registered repo${plural(count)} merged into the project list`,
+      ),
+    ];
+  };
 
   // A project's state that no listed project claims is dormant: terrier
   // rm of a repo sm held settings for leaves it, since the id is all
-  // that ties it to a path. Reported, never fixed: re-registering the
-  // path under terrier brings back the same id and picks it up again.
+  // that ties it to a path. Re-registering the path under terrier brings
+  // back the same id and picks it up again, so dropping it asks first.
   const checkDormantState = (
     projects: ReadonlyArray<ListedProject>,
     complete: boolean,
+    kept: ReadonlyArray<{ readonly projectId: string }>,
   ) =>
     Effect.gen(function* () {
       if (!complete) return [];
       const stored = new Set([
         ...(yield* config.storedProjectIds),
-        ...(yield* data.kept).map(({ projectId }) => projectId),
+        ...kept.map(({ projectId }) => projectId),
       ]);
       if (stored.size === 0) return [];
       const line = check("Data dir", "dormant-state", "project state");
@@ -1203,11 +1198,29 @@ const make = Effect.gen(function* () {
           ),
         ];
       }
-      const extra = dormant.length - 1;
+      const n = dormant.length;
+      const extra = n - 1;
+      const label = `${n} dormant project state${plural(n)}`;
       return [
-        line.warn(
-          `${dormant.length} state ${pluralize(dormant.length, "dir belongs", "dirs belong")} to no project (${first}${extra > 0 ? ` and ${extra} more` : ""})`,
-          `Harmless: it reconnects if terrier lists the repo again (re-added, or the terrier toggle back on). Otherwise delete it from ${collapseHome(path.join(dataDir, "projects"))} by hand.`,
+        repairable(
+          line.warn(
+            `${n} state ${pluralize(n, "dir belongs", "dirs belong")} to no project (${first}${extra > 0 ? ` and ${extra} more` : ""})`,
+            "Harmless: it reconnects if terrier lists the repo again (re-added, or the terrier toggle back on). Otherwise delete it.",
+          ),
+          {
+            prompt: `Delete ${label} (${dormant.join(", ")})? Its settings and worktree titles go.`,
+            label: `deleted ${label}`,
+            destructive: true,
+            apply: Effect.forEach(
+              dormant,
+              (id) =>
+                Effect.andThen(
+                  config.forgetProject(id),
+                  data.forgetProject(id),
+                ),
+              { discard: true },
+            ),
+          },
         ),
       ];
     });
@@ -1221,16 +1234,17 @@ const make = Effect.gen(function* () {
     projects: ReadonlyArray<ListedProject>,
     complete: boolean,
     listed: ReadonlyMap<string, ReadonlyArray<WorktreeIdentity>>,
+    kept: ReadonlyArray<{
+      readonly projectId: string;
+      readonly worktreeId: string;
+    }>,
   ) =>
     Effect.gen(function* () {
       if (!complete) return [];
       const known = new Set<string>();
       const idsOf = new Map<string, ReadonlySet<string>>();
       for (const project of projects) {
-        const found = Option.orElse(
-          Option.fromUndefinedOr(listed.get(project.id)),
-          () => Option.none<ReadonlyArray<WorktreeIdentity>>(),
-        );
+        const found = Option.fromUndefinedOr(listed.get(project.id));
         // A project whose checks stopped early is listed here.
         const identities = Option.isSome(found)
           ? found
@@ -1241,12 +1255,10 @@ const make = Effect.gen(function* () {
         for (const id of ids) known.add(id);
         idsOf.set(project.id, ids);
       }
-      const dataFiles = (yield* data.kept).filter(
-        ({ projectId, worktreeId }) => {
-          const ids = idsOf.get(projectId);
-          return ids !== undefined && !ids.has(worktreeId);
-        },
-      ).length;
+      const dataFiles = kept.filter(({ projectId, worktreeId }) => {
+        const ids = idsOf.get(projectId);
+        return ids !== undefined && !ids.has(worktreeId);
+      }).length;
       const sets: ReadonlyArray<ReadonlySet<string>> = [
         yield* registry.marked("shelved"),
         yield* registry.marked("autoPull"),
@@ -1515,9 +1527,9 @@ const make = Effect.gen(function* () {
       for (const base of bases) {
         const entries = yield* fs.readDirectory(base).pipe(Effect.option);
         if (Option.isNone(entries)) continue;
-        for (const name of entries.value) {
+        for (const [name, entry] of yield* lstatIn(base, entries.value)) {
           const dir = path.join(base, name);
-          if (known.has(dir) || !(yield* isDirectory(dir))) continue;
+          if (known.has(dir) || !isDirMode(entry.mode)) continue;
           // A sibling project with the same folder name shares a managed
           // base, so only a stray whose metadata points back here counts.
           const repo = yield* locateRepo(dir);
@@ -1725,9 +1737,11 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const line = check("Projects", "project-include", project.name);
       const file = path.join(project.path, WORKTREE_INCLUDE);
-      const info = yield* statOf(file);
-      if (Option.isNone(info)) return [];
-      if (info.value.type === "Directory") {
+      const entry = (yield* lstatIn(project.path, [WORKTREE_INCLUDE])).get(
+        WORKTREE_INCLUDE,
+      );
+      if (entry === undefined) return [];
+      if (isDirMode(entry.mode)) {
         return [
           line.warn(
             `${WORKTREE_INCLUDE} is a directory, so carry-over resolves nothing`,
@@ -1739,15 +1753,9 @@ const make = Effect.gen(function* () {
         .access(file, { readable: true })
         .pipe(Effect.result);
       if (Result.isFailure(readable)) {
-        const reason = Predicate.isTagged(
-          readable.failure.reason,
-          "PermissionDenied",
-        )
-          ? "permission denied"
-          : readable.failure.message;
         return [
           line.warn(
-            `${WORKTREE_INCLUDE} can't be read (open ${file}: ${reason}), so nothing is carried into new worktrees`,
+            `${WORKTREE_INCLUDE} can't be read (open ${file}: ${errnoText(readable.failure)}), so nothing is carried into new worktrees`,
             `Fix the permissions on ${collapseHome(file)}.`,
           ),
         ];
@@ -1778,14 +1786,14 @@ const make = Effect.gen(function* () {
   const checkCarryOver = (
     project: ListedProject,
     settings: ConfigDoc | null,
-    checkouts: ReadonlyArray<WorktreeIdentity>,
+    checkouts: ReadonlyArray<string>,
   ) =>
     Effect.gen(function* () {
       const missing: string[] = [];
       for (const entry of carryOverPaths(settings)) {
         let found = false;
         for (const checkout of checkouts) {
-          if (Option.isSome(yield* statOf(path.join(checkout.path, entry)))) {
+          if (Option.isSome(yield* statOf(path.join(checkout, entry)))) {
             found = true;
             break;
           }
@@ -1912,7 +1920,10 @@ const make = Effect.gen(function* () {
           ),
         );
       }
-      const checkouts = Result.isSuccess(identities) ? identities.success : [];
+      // Without a listing, carry-over still looks in the primary.
+      const checkouts = Result.isSuccess(identities)
+        ? identities.success.map((id) => id.path)
+        : [project.path];
       entries.push(
         ...(yield* checkProjectWorktrees(project, identities, bases)),
         ...(yield* checkProjectScripts(project, settings)),
@@ -1963,23 +1974,27 @@ const make = Effect.gen(function* () {
   // The registry's projects, then terrier's, as every command sees them.
   // A terrier listing that failed leaves the list short, so the checks
   // that read "nothing claims this" as a leftover stand down.
-  const listProjects = Effect.gen(function* () {
-    const registered = yield* registry.projects;
-    const listing = yield* terrier.listing;
-    const extras = terrierProjects(
-      new Set(registered.map(({ path: at }) => at)),
-      listing.paths,
-    );
-    return {
-      projects: [...registered, ...extras] as ReadonlyArray<ListedProject>,
-      complete: Option.isNone(listing.trouble),
-    };
-  });
+  const listProjects = (listing: Terrier.TerrierListing) =>
+    Effect.gen(function* () {
+      const registered = yield* registry.projects;
+      const extras = terrierProjects(
+        new Set(registered.map(({ path: at }) => at)),
+        listing.paths,
+      );
+      return {
+        projects: [...registered, ...extras] as ReadonlyArray<ListedProject>,
+        complete: Option.isNone(listing.trouble),
+      };
+    });
 
   const checkAll = (input: RunInput) =>
     Effect.gen(function* () {
-      const { projects, complete } = yield* listProjects;
+      // Read once a pass, and handed to each check that asks.
+      const listing = yield* terrier.listing;
+      const { projects, complete } = yield* listProjects(listing);
       const device = (yield* config.read({ kind: "device" })) ?? {};
+      const holder = yield* stagingHolder(stagingLock);
+      const kept = yield* data.kept;
       const environment = [
         yield* checkGit,
         yield* checkGh,
@@ -1994,8 +2009,8 @@ const make = Effect.gen(function* () {
             checkGlobalConfig(device),
             yield* checkRegistry,
             yield* checkStaleLocks,
-            ...(yield* checkStagingLock),
-            ...(yield* checkUpdateLeftovers(input.version)),
+            ...checkStagingLock(holder),
+            ...(yield* checkUpdateLeftovers(input.version, holder)),
             ...(yield* checkPortAllocations(device)),
             ...(yield* launcherFindings(
               check("Data dir", "launchers", "launchers"),
@@ -2003,8 +2018,8 @@ const make = Effect.gen(function* () {
               "config launcher rm",
               "",
             )),
-            ...(yield* checkTerrier(device)),
-            ...(yield* checkDormantState(projects, complete)),
+            ...checkTerrier(device, listing),
+            ...(yield* checkDormantState(projects, complete, kept)),
           ]
         : [dir.entry];
       const processes = [
@@ -2025,6 +2040,7 @@ const make = Effect.gen(function* () {
                   : [],
               ),
             ),
+            kept,
           )
         : [];
       return [

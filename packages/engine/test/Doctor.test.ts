@@ -279,6 +279,14 @@ describe("the data dir", () => {
       only(await run(), "update-leftovers", "warn").detail,
       "2 KB of downloads left by an earlier update that nothing will install",
     );
+    // A symlink counts as itself, never the file it points at.
+    writeFileSync(join(box.home, "big"), "x".repeat(4096));
+    symlinkSync(join(box.home, "big"), join(updates, "extract", "link"));
+    assert.match(
+      only(await run(), "update-leftovers", "warn").detail,
+      /^2 KB of downloads/,
+    );
+    // The sweep holds the stager's lock, and lets it go.
     await run({ fix: true });
     assert.deepEqual(readdirSync(updates), []);
 
@@ -311,9 +319,28 @@ describe("the data dir", () => {
     });
     box.write("projects/A1/project.json", { defaultBranch: "main" });
     box.write("projects/GONE/project.json", { defaultBranch: "main" });
+    box.write("projects/GONE/worktrees/cafecafecafe.json", { title: "t" });
     const finding = only(await run(), "dormant-state", "warn");
     assert.match(finding.detail, /\(GONE\)$/);
-    assert.equal(finding.repairable, undefined);
+    assert.equal(finding.repairable, true);
+    // Dropping it asks first, since terrier could list the repo again.
+    const asked: Doctor.Repair[] = [];
+    const fixed = await run({
+      fix: true,
+      approve: (repair) => {
+        asked.push(repair);
+        return repair.label.includes("dormant");
+      },
+    });
+    assert.equal(
+      asked[0]?.prompt,
+      "Delete 1 dormant project state (GONE)? Its settings and worktree titles go.",
+    );
+    assert.deepEqual(fixed.repaired, ["deleted 1 dormant project state"]);
+    assert.equal(
+      only(fixed, "dormant-state", "ok").detail,
+      "1 state dir, each belonging to a project",
+    );
   });
 
   it("stands the leftover checks down while terrier's list can't be read", async () => {
@@ -548,6 +575,24 @@ describe("a project", () => {
     } finally {
       chmodSync(include, 0o644);
     }
+  });
+
+  it("says why a .worktreeinclude that points nowhere can't be read", async () => {
+    const { repo } = alpha();
+    const include = join(repo, ".worktreeinclude");
+    symlinkSync(join(box.home, "nowhere"), include);
+    assert.equal(
+      only(await run(), "project-include", "warn").detail,
+      `.worktreeinclude can't be read (open ${include}: no such file or directory), so nothing is carried into new worktrees`,
+    );
+  });
+
+  it("leaves a symlinked folder in the managed layout alone, as Go's listing does", async () => {
+    const { base } = alpha();
+    mkdirSync(base, { recursive: true });
+    mkdirSync(join(box.home, "target"));
+    symlinkSync(join(box.home, "target"), join(base, "linked"));
+    assert.equal(only(await run(), "project", "ok").detail, "ok");
   });
 
   it("names only the carry-over entries no checkout has", async () => {

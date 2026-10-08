@@ -178,6 +178,8 @@ export class Config extends Context.Service<
     ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
     // The ids of the projects that have settings stored.
     readonly storedProjectIds: Effect.Effect<ReadonlyArray<string>>;
+    // Drops a project's stored settings.
+    readonly forgetProject: (projectId: string) => Effect.Effect<void>;
   }
 >()("sm/engine/Config") {}
 
@@ -506,6 +508,12 @@ const make = Effect.gen(function* () {
     unset,
     write,
     storedProjectIds,
+    forgetProject: (projectId) =>
+      sql`DELETE FROM project_config WHERE project_id = ${projectId}`.pipe(
+        Effect.asVoid,
+        Effect.orDie,
+        Effect.withSpan("Config.forgetProject"),
+      ),
   });
 });
 

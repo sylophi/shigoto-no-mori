@@ -44,6 +44,8 @@ export class WorktreeData extends Context.Service<
       projectId: string,
       worktreeId: string,
     ) => Effect.Effect<void>;
+    // Drops what is kept for every worktree of a project.
+    readonly forgetProject: (projectId: string) => Effect.Effect<void>;
     // Every project and worktree id something is kept under.
     readonly kept: Effect.Effect<
       ReadonlyArray<{ readonly projectId: string; readonly worktreeId: string }>
@@ -153,7 +155,20 @@ const make = Effect.gen(function* () {
     Effect.withSpan("WorktreeData.kept"),
   );
 
-  return WorktreeData.of({ description, describe, move, forget, kept });
+  const forgetProject = Effect.fn("WorktreeData.forgetProject")(function* (
+    projectId: string,
+  ) {
+    yield* sql`DELETE FROM worktree_data WHERE project_id = ${projectId}`;
+  }, Effect.orDie);
+
+  return WorktreeData.of({
+    description,
+    describe,
+    move,
+    forget,
+    forgetProject,
+    kept,
+  });
 });
 
 export const layer = Layer.effect(WorktreeData, make);

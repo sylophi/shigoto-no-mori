@@ -132,6 +132,13 @@ const launchersOf = (
   };
 };
 
+// Where an installed .app can live, in the order they are looked in.
+export const appFoldersOf = (path: Path.Path, home: string) => [
+  "/Applications",
+  path.join(home, "Applications"),
+  "/System/Applications",
+];
+
 const apps: ReadonlyArray<CatalogApp> = catalog;
 
 // Code-unit order, as Go compares strings.
@@ -144,11 +151,7 @@ const make = Effect.gen(function* () {
   const settings = yield* EngineConfig.Config;
   const git = yield* Git.Git;
   const usage = yield* Usage.Usage;
-  const appFolders = [
-    "/Applications",
-    path.join(home, "Applications"),
-    "/System/Applications",
-  ];
+  const appFolders = appFoldersOf(path, home);
 
   const exists = (file: string) =>
     fs.exists(file).pipe(Effect.orElseSucceed(() => false));
