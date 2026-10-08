@@ -124,7 +124,7 @@ import type { ClientTransport } from "@shared/ipc/transport";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
 import { createPortForwardEngine } from "../core/portForward/engine";
-import { createMirrorDaemon } from "../core/mirror/daemon";
+import * as MirrorDaemon from "../core/mirror/daemon";
 import { createMirrorGateway } from "../core/mirror/gateway";
 import { createMirrorHistory } from "../core/mirror/history";
 import { createGitFollower } from "@host/mirror/gitFollow";
@@ -134,7 +134,6 @@ import {
   withSchemaVersion,
 } from "@host/lib/util/jsonFile";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
-import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import {
@@ -295,8 +294,8 @@ function listening<T>(value: T | null): T {
   return value;
 }
 
-const mirrorDaemon = createMirrorDaemon({
-  spawn: spawnFileSync,
+const { mirrorDaemon } = MirrorDaemon;
+export const mirrorDaemonLayer = MirrorDaemon.layer({
   dataDir: fileSyncDir,
   gatewayAddress: () => listening(mirrorGateway.address()),
   gatewayToken: () => listening(mirrorGateway.token()),
@@ -420,17 +419,11 @@ async function ensureMirrorGateway(): Promise<void> {
   }
 }
 
-export async function startMirrorEngine(): Promise<void> {
-  await ensureMirrorGateway();
-  mirrorDaemon.start();
-  gitFollower.start();
-}
-
-export function stopMirrorEngine(): void {
-  gitFollower.stop();
-  mirrorDaemon.stop();
-  mirrorGateway.stop();
-}
+// The mirror engine's pieces, for main/hostLayer.ts.
+export const startMirrorGateway = ensureMirrorGateway;
+export const stopMirrorGateway = () => mirrorGateway.stop();
+export const startGitFollower = () => gitFollower.start();
+export const stopGitFollower = () => gitFollower.stop();
 
 export function registerIpcHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
