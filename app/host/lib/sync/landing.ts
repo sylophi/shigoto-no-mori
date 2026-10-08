@@ -1,12 +1,13 @@
 // The landing: the copy a move makes on the destination, one function
 // run there whichever device started the move. A pull runs it here
 // against a link to the source (move.ts), a send asks the peer to run
-// it (sync:receiveWorktree, host/ipc/modules/sync.ts) against a link
-// the sender answers on. The source's side is sourceLink.ts.
+// it (sync:receiveWorktree, landForSender below) against a link the
+// sender answers on. The source's side is sourceLink.ts.
 import {
   type SyncCloneInto,
   type SyncPullProgress,
   type SyncReceipt,
+  syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
@@ -35,20 +36,23 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
-import { MoveCancelledError, throwIfCancelled } from "@host/lib/sync/moves";
 import {
+  MoveCancelledError,
+  throwIfCancelled,
+  underSignal,
+} from "@host/lib/sync/moves";
+import {
+  attachLinkFarEnd,
   incomingRefFor,
   type ProgressFrame,
+  withLinkSource,
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { notifierFor } from "@host/ipc/modules/worktrees";
 import { log, logFailure } from "@shared/log";
 import { type Span, traced } from "@shared/trace";
 import type { Handlers } from "@shigomori/contracts/types";
-import { syncContract } from "@shigomori/contracts/modules/sync";
 import { landInvitedMirror } from "@host/mirror/invites";
-import { underSignal } from "@host/lib/sync/moves";
-import { attachLinkFarEnd, withLinkSource } from "@host/lib/sync/sourceLink";
 
 // The ref the CLI's dirty capture lands a worktree's uncommitted state
 // under (cli/cmd_dirty.go owns the name on that side).
@@ -309,11 +313,6 @@ export async function landWorktree(
 // tears the link down, and the landing runs under that as well as
 // under this connection, so the create here dies with its setup
 // script and the copy goes.
-// A cancel the landing's last step outran: the sender has
-// already given up on this answer, so the copy goes here.
-// A landing this device asked for (a mirror invited from
-// here, host/mirror/invites.ts): the invitation moves onto
-// the copy before the peer's next call names it.
 export const landForSender: Handlers<
   typeof syncContract,
   HandlerContext
