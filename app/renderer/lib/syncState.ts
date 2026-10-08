@@ -244,11 +244,3 @@ export function canSyncFromPrimary(worktree: Worktree): boolean {
     worktree.behindPrimary > 0
   );
 }
-
-// Whether the Git timeline has a remote marker to draw: a branch with
-// an upstream, or one that could be published.
-export function hasRemoteMarker(worktree: Worktree): boolean {
-  const state = deriveRemoteSyncState(worktree);
-  if (state.kind === "detached") return false;
-  return state.kind !== "publish" || state.canPublish;
-}

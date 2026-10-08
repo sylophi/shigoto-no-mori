@@ -3,7 +3,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shared/schemas";
-import { GitTimeline } from "./GitTimeline";
+import { HistoryList } from "./HistoryList";
 import { OperationBanner } from "./OperationBanner";
 import { StashList } from "./StashList";
 
@@ -15,11 +15,12 @@ const counted = (label: string, count: number) =>
 // The Git page's sidebar, as GitHub Desktop splits its left column: the
 // Changes tab (the working tree's files, ticked into the next commit,
 // with the branch and the commit box at its foot), the Stashes tab (the
-// work set aside) and the History tab (the branch's commits as the Git
-// timeline draws them, with the remote's and the primary branch's
-// markers). The two most used sit at the ends, the easier targets. Each tab is the page's routes for it, and a switch replaces
-// the page's entry, so Back still leaves. History opens on the newest
-// commit (and is off without one), Stashes on the newest stash.
+// work set aside) and the History tab (the branch's commits, pushed and
+// not, with the branch and its push and sync at its foot). The two most
+// used sit at the ends, the easier targets. Each tab is the page's
+// routes for it, and a switch replaces the page's entry, so Back still
+// leaves. History opens on the newest commit (and is off without one),
+// Stashes on the newest stash.
 export function GitPageSidebar({
   worktree,
   tab,
@@ -84,9 +85,7 @@ export function GitPageSidebar({
       ) : tab === "stashes" ? (
         <StashList worktree={worktree} selected={selected} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-          <GitTimeline worktree={worktree} selected={selected ?? null} />
-        </div>
+        <HistoryList worktree={worktree} selected={selected ?? null} />
       )}
     </div>
   );

@@ -20,10 +20,13 @@ import { SyncActionButton } from "./SyncActionButton";
 export function WorktreePrimarySyncPill({
   worktree,
   label,
+  disabledReason,
 }: {
   worktree: Worktree;
   // A shorter label where the counts are already on screen.
   label?: string;
+  // Why it can't run now (uncommitted changes), shown as its tooltip.
+  disabledReason?: string;
 }) {
   const sync = useSyncWithPrimaryWorktree();
   const merge = useMergePrimaryWorktree();
@@ -37,7 +40,11 @@ export function WorktreePrimarySyncPill({
         label ??
         `Sync ${pluralize(worktree.behindPrimary, "commit")} from ${branchName}`
       }
-      tip={`git fetch && git rebase ${branchName}, falling back to a merge on conflict`}
+      tip={
+        disabledReason ??
+        `git fetch && git rebase ${branchName}, falling back to a merge on conflict`
+      }
+      disabled={disabledReason !== undefined}
       pending={sync.isPending || merge.isPending}
       onClick={() =>
         sync.mutate(scope, {

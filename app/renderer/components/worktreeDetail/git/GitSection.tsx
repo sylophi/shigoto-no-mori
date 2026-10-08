@@ -15,7 +15,6 @@ import type { CommitSummary, Worktree } from "@shared/schemas";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { OperationBanner } from "./OperationBanner";
-import { CommitDot } from "./TimelineRow";
 
 // How many changed files the Changes row names before it just counts.
 const NAMED_FILES = 3;
@@ -260,6 +259,19 @@ function BranchLine({
         <ChevronRight aria-hidden className="size-3.5 opacity-60" />
       </button>
     </div>
+  );
+}
+
+// A commit's mark: the accent while it exists only here, muted once a
+// remote has it.
+function CommitDot({ local }: { local: boolean }) {
+  return (
+    <span
+      className={cn(
+        "size-2.5 rounded-full",
+        local ? "bg-emerald-500" : "bg-muted-foreground/45",
+      )}
+    />
   );
 }
 

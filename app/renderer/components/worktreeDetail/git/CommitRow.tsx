@@ -1,3 +1,4 @@
+import { createContext, use } from "react";
 import {
   Combine,
   Copy,
@@ -31,30 +32,37 @@ import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { CommitSummary, Worktree } from "@shared/schemas";
-import { CommitDot, TimelineRow, useRowSelection } from "./TimelineRow";
 import type { CommitActions } from "./useCommitActions";
 
-// One commit on the History tab's timeline: its subject, picked to show
-// it beside the list, and its moves, behind a "⋯" that shows on hover or
-// a right click.
-export function CommitNode({
+// The row the Git page shows, `branch` or `commit:<hash>`, marked in
+// the History tab's list. A pick replaces the page's entry, so Back
+// still leaves the page.
+export const HistorySelection = createContext<string | null>(null);
+
+export function useRowSelection(key: string): boolean {
+  return use(HistorySelection) === key;
+}
+
+// One commit in the History tab's list, the same two lines as a stash:
+// its subject, then its age and size. Picking it shows it beside the
+// list. Its moves sit behind a "⋯" that floats over the first line's
+// end on hover (so it takes no room from the counts) or a right click.
+export function CommitRow({
   worktree,
   commit,
   rewrite,
   actions,
-  local,
   faded = false,
 }: {
   worktree: Worktree;
   commit: CommitSummary;
-  // What the timeline allows for this row (lib/commitRewrite). The
-  // timeline knows the neighbours, the row doesn't.
+  // What the list allows for this row (lib/commitRewrite). The list
+  // knows the neighbours, the row doesn't.
   rewrite: CommitRewrite;
-  // The timeline's one set of moves (useCommitActions), shared across
-  // rows rather than subscribed to by each.
+  // The list's one set of moves (useCommitActions), shared across rows
+  // rather than subscribed to by each.
   actions: CommitActions;
-  // On no remote yet.
-  local: boolean;
+  // The history before the branch.
   faded?: boolean;
 }) {
   const nav = useWorktreeNav();
@@ -68,72 +76,64 @@ export function CommitNode({
     />
   );
   return (
-    <TimelineRow node={<CommitDot local={local} />} faded={faded}>
-      <ContextMenu>
-        <ContextMenuTrigger
-          render={
-            <div
-              className={cn(
-                "group/commit -mx-1.5 flex items-start gap-1 rounded-md transition-colors",
-                selected
-                  ? "bg-accent text-accent-foreground"
-                  : "hover:bg-accent/50 has-data-popup-open:bg-accent/50",
-              )}
-            />
+    <ContextMenu>
+      <ContextMenuTrigger
+        render={
+          <div
+            className={cn(
+              "group/commit relative rounded-md transition-colors",
+              selected
+                ? "bg-accent text-accent-foreground"
+                : "hover:bg-accent/50 has-data-popup-open:bg-accent/50",
+            )}
+          />
+        }
+      >
+        <button
+          type="button"
+          aria-current={selected || undefined}
+          onClick={() =>
+            nav.toCommit(worktree.projectId, worktree.id, commit.hash, true)
           }
+          className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
         >
-          {/* The subject over its age and counts. The hash is the
-              picked commit's pane's to say. */}
-          <button
-            type="button"
-            aria-current={selected || undefined}
-            onClick={() =>
-              nav.toCommit(worktree.projectId, worktree.id, commit.hash, true)
-            }
-            className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
+          <span
+            className={cn(
+              "w-full truncate text-sm group-hover/commit:pr-6 group-has-data-popup-open/commit:pr-6",
+              faded && "text-muted-foreground",
+            )}
           >
-            <span
-              className={cn(
-                "w-full truncate text-sm",
-                faded && "text-muted-foreground",
-              )}
-            >
-              {commit.subject}
+            {commit.subject}
+          </span>
+          <span className="flex w-full items-center gap-2 text-xs text-muted-foreground">
+            <span className="min-w-0 truncate">
+              <RelativeDate date={commit.date} />
             </span>
-            <span className="flex w-full items-center gap-2 text-xs text-muted-foreground">
-              <span className="truncate">
-                <RelativeDate date={commit.date} />
+            {(commit.additions > 0 || commit.deletions > 0) && (
+              <span className="ml-auto">
+                <DiffStats
+                  additions={commit.additions}
+                  deletions={commit.deletions}
+                />
               </span>
-              {(commit.additions > 0 || commit.deletions > 0) && (
-                <span className="ml-auto">
-                  <DiffStats
-                    additions={commit.additions}
-                    deletions={commit.deletions}
-                  />
-                </span>
-              )}
-            </span>
-          </button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label={`Actions for ${commit.hash}`}
-              data-icon-button
-              className="mt-1 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover/commit:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-popup-open:opacity-100 phone:opacity-100"
-            >
-              <Ellipsis aria-hidden className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              sideOffset={4}
-              className="min-w-52"
-            >
-              {items}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </ContextMenuTrigger>
-        <ContextMenuContent className="min-w-52">{items}</ContextMenuContent>
-      </ContextMenu>
-    </TimelineRow>
+            )}
+          </span>
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`Actions for ${commit.hash}`}
+            data-icon-button
+            className="absolute top-1 right-1 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover/commit:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-popup-open:opacity-100 phone:opacity-100"
+          >
+            <Ellipsis aria-hidden className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={4} className="min-w-52">
+            {items}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="min-w-52">{items}</ContextMenuContent>
+    </ContextMenu>
   );
 }
 
