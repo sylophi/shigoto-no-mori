@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
-import { it } from "vitest";
+import { it, vi } from "vitest";
 import {
   BranchNotMergedError,
   CloneDestinationError,
@@ -111,7 +111,12 @@ it("an interrupted run takes its git down with it, hooks and all", async () => {
   );
   assert.ok(Exit.hasInterrupts(outcome));
   const hook = Number(readFileSync(pidFile, "utf8"));
-  assert.throws(() => process.kill(hook, 0), /ESRCH/);
+  // Killed is not yet reaped: a zombie still answers a signal 0 until
+  // whoever adopts it collects it.
+  await vi.waitFor(() => assert.throws(() => process.kill(hook, 0), /ESRCH/), {
+    timeout: 5000,
+    interval: 20,
+  });
 });
 
 // --- worktrees ------------------------------------------------------
