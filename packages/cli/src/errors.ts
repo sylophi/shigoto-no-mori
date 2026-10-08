@@ -1,9 +1,13 @@
 // How a failed command reports and exits, the Go sm's way: a usage
-// error exits 2, anything else 1. Under --json the failure is a document,
-// {ok: false, error}. A person gets `sm: <message>` on stderr.
+// error exits 2, anything else 1. Under --json the failure is a
+// document, {ok: false, error, code?}, where the code names a failure
+// the app maps without reading prose. A person gets `sm: <message>` on
+// stderr.
+import * as Config from "@shigomori/engine/Config";
+import * as Registry from "@shigomori/engine/Registry";
+import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as CliError from "effect/cli/CliError";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { emit, note, Output, styles } from "./output.ts";
 
@@ -16,26 +20,21 @@ export class UsageError extends Schema.TaggedError<UsageError>()("UsageError", {
   }
 }
 
-// The engine's failures that are the caller's mistake, by tag.
-const USAGE = new Set([
-  "UsageError",
-  "UnknownConfigKey",
-  "InvalidConfigValue",
-  "StructuredConfigKey",
-]);
+// The failures that are the caller's mistake. A ref that names nothing
+// says which it is.
+const isUsage = (error: unknown) =>
+  error instanceof UsageError ||
+  error instanceof Config.UnknownConfigKey ||
+  error instanceof Config.InvalidConfigValue ||
+  error instanceof Config.StructuredConfigKey ||
+  (error instanceof Worktrees.TargetError && error.usage);
 
-// An Effect error's tag, read without naming the field.
-const tagOf = (error: unknown) => {
-  const tag: unknown = Predicate.isObject(error)
-    ? Reflect.get(error, "_tag")
-    : undefined;
-  return typeof tag === "string" ? tag : undefined;
-};
+const codeOf = (error: unknown) =>
+  error instanceof Registry.UnknownProject ? "unknown-project" : undefined;
 
 // Reports the failure and answers the exit code.
 export const report = (error: unknown) =>
   Effect.gen(function* () {
-    const tag = tagOf(error);
     // The parser shows help for --help and for a command used wrongly, and
     // only the second is a failure.
     const problems = error instanceof CliError.ShowHelp ? error.errors : [];
@@ -47,10 +46,15 @@ export const report = (error: unknown) =>
         : error instanceof Error
           ? error.message
           : String(error);
+    const code = codeOf(error);
     if (json) {
-      yield* emit({ ok: false, error: message });
+      yield* emit(
+        code === undefined
+          ? { ok: false, error: message }
+          : { ok: false, error: message, code },
+      );
     } else {
       yield* note(`${styles(stderrColor).red(`${binaryName}:`)} ${message}`);
     }
-    return problems.length > 0 || (tag !== undefined && USAGE.has(tag)) ? 2 : 1;
+    return problems.length > 0 || isUsage(error) ? 2 : 1;
   });
