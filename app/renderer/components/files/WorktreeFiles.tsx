@@ -20,6 +20,7 @@ import { withMember } from "@/lib/toggleSet";
 import type { Worktree } from "@shared/schemas";
 import { ancestorsOf, FileTree } from "./FileTree";
 import { FileViewer } from "./FileViewer";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 export function WorktreeFiles() {
   const { worktree, goBack, missing } = useRouteWorktree();
@@ -109,9 +110,11 @@ function FilesView({
             <h1 className="truncate text-xl font-medium tracking-tight phone:text-lg">
               Files
             </h1>
-            <p className="truncate font-mono text-xs text-muted-foreground select-text">
-              {worktree.name}
-            </p>
+            <SimpleTooltip whenTruncated tip={worktree.name}>
+              <p className="truncate font-mono text-xs text-muted-foreground select-text">
+                {worktree.name}
+              </p>
+            </SimpleTooltip>
           </div>
           {canCommand && (
             <div className="flex shrink-0 items-center gap-2 self-center">

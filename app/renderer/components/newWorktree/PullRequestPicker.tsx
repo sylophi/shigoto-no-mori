@@ -174,10 +174,12 @@ function PullRequestRow({
           )}
         />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm">
-            {pr.title}{" "}
-            <span className="text-muted-foreground/60">#{pr.number}</span>
-          </span>
+          <SimpleTooltip whenTruncated tip={`${pr.title} #${pr.number}`}>
+            <span className="truncate text-sm">
+              {pr.title}{" "}
+              <span className="text-muted-foreground/60">#{pr.number}</span>
+            </span>
+          </SimpleTooltip>
           <span className="truncate text-xs text-muted-foreground">
             @{pr.authorLogin} ·{" "}
             <span className="font-mono">{pr.headRefName}</span>

@@ -5,7 +5,6 @@
 // agree.
 import { Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { PullChoiceState } from "./ignoreChoice";
 import { browseWorktree, LeaveOutPicker } from "./LeaveOutPicker";
 
@@ -25,12 +24,10 @@ export function PullLeaveOut({
       browse={browseWorktree(worktree)}
     >
       {pull.presetDiffers && (
-        <SimpleTooltip tip="Start from this rule whenever you mirror or transplant this project's worktrees, on any device. You can change it under Configure.">
-          <Button variant="ghost" size="sm" onClick={pull.saveAsPreset}>
-            <Bookmark />
-            Save as project default
-          </Button>
-        </SimpleTooltip>
+        <Button variant="ghost" size="sm" onClick={pull.saveAsPreset}>
+          <Bookmark />
+          Save as project default
+        </Button>
       )}
     </LeaveOutPicker>
   );

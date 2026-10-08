@@ -328,7 +328,7 @@ function NormalRow({
           onClick={onDelete}
           tip={
             deleteBlockedReason ??
-            (confirmDelete ? "Click again to confirm" : "Delete worktree")
+            (confirmDelete ? "Click again to confirm" : undefined)
           }
         />
       )}

@@ -101,12 +101,14 @@ function ChangedFiles({
         const { mark, stats } = entry;
         return (
           <li key={entry.key} className="flex items-center gap-2">
-            <span
-              aria-label={mark.label}
-              className={cn("w-3 shrink-0 font-semibold", mark.className)}
-            >
-              {mark.mark}
-            </span>
+            <SimpleTooltip tip={mark.label}>
+              <span
+                aria-label={mark.label}
+                className={cn("w-3 shrink-0 font-semibold", mark.className)}
+              >
+                {mark.mark}
+              </span>
+            </SimpleTooltip>
             <SimpleTooltip whenTruncated tip={entry.path}>
               <span className="min-w-0 flex-1 truncate">{entry.path}</span>
             </SimpleTooltip>

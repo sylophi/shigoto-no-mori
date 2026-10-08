@@ -37,29 +37,25 @@ export function LastCommitStrip({
         </p>
         {!amending && (
           <>
-            <SimpleTooltip tip="Amend: fold the next commit into this one, editing its message">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={onAmend}
+              disabled={busy}
+              aria-label="Amend the last commit"
+            >
+              <PencilLine />
+            </Button>
+            {canUndo && (
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={onAmend}
+                onClick={onUndo}
                 disabled={busy}
-                aria-label="Amend the last commit"
+                aria-label="Undo the last commit"
               >
-                <PencilLine />
+                <Undo2 />
               </Button>
-            </SimpleTooltip>
-            {canUndo && (
-              <SimpleTooltip tip="Undo this commit; its changes come back staged">
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={onUndo}
-                  disabled={busy}
-                  aria-label="Undo the last commit"
-                >
-                  <Undo2 />
-                </Button>
-              </SimpleTooltip>
             )}
           </>
         )}

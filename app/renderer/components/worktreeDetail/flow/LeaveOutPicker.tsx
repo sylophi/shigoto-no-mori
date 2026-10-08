@@ -140,16 +140,10 @@ export function LeaveOutPicker<E extends PickerEntry>({
             />
           ))}
           {!disabled && (
-            <SimpleTooltip tip={copy.hint}>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPicking(true)}
-              >
-                <Plus />
-                {copy.add}
-              </Button>
-            </SimpleTooltip>
+            <Button variant="ghost" size="sm" onClick={() => setPicking(true)}>
+              <Plus />
+              {copy.add}
+            </Button>
           )}
         </div>
       )}

@@ -67,7 +67,9 @@ export function DeviceHeading({
   return (
     <div className="flex items-center gap-2">
       <DeviceMark icon={icon} tone={status.tone} />
-      <h2 className="truncate text-sm font-medium">{name}</h2>
+      <SimpleTooltip whenTruncated tip={name}>
+        <h2 className="truncate text-sm font-medium">{name}</h2>
+      </SimpleTooltip>
       <span className={cn("shrink-0 text-xs", TONE_TEXT[status.tone])}>
         {status.label}
       </span>
@@ -343,7 +345,7 @@ function PortsStrip({
         ) : (
           // A peer's server this window cannot forward is only news.
           <span key={port.port} className="inline-flex items-center gap-1">
-            <StatusDot tone="emerald" />
+            <ListeningDot />
             <PortText port={port.port} label={port.label} />
           </span>
         ),
@@ -370,7 +372,7 @@ function LocalhostLink({ port, label }: { port: number; label?: string }) {
         errorTitle="Couldn't open the port"
         className="inline-flex items-center gap-1 rounded-sm no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <StatusDot tone="emerald" />
+        <ListeningDot />
         <PortText port={`localhost:${port}`} label={label} />
         <ExternalLinkIcon aria-hidden className="size-3" />
       </ExternalLink>
@@ -396,7 +398,7 @@ function PeerPort({
     worktreeId: worktree.id,
   });
   return (
-    <SimpleTooltip tip={control.error ?? `Reach ${port} at localhost here`}>
+    <SimpleTooltip tip={control.error}>
       <ChipButton
         disabled={control.isPending}
         onClick={() => control.apply({ on: true, localPort: port })}
@@ -450,5 +452,14 @@ function PortsHeader() {
         </span>
       </div>
     </div>
+  );
+}
+
+// A port's dot: a server answers on it.
+function ListeningDot() {
+  return (
+    <SimpleTooltip tip="A server is listening">
+      <StatusDot tone="emerald" />
+    </SimpleTooltip>
   );
 }
