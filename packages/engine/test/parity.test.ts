@@ -6,7 +6,7 @@
 // command will: the service's answer wrapped the way the verb prints it.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -447,22 +447,13 @@ describe("projects list", () => {
 
 describe("projects list with terrier", () => {
   // A terrier on PATH that answers as `version` and `ls --json` do.
-  const fakeTerrier = (version: string, paths: ReadonlyArray<string>) => {
-    const bin = join(box.home, "bin");
-    mkdirSync(bin, { recursive: true });
-    writeFileSync(
-      join(bin, "terrier"),
-      `#!/bin/sh\nif [ "$1" = version ]; then echo ${version}; else echo '${JSON.stringify(
+  const fakeTerrier = (version: string, paths: ReadonlyArray<string>) =>
+    box.fakeBin(
+      "terrier",
+      `if [ "$1" = version ]; then echo ${version}; else echo '${JSON.stringify(
         { projects: paths.map((path) => ({ path })) },
-      )}'; fi\n`,
-      { mode: 0o755 },
+      )}'; fi`,
     );
-    process.env.PATH = `${bin}:${originalPath}`;
-  };
-  const originalPath = process.env.PATH;
-  afterEach(() => {
-    process.env.PATH = originalPath;
-  });
   const list = Effect.service(Registry.Registry).pipe(
     Effect.flatMap((registry) => registry.rows()),
   );

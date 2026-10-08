@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
@@ -10,14 +8,10 @@ import { terrierProjectId } from "../src/terrierId.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
-const originalPath = process.env.PATH;
 beforeEach(() => {
   box = sandbox();
 });
-afterEach(async () => {
-  process.env.PATH = originalPath;
-  await box.remove();
-});
+afterEach(() => box.remove());
 
 it("mints the Go sm's id for a path", () => {
   assert.equal(
@@ -42,14 +36,10 @@ it("adds the paths the registry lacks, by name then path", () => {
 
 it("registers a terrier repo under its terrier id, and hands its settings back on removal", async () => {
   const repo = box.repo("repo");
-  const bin = join(box.home, "bin");
-  mkdirSync(bin);
-  writeFileSync(
-    join(bin, "terrier"),
-    `#!/bin/sh\nif [ "$1" = version ]; then echo v0.1.0; else echo '{"projects":[{"path":"${repo}"}]}'; fi\n`,
-    { mode: 0o755 },
+  box.fakeBin(
+    "terrier",
+    `if [ "$1" = version ]; then echo v0.1.0; else echo '{"projects":[{"path":"${repo}"}]}'; fi`,
   );
-  process.env.PATH = `${bin}:${originalPath}`;
   box.write("config.json", { terrier: true });
   const id = terrierProjectId(repo);
   const result = await box.engine(

@@ -1,3 +1,4 @@
+import { WEB_GITHUB_ID } from "@shigomori/contracts/schemas/launchers";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -69,20 +70,19 @@ export const githubPageOf = (remoteUrl: string) => {
     : `https://${match[1]}/${match[2]}/${match[3]}`;
 };
 
-// A custom launcher as a settings document stores it.
+// The custom launchers a settings document stores. One that isn't an
+// object of strings is left out.
 const customOf = (value: unknown): ReadonlyArray<RowEntry> =>
   Array.isArray(value)
-    ? value.flatMap((entry: unknown) =>
-        typeof entry === "object" && entry !== null
-          ? [
-              {
-                kind: "custom" as const,
-                id: `custom:${String((entry as { id?: unknown }).id ?? "")}`,
-                label: String((entry as { label?: unknown }).label ?? ""),
-              },
-            ]
-          : [],
-      )
+    ? value.flatMap((entry: unknown) => {
+        const { id, label } = (entry ?? {}) as {
+          id?: unknown;
+          label?: unknown;
+        };
+        return typeof id === "string" && typeof label === "string"
+          ? [{ kind: "custom" as const, id: `custom:${id}`, label }]
+          : [];
+      })
     : [];
 
 const apps: ReadonlyArray<CatalogApp> = catalog;
@@ -166,25 +166,27 @@ const make = Effect.gen(function* () {
     readonly id: string;
     readonly path: string;
   }) {
-    const device = (yield* settings.read({ kind: "device" })) ?? {};
-    const stored = yield* settings.read({
-      kind: "project",
-      projectId: project.id,
-      path: project.path,
-    });
+    const [device, stored, installed, page, stats] = yield* Effect.all(
+      [
+        settings.read({ kind: "device" }),
+        settings.read({
+          kind: "project",
+          projectId: project.id,
+          path: project.path,
+        }),
+        Effect.filter(apps, available, { concurrency: "unbounded" }),
+        git.run(project.path, ["remote", "get-url", "origin"]).pipe(
+          Effect.map(githubPageOf),
+          Effect.orElseSucceed(() => undefined),
+        ),
+        usage.stats("launcher", ""),
+      ],
+      { concurrency: "unbounded" },
+    );
     // A project's own launchers count once it is configured.
     const configured =
       typeof stored?.defaultBranch === "string" &&
       stored.defaultBranch.trim() !== "";
-    const installed = yield* Effect.filter(apps, available, {
-      concurrency: "unbounded",
-    });
-    const page = yield* git
-      .run(project.path, ["remote", "get-url", "origin"])
-      .pipe(
-        Effect.map(githubPageOf),
-        Effect.orElseSucceed(() => undefined),
-      );
     const all: ReadonlyArray<RowEntry> = [
       ...installed.map((app) => ({
         kind: "detected" as const,
@@ -194,16 +196,15 @@ const make = Effect.gen(function* () {
       })),
       ...(page === undefined
         ? []
-        : [{ kind: "web" as const, id: "web:github", label: "GitHub" }]),
-      ...customOf(device.launchers),
+        : [{ kind: "web" as const, id: WEB_GITHUB_ID, label: "GitHub" }]),
+      ...customOf(device?.launchers),
       ...(configured ? customOf(stored?.launchers) : []),
     ];
     const hidden = new Set(
-      Array.isArray(device.hiddenLaunchers)
+      Array.isArray(device?.hiddenLaunchers)
         ? device.hiddenLaunchers.filter((id) => typeof id === "string")
         : [],
     );
-    const stats = yield* usage.stats("launcher", "");
     const statOf = (id: string) =>
       stats.get(id) ?? { lastUsed: 0, recentCount: 0 };
     const shown = all

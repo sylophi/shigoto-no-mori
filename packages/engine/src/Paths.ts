@@ -37,6 +37,8 @@ export class Paths extends Context.Service<
   {
     // The user's home directory.
     readonly home: string;
+    // A `~` or `~/` path under the home directory, cleaned.
+    readonly expandHome: (target: string) => string;
     readonly dataDir: string;
     readonly dataDirSource: DataDirSource;
     // The flavor's name for the data dir (.sm, .smd), which a managed
@@ -63,12 +65,14 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const names = flavorNames(flavor);
   // Unset reads as the working directory, as it does for the Go sm.
   const home = yield* Config.String("HOME").pipe(Config.withDefault("."));
-  const expandHome = (target: string) =>
-    target === "~"
-      ? home
-      : target.startsWith("~/")
-        ? path.join(home, target.slice(2))
-        : target;
+  // A `~/` path, joined to the home directory and cleaned as Go's
+  // filepath.Join cleans it. Any other path as it is.
+  const expandHome = (target: string) => {
+    if (target === "~") return home;
+    if (!target.startsWith("~/")) return target;
+    const joined = path.join(home, target.slice(2));
+    return joined.length > 1 ? joined.replace(/\/+$/, "") : joined;
+  };
 
   // A directory a pointer may aim at: one that doesn't exist yet, is
   // empty, or already holds sm's state, so a pointer at ~/Documents
@@ -155,6 +159,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
 
   return Paths.of({
     home,
+    expandHome,
     dataDir: resolved.dataDir,
     dataDirSource: resolved.source,
     dataDirName: names.dataDir,

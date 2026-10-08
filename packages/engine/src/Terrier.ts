@@ -41,8 +41,6 @@ export type TerrierProject = {
 export class Terrier extends Context.Service<
   Terrier,
   {
-    // Asked once per process: terrier's answer doesn't change under a
-    // command, and the setting only matters at the start.
     readonly listing: Effect.Effect<TerrierListing>;
   }
 >()("sm/engine/Terrier") {}
@@ -90,7 +88,7 @@ export function terrierProjects(
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const config = yield* Config.Config;
-  const { home, binaryName } = yield* Paths.Paths;
+  const { expandHome, binaryName } = yield* Paths.Paths;
 
   // terrier's stdout, failing on a spawn error, a nonzero exit or a
   // wedge: the listing runs before every command.
@@ -152,18 +150,17 @@ const make = Effect.gen(function* () {
     // Home-expanded and absolute, never resolved against the working
     // directory, which differs between the app and a shell.
     const paths = listed.value.projects.flatMap(({ path }) => {
-      const expanded =
-        path === "~"
-          ? home
-          : path.startsWith("~/")
-            ? `${home}/${path.slice(2)}`
-            : path;
+      const expanded = expandHome(path);
       return expanded.startsWith("/") ? [expanded] : [];
     });
     return { paths, trouble: Option.none() };
   }).pipe(Effect.orDie, Effect.withSpan("Terrier.listing"));
 
-  return Terrier.of({ listing: yield* Effect.cached(read) });
+  // Kept briefly, so a listing's several asks share one answer and a
+  // long-lived host still sees the setting or terrier change.
+  return Terrier.of({
+    listing: yield* Effect.cachedWithTTL(read, "10 seconds"),
+  });
 });
 
 export const layer = Layer.effect(Terrier, make);

@@ -117,10 +117,13 @@ export type Sandbox = {
   // share, with `files` committed.
   readonly repo: (name: string, files?: Record<string, string>) => string;
   readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
+  // A command on PATH for this sandbox's life, as a shell script.
+  readonly fakeBin: (name: string, script: string) => void;
   readonly remove: () => Promise<void>;
 };
 
 export function sandbox(): Sandbox {
+  const originalPath = process.env.PATH;
   const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-parity-")));
   const seed = join(root, "seed");
   mkdirSync(seed);
@@ -235,7 +238,18 @@ export function sandbox(): Sandbox {
           }),
         ),
       ),
+    fakeBin: (name, script) => {
+      const bin = join(root, "bin");
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(bin, name), `#!/bin/sh\n${script}\n`, {
+        mode: 0o755,
+      });
+      if (!process.env.PATH?.startsWith(`${bin}:`)) {
+        process.env.PATH = `${bin}:${originalPath}`;
+      }
+    },
     remove: async () => {
+      process.env.PATH = originalPath;
       await runtime?.dispose();
       rmSync(root, { recursive: true, force: true });
     },
