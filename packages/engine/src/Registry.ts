@@ -43,6 +43,16 @@ export class UnknownProject extends Schema.TaggedError<UnknownProject>()(
   }
 }
 
+// Another registered project already sits at the path.
+export class ProjectPathTaken extends Schema.TaggedError<ProjectPathTaken>()(
+  "ProjectPathTaken",
+  { path: Schema.String, name: Schema.String },
+) {
+  override get message(): string {
+    return `${this.path} is already registered as ${this.name}`;
+  }
+}
+
 // A listed project: the registry's, or terrier's (read-only).
 export type ListedProject = RegisteredProject & {
   readonly source?: "terrier";
@@ -74,6 +84,14 @@ export class Registry extends Context.Service<
     readonly unregister: (
       projectId: string,
     ) => Effect.Effect<RegisteredProject, UnknownProject>;
+    // Points the entry at where its repo is now, under the new folder's
+    // name, keeping its id: its place in the manual order moves with it,
+    // and the icon remembered for the old path goes.
+    readonly relocate: (
+      projectId: string,
+      path: string,
+      name: string,
+    ) => Effect.Effect<RegisteredProject, UnknownProject | ProjectPathTaken>;
     // The sidebar's manual order, as project paths.
     readonly order: Effect.Effect<ReadonlyArray<string>>;
     // Stores `listed` (the merged list as it reads now) with `ids` moved
@@ -383,8 +401,46 @@ const make = Effect.gen(function* () {
     )
     .pipe(Effect.orDie, Effect.withSpan("Registry.deviceId"));
 
+  const relocate = Effect.fn("Registry.relocate")(function* (
+    projectId: string,
+    path: string,
+    name: string,
+  ) {
+    return yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const [project] = yield* sql<RegisteredProject>`
+            SELECT id, name, path FROM projects WHERE id = ${projectId}`;
+          if (!project) return yield* new UnknownProject({ projectId });
+          const [other] = yield* sql<{ name: string }>`
+            SELECT name FROM projects WHERE path = ${path} AND id != ${projectId}`;
+          if (other) {
+            return yield* new ProjectPathTaken({ path, name: other.name });
+          }
+          yield* sql`UPDATE projects SET name = ${name}, path = ${path}
+            WHERE id = ${projectId}`;
+          // In the project's own place, and only there: the new path may
+          // already hold one (kept for a terrier row, say).
+          const stored = yield* order;
+          if (stored.includes(project.path)) {
+            const next = stored.flatMap((entry) =>
+              entry === project.path ? [path] : entry === path ? [] : [entry],
+            );
+            yield* sql`DELETE FROM project_order`;
+            yield* sql`INSERT INTO project_order ${sql.insert(
+              next.map((entry, position) => ({ path: entry, position })),
+            )}`;
+          }
+          yield* sql`DELETE FROM icon_cache WHERE project_path = ${project.path}`;
+          return { id: projectId, name, path };
+        }),
+      )
+      .pipe(Effect.catchTags({ SqlError: Effect.die }));
+  });
+
   return Registry.of({
     projects,
+    relocate,
     listed,
     rows,
     register,

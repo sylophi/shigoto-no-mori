@@ -3,9 +3,14 @@
 // status card, finding the worktree a command means, and the marks and
 // descriptions the app and agents set. The rows and documents keep the
 // shapes `sm worktrees ... --json` prints, field for field.
-import { isValidWorktreeDirName } from "@shigomori/contracts/predicates/worktreeDirName";
+import {
+  isValidWorktreeDirName,
+  sanitizeBranchForPath,
+} from "@shigomori/contracts/predicates/worktreeDirName";
+import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
 import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
+import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import { isUntracked } from "@shigomori/contracts/schemas";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -15,9 +20,14 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as CarryOver from "./CarryOver.ts";
+import type { CarryOverReport } from "./CarryOver.ts";
 import * as Config from "./Config.ts";
 import { findExecutable } from "./executables.ts";
 import * as Git from "./Git.ts";
@@ -25,7 +35,12 @@ import * as GitHub from "./GitHub.ts";
 import type { WorktreeEntry } from "./gitParse.ts";
 import { splitRemoteRef } from "./gitParse.ts";
 import * as Layout from "./Layout.ts";
+import * as Lifecycle from "./Lifecycle.ts";
+import { shellQuote } from "./Lifecycle.ts";
+import { pickWorktreeName } from "./names.ts";
 import * as Paths from "./Paths.ts";
+import { isNotFound } from "./platformErrors.ts";
+import * as Terrier from "./Terrier.ts";
 import {
   matchPorts,
   parsePortPoolConfig,
@@ -41,7 +56,11 @@ import {
   snapshotOf,
 } from "./shelf.ts";
 import * as WorktreeData from "./WorktreeData.ts";
-import { isManagedPath, worktreeIdFromPath } from "./worktreeLayout.ts";
+import {
+  driveBaseOf,
+  isManagedPath,
+  worktreeIdFromPath,
+} from "./worktreeLayout.ts";
 
 // --- the documents --------------------------------------------------------
 
@@ -209,6 +228,35 @@ export type Target = {
   readonly projectId?: string | undefined;
 };
 
+// The worktree as `rm` and `land` report it removed.
+export type Removed = {
+  readonly id: string;
+  readonly name: string;
+  readonly branch: string;
+  readonly path: string;
+  readonly projectName: string;
+};
+
+// What making or removing a worktree reports as it goes, each event the
+// document `sm --json` prints for it.
+export type WorktreeEvent =
+  | Lifecycle.LifecycleEvent
+  | { readonly event: "carryOver"; readonly report: CarryOverReport }
+  | { readonly event: "created"; readonly worktree: WorktreeRow };
+
+// Where the events go, and whether a script's output may be truecolor
+// (it is shown in the app's console).
+export type Reporter = {
+  readonly report: (event: WorktreeEvent) => Effect.Effect<void>;
+  readonly color: boolean;
+};
+
+// A new worktree, and the lifecycle scripts that failed on it.
+export type Created = {
+  readonly worktree: WorktreeRow;
+  readonly failures: ReadonlyArray<Lifecycle.ScriptFailure>;
+};
+
 // --- errors ---------------------------------------------------------------
 
 export class UnknownWorktree extends Schema.TaggedError<UnknownWorktree>()(
@@ -355,6 +403,165 @@ export class PullRequestOwnsDescription extends Schema.TaggedError<PullRequestOw
   }
 }
 
+// What `projects relocate` won't do: point a project that is still
+// there, or one terrier lists, at another path.
+export class RelocateRefused extends Schema.TaggedError<RelocateRefused>()(
+  "RelocateRefused",
+  {
+    reason: Schema.Literals([
+      "not-a-repo",
+      "via-terrier",
+      "still-there",
+      "terrier-lists-old",
+      "terrier-lists-new",
+    ]),
+    path: Schema.String,
+    name: Schema.String,
+    binary: Schema.String,
+  },
+) {
+  override get message(): string {
+    switch (this.reason) {
+      case "not-a-repo":
+        return `${this.path} is not a git repository`;
+      case "via-terrier":
+        return `${this.name} is registered via terrier, not ${this.binary}. Register its new path with terrier instead.`;
+      case "still-there":
+        return `${this.path} is still there. Relocate is for a repo that was moved or renamed by hand.`;
+      case "terrier-lists-old":
+        return `terrier still lists ${this.path}. Run \`terrier prune\` first, then relocate.`;
+      case "terrier-lists-new":
+        return `${this.path} is already a project, via terrier. Remove ${this.name} instead (\`${this.binary} projects remove ${this.name}\`).`;
+    }
+  }
+}
+
+// A worktree whose uncommitted changes would go with it, or whose status
+// can't be read (which must not pass for clean). `verb` is the command
+// that refused, `destroys` set when the changes would be lost with it.
+export class DirtyWorktree extends Schema.TaggedError<DirtyWorktree>()(
+  "DirtyWorktree",
+  {
+    reason: Schema.Literals(["uncommitted", "unreadable"]),
+    count: Schema.Int,
+    verb: Schema.String,
+    destroys: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  override get message(): string {
+    if (this.reason === "unreadable") {
+      const said =
+        this.cause instanceof Error ? this.cause.message : String(this.cause);
+      return `Couldn't check for uncommitted changes (${said}). Fix the worktree, or pass --force to ${this.verb} anyway.`;
+    }
+    return this.destroys === ""
+      ? `Worktree has ${this.count} uncommitted change(s). Pass --force to ${this.verb} anyway.`
+      : `Worktree has ${this.count} uncommitted change(s) that ${this.destroys} would destroy. Commit them first, or pass --force.`;
+  }
+}
+
+// What a worktree command won't do, the reason in its message.
+export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
+  "WorktreeRefused",
+  {
+    reason: Schema.Literals([
+      "reserved-name",
+      "invalid-name",
+      "name-taken",
+      "destination-taken",
+      "checkout-needs-base",
+      "vanished",
+      "remove-primary",
+      "changed-during-cleanup",
+      "uncommitted-at-remove",
+      "move-primary",
+      "move-destination-exists",
+      "move-not-listed",
+      "move-copy-failed",
+      "adopt-primary",
+      "adopt-managed",
+    ]),
+    // The name or path the refusal is about.
+    subject: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  // The command line was what was wrong (the terminal exits 2).
+  get usage(): boolean {
+    return this.reason === "reserved-name" || this.reason === "invalid-name";
+  }
+
+  override get message(): string {
+    const quoted = JSON.stringify(this.subject);
+    switch (this.reason) {
+      case "reserved-name":
+        return `${quoted} is reserved. It addresses the project's primary checkout.`;
+      case "invalid-name":
+        return `${quoted} is not a valid worktree folder name.`;
+      case "name-taken":
+        return `A worktree folder named "${this.subject}" already exists in this project.`;
+      case "destination-taken":
+        return `Destination already exists: ${this.subject} (another project with the same folder name may own it)`;
+      case "checkout-needs-base":
+        return "Checkout mode requires a base ref";
+      case "vanished":
+        return "worktree disappeared after creation";
+      case "remove-primary":
+        return "Cannot delete the project's primary worktree";
+      case "changed-during-cleanup":
+        return `Changes appeared in ${this.subject} while its cleanup scripts ran, so it was kept. Remove them, or pass --force --skip-cleanup to remove it without running the scripts again.`;
+      case "uncommitted-at-remove":
+        return `Worktree ${this.subject} has uncommitted changes. Pass --force to remove anyway.`;
+      case "move-primary":
+        return "The primary checkout can't be moved";
+      case "move-destination-exists":
+        return `Destination already exists: ${this.subject}`;
+      case "move-not-listed":
+        return `git doesn't list a worktree at ${this.subject} after the move`;
+      case "move-copy-failed": {
+        const said =
+          this.cause instanceof Error ? this.cause.message : String(this.cause);
+        return `Couldn't copy the worktree to ${this.subject}: ${said}`;
+      }
+      case "adopt-primary":
+        return "The primary checkout can't be converted";
+      case "adopt-managed":
+        return "Worktree is already shigomori-managed";
+    }
+  }
+}
+
+// A cleanup script that failed during a removal, which left the worktree
+// in place. The run id ties the failure to the script's output.
+export class CleanupFailed extends Schema.TaggedError<CleanupFailed>()(
+  "CleanupFailed",
+  {
+    phase: Schema.Literals(["portPoolRelease", "teardown"]),
+    exitCode: Schema.NullOr(Schema.Int),
+    runId: Schema.String,
+  },
+) {
+  override get message(): string {
+    const detail =
+      this.exitCode === null
+        ? "failed to run"
+        : `exited with code ${this.exitCode}`;
+    return `${this.phase} ${detail}; worktree not removed`;
+  }
+}
+
+// A removal git finished on its side (its admin entry is gone) whose
+// checkout is still on disk because the sweep after it failed.
+export class OrphanedWorktree extends Schema.TaggedError<OrphanedWorktree>()(
+  "OrphanedWorktree",
+  { path: Schema.String, git: Schema.String, wipe: Schema.String },
+) {
+  override get message(): string {
+    return `git no longer tracks ${this.path} as a worktree but couldn't finish deleting it (git: ${this.git}. wipe: ${this.wipe}). Delete the directory by hand.`;
+  }
+}
+
 // --- the service ----------------------------------------------------------
 
 export class Worktrees extends Context.Service<
@@ -435,6 +642,96 @@ export class Worktrees extends Context.Service<
     ) => Effect.Effect<
       WorktreeRow,
       DescribeRefused | PullRequestOwnsDescription
+    >;
+
+    // Where a new worktree named `name` (picked when empty) would go,
+    // and whether a worktree or anything else already sits there.
+    readonly destination: (
+      project: RegisteredProject,
+      name: string,
+    ) => Effect.Effect<
+      { readonly name: string; readonly path: string; readonly taken: boolean },
+      WorktreeRefused | Git.GitError
+    >;
+    // A new managed worktree on a new branch (`branch`, else its name)
+    // from `base`, or with `checkout` on the existing branch `base`, then
+    // carry-over and its setup.
+    readonly create: (
+      project: RegisteredProject,
+      input: {
+        readonly name?: string | undefined;
+        readonly branch?: string | undefined;
+        readonly base?: string | undefined;
+        readonly checkout?: boolean | undefined;
+        readonly skipSetup?: boolean | undefined;
+        readonly agentWorking?: boolean | undefined;
+      },
+      reporter: Reporter,
+    ) => Effect.Effect<Created, WorktreeRefused | Git.GitError>;
+    // Makes an external worktree a managed one: its branch checked out
+    // again under the layout, its marks and title carried, set up as a
+    // new worktree is.
+    readonly adopt: (
+      located: Located,
+      options: { readonly force: boolean },
+      reporter: Reporter,
+    ) => Effect.Effect<
+      Created,
+      WorktreeRefused | DirtyWorktree | OrphanedWorktree | Git.GitError
+    >;
+    // Runs the setup half of making a worktree again.
+    readonly setup: (
+      located: Located,
+      reporter: Reporter,
+    ) => Effect.Effect<{
+      readonly ran: ReadonlyArray<string>;
+      readonly failures: ReadonlyArray<Lifecycle.ScriptFailure>;
+    }>;
+    // Port-pool's release and the teardown script, the checkout, what is
+    // kept under its id, and its branch when the device's setting says so.
+    readonly remove: (
+      located: Located,
+      options: {
+        readonly force: boolean;
+        readonly keepBranch: boolean;
+        readonly skipCleanup: boolean;
+      },
+      reporter: Reporter,
+    ) => Effect.Effect<
+      Removed,
+      | WorktreeRefused
+      | DirtyWorktree
+      | CleanupFailed
+      | OrphanedWorktree
+      | Git.GitError
+    >;
+    // Moves the checkout, across volumes too, and carries what is kept
+    // under its id to the new one.
+    readonly move: (
+      located: Located,
+      destination: string,
+    ) => Effect.Effect<
+      { readonly worktree: WorktreeRow; readonly previousId: string },
+      WorktreeRefused | Git.GitError
+    >;
+    // Carries what is kept under `from` to the id a checkout at `toPath`
+    // will have, ahead of moving it there. Answers that id.
+    readonly rekey: (
+      project: RegisteredProject,
+      from: string,
+      toPath: string,
+    ) => Effect.Effect<string>;
+    // Points a project whose repo was moved or renamed by hand at where
+    // it is now (any folder inside it will do), keeping its id. The
+    // linked worktrees that moved along are re-linked, and the managed
+    // ones a rename would leave external move to where new ones go.
+    // Answers the project's row.
+    readonly relocateProject: (
+      project: Registry.ListedProject,
+      destination: string,
+    ) => Effect.Effect<
+      ProjectRow,
+      RelocateRefused | Registry.UnknownProject | Registry.ProjectPathTaken
     >;
   }
 >()("sm/engine/Worktrees") {}
@@ -573,12 +870,24 @@ const across = <A>(
 
 // --- make -----------------------------------------------------------------
 
+// The project's folder names, lowercased: what a new one must not
+// collide with (case-insensitively, as the default volume is).
+const namesUsed = (found: ReadonlyArray<WorktreeIdentity>) =>
+  new Set(found.map((worktree) => worktree.name.toLowerCase()));
+
+// A pending dirty-state capture of the worktree (`worktrees dirty`).
+const dirtyRef = (worktreeId: string) => `refs/shigomori/dirty/${worktreeId}`;
+
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
+  const lifecycle = yield* Lifecycle.Lifecycle;
+  const carryOver = yield* CarryOver.CarryOver;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const github = yield* GitHub.GitHub;
   const config = yield* Config.Config;
   const layout = yield* Layout.Layout;
   const registry = yield* Registry.Registry;
+  const terrier = yield* Terrier.Terrier;
   const data = yield* WorktreeData.WorktreeData;
   const sql = yield* SqlClient.SqlClient;
   const fs = yield* FileSystem.FileSystem;
@@ -1175,7 +1484,7 @@ const make = Effect.gen(function* () {
     });
 
   const locate = Effect.fn("Worktrees.here")(function* (cwd: string) {
-    const projects = yield* registry.projects;
+    const projects = yield* registry.listed;
     const repo = yield* locateRepo(cwd);
     if (Option.isNone(repo)) {
       return { cwd, projects, current: undefined, unregisteredRepo: undefined };
@@ -1494,6 +1803,920 @@ const make = Effect.gen(function* () {
     return yield* row(located);
   });
 
+  // --- making and removing worktrees ---
+
+  // A fresh folder name. It doubles as the branch name, so names a kept
+  // local branch holds (a removed worktree's) are skipped too.
+  const pickName = (project: RegisteredProject, used: ReadonlySet<string>) =>
+    Effect.gen(function* () {
+      const taken = new Set(used);
+      const refs = yield* git.branchRefs(project.path).pipe(Effect.option);
+      for (const branch of Option.match(refs, {
+        onNone: () => [],
+        onSome: ({ locals }) => locals,
+      })) {
+        taken.add(branch.toLowerCase());
+      }
+      return yield* pickWorktreeName(taken, yield* deviceFlag("doubutsuNames"));
+    });
+
+  const checkName = (name: string) =>
+    isPrimaryKeyword(name)
+      ? Effect.fail(
+          new WorktreeRefused({ reason: "reserved-name", subject: name }),
+        )
+      : name !== "" && !isValidWorktreeDirName(name)
+        ? Effect.fail(
+            new WorktreeRefused({ reason: "invalid-name", subject: name }),
+          )
+        : Effect.void;
+
+  // Whether anything is at the path, a dangling symlink included.
+  const occupied = (file: string) =>
+    fs.readLink(file).pipe(
+      Effect.as(true),
+      Effect.catch(() => fs.exists(file)),
+      Effect.orElseSucceed(() => false),
+    );
+
+  const destination = Effect.fn("Worktrees.destination")(function* (
+    project: RegisteredProject,
+    requested: string,
+  ) {
+    const name = requested.trim();
+    yield* checkName(name);
+    const used = namesUsed(yield* identities(project));
+    const picked = name === "" ? yield* pickName(project, used) : name;
+    const place = path.join(yield* layout.worktreeBase(project), picked);
+    const taken =
+      (name !== "" && used.has(name.toLowerCase())) || (yield* occupied(place));
+    return { name: picked, path: place, taken };
+  });
+
+  // What a script is told about the worktree it runs in.
+  const scriptContext = (
+    project: RegisteredProject,
+    worktree: WorktreeIdentity,
+  ) =>
+    Effect.gen(function* () {
+      const [found, primary, described] = yield* Effect.all(
+        [
+          identities(project).pipe(Effect.orElseSucceed(() => [])),
+          primaryRefOf(project),
+          descriptionOf(worktree),
+        ],
+        { concurrency: "unbounded" },
+      );
+      return {
+        project,
+        worktree,
+        projectBranch: found.find((id) => id.isPrimary)?.branch ?? "",
+        defaultBranch: primary.primaryRef,
+        title: described.title,
+        description: described.description,
+      };
+    });
+
+  // The setup script, then port-pool's provision (never for an external
+  // worktree, whose release never runs). Answers the failures and the
+  // steps that ran. The caller reports the closing idle phase.
+  const provision = (
+    project: RegisteredProject,
+    worktree: WorktreeIdentity,
+    settings: Readonly<Record<string, unknown>> | null,
+    skipSetup: boolean,
+    reporter: Reporter,
+  ) =>
+    Effect.gen(function* () {
+      const failures: Lifecycle.ScriptFailure[] = [];
+      const ran: string[] = [];
+      const scripts = settings?.["scripts"];
+      const setup =
+        skipSetup ||
+        !Predicate.isObject(scripts) ||
+        typeof scripts["setup"] !== "string"
+          ? ""
+          : scripts["setup"].trim();
+      const pool = yield* lifecycle.portPoolActive(worktree);
+      if (setup === "" && !pool) return { failures, ran };
+      const context = yield* scriptContext(project, worktree);
+      const step = (
+        name: string,
+        phase: Lifecycle.Phase,
+        command: string,
+        slot: LifecycleSlot,
+      ) =>
+        Effect.gen(function* () {
+          yield* reporter.report({ event: "phase", phase });
+          ran.push(name);
+          const { code } = yield* lifecycle.run({
+            command,
+            slot,
+            context,
+            color: reporter.color,
+            report: reporter.report,
+          });
+          if (code !== 0) failures.push({ step: name, exitCode: code });
+        });
+      if (setup !== "") yield* step("setup", "setup", setup, { kind: "setup" });
+      if (pool) {
+        yield* step(
+          "port-pool provision",
+          "portPoolProvision",
+          `port-pool provision ${shellQuote(worktree.path)}`,
+          { kind: "portPool", phase: "provision" },
+        );
+      }
+      return { failures, ran };
+    });
+
+  // What a new worktree goes through: carry-over, then the setup script
+  // and port-pool's provision. `base` is the ref it was branched from,
+  // which decides where carry-over looks first.
+  const createLifecycle = (
+    project: RegisteredProject,
+    worktree: WorktreeIdentity,
+    base: string,
+    skipSetup: boolean,
+    reporter: Reporter,
+  ) =>
+    Effect.gen(function* () {
+      const { settings } = yield* projectSettings(project);
+      const checkouts = yield* identities(project).pipe(
+        Effect.orElseSucceed(() => []),
+      );
+      const carried = yield* carryOver.apply({
+        repo: project.path,
+        settings,
+        checkouts,
+        destination: worktree.path,
+        base,
+      });
+      if (Option.isSome(carried)) {
+        yield* reporter.report({ event: "phase", phase: "carryOver" });
+        yield* reporter.report({ event: "carryOver", report: carried.value });
+      }
+      const { failures } = yield* provision(
+        project,
+        worktree,
+        settings,
+        skipSetup,
+        reporter,
+      );
+      yield* reporter.report({ event: "phase", phase: "idle" });
+      return failures;
+    });
+
+  // The one way a worktree is made: the name checked or picked, the
+  // layout's place, the base's remote ref refreshed, `git worktree add`,
+  // and the identity git settled on. `checkout` puts the existing branch
+  // `base` there (adopt's way) instead of making a new one.
+  const addWorktree = (
+    project: RegisteredProject,
+    input: {
+      readonly name: string;
+      readonly branch: string;
+      readonly base: string;
+      readonly checkout: boolean;
+    },
+  ) =>
+    Effect.gen(function* () {
+      const used = namesUsed(yield* identities(project));
+      if (input.name !== "" && used.has(input.name.toLowerCase())) {
+        return yield* new WorktreeRefused({
+          reason: "name-taken",
+          subject: input.name,
+        });
+      }
+      const name =
+        input.name === "" ? yield* pickName(project, used) : input.name;
+      const place = path.join(yield* layout.worktreeBase(project), name);
+      // The remote-tracking ref the worktree sits on, refreshed, so the
+      // base isn't whatever the last fetch left.
+      let remotes: ReadonlyArray<string> | undefined;
+      if (
+        input.base !== "" &&
+        (yield* git.remoteRefExists(project.path, input.base))
+      ) {
+        remotes = yield* git.listRemotes(project.path);
+        const split = splitRemoteRef(input.base, remotes);
+        if (split) {
+          yield* git
+            .run(project.path, ["fetch", "--quiet", split.remote, split.branch])
+            .pipe(Effect.ignore);
+        }
+      }
+      // Projects that share a folder name share a base, so a sibling's
+      // worktree can sit at the path.
+      if (yield* occupied(place)) {
+        return yield* new WorktreeRefused({
+          reason: "destination-taken",
+          subject: place,
+        });
+      }
+      yield* fs
+        .makeDirectory(path.dirname(place), { recursive: true })
+        .pipe(Effect.orDie);
+      if (input.checkout && input.base === "") {
+        return yield* new WorktreeRefused({
+          reason: "checkout-needs-base",
+          subject: "",
+        });
+      }
+      if (input.checkout) {
+        yield* git.checkoutWorktree({
+          repo: project.path,
+          path: place,
+          ref: input.base,
+          remotes,
+        });
+      } else {
+        yield* git.addWorktree({
+          repo: project.path,
+          path: place,
+          branch: input.branch.trim() === "" ? name : input.branch.trim(),
+          base: input.base === "" ? undefined : input.base,
+        });
+      }
+      const made = (yield* identities(project)).find((id) => id.path === place);
+      if (!made) {
+        return yield* new WorktreeRefused({
+          reason: "vanished",
+          subject: place,
+        });
+      }
+      return made;
+    });
+
+  const create = Effect.fn("Worktrees.create")(function* (
+    project: RegisteredProject,
+    input: {
+      readonly name?: string | undefined;
+      readonly branch?: string | undefined;
+      readonly base?: string | undefined;
+      readonly checkout?: boolean | undefined;
+      readonly skipSetup?: boolean | undefined;
+      readonly agentWorking?: boolean | undefined;
+    },
+    reporter: Reporter,
+  ) {
+    const name = input.name ?? "";
+    yield* checkName(name);
+    const made = yield* addWorktree(project, {
+      name,
+      branch: input.branch ?? "",
+      base: input.base ?? "",
+      checkout: input.checkout ?? false,
+    });
+    // Only a worktree that is new takes the autoPullNew setting's mark.
+    const [autoPullNew, primaryOnly] = yield* Effect.all([
+      deviceFlag("autoPullNew"),
+      deviceFlag("autoPullPrimaryOnly"),
+    ]);
+    if (autoPullNew && !primaryOnly) {
+      yield* registry.setMark("autoPull", made.id, true);
+    }
+    if (input.agentWorking) {
+      yield* registry.setMark("agentWorking", made.id, true);
+    }
+    const worktree = yield* row({ project, worktree: made });
+    yield* reporter.report({ event: "created", worktree });
+    const failures = yield* createLifecycle(
+      project,
+      made,
+      input.base ?? "",
+      input.skipSetup ?? false,
+      reporter,
+    );
+    return { worktree, failures };
+  });
+
+  // Fails closed on a dirty or unreadable worktree, untracked files
+  // counted whatever the user's setting, since the next step destroys
+  // the folder.
+  const requireClean = (
+    worktree: WorktreeIdentity,
+    force: boolean,
+    verb: string,
+    destroys: string,
+  ) =>
+    force
+      ? Effect.void
+      : git.changedCount(worktree.path).pipe(
+          Effect.catchTags({
+            GitCommandError: (cause) =>
+              Effect.fail(
+                new DirtyWorktree({
+                  reason: "unreadable",
+                  count: 0,
+                  verb,
+                  destroys,
+                  cause: new Error(Git.stderrOf(cause)),
+                }),
+              ),
+            GitOutputTooLargeError: (cause) =>
+              Effect.fail(
+                new DirtyWorktree({
+                  reason: "unreadable",
+                  count: 0,
+                  verb,
+                  destroys,
+                  cause,
+                }),
+              ),
+          }),
+          Effect.flatMap((count) =>
+            count === 0
+              ? Effect.void
+              : Effect.fail(
+                  new DirtyWorktree({
+                    reason: "uncommitted",
+                    count,
+                    verb,
+                    destroys,
+                  }),
+                ),
+          ),
+        );
+
+  // An admin dir that is definitely gone: an unreadable one must not
+  // pass for a finished sweep.
+  const gone = (dir: string) =>
+    fs.stat(dir).pipe(
+      Effect.as(false),
+      Effect.catchIf(isNotFound, () => Effect.succeed(true)),
+      Effect.orElseSucceed(() => false),
+    );
+
+  // rm -rf, retried for a few seconds while a folder keeps refilling: the
+  // writer that defeated git's sweep may still be landing files.
+  const wipe = (dir: string) =>
+    fs.remove(dir, { recursive: true, force: true }).pipe(
+      Effect.retry({
+        while: (error) =>
+          Predicate.hasProperty(error.cause, "code") &&
+          error.cause.code === "ENOTEMPTY",
+        schedule: Schedule.spaced("250 millis").pipe(
+          Schedule.upTo({ duration: "5 seconds" }),
+        ),
+      }),
+    );
+
+  // `git worktree remove`, finishing the sweep when git couldn't. Git
+  // drops its admin entry whether or not the sweep finished, so a sweep
+  // a watcher outran leaves a folder no later remove can reach. The wipe
+  // takes only what git had agreed to delete: it runs when the admin
+  // entry was there before and is gone after.
+  const removeCheckout = (repo: string, worktreePath: string, force: boolean) =>
+    Effect.gen(function* () {
+      const admin = yield* adminDirOf(worktreePath);
+      const removed = yield* git
+        .removeWorktree({ repo, path: worktreePath, force })
+        .pipe(Effect.result);
+      if (Result.isSuccess(removed)) return;
+      if (Option.isNone(admin) || !(yield* gone(admin.value))) {
+        return yield* removed.failure;
+      }
+      yield* wipe(worktreePath).pipe(
+        Effect.mapError(
+          (error) =>
+            new OrphanedWorktree({
+              path: worktreePath,
+              git:
+                removed.failure instanceof Git.GitCommandError
+                  ? Git.stderrOf(removed.failure)
+                  : removed.failure.message,
+              wipe: error.message,
+            }),
+        ),
+      );
+    });
+
+  // Removes the folders a worktree leaves empty when they are ours: the
+  // project's folder under the managed root, the in-project base, and the
+  // managed root on the project's drive, whole once the last project
+  // leaves it.
+  const pruneEmptyParents = (worktreePath: string, projectPath: string) =>
+    Effect.gen(function* () {
+      const parent = path.dirname(worktreePath);
+      const place = { dataDir: paths.dataDir, dataDirName: paths.dataDirName };
+      const levels =
+        parent ===
+        path.join(paths.dataDir, "worktrees", path.basename(projectPath))
+          ? 1
+          : parent === path.join(projectPath, ".shigomori", "worktrees")
+            ? 2
+            : parent === driveBaseOf(projectPath, place)
+              ? 3
+              : 0;
+      let dir = parent;
+      for (let level = 0; level < levels; level++) {
+        const entries = yield* fs.readDirectory(dir);
+        if (entries.length > 0) return;
+        yield* fs.remove(dir, { recursive: true });
+        dir = path.dirname(dir);
+      }
+    }).pipe(Effect.ignore);
+
+  // What is kept under an id that is going away: marks, the shelf, the
+  // title, and a pending dirty capture.
+  const forget = (project: RegisteredProject, worktreeId: string) =>
+    Effect.all([
+      registry.forgetWorktree(worktreeId),
+      data.forget(project.id, worktreeId),
+      git.deleteRef(project.path, dirtyRef(worktreeId)).pipe(Effect.ignore),
+    ]);
+
+  // What is kept under one id, carried to another.
+  const rekeyWorktree = (
+    project: RegisteredProject,
+    from: string,
+    to: string,
+  ) =>
+    Effect.gen(function* () {
+      yield* registry.moveWorktree(from, to);
+      yield* data.move(project.id, from, to);
+      // A pending capture belongs to the worktree, not its old path.
+      const capture = yield* git.refTip(project.path, dirtyRef(from));
+      if (Option.isSome(capture)) {
+        yield* git
+          .updateRef({
+            repo: project.path,
+            ref: dirtyRef(to),
+            commit: capture.value,
+          })
+          .pipe(
+            Effect.andThen(git.deleteRef(project.path, dirtyRef(from))),
+            Effect.ignore,
+          );
+      }
+    });
+
+  const remove = Effect.fn("Worktrees.remove")(function* (
+    located: Located,
+    options: {
+      readonly force: boolean;
+      readonly keepBranch: boolean;
+      readonly skipCleanup: boolean;
+    },
+    reporter: Reporter,
+  ) {
+    const { project, worktree } = located;
+    if (worktree.isPrimary) {
+      return yield* new WorktreeRefused({
+        reason: "remove-primary",
+        subject: worktree.path,
+      });
+    }
+    yield* requireClean(worktree, options.force, "remove", "");
+    const deleteBranchOnRemove = (yield* config
+      .get({ kind: "device" }, "deleteBranchOnRemove")
+      .pipe(Effect.orDie)).value;
+    // Never for an external worktree: no provision ever ran.
+    let cleanupRan = false;
+    if (!worktree.isExternal && !options.skipCleanup) {
+      const { settings } = yield* projectSettings(project);
+      const scripts = settings?.["scripts"];
+      const teardown =
+        Predicate.isObject(scripts) && typeof scripts["teardown"] === "string"
+          ? scripts["teardown"].trim()
+          : "";
+      const pool = yield* lifecycle.portPoolActive(worktree);
+      if (pool || teardown !== "") {
+        const context = yield* scriptContext(project, worktree);
+        const cleanup = (
+          phase: CleanupFailed["phase"],
+          command: string,
+          slot: LifecycleSlot,
+        ) =>
+          lifecycle
+            .run({
+              command,
+              slot,
+              context,
+              color: reporter.color,
+              report: reporter.report,
+            })
+            .pipe(
+              Effect.flatMap(({ code, runId }) =>
+                code === 0
+                  ? Effect.void
+                  : Effect.fail(
+                      new CleanupFailed({ phase, exitCode: code, runId }),
+                    ),
+              ),
+            );
+        cleanupRan = true;
+        if (pool) {
+          yield* cleanup(
+            "portPoolRelease",
+            `port-pool release ${shellQuote(worktree.path)}`,
+            { kind: "portPool", phase: "release" },
+          );
+        }
+        if (teardown !== "") {
+          yield* cleanup("teardown", teardown, { kind: "teardown" });
+        }
+      }
+    }
+    // Unforced, git checks the tree again at the delete, which covers
+    // what a cleanup script wrote since the check above.
+    const removed = yield* removeCheckout(
+      project.path,
+      worktree.path,
+      options.force,
+    ).pipe(Effect.result);
+    if (
+      Result.isFailure(removed) &&
+      !(removed.failure instanceof OrphanedWorktree)
+    ) {
+      const failure = removed.failure;
+      if (
+        !options.force &&
+        failure instanceof Git.GitCommandError &&
+        Git.stderrOf(failure).includes("contains modified or untracked files")
+      ) {
+        return yield* new WorktreeRefused({
+          reason: cleanupRan
+            ? "changed-during-cleanup"
+            : "uncommitted-at-remove",
+          subject: worktree.path,
+        });
+      }
+      return yield* failure;
+    }
+    // An orphaned checkout is git's side done, so the bookkeeping still
+    // follows it.
+    if (!worktree.isExternal) {
+      yield* pruneEmptyParents(worktree.path, project.path);
+    }
+    yield* forget(project, worktree.id);
+    if (
+      !options.keepBranch &&
+      deleteBranchOnRemove !== false &&
+      !worktree.isExternal &&
+      worktree.branch !== UNKNOWN_BRANCH
+    ) {
+      // The branch may be shared, or the primary's: a failure is fine.
+      yield* git
+        .run(project.path, ["branch", "-D", "--", worktree.branch])
+        .pipe(Effect.ignore);
+    }
+    if (Result.isFailure(removed)) return yield* removed.failure;
+    return {
+      id: worktree.id,
+      name: worktree.name,
+      branch: worktree.branch,
+      path: worktree.path,
+      projectName: project.name,
+    };
+  });
+
+  // The move git can't make, across volumes: the checkout copied over,
+  // git pointed at the copy, and the original gone only once git lists
+  // the worktree at its new path. A failure before that leaves the
+  // original as it was.
+  const moveAcrossVolumes = (
+    project: RegisteredProject,
+    from: string,
+    to: string,
+  ) =>
+    Effect.gen(function* () {
+      const undo = wipe(to).pipe(
+        Effect.andThen(
+          git.run(project.path, ["worktree", "repair", "--", from]),
+        ),
+        Effect.ignore,
+      );
+      const cp = (flags: ReadonlyArray<string>) =>
+        spawner
+          .string(ChildProcess.make("cp", ["-R", "-P", ...flags, from, to]), {
+            includeStderr: true,
+          })
+          .pipe(Effect.scoped);
+      // -p keeps the times and modes. A volume that can't hold some of
+      // them fails it, so the plain copy is the second try.
+      const copied = yield* cp(["-p"]).pipe(
+        Effect.catch(() => wipe(to).pipe(Effect.andThen(cp([])))),
+        Effect.result,
+      );
+      if (Result.isFailure(copied)) {
+        yield* undo;
+        return yield* new WorktreeRefused({
+          reason: "move-copy-failed",
+          subject: to,
+          cause: copied.failure,
+        });
+      }
+      const repaired = yield* git
+        .run(project.path, ["worktree", "repair", "--", to])
+        .pipe(Effect.andThen(findMoved(project, to)), Effect.result);
+      if (Result.isFailure(repaired)) {
+        yield* undo;
+        return yield* repaired.failure;
+      }
+      // A leftover original is a stray folder, not a failed move.
+      yield* wipe(from).pipe(Effect.ignore);
+    });
+
+  // The worktree git lists at `to`, in git's spelling (a symlinked
+  // parent resolved), which the new id derives from.
+  const findMoved = (project: RegisteredProject, to: string) =>
+    Effect.gen(function* () {
+      const resolved = yield* fs
+        .realPath(to)
+        .pipe(Effect.orElseSucceed(() => ""));
+      const moved = (yield* identities(project)).find(
+        (id) => id.path === to || (resolved !== "" && id.path === resolved),
+      );
+      if (!moved) {
+        return yield* new WorktreeRefused({
+          reason: "move-not-listed",
+          subject: to,
+        });
+      }
+      return moved;
+    });
+
+  const move = Effect.fn("Worktrees.move")(function* (
+    located: Located,
+    target: string,
+  ) {
+    const { project, worktree } = located;
+    if (worktree.isPrimary) {
+      return yield* new WorktreeRefused({
+        reason: "move-primary",
+        subject: "",
+      });
+    }
+    const to = path.resolve(target);
+    if (to !== worktree.path) {
+      // git would move the checkout into an existing folder, at a path
+      // (and an id) other than the one asked for.
+      if (yield* occupied(to)) {
+        return yield* new WorktreeRefused({
+          reason: "move-destination-exists",
+          subject: to,
+        });
+      }
+      yield* fs
+        .makeDirectory(path.dirname(to), { recursive: true })
+        .pipe(Effect.orDie);
+      const moved = yield* git
+        .run(project.path, ["worktree", "move", "--", worktree.path, to])
+        .pipe(
+          Effect.catchTags({
+            GitCommandError: (error) =>
+              Git.stderrOf(error).toLowerCase().includes("cross-device link")
+                ? moveAcrossVolumes(project, worktree.path, to)
+                : Effect.fail(error),
+          }),
+          Effect.result,
+        );
+      if (Result.isFailure(moved)) {
+        // The folders made for it go again when they are ours and empty.
+        yield* pruneEmptyParents(to, project.path);
+        return yield* moved.failure;
+      }
+      yield* pruneEmptyParents(worktree.path, project.path);
+    }
+    const moved = yield* findMoved(project, to);
+    if (moved.id !== worktree.id) {
+      yield* rekeyWorktree(project, worktree.id, moved.id);
+    }
+    return {
+      worktree: yield* row({ project, worktree: moved }),
+      previousId: worktree.id,
+    };
+  });
+
+  const rekey = Effect.fn("Worktrees.rekey")(function* (
+    project: RegisteredProject,
+    from: string,
+    toPath: string,
+  ) {
+    const to = worktreeIdFromPath(path.resolve(toPath));
+    if (to !== from) yield* rekeyWorktree(project, from, to);
+    return to;
+  });
+
+  const adopt = Effect.fn("Worktrees.adopt")(function* (
+    located: Located,
+    options: { readonly force: boolean },
+    reporter: Reporter,
+  ) {
+    const { project, worktree } = located;
+    if (worktree.isPrimary) {
+      return yield* new WorktreeRefused({
+        reason: "adopt-primary",
+        subject: "",
+      });
+    }
+    if (!worktree.isExternal) {
+      return yield* new WorktreeRefused({
+        reason: "adopt-managed",
+        subject: "",
+      });
+    }
+    // Adopting re-checks-out the branch tip, so what is uncommitted goes.
+    yield* requireClean(worktree, options.force, "adopt", "adopting");
+    const name = worktree.detached
+      ? worktree.branch
+      : sanitizeBranchForPath(worktree.branch);
+    // Refused before the wipe below: the add's own check runs after the
+    // old folder is gone.
+    if (name !== "") {
+      const clash = (yield* identities(project)).some(
+        (other) =>
+          other.id !== worktree.id &&
+          other.name.toLowerCase() === name.toLowerCase(),
+      );
+      if (clash) {
+        return yield* new WorktreeRefused({
+          reason: "name-taken",
+          subject: name,
+        });
+      }
+    }
+    yield* removeCheckout(project.path, worktree.path, true);
+    yield* registry.setMark("shelved", worktree.id, false);
+    yield* registry.setMark("agentWorking", worktree.id, false);
+    const made = yield* addWorktree(project, {
+      name,
+      branch: "",
+      base: worktree.branch,
+      checkout: true,
+    });
+    // The checkout moved, so its id did too, like after a move.
+    if (made.id !== worktree.id) {
+      yield* rekeyWorktree(project, worktree.id, made.id);
+    }
+    const adopted = yield* row({ project, worktree: made });
+    yield* reporter.report({ event: "created", worktree: adopted });
+    const failures = yield* createLifecycle(project, made, "", false, reporter);
+    return { worktree: adopted, failures };
+  });
+
+  const setup = Effect.fn("Worktrees.setup")(function* (
+    located: Located,
+    reporter: Reporter,
+  ) {
+    const { settings } = yield* projectSettings(located.project);
+    const outcome = yield* provision(
+      located.project,
+      located.worktree,
+      settings,
+      false,
+      reporter,
+    );
+    if (outcome.ran.length > 0) {
+      yield* reporter.report({ event: "phase", phase: "idle" });
+    }
+    return outcome;
+  });
+
+  // The linked worktrees that moved along with the repo: git lists them
+  // at a path that is gone, and they sit at the same place relative to
+  // the repo's new path. Inside the repo, or beside it when a parent
+  // folder moved whole, each ancestor pair that still shares a name
+  // tried, nearest first. Old path to new.
+  const movedAlong = (repo: string, oldPath: string) =>
+    Effect.gen(function* () {
+      const moved = new Map<string, string>();
+      const entries = yield* git
+        .listWorktrees(repo)
+        .pipe(Effect.orElseSucceed((): ReadonlyArray<WorktreeEntry> => []));
+      const pairs: Array<readonly [string, string]> = [[oldPath, repo]];
+      for (
+        let from = oldPath, to = repo;
+        path.basename(from) === path.basename(to);
+      ) {
+        from = path.dirname(from);
+        to = path.dirname(to);
+        if (from === to || from === path.dirname(from)) break;
+        pairs.push([from, to]);
+      }
+      for (const entry of entries) {
+        if (
+          yield* fs.exists(entry.path).pipe(Effect.orElseSucceed(() => true))
+        ) {
+          continue;
+        }
+        for (const [from, to] of pairs) {
+          if (!entry.path.startsWith(`${from}/`)) continue;
+          const candidate = path.join(to, entry.path.slice(from.length + 1));
+          const isDirectory = yield* fs.stat(candidate).pipe(
+            Effect.map((info) => info.type === "Directory"),
+            Effect.orElseSucceed(() => false),
+          );
+          if (isDirectory) {
+            moved.set(entry.path, candidate);
+            break;
+          }
+        }
+      }
+      return moved;
+    });
+
+  // `git worktree repair` for the moved ones, and what each kept under
+  // its old id re-keyed. git repairs each path on its own, so the ones it
+  // did re-link are re-keyed whatever it answers.
+  const relinkMoved = (
+    project: RegisteredProject,
+    moved: ReadonlyMap<string, string>,
+  ) =>
+    Effect.gen(function* () {
+      yield* git
+        .run(project.path, ["worktree", "repair", "--", ...moved.values()])
+        .pipe(Effect.ignore);
+      for (const [oldPath, newPath] of moved) {
+        const now = yield* findMoved(project, newPath).pipe(Effect.option);
+        if (Option.isNone(now)) continue;
+        const from = worktreeIdFromPath(oldPath);
+        if (from !== now.value.id)
+          yield* rekeyWorktree(project, from, now.value.id);
+      }
+    });
+
+  // The managed bases are named after the repo's folder, so a rename
+  // would leave the managed worktrees reading as external. Each moves to
+  // where new worktrees go.
+  const rehomeManaged = (project: RegisteredProject, oldPath: string) =>
+    Effect.gen(function* () {
+      const oldBases = yield* layout.managedBases({
+        ...project,
+        path: oldPath,
+      });
+      const newBases = yield* layout.managedBases(project);
+      const base = yield* layout.worktreeBase(project);
+      const found = yield* identities(project).pipe(
+        Effect.orElseSucceed((): ReadonlyArray<WorktreeIdentity> => []),
+      );
+      for (const worktree of found) {
+        if (
+          worktree.isPrimary ||
+          !isManagedPath(worktree.path, oldBases) ||
+          isManagedPath(worktree.path, newBases) ||
+          !(yield* fs
+            .exists(worktree.path)
+            .pipe(Effect.orElseSucceed(() => false)))
+        ) {
+          continue;
+        }
+        yield* move(
+          { project, worktree },
+          path.join(base, path.basename(worktree.path)),
+        ).pipe(Effect.ignore);
+      }
+    });
+
+  const relocateProject = Effect.fn("Worktrees.relocateProject")(function* (
+    project: Registry.ListedProject,
+    target: string,
+  ) {
+    const refuse = (reason: RelocateRefused["reason"], at: string) =>
+      new RelocateRefused({ reason, path: at, name: project.name, binary });
+    if (project.source === "terrier") {
+      return yield* refuse("via-terrier", project.path);
+    }
+    // Folded to the primary checkout, so a folder inside the repo or one
+    // of its worktrees still lands on the repo.
+    const repo = yield* locateRepo(target);
+    if (Option.isNone(repo)) return yield* refuse("not-a-repo", target);
+    const to = repo.value.primaryPath;
+    if (to !== project.path) {
+      // Only for a repo that went: pointing a project that is still there
+      // at another repo would hand that repo its settings and marks.
+      const stillThere = yield* fs.stat(project.path).pipe(
+        Effect.map((info) => info.type === "Directory"),
+        Effect.orElseSucceed(() => false),
+      );
+      if (stillThere) return yield* refuse("still-there", project.path);
+      // terrier's rows merge in by path, so either side being one would
+      // list one repo twice.
+      const { paths: listed } = yield* terrier.listing;
+      if (listed.includes(project.path)) {
+        return yield* refuse("terrier-lists-old", project.path);
+      }
+      if (listed.includes(to)) return yield* refuse("terrier-lists-new", to);
+      const relocated = yield* registry.relocate(
+        project.id,
+        to,
+        path.basename(to),
+      );
+      // Best effort from here: the entry already points at the new path.
+      const moved = yield* movedAlong(to, project.path);
+      moved.set(project.path, to);
+      yield* relinkMoved(relocated, moved);
+      yield* rehomeManaged(relocated, project.path);
+    }
+    const rows = yield* registry.rows();
+    const found = rows.find((listed) => listed.id === project.id);
+    if (!found)
+      return yield* new Registry.UnknownProject({ projectId: project.id });
+    return found;
+  });
+
   return Worktrees.of({
     identities,
     identityList,
@@ -1510,6 +2733,14 @@ const make = Effect.gen(function* () {
     setAgentWorking,
     description,
     describe,
+    destination,
+    create,
+    adopt,
+    setup,
+    remove,
+    move,
+    rekey,
+    relocateProject,
   });
 });
 

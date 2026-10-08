@@ -22,12 +22,15 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as CarryOver from "../../src/CarryOver.ts";
 import * as Config from "../../src/Config.ts";
+import * as Darwin from "../../src/Darwin.ts";
 import * as Git from "../../src/Git.ts";
 import * as GitHub from "../../src/GitHub.ts";
 import * as Icons from "../../src/Icons.ts";
 import * as Identity from "../../src/Identity.ts";
 import * as Launchers from "../../src/Launchers.ts";
+import * as Lifecycle from "../../src/Lifecycle.ts";
 import * as Layout from "../../src/Layout.ts";
 import * as Paths from "../../src/Paths.ts";
 import * as Registry from "../../src/Registry.ts";
@@ -119,9 +122,66 @@ const CODES = [
   [Worktrees.PullRequestOwnsDescription, "pull-request-open"],
 ] as const;
 const codeOf = (error: unknown) => {
-  const code = CODES.find(([cls]) => error instanceof cls)?.[1];
+  const code =
+    error instanceof Worktrees.DirtyWorktree
+      ? error.reason === "uncommitted"
+        ? "uncommitted-changes"
+        : "status-unreadable"
+      : CODES.find(([cls]) => error instanceof cls)?.[1];
   return code === undefined ? {} : { code };
 };
+
+// What the terminal says for a failure: git's own words for a git that
+// failed, the message otherwise.
+const messageOf = (error: unknown) =>
+  error instanceof Git.GitCommandError
+    ? Git.stderrOf(error)
+    : error instanceof Error
+      ? error.message
+      : String(error);
+
+// The darwin helper as macfs/ is now, built once per state of its
+// sources, for the Darwin service.
+let macfsBuilt: string | undefined;
+
+function macfs(): string {
+  macfsBuilt ??= buildFrom(
+    join(cliDir, "..", "macfs"),
+    "macfs",
+    (file) =>
+      file === "go.mod" ||
+      file === "go.sum" ||
+      (file.endsWith(".go") && !file.endsWith("_test.go")),
+  );
+  return macfsBuilt;
+}
+
+function buildFrom(
+  dir: string,
+  name: string,
+  include: (file: string) => boolean,
+): string {
+  const hash = createHash("sha256");
+  for (const rel of readdirSync(dir).filter(include).toSorted()) {
+    hash.update(`${rel}\0`);
+    hash.update(readFileSync(join(dir, rel)));
+  }
+  const binary = join(
+    tmpdir(),
+    `${name}-parity-${hash.digest("hex").slice(0, 16)}`,
+    name,
+  );
+  if (existsSync(binary)) return binary;
+  mkdirSync(dirname(binary), { recursive: true });
+  const partial = `${binary}.${process.pid}`;
+  execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
+    cwd: dir,
+    env: childEnv(),
+    stdio: ["ignore", "ignore", "inherit"],
+  });
+  renameSync(partial, binary);
+  return binary;
+}
 
 export type Sandbox = {
   readonly home: string;
@@ -131,6 +191,15 @@ export type Sandbox = {
   readonly go: (...args: string[]) => Promise<unknown>;
   // The same, run from `cwd`.
   readonly goAt: (cwd: string, ...args: string[]) => Promise<unknown>;
+  // Every document the verb prints, in order.
+  readonly goDocs: (cwd: string, ...args: string[]) => Promise<unknown[]>;
+  // A verb that changes what both sides share (the repos, the
+  // worktrees): Go's side first, then the engine's against everything
+  // restored to how it was. Answers both.
+  readonly changeBoth: <A, B>(
+    go: () => Promise<A>,
+    engine: () => Promise<B>,
+  ) => Promise<[A, B]>;
   // A git repository at `name` beside the data dirs, which both sides
   // share, with `files` committed.
   readonly repo: (name: string, files?: Record<string, string>) => string;
@@ -166,9 +235,12 @@ export function sandbox(): Sandbox {
             Scripts.layer,
             WorktreeData.layer,
             GitHub.layer,
+            Lifecycle.layer,
+            CarryOver.layer,
           ),
         ),
         Layer.provideMerge(Terrier.layer),
+        Layer.provideMerge(Darwin.layer(macfs())),
         Layer.provideMerge(
           Layer.mergeAll(
             Config.layer,
@@ -206,9 +278,9 @@ export function sandbox(): Sandbox {
     GIT_COMMITTER_EMAIL: "t@t",
   });
 
-  // The verb's last document, as `sm --json` prints it.
-  const goAt = (cwd: string, ...args: string[]) =>
-    new Promise<unknown>((resolve, reject) => {
+  // Every document the verb prints, as `sm --json` prints them.
+  const goDocs = (cwd: string, ...args: string[]) =>
+    new Promise<unknown[]>((resolve, reject) => {
       execFile(
         goSm(),
         ["--json", ...args],
@@ -222,10 +294,20 @@ export function sandbox(): Sandbox {
             .filter((line) => line.startsWith("{") || line.startsWith("["))
             .map((line) => JSON.parse(line) as unknown);
           if (docs.length === 0) reject(error ?? new Error("no document"));
-          else resolve(docs.at(-1));
+          else resolve(docs);
         },
       );
     });
+
+  // The verb's last document.
+  const goAt = (cwd: string, ...args: string[]) =>
+    goDocs(cwd, ...args).then((docs) => docs.at(-1));
+
+  // What both sides share in the home directory: everything but the
+  // data dirs, the seed and the fake commands.
+  const OWN = new Set(["go", "engine", "seed", "bin", ".before"]);
+  const shared = () => readdirSync(root).filter((name) => !OWN.has(name));
+  const before = join(root, ".before");
 
   return {
     home: root,
@@ -234,6 +316,30 @@ export function sandbox(): Sandbox {
       writeFileSync(join(seed, file), JSON.stringify(value));
     },
     go: (...args) => goAt(root, ...args),
+    goDocs,
+    changeBoth: async (goSide, engineSide) => {
+      rmSync(before, { recursive: true, force: true });
+      mkdirSync(before);
+      for (const name of shared()) {
+        cpSync(join(root, name), join(before, name), {
+          recursive: true,
+          verbatimSymlinks: true,
+          preserveTimestamps: true,
+        });
+      }
+      const go = await goSide();
+      for (const name of shared()) {
+        rmSync(join(root, name), { recursive: true, force: true });
+      }
+      for (const name of readdirSync(before)) {
+        cpSync(join(before, name), join(root, name), {
+          recursive: true,
+          verbatimSymlinks: true,
+          preserveTimestamps: true,
+        });
+      }
+      return [go, await engineSide()];
+    },
     git: (cwd, ...args) =>
       execFileSync("git", args, { cwd, env: gitEnv(), encoding: "utf8" }),
     goAt,
@@ -260,7 +366,7 @@ export function sandbox(): Sandbox {
             onSuccess: (value) => value as unknown,
             onFailure: (error) => ({
               ok: false,
-              error: error instanceof Error ? error.message : String(error),
+              error: messageOf(error),
               ...codeOf(error),
             }),
           }),
