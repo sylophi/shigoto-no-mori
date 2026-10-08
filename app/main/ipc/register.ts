@@ -137,7 +137,7 @@ const electronServer: ServerTransport = {
 
 // The direct data plane's listener. Auth consumes single-use connect
 // tickets minted by connectInfo over the device hub, and dispatch gates
-// every channel not registered mutating:false on the host's live
+// every channel not registered gated:false on the host's live
 // command-access switch (acceptsPeerCommands: every ticketed peer is a
 // device of this account, so the switch is the whole verdict). That
 // gate is the only enforcement; everything else that shows the switch
@@ -278,7 +278,7 @@ const hubServer = createHubConnection({
 // an app-menu mutation.
 const hostServer: ServerTransport = {
   // The Electron wire always serves host calls. The direct listener,
-  // the one remote wire, serves a call ONLY when its def opted into
+  // the one remote wire, serves a call ONLY when it opted into
   // remote exposure, so a host-scoped-but-not-remote channel
   // (runtime:nuke, launchers:launch) is never even registered on it. A
   // remote req for it gets the same no-handler res a client-scoped
@@ -370,7 +370,7 @@ export function registerContract<M extends ContractModule>(
       }
     },
     // Only host-scoped modules can move host state a viewer caches.
-    // Client-scoped defs never tag mutating anyway, so this gate is
+    // Client-scoped calls are never gated anyway, so this gate is
     // belt and braces.
     onMutationResolved: scopeOf(module) === "host" ? pingViewers : undefined,
   });

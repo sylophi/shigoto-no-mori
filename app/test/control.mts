@@ -109,10 +109,8 @@ import {
 import { setCliRunnerImpl, type CliResult } from "@host/ipc/cliDelegate";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
-import {
-  shigomoriHandlers,
-  worktreeDataHandlers,
-} from "@host/ipc/modules/shigomori";
+import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
+import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import {
   setWorktreeRemovalBroadcaster,

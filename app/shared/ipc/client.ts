@@ -55,7 +55,7 @@ import type {
 
 // Every contract module the api surface is built from, in one list, so
 // a platform binding that needs the full channel inventory (the web
-// bridge's stub fallback walks every def to answer unhandled channels
+// bridge's stub fallback walks every call to answer unhandled channels
 // with a typed default) reads the same set buildApi consumes instead of
 // keeping a second import list that could drift. Kept beside buildApi
 // on purpose: adding a module means touching both in this one file.

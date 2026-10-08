@@ -1038,11 +1038,11 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
   // Every group the app serves, the CLI's control contract included.
   const covered = new Set<string>();
   for (const module of [...allContractModules, controlContract]) {
-    for (const [, call] of callsOf(module)) {
+    for (const call of callsOf(module)) {
       // The registrar's fail-closed rule: a host invoke says whether it
       // is remote, a remote one whether it is gated, and a remote gated
       // one which consent line covers it.
-      assert.equal(classificationGap(module, call), null);
+      assert.equal(classificationGap(call), null);
       const grant = annotation(call, Grant);
       if (grant !== undefined) covered.add(grant);
       // movesHostState opts a gated call out of the remote-viewer
@@ -1083,7 +1083,7 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
   assert.equal(annotation(callOf(launchersContract, "launch"), Remote), false);
   // The cli module rides the wire wholly behind the grant: even
   // its status reads name host paths, so none of it is ungated.
-  for (const [, call] of callsOf(cliContract)) {
+  for (const call of callsOf(cliContract)) {
     assert.equal(annotation(call, Remote), true);
     assert.equal(annotation(call, Gated), true);
   }
@@ -1287,7 +1287,7 @@ it("golden read surface: the ungated read channels match read-surface.golden.jso
   const goldenPath = join(import.meta.dirname, "read-surface.golden.json");
   const derived = allContractModules
     .filter((module) => scopeOf(module) === "host")
-    .flatMap((module) => callsOf(module).map(([, call]) => call))
+    .flatMap((module) => callsOf(module))
     .filter(
       (call) =>
         !isBroadcast(call) &&

@@ -112,10 +112,8 @@ import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import { releasesHandlers } from "./modules/releases";
 import { shellHandlers } from "./modules/shell";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
-import {
-  shigomoriHandlers,
-  worktreeDataHandlers,
-} from "@host/ipc/modules/shigomori";
+import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
+import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
@@ -741,7 +739,7 @@ export function registerIpcHandlers(): void {
   registerContract(syncContract, syncHandlers);
   // Host side of the port-forward wire: host-scoped, so it mounts on
   // the Electron wire and the direct listener, whose command-access
-  // gate covers every verb (all mutating:true).
+  // gate covers every verb (all gated).
   registerContract(forwardContract, forwardHandlers);
   // Host-scoped: a peer's Settings page reads this device's update
   // state and, when granted, checks or restarts into an update here.

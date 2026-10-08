@@ -67,7 +67,7 @@ import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { type PeerChannels, setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { sendWorktree, syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import { worktreeDataHandlers } from "@host/ipc/modules/shigomori";
+import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import {
   readWorktreeData,
   writeWorktreeDescription,

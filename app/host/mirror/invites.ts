@@ -196,7 +196,7 @@ export async function reconcileMirrorInvites(
 // admits nothing.
 const invitable = new Map<string, InvitableScope>();
 for (const module of allContractModules) {
-  for (const [, call] of callsOf(module)) {
+  for (const call of callsOf(module)) {
     const scope = annotation(call, Invitable);
     if (scope !== undefined) invitable.set(channelOf(call), scope);
   }

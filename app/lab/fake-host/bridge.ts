@@ -156,8 +156,8 @@ function createFixtureWire(
   return {
     transport: {
       invoke(channel, input) {
-        const def = index.get(channel);
-        if (def === undefined) {
+        const call = index.get(channel);
+        if (call === undefined) {
           return Promise.reject(
             new Error(`[fake-host] no contract entry for ${channel}`),
           );
@@ -171,10 +171,10 @@ function createFixtureWire(
           // and change them in place later: a cached answer that is the
           // same object as the next one would never look changed.
           return Promise.resolve()
-            .then(() => handler(decode(inputOf(def), input)))
+            .then(() => handler(decode(inputOf(call), input)))
             .then((answer) => structuredClone(answer));
         }
-        const stub = stubValueFor(outputOf(def), { fabricateArms: true });
+        const stub = stubValueFor(outputOf(call), { fabricateArms: true });
         if (stub === NO_STRUCTURAL_STUB) {
           return Promise.reject(
             new Error(`[fake-host] no stub for ${channel}`),

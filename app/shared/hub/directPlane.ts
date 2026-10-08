@@ -19,10 +19,6 @@
 // Pure aside from the injected deps (no electron, no node builtins),
 // like the pieces it composes.
 
-// The peer's command-access switch flipping, as its direct listener
-// pushes it. The bridge records it on the peer's session so the status
-// snapshot's peerAcceptsCommands follows the switch live.
-const COMMAND_ACCESS_CHANGED = callOf(accountContract, "commandAccessChanged");
 import { callOf, channelOf, payloadOf } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { safeDecode } from "@shigomori/contracts/codec";
@@ -38,6 +34,11 @@ import {
 import { applyDirectPresence } from "@shared/hub/directPresence";
 import type { OpenClientSocket } from "@shared/ipc/socket/wsClientTransport";
 import type { SupervisorClock } from "@shared/remote/supervisor";
+
+// The peer's command-access switch flipping, as its direct listener
+// pushes it. The bridge records it on the peer's session so the status
+// snapshot's peerAcceptsCommands follows the switch live.
+const COMMAND_ACCESS_CHANGED = callOf(accountContract, "commandAccessChanged");
 
 // The slice of a hub connection the plane composes over, common to
 // the node connection (host/hub/connection.ts) and the browser one

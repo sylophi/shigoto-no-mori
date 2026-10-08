@@ -31,7 +31,7 @@ export type InvitableScope = "landing" | "copy" | "project";
 const ModuleName = Context.Service<"sm/contracts/ModuleName", string>(
   "sm/contracts/ModuleName",
 );
-const Scope = Context.Service<"sm/contracts/Scope", ContractScope>(
+export const Scope = Context.Service<"sm/contracts/Scope", ContractScope>(
   "sm/contracts/Scope",
 );
 
@@ -157,13 +157,13 @@ export const broadcast = <const Key extends string, P extends ContractSchema>(
   );
 
 // A contract module: the group of its calls, each tagged with its
-// channel, annotated with the module's name and scope. Read through its
-// requests, so any module is one (RpcGroup itself is invariant).
-export type ContractModule<R extends Rpc.AnyWithProps = Rpc.AnyWithProps> =
-  RpcGroup.Any & {
-    readonly requests: ReadonlyMap<string, R>;
-    readonly annotations: Context.Context<never>;
-  };
+// channel, annotated with the module's name and scope (each call
+// carries the scope too). Read through its requests, so any module is
+// one (RpcGroup itself is invariant).
+export type ContractModule = RpcGroup.Any & {
+  readonly requests: ReadonlyMap<string, Rpc.AnyWithProps>;
+  readonly annotations: Context.Context<never>;
+};
 
 export const defineContract = <
   const Name extends string,
@@ -176,7 +176,8 @@ export const defineContract = <
   RpcGroup.make(...rpcs)
     .prefix(`${name}:`)
     .annotate(ModuleName, name)
-    .annotate(Scope, scope);
+    .annotate(Scope, scope)
+    .annotateRpcs(Scope, scope);
 
 // ---- Reading a module ----
 
@@ -196,13 +197,14 @@ function required<S>(
   return value;
 }
 
-// The module's calls, keyed by the name the client and the handler
-// table use (the channel without its module prefix).
-export function callsOf(
-  module: ContractModule,
-): ReadonlyArray<readonly [key: string, call: ContractCall]> {
-  return [...module.requests.values()].map((call) => [keyOf(call), call]);
+export function callsOf(module: ContractModule): ContractCall[] {
+  return [...module.requests.values()];
 }
+
+// A push, as a type: its success is a stream.
+export type Streaming = {
+  readonly successSchema: RpcSchema.Stream<Schema.Top, Schema.Top>;
+};
 
 // The calls of a module, as a union of their Rpc types.
 export type CallsOf<M> = M extends {
@@ -251,7 +253,9 @@ export function outputOf<R extends ContractCall>(call: R): OutputOf<R> {
   return call.successSchema as OutputOf<R>;
 }
 
-function keyOf(call: ContractCall): string {
+// The name the client and the handler table use for a call: its
+// channel without the module prefix.
+export function keyOf(call: ContractCall): string {
   const channel = channelOf(call);
   return channel.slice(channel.indexOf(":") + 1);
 }

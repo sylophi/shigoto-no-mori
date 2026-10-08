@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, Remote } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import { SyncCloneIntoSchema, SyncPullWorktreeResultSchema } from "./sync.ts";
 import {
@@ -17,10 +17,10 @@ import { strict } from "../schemas/strict.ts";
 // orchestrators its own dialogs do, which shell the CLI back for each
 // git step.
 //
-// Served on the control wire ONLY (main/ipc/handlers.ts), so every call
-// says remote: false. Its caller is a local process of this user and
-// commands this machine without a grant. `gated` is what pings the
-// app's windows and the remote viewers once an op moved state.
+// Served on the control wire ONLY (main/ipc/handlers.ts), so the module
+// annotates every call remote: false. Its caller is a local process of
+// this user and commands this machine without a grant. `gated` is what
+// pings the app's windows and the remote viewers once an op moved state.
 //
 // Each op takes what a person would say (a device by name, a worktree
 // by name or branch) and resolves it the way the dialogs do.
@@ -195,7 +195,6 @@ export const controlContract = defineContract(
         devices: Schema.Array(ControlDeviceSchema),
       }),
     ),
-    { remote: false },
   ),
   // The repo's worktrees on the other devices, the candidates for a
   // bring. Primary checkouts are left out: only a worktree moves.
@@ -216,20 +215,17 @@ export const controlContract = defineContract(
         unreachable: Schema.Array(Schema.String),
       }),
     ),
-    { remote: false },
   ),
   // One of this device's worktrees to a peer: a transplant, or with
   // `mirror` a mirror whose copy is there. A peer with no checkout of
   // the repo clones it first. Progress streams to the caller as
   // sync:pullProgress frames, keyed by the local worktree.
   invoke("send", ControlSendPayloadSchema, ControlTransferResultSchema, {
-    remote: false,
     gated: true,
   }),
   // A peer's worktree to this device, the same two ways. Progress is
   // keyed by the peer's worktree id.
   invoke("bring", ControlBringPayloadSchema, ControlTransferResultSchema, {
-    remote: false,
     gated: true,
   }),
   invoke(
@@ -241,7 +237,6 @@ export const controlContract = defineContract(
         mirrors: Schema.Array(ControlMirrorSchema),
       }),
     ),
-    { remote: false },
   ),
   // Ends the mirror the worktree is part of and removes the copy,
   // wherever it is. Refused unless the follower reports "synced", as
@@ -262,9 +257,9 @@ export const controlContract = defineContract(
         copyStayed: Schema.optional(Schema.String),
       }),
     ),
-    { remote: false, gated: true },
+    { gated: true },
   ),
-);
+).annotateRpcs(Remote, false);
 
 // The failure codes a control op's refusal carries across the wire, so
 // the CLI keys its exit handling on the code and not on the prose.

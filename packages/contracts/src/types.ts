@@ -1,12 +1,6 @@
 // The types a contract module gives its two sides: the handler table
 // that serves it and the client that calls it, both keyed by the call's
 // name (its channel without the module prefix).
-// effect/rpc is @stability unstable in the pinned Effect (V3.md, decision
-// 1: pinned exactly, bumped in its own PR), and this module is where the
-// contracts meet it, so the unstable-API warning is off here only.
-// @effect-diagnostics unstableApiUsage:off
-import type * as RpcSchema from "effect/rpc/RpcSchema";
-import type * as Schema from "effect/Schema";
 import type { Decoded, Encoded } from "./codec.ts";
 import type {
   CallsOf,
@@ -14,11 +8,8 @@ import type {
   InputOf,
   OutputOf,
   PayloadOf,
+  Streaming,
 } from "./contract.ts";
-
-type Streaming = {
-  readonly successSchema: RpcSchema.Stream<Schema.Top, Schema.Top>;
-};
 
 type InvokesOf<M> = Exclude<CallsOf<M>, Streaming>;
 type BroadcastsOf<M> = Extract<CallsOf<M>, Streaming>;

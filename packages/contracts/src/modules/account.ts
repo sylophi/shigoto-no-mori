@@ -10,7 +10,7 @@ import { DeviceIconSchema } from "../deviceIcon.ts";
 // Being client-scoped also keeps every call structurally off the
 // websocket wire (main/ipc/register.ts registers client channels only
 // on the Electron binding), which is why these invokes carry no
-// `remote` tag and the socket check exempts them.
+// `remote` tag and the registrar does not ask them to.
 
 // The renderer's whole view of account state in one object. accountId is
 // empty when signed out. This device's id is not carried here since the

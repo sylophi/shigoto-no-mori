@@ -9,11 +9,12 @@ import {
   Grant,
   inputOf,
   isBroadcast,
+  keyOf,
   MovesHostState,
   outputOf,
   payloadOf,
   Remote,
-  scopeOf,
+  Scope,
   TracksProjectUsage,
 } from "@shigomori/contracts/contract";
 import { decode, encode } from "@shigomori/contracts/codec";
@@ -30,14 +31,14 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
   // decoded shapes diverge) surfaces at the registrar instead of as a
   // confusing failure in the renderer.
   validateOutputs: boolean;
-  // Runs after a handler whose def opts in via `tracksProjectUsage`
+  // Runs after a handler whose call opts in via TracksProjectUsage
   // resolves, with the parsed input. The Electron binding hooks the
   // project usage bump here. Required whenever the module declares any
   // tracked call: registration throws otherwise, so a binding that
   // forgets the hook fails at startup instead of silently freezing the
   // usage sorts.
   onUsageTracked?: (parsedInput: unknown) => void;
-  // Runs after a handler whose def is tagged `gated: true` resolves
+  // Runs after a handler whose call is annotated Gated true resolves
   // (before output validation, which only dev builds run: the mutation
   // happened either way), whichever wire carried the call, with the
   // calling peer's context so the binding can tell which wire that was
@@ -48,7 +49,7 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
   // the fs watcher (its self-write suppression exists to keep the
   // app's own writes from echoing), so without this a remote viewer
   // would never learn the host's state moved. Optional, since bindings
-  // with no remote push surface (the web bridge) omit it. A def tagged
+  // with no remote push surface (the web bridge) omit it. A call annotated
   // movesHostState:false skips the hook: it is still a command on the
   // grant axis, but its effects are invisible to viewers (forward's
   // byte shuttling), so pinging on it would re-invalidate a peer's
@@ -62,9 +63,9 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
 // UNCONDITIONAL, never gated by build type: the moment handlers are
 // reachable over a socket, this parse is the wall between a malformed
 // payload and git argv. The hooks are resolved once here (an untracked
-// ungated def pays nothing per call): onUsageTracked runs only
-// for a def opting in via tracksProjectUsage, and onMutationResolved
-// only for an explicit gated:true def not opted out via
+// ungated call pays nothing per call): onUsageTracked runs only
+// for a call opting in via TracksProjectUsage, and onMutationResolved
+// only for an explicit gated:true call not opted out via
 // movesHostState:false, exactly the rules RegisterContractOpts
 // documents.
 function wrapContractCall<Ctx>(
@@ -94,11 +95,8 @@ function wrapContractCall<Ctx>(
 // invoke must say whether it is remote, a remote one whether it is
 // gated, and a remote gated one which consent line covers it. Thrown at
 // registration, so such a call never serves.
-export function classificationGap(
-  module: ContractModule,
-  call: ContractCall,
-): string | null {
-  if (scopeOf(module) !== "host" || isBroadcast(call)) return null;
+export function classificationGap(call: ContractCall): string | null {
+  if (annotation(call, Scope) !== "host" || isBroadcast(call)) return null;
   const remote = annotation(call, Remote);
   if (remote === undefined)
     return `${channelOf(call)} does not say whether it is remote`;
@@ -120,11 +118,11 @@ export function registerContract<M extends ContractModule>(
 ): void {
   const calls = callsOf(module);
   const tracked = calls.find(
-    ([, call]) => annotation(call, TracksProjectUsage) === true,
+    (call) => annotation(call, TracksProjectUsage) === true,
   );
   if (tracked && opts.onUsageTracked === undefined) {
     throw new Error(
-      `registerContract: the module containing "${channelOf(tracked[1])}" declares tracksProjectUsage but no onUsageTracked hook was passed`,
+      `registerContract: the module containing "${channelOf(tracked)}" declares tracksProjectUsage but no onUsageTracked hook was passed`,
     );
   }
   // The table is typed per call and read below by name, which loses
@@ -135,25 +133,23 @@ export function registerContract<M extends ContractModule>(
     string,
     (i: unknown, ctx: HandlerContext) => unknown
   >;
-  for (const [key, call] of calls) {
+  for (const call of calls) {
     if (isBroadcast(call)) continue;
-    const gap = classificationGap(module, call);
+    const gap = classificationGap(call);
     if (gap !== null) throw new Error(`registerContract: ${gap}`);
-    const handler = byName[key];
+    const handler = byName[keyOf(call)];
     if (handler === undefined) {
       throw new Error(`registerContract: no handler for "${channelOf(call)}"`);
     }
-    // The def's exposure decision rides to the transport so a composite
+    // The call's exposure decision rides to the transport so a composite
     // wire can withhold a non-remote channel from the socket entirely.
     const remote = annotation(call, Remote) === true;
     // The command-vs-read decision rides RAW (undefined stays
     // undefined, never collapsed to false) so the remote bindings'
     // read-only collections stay fail-closed at the transport level
     // too: they record a channel as servable-ungated only on an
-    // EXPLICIT gated:false, so a def that never classified itself is
-    // gated like a command rather than served as a read. The socket
-    // check already forbids untagged remote invokes at the contract
-    // level, and this keeps the property even for a def that escapes it.
+    // EXPLICIT gated:false, so a call that never classified itself is
+    // gated like a command rather than served as a read.
     const gated = annotation(call, Gated);
     server.handle(channelOf(call), wrapContractCall(call, handler, opts), {
       remote,

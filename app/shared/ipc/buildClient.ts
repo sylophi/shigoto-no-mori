@@ -3,6 +3,7 @@ import {
   callsOf,
   channelOf,
   isBroadcast,
+  keyOf,
 } from "@shigomori/contracts/contract";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type { Client } from "@shigomori/contracts/types";
@@ -12,9 +13,9 @@ export function buildClient<M extends ContractModule>(
   transport: ClientTransport,
 ): Client<M> {
   const out: Record<string, unknown> = {};
-  for (const [key, call] of callsOf(module)) {
+  for (const call of callsOf(module)) {
     const channel = channelOf(call);
-    out[key] = isBroadcast(call)
+    out[keyOf(call)] = isBroadcast(call)
       ? (handler: (p: unknown) => void) => transport.subscribe(channel, handler)
       : (input: unknown) => transport.invoke(channel, input);
   }
