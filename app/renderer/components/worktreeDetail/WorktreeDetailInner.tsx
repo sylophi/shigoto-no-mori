@@ -59,7 +59,7 @@ import {
 } from "./WorktreeDetailFooter";
 import { BranchTitle } from "./branch/BranchTitle";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
-import { CommitsSection } from "./commits/CommitsSection";
+import { GitTimeline } from "./git/GitTimeline";
 import { DescriptionSection } from "./DescriptionSection";
 
 // A cleanup script still in flight.
@@ -321,7 +321,7 @@ export function WorktreeDetailInner({
 
           {!pullRequest && <PullRequestSection worktree={worktree} />}
 
-          <CommitsSection worktree={worktree} />
+          <GitTimeline worktree={worktree} />
 
           {/* Keyed so an open add or edit form stays with its worktree. */}
           <PortsSection key={worktree.id} worktree={worktree} />

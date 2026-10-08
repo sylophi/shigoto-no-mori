@@ -42,6 +42,8 @@ const { abortOperation, continueOperation, readOperation, resolveConflict } =
 const { mergePrimaryKeepingConflicts, syncWithPrimary } =
   await import("../host/lib/git/sync.ts");
 const { isSyncConflictsError } = await import("../shared/errors.ts");
+const { listCommits, readBranchHistory } =
+  await import("../host/lib/git/worktrees.ts");
 
 const git = sandboxGit(gitEnv);
 
@@ -274,6 +276,67 @@ async function main() {
       const [stash] = await listStashes(repo, "main");
       await assert.rejects(applyStash(repo, stash?.hash ?? "", true), /kept/);
       assert.equal((await listStashes(repo, "main")).length, 1);
+    },
+  );
+
+  await check(
+    "the timeline reads a branch's own commits back to where it left main, and its upstream",
+    async (track) => {
+      const repo = seedRepo(track);
+      const fork = rev(repo, "HEAD");
+      const remote = tempDir("sm-history-remote-", track);
+      git(remote, "init", "-q", "--bare");
+      git(repo, "remote", "add", "origin", remote);
+      git(repo, "checkout", "-q", "-b", "feature");
+      commit(repo, "d.txt", "d\n", "Fourth");
+      git(repo, "push", "-q", "-u", "origin", "feature");
+      commit(repo, "e.txt", "e\n", "Fifth");
+      git(repo, "checkout", "-q", "main");
+      commit(repo, "a.txt", "main moved\n", "Main moves on");
+      git(repo, "checkout", "-q", "feature");
+
+      const history = await readBranchHistory(repo, {
+        base: "main",
+        count: 50,
+      });
+      assert.deepEqual(
+        history.commits.map((c) => c.subject),
+        ["Fifth", "Fourth"],
+      );
+      assert.deepEqual(history.base, { ref: "main", hash: fork });
+      assert.equal(history.upstream, "origin/feature");
+      assert.equal(history.more, false);
+
+      const cut = await readBranchHistory(repo, { base: "main", count: 1 });
+      assert.deepEqual(
+        cut.commits.map((c) => c.subject),
+        ["Fifth"],
+      );
+      assert.equal(cut.more, true);
+
+      // No base: HEAD's newest, and no upstream on main.
+      git(repo, "checkout", "-q", "main");
+      const plain = await readBranchHistory(repo, {
+        base: undefined,
+        count: 2,
+      });
+      assert.deepEqual(
+        plain.commits.map((c) => c.subject),
+        ["Main moves on", "Third"],
+      );
+      assert.equal(plain.base, null);
+      assert.equal(plain.upstream, null);
+
+      // The history before the branch: from where it left main.
+      const earlier = await listCommits(repo, {
+        skip: 0,
+        count: 10,
+        from: fork,
+      });
+      assert.deepEqual(
+        earlier.map((c) => c.subject),
+        ["Third", "Second", "init"],
+      );
     },
   );
 

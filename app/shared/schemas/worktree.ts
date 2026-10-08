@@ -445,7 +445,25 @@ export const ListCommitsPayloadSchema = WorktreeScopedPayloadSchema.extend({
   count: z.number().int().positive().max(200),
   // Only commits whose message holds this, case blind.
   query: z.string().trim().min(1).optional(),
+  // History from this commit rather than HEAD.
+  from: CommitHashSchema.optional(),
 });
+
+// What a worktree's Git timeline draws (host/lib/git/worktrees.ts,
+// readBranchHistory): the branch's own commits, newest first, the
+// commit it left its base at, and the upstream it pushes to.
+export const BranchHistorySchema = z.object({
+  commits: z.array(CommitSummarySchema),
+  // More commits than were asked for: the list was cut.
+  more: z.boolean(),
+  // Where the branch left the primary ref (`ref`, e.g. "origin/main").
+  // Null for the primary checkout, the primary branch itself, and a
+  // detached HEAD, whose commits are just HEAD's newest.
+  base: z.object({ ref: z.string(), hash: CommitHashSchema }).nullable(),
+  // The upstream's short name ("origin/feature"), null without one.
+  upstream: z.string().nullable(),
+});
+export type BranchHistory = z.infer<typeof BranchHistorySchema>;
 
 export const CleanupErrorSchema = z.object({
   phase: z.enum(["teardown", "portPoolRelease"]),

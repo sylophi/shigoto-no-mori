@@ -12,7 +12,11 @@ import {
   restoreDiscard,
   setStaged,
 } from "@host/lib/git/changes";
-import { getCommitDiff, getFileDiff } from "@host/lib/git/diff";
+import {
+  getCommitDiff,
+  getFileDiff,
+  getMergeBaseDiff,
+} from "@host/lib/git/diff";
 import {
   cherryPickCommit,
   revertCommit,
@@ -53,6 +57,7 @@ import {
   listCommits,
   listWorktreeIdentities,
   listWorktrees,
+  readBranchHistory,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
 import {
@@ -390,8 +395,38 @@ export const worktreesHandlers: Handlers<
   commitDiff: async (input) =>
     getCommitDiff(await findWorktreePathOrThrow(input), input.hash),
 
-  listCommits: async ({ skip, count, query, ...input }) =>
-    listCommits(await findWorktreePathOrThrow(input), { skip, count, query }),
+  listCommits: async ({ skip, count, query, from, ...input }) =>
+    listCommits(await findWorktreePathOrThrow(input), {
+      skip,
+      count,
+      query,
+      from,
+    }),
+
+  branchHistory: async (input) => {
+    const identity = await findWorktreeIdentityOrThrow(
+      input.projectId,
+      input.worktreeId,
+      { primaryRef: true },
+    );
+    return readBranchHistory(identity.path, {
+      base: branchBaseOf(identity),
+      count: BRANCH_HISTORY_COUNT,
+    });
+  },
+
+  branchDiff: async (input) => {
+    const identity = await findWorktreeIdentityOrThrow(
+      input.projectId,
+      input.worktreeId,
+      { primaryRef: true },
+    );
+    const base = branchBaseOf(identity);
+    if (base === undefined) {
+      throw new Error("This branch has no primary branch to compare with.");
+    }
+    return getMergeBaseDiff(identity.path, base, "HEAD");
+  },
 
   revertCommit: (input) =>
     mutateAndDescribe(input, (wt) => revertCommit(wt.path, input.hash)),
@@ -467,6 +502,19 @@ export const worktreesHandlers: Handlers<
     return doneViaCli(project, input.worktreeId);
   },
 };
+
+// How many of a branch's own commits the Git timeline is handed. A
+// branch rarely has more, and past this it says there are more.
+const BRANCH_HISTORY_COUNT = 50;
+
+// What a worktree's branch is measured against: the primary ref, for
+// a branch of its own. The primary checkout, the primary branch checked
+// out elsewhere and a detached HEAD have none.
+function branchBaseOf(identity: WorktreeIdentity): string | undefined {
+  if (identity.isPrimary || identity.detached) return undefined;
+  if (identity.branch === identity.primaryBranch) return undefined;
+  return identity.primaryRef;
+}
 
 // The ref a sync from primary takes in, refusing the worktrees it has
 // no meaning for.

@@ -232,3 +232,23 @@ export function worktreeSyncView(worktree: Worktree): WorktreeSyncView {
   const waiting = worktree.changedCount > 0 && syncWaitsForCleanTree(state);
   return { ...view, state, waiting, move: waiting ? null : view.move };
 }
+
+// Whether the primary branch has commits to take in that this worktree
+// can take now: a rebase or merge needs a clean tree, so the move waits
+// rather than surfacing a git failure after the click.
+export function canSyncFromPrimary(worktree: Worktree): boolean {
+  return (
+    !worktree.isPrimary &&
+    !worktree.detached &&
+    worktree.changedCount === 0 &&
+    worktree.behindPrimary > 0
+  );
+}
+
+// Whether the Git timeline has a remote marker to draw: a branch with
+// an upstream, or one that could be published.
+export function hasRemoteMarker(worktree: Worktree): boolean {
+  const state = deriveRemoteSyncState(worktree);
+  if (state.kind === "detached") return false;
+  return state.kind !== "publish" || state.canPublish;
+}

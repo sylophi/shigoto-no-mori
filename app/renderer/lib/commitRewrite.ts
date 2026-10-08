@@ -45,3 +45,12 @@ export function commitRewriteAt(
         : null,
   };
 }
+
+// What a commit off HEAD's line allows: a search's results and the
+// history before the branch. Nothing that rewrites from it.
+export const NO_REWRITE: CommitRewrite = {
+  canAmend: false,
+  undo: null,
+  reword: null,
+  squash: null,
+};

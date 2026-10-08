@@ -87,12 +87,24 @@ export function useWorktreeNav() {
       );
     },
 
-    toCommit(projectId: string, worktreeId: string, hash: string) {
-      go("commit", { projectId, worktreeId, hash });
+    // `replace` for a step between commits on a commit's page, so Back
+    // leaves the page rather than stepping back through every commit.
+    toCommit(
+      projectId: string,
+      worktreeId: string,
+      hash: string,
+      replace = false,
+    ) {
+      go("commit", { projectId, worktreeId, hash }, replace);
     },
 
     toPrDiff(projectId: string, worktreeId: string) {
       go("prDiff", { projectId, worktreeId });
+    },
+
+    // Everything the branch changes against the primary branch.
+    toBranchDiff(projectId: string, worktreeId: string) {
+      go("branchDiff", { projectId, worktreeId });
     },
 
     // The files page, opened on `path` when given (a file to show). A

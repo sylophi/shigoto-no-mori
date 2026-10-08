@@ -478,6 +478,30 @@ function hostHandlersFor(
         pushed(w);
       }),
     "worktrees:commitDiff": () => FAKE_DIFF,
+    "worktrees:branchDiff": () => FAKE_DIFF,
+    // The Git timeline's reads: the row's own commits, from a fork on
+    // the primary branch for any worktree but the primary, nothing
+    // stashed or stopped, and no hunk bars, since the posed patches
+    // aren't real files.
+    "worktrees:branchHistory": ({ worktreeId }) => {
+      const w = findWorktree(worktreeId);
+      return {
+        commits: w?.recentCommits ?? [],
+        more: false,
+        base:
+          w && !w.isPrimary
+            ? { ref: w.primaryRef ?? "origin/main", hash: "a1b2c3d" }
+            : null,
+        upstream: w?.hasUpstream ? `origin/${w.branch}` : null,
+      };
+    },
+    "worktrees:stashes": () => [],
+    "worktrees:operation": () => ({
+      operation: null,
+      continuable: false,
+      conflicted: 0,
+    }),
+    "worktrees:fileHunks": () => ({ changes: [], editable: true }),
     // For an amend's prefill: the subject the row carries, no body.
     "worktrees:commitMessage": ({ worktreeId, hash }) => ({
       summary:

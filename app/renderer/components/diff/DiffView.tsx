@@ -142,6 +142,8 @@ export function DiffView({
   emptyMessage,
   changes,
   footer,
+  details,
+  steps,
 }: {
   // The patch's read, whichever of the three pages asked for it.
   diff: UseQueryResult<string>;
@@ -158,6 +160,10 @@ export function DiffView({
   changes?: DiffChangesControls;
   // Mounted at the foot of the file list: the commit composer.
   footer?: ReactNode;
+  // Under the title, the header's width: a commit's message and moves.
+  details?: ReactNode;
+  // Beside the view's own controls: a commit's steps to its neighbours.
+  steps?: ReactNode;
 }) {
   const { data: patch, isLoading, error } = diff;
   const backLabel = useWorktreeName(worktree);
@@ -307,6 +313,7 @@ export function DiffView({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
+            {steps}
             {phone && (singleFile || allFiles.length >= SHEET_MIN_FILES) && (
               <ChipButton
                 onClick={() => setFileSheetOpen(true)}
@@ -336,6 +343,7 @@ export function DiffView({
             />
           </div>
         </div>
+        {details}
       </header>
 
       <div

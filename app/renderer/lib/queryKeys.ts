@@ -142,8 +142,24 @@ function buildQueryKeys(deviceId: string) {
       projectId: string,
       worktreeId: string,
       headHash: string | undefined,
-      query?: string,
-    ) => host("branchCommits", projectId, worktreeId, headHash, query ?? ""),
+      opts: { query?: string; from?: string },
+    ) =>
+      host(
+        "branchCommits",
+        projectId,
+        worktreeId,
+        headHash,
+        opts.query ?? "",
+        opts.from ?? "",
+      ),
+    branchHistory: (
+      projectId: string,
+      worktreeId: string,
+      headHash: string | undefined,
+    ) => host("branchHistory", projectId, worktreeId, headHash),
+    // What a branch changes against the primary branch.
+    branchDiff: (projectId: string, worktreeId: string) =>
+      host("branchDiff", projectId, worktreeId),
 
     packageScripts: (projectId: string | null, worktreeId: string | null) =>
       host("packageScripts", projectId, worktreeId),

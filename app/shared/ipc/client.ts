@@ -452,6 +452,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       resetSoft: worktreesClient.resetSoft,
       commitDiff: worktreesClient.commitDiff,
       listCommits: worktreesClient.listCommits,
+      branchHistory: worktreesClient.branchHistory,
+      branchDiff: worktreesClient.branchDiff,
       revertCommit: worktreesClient.revertCommit,
       cherryPick: worktreesClient.cherryPick,
       rewordCommit: worktreesClient.rewordCommit,

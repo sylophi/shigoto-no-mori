@@ -52,3 +52,20 @@ export function useCommitDiff(
     meta: { errorTitle: "Couldn't compute diff" },
   });
 }
+
+// What the branch changes against the primary branch, the way a pull
+// request would show it. Read afresh on each visit: the branch moves.
+export function useBranchDiff(
+  projectId: string,
+  worktreeId: string | undefined,
+) {
+  const { api, keys } = useHostScope();
+  return useQuery<string>({
+    queryKey: keys.branchDiff(projectId, worktreeId ?? ""),
+    queryFn: worktreeId
+      ? () => api.worktrees.branchDiff({ projectId, worktreeId })
+      : skipToken,
+    staleTime: 0,
+    meta: { errorTitle: "Couldn't compute diff" },
+  });
+}

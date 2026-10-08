@@ -2,6 +2,7 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   ApplyStashPayloadSchema,
+  BranchHistorySchema,
   ChangedFileSchema,
   CheckoutBranchPayloadSchema,
   CommitChangesPayloadSchema,
@@ -229,6 +230,25 @@ export const worktreesContract = defineContract("host", {
     ListCommitsPayloadSchema,
     z.array(CommitSummarySchema),
     { remote: true, gated: false },
+  ),
+  // The Git timeline: the branch's own commits back to where it left
+  // the primary branch, and its upstream.
+  branchHistory: invoke(
+    "worktrees:branchHistory",
+    WorktreeScopedPayloadSchema,
+    BranchHistorySchema,
+    { remote: true, gated: false },
+  ),
+  // What the branch changes against the primary branch, as a pull
+  // request would show it, pull request or not.
+  branchDiff: invoke(
+    "worktrees:branchDiff",
+    WorktreeScopedPayloadSchema,
+    z.string(),
+    {
+      remote: true,
+      gated: false,
+    },
   ),
   // The commit menu's history moves (host/lib/git/history.ts). A
   // cherry-pick's worktree is the one the commit lands on.

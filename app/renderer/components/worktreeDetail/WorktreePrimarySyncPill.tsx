@@ -17,7 +17,14 @@ import { SyncActionButton } from "./SyncActionButton";
 // A sync that conflicts changes nothing, and its toast offers the way
 // on: merge anyway and settle the conflicts here (the Git section's
 // banner takes it from there).
-export function WorktreePrimarySyncPill({ worktree }: { worktree: Worktree }) {
+export function WorktreePrimarySyncPill({
+  worktree,
+  label,
+}: {
+  worktree: Worktree;
+  // A shorter label where the counts are already on screen.
+  label?: string;
+}) {
   const sync = useSyncWithPrimaryWorktree();
   const merge = useMergePrimaryWorktree();
   const branchName = worktree.primaryRef ?? "primary";
@@ -26,7 +33,10 @@ export function WorktreePrimarySyncPill({ worktree }: { worktree: Worktree }) {
     <SyncActionButton
       tone="sky"
       icon={ArrowDown}
-      label={`Sync ${pluralize(worktree.behindPrimary, "commit")} from ${branchName}`}
+      label={
+        label ??
+        `Sync ${pluralize(worktree.behindPrimary, "commit")} from ${branchName}`
+      }
       tip={`git fetch && git rebase ${branchName}, falling back to a merge on conflict`}
       pending={sync.isPending || merge.isPending}
       onClick={() =>

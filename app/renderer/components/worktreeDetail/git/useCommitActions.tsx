@@ -18,10 +18,15 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 
-// Everything a commit row's menu can do, as one object per list (the
-// Git section's teaser, the history drawer) rather than a subscription
-// per row. `dialog` is the reword dialog, rendered by the list.
-export function useCommitActions(worktree: Worktree) {
+// Everything a commit's menu or buttons can do, as one object per
+// surface (the Git timeline, a commit's page) rather than a
+// subscription per row. `dialog` is the reword dialog, rendered by the
+// surface. `onRewritten` hears a reword or squash land, after which the
+// commits from there up have new hashes.
+export function useCommitActions(
+  worktree: Worktree,
+  onRewritten?: (worktree: Worktree) => void,
+) {
   const { projectId, id: worktreeId } = worktree;
   const undo = useUndoCommits(worktree);
   const revert = useRevertCommit();
@@ -66,7 +71,12 @@ export function useCommitActions(worktree: Worktree) {
     squash: (commit: CommitSummary, head: string) =>
       squash.mutate(
         { projectId, worktreeId, hash: commit.hash, expectHead: head },
-        { onSuccess: () => say(worktree, "Squashed into the commit before") },
+        {
+          onSuccess: (rewritten) => {
+            say(worktree, "Squashed into the commit before");
+            onRewritten?.(rewritten);
+          },
+        },
       ),
     reword: (commit: CommitSummary, head: string) =>
       setRewording({ hash: commit.hash, head }),
@@ -76,6 +86,7 @@ export function useCommitActions(worktree: Worktree) {
         hash={rewording.hash}
         head={rewording.head}
         onClose={() => setRewording(null)}
+        onRewritten={onRewritten}
       />
     ),
   };
@@ -88,11 +99,13 @@ function RewordDialog({
   hash,
   head,
   onClose,
+  onRewritten,
 }: {
   worktree: Worktree;
   hash: string;
   head: string;
   onClose: () => void;
+  onRewritten: ((worktree: Worktree) => void) | undefined;
 }) {
   const scope = useHostScope();
   const message = useQuery(
@@ -111,6 +124,7 @@ function RewordDialog({
             head={head}
             initial={message.data}
             onClose={onClose}
+            onRewritten={onRewritten}
           />
         ) : (
           <div className="mt-4 h-40" />
@@ -126,12 +140,14 @@ function RewordForm({
   head,
   initial,
   onClose,
+  onRewritten,
 }: {
   worktree: Worktree;
   hash: string;
   head: string;
   initial: { summary: string; description: string };
   onClose: () => void;
+  onRewritten: ((worktree: Worktree) => void) | undefined;
 }) {
   const [summary, setSummary] = useState(initial.summary);
   const [description, setDescription] = useState(initial.description);
@@ -148,7 +164,12 @@ function RewordForm({
         description,
         expectHead: head,
       },
-      { onSuccess: onClose },
+      {
+        onSuccess: (rewritten) => {
+          onClose();
+          onRewritten?.(rewritten);
+        },
+      },
     );
   };
   const onKeyDown = (e: React.KeyboardEvent) => {

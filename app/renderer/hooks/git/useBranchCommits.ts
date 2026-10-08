@@ -1,28 +1,41 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
-import type { CommitSummary } from "@shared/schemas";
+import { skipToken, useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import type { BranchHistory, CommitSummary } from "@shared/schemas";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
-export const BRANCH_COMMITS_PAGE_SIZE = 50;
+export const BRANCH_COMMITS_PAGE_SIZE = 30;
 
-// Pages the worktree's `git log HEAD` in PAGE_SIZE chunks. The cursor is
-// the cumulative number of commits already loaded, which we feed back as
-// `skip`. A short final page (fewer than PAGE_SIZE rows) ends the
-// scroll. Disabled until the drawer opens so closed detail pages don't
-// run the query at all.
-//
-// The worktree id is path-derived, so it doesn't change when the user
-// switches branches, renames, or pulls inside the same worktree. We
-// also fold the current HEAD hash into the key so any HEAD movement
-// (branch switch, pull, rebase, overwrite) drops the stale pages
-// instead of reusing them under a new branch's title.
+// What the Git timeline draws: the branch's own commits back to where
+// it left the primary branch, and its upstream. Refetched with the
+// project's git state (the host watcher's ping), and keyed on HEAD so a
+// commit made here drops the old answer at once.
+export function useBranchHistory(
+  projectId: string,
+  worktreeId: string | undefined,
+  headHash: string | undefined,
+) {
+  const { api, keys } = useHostScope();
+  return useQuery<BranchHistory>({
+    queryKey: keys.branchHistory(projectId, worktreeId ?? "", headHash),
+    queryFn: worktreeId
+      ? () => api.worktrees.branchHistory({ projectId, worktreeId })
+      : skipToken,
+    meta: { errorTitle: "Couldn't read the branch's commits" },
+  });
+}
+
+// Pages through `git log` in PAGE_SIZE chunks, from `from` (a commit,
+// for the history before the branch) or HEAD, or through a search of
+// the messages. The cursor is the number already loaded, fed back as
+// `skip`, and a short page ends it. Disabled until asked for, so a
+// timeline nobody unfolds runs no log. HEAD's hash is in the key, so
+// any HEAD movement drops the stale pages.
 export function useBranchCommits(
   projectId: string,
   worktreeId: string,
   headHash: string | undefined,
   enabled: boolean,
-  // A search of the history's messages.
-  query?: string,
+  opts: { query?: string; from?: string } = {},
 ) {
   const { api, keys } = useHostScope();
   return useInfiniteQuery<
@@ -32,7 +45,7 @@ export function useBranchCommits(
     ReturnType<QueryKeyRegistry["branchCommits"]>,
     number
   >({
-    queryKey: keys.branchCommits(projectId, worktreeId, headHash, query),
+    queryKey: keys.branchCommits(projectId, worktreeId, headHash, opts),
     enabled,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
@@ -41,12 +54,13 @@ export function useBranchCommits(
         worktreeId,
         skip: pageParam,
         count: BRANCH_COMMITS_PAGE_SIZE,
-        query,
+        query: opts.query,
+        from: opts.from,
       }),
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage.length < BRANCH_COMMITS_PAGE_SIZE) return undefined;
       return allPages.reduce((sum, page) => sum + page.length, 0);
     },
-    meta: { errorTitle: "Couldn't load branch history" },
+    meta: { errorTitle: "Couldn't load the history" },
   });
 }

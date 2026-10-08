@@ -7,6 +7,7 @@
 import { createHash } from "node:crypto";
 import { unknownWorktreeError } from "@shared/errors";
 import {
+  type BranchHistory,
   type CommitSummary,
   isCommitHash,
   type Worktree,
@@ -18,7 +19,7 @@ import {
   listWorktreesViaCli,
 } from "@host/ipc/cliDelegate";
 import { createLimiter } from "@shared/util/limit";
-import { run } from "./core";
+import { run, runLenient } from "./core";
 
 export type { WorktreeIdentity };
 
@@ -149,7 +150,7 @@ export function parseLog(stdout: string): CommitSummary[] {
 // don't have to fork on error.
 export async function listCommits(
   worktreePath: string,
-  opts: { skip: number; count: number; query?: string },
+  opts: { skip: number; count: number; query?: string; from?: string },
 ): Promise<CommitSummary[]> {
   try {
     const args = ["log", `--skip=${opts.skip}`, `-${opts.count}`];
@@ -162,11 +163,63 @@ export async function listCommits(
       );
     }
     args.push(`--pretty=format:${LOG_FORMAT}`, "--shortstat");
+    // History from a commit other than HEAD: where a branch left its base,
+    // for the history before the branch's own commits.
+    if (opts.from) args.push("--end-of-options", opts.from, "--");
     const stdout = await run(worktreePath, args);
     return parseLog(stdout);
   } catch {
     return [];
   }
+}
+
+// The commits a worktree's Git timeline draws: the branch's own, newest
+// first, back to where it left `base` (the project's primary ref), and
+// which commit that is. Without a base (the primary checkout, a branch
+// that is the primary branch, a detached HEAD) it is the newest commits
+// of HEAD. `more` says the list was cut at `count`. The upstream's name
+// labels the timeline's remote marker.
+export async function readBranchHistory(
+  worktreePath: string,
+  opts: { base: string | undefined; count: number },
+): Promise<BranchHistory> {
+  const [upstream, mergeBase] = await Promise.all([
+    runLenient(worktreePath, [
+      "rev-parse",
+      "--abbrev-ref",
+      "--symbolic-full-name",
+      "@{u}",
+    ]),
+    opts.base
+      ? runLenient(worktreePath, ["merge-base", "HEAD", opts.base])
+      : Promise.resolve(""),
+  ]);
+  const baseHash = mergeBase.trim();
+  const fork =
+    opts.base && baseHash
+      ? {
+          ref: opts.base,
+          hash: (
+            await run(worktreePath, ["rev-parse", "--short", baseHash])
+          ).trim(),
+        }
+      : null;
+  const stdout = await runLenient(worktreePath, [
+    "log",
+    `-${opts.count + 1}`,
+    `--pretty=format:${LOG_FORMAT}`,
+    "--shortstat",
+    "--end-of-options",
+    fork ? `${baseHash}..HEAD` : "HEAD",
+    "--",
+  ]);
+  const commits = parseLog(stdout);
+  return {
+    commits: commits.slice(0, opts.count),
+    more: commits.length > opts.count,
+    base: fork,
+    upstream: upstream.trim() || null,
+  };
 }
 
 // Drops admin entries under $GIT_DIR/worktrees whose checkout dir is

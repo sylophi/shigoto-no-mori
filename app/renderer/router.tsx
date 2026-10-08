@@ -139,7 +139,7 @@ const ScriptConsole = lazyRouteComponent(
   "ScriptConsole",
 );
 
-// The three diff pages bring the diff renderer and the syntax
+// The diff pages bring the diff renderer and the syntax
 // highlighter along, over a quarter of what boot would otherwise
 // download, and a session starts on a forest or a worktree, never on a
 // diff. Lazy like the console.
@@ -154,6 +154,10 @@ const PullRequestDiff = lazyRouteComponent(
 const CommitDiff = lazyRouteComponent(
   () => import("@/components/diff/CommitDiff"),
   "CommitDiff",
+);
+const BranchDiff = lazyRouteComponent(
+  () => import("@/components/diff/BranchDiff"),
+  "BranchDiff",
 );
 
 // The files page shows code through the same highlighter the diffs
@@ -209,6 +213,12 @@ const pullRequestDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.prDiff,
   component: withDeviceScope(PullRequestDiff),
+});
+
+const branchDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.branchDiff,
+  component: withDeviceScope(BranchDiff),
 });
 
 const commitDiffRoute = createRoute({
@@ -300,6 +310,7 @@ const routeTree = rootRoute.addChildren([
   worktreeRoute,
   worktreeDiffRoute,
   pullRequestDiffRoute,
+  branchDiffRoute,
   commitDiffRoute,
   worktreeFilesRoute,
   scriptConsoleRoute,
