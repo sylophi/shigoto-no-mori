@@ -67,9 +67,6 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	if err := setShelved(id.ID, false); err != nil {
 		vlog("[state] drop shelved: %v", err)
 	}
-	if err := setRegistryMark(agentWorkingKey, id.ID, false); err != nil {
-		vlog("[state] drop agent working: %v", err)
-	}
 
 	worktree, err := createWorktree(proj, worktreeName, "", branchOrSha, true, true)
 	if err != nil {

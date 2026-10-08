@@ -44,18 +44,23 @@ export interface BuildSidebarRowsArgs {
   // The group key (projectGroupKey) of the project the tree is inside,
   // null on the list of projects. A key no group here goes by (the
   // device filter narrowed the project away, or it was removed) reads
-  // as the list rather than as an empty tree.
+  // as the list rather than as an empty tree. Unread while `inline`.
   openKey: string | null;
+  // Lists every project's worktrees under its header on the list of
+  // projects, the groups in `collapsed` drawn as their header alone,
+  // rather than one project at a time. Null steps into projects.
+  inline: { collapsed: GroupIdSet } | null;
   // Where each group sits (projectGroupOrder), decided over every
   // device's projects so the device filter never reorders the groups.
   order: ProjectGroupOrder;
-  // How the open project's worktrees are ordered (useWorktreeSort).
-  worktreeSort: WorktreeSortMode;
+  // How a project's worktrees are ordered, by group key
+  // (useWorktreeSorts).
+  worktreeSort: (groupKey: string) => WorktreeSortMode;
   // The groups whose shelf is open, per shelf.
   openShelves: Record<GroupShelf, GroupIdSet>;
   // Worktrees starting with one of these fold away like shelved ones.
   hiddenPrefixes: readonly string[];
-  // Whether the agent-working mark counts (isAgentWorking).
+  // Whether a working agent session shelves its worktree (isAgentWorking).
   allowAgentWorking: boolean;
   // Gathers the open project's worktrees starting with one of
   // `prefixes` under a header per prefix (groupPrefixOf), those `shut`
@@ -156,6 +161,7 @@ export function buildSidebarRows({
   worktreeQueries,
   pullRequestQueries,
   openKey,
+  inline,
   order,
   worktreeSort,
   openShelves,
@@ -279,23 +285,43 @@ export function buildSidebarRows({
     });
   }
 
-  const rows: SidebarRow[] = [];
+  // A run of rows per group, its header first (but for the open
+  // project's, held over the rows instead), so the list's pinned and
+  // owner sections move a project's worktrees with it.
+  const chunks: SidebarRow[][] = [];
   let pinned: SidebarRow | undefined;
   // The toggle (or group header) each row behind a shut fold stands
   // behind, for revealKey.
   const shutFoldRows = new Map<string, string>();
+  const hide = (
+    local: readonly Worktree[],
+    peers: readonly RemoteRow[],
+    foldKey: string,
+  ) => {
+    for (const worktree of local)
+      shutFoldRows.set(worktreeRowKey(undefined, worktree.id), foldKey);
+    for (const row of peers) shutFoldRows.set(row.key, foldKey);
+  };
   // Every group is in the order, which was built over a superset of
   // these inputs. The fallback only keeps the comparator total.
   const rankOf = (group: ProjectGroup) =>
     order.groups.get(group.groupId) ?? order.groups.size;
   const sorted = groups.toSorted((a, b) => rankOf(a) - rankOf(b));
   // The tree draws one level: the open project on its own, or the list
-  // of projects, a header each. (A repo registered twice here is two
-  // groups under one key, and opens as both.)
-  const open = sorted.filter((group) => group.groupKey === openKey);
+  // of projects, a header each, and inline each one's rows under it.
+  // (A repo registered twice here is two groups under one key, and
+  // opens as both.)
+  const open =
+    inline === null ? sorted.filter((group) => group.groupKey === openKey) : [];
   const inProject = open.length > 0;
   for (const group of inProject ? open : sorted) {
     const { groupId, project, query } = group;
+    const rows: SidebarRow[] = [];
+    chunks.push(rows);
+    // Inline, whether the project is folded to its header.
+    const isFolded =
+      inline === null ? undefined : inline.collapsed.has(groupId);
+    const rowsDrawn = inProject || isFolded === false;
     // What the group lists, worked out the same way at both levels, so
     // the list's count is the rows the project draws once opened.
     // Peers' worktrees of this same repo sort in among the local rows
@@ -345,6 +371,7 @@ export function buildSidebarRows({
       project,
       local: group.local,
       expanded: inProject,
+      folded: isFolded,
       pinned: order.pinned.has(group.groupKey),
       // The worktrees beside the primary checkouts. Those are left out
       // because every project has one, and a number on every line
@@ -352,7 +379,7 @@ export function buildSidebarRows({
       // machine's listing is loading or failed, since the peers' share
       // alone would read as the whole.
       branches:
-        inProject || missing || unlisted !== null
+        rowsDrawn || missing || unlisted !== null
           ? undefined
           : localVisible.filter((worktree) => !worktree.isPrimary).length +
             remoteVisible.filter((row) => !row.worktree.isPrimary).length,
@@ -364,7 +391,16 @@ export function buildSidebarRows({
     // keep their headers in the rows, each over its own.
     if (inProject && open.length === 1) pinned = header;
     else rows.push(header);
-    if (missing || !inProject) continue;
+    if (missing) continue;
+    if (!rowsDrawn) {
+      // A folded project's header stands in for its rows.
+      if (isFolded) {
+        hide(localVisible, remoteVisible, header.key);
+        for (const shelf of GROUP_SHELVES)
+          hide(localShelves[shelf], remoteShelves[shelf], header.key);
+      }
+      continue;
+    }
     if (unlisted !== null) {
       rows.push({
         kind: unlisted,
@@ -387,7 +423,7 @@ export function buildSidebarRows({
       placeByStack(
         sortWorktrees(
           [...localRows(local, group.pullRequests, shelf), ...peers],
-          worktreeSort,
+          worktreeSort(group.groupKey),
           (row) => row.worktree,
         ),
         (row) => row.worktree.branch,
@@ -409,10 +445,7 @@ export function buildSidebarRows({
       foldKey: string,
     ): SidebarRow[] => {
       if (shown) return placed(local, peers, shelf);
-      for (const worktree of local) {
-        shutFoldRows.set(worktreeRowKey(undefined, worktree.id), foldKey);
-      }
-      for (const row of peers) shutFoldRows.set(row.key, foldKey);
+      hide(local, peers, foldKey);
       return [];
     };
     // The open rows a prefix gathers sit under its header, after the
@@ -509,20 +542,28 @@ export function buildSidebarRows({
   // The pinned projects lead the list, parted from the rest by a gap,
   // and the rest split by owner files the headers drawn above under
   // them.
-  const drawn = inProject ? rows : pinnedFirst(rows, byOwner, order.owners);
+  const drawn = inProject
+    ? chunks.flat()
+    : pinnedFirst(chunks, byOwner, order.owners, (key, foldKey) =>
+        shutFoldRows.set(key, foldKey),
+      );
 
   return {
     rows: drawn,
     pinned,
-    level: inProject ? openKey : null,
+    level: inProject ? openKey : inline === null ? null : undefined,
     // Every project renders a header, so "no rows" here only ever means
     // "no projects", which the shell already has its own answer for.
     emptyMessage: null,
     revealKey: (_projectId, worktreeId, deviceId) => {
       // A row behind a shut shelved or hidden fold, or a shut group:
-      // its toggle or header stands in for it.
-      const shown = (key: string) =>
-        drawn.some((r) => r.key === key) ? key : shutFoldRows.get(key);
+      // its toggle or header stands in for it. Inline, a folded project
+      // can itself be behind a shut owner, whose header then does.
+      const shown = (key: string): string | undefined => {
+        if (drawn.some((r) => r.key === key)) return key;
+        const foldKey = shutFoldRows.get(key);
+        return foldKey === undefined ? undefined : shown(foldKey);
+      };
       // A peer's row is device-qualified (remoteWorktreeRows). It
       // is absent while its listing is in flight or the tree is not
       // inside its project, which reveals nothing: the shell opens the
@@ -602,63 +643,76 @@ export function ownerOf(project: Project): Owner | null {
   };
 }
 
-const isPinned = (row: SidebarRow) => row.kind === "project" && row.pinned;
+const isPinned = ([header]: SidebarRow[]) =>
+  header?.kind === "project" && header.pinned;
 
-// The list of projects' rows with the pinned ones first, the last of
-// them marked for the gap under it when more follow, then the rest,
-// split by owner when `byOwner` says to.
+// The list of projects' rows, a run per project, with the pinned ones
+// first, the last of them marked for the gap under it when more follow
+// and it is a header alone, then the rest, split by owner when
+// `byOwner` says to.
 function pinnedFirst(
-  rows: SidebarRow[],
+  chunks: SidebarRow[][],
   byOwner: BuildSidebarRowsArgs["byOwner"],
   owners: ProjectGroupOrder["owners"],
+  hide: HideRow,
 ): SidebarRow[] {
-  const lead = rows.filter(isPinned);
-  const rest = rows.filter((row) => !isPinned(row));
+  const lead = chunks.filter(isPinned).flat();
+  const rest = chunks.filter((chunk) => !isPinned(chunk));
   const after =
-    byOwner === null ? rest : ownerSections(rest, owners, byOwner.shut);
+    byOwner === null
+      ? rest.flat()
+      : ownerSections(rest, owners, byOwner.shut, hide);
   const end = lead.at(-1);
   if (end?.kind === "project" && after.length > 0)
     lead[lead.length - 1] = { ...end, pinnedEnd: true };
   return [...lead, ...after];
 }
 
-// The list of projects' rows under a header per owner, the owners in
-// `order` and labeled as it says. Projects with no owner trail the rest
-// under a header of their own, as the order leaves them out. All of one
-// owner (or none), there is nothing to tell apart, so the list stays
-// one run with no header.
+// The list of projects' rows, a run per project, under a header per
+// owner, the owners in `order` and labeled as it says. Projects with no
+// owner trail the rest under a header of their own, as the order
+// leaves them out. All of one owner (or none), there is nothing to tell
+// apart, so the list stays one run with no header. A shut owner's rows
+// are handed to `hide`, its header standing in for them.
 function ownerSections(
-  rows: SidebarRow[],
+  chunks: SidebarRow[][],
   order: ProjectGroupOrder["owners"],
   shut: ReadonlySet<string>,
+  hide: HideRow,
 ): SidebarRow[] {
-  const sections = new Map<string, SidebarRow[]>();
-  for (const row of rows) {
-    const owner = row.kind === "project" ? ownerOf(row.project) : null;
+  const sections = new Map<string, SidebarRow[][]>();
+  for (const chunk of chunks) {
+    const [header] = chunk;
+    const owner = header?.kind === "project" ? ownerOf(header.project) : null;
     const key = owner?.key ?? NO_OWNER_KEY;
     const section = sections.get(key);
-    if (section) section.push(row);
-    else sections.set(key, [row]);
+    if (section) section.push(chunk);
+    else sections.set(key, [chunk]);
   }
-  if (sections.size < 2) return rows;
+  if (sections.size < 2) return chunks.flat();
   const rankOf = (key: string) => order.get(key)?.rank ?? order.size;
   const drawn: SidebarRow[] = [];
   for (const [ownerKey, section] of [...sections].toSorted(
     ([a], [b]) => rankOf(a) - rankOf(b),
   )) {
     const expanded = !shut.has(ownerKey);
+    const headerKey = `o:${ownerKey}`;
     drawn.push({
       kind: "owner-header",
-      key: `o:${ownerKey}`,
+      key: headerKey,
       ownerKey,
       label: order.get(ownerKey)?.label ?? "No remote",
       count: section.length,
       expanded,
     });
-    if (expanded) drawn.push(...section);
+    if (expanded) drawn.push(...section.flat());
+    else for (const row of section.flat()) hide(row.key, headerKey);
   }
   return drawn;
 }
+
+// Files a row left out behind the row standing in for it (revealKey).
+type HideRow = (key: string, foldKey: string) => void;
 
 // The section of the projects with no owner. Not a valid owner key
 // (those always hold a slash), so no owner can take it.

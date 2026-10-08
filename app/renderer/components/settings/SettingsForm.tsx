@@ -146,6 +146,7 @@ export function SettingsForm({
           markTerrierProjects: prev.markTerrierProjects,
           showDeviceBadges: prev.showDeviceBadges,
           allowAgentWorking: prev.allowAgentWorking,
+          inlineWorktrees: prev.inlineWorktrees,
         }));
       }
     }

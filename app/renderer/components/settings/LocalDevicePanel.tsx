@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { localDeviceId } from "@/lib/queryKeys";
+import { AgentsSection } from "./AgentsSection";
 import { CliSection } from "./CliSection";
 import { DangerZone } from "./DangerZone";
 import { DataLocationSection } from "./DataLocationSection";
@@ -41,7 +42,12 @@ export function LocalDevicePanel({
           </>
         ),
         worktrees: <WorktreeToggles form={form} setForm={setForm} />,
-        integrations: <IntegrationToggles form={form} setForm={setForm} />,
+        integrations: (
+          <>
+            <IntegrationToggles form={form} setForm={setForm} />
+            <AgentsSection />
+          </>
+        ),
       }}
     />
   );

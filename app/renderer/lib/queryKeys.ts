@@ -199,6 +199,7 @@ function buildQueryKeys(deviceId: string) {
     villagerProfiles: () => host("villagers", "profiles"),
     villagerFace: (slug: string) => host("villagers", "face", slug),
     cli: () => host("cli"),
+    agents: () => host("agents"),
     cliShell: () => host("cliShell"),
     doctor: () => host("doctor"),
     portPoolActive: (projectId: string, worktreeId: string) =>
@@ -370,6 +371,9 @@ const externalChangeExempt = new Set([
   // spawns the CLI on the host, so a git-state ping never re-asks.
   "cli",
   "cliShell",
+  // The agents' hooks files, likewise: and an agent's turn changes
+  // forest state on every prompt.
+  "agents",
   "clientConfig",
   // A full doctor run spawns git and gh on the host: it re-runs on
   // demand, never on a ping.
