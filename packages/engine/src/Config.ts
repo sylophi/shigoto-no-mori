@@ -9,7 +9,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import {
@@ -295,8 +294,7 @@ const parseValue = (
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const { home } = yield* Paths.Paths;
-  const path = yield* Path.Path;
+  const { expandHome } = yield* Paths.Paths;
   const git = yield* Git.Git;
 
   const load = (scope: ConfigScope) =>
@@ -389,15 +387,6 @@ const make = Effect.gen(function* () {
       ),
       Effect.catchTags({ SqlError: Effect.die }),
     );
-  };
-
-  // A `~/` path, joined to the home directory and cleaned as Go's
-  // filepath.Join cleans it.
-  const expandHome = (raw: string) => {
-    if (raw === "~") return home;
-    if (!raw.startsWith("~/")) return raw;
-    const joined = path.join(home, raw.slice(2));
-    return joined.length > 1 ? joined.replace(/\/+$/, "") : joined;
   };
 
   const list = Effect.fn("Config.list")(function* (scope: ConfigScope) {
