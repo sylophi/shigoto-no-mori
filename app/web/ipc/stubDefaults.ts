@@ -18,7 +18,6 @@
 // been judged harmless) may pass fabricateArms to opt back in.
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
-import { z } from "zod";
 import { type ContractSchema, safeDecode } from "@shared/ipc/schema";
 
 // Distinct from every legal stub value (undefined included), so the
@@ -48,9 +47,7 @@ export function stubValueFor(
     const result = safeDecode(schema, candidate);
     if (result.success) return result.data;
   }
-  return Schema.isSchema(schema)
-    ? stubFromAst(schema.ast, opts)
-    : stubFromZod(schema as z.ZodType, opts);
+  return stubFromAst(schema.ast, opts);
 }
 
 // Objects with required members are built recursively from the same
@@ -92,30 +89,5 @@ function stubFromAst(
   }
   if (SchemaAST.isString(ast)) return "unavailable";
   if (SchemaAST.isNumber(ast)) return 0;
-  return NO_STRUCTURAL_STUB;
-}
-
-function stubFromZod(
-  schema: z.ZodType,
-  opts: StubOptions,
-): unknown | typeof NO_STRUCTURAL_STUB {
-  if (schema instanceof z.ZodObject) {
-    const out: Record<string, unknown> = {};
-    for (const [key, field] of Object.entries<z.ZodType>(schema.shape)) {
-      const value = stubValueFor(field, opts);
-      if (value === NO_STRUCTURAL_STUB) return NO_STRUCTURAL_STUB;
-      if (value !== undefined) out[key] = value;
-    }
-    return out;
-  }
-  if (!opts.fabricateArms) return NO_STRUCTURAL_STUB;
-  if (schema instanceof z.ZodLiteral) return schema.value;
-  if (schema instanceof z.ZodEnum) return schema.options[0];
-  if (schema instanceof z.ZodUnion) {
-    const first = (schema.options as readonly z.ZodType[])[0];
-    return first === undefined ? NO_STRUCTURAL_STUB : stubValueFor(first, opts);
-  }
-  if (schema instanceof z.ZodString) return "unavailable";
-  if (schema instanceof z.ZodNumber) return 0;
   return NO_STRUCTURAL_STUB;
 }
