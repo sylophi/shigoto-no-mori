@@ -1,7 +1,7 @@
 // The types a contract module gives its two sides: the handler table
-// that serves it and the client that calls it, keyed by the call's name
-// (its channel without the module prefix), a push's subscription as
-// `on` and its capitalized name.
+// that serves it and the client that calls it. Both key a call by its
+// name, its channel without the module prefix. A client subscribes to a
+// push as `on` and the push's capitalized name.
 import type { Decoded, Encoded } from "./codec.ts";
 import type {
   CallsOf,

@@ -29,12 +29,9 @@ import {
   type QueryKeyRegistry,
 } from "@/lib/queryKeys";
 
-// The host-scoped slice of the api surface (shared/ipc/client.ts),
-// generated from the contract modules whose scope is host. window.api
-// and a connected remote device's api both satisfy it, so one hook body
-// serves both. Client-scoped namespaces are left out on purpose: a hook
-// that reaches for scope.api.dialog fails to compile instead of
-// rejecting at runtime on a remote device.
+// The host-scoped api (shared/ipc/client.ts), the one a scope's hooks
+// reach: scope.api.dialog fails to compile rather than rejecting on a
+// remote device.
 export type { HostApi };
 
 // The two halves of a scope a read needs, for the query option

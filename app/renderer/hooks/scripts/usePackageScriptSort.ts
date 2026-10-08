@@ -24,7 +24,8 @@ function usePackageScriptSort(projectId: string | null) {
     queryKey: keys.packageScriptSort(projectId),
     queryFn:
       projectId !== null
-        ? () => api.packageScripts.getSort({ projectId, knowsManual: true })
+        ? // This page shows the manual order, so it can be told it.
+          () => api.packageScripts.getSort({ projectId, knowsManual: true })
         : skipToken,
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read script sort preference" },
