@@ -636,6 +636,15 @@ export class Worktrees extends Context.Service<
       here: Here,
       projectId: string,
     ) => Effect.Effect<Registry.ListedProject, Registry.UnknownProject>;
+    // The project a command names: by --project-id, else by -p, else the
+    // one at the cwd. An empty flag is no flag.
+    readonly resolveProjectRef: (
+      here: Here,
+      ref: Pick<Target, "project" | "projectId">,
+    ) => Effect.Effect<
+      Registry.ListedProject,
+      TargetError | Registry.UnknownProject | Git.GitError
+    >;
     // The worktree a command means. The reserved names root and primary
     // are the project's primary checkout.
     readonly resolve: (
@@ -1584,6 +1593,14 @@ const make = Effect.gen(function* () {
       return found;
     },
   );
+
+  const resolveProjectRef = (
+    here: Here,
+    ref: Pick<Target, "project" | "projectId">,
+  ) =>
+    ref.projectId !== undefined && ref.projectId !== ""
+      ? resolveProjectById(here, ref.projectId)
+      : resolveProject(here, ref.project);
 
   const primaryOf = Effect.fn(function* (
     here: Here,
@@ -2847,6 +2864,7 @@ const make = Effect.gen(function* () {
     here: locate,
     resolveProject,
     resolveProjectById,
+    resolveProjectRef,
     resolve,
     setShelved,
     setAutoPull,

@@ -26,9 +26,13 @@ const stripComments = (code: string) =>
   code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
 // `from "x"` (imports and re-exports), `import("x")`, `require("x")`,
-// and `import "x"` at the start of a statement.
+// and `import "x"` at the start of a statement. A `from` inside a string
+// or after a dot (`"from"`, `x.from "`) is not a keyword.
 const IMPORT_SPECIFIER =
-  /(?:\bfrom\s*|\b(?:import|require)\s*\(\s*|^\s*import\s*)["']([^"']+)["']/gm;
+  /(?:(?<![\w$."'`])\bfrom\s*|\b(?:import|require)\s*\(\s*|^\s*import\s*)["']([^"']+)["']/gm;
+
+const specifiersOf = (code: string) =>
+  [...code.matchAll(IMPORT_SPECIFIER)].map(([, specifier = ""]) => specifier);
 const BUN_GLOBAL = /\bBun\b/;
 
 it("imports only Node, Effect and the contracts, and no Bun global", () => {
@@ -41,7 +45,7 @@ it("imports only Node, Effect and the contracts, and no Bun global", () => {
     const file = join(entry.parentPath, entry.name);
     const rel = relative(root, file);
     const code = stripComments(readFileSync(file, "utf8"));
-    for (const [, specifier = ""] of code.matchAll(IMPORT_SPECIFIER)) {
+    for (const specifier of specifiersOf(code)) {
       if (!isAllowed(specifier, dirname(file))) {
         failures.push(`${rel} imports "${specifier}"`);
       }
@@ -49,4 +53,35 @@ it("imports only Node, Effect and the contracts, and no Bun global", () => {
     if (BUN_GLOBAL.test(code)) failures.push(`${rel} reaches the Bun global`);
   }
   assert.deepEqual(failures, []);
+});
+
+it("reads every import form, and no string that says from", () => {
+  const code = [
+    'import * as A from "a";',
+    "import { b } from 'b';",
+    'import type { C } from "c";',
+    'import d, { e } from"d";',
+    'export * from "e";',
+    'export { f } from "f";',
+    'import "g";',
+    'const h = await import("h");',
+    'const i = require( "i" );',
+    'import {\n  j,\n} from "j";',
+    'const flags = ["to", "from"] as const;',
+    "const keys = { to: 1, from: 2 };",
+    'const said = x.from "nope";',
+    "const line = `--from <device>`;",
+  ].join("\n");
+  assert.deepEqual(specifiersOf(code), [
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "f",
+    "g",
+    "h",
+    "i",
+    "j",
+  ]);
 });
