@@ -6,6 +6,7 @@ export type Flavor = "prod" | "dev";
 export const flavorNames = (flavor: Flavor) =>
   flavor === "prod"
     ? {
+        binaryName: "sm",
         dataDir: ".sm",
         legacyDataDir: "shigomori",
         configDir: "shigomori",
@@ -13,6 +14,7 @@ export const flavorNames = (flavor: Flavor) =>
         legacyPointer: "root",
       }
     : {
+        binaryName: "smd",
         dataDir: ".smd",
         legacyDataDir: "shigomori-dev",
         configDir: "shigomori-dev",
