@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import { worktreeSyncView } from "@/lib/syncState";
+import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
+import { Kbd } from "@/components/ui/kbd";
 import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
@@ -226,6 +228,12 @@ function ChangesView({
   // commit to amend. A clean tree keeps the branch bar and the last
   // commit, which is where the next move (push, amend, undo) lives.
   const showComposer = (loading || list.length > 0 || amending) && !failed;
+  // With nothing to commit, ⌘↵ sends the commits instead: the push (or
+  // the publish) the branch bar offers.
+  const sendShortcut = usePushShortcut(
+    worktree,
+    !showComposer && !failed && list.length === 0,
+  );
 
   const controls: DiffChangesControls = {
     files: list,
@@ -375,7 +383,7 @@ function ChangesView({
         failed ? (
           "Couldn't read the changes."
         ) : (
-          <CleanTreeMessage worktree={worktree} />
+          <CleanTreeMessage worktree={worktree} shortcut={sendShortcut} />
         )
       }
       changes={controls}
@@ -436,13 +444,57 @@ function StashView({
 // What the pane says once everything is committed: that the tree is
 // clean, and what the branch still owes the remote, the next thing to
 // do, which the branch bar below has the button for.
-function CleanTreeMessage({ worktree }: { worktree: Worktree }) {
+function CleanTreeMessage({
+  worktree,
+  shortcut,
+}: {
+  worktree: Worktree;
+  // What ⌘↵ runs here, when it runs anything.
+  shortcut: string | null;
+}) {
   const next = worktreeSyncView(worktree).owed;
   return (
     <span className="flex flex-col items-center gap-2">
       <CircleCheck aria-hidden className="size-6 text-muted-foreground/60" />
       <span className="text-foreground">No uncommitted changes</span>
       {next && <span className="text-xs">{next}</span>}
+      {shortcut && (
+        <span className="flex items-center gap-1.5 text-xs">
+          <Kbd>⌘↵</Kbd>
+          {shortcut}
+        </span>
+      )}
     </span>
   );
+}
+
+// ⌘↵ (or Ctrl+↵) on a page with nothing to commit: run the branch's
+// send, a push or a publish, the move the commit box's chord leads to
+// anyway. Only those two: they send commits and touch nothing here.
+// Answers with what the chord runs ("Push"), or null while it runs
+// nothing.
+function usePushShortcut(worktree: Worktree, enabled: boolean): string | null {
+  const mutations = useSyncMoveMutations();
+  const move = worktreeSyncView(worktree).move;
+  const send =
+    enabled &&
+    move &&
+    (move.key === "push" || move.key === "publish") &&
+    move.disabledReason === undefined
+      ? move
+      : null;
+  const mutation = send ? mutations[send.key] : null;
+  const scope = { projectId: worktree.projectId, worktreeId: worktree.id };
+  useEffect(() => {
+    if (!mutation) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+      if (e.isComposing || e.defaultPrevented || mutation.isPending) return;
+      e.preventDefault();
+      mutation.mutate(scope);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  return send && (send.key === "push" ? "to push" : "to publish");
 }
