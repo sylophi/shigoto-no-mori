@@ -20,7 +20,7 @@
     "fake-host:web": "pnpm -F ./app fake-host:web",
     "package": "pnpm -F ./app package",
     "make": "pnpm -F ./app make",
-    "check": "pnpm run check:typecheck && pnpm run check:lint && pnpm run check:lint-rules && pnpm run check:format && pnpm run check:knip && pnpm run check:licenses && pnpm run check:contracts && pnpm run check:proofs && pnpm run check:hub && pnpm run check:go",
+    "check": "pnpm run check:typecheck && pnpm run check:lint && pnpm run check:lint-rules && pnpm run check:format && pnpm run check:knip && pnpm run check:licenses && pnpm run check:contracts && pnpm run check:engine && pnpm run check:proofs && pnpm run check:hub && pnpm run check:go",
     "check:typecheck": "pnpm run typecheck",
     "check:lint": "pnpm run lint",
     "check:lint-rules": "pnpm -F @shigomori/lint test",
@@ -28,6 +28,7 @@
     "check:knip": "knip",
     "check:licenses": "pnpm -C app licenses:check",
     "check:contracts": "pnpm -F @shigomori/contracts test",
+    "check:engine": "pnpm -F @shigomori/engine test",
     "check:proofs": "pnpm -C app test",
     "check:hub": "pnpm -C hub run check",
     "check:go": "go test -C cli ./... && CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./... && go test -C macfs ./..."
