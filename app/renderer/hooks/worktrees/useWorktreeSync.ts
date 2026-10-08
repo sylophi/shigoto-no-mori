@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { MergeBranchResult, Worktree } from "@shared/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { notifyError } from "@/lib/toast";
+import { isSyncConflictsError } from "@shared/errors";
 import { invalidateWorkingTree } from "./useWorktreeChanges";
 import type { SyncMove } from "@/lib/syncState";
 
@@ -15,9 +17,9 @@ interface SyncWorktreeInput {
 function useSyncMutation(
   apiMethod: (api: HostApi, input: SyncWorktreeInput) => Promise<Worktree>,
   errorTitle: string,
-  // The caller reports failures itself (the primary sync pill, which
-  // offers a way on from a conflict).
-  silentError = false,
+  // Reports failures itself rather than by the shared toast. Here, on
+  // the hook, so a failure is said even once the caller has unmounted.
+  onError?: (err: Error) => void,
 ) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
@@ -29,7 +31,8 @@ function useSyncMutation(
     // itself triggers, so no PR invalidation is needed here.
     onSuccess: (data, vars) =>
       invalidateWorkingTree(queryClient, keys, vars, data),
-    meta: silentError ? { silentError } : { errorTitle },
+    onError,
+    meta: onError ? { silentError: true } : { errorTitle },
   });
 }
 
@@ -57,11 +60,17 @@ export const usePullAndPushWorktree = () =>
     (api, i) => api.worktrees.pullAndPush(i),
     "Couldn't pull and push",
   );
+// A conflict is the pill's to say, with its way on. Anything else is
+// said here.
 export const useSyncWithPrimaryWorktree = () =>
   useSyncMutation(
     (api, i) => api.worktrees.syncWithPrimary(i),
     "Couldn't sync from primary",
-    true,
+    (err) => {
+      if (!isSyncConflictsError(err)) {
+        notifyError("Couldn't sync from primary", err);
+      }
+    },
   );
 // A sync that conflicts, from the upstream or the primary branch,
 // merged anyway and stopped on its conflicts.

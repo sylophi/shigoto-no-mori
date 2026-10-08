@@ -3,7 +3,7 @@
 // branch, and reword or squash commits that exist nowhere but here.
 import { onIndex } from "./changes";
 import { run, runLenient } from "./core";
-import { refuseMidOperation } from "./operation";
+import { conflictedPaths, refuseMidOperation } from "./operation";
 import { isAncestor, verifyRev } from "./refs";
 
 // --- revert and cherry-pick -------------------------------------------
@@ -46,12 +46,16 @@ async function applyCommit(
         verb === "revert" ? "REVERT_HEAD" : "CHERRY_PICK_HEAD",
       ]);
       if (inProgress.trim() === "") throw err;
+      const conflicted = (await conflictedPaths(worktreePath)).length > 0;
       await runLenient(worktreePath, [verb, "--abort"]);
       if (/is now empty|nothing to commit/.test((err as Error).message)) {
         throw new Error("That change is already on this branch.", {
           cause: err,
         });
       }
+      // Stopped for another reason (a hook refusing the commit): git's
+      // own words, the move undone.
+      if (!conflicted) throw err;
       throw new Error(
         verb === "revert"
           ? `Reverting ${hash} conflicts with this branch, so nothing was changed.`

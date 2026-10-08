@@ -13,7 +13,8 @@
 // edited away) can't be described as a pick of the working tree's
 // changes, so ticking hunks there is refused: ticking the whole file
 // settles it.
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { isUtf8 } from "node:buffer";
+import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChangedFile, HunkStates, LineChange } from "@shared/schemas";
@@ -81,6 +82,8 @@ interface FileState {
   tree: string[];
   changes: (LineChange & { staged: boolean })[];
   editable: boolean;
+  // A symlink, or text that isn't UTF-8: no hunks, the whole file only.
+  whole: boolean;
 }
 
 async function readState(
@@ -100,24 +103,37 @@ async function readState(
       "--",
       path,
     ]);
-  const [head, index, tree, worktreeDiff, indexDiff] = await Promise.all([
+  // Only a plain text file is edited by the line: a symlink's text is
+  // its target, which a write would follow, and text that isn't UTF-8
+  // wouldn't survive being decoded and written back.
+  const file = join(worktreePath, path);
+  const raw = (await lstat(file)).isSymbolicLink()
+    ? null
+    : await readFile(file);
+  if (raw === null || !isUtf8(raw)) {
+    return { head: [], tree: [], changes: [], editable: false, whole: true };
+  }
+  const [head, index, worktreeDiff, indexDiff] = await Promise.all([
     run(worktreePath, ["cat-file", "blob", `HEAD:${path}`]),
     run(worktreePath, ["cat-file", "blob", `:${path}`]),
-    readFile(join(worktreePath, path), "utf8"),
     diff(false),
     diff(true),
   ]);
   const headLines = splitLines(head);
   const indexLines = splitLines(index);
-  const treeLines = splitLines(tree);
+  const treeLines = splitLines(raw.toString("utf8"));
   const staged = parseChanges(indexDiff);
   const changes = parseChanges(worktreeDiff).map((change) =>
     Object.assign(change, {
       staged: staged.some(
         (s) =>
           sameRange(s, change) &&
-          linesAt(indexLines, newFrom(s), s.newCount) ===
+          // By content, not line endings: the index holds them clean
+          // and a CRLF checkout holds them smudged.
+          sameText(
+            linesAt(indexLines, newFrom(s), s.newCount),
             linesAt(treeLines, newFrom(change), change.newCount),
+          ),
       ),
     }),
   );
@@ -129,8 +145,14 @@ async function readState(
     tree: treeLines,
     changes,
     editable,
+    whole: false,
   };
 }
+
+const sameText = (a: string, b: string) =>
+  a.replaceAll("\r\n", "\n") === b.replaceAll("\r\n", "\n");
+
+const WHOLE_ONLY = "This file can only be ticked or discarded whole.";
 
 export async function readHunkStates(
   worktreePath: string,
@@ -194,6 +216,7 @@ export function setHunksStaged(
 ): Promise<ChangedFile[]> {
   return onIndex(worktreePath, async () => {
     const state = await readState(worktreePath, path);
+    if (state.whole) throw new Error(WHOLE_ONLY);
     if (!state.editable) {
       throw new Error(
         "The index holds changes this file no longer has. Tick or untick the whole file first.",
@@ -221,6 +244,7 @@ export function discardHunks(
 ): Promise<string> {
   return onIndex(worktreePath, async () => {
     const state = await readState(worktreePath, path);
+    if (state.whole) throw new Error(WHOLE_ONLY);
     const picked = resolvePicks(state, picks);
     const snapshot = await snapshotPaths(worktreePath, [path]);
     const kept = state.changes.filter((c) => !picked.includes(c));

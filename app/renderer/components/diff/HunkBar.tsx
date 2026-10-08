@@ -27,7 +27,10 @@ export function hunkAnnotations(
   states: HunkStates,
 ): DiffLineAnnotation<HunkGroup>[] {
   return fileDiff.hunks.flatMap((hunk): DiffLineAnnotation<HunkGroup>[] => {
-    const from = hunk.deletionStart - 1;
+    // Where it starts in HEAD, as changeFrom counts it: a hunk with no
+    // old lines (a file empty in HEAD) sits at its start line itself.
+    const from =
+      hunk.deletionCount === 0 ? hunk.deletionStart : hunk.deletionStart - 1;
     const to = from + hunk.deletionCount;
     const held = states.changes.filter(
       (c) => changeFrom(c) >= from && changeFrom(c) + c.oldCount <= to,

@@ -3,7 +3,7 @@
 // and the moves that see it through: settle each conflicted file one
 // way or the other, then continue or abort. The Git section's banner and the
 // changes page's conflicted rows drive these.
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { GitOperationState } from "@shared/schemas";
 import { onIndex } from "./changes";
@@ -68,7 +68,8 @@ export async function conflictedPaths(worktreePath: string): Promise<string[]> {
 // `merge --squash` leaves no MERGE_HEAD, only the message it made in
 // SQUASH_MSG, which a commit or a reset clears but a discard of the
 // files doesn't. So it is a squash under way only while the index holds
-// one: conflicted, or staged and not yet committed.
+// one: conflicted, or staged and not yet committed. Otherwise the
+// message is cleared here.
 async function squashPending(
   worktreePath: string,
   gitDir: string,
@@ -79,7 +80,12 @@ async function squashPending(
     () => false,
   );
   if (!message) return false;
-  return conflicted > 0 || (await hasStagedChanges(worktreePath));
+  if (conflicted > 0 || (await hasStagedChanges(worktreePath))) return true;
+  // Its changes gone (discarded file by file, which leaves the message
+  // behind), the message is git's leftover, and staged work later on
+  // would otherwise read as the squash.
+  await rm(join(gitDir, "SQUASH_MSG"), { force: true });
+  return false;
 }
 
 export async function hasStagedChanges(worktreePath: string): Promise<boolean> {
@@ -92,14 +98,16 @@ export async function hasStagedChanges(worktreePath: string): Promise<boolean> {
   return staged !== "";
 }
 
-// Refuses a move that rewrites history or makes a commit of its own
-// while git waits on the user mid-operation, where git itself might go
-// along with it.
+// Refuses a move that rewrites history, makes a commit or starts a
+// merge while git waits on the user mid-operation or over conflicted
+// files, where git might go along with it, or refuse in a way that reads
+// like the move's own stop.
 export async function refuseMidOperation(worktreePath: string): Promise<void> {
-  const { operation } = await readOperation(worktreePath);
+  const { operation, conflicted } = await readOperation(worktreePath);
   if (operation !== null) {
     throw new Error(`Finish or abort the ${operation} first.`);
   }
+  if (conflicted > 0) throw new Error("Resolve the conflicted files first.");
 }
 
 // The branch a rebase replays, which git keeps in its state dir while
@@ -163,8 +171,16 @@ export function continueOperation(worktreePath: string): Promise<void> {
         ]);
         return;
       case "rebase":
+        await run(worktreePath, ["rebase", "--continue"], NO_EDITOR);
+        return;
+      // A pick or revert that came out empty once its conflicts were
+      // settled is skipped, as a rebase drops one: git won't commit it.
       case "cherry-pick":
       case "revert":
+        if (!(await hasStagedChanges(worktreePath))) {
+          await run(worktreePath, [operation, "--skip"]);
+          return;
+        }
         await run(worktreePath, [operation, "--continue"], NO_EDITOR);
         return;
       default:

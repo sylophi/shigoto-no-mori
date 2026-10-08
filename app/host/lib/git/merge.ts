@@ -10,7 +10,12 @@ import { join } from "node:path";
 import type { IntegrateMethod, MergePreview } from "@shared/schemas";
 import { onIndex } from "./changes";
 import { run, runLenient, splitZ } from "./core";
-import { gitDirOf, hasStagedChanges, readOperation } from "./operation";
+import {
+  gitDirOf,
+  hasStagedChanges,
+  readOperation,
+  refuseMidOperation,
+} from "./operation";
 import { countCommits, ownCommitCounts, refTip } from "./refs";
 
 async function resolveCommit(
@@ -63,7 +68,8 @@ export async function readMergePreview(
 
 // Runs the move and reads a failure that left git waiting on the user
 // (a merge or rebase on conflicts, a squash's conflicted files) as a
-// stop rather than an error. Anything else, git's refusal over local
+// stop rather than an error. Its callers refuse first while git already
+// waits, so the stop found is this move's. Anything else, git's refusal over local
 // edits in the way above all, still throws.
 async function stopsOnConflict(
   worktreePath: string,
@@ -86,15 +92,16 @@ export function mergeKeepingConflicts(
   worktreePath: string,
   ref: string,
 ): Promise<boolean> {
-  return onIndex(worktreePath, () =>
-    stopsOnConflict(worktreePath, [
+  return onIndex(worktreePath, async () => {
+    await refuseMidOperation(worktreePath);
+    return stopsOnConflict(worktreePath, [
       "merge",
       "--no-edit",
       "--ff",
       "--end-of-options",
       ref,
-    ]),
-  );
+    ]);
+  });
 }
 
 // Whether it stopped on conflicts. A squash commits with `message`
@@ -107,6 +114,7 @@ export function mergeBranch(
   message: string | undefined,
 ): Promise<boolean> {
   return onIndex(worktreePath, async () => {
+    await refuseMidOperation(worktreePath);
     await resolveCommit(worktreePath, ref);
     switch (method) {
       case "fastForward":

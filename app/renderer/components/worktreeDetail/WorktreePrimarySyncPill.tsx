@@ -5,7 +5,7 @@ import {
 } from "@/hooks/worktrees/useWorktreeSync";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { pluralize } from "@/lib/pluralize";
-import { notifyError, toast, UNDO_TOAST_MS } from "@/lib/toast";
+import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { isSyncConflictsError } from "@shared/errors";
 import type { Worktree } from "@shared/schemas";
 import { SyncActionButton } from "./SyncActionButton";
@@ -51,10 +51,7 @@ export function WorktreePrimarySyncPill({
       onClick={() =>
         sync.mutate(scope, {
           onError: (err) => {
-            if (!isSyncConflictsError(err)) {
-              notifyError("Couldn't sync from primary", err);
-              return;
-            }
+            if (!isSyncConflictsError(err)) return;
             toast(`${branchName} conflicts with this branch`, {
               description: "Nothing changed.",
               duration: UNDO_TOAST_MS,

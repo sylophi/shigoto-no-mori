@@ -9,8 +9,10 @@
 // what it brought in as its diff and counts, and reverts. One on top
 // is undone whole, back to its first parent, and redone. A squash whose
 // commit a hook refuses keeps its message for the continue, a squash
-// message left over once its changes are gone is no squash, and a
-// `merge.ff` setting doesn't stand in the way.
+// message left over once its changes are gone is no squash (and is
+// cleared), a `merge.ff` setting doesn't stand in the way, nothing
+// merges while git already waits, and a pick that comes out empty is
+// skipped by the continue.
 //
 // Run: pnpm test git-merge.
 import assert from "node:assert/strict";
@@ -33,7 +35,7 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const { mergeBranch, readMergePreview } =
+const { mergeBranch, mergeKeepingConflicts, readMergePreview } =
   await import("../host/lib/git/merge.ts");
 const { abortOperation, continueOperation, readOperation, resolveConflict } =
   await import("../host/lib/git/operation.ts");
@@ -421,6 +423,52 @@ async function main() {
         /unrelated histories/,
       );
       await clean(repo);
+    },
+  );
+
+  await check(
+    "nothing merges while git already waits, so no stop is mistaken for its own",
+    async (track) => {
+      const repo = seed(track, { conflict: true });
+      git(repo, "tag", "base", "main~1");
+      assert.equal(await mergeBranch(repo, "main", "merge", undefined), true);
+      await assert.rejects(
+        mergeBranch(repo, "base", "merge", undefined),
+        /Finish or abort the merge/,
+      );
+      await assert.rejects(
+        mergeKeepingConflicts(repo, "main"),
+        /Finish or abort the merge/,
+      );
+    },
+  );
+
+  await check(
+    "a squash message left behind is cleared before staged work can read as the squash",
+    async (track) => {
+      const repo = seed(track, { conflict: true });
+      await mergeBranch(repo, "main", "squash", "Take main");
+      git(repo, "reset", "-q", "--", "a.txt");
+      git(repo, "checkout", "--", "a.txt");
+      assert.equal((await readOperation(repo)).operation, null);
+      commit(repo, "n.txt", "n\n", "Later");
+      writeFileSync(join(repo, "n.txt"), "staged\n");
+      git(repo, "add", "n.txt");
+      assert.equal((await readOperation(repo)).operation, null);
+    },
+  );
+
+  await check(
+    "a cherry-pick that comes out empty once settled is skipped by the continue",
+    async (track) => {
+      const repo = seed(track, { conflict: true });
+      const theirs = rev(repo, "main");
+      const head = rev(repo, "HEAD");
+      assert.throws(() => git(repo, "cherry-pick", theirs));
+      await resolveConflict(repo, "a.txt", "mine");
+      await continueOperation(repo);
+      await clean(repo);
+      assert.equal(rev(repo, "HEAD"), head);
     },
   );
 

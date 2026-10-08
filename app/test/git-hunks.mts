@@ -4,13 +4,14 @@
 // exactly HEAD plus the ticked ones, insertions, deletions and a
 // missing final newline among them, a discard that takes one change
 // out of the file and the index and comes back through its snapshot,
-// a CRLF checkout keeping its line endings through a discard, and the
+// a CRLF checkout keeping its line endings through a discard and its
+// ticks read as ticked, a symlink or non-UTF-8 file left whole, and the
 // refusals (an index holding what the file doesn't, a pick the file no
 // longer has).
 //
 // Run: pnpm test git-hunks.
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   makeProof,
@@ -159,6 +160,59 @@ async function main() {
       assert.ok(removal && changes.length === 2);
       await discardHunks(repo, "f.txt", [removal]);
       assert.equal(read(repo), crlf(lines(20).replace("line 2\n", "two\n")));
+    },
+  );
+
+  await check(
+    "in a CRLF checkout a ticked change reads as ticked",
+    async (track) => {
+      const repo = tempDir("sm-hunks-crlf-", track);
+      git(repo, "init", "-q", "-b", "main");
+      git(repo, "config", "core.autocrlf", "true");
+      writeFileSync(join(repo, "f.txt"), crlf(lines(20)));
+      git(repo, "add", ".");
+      git(repo, "commit", "-q", "-m", "init");
+      writeFileSync(
+        join(repo, "f.txt"),
+        crlf(lines(20).replace("line 2\n", "two\n").replace("line 18\n", "")),
+      );
+      const [first] = (await readHunkStates(repo, "f.txt")).changes;
+      assert.ok(first);
+      await setHunksStaged(repo, "f.txt", [first], true);
+      const after = await readHunkStates(repo, "f.txt");
+      assert.equal(after.editable, true);
+      assert.deepEqual(
+        after.changes.map((c) => c.staged),
+        [true, false],
+      );
+    },
+  );
+
+  await check(
+    "a symlink or a file that isn't UTF-8 has no hunks and is never written by the line",
+    async (track) => {
+      const repo = seed(track);
+      writeFileSync(join(repo, "target.txt"), "t\n");
+      symlinkSync("target.txt", join(repo, "link"));
+      git(repo, "add", ".");
+      git(repo, "commit", "-q", "-m", "link");
+      rmSync(join(repo, "link"));
+      symlinkSync("f.txt", join(repo, "link"));
+      assert.deepEqual((await readHunkStates(repo, "link")).changes, []);
+      await assert.rejects(
+        discardHunks(repo, "link", [
+          { oldStart: 1, oldCount: 1, newStart: 1, newCount: 1 },
+        ]),
+        /whole/,
+      );
+      assert.equal(readFileSync(join(repo, "f.txt"), "utf8"), EDITED);
+
+      const latin = Buffer.from("caf\xe9\n", "latin1");
+      writeFileSync(join(repo, "l.txt"), latin);
+      git(repo, "add", "l.txt");
+      git(repo, "commit", "-q", "-m", "latin");
+      writeFileSync(join(repo, "l.txt"), Buffer.concat([latin, latin]));
+      assert.deepEqual((await readHunkStates(repo, "l.txt")).changes, []);
     },
   );
 
