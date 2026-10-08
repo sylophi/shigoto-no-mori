@@ -19,6 +19,8 @@ export interface RowHandlers {
   onToggleOwner: (ownerKey: string) => void;
   // A prefix's group in the open project opened or shut.
   onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
+  // A prefix's group in the inbox opened or shut.
+  onToggleInboxGroup: (prefix: string) => void;
   // The group key of the project the page on screen belongs to.
   currentGroupKey: string | undefined;
   arrangeMode: boolean;
@@ -49,7 +51,11 @@ export function VirtualRow({
       data-index={index}
       data-slot="sidebar-row"
       ref={measureRef}
-      className={cn("absolute top-0 left-0 w-full", ROW_LAYOUT[row.kind])}
+      className={cn(
+        "absolute top-0 left-0 w-full",
+        ROW_LAYOUT[row.kind],
+        row.kind === "project" && row.pinnedEnd && "pb-3",
+      )}
       style={{ transform: `translateY(${start}px)` }}
       onMouseEnter={() => setHoveredProjectId(rowProjectId)}
       onMouseLeave={() =>
@@ -76,6 +82,7 @@ function projectIdForRow(row: SidebarRow): string | null {
   if (
     row.kind === "inbox-worktree" ||
     row.kind === "inbox-shelf" ||
+    row.kind === "inbox-group" ||
     row.kind === "owner-header"
   )
     return null;

@@ -6,8 +6,9 @@ import { run } from "./core";
 // Where a clone lands: `parentDir/name`, with the parent a folder and
 // the destination not yet there. Both checks are for the message: git
 // would refuse either, in words about its own argv. The clone from a
-// peer (host/lib/sync/cloneFromPeer.ts) lands the same way.
-export async function checkCloneDestination(
+// peer (host/lib/sync/cloneFromPeer.ts) and a new repository
+// (./init.ts) land the same way.
+export async function checkNewCheckoutDestination(
   parentDir: string,
   name: string,
 ): Promise<string> {
@@ -33,7 +34,7 @@ export async function cloneRepo(
   parentDir: string,
   name: string,
 ): Promise<string> {
-  const dest = await checkCloneDestination(parentDir, name);
+  const dest = await checkNewCheckoutDestination(parentDir, name);
   // Nobody is at this process's terminal to answer a credential prompt,
   // least of all when the clone was asked for from another device, so
   // git's own is turned off and a remote it can't authenticate to fails

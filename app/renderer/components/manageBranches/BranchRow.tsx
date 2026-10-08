@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Check, ExternalLink, House, Pencil, Trash2, X } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -81,9 +82,11 @@ export function BranchRow({
           className="flex-1 px-2 py-1 font-mono text-sm"
         />
       ) : (
-        <span className="min-w-0 flex-1 truncate font-mono select-text">
-          {name}
-        </span>
+        <SimpleTooltip whenTruncated tip={name}>
+          <span className="min-w-0 flex-1 truncate font-mono select-text">
+            {name}
+          </span>
+        </SimpleTooltip>
       )}
 
       {checkedOut && !editing && (
@@ -92,11 +95,9 @@ export function BranchRow({
           onClick={() => toWorktree(projectId, worktree.id)}
           className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
-          {worktree.isPrimary ? (
-            <House className="size-3" />
-          ) : worktree.isExternal ? (
-            <ExternalLink className="size-3" />
-          ) : null}
+          {(worktree.isPrimary || worktree.isExternal) && (
+            <WorktreeKindIcon worktree={worktree} />
+          )}
           <span className="truncate">{worktree.name}</span>
         </button>
       )}

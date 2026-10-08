@@ -176,13 +176,13 @@ export function WorktreeEntry({
 // root apart from a worktree named after the project. Under Village
 // life, the villager whose home this is sits beside the name, as their
 // face sits beside the title on the worktree page. It's decoration
-// here, so it stays out of the row's label and hover tip.
+// here, so it stays out of the row's label.
 function EntryName({ worktree }: { worktree: Worktree }) {
   const resident = useResident(worktree);
   return (
     <>
       {(worktree.isPrimary || worktree.isExternal) && (
-        <WorktreeKindIcon worktree={worktree} showTooltip={false} />
+        <WorktreeKindIcon worktree={worktree} />
       )}
       {resident?.face && (
         <VillagerFace

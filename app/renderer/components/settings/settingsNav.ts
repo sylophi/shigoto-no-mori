@@ -1,11 +1,13 @@
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import {
   BookHeart,
+  CircleUserRound,
   GitBranch,
   Palette,
   Plug,
   Rocket,
   SlidersHorizontal,
+  Trees,
   type LucideIcon,
 } from "lucide-react";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
@@ -176,4 +178,17 @@ export const SECTION_LABELS: Readonly<Record<SettingsTab, string>> = {
   [GENERAL_TAB]: "General",
   [WORKTREES_TAB]: "Worktrees",
   [INTEGRATIONS_TAB]: "Integrations",
+};
+
+// The pages beside Settings that its list leads to (SettingsPages).
+export const TIDY_SECTION: SettingsSection = {
+  id: "tidy",
+  label: "Tidy the forest",
+  icon: Trees,
+};
+
+export const ACCOUNT_SECTION: SettingsSection = {
+  id: "account",
+  label: "Account",
+  icon: CircleUserRound,
 };

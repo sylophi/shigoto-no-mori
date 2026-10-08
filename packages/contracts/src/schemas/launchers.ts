@@ -23,10 +23,14 @@ const CustomLauncherSchema = Schema.Struct({
 // the IPC compare against the same string.
 export const WEB_GITHUB_ID = "web:github";
 
-// A launcher id is "<kind>:<id>". The parser keeps the prefixes in one
-// place, rather than decoding them by hand-counted slices at each call
-// site. Mirrored by cli/launchers.go.
+// A launcher id is "<kind>:<id>". Builder and parser live together so
+// the prefixes exist once, rather than being decoded by hand-counted
+// slices at each call site. Mirrored by cli/launchers.go.
 export type LauncherKind = "app" | "custom" | "web";
+
+export function launcherIdFor(kind: LauncherKind, id: string): string {
+  return `${kind}:${id}`;
+}
 
 export function parseLauncherId(
   launcherId: string,
@@ -37,6 +41,12 @@ export function parseLauncherId(
   if (kind !== "app" && kind !== "custom" && kind !== "web") return null;
   return { kind, id: launcherId.slice(separator + 1) };
 }
+
+// The terminals terminal tools open in (config.json's terminal), as
+// launcher catalog ids, in the order Settings lists them. Mirrors
+// cli/terminals.go terminalIDs.
+export const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
+export type TerminalId = (typeof TERMINAL_IDS)[number];
 
 const WebLauncherSchema = Schema.Struct({
   kind: Schema.Literal("web"),

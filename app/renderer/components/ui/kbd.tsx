@@ -29,15 +29,19 @@ export function KbdGroup({
   );
 }
 
-// A key hint in a footer row: the keys, then what they do.
+// A key hint in a footer row: the keys, then what they do. The label
+// sits beside the <kbd>, not in it: inside, it took the browser's
+// monospace for keyboard input.
 export function KbdHint({ keys, label }: { keys: ReactNode[]; label: string }) {
   return (
-    <KbdGroup>
-      {keys.map((key, index) => (
-        // oxlint-disable-next-line react/no-array-index-key -- a fixed list, never reordered
-        <Kbd key={index}>{key}</Kbd>
-      ))}
+    <span className="inline-flex items-center gap-1.5">
+      <KbdGroup>
+        {keys.map((key, index) => (
+          // oxlint-disable-next-line react/no-array-index-key -- a fixed list, never reordered
+          <Kbd key={index}>{key}</Kbd>
+        ))}
+      </KbdGroup>
       <span className="text-muted-foreground/80">{label}</span>
-    </KbdGroup>
+    </span>
   );
 }

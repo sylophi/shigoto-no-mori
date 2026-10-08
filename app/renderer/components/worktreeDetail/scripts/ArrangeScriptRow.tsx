@@ -38,8 +38,7 @@ export function ArrangeScriptRow({
     transition,
     isDragging,
   } = useSortable({ id: name });
-  // A toggle's label stays put and aria-pressed carries the state. The
-  // tooltip says what a click does.
+  // A toggle's label stays put and aria-pressed carries the state.
   const pinLabel = `Pin ${name} to the Launch section`;
 
   return (
@@ -63,22 +62,18 @@ export function ArrangeScriptRow({
         <ScriptCellContent name={name} />
       </div>
       {pinned !== undefined && (
-        <SimpleTooltip
-          tip={pinned ? `Unpin ${name} from the Launch section` : pinLabel}
+        <button
+          type="button"
+          onClick={() => onPin(!pinned)}
+          aria-label={pinLabel}
+          aria-pressed={pinned}
+          className={cn(
+            PIN,
+            "transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
+          )}
         >
-          <button
-            type="button"
-            onClick={() => onPin(!pinned)}
-            aria-label={pinLabel}
-            aria-pressed={pinned}
-            className={cn(
-              PIN,
-              "transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
-            )}
-          >
-            <PinIcon pinned={pinned} />
-          </button>
-        </SimpleTooltip>
+          <PinIcon pinned={pinned} />
+        </button>
       )}
     </div>
   );
@@ -129,7 +124,9 @@ function ScriptCellContent({ name }: { name: string }) {
         aria-hidden
         className="size-3 shrink-0 text-muted-foreground"
       />
-      <span className="min-w-0 flex-1 truncate font-mono">{name}</span>
+      <SimpleTooltip whenTruncated tip={name}>
+        <span className="min-w-0 flex-1 truncate font-mono">{name}</span>
+      </SimpleTooltip>
     </>
   );
 }

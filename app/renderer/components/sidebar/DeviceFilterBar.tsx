@@ -30,7 +30,7 @@ type Pill = {
   id: string;
   icon: DeviceIcon | null;
   label: string;
-  title: string;
+  ariaLabel: string;
   tone: StatusTone | null;
 };
 
@@ -39,7 +39,7 @@ function pillFor(choice: DeviceRosterEntry, checked: boolean): Pill {
     id: choice.deviceId,
     icon: choice.icon,
     label: checked ? choice.label : deviceAbbrev(choice.label),
-    title: deviceTitle(choice.label, choice.status),
+    ariaLabel: deviceTitle(choice.label, choice.status),
     tone: choice.status?.tone ?? null,
   };
 }
@@ -47,7 +47,13 @@ function pillFor(choice: DeviceRosterEntry, checked: boolean): Pill {
 export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
   const selectedId = selected?.deviceId ?? ALL;
   const pills: Pill[] = [
-    { id: ALL, icon: null, label: "All", title: "Every device", tone: null },
+    {
+      id: ALL,
+      icon: null,
+      label: "All",
+      ariaLabel: "Every device",
+      tone: null,
+    },
     ...choices.map((choice) => pillFor(choice, choice.deviceId === selectedId)),
   ];
   const pick = (id: string) => setDeviceFilter(id === ALL ? null : id);
@@ -73,33 +79,32 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
       {pills.map((pill) => {
         const checked = pill.id === selectedId;
         return (
-          <SimpleTooltip key={pill.id} tip={pill.title}>
-            <Button
-              variant="outline"
-              size="xs"
-              role="radio"
-              aria-checked={checked}
-              aria-label={pill.title}
-              tabIndex={checked ? 0 : -1}
-              onClick={() => pick(pill.id)}
-              onKeyDown={onKeyDown}
-              // The picked pill wears the accent fill every selection in
-              // the app wears, hover included, over the variant's own
-              // fill. (doubutsu fills outline buttons from an unlayered
-              // rule, so it re-fills the picked pill itself: see
-              // sidebar-device-filter.)
-              className={cn(
-                "font-normal",
-                checked &&
-                  "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
-              )}
-            >
-              {pill.icon && (
-                <DeviceLead icon={pill.icon} tone={pill.tone} size="xs" />
-              )}
+          <Button
+            key={pill.id}
+            variant="outline"
+            size="xs"
+            role="radio"
+            aria-checked={checked}
+            aria-label={pill.ariaLabel}
+            tabIndex={checked ? 0 : -1}
+            onClick={() => pick(pill.id)}
+            onKeyDown={onKeyDown}
+            // The picked pill wears the accent fill every selection in
+            // the app wears, hover included, over the variant's own
+            // fill.
+            className={cn(
+              "font-normal",
+              checked &&
+                "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground dark:bg-accent dark:hover:bg-accent",
+            )}
+          >
+            {pill.icon && (
+              <DeviceLead icon={pill.icon} tone={pill.tone} size="xs" />
+            )}
+            <SimpleTooltip whenTruncated tip={pill.label}>
               <span className="max-w-32 truncate">{pill.label}</span>
-            </Button>
-          </SimpleTooltip>
+            </SimpleTooltip>
+          </Button>
         );
       })}
     </div>

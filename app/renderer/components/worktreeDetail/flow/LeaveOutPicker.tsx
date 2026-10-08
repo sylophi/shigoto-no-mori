@@ -64,7 +64,7 @@ export function browseWorktree(worktree: {
   return {
     rootPath: worktree.path,
     useListing: (relative) =>
-      useWorktreeFolder(worktree.projectId, worktree.id, relative),
+      useWorktreeFolder(worktree.projectId, worktree.id, relative, true),
     emptyRootLabel: "The worktree is empty.",
   };
 }
@@ -140,16 +140,10 @@ export function LeaveOutPicker<E extends PickerEntry>({
             />
           ))}
           {!disabled && (
-            <SimpleTooltip tip={copy.hint}>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPicking(true)}
-              >
-                <Plus />
-                {copy.add}
-              </Button>
-            </SimpleTooltip>
+            <Button variant="ghost" size="sm" onClick={() => setPicking(true)}>
+              <Plus />
+              {copy.add}
+            </Button>
           )}
         </div>
       )}

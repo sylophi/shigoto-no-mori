@@ -1,9 +1,10 @@
 import * as Schema from "effect/Schema";
 import { broadcast, defineContract, invoke } from "../contract.ts";
 import {
+  AddProjectPayloadSchema,
   BranchListSchema,
   CloneProjectPayloadSchema,
-  PathPayloadSchema,
+  CreateProjectPayloadSchema,
   ProjectIconSchema,
   ProjectSchema,
   ProjectScopedPayloadSchema,
@@ -25,7 +26,7 @@ export const projectsContract = defineContract(
     remote: true,
     gated: false,
   }),
-  invoke("add", PathPayloadSchema, ProjectSchema, {
+  invoke("add", AddProjectPayloadSchema, ProjectSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
@@ -33,6 +34,13 @@ export const projectsContract = defineContract(
   // Runs for as long as the clone does. The wire has no per-call
   // timeout, and the device doing the clone uses its own credentials.
   invoke("clone", CloneProjectPayloadSchema, ProjectSchema, {
+    remote: true,
+    gated: true,
+    grant: "browseFiles",
+  }),
+  // A new repository with an empty first commit, so its default
+  // branch exists for worktrees to branch off.
+  invoke("create", CreateProjectPayloadSchema, ProjectSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",

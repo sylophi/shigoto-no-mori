@@ -42,7 +42,10 @@ import { createRequire } from "node:module";
 import { basename, join, resolve } from "node:path";
 import { DEV_NAME_SUFFIX } from "../../shared/packaging/appName.mts";
 import { APP_BUNDLE_ID } from "../../shared/packaging/cliDist.mts";
-import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "../../shared/packaging/infoPlist.mts";
+import {
+  APPLE_EVENTS_USAGE_DESCRIPTION,
+  LOCAL_NETWORK_USAGE_DESCRIPTION,
+} from "../../shared/packaging/infoPlist.mts";
 import { rendererSchemeName } from "../../shared/packaging/rendererScheme.mts";
 
 import { appRoot, repoRoot } from "./appRoot.mts";
@@ -133,6 +136,8 @@ export function ensureDevBundle(): string {
     bundleId,
     scheme,
     devName,
+    LOCAL_NETWORK_USAGE_DESCRIPTION,
+    APPLE_EVENTS_USAGE_DESCRIPTION,
   });
   const usable = existsSync(bundleExecutable);
   const fresh =
@@ -167,13 +172,20 @@ export function ensureDevBundle(): string {
       plutilReplace(plist, "CFBundleIdentifier", "string", bundleId);
       plutilReplace(plist, "CFBundleName", "string", devName);
       plutilReplace(plist, "CFBundleDisplayName", "string", devName);
-      // Same entry forge writes into the packaged app, so a dev build's
-      // first LAN dial gets the Local Network prompt too.
+      // Same entries forge writes into the packaged app, so a dev
+      // build's first LAN dial and first terminal tool get their
+      // prompts too.
       plutilReplace(
         plist,
         "NSLocalNetworkUsageDescription",
         "string",
         LOCAL_NETWORK_USAGE_DESCRIPTION,
+      );
+      plutilReplace(
+        plist,
+        "NSAppleEventsUsageDescription",
+        "string",
+        APPLE_EVENTS_USAGE_DESCRIPTION,
       );
       plutilReplace(
         plist,

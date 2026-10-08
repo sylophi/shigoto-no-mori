@@ -1,29 +1,21 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
 import { cn } from "@/lib/utils";
 
 // What the worktree's work is, as its pull request's body says once it
 // has one, else as `sm describe` put it (useWorktreeTitle). Markdown,
 // since a PR body is. A long one starts cut down to a few lines, faded
-// out at the cut, with a toggle to read the rest. `bare` leaves out the
-// heading, for a PR's body right under its header, the way GitHub shows
-// it under the title.
-export function DescriptionSection({
-  description,
-  bare = false,
-}: {
-  description: string;
-  bare?: boolean;
-}) {
+// out at the cut, with a toggle to read the rest. No heading: it
+// follows the page's header the way GitHub shows a PR's body under its
+// title.
+export function DescriptionSection({ description }: { description: string }) {
   const [expanded, setExpanded] = useState(false);
   // Open, nothing is cut, and the toggle stays to fold it back.
   const [ref, truncated] = useIsTruncated<HTMLDivElement>(description);
   return (
     <section className="space-y-3">
-      {!bare && <SectionHeading>Description</SectionHeading>}
       <div
         ref={ref}
         className={cn(

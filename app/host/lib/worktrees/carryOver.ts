@@ -208,17 +208,19 @@ async function ruleIgnoredFolders(
 }
 
 // One folder of one checkout, with git's ignore verdict per entry: the
-// mirror dialog's picker of what stays behind (packages/contracts/src/modules/
-// sync.ts worktreeFolder). Folders first, then alphabetical, like the
-// carry-over listing, and .git left out for the same reason.
+// mirror dialog's picker of what stays behind and the files page's tree
+// (packages/contracts/src/modules/sync.ts worktreeFolder). Folders
+// first, then alphabetical, like the carry-over listing, and .git left
+// out for the same reason.
 export async function listWorktreeFolder(
   worktreePath: string,
   relative: string,
+  ruleIgnored: boolean,
 ): Promise<SyncWorktreeFolderEntry[]> {
   const { entries, isIgnored } = await readFolderVerdicts(
     worktreePath,
     relative,
-    true,
+    ruleIgnored,
   );
   // A link to a folder is a folder to browse: pnpm's node_modules is
   // nothing else. A dangling link stays a (dead) file. The rule

@@ -27,7 +27,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { StatusTone } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useAccountStatus, useSetDeviceIcon } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
 
@@ -92,8 +91,8 @@ export function DeviceIconPicker({
 }
 
 // One family as a grid of square tiles, seven across (the shapes are
-// seven, and the marks a multiple of it): the glyph alone, named in
-// the tooltip and to assistive tech. The picked tile wears the accent
+// seven, and the marks a multiple of it): the glyph alone, named to
+// assistive tech. The picked tile wears the accent
 // fill every selection in the app wears, and the detected one says so
 // in its name, since it is the entry that means "back to the default".
 function IconTiles({
@@ -120,18 +119,17 @@ function IconTiles({
           .filter((part) => part !== null)
           .join(" ");
         return (
-          <SimpleTooltip key={option} tip={name}>
-            <DropdownMenuItem
-              aria-label={name}
-              onClick={() => onPick(option)}
-              className={cn(
-                "size-9 justify-center p-0",
-                option === picked && "bg-accent text-accent-foreground",
-              )}
-            >
-              <DeviceGlyph icon={option} className="size-4" />
-            </DropdownMenuItem>
-          </SimpleTooltip>
+          <DropdownMenuItem
+            key={option}
+            aria-label={name}
+            onClick={() => onPick(option)}
+            className={cn(
+              "size-9 justify-center p-0",
+              option === picked && "bg-accent text-accent-foreground",
+            )}
+          >
+            <DeviceGlyph icon={option} className="size-4" />
+          </DropdownMenuItem>
         );
       })}
     </div>

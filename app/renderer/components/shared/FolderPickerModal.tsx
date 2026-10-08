@@ -152,22 +152,20 @@ export function FolderPickerModal({
             placeholder="Enter a path (e.g. ~/projects/)"
             className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
           />
-          <SimpleTooltip tip={`${confirmLabel} (${confirmKbd})`}>
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={confirm}
-              disabled={!canConfirm}
-              aria-label={`${confirmLabel} (${confirmKbd})`}
-            >
-              <span>{confirmLabel}</span>
-              <KbdGroup className="pointer-events-none">
-                <Kbd>{confirmKbd}</Kbd>
-              </KbdGroup>
-            </Button>
-          </SimpleTooltip>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={confirm}
+            disabled={!canConfirm}
+            aria-label={`${confirmLabel} (${confirmKbd})`}
+          >
+            <span>{confirmLabel}</span>
+            <KbdGroup className="pointer-events-none">
+              <Kbd>{confirmKbd}</Kbd>
+            </KbdGroup>
+          </Button>
         </div>
         {hint && (
           <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
@@ -192,9 +190,11 @@ export function FolderPickerModal({
                 className={ITEM_CLASS}
               >
                 <Folder className="size-4 text-muted-foreground/80" />
-                <span className="min-w-0 flex-1 truncate font-mono">
-                  {entry.name}
-                </span>
+                <SimpleTooltip whenTruncated lazy tip={entry.name}>
+                  <span className="min-w-0 flex-1 truncate font-mono">
+                    {entry.name}
+                  </span>
+                </SimpleTooltip>
               </Command.Item>
             );
           })}

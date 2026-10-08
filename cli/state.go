@@ -321,6 +321,7 @@ type globalConfig struct {
 	ManagedOnProjectDrive *bool             `json:"managedOnProjectDrive"`
 	Launchers             []launcherCommand `json:"launchers"`
 	HiddenLaunchers       []string          `json:"hiddenLaunchers"`
+	Terminal              string            `json:"terminal"`
 }
 
 type launcherCommand struct {

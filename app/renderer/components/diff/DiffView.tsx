@@ -298,12 +298,16 @@ export function DiffView({
           <div className="min-w-0 flex-1 space-y-1">
             {/* A phone's header row is shared with the chips, so the
                 title wraps there instead of losing its tail. */}
-            <h1 className="truncate text-xl font-medium tracking-tight select-text phone:text-lg phone:whitespace-normal">
-              {title}
-            </h1>
-            <p className="truncate text-xs text-muted-foreground select-text">
-              {subtitle}
-            </p>
+            <SimpleTooltip whenTruncated tip={title}>
+              <h1 className="truncate text-xl font-medium tracking-tight select-text phone:text-lg phone:whitespace-normal">
+                {title}
+              </h1>
+            </SimpleTooltip>
+            <SimpleTooltip whenTruncated tip={subtitle}>
+              <p className="truncate text-xs text-muted-foreground select-text">
+                {subtitle}
+              </p>
+            </SimpleTooltip>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
             {phone && (singleFile || allFiles.length >= SHEET_MIN_FILES) && (

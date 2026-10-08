@@ -29,6 +29,7 @@ import {
   accountSignedIn,
 } from "../ipc/modules/account";
 import { scheduleRelaunch } from "./relaunch";
+import { rememberVisibilityForRestart } from "./restartVisibility";
 import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
 import { log } from "@shared/log";
 
@@ -248,6 +249,7 @@ export function installFatalRecovery(deps: {
       // hurried one, with no busy-action prompt.
       scheduleRelaunch();
       markShuttingDown();
+      rememberVisibilityForRestart();
     } catch (error) {
       log.error(
         `[liveness] scheduling the relaunch failed: ${errorMessageOf(error)}`,

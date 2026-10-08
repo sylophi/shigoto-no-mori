@@ -36,7 +36,13 @@ export function fakeHostBaseConfig(opts: {
       port: fixedDevServerPort(opts.portKey),
       strictPort: true,
     },
-    optimizeDeps: { entries: [opts.entry] },
+    // The contracts package is served as source. Prebundled, it carries a
+    // copy of effect's Schema of its own, and the renderer's Schema calls
+    // fail on schemas built by that copy.
+    optimizeDeps: {
+      entries: [opts.entry],
+      exclude: ["@shigomori/contracts"],
+    },
     define: {
       __APP_VERSION__: JSON.stringify("2.0.3"),
       __APP_COMMIT__: JSON.stringify("fake-host"),

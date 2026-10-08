@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
-import { Check, ChevronDown, Pencil, X } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
-import { CopyButton } from "@/components/ui/copy-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +15,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
 import { IconButton } from "@/components/ui/icon-button";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // The branch's two sizes: the page's title, or a line under the work's
 // own title. The rename field is as tall as the line it stands in for,
@@ -42,16 +42,14 @@ const SIZES = {
 
 // The branch, renamed in place. The page's title, unless the work has
 // a title of its own (useWorktreeTitle), and then a line under it.
-// `menu` folds rename, switch and copy into one button, for a row with
-// little room to spare (PullRequestHeader).
+// Rename, switch and copy sit behind one button, so the line keeps its
+// room for what's beside it (WorktreeHeader).
 export function BranchTitle({
   worktree,
   subtitle = false,
-  menu = false,
 }: {
   worktree: Worktree;
   subtitle?: boolean;
-  menu?: boolean;
 }) {
   // null while idle; the in-flight edit value otherwise. Folds "editing"
   // and "draft" together so we don't seed state from a prop.
@@ -64,7 +62,7 @@ export function BranchTitle({
 
   const begin = () => {
     // Detached HEAD has no branch to rename, so guard against any caller
-    // (incl. future keybindings) that bypasses the hidden pencil button.
+    // (incl. future keybindings) that bypasses the menu, which hides it.
     if (worktree.detached) return;
     rename.reset();
     setDraft(worktree.branch);
@@ -138,46 +136,31 @@ export function BranchTitle({
   }
 
   return (
-    <div className="group/copy flex min-w-0 items-center gap-1.5">
-      <Heading
-        ref={titleRef}
-        data-branch-name
-        className={cn("min-w-0 truncate font-mono", size.text)}
+    <div className="group/branch flex min-w-0 items-center gap-1.5">
+      <SimpleTooltip
+        whenTruncated
+        tip={
+          <BranchLabel branch={worktree.branch} detached={worktree.detached} />
+        }
       >
-        <BranchLabel
-          branch={worktree.branch}
-          detached={worktree.detached}
-          suffixClassName={size.suffix}
-        />
-      </Heading>
-      {menu ? (
-        <BranchMenu worktree={worktree} anchorRef={titleRef} onRename={begin} />
-      ) : (
-        <>
-          {!worktree.detached && (
-            <button
-              type="button"
-              onClick={begin}
-              aria-label="Rename branch"
-              data-icon-button
-              className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 phone:opacity-100"
-            >
-              <Pencil className="size-3.5" />
-            </button>
-          )}
-          <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
-          <CopyButton
-            value={worktree.branch}
-            label={worktree.detached ? "Copy commit hash" : "Copy branch name"}
+        <Heading
+          ref={titleRef}
+          data-branch-name
+          className={cn("min-w-0 truncate font-mono", size.text)}
+        >
+          <BranchLabel
+            branch={worktree.branch}
+            detached={worktree.detached}
+            suffixClassName={size.suffix}
           />
-        </>
-      )}
+        </Heading>
+      </SimpleTooltip>
+      <BranchMenu worktree={worktree} anchorRef={titleRef} onRename={begin} />
     </div>
   );
 }
 
-// Rename, switch and copy behind one button, for a row with little
-// room to spare (BranchTitle's `menu`).
+// Rename, switch and copy behind one button.
 function BranchMenu({
   worktree,
   anchorRef,
@@ -202,7 +185,7 @@ function BranchMenu({
           render={
             <IconButton
               aria-label="Branch actions"
-              className="shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
+              className="shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/branch:opacity-100 focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
             >
               <ChevronDown aria-hidden className="size-3.5" />
             </IconButton>
@@ -217,16 +200,16 @@ function BranchMenu({
             return !keep;
           }}
         >
+          {/* A detached head has no branch to rename, but can switch
+              onto one. */}
           {!worktree.detached && (
-            <>
-              <DropdownMenuItem onClick={handOff(onRename)}>
-                Rename branch
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handOff(() => setSwitching(true))}>
-                Switch branch…
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem onClick={handOff(onRename)}>
+              Rename branch
+            </DropdownMenuItem>
           )}
+          <DropdownMenuItem onClick={handOff(() => setSwitching(true))}>
+            Switch branch…
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => void navigator.clipboard.writeText(worktree.branch)}
           >
@@ -234,14 +217,12 @@ function BranchMenu({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {!worktree.detached && (
-        <BranchSwitcher
-          worktree={worktree}
-          anchorRef={anchorRef}
-          open={switching}
-          onOpenChange={setSwitching}
-        />
-      )}
+      <BranchSwitcher
+        worktree={worktree}
+        anchorRef={anchorRef}
+        open={switching}
+        onOpenChange={setSwitching}
+      />
     </>
   );
 }

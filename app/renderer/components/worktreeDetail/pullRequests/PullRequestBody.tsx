@@ -11,7 +11,7 @@ import { MergeBox } from "./MergeBox";
 
 // What to do about the PR: merge it, or clean up after it. What the
 // PR is comes before it, from whoever places it (PullRequestSection,
-// or the page's PR header above PullRequestLead).
+// or the page's header, WorktreeHeader, above PullRequestLead).
 export function PullRequestBody({
   worktree,
   pr,

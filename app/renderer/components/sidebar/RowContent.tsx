@@ -15,6 +15,7 @@ interface RowContentProps {
   onToggleShelf: (shelf: InboxShelf) => void;
   onToggleOwner: (ownerKey: string) => void;
   onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
+  onToggleInboxGroup: (prefix: string) => void;
   currentGroupKey: string | undefined;
   arrangeMode: boolean;
   isHovered: boolean;
@@ -27,6 +28,7 @@ export function RowContent({
   onToggleShelf,
   onToggleOwner,
   onToggleWorktreeGroup,
+  onToggleInboxGroup,
   currentGroupKey,
   arrangeMode,
   isHovered,
@@ -38,6 +40,8 @@ export function RowContent({
           project={row.project}
           local={row.local}
           groupId={row.groupId}
+          groupKey={row.groupKey}
+          pinned={row.pinned}
           expanded={row.expanded}
           current={row.groupKey === currentGroupKey}
           branches={row.branches}
@@ -125,6 +129,15 @@ export function RowContent({
           count={row.count}
           expanded={row.expanded}
           onToggle={() => onToggleShelf(row.shelf)}
+        />
+      );
+    case "inbox-group":
+      return (
+        <FoldHeader
+          label={row.prefix}
+          count={row.count}
+          expanded={row.expanded}
+          onToggle={() => onToggleInboxGroup(row.prefix)}
         />
       );
     case "worktree-error":

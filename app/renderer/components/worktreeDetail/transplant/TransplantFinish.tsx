@@ -38,6 +38,7 @@ import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type Landing, LANDS_HERE } from "../flow/pullSteps";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 type SourceChoice = "keep" | "shelve" | "teardown";
 
@@ -226,9 +227,11 @@ export function TransplantFinish({
                 <Check className="size-4" />
               </span>
               <div className="min-w-0 flex-1 basis-64 space-y-1.5">
-                <p className="truncate font-mono text-sm font-semibold">
-                  {branch}
-                </p>
+                <SimpleTooltip whenTruncated tip={branch}>
+                  <p className="truncate font-mono text-sm font-semibold">
+                    {branch}
+                  </p>
+                </SimpleTooltip>
                 <LandedPath path={result.worktree.path} />
                 <div className="flex flex-wrap gap-1.5">
                   {result.captured ? (

@@ -59,6 +59,13 @@ import * as ShellLayer from "./shellLayer";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
+  applyRestartVisibility,
+  rememberVisibilityAtShutdown,
+  rememberVisibilityForRestart,
+  type RestartVisibility,
+  takeRestartVisibility,
+} from "./electron/restartVisibility";
+import {
   attachRenderProcessRecovery,
   installChildProcessLogging,
   installFatalRecovery,
@@ -210,7 +217,7 @@ let hasBooted = false;
 // empty by the time any window exists: getDeviceId mints or throws.
 let deviceId = "";
 
-const createWindow = () => {
+const createWindow = (restart: RestartVisibility | null = null) => {
   hasBooted = true;
   // Drive the native appearance from the saved theme before constructing
   // the window so the macOS vibrancy material picks the right light/dark
@@ -221,6 +228,7 @@ const createWindow = () => {
     height: 720,
     minWidth: 640,
     minHeight: 420,
+    show: restart === null,
     // Inset traffic lights over a transparent shell so the
     // NSVisualEffectView material set via `vibrancy` shows through where
     // the renderer paints no background (the sidebar column). Inset as
@@ -304,6 +312,7 @@ const createWindow = () => {
   });
 
   attachContextMenu(mainWindow);
+  if (restart) applyRestartVisibility(mainWindow, restart);
 };
 
 // An update install or a relaunch: a quit that neither asks about busy
@@ -480,8 +489,9 @@ app.on("ready", async () => {
   // ipc/handlers.ts), making this the boot-time pass only.
   installChildProcessLogging();
   installFatalRecovery({ isShuttingDown });
-  createWindow();
+  createWindow(takeRestartVisibility());
   reconcileLaunchAtLogin();
+  rememberVisibilityAtShutdown();
   // The window is already up, so the graph delays only the background
   // machinery. A quit that came first has disposed it.
   await runtime.context().catch((error: unknown) => {
@@ -518,6 +528,7 @@ app.on("before-quit", (event) => {
     return;
   }
   quitting = true;
+  if (isHurriedQuit()) rememberVisibilityForRestart();
   void runtime
     .dispose()
     .catch((error: unknown) => {

@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import { isSafeRelPath } from "../predicates/relPath.ts";
+import { TERMINAL_IDS } from "./launchers.ts";
 import { loose } from "./loose.ts";
 import { ProjectScopedPayloadSchema } from "./payloads.ts";
 import {
@@ -280,6 +281,10 @@ const GlobalConfigSchema = Schema.Struct({
   // project's script sort. On by default; absent = on, explicit `false` is
   // the opt-out.
   launchScripts: Schema.optional(Schema.Boolean),
+  // The terminal app terminal tools (Claude Code, Neovim, lazygit, …)
+  // open in, a launcher catalog id. Absent = Terminal. Mirrors the
+  // CLI's terminalIDs (cli/terminals.go), which launches them.
+  terminal: Schema.optional(Schema.Literals(TERMINAL_IDS)),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
   // use by another worktree). ON by default. Unset means delete
@@ -334,8 +339,8 @@ const GlobalConfigSchema = Schema.Struct({
   // projects can't be removed here, only `terrier rm` unregisters them. A
   // path registered in both is an ordinary removable project, and
   // removing its registry entry demotes it back to terrier-sourced. Off by
-  // default, and only active while `terrier` is on PATH at a version
-  // this build understands (cli/terrier.go).
+  // default, and only active while `terrier` is on PATH and `terrier ls
+  // --json` answers in the shape cli/terrier.go reads.
   terrier: Schema.optional(Schema.Boolean),
   // When true, GitHub CLI features light up wherever they apply.
   // Activates only when `gh` is on PATH and authenticated. On by
@@ -376,6 +381,7 @@ export const DeviceSettingsPatchSchema = strict(
     launchers: GlobalConfigSchema.fields.launchers,
     hiddenLaunchers: GlobalConfigSchema.fields.hiddenLaunchers,
     launchScripts: GlobalConfigSchema.fields.launchScripts,
+    terminal: GlobalConfigSchema.fields.terminal,
     deleteBranchOnRemove: GlobalConfigSchema.fields.deleteBranchOnRemove,
     autoPopulateInstall: GlobalConfigSchema.fields.autoPopulateInstall,
     autoPullNew: GlobalConfigSchema.fields.autoPullNew,
@@ -406,6 +412,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   launchers: [],
   hiddenLaunchers: [],
   launchScripts: true,
+  terminal: "terminal",
   deleteBranchOnRemove: true,
   autoPopulateInstall: false,
   autoPullNew: false,

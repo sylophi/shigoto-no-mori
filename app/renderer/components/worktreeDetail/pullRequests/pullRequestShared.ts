@@ -52,13 +52,13 @@ export const TONE_FILL: Record<PullRequestTone, string> = {
 
 export const CHECK_BUCKET_ICON: Record<
   PullRequestCheckBucket,
-  { Icon: typeof CircleCheck; tone: PullRequestTone }
+  { Icon: typeof CircleCheck; tone: PullRequestTone; label: string }
 > = {
-  passed: { Icon: CircleCheck, tone: "emerald" },
-  failing: { Icon: CircleAlert, tone: "rose" },
-  pending: { Icon: Loader2, tone: "amber" },
-  neutral: { Icon: MinusCircle, tone: "slate" },
-  skipped: { Icon: CircleSlash, tone: "slate" },
+  passed: { Icon: CircleCheck, tone: "emerald", label: "Passed" },
+  failing: { Icon: CircleAlert, tone: "rose", label: "Failing" },
+  pending: { Icon: Loader2, tone: "amber", label: "Pending" },
+  neutral: { Icon: MinusCircle, tone: "slate", label: "Neutral" },
+  skipped: { Icon: CircleSlash, tone: "slate", label: "Skipped" },
 };
 
 export const REVIEWER_STATE: Record<

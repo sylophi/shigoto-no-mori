@@ -1,7 +1,7 @@
 // The worktree prefix lists, matched against a worktree's name or
 // branch in every project: the hidden ones, which the sidebar folds
 // away the way it does shelved ones, and the grouped ones, which a
-// project's tree gathers under a header each. Shared settings, so the
+// project's tree and the inbox gather under a header each. Shared settings, so the
 // lists are the same on every device.
 import { notifyError } from "@/lib/toast";
 import {

@@ -3,42 +3,42 @@
     "accepts": [
       {
         "installed": true,
-        "compatible": true,
-        "version": "0.4.2"
+        "readable": true
       },
       {
         "installed": true,
-        "compatible": false,
-        "version": "1.0.0"
+        "readable": false
       },
       {
         "installed": false,
-        "compatible": false
+        "readable": false
       }
     ],
     "normalizes": [
       {
         "input": {
           "installed": true,
-          "compatible": true,
-          "version": "0.4.2",
+          "readable": true,
           "path": "/opt/homebrew/bin/terrier"
         },
         "output": {
           "installed": true,
-          "compatible": true,
-          "version": "0.4.2"
+          "readable": true
         }
       }
     ],
     "rejects": [
       {
-        "installed": true,
-        "version": "0.4.2"
+        "installed": true
       },
       {
         "installed": "yes",
-        "compatible": false
+        "readable": false
+      },
+      {
+        "installed": true,
+        "compatible": true,
+        "version": "0.4.2"
       }
     ]
   }

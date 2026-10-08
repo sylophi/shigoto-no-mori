@@ -4,6 +4,15 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useCreateWorktree } from "./useWorktreeMutations";
 import { useWorktreeNav } from "./useWorktreeNav";
 
+// The rule every create entry point shares: a plain pick creates
+// outright, a modified one (shift, cmd, ctrl) opens the form to pick a
+// base.
+export const wantsCreateForm = (event: {
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+}) => event.shiftKey || event.metaKey || event.ctrlKey;
+
 // "Quick create": a worktree off the project's default branch, no form,
 // landing straight on the new worktree's page. Shared by the project
 // row's + button and the inbox sidebar's New worktree menu so the two
@@ -57,11 +66,9 @@ export function useQuickCreateWorktree() {
     toProjectPage("new", projectId, onDevice);
   };
 
-  // The click rule every create entry point shares: plain creates
-  // outright, a modified click (shift, cmd, ctrl) opens the form to
-  // pick a base.
+  // The click rule every create entry point shares (wantsCreateForm).
   const createFrom = (event: React.MouseEvent, projectId: string) => {
-    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+    if (wantsCreateForm(event)) {
       openCreateForm(projectId);
     } else {
       void quickCreate(projectId);

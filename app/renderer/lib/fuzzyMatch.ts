@@ -3,7 +3,7 @@
 // filter, etc.). Empty query returns 1 so unfiltered lists sort stably.
 // A space in the query only separates words as a subsequence, so
 // "fix st" finds fix-stale-locks.
-export function scoreMatch(query: string, target: string): number {
+function scoreMatch(query: string, target: string): number {
   if (!query) return 1;
   const q = query.toLowerCase();
   const t = target.toLowerCase();

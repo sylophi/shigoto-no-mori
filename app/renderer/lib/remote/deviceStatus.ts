@@ -62,10 +62,9 @@ export const THIS_DEVICE_VIEW: DeviceStatusView = {
   reachable: true,
 };
 
-// The tooltip every compact mark for a device carries: its name and
-// its state, in one spelling ("Thinkpad, Connected", "Studio Mac, This
-// device"), so a pill, a tab and a badge naming the same machine say
-// the same thing on hover.
+// A device's name and its state, in one spelling ("Thinkpad,
+// Connected", "Studio Mac, This device"): the chip's tooltip and a
+// filter pill's accessible name.
 export function deviceTitle(
   label: string,
   status: DeviceStatusView | null,

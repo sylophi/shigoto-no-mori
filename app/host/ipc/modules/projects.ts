@@ -2,10 +2,12 @@ import { pickCloneUrl, repoNameFromUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { reorderProjects } from "@shared/reorder";
 import type { Handlers } from "@shigomori/contracts/types";
+import type { Project } from "@shigomori/contracts/schemas";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
 import { isGitRepo } from "@host/lib/git/core";
+import { createRepo } from "@host/lib/git/init";
 import { listRemoteEntries } from "@host/lib/git/remotes";
 import {
   findProjectOrThrow,
@@ -27,6 +29,7 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "@host/lib/scripts";
+import { terrierAdd } from "@host/lib/terrier";
 import { expandHome } from "@host/lib/util/paths";
 import {
   projectIconViaCli,
@@ -40,34 +43,58 @@ import {
 // one's project back.
 let reorderChain: Promise<void> = Promise.resolve();
 
+// Registers a checkout the app just made (a clone, a new repository).
+// The checkout stays if registering fails, so the error says where it
+// is: a retry would only find the folder taken. Terrier first, for
+// add's reason.
+async function registerNewCheckout(
+  path: string,
+  terrier: boolean | undefined,
+  made: string,
+): Promise<Project> {
+  try {
+    if (terrier) await terrierAdd(path);
+    return await registerProject(path);
+  } catch (error) {
+    throw new Error(
+      `${made} ${path}, but couldn't add it as a project: ${errorMessageOf(error)}`,
+      { cause: error },
+    );
+  }
+}
+
 export const projectsHandlers: Handlers<typeof projectsContract> = {
   list: () => listProjectsWithStatus(),
 
-  add: async ({ path: rawPath }) => {
+  add: async ({ path: rawPath, terrier }) => {
     const path = expandHome(rawPath);
 
     if (!(await isGitRepo(path))) {
       throw new Error(`${path} is not a git repository`);
     }
 
+    // Into terrier first, so registering mints the id terrier's listing
+    // of the repo carries (registerProject in cli/cmd_project.go):
+    // removing the project here later leaves it under the same id, its
+    // per-project state intact.
+    if (terrier) await terrierAdd(path);
     // Same engine as `sm projects add`: registration and the config
     // seed run in the CLI.
     return registerProject(path);
   },
 
-  clone: async ({ url, parentDir, name }) => {
+  clone: async ({ url, parentDir, name, terrier }) => {
     const folder = name ?? repoNameFromUrl(url);
     // The payload schema has held the URL to a remote already. Not
     // echoed: it may carry a token.
     if (folder === null) throw new Error("Not a git remote URL");
     const path = await cloneRepo(url, expandHome(parentDir), folder);
-    // The checkout stays if registering fails, so the error says where
-    // it is: a retry would only find the folder taken.
-    return registerProject(path).catch((error: unknown) => {
-      throw new Error(
-        `Cloned into ${path}, but couldn't add it as a project: ${errorMessageOf(error)}`,
-      );
-    });
+    return registerNewCheckout(path, terrier, "Cloned into");
+  },
+
+  create: async ({ parentDir, name, terrier }) => {
+    const path = await createRepo(expandHome(parentDir), name);
+    return registerNewCheckout(path, terrier, "Created");
   },
 
   remove: async ({ id }) => {

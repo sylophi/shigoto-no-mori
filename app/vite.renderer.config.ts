@@ -61,7 +61,13 @@ export default defineConfig(({ mode }) => {
     // Scope the dep scanner to the real entry; its default **/*.html
     // glob picks up LICENSES.chromium.html inside out/ packaged builds
     // and fails the scan with noisy (harmless) errors at dev boot.
-    optimizeDeps: { entries: ["index.html"] },
+    // The contracts package is served as source. Prebundled, it carries a
+    // copy of effect's Schema of its own, and the renderer's Schema calls
+    // fail on schemas built by that copy.
+    optimizeDeps: {
+      entries: ["index.html"],
+      exclude: ["@shigomori/contracts"],
+    },
     define: {
       __APP_VERSION__: JSON.stringify(version),
       __APP_COMMIT__: JSON.stringify(commit),

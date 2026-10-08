@@ -7,7 +7,9 @@ import {
 } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import type {
+  AddProjectPayload,
   CloneProjectPayload,
+  CreateProjectPayload,
   Project,
 } from "@shigomori/contracts/schemas";
 import { reorderProjects } from "@shared/reorder";
@@ -49,8 +51,8 @@ export function useProjects() {
 export function useAddProject() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  return useMutation<Project, Error, string>({
-    mutationFn: (path) => api.projects.add({ path }),
+  return useMutation<Project, Error, AddProjectPayload>({
+    mutationFn: (input) => api.projects.add(input),
     // Returned (not void-ed) so mutateAsync resolves only after the
     // projects list is fresh: callers navigate into the new project right
     // away, and routes render "not found" against a stale list.
@@ -71,6 +73,19 @@ export function useCloneProject() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: keys.projects() }),
     meta: { errorTitle: "Couldn't clone the repository" },
+  });
+}
+
+// Starts a new repository on the scoped device and registers it.
+export function useCreateProject() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<Project, Error, CreateProjectPayload>({
+    mutationFn: (input) => api.projects.create(input),
+    // Returned for the same reason useAddProject returns it.
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.projects() }),
+    meta: { errorTitle: "Couldn't create the repository" },
   });
 }
 

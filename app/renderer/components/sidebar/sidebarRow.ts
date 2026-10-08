@@ -61,6 +61,11 @@ export type SidebarRow =
       branches?: number;
       devices: readonly SidebarDeviceBadge[];
       members: readonly RemoteProjectMember[];
+      // Pinned to the top of the list (ProjectGroupOrder.pinned).
+      pinned: boolean;
+      // The last of the pinned projects leading the list, with more
+      // after it: a gap under it parts them from the rest.
+      pinnedEnd?: boolean;
     }
   // A local worktree. `mirror` names the peer device it is kept in
   // step with (a live mirror either way round), in which case the
@@ -169,6 +174,15 @@ export type SidebarRow =
       shelf: InboxShelf;
       count: number;
       expanded: boolean;
+    }
+  // The head of the inbox's live work gathered by a prefix, the
+  // inbox's "worktree-group".
+  | {
+      kind: "inbox-group";
+      key: string;
+      prefix: string;
+      count: number;
+      expanded: boolean;
     };
 
 // What a view hands the sidebar shell. Both row builders produce this,
@@ -216,6 +230,7 @@ const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "shelved-toggle": 24,
   "inbox-worktree": 66,
   "inbox-shelf": 36,
+  "inbox-group": 36,
   "remote-worktree": 49,
 };
 
@@ -261,5 +276,6 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   "shelved-toggle": "px-2",
   "inbox-worktree": WORKTREE_ROW_GAP,
   "inbox-shelf": "px-2 pb-1",
+  "inbox-group": "px-2 pb-1",
   "remote-worktree": WORKTREE_ROW_GAP,
 };

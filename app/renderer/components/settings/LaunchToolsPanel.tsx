@@ -1,9 +1,14 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Plus } from "lucide-react";
-import type { DetectedLauncher } from "@shigomori/contracts/schemas";
+import {
+  launcherIdFor,
+  TERMINAL_IDS,
+  type DetectedLauncher,
+} from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { ScriptEnvPopover } from "@/components/shared/ScriptEnvPopover";
@@ -14,10 +19,11 @@ import { DetectedToolsSection } from "./DetectedToolsSection";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 
 // The Launch tools tab: what the Launch section on THIS machine offers.
-// The keys it edits (launchers, hiddenLaunchers, launchScripts) live in
-// this device's config like the per-device toggles do, but launching
-// is local by nature (a tool is detected here and opens here), so the
-// page files them under "Client" and never offers them for a peer.
+// The keys it edits (launchers, hiddenLaunchers, launchScripts,
+// terminal) live in this device's config like the per-device toggles
+// do, but launching is local by nature (a tool is detected here and
+// opens here), so the page files them under "Client" and never offers
+// them for a peer.
 // launchScripts also decides the script pills this window shows on a
 // peer's worktree page, still read from this machine's config.
 export function LaunchToolsPanel({
@@ -30,6 +36,23 @@ export function LaunchToolsPanel({
   const { data: detected = [] } = useDetectedLaunchers();
   const availableTools = detected.filter((d) => d.available);
   const missingTools = detected.filter((d) => !d.available);
+  // The installed terminals, in TERMINAL_IDS order, with the catalog's
+  // labels and icons.
+  const terminals = TERMINAL_IDS.flatMap((id) => {
+    const d = availableTools.find((t) => t.id === launcherIdFor("app", id));
+    if (d === undefined) return [];
+    return [
+      {
+        value: id,
+        label: (
+          <>
+            <LauncherIcon entry={d} className="size-3.5" />
+            {d.label}
+          </>
+        ),
+      },
+    ];
+  });
 
   const toggleToolHidden = (id: string) => {
     setForm((prev) => ({
@@ -51,6 +74,21 @@ export function LaunchToolsPanel({
         onToggle={toggleToolHidden}
       />
 
+      {terminals.length > 1 && (
+        <section className="space-y-3">
+          <SectionIntro title="Terminal">
+            Where terminal tools like Claude Code and Neovim open.
+          </SectionIntro>
+          <SegmentedControl
+            aria-label="Terminal"
+            value={form.terminal}
+            onChange={(terminal) => setForm((prev) => ({ ...prev, terminal }))}
+            options={terminals}
+            optionClassName="px-3 py-1.5 text-xs"
+          />
+        </section>
+      )}
+
       {missingTools.length > 0 && (
         <section className="space-y-4">
           <SectionIntro title="Supported tools">
@@ -68,8 +106,7 @@ export function LaunchToolsPanel({
       <section className="space-y-3">
         <SectionIntro title="Custom tools" action={<ScriptEnvPopover />}>
           Custom commands available in every worktree (e.g.{" "}
-          <span className="font-mono">claude</span>,{" "}
-          <span className="font-mono">tmux new-session</span>,{" "}
+          <span className="font-mono">gh pr view --web</span>,{" "}
           <span className="font-mono">open .</span>
           ).
         </SectionIntro>

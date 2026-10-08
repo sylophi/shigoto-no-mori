@@ -3,7 +3,8 @@
 // page makes (buildGrid).
 //
 // Asserts: the list's project rows file under their owners in the
-// list's order, and an unsplit list is one unnamed section. A tile
+// list's order, and an unsplit list is one unnamed section. The pinned
+// projects lead either as an unnamed section of their own. A tile
 // lands on the worktree visited last, wherever it lives, never on a
 // shelved, merged or hidden one while the project has another, nor on
 // an unreachable device's while a reachable one has one, and falls
@@ -115,6 +116,7 @@ function grid(
   visits: Record<string, number> = {},
   byOwner = false,
   peer: RemoteForestItem = peerForest,
+  pinned: ReadonlySet<string> = new Set(),
 ) {
   return buildGrid({
     projects,
@@ -124,6 +126,7 @@ function grid(
       projects,
       remote: [peerForest],
       sortMode: "manual",
+      pinned,
     }),
     hiddenPrefixes: ["wip/"],
     allowAgentWorking: false,
@@ -140,8 +143,8 @@ const keyOf = (p: Project) => projectGroupKey(p, undefined);
 const leadOf = (visits: Record<string, number>, p: Project) =>
   work(visits).get(keyOf(p))?.lead;
 
-const names = (byOwner: boolean) =>
-  grid({}, byOwner).sections.map((section) => [
+const names = (byOwner: boolean, pinned?: ReadonlySet<string>) =>
+  grid({}, byOwner, peerForest, pinned).sections.map((section) => [
     section.label,
     section.rows.map((row) => row.project.name),
   ]);
@@ -154,6 +157,19 @@ it("a split list files each project under its owner", () => {
   assert.deepEqual(names(true), [
     ["acme", ["forest", "lantern"]],
     ["rin", ["kettle"]],
+  ]);
+});
+
+it("the pinned projects are a section of their own", () => {
+  const pinned = new Set([keyOf(kettle)]);
+  assert.deepEqual(names(false, pinned), [
+    [null, ["kettle"]],
+    [null, ["forest", "lantern"]],
+  ]);
+  // Split by owner, the rest are all acme's, which needs no name.
+  assert.deepEqual(names(true, pinned), [
+    [null, ["kettle"]],
+    [null, ["forest", "lantern"]],
   ]);
 });
 

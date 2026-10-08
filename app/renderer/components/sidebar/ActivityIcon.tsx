@@ -1,6 +1,7 @@
 import { CircleAlert, Rocket, Terminal, Trash2 } from "lucide-react";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 const ACTIVITY: Record<
   ScriptActivityKind,
@@ -28,13 +29,15 @@ export function ActivityIcon({ kind }: ActivityIconProps) {
   const { Icon, label, tone } = ACTIVITY[kind];
   // The failure is news, not progress, so it holds still.
   return (
-    <Icon
-      aria-label={label}
-      className={cn(
-        "size-3 shrink-0",
-        kind !== "failed" && "animate-pulse",
-        tone,
-      )}
-    />
+    <SimpleTooltip tip={label}>
+      <Icon
+        aria-label={label}
+        className={cn(
+          "size-3 shrink-0",
+          kind !== "failed" && "animate-pulse",
+          tone,
+        )}
+      />
+    </SimpleTooltip>
   );
 }

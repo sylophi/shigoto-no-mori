@@ -539,6 +539,7 @@
         ],
         "hiddenLaunchers": ["app:cursor", "web:github"],
         "launchScripts": false,
+        "terminal": "ghostty",
         "deleteBranchOnRemove": false,
         "autoPopulateInstall": true,
         "autoPullNew": true,
@@ -586,6 +587,7 @@
         ],
         "hiddenLaunchers": ["app:cursor", "web:github"],
         "launchScripts": false,
+        "terminal": "ghostty",
         "deleteBranchOnRemove": false,
         "autoPopulateInstall": true,
         "autoPullNew": true,
@@ -602,6 +604,9 @@
     "rejects": [
       {
         "directConnections": false
+      },
+      {
+        "terminal": "xterm"
       },
       {
         "launchers": [

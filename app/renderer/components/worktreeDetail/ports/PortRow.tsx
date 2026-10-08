@@ -83,14 +83,11 @@ export function PortRow({
                 : `Nothing is listening ${where} right now`
             }
           >
-            {/* The span takes the tooltip's trigger props; StatusDot
-                spreads none. */}
-            <span className={cn("inline-flex", !listening && "opacity-40")}>
-              <StatusDot
-                tone={listening ? "emerald" : "slate"}
-                pulse={listening}
-              />
-            </span>
+            <StatusDot
+              tone={listening ? "emerald" : "slate"}
+              pulse={listening}
+              className={cn(!listening && "opacity-40")}
+            />
           </SimpleTooltip>
           <div className="flex min-w-0 items-baseline gap-2">
             <span

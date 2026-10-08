@@ -3,7 +3,8 @@ import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
-import { rankByScore, scoreFields, scoreMatch } from "@/lib/fuzzyMatch";
+import { rankByScore, scoreFields } from "@/lib/fuzzyMatch";
+import type { LucideIcon } from "lucide-react";
 import { sanitizeBranchName } from "@shared/git/branches";
 import { isAnchoredPath } from "@shared/projectPaths";
 import { isHiddenByPrefix } from "@shared/sharedSettings";
@@ -18,6 +19,7 @@ import {
   deviceBadgeOf,
   mirrorBadgeLookup,
   mirrorPairsOf,
+  ownerOf,
   projectGroupKey,
   worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
@@ -168,7 +170,8 @@ export function initialPaletteKey(
 
 // Best field wins: a query can name the branch, its title, the folder, the
 // project (alone or ahead of the branch, "sm feat"), the device, so
-// "thinkpad" narrows to that machine's work, or the pull request, by
+// "thinkpad" narrows to that machine's work, the project's owner, so
+// an org's name narrows to its work, or the pull request, by
 // "#148" or its title. Merged and shelved worktrees score at half, so
 // they come up for a query that names them and sink under one that
 // matches live work as well. Ties keep the recency order, since the
@@ -187,6 +190,7 @@ const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
   worktree.name,
   `${project.name} ${worktree.branch}`,
   device?.label ?? "",
+  ...ownerNames(project),
   pr ? `#${pr.number}` : "",
   pr?.title ?? "",
 ];
@@ -222,7 +226,20 @@ export function projectLead(
   return open.find((t) => t.device?.reachable !== false) ?? open[0] ?? trees[0];
 }
 
-// The few projects the query names by name, best first. Every project
+// What a project answers to: its name, and its remote's owner (the
+// sidebar's owner headers, ownerOf), alone or ahead of the repo
+// ("sylophi/web"). Its worktrees answer to the owner too.
+export function projectNames(project: Project): string[] {
+  return [project.name, ...ownerNames(project)];
+}
+
+function ownerNames(project: Project): string[] {
+  const owner = ownerOf(project);
+  return owner ? [owner.name, `${owner.name}/${owner.repo}`] : [];
+}
+
+// The few projects the query names, best first, and all of an owner's
+// when it is the owner's name. Every project
 // on every device, the ones with no worktrees too, since the sidebar's
 // list of projects is the other way to them. Not one whose folder is
 // gone, which the sidebar won't open either. Only for a query:
@@ -283,27 +300,62 @@ export function rankPaletteProjects(
       deviceCount: devices.size,
     }),
   );
-  return rankByScore(query, items, (p) => p.project.name).slice(0, 3);
+  const ranked = rankByScore(query, items, (p) => projectNames(p.project));
+  const owner = query.toLowerCase();
+  return ranked.filter(
+    (p, i) =>
+      i < PROJECTS_SHOWN || ownerOf(p.project)?.name.toLowerCase() === owner,
+  );
 }
 
-// How many of the ranked projects go above the worktrees: those the
-// query names at least as well as the top worktree, so typing a
-// project's name finds the project, not its first worktree, and a
-// project the letters only scatter through stays under a worktree that
-// spells them. A worktree's "project branch" field is the longer, so a
-// project name matching in both leads.
-export function leadingProjectCount(
+const PROJECTS_SHOWN = 3;
+
+// How many of the ranked projects or pages go above the worktrees:
+// those the query names at least as well as the top worktree, so
+// typing a project's name finds the project, not its first worktree,
+// and a project the letters only scatter through stays under a
+// worktree that spells them. A worktree's "project branch" field is
+// the longer, so a project name matching in both leads.
+export function leadingCount<T>(
   query: string,
-  projects: readonly PaletteProject[],
+  ranked: readonly T[],
+  fields: (item: T) => readonly string[],
   shown: readonly PaletteEntry[],
 ): number {
   const [entry] = shown;
-  if (!entry) return projects.length;
+  if (!entry) return ranked.length;
   const top = scoreFields(query, entryFields(entry)) * entryWeight(entry);
-  const trailing = projects.findIndex(
-    (p) => scoreMatch(query, p.project.name) < top,
+  const trailing = ranked.findIndex(
+    (item) => scoreFields(query, fields(item)) < top,
   );
-  return trailing < 0 ? projects.length : trailing;
+  return trailing < 0 ? ranked.length : trailing;
+}
+
+// A page of the app the query names: one the sidebar's footer leads to,
+// or a section of Settings.
+export interface PalettePage {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  // Settings, for a section of it: where the row says it is, and what
+  // the query can name it by too ("settings appearance").
+  parent?: string;
+  // What else it goes by ("Devices" for the account).
+  aliases?: readonly string[];
+  open: () => void;
+}
+
+export const pageFields = ({ label, parent, aliases = [] }: PalettePage) =>
+  parent ? [label, ...aliases, `${parent} ${label}`] : [label, ...aliases];
+
+// The pages the query names, best first. Only for a query: unasked,
+// the list is the worktrees.
+export function rankPalettePages(
+  query: string,
+  pages: readonly PalettePage[],
+): readonly PalettePage[] {
+  if (!query) return [];
+  return rankByScore(query, pages, pageFields);
 }
 
 // A query as the branch a new worktree would take: the branch inputs'

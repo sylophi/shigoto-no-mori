@@ -25,10 +25,10 @@ import { NavIconButton } from "./NavIconButton";
 export function SidebarNavActions() {
   const updateReady = Object.keys(useStagedUpdates()).length > 0;
   const live = useLiveCount();
-  const liveTip = live > 0 ? `Live (${live} running)` : "Live";
+  const liveLabel = live > 0 ? `Live (${live} running)` : "Live";
   return (
     <>
-      <NavIconButton to="/live" tip={liveTip} label={liveTip}>
+      <NavIconButton to="/live" label={liveLabel}>
         <Radio className="size-3.5" />
         {live > 0 && (
           <span
@@ -38,17 +38,16 @@ export function SidebarNavActions() {
         )}
       </NavIconButton>
       {hasLocalHost ? (
-        <NavIconButton to="/" tip="Projects" label="Projects">
+        <NavIconButton to="/" label="Projects">
           <LayoutGrid className="size-3.5" />
         </NavIconButton>
       ) : (
-        <NavIconButton to="/account" tip="Devices" label="Devices">
+        <NavIconButton to="/account" label="Devices">
           <MonitorSmartphone className="size-3.5" />
         </NavIconButton>
       )}
       <NavIconButton
         to="/settings"
-        tip={updateReady ? "Settings (update available)" : "Settings"}
         label={updateReady ? "Settings (update available)" : "Settings"}
       >
         <SettingsIcon className="size-3.5" />

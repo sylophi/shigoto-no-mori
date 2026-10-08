@@ -475,6 +475,9 @@
       "outcome": "auto-merge"
     }
   },
+  "githubCli:owners": {
+    "success": ["\n", "zW"]
+  },
   "githubCli:projectPullRequests": {
     "payload": {
       "projectId": "3"
@@ -484,6 +487,12 @@
   "githubCli:projectPullRequestsRefreshed": {
     "payload": {
       "projectId": "@"
+    }
+  },
+  "githubCli:publish": {
+    "payload": {
+      "projectId": " ",
+      "visibility": "private"
     }
   },
   "githubCli:pullRequestCandidates": {
@@ -505,7 +514,8 @@
   "githubCli:readiness": {
     "success": {
       "installed": true,
-      "authed": true
+      "authed": true,
+      "unavailable": null
     }
   },
   "githubCli:repoDescription": {
@@ -1241,6 +1251,17 @@
     },
     "success": ""
   },
+  "projects:create": {
+    "payload": {
+      "parentDir": "V",
+      "name": "J"
+    },
+    "success": {
+      "id": "\ud800",
+      "name": "-1",
+      "path": " "
+    }
+  },
   "projects:defaultBranch": {
     "payload": {
       "projectId": "U"
@@ -1725,14 +1746,15 @@
     "payload": {
       "projectId": "3r",
       "worktreeId": "115161d51857",
-      "relative": ""
+      "relative": "",
+      "ruleIgnored": true
     },
     "success": []
   },
   "terrier:readiness": {
     "success": {
       "installed": true,
-      "compatible": false
+      "readable": false
     }
   },
   "updater:check": {},

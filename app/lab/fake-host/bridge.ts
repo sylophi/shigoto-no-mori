@@ -338,6 +338,18 @@ function hostHandlersFor(
         )?.[0] ?? `remote:${normalizeRemoteUrl(url)}`;
       return registerProject(disk, forest, `${parent}/${folder}`, identity);
     },
+    // Quick, as a new repository is, but long enough to see the stage.
+    "projects:create": async ({ parentDir, name }) => {
+      await sleep(600);
+      const parent = resolveOnDisk(disk, parentDir);
+      const entries = disk.dirs[parent];
+      if (entries === undefined) throw new Error(`${parent} is not a folder`);
+      if (entries.some((entry) => entry.name === name)) {
+        throw new Error(`${parent}/${name} already exists`);
+      }
+      entries.push({ name, isGitRepo: true });
+      return registerProject(disk, forest, `${parent}/${name}`);
+    },
     // Points the project at a repo on the fake disk, the primary row
     // with it, so a missing project (?missing=1) comes back.
     "projects:relocate": ({ id, path }) => {
@@ -531,7 +543,7 @@ function hostHandlersFor(
     "portPool:isActive": () => true,
     "globalConfig:read": () => fakeGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
-    // The devices ?updates poses (Thinkpad alone by default) have an
+    // The devices ?updates poses (none by default) have an
     // update staged, so the restart-to-update buttons on their Settings
     // General sections have something to show, and the ones ?downloading poses
     // are fetching it. Installing stands in for the restart into the
@@ -563,8 +575,8 @@ function hostHandlersFor(
     "launchers:detect": () => [...FAKE_DETECTED],
     "launchers:forProject": () => ({
       entries: [
-        ...FAKE_DETECTED,
-        { kind: "custom", id: "claude", label: "Claude Code" },
+        ...FAKE_DETECTED.filter((d) => d.available),
+        { kind: "custom", id: "custom:deploy", label: "Deploy preview" },
         { kind: "web", id: "web:github", label: "GitHub" },
       ],
       hiddenCount: 0,
@@ -584,12 +596,33 @@ function hostHandlersFor(
     }),
     "packageScripts:getSort": () => "manifest",
     "packageScripts:getOrder": () => [],
-    "githubCli:readiness": () => ({ installed: true, authed: true }),
-    "terrier:readiness": () => ({
-      installed: true,
-      compatible: true,
-      version: "0.4.0",
-    }),
+    "githubCli:readiness": () => {
+      const gh = new URLSearchParams(location.search).get("gh");
+      return {
+        installed: gh !== "missing",
+        authed: gh === null,
+        unavailable:
+          gh === null
+            ? null
+            : gh === "missing"
+              ? "gh-missing"
+              : "gh-signed-out",
+      };
+    },
+    "githubCli:owners": () => ["rin", "sylophi", "dittofleet"],
+    // Takes the push's moment, and gives the project the remote it
+    // would have.
+    "githubCli:publish": async ({ projectId, owner = "rin" }) => {
+      await sleep(1500);
+      const at = forest.projects.findIndex((entry) => entry.id === projectId);
+      const project = forest.projects[at];
+      if (!project) throw new Error("Unknown project");
+      forest.projects[at] = {
+        ...project,
+        identity: `remote:github.com/${owner}/${project.name}`,
+      };
+    },
+    "terrier:readiness": () => ({ installed: true, readable: true }),
     // One repo, one set of PRs: every checkout of shigoto-no-mori
     // answers with the same map, as the real sweep would on each
     // device, so a stack reads the same from every device's rows.
@@ -1240,10 +1273,28 @@ async function fakeSyncPull(
 }
 
 const FAKE_DETECTED = [
-  { kind: "detected", id: "vscode", label: "VS Code", available: true },
-  { kind: "detected", id: "terminal", label: "Terminal", available: true },
-  { kind: "detected", id: "finder", label: "Finder", available: true },
-  { kind: "detected", id: "codex", label: "ChatGPT", available: true },
+  { kind: "detected", id: "app:vscode", label: "VS Code", available: true },
+  { kind: "detected", id: "app:terminal", label: "Terminal", available: true },
+  { kind: "detected", id: "app:ghostty", label: "Ghostty", available: true },
+  { kind: "detected", id: "app:finder", label: "Finder", available: true },
+  { kind: "detected", id: "app:codex", label: "ChatGPT", available: true },
+  {
+    kind: "detected",
+    id: "app:claude-code",
+    label: "Claude Code",
+    available: true,
+  },
+  { kind: "detected", id: "app:neovim", label: "Neovim", available: true },
+  { kind: "detected", id: "app:lazygit", label: "lazygit", available: true },
+  { kind: "detected", id: "app:gemini", label: "Gemini CLI", available: false },
+  {
+    kind: "detected",
+    id: "app:copilot",
+    label: "Copilot CLI",
+    available: false,
+  },
+  { kind: "detected", id: "app:vim", label: "Vim", available: false },
+  { kind: "detected", id: "app:helix", label: "Helix", available: false },
 ] as const;
 
 // ---- account and presence state the fake host can change ----
@@ -1308,7 +1359,7 @@ function initPresence(): void {
     if (state === "connected" || state === "online") roster.add(id);
     if (state === "connected") directSessions.add(id);
   }
-  posedDevices(pose.get("updates") ?? "tp", stagedUpdates);
+  posedDevices(pose.get("updates") ?? "", stagedUpdates);
   posedDevices(pose.get("downloading") ?? "", downloadingUpdates);
 }
 

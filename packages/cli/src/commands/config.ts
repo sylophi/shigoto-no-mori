@@ -190,6 +190,7 @@ const device: Settings = {
     githubCli: "GitHub CLI integration",
     launchers: "Global custom launchers (`config launcher`)",
     hiddenLaunchers: "Hidden launcher ids (via edit or the app)",
+    terminal: "Terminal that terminal tools (Claude Code, Neovim, …) open in",
   },
 };
 
