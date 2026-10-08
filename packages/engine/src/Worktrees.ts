@@ -68,6 +68,7 @@ import {
 } from "./shelf.ts";
 import * as WorktreeData from "./WorktreeData.ts";
 import {
+  cleanPath,
   driveBaseOf,
   isManagedPath,
   worktreeIdFromPath,
@@ -509,6 +510,8 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "remove-primary",
       "changed-during-cleanup",
       "uncommitted-at-remove",
+      "invalid-branch",
+      "invalid-base",
       "move-primary",
       "move-destination-exists",
       "move-not-listed",
@@ -523,7 +526,12 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
 ) {
   // The command line was what was wrong (the terminal exits 2).
   get usage(): boolean {
-    return this.reason === "reserved-name" || this.reason === "invalid-name";
+    return [
+      "reserved-name",
+      "invalid-name",
+      "invalid-branch",
+      "invalid-base",
+    ].includes(this.reason);
   }
 
   override get message(): string {
@@ -547,6 +555,10 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         return `Changes appeared in ${this.subject} while its cleanup scripts ran, so it was kept. Remove them, or pass --force --skip-cleanup to remove it without running the scripts again.`;
       case "uncommitted-at-remove":
         return `Worktree ${this.subject} has uncommitted changes. Pass --force to remove anyway.`;
+      case "invalid-branch":
+        return `Invalid --branch: ${quoted} is not a valid git ref name.`;
+      case "invalid-base":
+        return `Invalid --base: ${quoted} is not a valid git ref name.`;
       case "move-primary":
         return "The primary checkout can't be moved";
       case "move-destination-exists":
@@ -2225,6 +2237,15 @@ const make = Effect.gen(function* () {
   ) {
     const name = input.name ?? "";
     yield* checkName(name);
+    // A ref git would read as an option.
+    for (const [reason, ref] of [
+      ["invalid-branch", input.branch],
+      ["invalid-base", input.base],
+    ] as const) {
+      if (ref?.startsWith("-")) {
+        return yield* new WorktreeRefused({ reason, subject: ref });
+      }
+    }
     const { made, found, cloned } = yield* addWorktree(project, {
       name,
       branch: input.branch ?? "",
@@ -2606,7 +2627,7 @@ const make = Effect.gen(function* () {
         subject: "",
       });
     }
-    const to = path.normalize(target);
+    const to = cleanPath(target);
     if (to !== worktree.path) {
       // git would move the checkout into an existing folder, at a path
       // (and an id) other than the one asked for.
@@ -2652,7 +2673,7 @@ const make = Effect.gen(function* () {
     from: string,
     toPath: string,
   ) {
-    const to = worktreeIdFromPath(path.normalize(toPath));
+    const to = worktreeIdFromPath(cleanPath(toPath));
     if (to !== from) yield* rekeyWorktree(project, from, to);
     return to;
   });

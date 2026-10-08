@@ -658,6 +658,7 @@ describe("making and removing worktrees", () => {
     await change("create", "root", "-p", "alpha");
     await change("create", "a/b", "-p", "alpha");
     await change("create", "cat", "-p", "alpha", "--branch=-x");
+    await change("create", "root", "-p", "alpha", "--base=-y");
     await change("create", "cat", "-p", "alpha", "--checkout");
   });
 
@@ -737,7 +738,7 @@ describe("making and removing worktrees", () => {
       "--from-id",
       id,
       "--to-path",
-      `${box.home}/wts/lynx`,
+      `${box.home}/wts/lynx/`,
     );
     await same("wt", "rekey", "--project-id", "A", "--from-id", id);
     await same(

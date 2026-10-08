@@ -21,10 +21,10 @@ type Slot = Extract<
 const slotLabel = (slot: Slot) =>
   slot.kind === "portPool" ? `port-pool ${slot.phase}` : slot.kind;
 
-// `created` is the line for a new worktree: create and adopt say it
+// `created` is the line for a new worktree, which create and adopt say
 // their own way.
 export const reporter = (
-  created: (worktree: Worktrees.WorktreeRow) => string,
+  created: (worktree: Worktrees.WorktreeRow) => string = () => "",
 ) =>
   Effect.gen(function* () {
     const output = yield* Effect.service(Output);

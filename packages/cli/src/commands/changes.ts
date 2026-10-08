@@ -1,6 +1,6 @@
 // The worktree verbs that change things: create, adopt and setup (each
 // waits for the lifecycle scripts), rm, move, and rekey for the app.
-import { isAbsolute, normalize } from "node:path";
+import { isAbsolute } from "node:path";
 import { envVar } from "@shigomori/engine/environment";
 import type * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
@@ -52,6 +52,17 @@ const force = (description: string) =>
 // Go reads the positionals it needs and lets the rest be.
 const rest = Argument.String("args").pipe(Argument.variadic());
 
+// Where to go when the shell stands in a folder that is gone: "the
+// removed worktree" or "the old location".
+const cdNote = (what: string, path: string) =>
+  Effect.flatMap(Effect.service(Output), ({ stderrColor }) =>
+    note(
+      styles(stderrColor).dim(
+        `note: your shell is inside ${what}. Run \`cd ${path}\``,
+      ),
+    ),
+  );
+
 // A new worktree's last word: the failed scripts as warnings and the
 // path as the result, or the closing document. Exit 3 when a script
 // failed, the worktree being there all the same.
@@ -101,16 +112,6 @@ export const create = Command.make(
   (input) =>
     Effect.gen(function* () {
       const project = yield* resolveProject(input);
-      for (const [name, ref] of [
-        ["branch", input.branch],
-        ["base", input.base],
-      ] as const) {
-        if (Option.isSome(ref) && ref.value.startsWith("-")) {
-          return yield* new UsageError({
-            problem: `Invalid --${name}: ${JSON.stringify(ref.value)} is not a valid git ref name.`,
-          });
-        }
-      }
       const { json, stderrColor } = yield* Effect.service(Output);
       const { cyan } = styles(stderrColor);
       const created = yield* (yield* Worktrees.Worktrees).create(
@@ -161,7 +162,7 @@ export const adopt = Command.make(
     Effect.gen(function* () {
       const { located } = yield* resolveWorktree(input);
       const { json, stderrColor } = yield* Effect.service(Output);
-      const { cyan, dim } = styles(stderrColor);
+      const { cyan } = styles(stderrColor);
       const old = located.worktree.path;
       const wasInside = cwdInside(old);
       const created = yield* (yield* Worktrees.Worktrees).adopt(
@@ -174,11 +175,7 @@ export const adopt = Command.make(
       );
       const code = yield* finish(created);
       if (wasInside && !json) {
-        yield* note(
-          dim(
-            `note: your shell is inside the old location. Run \`cd ${created.worktree.path}\``,
-          ),
-        );
+        yield* cdNote("the old location", created.worktree.path);
       }
       if (code !== 0) return yield* new ExitCode({ code });
     }),
@@ -197,7 +194,7 @@ export const setup = Command.make(
       const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
       const { ran, failures } = yield* (yield* Worktrees.Worktrees).setup(
         located,
-        yield* reporter(() => ""),
+        yield* reporter(),
       );
       if (ran.length === 0) {
         return yield* json
@@ -238,7 +235,7 @@ export const rm = Command.make(
   (input) =>
     Effect.gen(function* () {
       const { located } = yield* resolveWorktree(input);
-      const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
+      const { json, stdoutColor } = yield* Effect.service(Output);
       const removed = yield* (yield* Worktrees.Worktrees)
         .remove(
           located,
@@ -247,7 +244,7 @@ export const rm = Command.make(
             keepBranch: input.keepBranch,
             skipCleanup: input.skipCleanup,
           },
-          yield* reporter(() => ""),
+          yield* reporter(),
         )
         .pipe(
           // The app reads which cleanup step failed from the document.
@@ -278,11 +275,7 @@ export const rm = Command.make(
       }
       yield* out(styles(stdoutColor).green(`removed ${removed.name}`));
       if (hint !== "") {
-        yield* note(
-          styles(stderrColor).dim(
-            `note: your shell is inside the removed worktree. Run \`cd ${hint}\``,
-          ),
-        );
+        yield* cdNote("the removed worktree", hint);
       }
     }),
 ).pipe(Command.withDescription("Remove a worktree, its teardown first"));
@@ -292,7 +285,7 @@ export const move = Command.make(
   { ...worktreeFlags, args: Argument.String("args").pipe(Argument.variadic()) },
   (input) =>
     Effect.gen(function* () {
-      const { json, binaryName, stderrColor } = yield* Effect.service(Output);
+      const { json, binaryName } = yield* Effect.service(Output);
       // The last positional is where it goes, a name before it.
       const most = Option.isSome(given(input.worktreeId)) ? 0 : 1;
       const count = input.args.length;
@@ -301,9 +294,7 @@ export const move = Command.make(
           problem: `Usage: ${binaryName} worktrees move [<name>] <new-path>`,
         });
       }
-      const destination = normalize(
-        yield* absolute(input.args[count - 1] ?? ""),
-      ).replace(/(.)\/+$/, "$1");
+      const destination = yield* absolute(input.args[count - 1] ?? "");
       const { located } = yield* resolveWorktree({
         ...input,
         ref: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
@@ -322,11 +313,7 @@ export const move = Command.make(
       }
       yield* out(moved.worktree.path);
       if (wasInside && moved.worktree.path !== located.worktree.path) {
-        yield* note(
-          styles(stderrColor).dim(
-            `note: your shell is inside the old location. Run \`cd ${moved.worktree.path}\``,
-          ),
-        );
+        yield* cdNote("the old location", moved.worktree.path);
       }
     }),
 ).pipe(Command.withDescription("Move a worktree's folder"));

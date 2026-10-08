@@ -410,4 +410,4 @@ export const cdCommand = Command.make(
       }
       yield* enter(worktree.name, worktree.path, cdFile);
     }),
-).pipe(Command.withAlias("c"), Command.withDescription("Enter a worktree"));
+).pipe(Command.withDescription("Enter a worktree"));
