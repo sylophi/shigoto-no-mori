@@ -109,8 +109,8 @@ func TestAutoMergeArms(t *testing.T) {
 }
 
 // A gh on PATH for a one-PR land on a repo that allows auto-merge: the
-// fox branch's PR #5 is waiting on its checks (BLOCKED), posable as
-// already armed through GH_FOX_AUTO. Each read of the PR's progress
+// fox branch's PR #5 is waiting on its checks (BLOCKED, or the verdict
+// in GH_FOX_VERDICT), posable as already armed through GH_FOX_AUTO. Each read of the PR's progress
 // (the read-back after the --auto merge, then every poll of the wait)
 // takes the next line of the file at GH_FOX_POLLS, the last one
 // answering every read after it. Every invocation is appended to a log.
@@ -121,14 +121,14 @@ func fakeGhAutoMerge(t *testing.T) (log string) {
 	script := `#!/bin/sh
 echo "$*" >> "$GH_LOG"
 case "$*" in
-  "pr list --state all --head fox --limit 10 --json "*) echo '[{"number":5,"title":"Fox","state":"OPEN","isDraft":false,"url":"u5","baseRefName":"main","headRefName":"fox","mergeStateStatus":"BLOCKED","autoMergeRequest":'"${GH_FOX_AUTO:-null}"'}]';;
+  "pr list --state all --head fox --limit 10 --json "*) echo '[{"number":5,"title":"Fox","state":"OPEN","isDraft":false,"url":"u5","baseRefName":"main","headRefName":"fox","mergeStateStatus":"'"${GH_FOX_VERDICT:-BLOCKED}"'","autoMergeRequest":'"${GH_FOX_AUTO:-null}"'}]';;
   "api graphql -F number=5 "*)
     head -n 1 "$GH_FOX_POLLS"
     if [ "$(wc -l < "$GH_FOX_POLLS")" -gt 1 ]; then
       tail -n +2 "$GH_FOX_POLLS" > "$GH_FOX_POLLS.next" && mv "$GH_FOX_POLLS.next" "$GH_FOX_POLLS"
     fi;;
   "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":true}}}';;
-  "pr merge 5 --auto --squash") ;;
+  "pr merge 5 --auto --squash"|"pr merge 5 --squash") ;;
   *) echo "unexpected gh $*" >&2; exit 1;;
 esac
 `
@@ -279,6 +279,36 @@ func TestLandStopsWhenTheAutoMergedPRNeedsAttention(t *testing.T) {
 	}
 }
 
+// On a base branch with a merge queue, a plain merge gh accepts queues
+// the PR. land reads that back and waits on the queue rather than
+// cleaning up a PR that hasn't merged.
+func TestLandWaitsOnAPlainMergeTheQueueTook(t *testing.T) {
+	proj, ctx := landFixture(t)
+	log := fakeGhAutoMerge(t)
+	t.Setenv("GH_FOX_VERDICT", "CLEAN")
+	queued := `{"data":{"repository":{"pullRequest":{"state":"OPEN","mergeStateStatus":"BLOCKED","isInMergeQueue":true}}}}`
+	posePolls(t, queued, queued, poll("MERGED", "UNKNOWN", "", false))
+
+	if code, err := cmdLand(ctx, []string{"fox"}); err != nil || code != 0 {
+		t.Fatalf("land = %d, %v", code, err)
+	}
+	if got := mergeCalls(t, log); strings.Join(got, ";") != "pr merge 5 --squash" {
+		t.Errorf("gh merge calls = %q, want the one plain merge", got)
+	}
+	reads := 0
+	for _, call := range ghCalls(t, log) {
+		if strings.HasPrefix(call, "api graphql -F number=5 ") {
+			reads++
+		}
+	}
+	if reads != 3 {
+		t.Errorf("read the PR %d times, want the read-back and two polls", reads)
+	}
+	if foxSurvives(t, proj) {
+		t.Error("the worktree survived the land of its merged PR")
+	}
+}
+
 // merge waits the same way, and leaves the worktree to the cleanup.
 func TestMergeWaitsForAutoMerge(t *testing.T) {
 	proj, ctx := landFixture(t)
@@ -324,7 +354,8 @@ func TestMergeProgressProblem(t *testing.T) {
 		}
 	}
 
-	queue, err := parseMergeProgress(`{"data":{"repository":{"pullRequest":{"state":"OPEN","mergeStateStatus":"BLOCKED","isInMergeQueue":true}}}}`)
+	// The queue brings a PR up to date itself.
+	queue, err := parseMergeProgress(`{"data":{"repository":{"pullRequest":{"state":"OPEN","mergeStateStatus":"BEHIND","isInMergeQueue":true}}}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,6 +364,36 @@ func TestMergeProgressProblem(t *testing.T) {
 	}
 	if got := queue.waitingOn(); got != "it is in the merge queue" {
 		t.Errorf("queued: waitingOn = %q", got)
+	}
+}
+
+// A read that falls between two of GitHub's steps (auto-merge gone,
+// the merge queue not shown yet) doesn't end the wait. A PR that sits
+// BLOCKED with nothing to wait on does, once it has for a while.
+func TestAwaitMergeRidesOutOneReadAndStopsWhenStuck(t *testing.T) {
+	fakeGhAutoMerge(t)
+	pr := &prSummary{Number: 5, Title: "Fox", URL: "u5", BaseRefName: "main"}
+	armed := mergeOutcome{method: "squash", outcome: outcomeAutoMerge}
+	queued := `{"data":{"repository":{"pullRequest":{"state":"OPEN","mergeStateStatus":"BLOCKED","isInMergeQueue":true}}}}`
+
+	posePolls(t, poll("OPEN", "BLOCKED", "", true, "build=!"), poll("OPEN", "BLOCKED", "", false), queued, poll("MERGED", "UNKNOWN", "", false))
+	if err := awaitMerge(t.TempDir(), pr, armed, "land"); err != nil {
+		t.Errorf("wait through a hand-off to the queue = %v, want merged", err)
+	}
+
+	posePolls(t, poll("OPEN", "BLOCKED", "", true, "build=SUCCESS!"))
+	err := awaitMerge(t.TempDir(), pr, armed, "land")
+	if errorKindOf(err) != "needs-attention" || !strings.Contains(err.Error(), "can't see") {
+		t.Errorf("wait on a stuck PR = %v, want needs-attention", err)
+	}
+}
+
+// A land run again on an armed PR says so, rather than that it armed it.
+func TestAlreadyArmedOutcomeLine(t *testing.T) {
+	pr := &prSummary{Number: 5, Title: "Fox"}
+	o := mergeOutcome{method: "squash", outcome: outcomeAutoMerge, alreadyArmed: true}
+	if got := o.line(pr); !strings.Contains(got, "auto-merge already enabled for PR #5 (squash): Fox") {
+		t.Errorf("line = %q", got)
 	}
 }
 

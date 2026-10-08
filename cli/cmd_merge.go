@@ -318,6 +318,8 @@ const (
 type mergeOutcome struct {
 	method  string
 	outcome string
+	// An auto-merge armed before this merge, which it left as it was.
+	alreadyArmed bool
 }
 
 // The JSON fields the outcome adds to merge's and land's documents.
@@ -335,6 +337,9 @@ func (o mergeOutcome) line(pr *prSummary) string {
 		verb = "queued"
 	case outcomeAutoMerge:
 		verb = "auto-merge enabled for"
+		if o.alreadyArmed {
+			verb = "auto-merge already enabled for"
+		}
 	}
 	return greenOut(fmt.Sprintf("%s PR #%d (%s): %s", verb, pr.Number, o.method, pr.Title))
 }
@@ -471,17 +476,17 @@ func execMerge(proj project, pr *prSummary, methodFlag string, settings repoMerg
 
 // `gh pr merge`, with the stacked-PR fallback below.
 func mergeNow(projectPath string, number int, method string) (mergeOutcome, error) {
-	o := mergeOutcome{method: method, outcome: outcomeMerged}
 	if _, err := runGh(projectPath, "pr", "merge", fmt.Sprint(number), "--"+method); err != nil {
 		queued, err := mergeStackedAlone(projectPath, number, method, err)
 		if err != nil {
 			return mergeOutcome{}, err
 		}
 		if queued {
-			o.outcome = outcomeQueued
+			return mergeOutcome{method: method, outcome: outcomeQueued}, nil
 		}
+		return mergeOutcome{method: method, outcome: outcomeMerged}, nil
 	}
-	return o, nil
+	return readBackOutcome(projectPath, number, mergeOutcome{method: method, outcome: outcomeMerged}), nil
 }
 
 // The verdicts auto-merge is for: the base branch's rules aren't met
@@ -496,41 +501,42 @@ func autoMergeArms(mergeStateStatus string) bool {
 }
 
 // Arm auto-merge on the PR, so GitHub merges it once its requirements
-// are met. gh's --auto merges at once instead when the verdict has
-// moved since the lookup, and a base branch with a merge queue queues
-// the PR, so the outcome is read back off the PR rather than assumed.
+// are met.
 func armAutoMerge(projectPath string, pr *prSummary, method string) (mergeOutcome, error) {
 	if armed := pr.AutoMergeRequest; armed != nil {
 		// GitHub refuses a second enable, and the PR lands on its
 		// own with what is armed.
-		return mergeOutcome{method: cmp.Or(armed.method(), method), outcome: outcomeAutoMerge}, nil
+		return mergeOutcome{method: cmp.Or(armed.method(), method), outcome: outcomeAutoMerge, alreadyArmed: true}, nil
 	}
 	if _, err := runGh(projectPath, "pr", "merge", fmt.Sprint(pr.Number), "--auto", "--"+method); err != nil {
 		return mergeOutcome{}, err
 	}
-	return autoMergeOutcome(projectPath, pr.Number, method)
+	return readBackOutcome(projectPath, pr.Number, mergeOutcome{method: method, outcome: outcomeAutoMerge}), nil
 }
 
-func autoMergeOutcome(projectPath string, number int, method string) (mergeOutcome, error) {
-	armed := mergeOutcome{method: method, outcome: outcomeAutoMerge}
+// A merge gh accepted doesn't always end the way it was asked to: --auto
+// merges at once when the verdict has moved since the lookup, and on a
+// base branch with a merge queue either merge queues the PR. So the
+// outcome is read back off the PR rather than assumed. A read that
+// fails leaves the one asked for, since it only shapes the report and
+// the wait.
+func readBackOutcome(projectPath string, number int, asked mergeOutcome) mergeOutcome {
 	after, err := readMergeProgress(projectPath, number)
-	if err != nil {
-		// gh accepted the merge. This read only shapes the report.
-		return armed, nil
-	}
 	switch {
+	case err != nil:
 	case after.State == "MERGED":
-		return mergeOutcome{method: method, outcome: outcomeMerged}, nil
+		asked.outcome = outcomeMerged
 	case after.IsInMergeQueue:
-		return mergeOutcome{method: method, outcome: outcomeQueued}, nil
+		asked.outcome = outcomeQueued
+	case after.AutoMergeRequest != nil:
+		asked.outcome = outcomeAutoMerge
 	}
-	return armed, nil
+	return asked
 }
 
 // GraphQL, since `gh pr view --json` exposes neither isInMergeQueue
-// nor whether a check is required. isRequired is what lets land's
-// wait (cmd_land.go) go on past a failing check GitHub merges past
-// anyway. The number goes first so a test's fake gh can tell this
+// nor whether a check is required. isRequired is what lets the wait
+// (awaitMerge) go on past a failing check GitHub merges past anyway. The number goes first so a test's fake gh can tell this
 // query from the repo settings' by its prefix.
 const mergeProgressQuery = "query($number: Int!, $owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
 	"{ pullRequest(number: $number) { state mergeStateStatus reviewDecision isInMergeQueue autoMergeRequest { mergeMethod } " +
@@ -612,11 +618,16 @@ var autoMergePollInterval = 10 * time.Second
 // fails now and then (a network blip) is waited out.
 const autoMergeReadAttempts = 5
 
+// How many polls in a row (about five minutes) a PR may sit BLOCKED
+// with nothing the wait can see to wait on before it counts as stuck:
+// a required check that never reports, say, or a rule the reads don't
+// cover.
+const autoMergeStallPolls = 30
+
 // Waits for a PR that didn't merge on the spot (auto-merge armed, or a
 // merge queue took it) until GitHub merges it. Every other way out is
 // an error naming what the PR needs, and the command to run again once
-// it's dealt with. The merge has just read the PR back, so the first
-// poll waits a turn too.
+// it's dealt with.
 func awaitMerge(projectPath string, pr *prSummary, o mergeOutcome, command string) error {
 	if o.outcome == outcomeMerged {
 		return nil
@@ -625,10 +636,9 @@ func awaitMerge(projectPath string, pr *prSummary, o mergeOutcome, command strin
 		out(o.line(pr))
 	}
 	queued := o.outcome == outcomeQueued
-	lastNote := ""
-	failedReads := 0
-	for {
-		time.Sleep(autoMergePollInterval)
+	lastNote, lastProblem := "", ""
+	failedReads, stalledPolls := 0, 0
+	for ; ; time.Sleep(autoMergePollInterval) {
 		progress, err := readMergeProgress(projectPath, pr.Number)
 		if err != nil {
 			if failedReads++; failedReads == autoMergeReadAttempts {
@@ -642,13 +652,27 @@ func awaitMerge(projectPath string, pr *prSummary, o mergeOutcome, command strin
 			return nil
 		}
 		queued = queued || progress.IsInMergeQueue
-		if problem := progress.problem(pr.BaseRefName, queued); problem != "" {
+		problem, waitingOn := progress.problem(pr.BaseRefName, queued), progress.waitingOn()
+		if problem == "" && waitingOn == "" && progress.MergeStateStatus == "BLOCKED" {
+			if stalledPolls++; stalledPolls >= autoMergeStallPolls {
+				problem = "GitHub is holding it back for a reason sm can't see"
+			}
+		} else {
+			stalledPolls = 0
+		}
+		// A problem counts once two reads in a row see it: one read can
+		// fall between two of GitHub's steps, like auto-merge handing
+		// the PR to a merge queue, or the queue landing it.
+		if problem != "" && problem == lastProblem {
 			return codedErrf("needs-attention", "PR #%d needs attention: %s (%s). Run `%s %s` again once it's dealt with",
 				pr.Number, problem, pr.URL, binaryName, command)
 		}
+		if lastProblem = problem; problem != "" {
+			continue
+		}
 		line := "waiting for GitHub to merge it"
-		if w := progress.waitingOn(); w != "" {
-			line += ": " + w
+		if waitingOn != "" {
+			line += ": " + waitingOn
 		}
 		if line != lastNote {
 			lastNote = line
@@ -669,15 +693,19 @@ func (p mergeProgress) requiredChecks(verdict checkVerdict) []string {
 
 // Why GitHub won't merge the PR without a person, or "" while it still
 // might. GitHub doesn't update a branch that is behind for auto-merge,
-// so BEHIND waits on a person too. queued is whether the PR has been
-// in a merge queue, which takes it out again when its checks fail.
+// so BEHIND waits on a person too. A merge queue brings the PR up to
+// date and runs its checks itself, so a queued PR waits on the queue.
+// queued is whether the PR has been in one, which takes it out again
+// when its checks fail.
 func (p mergeProgress) problem(base string, queued bool) string {
 	switch {
 	case p.State == "CLOSED":
 		return "it was closed"
-	case p.AutoMergeRequest == nil && !p.IsInMergeQueue && queued:
+	case p.IsInMergeQueue:
+		return ""
+	case p.AutoMergeRequest == nil && queued:
 		return "it left the merge queue unmerged"
-	case p.AutoMergeRequest == nil && !p.IsInMergeQueue:
+	case p.AutoMergeRequest == nil:
 		return "auto-merge was turned off"
 	case p.MergeStateStatus == "DIRTY":
 		return "it conflicts with " + base

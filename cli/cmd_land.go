@@ -99,6 +99,13 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		if err := awaitMerge(proj.Path, pr, o, "land"); err != nil {
 			return exitCodeOf(err), err
 		}
+		// The wait can take as long as the checks do, time enough for
+		// new work in the worktree, so the guards run again.
+		if o.outcome != outcomeMerged && !id.IsPrimary {
+			if err := removePreflight(id, opts.force); err != nil {
+				return exitCodeOf(err), err
+			}
+		}
 		method = o.method
 	}
 	reportMerged(pr, method)
