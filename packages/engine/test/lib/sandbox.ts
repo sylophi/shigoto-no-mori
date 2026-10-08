@@ -29,6 +29,7 @@ import * as Icons from "../../src/Icons.ts";
 import * as Landing from "../../src/Landing.ts";
 import * as Launchers from "../../src/Launchers.ts";
 import * as Layout from "../../src/Layout.ts";
+import * as Projects from "../../src/Projects.ts";
 import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Terrier from "../../src/Terrier.ts";
@@ -43,6 +44,7 @@ export type Engine =
   | Icons.Icons
   | Launchers.Launchers
   | Layout.Layout
+  | Projects.Projects
   | Registry.Registry
   | Scripts.Scripts
   | Terrier.Terrier

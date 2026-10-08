@@ -51,6 +51,15 @@ const withoutHue = (doc: unknown) =>
     ? doc.map((row: unknown) => Object.assign({}, row, { hue: null }))
     : doc;
 
+// A new project's id, random on each side.
+const withoutIds = (seen: object) =>
+  JSON.parse(
+    JSON.stringify(seen).replaceAll(
+      /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
+      "<id>",
+    ),
+  ) as unknown;
+
 // The same command through both binaries from `cwd`, each on its own
 // copy. Under --json the documents are compared, not their bytes (Go
 // sorts keys and escapes <, > and &); a person's output is compared as
@@ -61,13 +70,15 @@ const sameAt = async (cwd: string, ...args: string[]) => {
     box.runAt(built, "cli", cwd, args),
   ]);
   const seen = (run: typeof go) =>
-    args.includes("--json")
-      ? {
-          code: run.code,
-          doc: withoutHue(withoutFileMarker(run.doc)),
-          stderr: run.stderr,
-        }
-      : { code: run.code, stdout: run.stdout, stderr: run.stderr };
+    withoutIds(
+      args.includes("--json")
+        ? {
+            code: run.code,
+            doc: withoutHue(withoutFileMarker(run.doc)),
+            stderr: run.stderr,
+          }
+        : { code: run.code, stdout: run.stdout, stderr: run.stderr },
+    );
   assert.deepStrictEqual(seen(ours), seen(go), args.join(" "));
 };
 
@@ -241,6 +252,87 @@ describe("projects", () => {
     );
     await same("projects", "config", "set", "carryOver", "x", "-p", "alpha");
     await same("--json", "projects", "config", "read", "-p", "beta");
+  });
+});
+
+describe("projects add, remove and reorder", () => {
+  it("adds the repo a folder is in, at its primary checkout", async () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta", {
+      "package.json": "{}",
+      "pnpm-lock.yaml": "",
+      "src/index.ts": "",
+    });
+    box.write("registry.json", { projects: [] });
+    box.write("config.json", {
+      autoPullNew: true,
+      autoPopulateInstall: true,
+    });
+    await sameAt(alpha, "projects", "add");
+    await same("--json", "projects", "add", `${beta}/src`);
+    await same("--json", "projects", "config", "read", "-p", "beta");
+    await same("--json", "projects", "config", "read", "-p", "alpha");
+    await same("projects", "add", "beta");
+    await same("--json", "projects", "add", "alpha");
+    await same("projects", "add", box.home);
+    await same("--json", "projects", "list");
+  });
+
+  it("adds every repo under a folder once told yes", async () => {
+    box.repo("one");
+    box.repo("two");
+    box.repo(".hidden");
+    box.repo("node_modules");
+    const known = box.repo("known");
+    box.write("registry.json", {
+      projects: [{ id: "K", name: "known", path: known }],
+    });
+    await same("projects", "add", "--all", box.home);
+    await same("--json", "projects", "add", "-a", "-y", box.home);
+    await same("projects", "add", "--all", "--yes", box.home);
+    await same("--json", "projects", "add", "--all", `${box.home}/nowhere`);
+  });
+
+  it("removes a project once told yes, and leaves terrier's", async () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.git(alpha, "worktree", "add", "-q", "-b", "w", `${box.home}/w`);
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    box.fakeBin(
+      "terrier",
+      `if [ "$1" = version ]; then echo v0.1.4; else echo '${JSON.stringify({
+        projects: [{ path: box.repo("zeta") }],
+      })}'; fi`,
+    );
+    box.write("config.json", { terrier: true });
+    await same("projects", "remove", "alpha");
+    await same("--json", "projects", "remove");
+    await same("projects", "remove", "zeta", "--yes");
+    await same("--json", "projects", "rm", "--project-id", "B", "-y");
+    await same("projects", "remove", "alpha", "-y");
+    await same("--json", "projects", "remove", "--project-id", "B", "-y");
+    await same("--json", "projects", "list");
+  });
+
+  it("reorders the projects by id", async () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    await same("projects", "reorder");
+    await same("--json", "projects", "reorder", "--ids", "B, nope,A");
+    await same("projects", "list");
+    await same("projects", "reorder", "--ids", "A");
+    await same("--json", "projects", "list");
   });
 });
 
