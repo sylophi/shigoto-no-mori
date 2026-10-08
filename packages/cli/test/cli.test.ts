@@ -1352,6 +1352,18 @@ describe("doctor", () => {
     await sameDoctor("--json", "doctor", "--fix", "--yes");
     await sameDoctor("doctor");
   });
+
+  it("still gives its checklist when the store won't open", async () => {
+    writeFileSync(join(box.home, "seed", "store.db"), "not a database");
+    const run = await box.runAt(built, "cli", box.home, ["--json", "doctor"]);
+    const doc = run.doc as {
+      readonly ok: boolean;
+      readonly checks: ReadonlyArray<{ readonly status: string }>;
+    };
+    assert.equal(run.code, 1);
+    assert.equal(doc.ok, false);
+    assert.ok(doc.checks.some(({ status }) => status === "fail"));
+  });
 });
 
 describe("launchers", () => {
