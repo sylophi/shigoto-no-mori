@@ -24,6 +24,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Config from "../../src/Config.ts";
 import * as Git from "../../src/Git.ts";
+import * as GitHub from "../../src/GitHub.ts";
 import * as Identity from "../../src/Identity.ts";
 import * as Launchers from "../../src/Launchers.ts";
 import * as Layout from "../../src/Layout.ts";
@@ -32,6 +33,8 @@ import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Store from "../../src/Store.ts";
 import * as Usage from "../../src/Usage.ts";
+import * as WorktreeData from "../../src/WorktreeData.ts";
+import * as Worktrees from "../../src/Worktrees.ts";
 
 // The services a harness case calls.
 export type Engine =
@@ -40,7 +43,8 @@ export type Engine =
   | Layout.Layout
   | Registry.Registry
   | Scripts.Scripts
-  | Usage.Usage;
+  | Usage.Usage
+  | Worktrees.Worktrees;
 
 const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
 
@@ -102,6 +106,19 @@ function buildGoSm(): string {
   return binary;
 }
 
+// The stable code Go's error document carries beside the message, for
+// the failures the app maps without reading prose. Go codes an unknown
+// project only where the app names it by id, so that one is the
+// terminal's to add.
+const CODES = [
+  [Worktrees.UnknownWorktree, "unknown-worktree"],
+  [Worktrees.PullRequestOwnsDescription, "pull-request-open"],
+] as const;
+const codeOf = (error: unknown) => {
+  const code = CODES.find(([cls]) => error instanceof cls)?.[1];
+  return code === undefined ? {} : { code };
+};
+
 export type Sandbox = {
   readonly home: string;
   // Writes a JSON file under the data dir.
@@ -113,6 +130,8 @@ export type Sandbox = {
   // A git repository at `name` beside the data dirs, which both sides
   // share, with `files` committed.
   readonly repo: (name: string, files?: Record<string, string>) => string;
+  // git in `cwd` with the sandbox's identity, answering its stdout.
+  readonly git: (cwd: string, ...args: string[]) => string;
   readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
   readonly remove: () => Promise<void>;
 };
@@ -131,12 +150,17 @@ export function sandbox(): Sandbox {
   const engineRuntime = () => {
     const dataDir = side("engine");
     runtime ??= ManagedRuntime.make(
-      Layer.mergeAll(
-        Launchers.layer,
-        Layout.layer,
-        Registry.layer,
-        Scripts.layer,
-      ).pipe(
+      Worktrees.layer.pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(
+            Launchers.layer,
+            Layout.layer,
+            Registry.layer,
+            Scripts.layer,
+            WorktreeData.layer,
+            GitHub.layer,
+          ),
+        ),
         Layer.provideMerge(
           Layer.mergeAll(Config.layer, Usage.layer, Identity.layer),
         ),
@@ -196,6 +220,8 @@ export function sandbox(): Sandbox {
       writeFileSync(join(seed, file), JSON.stringify(value));
     },
     go: (...args) => goAt(root, ...args),
+    git: (cwd, ...args) =>
+      execFileSync("git", args, { cwd, env: gitEnv, encoding: "utf8" }),
     goAt,
     repo: (name, files = {}) => {
       const dir = join(root, name);
@@ -220,6 +246,7 @@ export function sandbox(): Sandbox {
             onFailure: (error) => ({
               ok: false,
               error: error instanceof Error ? error.message : String(error),
+              ...codeOf(error),
             }),
           }),
         ),
