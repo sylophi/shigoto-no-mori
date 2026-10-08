@@ -38,7 +38,9 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		// transplant was told not to set the copy up.
 		// no-clone: have git write every tracked file instead of cloning
 		// them from an existing checkout (cloneCheckout).
-		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}, "no-clone": {}},
+		// agent-working: set the agent-working mark (`sm agent-working`)
+		// from the start, for an agent that creates a worktree to work in.
+		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}, "no-clone": {}, "agent-working": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -71,6 +73,12 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	// The row was built before the mark existed, so it's set on it here.
 	if markAutoPullIfNew(readGlobalConfigHints(), worktree.ID, false) {
 		worktree.AutoPull = true
+	}
+	if parsed.bools["agent-working"] {
+		if err := setRegistryMark(agentWorkingKey, worktree.ID, true); err != nil {
+			return 1, err
+		}
+		worktree.AgentWorking = true
 	}
 	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
 		"created "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")

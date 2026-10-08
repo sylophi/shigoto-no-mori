@@ -25,8 +25,9 @@ export const LABEL_RANK = {
   files: 3,
   mirror: 4,
   shelve: 5,
-  autoPull: 6,
-  delete: 7,
+  agentWorking: 6,
+  autoPull: 7,
+  delete: 8,
 } as const;
 
 const rankOf = (label: HTMLElement) => Number(label.dataset.labelRank);

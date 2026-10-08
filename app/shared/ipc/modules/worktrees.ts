@@ -27,6 +27,7 @@ import {
   ReadWorktreeFilePayloadSchema,
   RestoreDiscardPayloadSchema,
   SetAutoPullPayloadSchema,
+  SetAgentWorkingPayloadSchema,
   SetShelvedPayloadSchema,
   SetStagedPayloadSchema,
   WorktreeCarryOverCompleteSchema,
@@ -103,6 +104,12 @@ export const worktreesContract = defineContract("host", {
   setAutoPull: invoke(
     "worktrees:setAutoPull",
     SetAutoPullPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  setAgentWorking: invoke(
+    "worktrees:setAgentWorking",
+    SetAgentWorkingPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),

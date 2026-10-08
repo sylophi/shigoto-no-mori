@@ -12,6 +12,7 @@ import {
 } from "@/hooks/projects/useProjectSort";
 import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
+import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -66,6 +67,7 @@ export function useForestSources({
   const deviceBadges = useDeviceBadges();
   const hiddenPrefixes = useWorktreePrefixes("hidden");
   const groupedPrefixes = useWorktreePrefixes("grouped");
+  const allowAgentWorking = useAllowAgentWorking();
   // The device filter narrows what the builders are handed rather than
   // what they do: one machine's rows only, the local ones or one
   // peer's. The queries above stay subscribed either way, so a pick
@@ -115,6 +117,7 @@ export function useForestSources({
     mirrors,
     deviceBadges,
     hiddenPrefixes,
+    allowAgentWorking,
     groupedPrefixes,
     filter,
     activeFilter,

@@ -125,6 +125,7 @@ function grid(
       sortMode: "manual",
     }),
     hiddenPrefixes: ["wip/"],
+    allowAgentWorking: false,
     byOwner,
     remote: [peer],
     mirrors: [],

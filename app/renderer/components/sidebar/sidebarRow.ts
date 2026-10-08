@@ -5,11 +5,20 @@ import type { SidebarDeviceBadge } from "./DeviceBadge";
 
 // The shelves the inbox view folds shut by default. The live box has
 // no header and no toggle, so it isn't in this union.
-export type InboxShelf = "shelved" | "merged" | "hidden";
+export type InboxShelf = "agentWorking" | "shelved" | "merged" | "hidden";
 
-// The folds under a tree group's rows, in order: the worktrees the
-// user shelved, and those the hidden prefixes match.
-export const GROUP_SHELVES = ["shelved", "hidden"] as const;
+// Each shelf's name, as its fold reads it.
+export const SHELF_LABELS: Record<InboxShelf, string> = {
+  agentWorking: "Agent working",
+  shelved: "Shelved",
+  merged: "Merged",
+  hidden: "Hidden",
+};
+
+// The folds under a tree group's rows, in order: the worktrees an agent
+// is working in (isAgentWorking), those the user shelved, and those the
+// hidden prefixes match.
+export const GROUP_SHELVES = ["agentWorking", "shelved", "hidden"] as const;
 export type GroupShelf = (typeof GROUP_SHELVES)[number];
 
 // One peer device's checkout of a project group.
