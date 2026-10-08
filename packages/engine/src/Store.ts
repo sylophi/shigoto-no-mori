@@ -38,7 +38,7 @@ export const layer: Layer.Layer<
     const sql = yield* Effect.gen(function* () {
       const client = yield* SqliteClient.make({ filename: store });
       // The schema's history, applied in order. A released migration is
-      // never edited; a change is a new one.
+      // never edited. A change is a new one.
       yield* SqliteMigrator.run({
         loader: SqliteMigrator.fromRecord({
           "1_tables": tables,
