@@ -2,6 +2,7 @@
 // error exits 2, anything else 1. Under --json the failure is the
 // engine's error document with `ok: false`. A person gets `sm: <message>`
 // on stderr.
+import { constants } from "node:os";
 import { errorDocument, isUsage } from "@shigomori/engine/errorDocument";
 import * as Effect from "effect/Effect";
 import * as CliError from "effect/cli/CliError";
@@ -22,6 +23,30 @@ export class ExitCode extends Schema.TaggedError<ExitCode>()("ExitCode", {
   code: Schema.Int,
 }) {}
 
+// The signals a program crashes with.
+const CRASHES = new Set([
+  "SIGSEGV",
+  "SIGBUS",
+  "SIGILL",
+  "SIGFPE",
+  "SIGABRT",
+  "SIGTRAP",
+  "SIGSYS",
+]);
+
+// A command whose program was killed by `signal`. sm dies of the same
+// signal (main.ts), so whoever started it sees what running the program
+// themselves would have shown, a shell's 128+n among it. A crash signal
+// is only reported as 128+n: raising it on sm would read as sm crashing,
+// with a crash report of its own.
+export class Killed extends Schema.TaggedError<Killed>()("Killed", {
+  signal: Schema.String,
+}) {
+  get raised(): boolean {
+    return !CRASHES.has(this.signal);
+  }
+}
+
 // A person answered no.
 export class Cancelled extends Schema.TaggedError<Cancelled>()(
   "Cancelled",
@@ -40,6 +65,9 @@ export const report = (error: unknown) =>
     const problems = error instanceof CliError.ShowHelp ? error.errors : [];
     if (error instanceof CliError.ShowHelp && problems.length === 0) return 0;
     if (error instanceof ExitCode) return error.code;
+    if (error instanceof Killed) {
+      return 128 + (constants.signals[error.signal as NodeJS.Signals] ?? 0);
+    }
     const { json, stderrColor, binaryName } = yield* Effect.service(Output);
     const document =
       problems.length > 0

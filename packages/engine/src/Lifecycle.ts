@@ -18,6 +18,7 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { CD_FILE_ENV } from "./shellHook.ts";
 
 // Where a lifecycle step stands, as `sm --json` reports it.
 export type Phase = "carryOver" | "setup" | "portPoolProvision" | "idle";
@@ -82,21 +83,35 @@ export class Lifecycle extends Context.Service<
   }
 >()("sm/engine/Lifecycle") {}
 
-// The variables a run's identity travels in. A stale one from a parent
-// run is dropped first, so a script that runs sm can't leak it.
-const CONTRACT_KEYS = [
-  "SHIGOMORI_SCRIPT_NAME",
-  "SHIGOMORI_WORKTREE_PATH",
-  "SHIGOMORI_WORKTREE_NAME",
-  "SHIGOMORI_WORKTREE_BRANCH",
-  "SHIGOMORI_WORKTREE_ID",
-  "SHIGOMORI_WORKTREE_TITLE",
-  "SHIGOMORI_WORKTREE_DESCRIPTION",
-  "SHIGOMORI_PROJECT_PATH",
-  "SHIGOMORI_PROJECT_NAME",
-  "SHIGOMORI_PROJECT_BRANCH",
-  "SHIGOMORI_DEFAULT_BRANCH",
-] as const;
+// What a script is told about where it runs, over the ambient
+// environment. A stale variable from a parent run is replaced, so a
+// script that runs sm can't leak it, and the wrapper's directive file is
+// dropped, so a script that runs `sm cd` can't retarget it. exec refuses
+// an environment holding a NUL, and the description is free text.
+export const scriptEnv = (context: ScriptContext, name: string) => {
+  const contract = {
+    SHIGOMORI_SCRIPT_NAME: name,
+    SHIGOMORI_WORKTREE_PATH: context.worktree.path,
+    SHIGOMORI_WORKTREE_NAME: context.worktree.name,
+    SHIGOMORI_WORKTREE_BRANCH: context.worktree.branch,
+    SHIGOMORI_WORKTREE_ID: context.worktree.id,
+    SHIGOMORI_WORKTREE_TITLE: context.title,
+    SHIGOMORI_WORKTREE_DESCRIPTION: context.description,
+    SHIGOMORI_PROJECT_PATH: context.project.path,
+    SHIGOMORI_PROJECT_NAME: context.project.name,
+    SHIGOMORI_PROJECT_BRANCH: context.projectBranch,
+    SHIGOMORI_DEFAULT_BRANCH: context.defaultBranch,
+  };
+  return {
+    [CD_FILE_ENV]: undefined,
+    ...Object.fromEntries(
+      Object.entries(contract).map(([key, value]) => [
+        key,
+        value.replaceAll("\0", ""),
+      ]),
+    ),
+  };
+};
 
 // The name a slot's script goes by in SHIGOMORI_SCRIPT_NAME.
 const scriptName = (slot: LifecycleSlot) =>
@@ -153,19 +168,6 @@ const make = Effect.gen(function* () {
       });
     const exit = (code: number | null) =>
       script({ runId, kind: "exit", code }).pipe(Effect.as({ code, runId }));
-    const contract: Record<(typeof CONTRACT_KEYS)[number], string> = {
-      SHIGOMORI_SCRIPT_NAME: scriptName(slot),
-      SHIGOMORI_WORKTREE_PATH: context.worktree.path,
-      SHIGOMORI_WORKTREE_NAME: context.worktree.name,
-      SHIGOMORI_WORKTREE_BRANCH: context.worktree.branch,
-      SHIGOMORI_WORKTREE_ID: context.worktree.id,
-      SHIGOMORI_WORKTREE_TITLE: context.title,
-      SHIGOMORI_WORKTREE_DESCRIPTION: context.description,
-      SHIGOMORI_PROJECT_PATH: context.project.path,
-      SHIGOMORI_PROJECT_NAME: context.project.name,
-      SHIGOMORI_PROJECT_BRANCH: context.projectBranch,
-      SHIGOMORI_DEFAULT_BRANCH: context.defaultBranch,
-    };
     const { shell, args } = yield* loginShell;
     return yield* Effect.scoped(
       Effect.gen(function* () {
@@ -179,17 +181,7 @@ const make = Effect.gen(function* () {
               detached: false,
               extendEnv: true,
               env: {
-                // A script that runs `sm cd` must not retarget the
-                // wrapper's directive file.
-                SHIGOMORI_CD_FILE: undefined,
-                // exec refuses an environment holding a NUL, and the
-                // description is free text.
-                ...Object.fromEntries(
-                  CONTRACT_KEYS.map((key) => [
-                    key,
-                    contract[key].replaceAll("\0", ""),
-                  ]),
-                ),
+                ...scriptEnv(context, scriptName(slot)),
                 // Output goes to a pipe, so tools are told it's a color
                 // terminal, and nobody is there to page.
                 FORCE_COLOR: "1",

@@ -8,6 +8,7 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import { findExecutable } from "./executables.ts";
 import { type PackageScript, packageScripts } from "./packageJson.ts";
 import * as Usage from "./Usage.ts";
 
@@ -52,6 +53,32 @@ export class UnreadablePackageJson extends Schema.TaggedError<UnreadablePackageJ
   }
 }
 
+// A script `sm run` can't start: the worktree has none, none by that
+// name, or the manager its lockfile picks isn't on PATH.
+export class ScriptRefused extends Schema.TaggedError<ScriptRefused>()(
+  "ScriptRefused",
+  {
+    reason: Schema.Literals(["no-scripts", "unknown-script", "no-manager"]),
+    script: Schema.String,
+    // The worktree's path and name, its scripts and its manager.
+    dir: Schema.String,
+    worktree: Schema.String,
+    scripts: Schema.Array(Schema.String),
+    manager: Schema.String,
+  },
+) {
+  override get message(): string {
+    switch (this.reason) {
+      case "no-scripts":
+        return `package.json in ${this.dir} has no scripts.`;
+      case "unknown-script":
+        return `No script named ${JSON.stringify(this.script)}. Scripts: ${this.scripts.join(", ")}.`;
+      case "no-manager":
+        return `${this.manager} isn't on PATH (the ${this.worktree} lockfile selects it).`;
+    }
+  }
+}
+
 export class Scripts extends Context.Service<
   Scripts,
   {
@@ -60,6 +87,23 @@ export class Scripts extends Context.Service<
       readonly worktreePath: string;
     }) => Effect.Effect<
       PackageScriptsList,
+      NoPackageJson | UnreadablePackageJson
+    >;
+    // The manager's command that runs the worktree's script `script` with
+    // `extra` after it, the manager found on PATH.
+    readonly command: (input: {
+      readonly worktree: { readonly path: string; readonly name: string };
+      readonly script: string;
+      readonly extra: ReadonlyArray<string>;
+    }) => Effect.Effect<
+      { readonly program: string; readonly args: ReadonlyArray<string> },
+      NoPackageJson | UnreadablePackageJson | ScriptRefused
+    >;
+    // The scripts of the package.json in `dir`, in manifest order.
+    readonly readScripts: (
+      dir: string,
+    ) => Effect.Effect<
+      ReadonlyArray<PackageScript>,
       NoPackageJson | UnreadablePackageJson
     >;
     // Counts a run of the project's script.
@@ -105,6 +149,19 @@ const LOCKFILES: ReadonlyArray<readonly [string, PackageManager]> = [
   ["yarn.lock", "yarn"],
 ];
 
+// npm only passes arguments on to the script after `--`. pnpm, yarn and
+// bun pass bare ones themselves.
+const runArgs = (
+  manager: PackageManager,
+  script: string,
+  extra: ReadonlyArray<string>,
+) => [
+  "run",
+  script,
+  ...(extra.length > 0 && manager === "npm" ? ["--"] : []),
+  ...extra,
+];
+
 export function mergeArrangedOrder(
   stored: ReadonlyArray<string>,
   arranged: ReadonlyArray<string>,
@@ -130,6 +187,7 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const usage = yield* Usage.Usage;
+  const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
   // Whether the entry is there, a dangling symlink included.
   const present = (file: string) =>
@@ -178,27 +236,33 @@ const make = Effect.gen(function* () {
           )}`,
     ]);
 
+  // The scripts of the package.json in `dir`, in manifest order.
+  const readScripts = (dir: string) =>
+    Effect.gen(function* () {
+      const manifest = path.join(dir, "package.json");
+      const text = yield* fs.readFileString(manifest).pipe(
+        Effect.mapError((cause) =>
+          Predicate.isTagged(cause.reason, "NotFound")
+            ? new NoPackageJson({ dir })
+            : new UnreadablePackageJson({
+                path: manifest,
+                stage: "read",
+                cause,
+              }),
+        ),
+      );
+      return yield* Effect.try({
+        try: () => packageScripts(text),
+        catch: (cause) =>
+          new UnreadablePackageJson({ path: manifest, stage: "parse", cause }),
+      });
+    });
+
   const list = Effect.fn("Scripts.list")(function* (input: {
     readonly projectId: string;
     readonly worktreePath: string;
   }) {
-    const manifest = path.join(input.worktreePath, "package.json");
-    const text = yield* fs.readFileString(manifest).pipe(
-      Effect.mapError((cause) =>
-        Predicate.isTagged(cause.reason, "NotFound")
-          ? new NoPackageJson({ dir: input.worktreePath })
-          : new UnreadablePackageJson({
-              path: manifest,
-              stage: "read",
-              cause,
-            }),
-      ),
-    );
-    const scripts = yield* Effect.try({
-      try: () => packageScripts(text),
-      catch: (cause) =>
-        new UnreadablePackageJson({ path: manifest, stage: "parse", cause }),
-    });
+    const scripts = yield* readScripts(input.worktreePath);
     const { manager, stats, sorted, order } = yield* Effect.all(
       {
         manager: packageManager(input.worktreePath),
@@ -222,6 +286,37 @@ const make = Effect.gen(function* () {
       // the default.
       sort: sorted[0]?.mode || IMPLICIT_SORT,
       order,
+    };
+  });
+
+  const command = Effect.fn("Scripts.command")(function* (input: {
+    readonly worktree: { readonly path: string; readonly name: string };
+    readonly script: string;
+    readonly extra: ReadonlyArray<string>;
+  }) {
+    const scripts = yield* readScripts(input.worktree.path);
+    const manager = yield* packageManager(input.worktree.path);
+    const refused = (reason: ScriptRefused["reason"]) =>
+      new ScriptRefused({
+        reason,
+        script: input.script,
+        dir: input.worktree.path,
+        worktree: input.worktree.name,
+        scripts: scripts.map(({ name }) => name),
+        manager,
+      });
+    if (!scripts.some(({ name }) => name === input.script)) {
+      return yield* refused(
+        scripts.length === 0 ? "no-scripts" : "unknown-script",
+      );
+    }
+    const program = yield* findExecutable(manager);
+    if (Option.isNone(program)) return yield* refused("no-manager");
+    return {
+      // An empty or relative PATH entry is the cwd's, and the script
+      // runs elsewhere.
+      program: path.resolve(program.value),
+      args: runArgs(manager, input.script, input.extra),
     };
   });
 
@@ -292,6 +387,8 @@ const make = Effect.gen(function* () {
             : Effect.succeed(Option.none()),
         ),
       ),
+    command: (input) => command(input).pipe(Effect.provideContext(platform)),
+    readScripts,
     recordRun,
     setSort,
     arrange,

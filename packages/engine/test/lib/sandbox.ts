@@ -208,6 +208,9 @@ export type Sandbox = {
     cwd: string,
     args: ReadonlyArray<string>,
   ) => Promise<Run>;
+  // The environment a binary runs in against its own copy of the data
+  // dir named `side`.
+  readonly env: (side: string) => NodeJS.ProcessEnv;
   // The same, run from `cwd`.
   readonly goAt: (cwd: string, ...args: string[]) => Promise<unknown>;
   // Every document the verb prints, in order.
@@ -297,6 +300,12 @@ export function sandbox(): Sandbox {
       ),
     );
 
+  const env = (side: string): NodeJS.ProcessEnv => ({
+    ...sideEnv(),
+    HOME: root,
+    SHIGOMORI_DATA_DIR: sideDir(side),
+  });
+
   // A binary run from `cwd` against its own copy of the data dir
   // (`side`): its exit code, its last JSON document and its stderr.
   const runAt = (
@@ -309,10 +318,7 @@ export function sandbox(): Sandbox {
       execFile(
         binary,
         [...args],
-        {
-          cwd,
-          env: { ...sideEnv(), HOME: root, SHIGOMORI_DATA_DIR: sideDir(side) },
-        },
+        { cwd, env: env(side) },
         (error, stdout, stderr) => {
           // A spawn failure or a signal has no exit code to compare.
           if (error !== null && typeof error.code !== "number") {
@@ -377,6 +383,7 @@ export function sandbox(): Sandbox {
       return [go, await engineSide()];
     },
     runAt,
+    env,
     git: (cwd, ...args) =>
       execFileSync("git", args, { cwd, env: gitEnv(), encoding: "utf8" }),
     goAt,

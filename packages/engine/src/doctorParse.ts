@@ -1,7 +1,6 @@
 // The pure pieces of the doctor's checks: the parsers for what git, ps
-// and port-pool print, the words a finding counts with, the shell hook
-// as install writes it, and just enough semver to tell an update file
-// this build already is.
+// and port-pool print, the words a finding counts with, and just enough
+// semver to tell an update file this build already is.
 import { shellQuote } from "./Lifecycle.ts";
 
 export const plural = (n: number) => (n === 1 ? "" : "s");
@@ -241,75 +240,4 @@ export const compareVersions = (a: Semver, b: Semver): number => {
     if (order !== 0) return order;
   }
   return compare(a.pre.length, b.pre.length);
-};
-
-// --- the shell hook ---
-
-export type ShellKind = "zsh" | "bash" | "fish";
-
-export const SHELL_KINDS: ReadonlyArray<ShellKind> = ["zsh", "bash", "fish"];
-
-// What `sm shell install` writes, by the flavor's command and alias.
-export type HookNames = { readonly binary: string; readonly alias: string };
-
-export const hookBeginMarker = ({ alias }: HookNames) =>
-  `# >>> ${alias} shell integration >>>`;
-
-const hookEndMarker = ({ alias }: HookNames) =>
-  `# <<< ${alias} shell integration <<<`;
-
-// The fenced block in a zsh or bash rc file.
-export const hookBlock = (names: HookNames, kind: ShellKind) =>
-  `${hookBeginMarker(names)}\ncommand -v ${names.binary} >/dev/null 2>&1 && eval "$(command ${names.binary} shell init ${kind})"\n${hookEndMarker(names)}\n`;
-
-// fish's conf.d drop-in, the whole hook.
-export const fishHookContent = (names: HookNames) =>
-  `${hookBeginMarker(names)}
-# Managed by \`${names.binary} shell install\`. Edits here are overwritten.
-if command -q ${names.binary}
-    command ${names.binary} shell init fish | source
-end
-${hookEndMarker(names)}
-`;
-
-// A line install would delete: blank, a comment, or one that runs our
-// own `shell init` (any guard-line vintage).
-const hookLineOurs = (names: HookNames, line: string) => {
-  const trimmed = line.trim();
-  return (
-    trimmed === "" ||
-    trimmed.startsWith("#") ||
-    trimmed.includes(`${names.binary} shell init`)
-  );
-};
-
-// The fenced block in an rc file's lines: where it is and whether its
-// content is ours, `broken` for a begin marker with no end.
-type HookSpan =
-  | { readonly kind: "none" }
-  | { readonly kind: "broken" }
-  | {
-      readonly kind: "found";
-      readonly begin: number;
-      readonly end: number;
-      readonly ours: boolean;
-    };
-
-export const findHookSpan = (
-  names: HookNames,
-  lines: ReadonlyArray<string>,
-): HookSpan => {
-  const begin = lines.findIndex(
-    (line) => line.trim() === hookBeginMarker(names),
-  );
-  if (begin < 0) return { kind: "none" };
-  for (let end = begin + 1; end < lines.length; end++) {
-    if ((lines[end] ?? "").trim() === hookEndMarker(names)) {
-      const ours = lines
-        .slice(begin + 1, end)
-        .every((inner) => hookLineOurs(names, inner));
-      return { kind: "found", begin, end, ours };
-    }
-  }
-  return { kind: "broken" };
 };

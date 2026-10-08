@@ -62,6 +62,7 @@ import {
   verifiedRecord,
 } from "./gitIndex.ts";
 import * as Paths from "./Paths.ts";
+import { CD_FILE_ENV } from "./shellHook.ts";
 import { worktreeIdFromPath } from "./worktreeLayout.ts";
 
 // A checkout a new worktree's files may be cloned from.
@@ -1136,7 +1137,7 @@ const make = Effect.gen(function* () {
         PATH: `${execPath}:${searched}`,
         GIT_DIR: undefined,
         GIT_WORK_TREE: undefined,
-        SHIGOMORI_CD_FILE: undefined,
+        [CD_FILE_ENV]: undefined,
       };
       const runOne = (command: string, commandArgs: ReadonlyArray<string>) =>
         Effect.scoped(

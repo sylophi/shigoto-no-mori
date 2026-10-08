@@ -4,6 +4,7 @@
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { flavorNames } from "@shigomori/engine/flavor";
+import * as Paths from "@shigomori/engine/Paths";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -15,6 +16,8 @@ import { launchersCommand } from "./commands/launchers.ts";
 import { projectsCommand } from "./commands/projects.ts";
 import { flavor, version } from "./build.ts";
 import { doctorCommand } from "./commands/doctor.ts";
+import { runCommand } from "./commands/run.ts";
+import { cdCommand, shellCommand } from "./commands/shell.ts";
 import {
   destination,
   list,
@@ -25,7 +28,7 @@ import { describe } from "./commands/describe.ts";
 import { agentWorking, autopull, shelve, unshelve } from "./commands/marks.ts";
 import { status } from "./commands/status.ts";
 import { engine } from "./engine.ts";
-import { report } from "./errors.ts";
+import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
 
 // --json and --verbose are global wherever they sit, up to a `--`,
@@ -91,6 +94,9 @@ const sm = Command.make("sm").pipe(
     configCommand.pipe(Command.provide(services)),
     projectsCommand.pipe(Command.provide(services)),
     launchersCommand.pipe(Command.provide(services)),
+    shellCommand.pipe(Command.provide(Paths.layer(flavor))),
+    cdCommand.pipe(Command.provide(services)),
+    runCommand.pipe(Command.provide(services)),
     worktreesCommand.pipe(Command.provide(services)),
     list.pipe(Command.provide(services)),
     path.pipe(Command.provide(services)),
@@ -115,9 +121,12 @@ const program = Command.runWith(sm, { version, renderErrors: false })(
       CliConfig.layer({ builtIns: [GlobalFlag.Help] }),
     ),
   ),
-  Effect.as(0),
+  Effect.as({ code: 0, error: undefined as unknown }),
   // A defect reports like any failure, so --json still ends in a document.
-  Effect.catchCause((cause) => report(Cause.squash(cause))),
+  Effect.catchCause((cause) => {
+    const error = Cause.squash(cause);
+    return Effect.map(report(error), (code) => ({ code, error }));
+  }),
   Effect.provideService(Output, {
     json,
     stdoutColor: !plain && process.stdout.isTTY === true,
@@ -128,9 +137,15 @@ const program = Command.runWith(sm, { version, renderErrors: false })(
     ),
     binaryName: flavorNames(flavor).binaryName,
   }),
-  Effect.flatMap((code) =>
+  Effect.flatMap(({ code, error }) =>
     Effect.sync(() => {
       process.exitCode = code;
+      // On the way out, once the runtime has let go of its own handlers,
+      // so the signal's default action ends sm. The code stands in should
+      // it not.
+      if (error instanceof Killed && error.raised) {
+        process.once("exit", () => process.kill(process.pid, error.signal));
+      }
     }),
   ),
 );
