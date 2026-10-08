@@ -36,6 +36,7 @@
     "cli": "go run -C ../cli .",
     "cli:build": "node scripts/build-cli.mts",
     "file-sync:build": "node scripts/build-file-sync.mts",
+    "macfs:build": "node scripts/build-macfs.mts",
     "cli:install": "node scripts/install-cli.mts",
     "postinstall": "node scripts/copy-material-icons.mts && node scripts/fix-node-pty-helper.mts"
   },

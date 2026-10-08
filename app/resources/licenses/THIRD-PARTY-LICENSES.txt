@@ -2,8 +2,8 @@ Third-Party Licenses
 ====================
 
 This file is generated from production npm dependencies with license-checker,
-the Go modules linked into the bundled sm CLI and file-sync engine, and the
-other binaries the packaged app bundles.
+the Go modules linked into the bundled sm CLI, file-sync engine and darwin
+helper, and the other binaries the packaged app bundles.
 Packages: 595
 
 --------------------------------------------------------------------------------

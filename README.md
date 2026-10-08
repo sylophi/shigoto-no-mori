@@ -19,6 +19,7 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 | `packages/` | The packages the v3 refactor moves code into (`contracts`, `engine`, `host`, `ui`, `cli`), each empty until its step (`V3.md`) |
 | `cli/` | The `sm` CLI, a Go module bundled into the app |
 | `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
+| `macfs/` | The macOS filesystem calls Node lacks (clone, flags, xattrs, private size, filesystem type), a Go module bundled into the app |
 | `skills/` | Agent skills for the `sm` workflow (below) |
 
 The JavaScript packages are one pnpm workspace (`pnpm-workspace.yaml`)

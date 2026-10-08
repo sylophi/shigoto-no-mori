@@ -48,13 +48,14 @@ const CHECK = process.argv.includes("--check");
 const initLicenseChecker = promisify(licenseChecker.init);
 const execFileP = promisify(execFile);
 
-// The Go modules whose binaries ship inside the app (the CLI and the
-// file-sync engine), each walked for the modules ACTUALLY LINKED into
-// its default build: `go list -deps` over the main package, with the
-// default build tags, so a dependency reachable only through a build
-// tag this project never sets (Mutagen's source-available parts behind
-// `mutagensspl`) is neither compiled in nor listed.
-const GO_MODULES = ["cli", "file-sync"];
+// The Go modules whose binaries ship inside the app (the CLI, the
+// file-sync engine and the darwin helper), each walked for the modules
+// ACTUALLY LINKED into its default build: `go list -deps` over the main
+// package, with the default build tags, so a dependency reachable only
+// through a build tag this project never sets (Mutagen's
+// source-available parts behind `mutagensspl`) is neither compiled in
+// nor listed.
+const GO_MODULES = ["cli", "file-sync", "macfs"];
 
 // License file names Go modules use, in lookup order.
 const LICENSE_FILE_NAMES = [
@@ -279,8 +280,8 @@ function renderText(entries: LicenseEntry[]): string {
     "====================",
     "",
     "This file is generated from production npm dependencies with license-checker,",
-    "the Go modules linked into the bundled sm CLI and file-sync engine, and the",
-    "other binaries the packaged app bundles.",
+    "the Go modules linked into the bundled sm CLI, file-sync engine and darwin",
+    "helper, and the other binaries the packaged app bundles.",
     `Packages: ${entries.length}`,
     "",
   ];
