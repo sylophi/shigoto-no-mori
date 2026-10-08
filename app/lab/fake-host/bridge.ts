@@ -447,6 +447,16 @@ function hostHandlersFor(
       }));
       return worktree;
     },
+    "worktrees:unbindAgent": ({ worktreeId, harness, session }) => {
+      const worktree = findWorktree(worktreeId);
+      if (!worktree) throw new Error("Unknown worktree");
+      worktree.agentSessions = worktree.agentSessions?.filter(
+        (s) => s.harness !== harness || s.session !== session,
+      );
+      worktree.agentWorking =
+        worktree.agentSessions?.some((s) => s.state === "working") ?? false;
+      return worktree;
+    },
     "agents:status": () => agentHarnesses,
     "agents:setHooks": async ({ harness, install }) => {
       await sleep(400);

@@ -47,6 +47,7 @@ import {
   SquashCommitPayloadSchema,
   StashChangesPayloadSchema,
   StashEntrySchema,
+  UnbindAgentPayloadSchema,
   WorktreeCarryOverCompleteSchema,
   WorktreeFileSchema,
   WorktreeLifecyclePhaseSchema,
@@ -134,6 +135,13 @@ export const worktreesContract = defineContract("host", {
   idleAgents: invoke(
     "worktrees:idleAgents",
     WorktreeScopedPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  // One agent session stops being bound to the worktree.
+  unbindAgent: invoke(
+    "worktrees:unbindAgent",
+    UnbindAgentPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),

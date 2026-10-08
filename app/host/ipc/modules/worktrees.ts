@@ -98,6 +98,7 @@ import {
   setAutoPullViaCli,
   idleAgentsViaCli,
   setShelvedViaCli,
+  unbindAgentViaCli,
 } from "../cliDelegate";
 
 // Exported for the sync module's pull orchestration, whose createViaCli
@@ -321,6 +322,11 @@ export const worktreesHandlers: Handlers<
 
   idleAgents: async ({ projectId, worktreeId }) =>
     idleAgentsViaCli(await findProjectOrThrow(projectId), worktreeId),
+
+  unbindAgent: ({ projectId, worktreeId, harness, session }) =>
+    mutateAndDescribe({ projectId, worktreeId }, () =>
+      unbindAgentViaCli(harness, session),
+    ),
 
   renameBranch: (input) =>
     mutateAndDescribe(input, (wt) => renameBranch(wt.path, input.newBranch)),
