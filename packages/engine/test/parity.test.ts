@@ -1755,6 +1755,44 @@ describe("landing", () => {
     await landVerb(repo, "owl", calls);
   });
 
+  it("refuses to land without an open pull request, over local changes, or a stack with a draft", async () => {
+    const { repo, tree } = inProject();
+    tree("fox");
+    tree("owl");
+    const dirty = tree("emu");
+    tree("yak");
+    writeFileSync(join(dirty, "scratch.txt"), "unsaved\n");
+    const calls = scriptedGh([
+      settingsRule({ merge: true }),
+      { args: ["pr", "list", "--state", "all", "--head", "fox"], out: [] },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "owl"],
+        out: [pr(8, "owl", "main", { state: "CLOSED" })],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "emu"],
+        out: [pr(9, "emu")],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--head", "yak"],
+        out: [pr(10, "yak", "gnu")],
+      },
+      {
+        args: ["pr", "list", "--state", "all", "--limit"],
+        out: [pr(10, "yak", "gnu"), pr(5, "gnu", "main", { isDraft: true })],
+      },
+      {
+        args: ["api", "repos/{owner}/{repo}/stacks?pull_request=10"],
+        err: "gh: Not Found (HTTP 404)",
+        code: 1,
+      },
+    ]);
+    await landVerb(repo, "fox", calls);
+    await landVerb(repo, "owl", calls);
+    await landVerb(repo, "emu", calls);
+    await landVerb(repo, "yak", calls, ["--stack"]);
+  });
+
   it("refuses to land a pull request stacked on another open one", async () => {
     const { repo, tree } = inProject();
     tree("fox");
