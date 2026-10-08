@@ -51,6 +51,7 @@ it("forgets a project's settings with it", async () => {
   assert.deepEqual(await run((r) => r.unregister("A")), {
     ok: false,
     error: "Unknown project: A",
+    code: "unknown-project",
   });
 });
 
