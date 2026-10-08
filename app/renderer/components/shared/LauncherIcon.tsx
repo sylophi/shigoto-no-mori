@@ -1,14 +1,22 @@
 // Maps a launcher entry to its brand asset: an icon extracted from the
-// app's bundle (scripts/extract-app-icon.sh), else an svgl SVG.
+// app's bundle (scripts/extract-app-icon.sh) or, for a terminal tool,
+// one made from its project's own logo, else an SVG (mostly svgl's).
 import type { ComponentType } from "react";
 import { Sparkles } from "lucide-react";
+import { Copilot } from "@/components/ui/svgs/copilot";
+import { Gemini } from "@/components/ui/svgs/gemini";
 import { GithubMark } from "@/components/ui/svgs/github-mark";
+import { Gitui } from "@/components/ui/svgs/gitui";
+import { Helix } from "@/components/ui/svgs/helix";
 import { Intellijidea } from "@/components/ui/svgs/intellijidea";
 import { JetbrainsSolid } from "@/components/ui/svgs/jetbrains-solid";
+import { Neovim } from "@/components/ui/svgs/neovim";
 import { Phpstorm } from "@/components/ui/svgs/phpstorm";
+import { Pi } from "@/components/ui/svgs/pi";
 import { Pycharm } from "@/components/ui/svgs/pycharm";
 import { Rider } from "@/components/ui/svgs/rider";
 import { Rubymine } from "@/components/ui/svgs/rubymine";
+import { Vim } from "@/components/ui/svgs/vim";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
 import {
   parseLauncherId,
@@ -35,6 +43,13 @@ const APP_ICON_URL = new Map(
   ).map(([path, url]) => [path.slice(path.lastIndexOf("/") + 1, -4), url]),
 );
 
+// Terminal tools wearing their app's icon.
+const ICON_ALIAS = new Map([
+  ["claude-code", "claude"],
+  ["codex-cli", "codex"],
+  ["cursor-agent", "cursor"],
+]);
+
 const SVG_ICON = new Map<string, ComponentType<{ className: string }>>([
   ["intellij", Intellijidea],
   ["webstorm", Webstorm],
@@ -50,6 +65,13 @@ const SVG_ICON = new Map<string, ComponentType<{ className: string }>>([
   ["dataspell", JetbrainsSolid],
   ["goland", JetbrainsSolid],
   ["rustrover", JetbrainsSolid],
+  ["gemini", Gemini],
+  ["copilot", Copilot],
+  ["neovim", Neovim],
+  ["vim", Vim],
+  ["helix", Helix],
+  ["gitui", Gitui],
+  ["pi", Pi],
 ]);
 
 export function LauncherIcon({
@@ -65,7 +87,8 @@ export function LauncherIcon({
     return <Sparkles className={className} />;
   }
 
-  const appId = parseLauncherId(entry.id)?.id ?? entry.id;
+  const id = parseLauncherId(entry.id)?.id ?? entry.id;
+  const appId = ICON_ALIAS.get(id) ?? id;
   const url = APP_ICON_URL.get(appId);
   if (url !== undefined) return <img src={url} alt="" className={className} />;
   const Icon = SVG_ICON.get(appId) ?? Sparkles;
