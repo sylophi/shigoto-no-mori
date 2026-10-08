@@ -26,7 +26,9 @@
 // piece of news.
 import type { QueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
+import { villageNewsEnabled } from "@shared/villageLife";
 import { toastVillagerMove } from "@/components/villagers/toasts";
+import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
 import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";
 import { remoteDeviceById } from "@/lib/remote/devices";
@@ -158,6 +160,12 @@ function forget(key: string, id: string): () => void {
 async function tell(queryClient: QueryClient): Promise<void> {
   const batch = [...pending];
   pending.clear();
+  // Village news off, the moves go untold. The album still counts
+  // them (visitLog.ts).
+  const config = await queryClient
+    .ensureQueryData({ ...clientConfigQueryOptions, retry: false })
+    .catch(() => undefined);
+  if (!config || !villageNewsEnabled(config)) return;
   await Promise.all(
     batch.map(async ([deviceId, moves]) => {
       const { movedIn, movedOut } = settled(moves);

@@ -411,6 +411,10 @@ export const ClientConfigSchema = z.object({
   // client has no device of its own. Off by default (absent = off),
   // explicit `true` is the opt-in. Nothing on a device reads it.
   villageLife: z.boolean().optional(),
+  // Village news: the toasts villagers send moving in or out
+  // (renderer/lib/villagers/moves.ts), under Village life. On by
+  // default (absent = on), explicit `false` keeps them quiet.
+  villageNews: z.boolean().optional(),
   // Mark the sidebar's terrier-sourced projects (Project.source), the
   // ones the terrier registry lists rather than this app's own, with
   // terrier's paw, on every device this window shows. Off by default
