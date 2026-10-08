@@ -208,6 +208,11 @@ function Forest({
   >(() => new Set());
   const worktreeGroupKey = (groupId: string, prefix: string) =>
     `${groupKeyOf(groupId)}\n${prefix}`;
+  // The inbox's prefix groups shut, by prefix. Apart from a project's:
+  // the inbox's group gathers every project's worktrees.
+  const [shutInboxGroups, setShutInboxGroups] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   // Stepped aside for a page's list (SidebarTakeover).
   const takenOver = useSidebarTakenOver();
@@ -247,6 +252,10 @@ function Forest({
       setOpenShelves((prev) => new Set(prev).add(row.shelf));
       return true;
     }
+    if (row.kind === "inbox-group" && !row.expanded) {
+      setShutInboxGroups((prev) => withMember(prev, row.prefix, false));
+      return true;
+    }
     return false;
   };
   // SidebarList's, kept here so a takeover's unmount doesn't reset it.
@@ -272,6 +281,8 @@ function Forest({
         deviceBadges,
         openShelves,
         hiddenPrefixes,
+        groupedPrefixes,
+        shutGroups: shutInboxGroups,
         allowAgentWorking,
       })
     : buildSidebarRows({
@@ -383,6 +394,7 @@ function Forest({
     onToggleOwner: (ownerKey) => setShutOwners(withToggled(ownerKey)),
     onToggleWorktreeGroup: (groupId, prefix) =>
       setShutWorktreeGroups(withToggled(worktreeGroupKey(groupId, prefix))),
+    onToggleInboxGroup: (prefix) => setShutInboxGroups(withToggled(prefix)),
     currentGroupKey: onScreenKey,
     arrangeMode,
   };

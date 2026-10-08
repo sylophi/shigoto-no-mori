@@ -12,7 +12,8 @@ interface FoldHeaderProps {
 // A header that folds the rows under it: label, hairline rule, chevron.
 // Shut, the count stands for what it folds away. The inbox's shelves
 // (InboxShelfRow), the owners on the list of projects split by owner,
-// and a project's prefix groups all head their rows with it.
+// and the prefix groups, a project's and the inbox's, all head their
+// rows with it.
 export function FoldHeader({
   label,
   count,
