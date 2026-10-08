@@ -1,18 +1,22 @@
 // ClerkTokens' Promise adapter (EFFECT.md, section 3), the storage the
 // Clerk bridge is created with before app ready (clerk.ts), well before
-// the graph is built. A call waits for the graph, which fills the
-// context here as it builds ClerkTokens and empties it as it closes.
+// the graph is built. A call waits for the graph to build ClerkTokens.
 import type { TokenStorage } from "@clerk/electron";
 import type * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as ClerkTokens from "./ClerkTokens";
 
-let context = Deferred.makeUnsafe<Context.Context<ClerkTokens.ClerkTokens>>();
+const context = Deferred.makeUnsafe<Context.Context<ClerkTokens.ClerkTokens>>();
 
 const run = <A>(
-  effect: Effect.Effect<A, never, ClerkTokens.ClerkTokens>,
+  effect: Effect.Effect<
+    A,
+    KeyValueStore.KeyValueStoreError,
+    ClerkTokens.ClerkTokens
+  >,
 ): Promise<A> =>
   Effect.runPromise(
     Deferred.await(context).pipe(
@@ -29,15 +33,11 @@ export const clerkTokenStorage: TokenStorage = {
     run(ClerkTokens.ClerkTokens.use((tokens) => tokens.removeItem(key))),
 };
 
+// Filled once and kept: the bridge outlives no graph, and a graph whose
+// later layers failed to build still built this one.
 export const layer = (userData: string) =>
   Layer.effectDiscard(
-    Effect.acquireRelease(
-      Effect.context<ClerkTokens.ClerkTokens>().pipe(
-        Effect.tap((filled) => Deferred.succeed(context, filled)),
-      ),
-      () =>
-        Effect.sync(() => {
-          context = Deferred.makeUnsafe();
-        }),
+    Effect.context<ClerkTokens.ClerkTokens>().pipe(
+      Effect.flatMap((filled) => Deferred.succeed(context, filled)),
     ),
   ).pipe(Layer.provideMerge(ClerkTokens.layer(userData)));

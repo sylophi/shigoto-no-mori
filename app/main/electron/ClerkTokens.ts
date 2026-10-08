@@ -13,6 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
 import * as Schema from "effect/Schema";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import { safeStorage } from "electron";
@@ -59,68 +60,94 @@ async function resolveCipher(): Promise<Cipher | null> {
   };
 }
 
-export class ClerkTokens extends Context.Service<
-  ClerkTokens,
-  {
-    readonly getItem: (key: string) => Effect.Effect<string | null>;
-    readonly setItem: (key: string, value: string) => Effect.Effect<void>;
-    readonly removeItem: (key: string) => Effect.Effect<void>;
-  }
->()("sm/desktop/ClerkTokens") {}
-
-const TokenFileSchema = Schema.Record(Schema.String, Schema.String);
+const TokenFileSchema = Schema.Record(Schema.String, Schema.Unknown);
 const decodeTokenFile = Schema.decodeUnknownOption(
   Schema.fromJsonString(TokenFileSchema),
 );
 
+export class ClerkTokens extends Context.Service<
+  ClerkTokens,
+  {
+    readonly getItem: (key: string) => Effect.Effect<string | null>;
+    readonly setItem: (
+      key: string,
+      value: string,
+    ) => Effect.Effect<void, KeyValueStore.KeyValueStoreError>;
+    readonly removeItem: (
+      key: string,
+    ) => Effect.Effect<void, KeyValueStore.KeyValueStoreError>;
+  }
+>()("sm/desktop/ClerkTokens") {}
+
+const refused = (method: string, cause?: unknown) =>
+  new KeyValueStore.KeyValueStoreError({
+    message: "Could not write the Clerk token file.",
+    method,
+    cause,
+  });
+
 // A string store over the one JSON file, read once: main is its only
-// writer. Each write replaces the file through a rename, so a crash
-// mid-write leaves the previous one.
+// writer. Writes take turns, and each replaces the file through a
+// rename, so a crash mid-write leaves the previous one. A file that is
+// there but cannot be read or parsed is never written over: its
+// entries may still be recoverable, so the store reads empty and
+// refuses writes, and the user signs in again for this session.
 const jsonFileStore = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const text = yield* fs
-    .readFileString(file)
-    .pipe(Effect.orElseSucceed(() => "{}"));
-  const entries = new Map(
-    Object.entries(Option.getOrElse(decodeTokenFile(text), () => ({}))),
-  );
-  const write = Effect.suspend(() => {
-    const temp = `${file}.tmp`;
-    return fs
-      .makeDirectory(path.dirname(file), { recursive: true })
-      .pipe(
-        Effect.andThen(
-          fs.writeFileString(
-            temp,
-            JSON.stringify(Object.fromEntries(entries), undefined, "\t"),
-            { mode: 0o666 },
-          ),
-        ),
-        Effect.andThen(fs.rename(temp, file)),
-      );
-  }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new KeyValueStore.KeyValueStoreError({
-          message: "Could not write the Clerk token file.",
-          method: "write",
-          cause,
-        }),
-    ),
-  );
+  const writes = yield* Semaphore.make(1);
+  const present = yield* fs.exists(file).pipe(Effect.orElseSucceed(() => true));
+  const loaded = present
+    ? yield* fs.readFileString(file).pipe(
+        Effect.map(decodeTokenFile),
+        Effect.orElseSucceed(() => Option.none()),
+      )
+    : Option.some({});
+  if (Option.isNone(loaded)) {
+    yield* Effect.logError(
+      "[clerk] the token file could not be read, so it is left as it is and nothing is kept this session",
+    );
+  }
+  const writable = Option.isSome(loaded);
+  // Values that are not strings are kept as they were found.
+  const entries = new Map(Object.entries(Option.getOrElse(loaded, () => ({}))));
+  const write = (method: string) =>
+    writable
+      ? Effect.suspend(() => {
+          const temp = `${file}.tmp`;
+          return fs
+            .makeDirectory(path.dirname(file), { recursive: true })
+            .pipe(
+              Effect.andThen(
+                fs.writeFileString(
+                  temp,
+                  JSON.stringify(Object.fromEntries(entries), undefined, "\t"),
+                  { mode: 0o666 },
+                ),
+              ),
+              Effect.andThen(fs.rename(temp, file)),
+            );
+        }).pipe(Effect.mapError((cause) => refused(method, cause)))
+      : Effect.fail(refused(method));
+  const update = (method: string, change: () => boolean) =>
+    writes.withPermits(1)(
+      Effect.suspend(() => (change() ? write(method) : Effect.void)),
+    );
   return KeyValueStore.makeStringOnly({
-    get: (key) => Effect.sync(() => entries.get(key)),
-    set: (key, value) =>
-      Effect.suspend(() => {
-        entries.set(key, value);
-        return write;
+    get: (key) =>
+      Effect.sync(() => {
+        const value = entries.get(key);
+        return typeof value === "string" ? value : undefined;
       }),
-    remove: (key) =>
-      Effect.suspend(() => (entries.delete(key) ? write : Effect.void)),
-    clear: Effect.suspend(() => {
+    set: (key, value) =>
+      update("set", () => {
+        entries.set(key, value);
+        return true;
+      }),
+    remove: (key) => update("remove", () => entries.delete(key)),
+    clear: update("clear", () => {
       entries.clear();
-      return write;
+      return true;
     }),
     size: Effect.sync(() => entries.size),
   });
@@ -129,17 +156,21 @@ const jsonFileStore = Effect.fnUntraced(function* (file: string) {
 const make = Effect.fnUntraced(function* (file: string) {
   const store = yield* jsonFileStore(file);
   // Kept once one resolves. None is asked again next time, since a
-  // keyring can come up after launch.
+  // keyring can come up after launch. Concurrent first calls share one
+  // probe.
   const resolved = yield* Ref.make<Cipher | null>(null);
-  const getCipher = Ref.get(resolved).pipe(
-    Effect.flatMap((cipher) =>
-      cipher !== null
-        ? Effect.succeed(cipher)
-        : Effect.promise(resolveCipher).pipe(
-            Effect.tap((next) =>
-              next === null ? Effect.void : Ref.set(resolved, next),
+  const probing = yield* Semaphore.make(1);
+  const getCipher = probing.withPermits(1)(
+    Ref.get(resolved).pipe(
+      Effect.flatMap((cipher) =>
+        cipher !== null
+          ? Effect.succeed(cipher)
+          : Effect.promise(resolveCipher).pipe(
+              Effect.tap((next) =>
+                next === null ? Effect.void : Ref.set(resolved, next),
+              ),
             ),
-          ),
+      ),
     ),
   );
   const warnUnencrypted = yield* Effect.cached(
@@ -147,6 +178,19 @@ const make = Effect.fnUntraced(function* (file: string) {
       "[clerk] OS encryption is unavailable, so the session token is not kept and the next launch signs in again",
     ),
   );
+  const keep = (key: string, cipher: Cipher, value: string) =>
+    Effect.tryPromise(() => cipher.encrypt(value)).pipe(
+      Effect.catch(() =>
+        Effect.logWarning(
+          "[clerk] the session token could not be encrypted and was not kept",
+        ).pipe(Effect.as(null)),
+      ),
+      Effect.flatMap((ciphertext) =>
+        ciphertext === null
+          ? Effect.void
+          : store.set(key, ENCRYPTED_PREFIX + ciphertext),
+      ),
+    );
 
   const getItem = Effect.fn("ClerkTokens.getItem")(function* (key: string) {
     const stored = yield* store
@@ -158,22 +202,15 @@ const make = Effect.fnUntraced(function* (file: string) {
       yield* store.remove(key).pipe(Effect.ignore);
       return null;
     }
-    const decrypt = yield* getCipher;
-    if (decrypt === null) return null;
+    const cipher = yield* getCipher;
+    if (cipher === null) return null;
     const payload = stored.slice(ENCRYPTED_PREFIX.length);
     const decrypted = yield* Effect.tryPromise(() =>
-      decrypt.decrypt(payload),
+      cipher.decrypt(payload),
     ).pipe(Effect.option);
     if (Option.isNone(decrypted)) return null;
     const { value, shouldReEncrypt } = decrypted.value;
-    if (shouldReEncrypt) {
-      yield* Effect.tryPromise(() => decrypt.encrypt(value)).pipe(
-        Effect.flatMap((ciphertext) =>
-          store.set(key, ENCRYPTED_PREFIX + ciphertext),
-        ),
-        Effect.ignore,
-      );
-    }
+    if (shouldReEncrypt) yield* keep(key, cipher, value).pipe(Effect.ignore);
     return value;
   });
 
@@ -181,27 +218,15 @@ const make = Effect.fnUntraced(function* (file: string) {
     key: string,
     value: string,
   ) {
-    const encrypt = yield* getCipher;
-    if (encrypt === null) {
-      yield* warnUnencrypted;
-      return;
-    }
-    yield* Effect.tryPromise(() => encrypt.encrypt(value)).pipe(
-      Effect.flatMap((ciphertext) =>
-        store.set(key, ENCRYPTED_PREFIX + ciphertext),
-      ),
-      Effect.catch(() =>
-        Effect.logWarning(
-          "[clerk] the session token could not be encrypted and was not kept",
-        ),
-      ),
-    );
+    const cipher = yield* getCipher;
+    if (cipher === null) return yield* warnUnencrypted;
+    yield* keep(key, cipher, value);
   });
 
   const removeItem = Effect.fn("ClerkTokens.removeItem")(function* (
     key: string,
   ) {
-    yield* store.remove(key).pipe(Effect.ignore);
+    yield* store.remove(key);
   });
 
   return ClerkTokens.of({ getItem, setItem, removeItem });
