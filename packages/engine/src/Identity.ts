@@ -50,7 +50,7 @@ const make = Effect.gen(function* () {
 
   // `root:<sha>` of the parentless commit the default ref reaches (never
   // HEAD, which would name the checkout, not the repo). None for a
-  // shallow clone, whose root is fake, or without a default ref; a
+  // shallow clone, whose root is fake, or without a default ref. A
   // failed git run fails, which reads as no identity.
   const rootCommitKey = (projectPath: string) =>
     Effect.gen(function* () {
