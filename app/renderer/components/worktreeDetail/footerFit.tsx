@@ -24,7 +24,7 @@ export const LABEL_RANK = {
   files: 2,
   options: 3,
   mirror: 4,
-  agentWorking: 5,
+  agents: 5,
   delete: 6,
 } as const;
 

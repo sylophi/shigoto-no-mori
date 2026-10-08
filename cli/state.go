@@ -399,14 +399,12 @@ func noteNewerSchema(path string, raw []byte) {
 // its fetch cadence (host/lib/worktrees/autoPullSweep.ts): the app
 // flips it from the detail footer through `sm worktrees autopull`, and
 // the CLI seeds it for a new worktree or project when the autoPullNew
-// setting says so (markAutoPullIfNew). agentWorkingKey holds the
-// worktrees an agent is working in (`sm agent-working`), which the app
-// keeps on their own folded shelf until the mark is cleared.
+// setting says so (markAutoPullIfNew). agentSessionsKey (agents.go)
+// holds the agent sessions bound to each worktree.
 const (
-	projectsKey     = "projects"
-	shelvedKey      = "shelvedWorktrees"
-	autoPullKey     = "autoPullWorktrees"
-	agentWorkingKey = "agentWorkingWorktrees"
+	projectsKey = "projects"
+	shelvedKey  = "shelvedWorktrees"
+	autoPullKey = "autoPullWorktrees"
 )
 
 // The sidebar's manual project order (`projects reorder`) as project
@@ -428,14 +426,14 @@ const projectOrderKey = "projectOrder"
 const shelfSnapshotsKey = "shelfSnapshots"
 
 // Every map in the registry keyed by worktree id: the `{ worktreeId:
-// true }` marks and the shelf snapshots. A worktree's id is
+// true }` marks, the shelf snapshots and the agent sessions. A worktree's id is
 // derived from its path, so the flows that retire an id (rm, project
 // remove) clear it from each of these through dropWorktreeMarks, and a
 // new mark only has to be added to this list. The app reads the marks
 // off rows and identities (`sm worktrees list`); `sm shelve`, `sm
-// autopull` and `sm agent-working` flip them, and the listing keeps the
-// shelf snapshots.
-var worktreeMarkKeys = []string{shelvedKey, autoPullKey, agentWorkingKey, shelfSnapshotsKey}
+// autopull` flip them, the listing keeps the shelf snapshots, and
+// `sm agents` the sessions.
+var worktreeMarkKeys = []string{shelvedKey, autoPullKey, shelfSnapshotsKey, agentSessionsKey}
 
 // The id the app mints for its data dir (host/lib/config/deviceId.ts).
 // The CLI only reads it, for `sm link`.
@@ -700,18 +698,14 @@ func readRegistryMarkSet(key string) map[string]bool {
 	return markSetFrom(readRegistryHints(), key)
 }
 
-// The `{ worktreeId: true }` marks every row and identity carries, from
-// one registry read, keyed by mark key. The shelf snapshots are not an
-// id set (shelfSnapshotsFrom reads them).
-func readWorktreeMarkSets() map[string]map[string]bool {
-	return worktreeMarkSetsFrom(readRegistryHints())
-}
-
+// The `{ worktreeId: true }` marks every row and identity carries,
+// keyed by mark key, from one registry read. The shelf snapshots and
+// the agent sessions are not id sets (shelfSnapshotsFrom and
+// agentSessionsFrom read them).
 func worktreeMarkSetsFrom(all map[string]json.RawMessage) map[string]map[string]bool {
 	return map[string]map[string]bool{
-		shelvedKey:      markSetFrom(all, shelvedKey),
-		autoPullKey:     markSetFrom(all, autoPullKey),
-		agentWorkingKey: markSetFrom(all, agentWorkingKey),
+		shelvedKey:  markSetFrom(all, shelvedKey),
+		autoPullKey: markSetFrom(all, autoPullKey),
 	}
 }
 

@@ -16,6 +16,7 @@ import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { cn } from "@/lib/utils";
+import { AgentsSection } from "./AgentsSection";
 import { CliSection } from "./CliSection";
 import { DataLocationSection } from "./DataLocationSection";
 import { DoctorSection } from "./DoctorSection";
@@ -272,8 +273,13 @@ function PeerSettingsForm({
           </>
         ),
         worktrees: toggles(<WorktreeToggles form={form} setForm={setForm} />),
-        integrations: toggles(
-          <IntegrationToggles form={form} setForm={setForm} />,
+        integrations: (
+          <>
+            {toggles(<IntegrationToggles form={form} setForm={setForm} />)}
+            {/* Read on mount, so only once the device allows it, like
+                the CLI section. */}
+            {access.granted && <AgentsSection />}
+          </>
         ),
       };
 

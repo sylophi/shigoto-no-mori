@@ -1,12 +1,9 @@
-import { Hammer, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { type ReactNode, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/ui/inline-error";
-import { useSetAgentWorking } from "@/hooks/worktrees/useWorktreeMutations";
-import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { assertNever } from "@/lib/utils";
 import {
-  isAgentWorking,
   type CleanupError,
   type Worktree,
 } from "@shared/schemas";
@@ -17,6 +14,7 @@ import {
   LABEL_RANK,
   useFittedLabels,
 } from "./footerFit";
+import { AgentSessionsMenu } from "./AgentSessionsMenu";
 import { WorktreeOptions } from "./WorktreeOptions";
 
 // The footer is a four-state machine. The parent owns the transitions and
@@ -240,31 +238,10 @@ function NormalRow({
   options: ReactNode;
   onDelete: () => void;
 }) {
-  const setAgentWorking = useSetAgentWorking();
-  const allowAgentWorking = useAllowAgentWorking();
-
   return (
     <div className="ml-auto flex items-center gap-3">
-      {/* Agents set the mark (`sm agent-working`). Here it can only be
-          cleared, for an agent that stopped without clearing it. */}
-      {isAgentWorking(worktree, allowAgentWorking) && (
-        <FooterVerb
-          rank={LABEL_RANK.agentWorking}
-          icon={<Hammer />}
-          label="Agent working"
-          variant="ghost"
-          className="shrink-0 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
-          aria-pressed
-          disabled={setAgentWorking.isPending || busy}
-          onClick={() =>
-            setAgentWorking.mutate({
-              projectId: worktree.projectId,
-              worktreeId: worktree.id,
-              agentWorking: false,
-            })
-          }
-          tip="An agent marked this worktree as working, so the sidebar keeps it on the Agent working shelf. Click to clear the mark."
-        />
+      {worktree.agentSessions.length > 0 && (
+        <AgentSessionsMenu worktree={worktree} busy={busy} />
       )}
       <WorktreeOptions worktree={worktree} busy={busy}>
         {options}

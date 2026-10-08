@@ -28,6 +28,7 @@ import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { terrierContract } from "@shared/ipc/modules/terrier";
+import { agentsContract } from "@shared/ipc/modules/agents";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { updaterContract } from "@shared/ipc/modules/updater";
@@ -82,6 +83,7 @@ export const allContractModules = [
   cliContract,
   shellContract,
   terrierContract,
+  agentsContract,
   shigomoriContract,
   syncContract,
   updaterContract,
@@ -132,6 +134,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const cliClient = c(cliContract);
   const shellClient = c(shellContract);
   const terrierClient = c(terrierContract);
+  const agentsClient = c(agentsContract);
   const shigomoriClient = c(shigomoriContract);
   const syncClient = c(syncContract);
   const updaterClient = c(updaterContract);
@@ -164,6 +167,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     },
 
     cli: { ...cliClient },
+
+    agents: { ...agentsClient },
 
     dialog: {
       // Optional-arg ergonomics on top of the contract client. The payload
@@ -439,7 +444,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       renameBranch: worktreesClient.renameBranch,
       setShelved: worktreesClient.setShelved,
       setAutoPull: worktreesClient.setAutoPull,
-      setAgentWorking: worktreesClient.setAgentWorking,
+      idleAgents: worktreesClient.idleAgents,
       checkoutBranch: worktreesClient.checkoutBranch,
       fileDiff: worktreesClient.fileDiff,
       readFile: worktreesClient.readFile,

@@ -29,6 +29,7 @@ import {
 import type { ContractScope } from "@shared/ipc/contract";
 import { WEB_PLATFORM } from "@shared/account/platform";
 import type { HubStatus } from "@shared/ipc/modules/hub";
+import type { AgentHarnessStatus } from "@shared/ipc/modules/agents";
 import {
   MIRROR_HISTORY_LIMIT,
   summarizeIgnores,
@@ -274,6 +275,23 @@ function hostHandlersFor(
     Object.entries(fakeCustomPorts).map(([id, ports]) => [id, { ports }]),
   );
   const allWorktrees = () => Object.values(forest.worktrees).flat();
+  // Claude Code's hooks in, Codex's waiting on a fresh install.
+  let agentHarnesses: AgentHarnessStatus[] = [
+    {
+      id: "claude",
+      label: "Claude Code",
+      detected: true,
+      path: `${disk.home}/.claude/settings.json`,
+      hooks: "installed",
+    },
+    {
+      id: "codex",
+      label: "Codex",
+      detected: true,
+      path: `${disk.home}/.codex/hooks.json`,
+      hooks: "missing",
+    },
+  ];
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const changes = createFakeChanges(findWorktree);
@@ -418,6 +436,27 @@ function hostHandlersFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",
       ),
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
+    "worktrees:idleAgents": ({ worktreeId }) => {
+      const worktree = findWorktree(worktreeId);
+      if (!worktree) throw new Error("Unknown worktree");
+      worktree.agentWorking = false;
+      worktree.agentSessions = worktree.agentSessions.map((session) => ({
+        ...session,
+        state: "idle",
+        at: Date.now(),
+      }));
+      return worktree;
+    },
+    "agents:status": () => agentHarnesses,
+    "agents:setHooks": async ({ harness, install }) => {
+      await sleep(400);
+      agentHarnesses = setHooks(
+        agentHarnesses,
+        harness,
+        install ? "installed" : "missing",
+      );
+      return agentHarnesses;
+    },
     "worktrees:create": ({ projectId, worktreeName, branchName }) => {
       const name = worktreeName ?? "tender-tanuki";
       const created = worktreeFixture({
@@ -805,6 +844,22 @@ function hostHandlersFor(
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// An install or uninstall, as the CLI answers it: a fresh Codex
+// install isn't trusted yet.
+function setHooks(
+  harnesses: AgentHarnessStatus[],
+  id: string,
+  hooks: AgentHarnessStatus["hooks"],
+): AgentHarnessStatus[] {
+  return harnesses.map((harness) => {
+    if (harness.id !== id) return harness;
+    const { trusted: _trusted, ...rest } = harness;
+    return hooks === "installed" && id === "codex"
+      ? { ...rest, hooks, trusted: false }
+      : { ...rest, hooks };
+  });
+}
 
 // What a push or a publish leaves: every commit on the branch is on the
 // remote now.
@@ -1239,6 +1294,7 @@ async function fakeSyncPull(
     shelved: false,
     autoPull: false,
     agentWorking: false,
+    agentSessions: [],
   });
   (local.worktrees[project.id] ??= []).push(landed);
   // The real host pings this after any app-driven mutation, and the

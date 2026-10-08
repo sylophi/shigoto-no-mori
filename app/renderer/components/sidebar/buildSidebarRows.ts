@@ -55,7 +55,7 @@ export interface BuildSidebarRowsArgs {
   openShelves: Record<GroupShelf, GroupIdSet>;
   // Worktrees starting with one of these fold away like shelved ones.
   hiddenPrefixes: readonly string[];
-  // Whether the agent-working mark counts (isAgentWorking).
+  // Whether a working agent session shelves its worktree (isAgentWorking).
   allowAgentWorking: boolean;
   // Gathers the open project's worktrees starting with one of
   // `prefixes` under a header per prefix (groupPrefixOf), those `shut`
