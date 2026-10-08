@@ -13,18 +13,15 @@ import {
 // host is deliberately unresolved until the remote-actions step, since
 // stream or port-carried output can travel but a GUI app opens on the
 // host machine.
-export const launchersContract = defineContract("host", {
-  detect: invoke(
-    "launchers:detect",
-    VoidSchema,
-    Schema.Array(DetectedLauncherSchema),
-    {
-      remote: true,
-      gated: false,
-    },
-  ),
-  forProject: invoke(
-    "launchers:forProject",
+export const launchersContract = defineContract(
+  "launchers",
+  "host",
+  invoke("detect", VoidSchema, Schema.Array(DetectedLauncherSchema), {
+    remote: true,
+    gated: false,
+  }),
+  invoke(
+    "forProject",
     ProjectScopedPayloadSchema,
     Schema.Struct({
       entries: Schema.Array(LauncherEntrySchema),
@@ -37,8 +34,8 @@ export const launchersContract = defineContract("host", {
   ),
   // launch is remote false: it spawns an arbitrary shell command from
   // config, the one clear remote code execution vector. Detection is safe to serve, launching is not.
-  launch: invoke("launchers:launch", LaunchPayloadSchema, VoidSchema, {
+  invoke("launch", LaunchPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
     remote: false,
   }),
-});
+);

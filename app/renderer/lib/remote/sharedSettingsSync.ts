@@ -26,6 +26,7 @@
 // one copy nobody can pull from: a browser serves no calls, so its
 // picks travel only by being offered. (A desktop always has a window
 // to do its pulling: the app quits with its last one.)
+import { callOf, payloadOf } from "@shigomori/contracts/contract";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   SharedSettingsDoc,
@@ -76,7 +77,7 @@ export async function writeSharedSetting(
 // parsed against the contract's schema rather than trusted.
 function mergePeerSharedSettings(payload: unknown): void {
   const parsed = safeDecode(
-    sharedSettingsContract.calls.changed.payload,
+    payloadOf(callOf(sharedSettingsContract, "changed")),
     payload,
   );
   if (!parsed.success) return;

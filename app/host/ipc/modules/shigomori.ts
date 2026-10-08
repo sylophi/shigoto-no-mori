@@ -1,13 +1,9 @@
-import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import type { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
 import type { Handlers } from "@shigomori/contracts/types";
 import {
   invalidateProjectConfigCache,
   readShigomoriConfig,
-  readWorktreeData,
-  writeWorktreeData,
-  writeWorktreeDescription,
 } from "@host/lib/config/project";
-import { findProjectOrThrow } from "@host/lib/projects";
 import { shigomoriWriteViaCli } from "../cliDelegate";
 
 export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
@@ -25,27 +21,5 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
     // The watcher treats the delegated spawn as a self-write, so the
     // TTL cache must be dropped here rather than by the fs event.
     invalidateProjectConfigCache(projectId);
-  },
-
-  worktreeDataRead: async ({ projectId, worktreeId }) => {
-    // Validate projectId against the in-memory project list before any
-    // path construction, so a bogus id can't read outside projects/.
-    await findProjectOrThrow(projectId);
-    return readWorktreeData(projectId, worktreeId);
-  },
-
-  worktreeDataWrite: async ({ projectId, worktreeId, data }) => {
-    // The renderer only surfaces a ports editor for managed worktrees
-    // and the primary checkout, so we don't re-verify here. Enforcing the "no
-    // external state" rule would mean asking the CLI for the worktree
-    // list on every save. findProjectOrThrow + the WorktreeIdSchema regex keep
-    // the path-build safe against malformed input.
-    await findProjectOrThrow(projectId);
-    await writeWorktreeData(projectId, worktreeId, data);
-  },
-
-  worktreeDataDescribe: async ({ projectId, worktreeId, description }) => {
-    await findProjectOrThrow(projectId);
-    await writeWorktreeDescription(projectId, worktreeId, description);
   },
 };

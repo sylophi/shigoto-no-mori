@@ -77,16 +77,14 @@ const PortForwardListResultSchema = strict(
   }),
 );
 
-export const portForwardContract = defineContract("client", {
-  start: invoke(
-    "portForward:start",
-    PortForwardStartPayloadSchema,
-    PortForwardStartResultSchema,
-  ),
-  stop: invoke("portForward:stop", PortForwardStopPayloadSchema, VoidSchema),
-  list: invoke("portForward:list", VoidSchema, PortForwardListResultSchema),
+export const portForwardContract = defineContract(
+  "portForward",
+  "client",
+  invoke("start", PortForwardStartPayloadSchema, PortForwardStartResultSchema),
+  invoke("stop", PortForwardStopPayloadSchema, VoidSchema),
+  invoke("list", VoidSchema, PortForwardListResultSchema),
   // Fired by the engine whenever the forward or conn set changes, so
   // the list query refreshes without polling. Payload-free on purpose:
   // the list read is cheap and one signal shape cannot drift.
-  changed: broadcast("portForward:changed", VoidSchema),
-});
+  broadcast("changed", VoidSchema),
+);

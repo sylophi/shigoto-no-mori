@@ -7,20 +7,20 @@ import {
   WorktreeScopedPayloadSchema,
 } from "../schemas/index.ts";
 
-export const hygieneContract = defineContract("host", {
+export const hygieneContract = defineContract(
+  "hygiene",
+  "host",
   // Fast, all-git: safe to await before the tidy list renders.
-  list: invoke(
-    "hygiene:list",
+  invoke(
+    "list",
     ProjectScopedPayloadSchema,
     Schema.Array(WorktreeHygieneSchema),
     { remote: true, gated: false },
   ),
   // Slow, per-worktree: the renderer fires one of these per row so each
   // size lands independently instead of the page waiting on the total.
-  diskUsage: invoke(
-    "hygiene:diskUsage",
-    WorktreeScopedPayloadSchema,
-    WorktreeDiskUsageSchema,
-    { remote: true, gated: false },
-  ),
-});
+  invoke("diskUsage", WorktreeScopedPayloadSchema, WorktreeDiskUsageSchema, {
+    remote: true,
+    gated: false,
+  }),
+);
