@@ -328,11 +328,7 @@ const cleanupFailed = (
     ? {
         ...extra,
         ok: false,
-        cleanupError: {
-          phase: error.phase,
-          exitCode: error.exitCode,
-          runId: error.runId,
-        },
+        cleanupError: Worktrees.cleanupErrorOf(error),
       }
     : { ...extra, ok: false, ...errorDocument(error) };
 
