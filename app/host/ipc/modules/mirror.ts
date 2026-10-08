@@ -101,7 +101,7 @@ import {
 } from "@host/mirror/registry";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
-import { rollBackSent, sendWorktree } from "./sync";
+import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { log } from "@shared/log";
 
 const decodePullProgress = Schema.decodeOption(SyncPullProgressSchema);
