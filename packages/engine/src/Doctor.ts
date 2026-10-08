@@ -71,10 +71,10 @@ import * as Layout from "./Layout.ts";
 import * as Paths from "./Paths.ts";
 import { StoreImportError } from "./migrations/importJson.ts";
 import { errnoText, isAbsent, isNotFound } from "./platformErrors.ts";
+import { pidAlive } from "./processes.ts";
 import * as Registry from "./Registry.ts";
 import {
   acquireStagingLock,
-  pidAlive,
   StagingLockUnavailable,
   stagingHolder,
   stagingLockPath,

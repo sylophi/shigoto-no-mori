@@ -48,11 +48,10 @@ import type { Flavor } from "./flavor.ts";
 import { parseJson } from "./json.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText } from "./platformErrors.ts";
-import { capture } from "./processes.ts";
+import { capture, pidAlive } from "./processes.ts";
 import { compareSemver, isPrerelease, parseSemver } from "./semver.ts";
 import {
   acquireStagingLock,
-  pidAlive,
   StagingLockUnavailable,
   stagingLockPath,
   UpdateInProgress,

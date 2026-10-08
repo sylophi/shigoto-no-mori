@@ -5,6 +5,7 @@
 import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
+import * as Control from "./Control.ts";
 import * as Darwin from "./Darwin.ts";
 import * as Doctor from "./Doctor.ts";
 import type { Flavor } from "./flavor.ts";
@@ -24,6 +25,7 @@ import * as Scripts from "./Scripts.ts";
 import * as Store from "./Store.ts";
 import type * as SqlClient from "effect/sql/SqlClient";
 import * as Terrier from "./Terrier.ts";
+import * as Transfer from "./Transfer.ts";
 import * as Updater from "./Updater.ts";
 import * as Usage from "./Usage.ts";
 import * as WorktreeData from "./WorktreeData.ts";
@@ -39,9 +41,15 @@ type EngineOptions = {
 
 // Every service but Paths, which is built once beside them.
 const services = (options: EngineOptions) =>
-  Layer.mergeAll(Landing.layer, Projects.layer, Doctor.layer).pipe(
+  Layer.mergeAll(
+    Landing.layer,
+    Projects.layer,
+    Doctor.layer,
+    Transfer.layer,
+  ).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
+    Layer.provideMerge(Control.layer(options.flavor)),
     Layer.provideMerge(
       Layer.mergeAll(
         Launchers.layer,
