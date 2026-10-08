@@ -5,16 +5,13 @@
 // mapping half. Every probe may fail, and a failure reads as the
 // platform fallback rather than an error: the icon is cosmetic, and a
 // status read must never break on it.
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { platform } from "node:os";
-import { promisify } from "node:util";
 import {
   fallbackDeviceIcon,
   type DeviceShape,
 } from "@shigomori/contracts/deviceIcon";
-
-const execFileP = promisify(execFile);
+import * as Processes from "@host/lib/util/processes";
 
 // Apple's product name ("Mac mini (2024)", "MacBook Pro") or model
 // identifier ("MacBookPro18,3", "Macmini9,1"), as ioreg and sysctl
@@ -121,10 +118,9 @@ export function appleProductNameOf(ioregOutput: string): string | null {
 }
 
 async function run(file: string, args: readonly string[]): Promise<string> {
-  const { stdout } = await execFileP(file, [...args], {
-    encoding: "utf8",
-    timeout: 2000,
-  });
+  const { stdout } = await Processes.run(
+    Processes.exec(file, args, { timeout: 2000 }),
+  );
   return stdout;
 }
 

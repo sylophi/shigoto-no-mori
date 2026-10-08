@@ -6,7 +6,7 @@ import {
 import { run } from "../git/core";
 import { getMergeBaseDiff } from "../git/diff";
 import { hasCommit } from "../git/refs";
-import { isENOENT } from "../util/paths";
+import { isCommandError, stderrOf } from "../util/processes";
 import { execGh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
 import { ghReady } from "./readiness";
@@ -14,7 +14,7 @@ import { remoteNameForUrl } from "./remote";
 
 // Every action here shares one policy: gate on readiness, then rethrow
 // gh failures with a trimmed message the renderer can show inline.
-// `fallback` covers the rare non-Error / empty-message throw.
+// `fallback` covers a gh that failed without a word.
 async function runGh(
   args: string[],
   opts: { cwd: string; fallback: string; maxBuffer?: number; timeout?: number },
@@ -30,21 +30,18 @@ async function runGh(
     });
     return stdout;
   } catch (err) {
+    if (!isCommandError(err)) throw err;
     // gh vanished between the readiness probe (cached 30s) and this
-    // spawn; "spawn gh ENOENT" would read as a bug rather than a state.
-    if (isENOENT(err)) {
+    // spawn. "Not installed" reads as a state rather than a bug.
+    if (err.reason === "not-found") {
       throw new Error("GitHub CLI isn't installed", { cause: err });
     }
-    // A timeout kill rejects with "Command failed: gh ..." and empty
-    // stderr; name the actual cause instead.
-    if (err instanceof Error && "killed" in err && err.killed === true) {
+    if (err.reason === "timed-out") {
       throw new Error("GitHub CLI timed out", { cause: err });
     }
-    const message =
-      err instanceof Error && err.message
-        ? trimGhError(err.message)
-        : opts.fallback;
-    throw new Error(message, { cause: err });
+    throw new Error(trimGhError(stderrOf(err)) || opts.fallback, {
+      cause: err,
+    });
   }
 }
 
@@ -77,9 +74,8 @@ export async function getPullRequestDiff(opts: {
 // keeps only the last line of gh's stderr in the message, so the whole
 // of it is read off the cause.
 function isDiffTooLarge(err: unknown): boolean {
-  const cause = (err as { cause?: { stderr?: unknown } }).cause;
-  const stderr = typeof cause?.stderr === "string" ? cause.stderr : "";
-  return /\btoo_large\b/.test(stderr);
+  const cause = err instanceof Error ? err.cause : undefined;
+  return isCommandError(cause) && /\btoo_large\b/.test(stderrOf(cause));
 }
 
 const decodeGhPrCommits = Schema.decodeUnknownSync(

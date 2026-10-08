@@ -17,6 +17,7 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { createLocalBranch } from "../git/branches";
 import { run } from "../git/core";
 import { localBranchExists } from "../git/remotes";
+import { isCommandError, stderrOf } from "../util/processes";
 import { execGh, trimGhError } from "./exec";
 import { getGithubRepoInfo, remoteNameForUrl } from "./remote";
 import { ghUnavailableReason } from "./readiness";
@@ -147,7 +148,7 @@ async function readPullRequestHead(
       { cwd },
     ));
   } catch (err) {
-    const stderr = (err as { stderr?: string }).stderr ?? "";
+    const stderr = isCommandError(err) ? stderrOf(err) : "";
     throw new Error(
       `Couldn't read pull request #${number}: ${trimGhError(stderr) || "gh failed"}`,
       { cause: err },

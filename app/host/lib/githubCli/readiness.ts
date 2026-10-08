@@ -3,7 +3,7 @@ import type {
   GithubCliReadiness,
 } from "@shigomori/contracts/schemas";
 import { readGlobalConfig } from "../config/global";
-import { binaryOnPath } from "../util/binaries";
+import * as Processes from "../util/processes";
 import { ttlValueCache } from "../util/ttlCache";
 import { execGh } from "./exec";
 
@@ -12,7 +12,8 @@ const READINESS_CACHE_TTL_MS = 30_000;
 const readinessCache = ttlValueCache<GithubCliReadiness>(
   READINESS_CACHE_TTL_MS,
   async () => {
-    const installed = await binaryOnPath("gh");
+    const installed =
+      (await Processes.run(Processes.resolveOnPath("gh"))) !== null;
     // `gh auth status` exits non-zero when not signed in. We don't bother
     // probing for auth when `gh` is missing, since there's nothing to ask.
     const authed = installed ? await isAuthed() : false;

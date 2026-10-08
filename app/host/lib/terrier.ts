@@ -4,22 +4,13 @@
 // through `sm projects list`); what the app keeps is the readiness
 // probe behind the Settings toggle: is terrier installed, and does its
 // version speak the registry-read contract this build understands.
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import * as Effect from "effect/Effect";
 import type { TerrierReadiness } from "@shigomori/contracts/schemas";
+import * as Processes from "./util/processes";
 import { ttlValueCache } from "./util/ttlCache";
 
-const execFileP = promisify(execFile);
-
-const TERRIER_BINARY = "terrier";
 // A wedged terrier must not hang the Settings panel waiting on it.
 const TERRIER_SPAWN_TIMEOUT_MS = 10_000;
-
-function execTerrier(args: string[]): Promise<{ stdout: string }> {
-  return execFileP(TERRIER_BINARY, args, {
-    timeout: TERRIER_SPAWN_TIMEOUT_MS,
-  });
-}
 
 // The registry-read contract the bundled CLI understands
 // (terrierSupported* in cli/terrier.go, which decides whether the merge
@@ -31,25 +22,32 @@ const TERRIER_SUPPORTED_MINOR = 1;
 
 const READINESS_CACHE_TTL_MS = 30_000;
 
-// One spawn answers both questions: ENOENT is "not installed", any
-// output is the version to run the minor handshake against.
-const readinessCache = ttlValueCache<TerrierReadiness>(
-  READINESS_CACHE_TTL_MS,
-  async () => {
-    let version: string;
-    try {
-      ({ stdout: version } = await execTerrier(["version"]));
-    } catch (error) {
-      const installed = (error as NodeJS.ErrnoException).code !== "ENOENT";
-      return { installed, compatible: false };
-    }
-    version = version.trim();
+// One spawn answers both questions: a missing binary is "not
+// installed", any output is the version to run the minor handshake
+// against.
+const readiness = Processes.exec("terrier", ["version"], {
+  timeout: TERRIER_SPAWN_TIMEOUT_MS,
+}).pipe(
+  Effect.map(({ stdout }): TerrierReadiness => {
+    const version = stdout.trim();
     return {
       installed: true,
       compatible: versionCompatible(version),
       version: version || undefined,
     };
-  },
+  }),
+  Effect.catchTags({
+    CommandError: (error) =>
+      Effect.succeed({
+        installed: error.reason !== "not-found",
+        compatible: false,
+      }),
+  }),
+);
+
+const readinessCache = ttlValueCache<TerrierReadiness>(
+  READINESS_CACHE_TTL_MS,
+  () => Processes.run(readiness),
 );
 
 function versionCompatible(version: string): boolean {

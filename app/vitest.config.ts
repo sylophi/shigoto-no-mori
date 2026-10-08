@@ -19,6 +19,7 @@ export default defineConfig({
   test: {
     include: ["test/*.mts"],
     exclude: ["test/run.mts"],
+    setupFiles: ["test/lib/adapters.mts"],
     pool: "forks",
     fileParallelism: false,
     // A check can build sm from a cold Go cache, or drive a whole

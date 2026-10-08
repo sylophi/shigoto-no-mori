@@ -2,11 +2,8 @@
 // what the machine's owner already calls it, as far as the OS will
 // say. Pure node (os and a child process), electron-free like the rest
 // of main/core/account/ so the account check script drives the string half.
-import { execFile } from "node:child_process";
 import { hostname, platform } from "node:os";
-import { promisify } from "node:util";
-
-const execFileP = promisify(execFile);
+import * as Processes from "@host/lib/util/processes";
 
 // The hostname's first DNS label. macOS reports the mDNS form
 // ("Name.local") and a domain-joined box reports "name.corp.example",
@@ -43,10 +40,10 @@ export type DefaultDeviceName = {
 // caller.
 async function macComputerName(): Promise<string | null> {
   try {
-    const { stdout } = await execFileP(
-      "/usr/sbin/scutil",
-      ["--get", "ComputerName"],
-      { encoding: "utf8", timeout: 2000 },
+    const { stdout } = await Processes.run(
+      Processes.exec("/usr/sbin/scutil", ["--get", "ComputerName"], {
+        timeout: 2000,
+      }),
     );
     const name = stdout.trim();
     return name === "" ? null : name;

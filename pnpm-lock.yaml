@@ -266,6 +266,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.7)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.2(bufferutil@4.1.0)(effect@4.0.2)(redis@6.3.0)(utf-8-validate@6.0.6)
       '@fontsource-variable/geist':
         specifier: ^5.2.9
         version: 5.2.9
