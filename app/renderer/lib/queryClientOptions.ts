@@ -4,9 +4,11 @@
 // independent, and hand-copying them is exactly how the web boot once
 // dropped the refusal branch, so both boots build their client here.
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
-import { isEntityGoneError } from "@shigomori/contracts/errors";
-import { isNoDirectConnectionError } from "@shigomori/contracts/errors";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import {
+  isCommandRefusedError,
+  isEntityGoneError,
+  isNoDirectConnectionError,
+} from "@shigomori/contracts/errors";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 

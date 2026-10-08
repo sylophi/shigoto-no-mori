@@ -53,7 +53,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, it } from "vitest";
-import { CommandRefusedError } from "@shared/ipc/socket/frames";
+import { CommandRefusedError } from "@shigomori/contracts/errors";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
   type SyncCloneInto,

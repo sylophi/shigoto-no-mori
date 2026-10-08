@@ -10,7 +10,7 @@
 // channel registered gated:false to every authed peer, and anything
 // else (a mutation, or an untagged channel) only under the host's live
 // command-access switch, or as a call the host itself invited (the
-// auth's isInvited), refused with the shared command-refused code
+// auth's isInvited), refused with the contract's CommandRefusedError
 // before its handler runs otherwise. One authed socket per deviceId,
 // with supersede.
 //
@@ -26,7 +26,10 @@
 import type { IncomingMessage } from "node:http";
 import { deflateRaw } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import {
+  CommandRefusedError,
+  errorMessageOf,
+} from "@shigomori/contracts/errors";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,
@@ -35,8 +38,6 @@ import {
   CLOSE_HELLO_FAILED,
   CLOSE_OVER_CAPACITY,
   ClientFrameSchema,
-  COMMAND_REFUSED_CODE,
-  COMMAND_REFUSED_MESSAGE,
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
@@ -49,6 +50,7 @@ import {
   type ServerFrame,
   TERMINATE_GRACE_MS,
   resError,
+  resHandlerError,
 } from "@shared/ipc/socket/frames";
 import {
   handshakeProof,
@@ -549,10 +551,7 @@ export function createWsServerBinding(
       ) {
         call = invitedContext(ctx);
       } else if (!auth.isCommandGranted()) {
-        send(
-          socket,
-          resError(frame.id, COMMAND_REFUSED_MESSAGE, COMMAND_REFUSED_CODE),
-        );
+        send(socket, resHandlerError(frame.id, new CommandRefusedError()));
         return;
       }
     }
@@ -560,10 +559,7 @@ export function createWsServerBinding(
       const result = await fn(call, frame.input);
       send(socket, { t: "res", id: frame.id, ok: true, result });
     } catch (error) {
-      // Message text only, mirroring what survives Electron's IPC
-      // error serialization, so the packages/contracts/src/errors.ts matchers behave
-      // the same on both wires.
-      send(socket, resError(frame.id, errorMessageOf(error)));
+      send(socket, resHandlerError(frame.id, error));
     }
   }
 

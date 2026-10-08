@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
   errorMessageOf,
-  worktreeSettingUpError,
+  WorktreeSettingUpError,
 } from "@shigomori/contracts/errors";
 import { holdRootChecks } from "@host/mirror/registry";
 import {
@@ -375,7 +375,7 @@ export function assertWorktreeMutable(
   busyMessage: string,
 ): void {
   if (inflightDeleteCounts.has(worktreeId)) throw new Error(busyMessage);
-  if (inflightCreateIds.has(worktreeId)) throw worktreeSettingUpError();
+  if (inflightCreateIds.has(worktreeId)) throw new WorktreeSettingUpError();
 }
 
 // The one place the tombstone protocol is spelled out: refuse a

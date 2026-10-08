@@ -4,7 +4,7 @@
 // check), and wires the page-level events the bridge cannot see from
 // inside (other tabs, the network coming back). The window.api
 // assignment doubles as the compile-time proof that the web bridge
-// satisfies the preload's RendererApi surface, since window.api is
+// satisfies the RendererApi surface, since window.api is
 // declared with that exact type (renderer/window.d.ts).
 import { viteEnv } from "./account/config";
 import { browserHintsOf } from "./account/deviceName";

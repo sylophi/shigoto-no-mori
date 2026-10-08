@@ -4,8 +4,8 @@
 // the wire, so a schema's rewrite must keep the JSON it accepts,
 // produces and refuses exactly as it is.
 //
-// Each schema exported from the schemas barrel or the hub protocol has
-// an entry:
+// Each schema exported from the schemas barrel or the hub protocol, and
+// the contract errors' wire form, has an entry:
 //   accepts     values that decode to themselves, key order included
 //   normalizes  { input, output } pairs where decoding changes the value
 //               (a default filled in, an unknown key dropped)
@@ -20,6 +20,7 @@ import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
+import { ContractErrorSchema } from "../src/errors.ts";
 import * as hubProtocol from "../src/hubProtocol.ts";
 import * as schemas from "../src/schemas/index.ts";
 
@@ -42,9 +43,14 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
   }
 }
 
-const exported = Object.entries({ ...schemas, ...hubProtocol }).filter(
-  ([name]) => name.endsWith("Schema"),
-) as [string, Schema.Codec<unknown, unknown>][];
+const exported = Object.entries({
+  ...schemas,
+  ...hubProtocol,
+  ContractErrorSchema,
+}).filter(([name]) => name.endsWith("Schema")) as [
+  string,
+  Schema.Codec<unknown, unknown>,
+][];
 
 it("every exported schema has fixtures, and every fixture a schema", () => {
   const names = new Set(exported.map(([name]) => name));

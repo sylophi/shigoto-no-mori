@@ -23,9 +23,8 @@ import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 const DIAL_TIMEOUT_MS = 5_000;
 
 // Error messages here are stable markers, not prose (the FORWARD_*
-// constants beside the contract): Electron IPC and the device wires
-// both preserve only the message string, so the client side and the
-// UI match these exact texts.
+// constants beside the contract), which the client side and the UI
+// match.
 
 export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
   {

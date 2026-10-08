@@ -95,7 +95,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
         // which the next batch replaces.
         const shown = status.get(wt.id);
         const force =
-          shown?.kind === "error" && isConvertRefusedError(shown.message);
+          shown?.kind === "error" && isConvertRefusedError(shown.error);
         const result = await convert.mutateAsync({
           projectId: project.id,
           worktreeId: wt.id,
