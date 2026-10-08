@@ -3,6 +3,8 @@
 // file to, which attributes make a checkout convert, and the version 2
 // index file itself.
 
+import { S_IFLNK, S_IFMT, S_IFREG } from "./Darwin.ts";
+
 // The stat data an index entry records, each field truncated to the 32
 // bits the index stores, as git does.
 export type IndexStat = {
@@ -70,10 +72,6 @@ export const sameFile = (a: IndexStat, b: IndexStat) =>
   a.uid === b.uid &&
   a.gid === b.gid &&
   a.size === b.size;
-
-const S_IFMT = 0o170000;
-const S_IFREG = 0o100000;
-const S_IFLNK = 0o120000;
 
 // Whether a file of this stat is what an entry of this mode describes: a
 // symlink for 120000, a regular file with the owner's exec bit to match

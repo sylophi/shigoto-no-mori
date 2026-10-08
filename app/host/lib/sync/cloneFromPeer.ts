@@ -58,7 +58,7 @@ export async function cloneProjectFromPeer(
   await mkdir(parent, { recursive: true }).catch(() => {});
   const [dest, { branch, remoteUrl }] = await Promise.all([
     checkCloneDestination(parent, name),
-    source.cloneFacts(),
+    source.cloneFacts(signal),
   ]);
   if (
     landing === branch ||
@@ -85,6 +85,7 @@ export async function cloneProjectFromPeer(
       haves: [],
       into: { path: dest },
       onProgress,
+      signal,
     });
     const tip = fetched.find((entry) => entry.ref === incomingRef)?.commit;
     if (tip === undefined) {
