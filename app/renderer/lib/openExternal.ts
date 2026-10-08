@@ -8,7 +8,7 @@ export function openExternalUrl(
   errorTitle = "Couldn't open link",
 ): void {
   window.api.shell
-    .openExternal(url)
+    .openExternal({ url })
     .catch((err) => notifyError(errorTitle, err));
 }
 
@@ -16,6 +16,6 @@ export function openExternalUrl(
 // the shell IPC, reporting failure as a toast.
 export function revealInFolder(path: string, errorTitle: string): void {
   window.api.shell
-    .showItemInFolder(path)
+    .showItemInFolder({ path })
     .catch((err: unknown) => notifyError(errorTitle, err));
 }

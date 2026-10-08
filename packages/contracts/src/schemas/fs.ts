@@ -16,7 +16,6 @@ export const PickFolderPayloadSchema = Schema.UndefinedOr(
     defaultPath: Schema.optional(Schema.NonEmptyString),
   }),
 );
-export type PickFolderPayload = typeof PickFolderPayloadSchema.Type;
 
 const DirectoryEntrySchema = Schema.Struct({
   name: Schema.String,

@@ -46,7 +46,7 @@ pre-commit:
           # The engine's tests, its boundary proof among them
           # (packages/engine/README.md).
           - name: engine
-            glob: "{packages/engine/**,packages/contracts/**,macfs/**,cli/**}"
+            glob: "{packages/engine/**,packages/contracts/**,macfs/**,cli/**,app/shared/fixtures/git-log.json}"
             run: pnpm run check:engine
           - name: go-test
             glob: "{cli/**,app/shared/fixtures/git-log.json}"

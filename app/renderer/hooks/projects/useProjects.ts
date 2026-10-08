@@ -50,7 +50,7 @@ export function useAddProject() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation<Project, Error, string>({
-    mutationFn: (path) => api.projects.add(path),
+    mutationFn: (path) => api.projects.add({ path }),
     // Returned (not void-ed) so mutateAsync resolves only after the
     // projects list is fresh: callers navigate into the new project right
     // away, and routes render "not found" against a stale list.
@@ -79,7 +79,7 @@ export function useRemoveProject() {
   const router = useRouter();
   const { api, deviceId, keys } = useHostScope();
   return useMutation<void, Error, string>({
-    mutationFn: (id) => api.projects.remove(id),
+    mutationFn: (id) => api.projects.remove({ id }),
     onMutate: async (id) => {
       // Cancel this project's in-flight fetches before main starts the
       // removal (mirrors the nuke path): left to settle, one would
@@ -129,7 +129,7 @@ export function useRelocateProject(id: string) {
   const { api, deviceId, keys } = useHostScope();
   return useMutation<Project, Error, string>({
     mutationKey: relocateProjectKey(deviceId, id),
-    mutationFn: (path) => api.projects.relocate(id, path),
+    mutationFn: (path) => api.projects.relocate({ id, path }),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: keys.projects() }),

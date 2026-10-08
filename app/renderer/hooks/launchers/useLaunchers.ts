@@ -30,7 +30,7 @@ export function useLauncherForProject(projectId: string | null) {
     queryKey: keys.projectLaunchers(projectId),
     queryFn:
       projectId !== null
-        ? () => api.launchers.forProject(projectId)
+        ? () => api.launchers.forProject({ projectId })
         : skipToken,
     // Lock the order for the lifetime of the route mount. The page picks
     // up a fresh list when the user navigates in (refetchOnMount: "always"

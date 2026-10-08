@@ -161,14 +161,26 @@ export type ContractModule = RpcGroup.Any & {
   readonly annotations: Context.Context<never>;
 };
 
+// A module as defineContract returns it: the group, with its name and
+// scope also in its type (never set at runtime), so the API built from
+// the modules can be typed per namespace and per scope.
+export type Contract<
+  Name extends string,
+  S extends ContractScope,
+  R extends Rpc.Any,
+> = RpcGroup.RpcGroup<R> & {
+  readonly "~contract"?: { readonly name: Name; readonly scope: S };
+};
+
 export const defineContract = <
   const Name extends string,
+  const S extends ContractScope,
   const Rpcs extends ReadonlyArray<Rpc.Any>,
 >(
   name: Name,
-  scope: ContractScope,
+  scope: S,
   ...rpcs: Rpcs
-): RpcGroup.RpcGroup<Rpc.Prefixed<Rpcs[number], `${Name}:`>> => {
+): Contract<Name, S, Rpc.Prefixed<Rpcs[number], `${Name}:`>> => {
   // The group keys its calls by tag, so a second call under one name
   // would replace the first without a word.
   const keys = rpcs.map((rpc) => rpc["_tag"]);
@@ -187,6 +199,11 @@ export type ContractCall = Rpc.AnyWithProps;
 
 export function scopeOf(module: ContractModule): ContractScope {
   return required(module.annotations, Scope);
+}
+
+// The module's name: its namespace in the API, its channels' prefix.
+export function nameOf(module: ContractModule): string {
+  return required(module.annotations, ModuleName);
 }
 
 function required<S>(
