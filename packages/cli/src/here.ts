@@ -1,7 +1,10 @@
 // Where the command runs among the projects, which every command that
 // names a project starts from. Terrier's trouble is a warning here, as
 // the listing it explains is about to be used.
+import { isAbsolute, resolve } from "node:path";
+import * as Paths from "@shigomori/engine/Paths";
 import * as Terrier from "@shigomori/engine/Terrier";
+import { isSameOrInside } from "@shigomori/engine/worktreeLayout";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -78,3 +81,31 @@ export const resolveWorktree = (ref: {
     });
     return { at, located };
   });
+
+// A typed path, home-expanded and made absolute against the cwd, as
+// Go's toAbsolute: an absolute path stays as typed, and without a cwd
+// the path stays relative.
+export const absolute = (raw: string) =>
+  Effect.map(Effect.service(Paths.Paths), ({ expandHome }) => {
+    const expanded = expandHome(raw);
+    if (isAbsolute(expanded)) return expanded;
+    try {
+      return resolve(process.cwd(), expanded);
+    } catch {
+      return expanded;
+    }
+  });
+
+// Whether the command runs at or below `path`: the shell a removal or a
+// move leaves standing in a folder that is gone.
+// The shell's own $PWD counts, as Go's Getwd prefers it: through a
+// symlinked folder it names the path the shell sees.
+export const cwdInside = (path: string) => {
+  const pwd = process.env.PWD ?? "";
+  if (pwd !== "" && isSameOrInside(pwd, path)) return true;
+  try {
+    return isSameOrInside(process.cwd(), path);
+  } catch {
+    return false;
+  }
+};
