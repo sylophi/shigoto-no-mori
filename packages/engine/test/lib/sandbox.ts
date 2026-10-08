@@ -22,12 +22,15 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as CarryOver from "../../src/CarryOver.ts";
 import * as Config from "../../src/Config.ts";
+import * as Darwin from "../../src/Darwin.ts";
 import * as Git from "../../src/Git.ts";
 import * as GitHub from "../../src/GitHub.ts";
 import * as Icons from "../../src/Icons.ts";
 import * as Identity from "../../src/Identity.ts";
 import * as Launchers from "../../src/Launchers.ts";
+import * as Lifecycle from "../../src/Lifecycle.ts";
 import * as Layout from "../../src/Layout.ts";
 import * as Paths from "../../src/Paths.ts";
 import * as Registry from "../../src/Registry.ts";
@@ -72,37 +75,46 @@ const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
 let built: string | undefined;
 
 export function goSm(): string {
-  built ??= buildGoSm();
+  built ??= buildGo(
+    cliDir,
+    "sm",
+    (file) =>
+      file.startsWith("embed/") ||
+      file === "go.mod" ||
+      file === "go.sum" ||
+      (file.endsWith(".go") &&
+        !file.endsWith("_test.go") &&
+        !file.includes("/")),
+  );
   return built;
 }
 
-function buildGoSm(): string {
+// A Go program built from `dir` into a folder named for the hash of its
+// sources (the files `include` takes), so a build is reused until they
+// change.
+function buildGo(
+  dir: string,
+  name: string,
+  include: (file: string) => boolean,
+): string {
   const hash = createHash("sha256");
-  for (const rel of readdirSync(cliDir, { recursive: true })
+  for (const rel of readdirSync(dir, { recursive: true })
     .map(String)
-    .filter(
-      (file) =>
-        file.startsWith("embed/") ||
-        file === "go.mod" ||
-        file === "go.sum" ||
-        (file.endsWith(".go") &&
-          !file.endsWith("_test.go") &&
-          !file.includes("/")),
-    )
+    .filter(include)
     .toSorted()) {
     hash.update(`${rel}\0`);
-    hash.update(readFileSync(join(cliDir, rel)));
+    hash.update(readFileSync(join(dir, rel)));
   }
   const binary = join(
     tmpdir(),
-    `sm-parity-${hash.digest("hex").slice(0, 16)}`,
-    "sm",
+    `${name}-parity-${hash.digest("hex").slice(0, 16)}`,
+    name,
   );
   if (existsSync(binary)) return binary;
   mkdirSync(dirname(binary), { recursive: true });
   const partial = `${binary}.${process.pid}`;
   execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
-    cwd: cliDir,
+    cwd: dir,
     env: childEnv(),
     stdio: ["ignore", "ignore", "inherit"],
   });
@@ -114,6 +126,7 @@ function buildGoSm(): string {
 type Run = {
   readonly code: number;
   readonly doc: unknown;
+  readonly docs: ReadonlyArray<unknown>;
   readonly stdout: string;
   readonly stderr: string;
 };
@@ -127,9 +140,53 @@ const CODES = [
   [Worktrees.PullRequestOwnsDescription, "pull-request-open"],
 ] as const;
 const codeOf = (error: unknown) => {
-  const code = CODES.find(([cls]) => error instanceof cls)?.[1];
+  const code =
+    error instanceof Worktrees.DirtyWorktree
+      ? error.reason === "uncommitted"
+        ? "uncommitted-changes"
+        : "status-unreadable"
+      : CODES.find(([cls]) => error instanceof cls)?.[1];
   return code === undefined ? {} : { code };
 };
+
+// What the terminal says for a failure: git's own words for a git that
+// failed, the message otherwise.
+const messageOf = (error: unknown) =>
+  error instanceof Git.GitCommandError
+    ? Git.stderrOf(error)
+    : error instanceof Error
+      ? error.message
+      : String(error);
+
+// Copies `names` from one folder to another as they are, links and
+// times included: worktrees name their repo by absolute path.
+const copyAll = (from: string, to: string, names: ReadonlyArray<string>) => {
+  for (const name of names) {
+    cpSync(join(from, name), join(to, name), {
+      recursive: true,
+      verbatimSymlinks: true,
+      preserveTimestamps: true,
+    });
+  }
+};
+
+// The darwin helper as macfs/ is now, built once per state of its
+// sources, for the Darwin service.
+let macfsBuilt: string | undefined;
+
+function macfs(): string {
+  macfsBuilt ??= buildGo(
+    join(cliDir, "..", "macfs"),
+    "macfs",
+    (file) =>
+      file === "go.mod" ||
+      file === "go.sum" ||
+      (file.endsWith(".go") &&
+        !file.endsWith("_test.go") &&
+        !file.includes("/")),
+  );
+  return macfsBuilt;
+}
 
 export type Sandbox = {
   readonly home: string;
@@ -146,6 +203,18 @@ export type Sandbox = {
   ) => Promise<Run>;
   // The same, run from `cwd`.
   readonly goAt: (cwd: string, ...args: string[]) => Promise<unknown>;
+  // Every document the verb prints, in order.
+  readonly goDocs: (
+    cwd: string,
+    ...args: string[]
+  ) => Promise<ReadonlyArray<unknown>>;
+  // A verb that changes what both sides share (the repos, the
+  // worktrees): Go's side first, then the engine's against everything
+  // restored to how it was. Answers both.
+  readonly changeBoth: <A, B>(
+    go: () => Promise<A>,
+    engine: () => Promise<B>,
+  ) => Promise<[A, B]>;
   // A git repository at `name` beside the data dirs, which both sides
   // share, with `files` committed.
   readonly repo: (name: string, files?: Record<string, string>) => string;
@@ -162,7 +231,9 @@ export function sandbox(): Sandbox {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-parity-")));
   const seed = join(root, "seed");
   mkdirSync(seed);
+  const sides = new Set<string>();
   const sideDir = (name: string) => {
+    sides.add(name);
     const dir = join(root, name);
     if (!existsSync(dir)) cpSync(seed, dir, { recursive: true });
     return dir;
@@ -181,9 +252,12 @@ export function sandbox(): Sandbox {
             Scripts.layer,
             WorktreeData.layer,
             GitHub.layer,
+            Lifecycle.layer,
+            CarryOver.layer,
           ),
         ),
         Layer.provideMerge(Terrier.layer),
+        Layer.provideMerge(Darwin.layer(macfs())),
         Layer.provideMerge(
           Layer.mergeAll(
             Config.layer,
@@ -250,6 +324,7 @@ export function sandbox(): Sandbox {
           resolve({
             code: typeof error?.code === "number" ? error.code : 0,
             doc: docs.at(-1),
+            docs,
             stdout,
             stderr,
           });
@@ -264,6 +339,21 @@ export function sandbox(): Sandbox {
       return doc;
     });
 
+  // Every document the verb prints, in order.
+  const goDocs = (cwd: string, ...args: string[]) =>
+    runAt(goSm(), "go", cwd, ["--json", ...args]).then(({ docs, stderr }) => {
+      if (docs.length === 0) throw new Error(`no document: ${stderr}`);
+      return docs;
+    });
+
+  // What the sides share in the home directory: everything but their
+  // data dirs, the seed and the fake commands.
+  const shared = () =>
+    readdirSync(root).filter(
+      (name) => !sides.has(name) && !["seed", "bin", ".before"].includes(name),
+    );
+  const before = join(root, ".before");
+
   return {
     home: root,
     write: (file, value) => {
@@ -271,6 +361,18 @@ export function sandbox(): Sandbox {
       writeFileSync(join(seed, file), JSON.stringify(value));
     },
     go: (...args) => goAt(root, ...args),
+    goDocs,
+    changeBoth: async (goSide, engineSide) => {
+      rmSync(before, { recursive: true, force: true });
+      mkdirSync(before);
+      copyAll(root, before, shared());
+      const go = await goSide();
+      for (const name of shared()) {
+        rmSync(join(root, name), { recursive: true, force: true });
+      }
+      copyAll(before, root, readdirSync(before));
+      return [go, await engineSide()];
+    },
     runAt,
     git: (cwd, ...args) =>
       execFileSync("git", args, { cwd, env: gitEnv(), encoding: "utf8" }),
@@ -298,7 +400,7 @@ export function sandbox(): Sandbox {
             onSuccess: (value) => value as unknown,
             onFailure: (error) => ({
               ok: false,
-              error: error instanceof Error ? error.message : String(error),
+              error: messageOf(error),
               ...codeOf(error),
             }),
           }),
