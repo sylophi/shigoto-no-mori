@@ -121,3 +121,10 @@ export function worktreeBase(
       return managedRoot;
   }
 }
+
+// Whether `path` is `root` or anything below it, trailing slashes aside.
+export const isSameOrInside = (path: string, root: string) => {
+  const inner = trimTrailingSlashes(path);
+  const outer = trimTrailingSlashes(root);
+  return inner === outer || inner.startsWith(`${outer}/`);
+};
