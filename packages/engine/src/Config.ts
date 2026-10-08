@@ -8,14 +8,19 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import {
   type ConfigDoc,
   type ConfigKey,
+  carryOverProblem,
+  documentProblem,
   docGet,
   docSet,
   docDelete,
+  launcherIdProblem,
+  launcherProblem,
   mergeConfigDoc,
   settingKeys,
 } from "./configDoc.ts";
@@ -85,12 +90,28 @@ export class InvalidConfigValue extends Schema.TaggedError<InvalidConfigValue>()
   }
 }
 
-// A list-valued key, which has its own verbs (or the app) instead of
-// `set`. `verbs` names them, without the binary.
+// A list-valued key, which `set` can't change: it has its own verbs, or
+// is edited in the file or the app.
 export class StructuredConfigKey extends Schema.TaggedError<StructuredConfigKey>()(
   "StructuredConfigKey",
-  { key: Schema.String, verbs: Schema.String },
-) {}
+  { key: Schema.String, verbs: Schema.String, orTheApp: Schema.Boolean },
+) {
+  override get message(): string {
+    const or = this.orTheApp ? " or the app" : "";
+    return `${this.key} is structured: use \`sm ${this.verbs}\`${or}.`;
+  }
+}
+
+// A project's settings must name its default branch, which a write
+// would leave out.
+export class MissingDefaultBranch extends Schema.TaggedError<MissingDefaultBranch>()(
+  "MissingDefaultBranch",
+  { projectId: Schema.String },
+) {
+  override get message(): string {
+    return "Set the project's default branch first: `sm projects config set defaultBranch <ref>`.";
+  }
+}
 
 // A whole-document write whose payload doesn't fit the schema.
 export class InvalidConfigDocument extends Schema.TaggedError<InvalidConfigDocument>()(
@@ -118,26 +139,32 @@ export class Config extends Context.Service<
     readonly read: (scope: ConfigScope) => Effect.Effect<ConfigDoc | null>;
     // A setting from its text form (true/on/yes/1, an enum member, a
     // number). A value equal to the default is stored by removing the
-    // key. Answers the value stored, or null for a cleared one.
+    // key. Answers the value stored, none for a cleared one.
     readonly set: (
       scope: ConfigScope,
       key: string,
       raw: string,
     ) => Effect.Effect<
       unknown,
-      UnknownConfigKey | InvalidConfigValue | StructuredConfigKey
+      | UnknownConfigKey
+      | InvalidConfigValue
+      | StructuredConfigKey
+      | MissingDefaultBranch
     >;
     readonly unset: (
       scope: ConfigScope,
       key: string,
-    ) => Effect.Effect<void, UnknownConfigKey | InvalidConfigValue>;
+    ) => Effect.Effect<
+      void,
+      UnknownConfigKey | InvalidConfigValue | MissingDefaultBranch
+    >;
     // The app's whole-document save: a modeled key the payload omits is
     // removed, a null removes its key, objects merge field by field, and
     // a key this build doesn't model survives.
     readonly write: (
       scope: ConfigScope,
       payload: ConfigDoc,
-    ) => Effect.Effect<void, InvalidConfigDocument>;
+    ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
   }
 >()("sm/engine/Config") {}
 
@@ -161,7 +188,13 @@ const deviceKeys = settingKeys(
     "launchers",
     "hiddenLaunchers",
   ],
-  { launchers: "config launcher add/rm" },
+  {
+    launchers: {
+      verbs: "config launcher add/rm",
+      entryProblem: launcherProblem,
+    },
+    hiddenLaunchers: { entryProblem: launcherIdProblem },
+  },
 );
 
 const projectKeys = settingKeys(
@@ -181,8 +214,14 @@ const projectKeys = settingKeys(
     "launchers",
   ],
   {
-    carryOver: "projects config carryover add/rm",
-    launchers: "projects config launcher add/rm",
+    carryOver: {
+      verbs: "projects config carryover add/rm",
+      entryProblem: carryOverProblem,
+    },
+    launchers: {
+      verbs: "projects config launcher add/rm",
+      entryProblem: launcherProblem,
+    },
   },
 );
 
@@ -199,21 +238,23 @@ const lookupKey = (scope: ConfigScope, name: string) => {
       );
 };
 
-const expandHome = (home: string, raw: string) =>
-  raw === "~" ? home : raw.startsWith("~/") ? `${home}/${raw.slice(2)}` : raw;
-
 const listedValue = (key: ConfigKey, doc: ConfigDoc): Setting => {
   const [value, set] = docGet(doc, key.name);
   return { key: key.name, value: set ? value : (key.default ?? null), set };
 };
 
-// The text forms `set` takes for each kind of key.
-const parseValue = (key: ConfigKey, raw: string, home: string) => {
+// The text forms `set` takes for each kind of key but a list.
+const parseValue = (
+  key: ConfigKey,
+  kind: Exclude<ConfigKey["kind"], "list">,
+  raw: string,
+  expandHome: (raw: string) => string,
+) => {
   const invalid = (reason: InvalidConfigValue["reason"]) =>
     Effect.fail(
       new InvalidConfigValue({ key: key.name, reason, choices: key.choices }),
     );
-  switch (key.kind) {
+  switch (kind) {
     case "boolean": {
       const word = raw.toLowerCase();
       if (["true", "on", "yes", "1"].includes(word))
@@ -232,19 +273,18 @@ const parseValue = (key: ConfigKey, raw: string, home: string) => {
     }
     case "string": {
       if (key.name !== "customWorktreePath") return Effect.succeed(raw);
-      const absolute = expandHome(home, raw);
+      const absolute = expandHome(raw);
       return absolute.startsWith("/")
         ? Effect.succeed(absolute)
         : invalid("absolutePath");
     }
-    case "list":
-      return Effect.die(new Error("a list key is set through its own verbs"));
   }
 };
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const { home } = yield* Paths.Paths;
+  const path = yield* Path.Path;
 
   const load = (scope: ConfigScope) =>
     (scope.kind === "device"
@@ -288,7 +328,8 @@ const make = Effect.gen(function* () {
       { discard: true },
     );
 
-  // A read-modify-write of the scope's document in one transaction.
+  // A read-modify-write of the scope's document in one transaction. A
+  // project's document must keep its default branch.
   const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) =>
     sql
       .withTransaction(
@@ -296,10 +337,27 @@ const make = Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
           const next = structuredClone(before);
           change(next);
+          if (scope.kind === "project") {
+            const [branch] = docGet(next, "defaultBranch");
+            if (typeof branch !== "string" || branch.trim() === "") {
+              return yield* new MissingDefaultBranch({
+                projectId: scope.projectId,
+              });
+            }
+          }
           yield* store(scope, before, next);
         }),
       )
-      .pipe(Effect.orDie);
+      .pipe(Effect.catchTags({ SqlError: Effect.die }));
+
+  // A `~/` path, joined to the home directory and cleaned as Go's
+  // filepath.Join cleans it.
+  const expandHome = (raw: string) => {
+    if (raw === "~") return home;
+    if (!raw.startsWith("~/")) return raw;
+    const joined = path.join(home, raw.slice(2));
+    return joined.length > 1 ? joined.replace(/\/+$/, "") : joined;
+  };
 
   const list = Effect.fn("Config.list")(function* (scope: ConfigScope) {
     const doc = (yield* load(scope)) ?? {};
@@ -342,7 +400,10 @@ const make = Effect.gen(function* () {
     if (key.kind === "list") {
       return yield* new StructuredConfigKey({
         key: key.name,
-        verbs: key.verbs ?? "",
+        verbs:
+          key.verbs ??
+          (scope.kind === "device" ? "config edit" : "projects config edit"),
+        orTheApp: key.verbs === undefined,
       });
     }
     if (key.required && raw.trim() === "") {
@@ -352,12 +413,12 @@ const make = Effect.gen(function* () {
         choices: [],
       });
     }
-    // An empty string clears a text setting.
+    // An empty string clears a text setting, which answers no value.
     if (key.kind === "string" && raw === "") {
       yield* unset(scope, name);
-      return null;
+      return undefined;
     }
-    const value = yield* parseValue(key, raw, home);
+    const value = yield* parseValue(key, key.kind, raw, expandHome);
     yield* update(scope, (doc) =>
       JSON.stringify(value) === JSON.stringify(key.default)
         ? docDelete(doc, key.name)
@@ -370,39 +431,14 @@ const make = Effect.gen(function* () {
     scope: ConfigScope,
     payload: ConfigDoc,
   ) {
-    yield* validate(keysOf(scope), payload);
+    const problem = documentProblem(keysOf(scope), payload);
+    if (problem !== undefined) {
+      return yield* new InvalidConfigDocument({ problem });
+    }
     yield* update(scope, (doc) => mergeConfigDoc(keysOf(scope), doc, payload));
   });
 
   return Config.of({ list, get, read, set, unset, write });
 });
-
-// The shape check a whole-document write passes first: required keys
-// are there, and every modeled key present decodes with its schema. A
-// null clears its key, so it passes wherever the key may be absent.
-const validate = (keys: ReadonlyArray<ConfigKey>, doc: ConfigDoc) =>
-  Effect.gen(function* () {
-    for (const key of keys) {
-      const [value, present, wrongParent] = docGet(doc, key.name);
-      if (wrongParent !== undefined) {
-        return yield* new InvalidConfigDocument({
-          problem: `${wrongParent} must be an object.`,
-        });
-      }
-      if (!present || value === null) {
-        if (key.required) {
-          return yield* new InvalidConfigDocument({
-            problem: `${key.name} is required.`,
-          });
-        }
-        continue;
-      }
-      if (!key.accepts(value)) {
-        return yield* new InvalidConfigDocument({
-          problem: `${key.name} ${key.expected}.`,
-        });
-      }
-    }
-  });
 
 export const layer = Layer.effect(Config, make);

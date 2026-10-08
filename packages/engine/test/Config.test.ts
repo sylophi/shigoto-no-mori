@@ -39,27 +39,37 @@ it("models exactly the schemas' keys", async () => {
   );
 });
 
-it("points a list key at its own verbs", async () => {
+it("points a list key at its own verbs, or at the file and the app", async () => {
+  const setList = (key: string) =>
+    box.engine(
+      config.pipe(Effect.flatMap((c) => c.set({ kind: "device" }, key, "x"))),
+    );
+  assert.deepEqual(await setList("launchers"), {
+    ok: false,
+    error: "launchers is structured: use `sm config launcher add/rm`.",
+  });
+  assert.deepEqual(await setList("hiddenLaunchers"), {
+    ok: false,
+    error: "hiddenLaunchers is structured: use `sm config edit` or the app.",
+  });
+});
+
+it("keeps a project's default branch through every write", async () => {
+  const project = { kind: "project", projectId: "P" } as const;
   assert.deepEqual(
     await box.engine(
-      config.pipe(
-        Effect.flatMap((c) => c.set({ kind: "device" }, "launchers", "x")),
-        Effect.flip,
-        Effect.map((error) =>
-          error instanceof Config.StructuredConfigKey
-            ? { key: error.key, verbs: error.verbs }
-            : error,
-        ),
-      ),
+      config.pipe(Effect.flatMap((c) => c.set(project, "portBase", "4000"))),
     ),
     {
-      key: "launchers",
-      verbs: "config launcher add/rm",
+      ok: false,
+      error:
+        "Set the project's default branch first: `sm projects config set defaultBranch <ref>`.",
     },
   );
 });
 
-it("takes an absolute custom path, home-expanded, and refuses a relative one", async () => {
+it("takes an absolute custom path, home-expanded and cleaned, and refuses a relative one", async () => {
+  box.write("projects/P/project.json", { defaultBranch: "main" });
   const project = { kind: "project", projectId: "P" } as const;
   const set = (raw: string) =>
     box.engine(
@@ -67,7 +77,7 @@ it("takes an absolute custom path, home-expanded, and refuses a relative one", a
         Effect.flatMap((c) => c.set(project, "customWorktreePath", raw)),
       ),
     );
-  assert.equal(await set("~/trees"), `${box.home}/trees`);
+  assert.equal(await set("~/trees/./x/"), `${box.home}/trees/x`);
   assert.deepEqual(await set("trees"), {
     ok: false,
     error: "customWorktreePath must be an absolute path.",

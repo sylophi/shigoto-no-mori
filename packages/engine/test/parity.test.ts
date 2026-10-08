@@ -6,9 +6,14 @@
 // command will: the service's answer wrapped the way the verb prints it.
 import assert from "node:assert/strict";
 import * as Effect from "effect/Effect";
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
-import { type Engine, type Sandbox, sandbox } from "./lib/sandbox.ts";
+import { type Engine, goSm, type Sandbox, sandbox } from "./lib/sandbox.ts";
+
+// A cold build of cli/ takes longer than a test's timeout.
+beforeAll(() => {
+  goSm();
+}, 300_000);
 
 let box: Sandbox;
 beforeEach(() => {
@@ -82,7 +87,9 @@ const verbs = (scope: Config.ConfigScope) => {
       ),
     set: (key: string, raw: string) =>
       verb(["set", key, raw], (c) =>
-        Effect.map(c.set(scope, key, raw), (value) => ({ key, value })),
+        Effect.map(c.set(scope, key, raw), (value) =>
+          value === undefined ? { key } : { key, value },
+        ),
       ),
     unset: (key: string) =>
       verb(["unset", key], (c) => Effect.as(c.unset(scope, key), { key })),
@@ -157,6 +164,9 @@ describe("config", () => {
         }),
       () => device.read(),
       () => device.write({ launchScripts: "yes" }),
+      () => device.write({ launchers: [{ id: "a", label: " " }] }),
+      () => device.write({ hiddenLaunchers: [1] }),
+      () => device.read(),
     ]);
   });
 });
@@ -210,7 +220,18 @@ describe("projects config", () => {
         }),
       () => project.read(),
       () => project.set("scripts.setup", "bun i"),
+      () => project.set("scripts.setup", ""),
+      () => project.set("customWorktreePath", "~/trees/"),
+      () => project.set("customWorktreePath", "trees"),
+      () => project.set("portBase", "0"),
       () => project.unset("defaultBranch"),
+      () => project.write({ defaultBranch: "  " }),
+      () => project.write({ defaultBranch: "main", worktreeLayout: 1 }),
+      () =>
+        project.write({
+          defaultBranch: "main",
+          carryOver: [{ path: "../out", mode: "copy" }],
+        }),
       () => project.read(),
     ]);
   });

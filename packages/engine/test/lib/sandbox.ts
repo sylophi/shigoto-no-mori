@@ -47,7 +47,7 @@ const scrubbedEnv = (): NodeJS.ProcessEnv => ({
 // once per test process.
 let built: string | undefined;
 
-function goSm(): string {
+export function goSm(): string {
   built ??= buildGoSm();
   return built;
 }

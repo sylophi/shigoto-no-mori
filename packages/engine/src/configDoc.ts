@@ -1,7 +1,6 @@
 // A settings document and the keys a scope models, the way the CLI
 // reads and edits them: keys are the JSON field names, dotted for
 // nesting (scripts.setup).
-import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 
 export type ConfigDoc = { [key: string]: unknown };
@@ -19,9 +18,8 @@ export type ConfigKey = {
   readonly required: boolean;
   // A list key's own verbs, which `set` points at.
   readonly verbs: string | undefined;
-  readonly accepts: (value: unknown) => boolean;
-  // What a value that `accepts` refuses should have been.
-  readonly expected: string;
+  // What is wrong with a list entry, for a whole-document write.
+  readonly entryProblem: ((entry: unknown) => string | undefined) | undefined;
 };
 
 const isObject = (value: unknown): value is ConfigDoc =>
@@ -63,7 +61,12 @@ export function settingKeys(
   }>,
   defaults: { readonly [name: string]: unknown },
   order: ReadonlyArray<string>,
-  verbs: { readonly [name: string]: string },
+  lists: {
+    readonly [name: string]: {
+      readonly verbs?: string;
+      readonly entryProblem: (entry: unknown) => string | undefined;
+    };
+  },
 ): ReadonlyArray<ConfigKey> {
   const byName = new Map(fields.map(({ path, ast }) => [path.join("."), ast]));
   const names = [
@@ -82,15 +85,8 @@ export function settingKeys(
       choices,
       default: defaults[name],
       required: present.length === members.length,
-      verbs: verbs[name],
-      accepts: Schema.is(Schema.make<Schema.Top>(ast)),
-      expected: {
-        boolean: "must be a boolean",
-        string: "must be a string",
-        enum: `must be one of: ${choices.join(", ")}`,
-        int: "must be a positive integer",
-        list: "must be an array of valid entries",
-      }[kind],
+      verbs: lists[name]?.verbs,
+      entryProblem: lists[name]?.entryProblem,
     };
   });
 }
@@ -200,4 +196,90 @@ export function mergeConfigDoc(
     if (!docGet(payload, key.name)[1]) docClear(doc, key.name);
   }
   mergeObjects(doc, payload);
+}
+
+const filled = (value: unknown) =>
+  typeof value === "string" && value.trim() !== "";
+
+// What is wrong with a launcher, a hidden launcher id and a carry-over
+// entry, in the words a refused write uses.
+export const launcherProblem = (entry: unknown) => {
+  if (!isObject(entry)) return "entries must be objects";
+  const missing = ["id", "label", "command"].find(
+    (field) => !filled(entry[field]),
+  );
+  return missing === undefined
+    ? undefined
+    : `entries need a non-empty ${missing}`;
+};
+
+export const launcherIdProblem = (entry: unknown) =>
+  typeof entry === "string" ? undefined : "entries must be strings";
+
+// Relative, with no `..` step and no NUL.
+const isSafeRelativePath = (path: string) =>
+  !path.startsWith("/") &&
+  !path.includes("\u0000") &&
+  !path.split(/[\\/]/).includes("..");
+
+export const carryOverProblem = (entry: unknown) => {
+  if (!isObject(entry)) return "entries must be objects";
+  const { path, mode } = entry;
+  if (typeof path !== "string" || path === "" || !isSafeRelativePath(path)) {
+    return "entries need a path inside the project root";
+  }
+  return mode === "copy" || mode === "symlink"
+    ? undefined
+    : "entries need mode copy or symlink";
+};
+
+// What keeps a whole document from being written: a required key
+// missing, or a modeled key holding the wrong kind of value. A null
+// clears its key, so it passes wherever the key may be absent.
+export function documentProblem(
+  keys: ReadonlyArray<ConfigKey>,
+  doc: ConfigDoc,
+): string | undefined {
+  for (const key of keys) {
+    const [value, present, wrongParent] = docGet(doc, key.name);
+    if (wrongParent !== undefined) return `${wrongParent} must be an object.`;
+    if (!present || value === null) {
+      if (key.required) return `${key.name} is required.`;
+      continue;
+    }
+    const problem = valueProblem(key, value);
+    if (problem !== undefined) return problem;
+  }
+  return undefined;
+}
+
+function valueProblem(key: ConfigKey, value: unknown): string | undefined {
+  switch (key.kind) {
+    case "boolean":
+      return typeof value === "boolean"
+        ? undefined
+        : `${key.name} must be a boolean.`;
+    case "string":
+      if (typeof value !== "string") return `${key.name} must be a string.`;
+      return key.required && value.trim() === ""
+        ? `${key.name} is required.`
+        : undefined;
+    case "enum":
+      if (typeof value !== "string") return `${key.name} must be a string.`;
+      return key.choices.includes(value)
+        ? undefined
+        : `${key.name} must be one of: ${key.choices.join(", ")}.`;
+    case "int":
+      return Number.isSafeInteger(value) && (value as number) > 0
+        ? undefined
+        : `${key.name} must be a positive integer.`;
+    case "list": {
+      if (!Array.isArray(value)) return `${key.name} must be an array.`;
+      for (const entry of value) {
+        const problem = key.entryProblem?.(entry);
+        if (problem !== undefined) return `${key.name}: ${problem}.`;
+      }
+      return undefined;
+    }
+  }
 }
