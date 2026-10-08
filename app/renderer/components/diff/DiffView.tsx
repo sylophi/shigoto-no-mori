@@ -312,8 +312,10 @@ export function DiffView({
       >
         {/* A wide viewport's way back is the sidebar's first row. */}
         {phone && <BackButton onClick={onBack} label={backLabel} />}
-        <div className="flex items-start justify-between gap-6">
-          <div className="min-w-0 flex-1 space-y-1">
+        {/* A phone gives the title its own row and the controls the
+            next, rather than a sliver of the width beside them. */}
+        <div className="flex items-start justify-between gap-6 phone:flex-wrap phone:gap-3">
+          <div className="min-w-0 flex-1 space-y-1 phone:basis-full">
             {/* A phone's header row is shared with the chips, so the
                 title wraps there instead of losing its tail. */}
             <h1 className="truncate text-xl font-medium tracking-tight select-text phone:text-lg phone:whitespace-normal">
