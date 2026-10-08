@@ -86,6 +86,13 @@ import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
+  applyRestartVisibility,
+  rememberVisibilityAtShutdown,
+  rememberVisibilityForRestart,
+  type RestartVisibility,
+  takeRestartVisibility,
+} from "./electron/restartVisibility";
+import {
   attachRenderProcessRecovery,
   installChildProcessLogging,
   installFatalRecovery,
@@ -238,7 +245,7 @@ let hasBooted = false;
 // empty by the time any window exists: getDeviceId mints or throws.
 let deviceId = "";
 
-const createWindow = () => {
+const createWindow = (restart: RestartVisibility | null = null) => {
   hasBooted = true;
   // Drive the native appearance from the saved theme before constructing
   // the window so the macOS vibrancy material picks the right light/dark
@@ -249,6 +256,7 @@ const createWindow = () => {
     height: 720,
     minWidth: 640,
     minHeight: 420,
+    show: restart === null,
     // Inset traffic lights over a transparent shell so the
     // NSVisualEffectView material set via `vibrancy` shows through where
     // the renderer paints no background (the sidebar column). Inset as
@@ -332,6 +340,7 @@ const createWindow = () => {
   });
 
   attachContextMenu(mainWindow);
+  if (restart) applyRestartVisibility(mainWindow, restart);
 };
 
 // True while the app is on any teardown or restart path, so the crash
@@ -503,7 +512,7 @@ app.on("ready", async () => {
   // ipc/handlers.ts), making this the boot-time pass only.
   installChildProcessLogging();
   installFatalRecovery({ isShuttingDown });
-  createWindow();
+  createWindow(takeRestartVisibility());
   reconcileLaunchAtLogin();
   // The sweeps below read the project list synchronously, from the
   // snapshot host/lib/projects keeps of the CLI's list, so read it once
@@ -537,6 +546,7 @@ app.on("ready", async () => {
   // rather than the UI reading "Connected" off corpses until the next
   // heartbeat tick.
   powerMonitor.on("resume", () => probeRemoteConnections());
+  rememberVisibilityAtShutdown();
   // External CLI writes surface in the UI via an explicit invalidation
   // broadcast. (The focus signal won't do: React Query's focusManager
   // only refetches on a blur->focus transition, and the window may be
@@ -645,6 +655,7 @@ app.on("before-quit", (event) => {
   // Acceptable for an explicit, user-initiated update.
   if (isInstallingUpdate() || isRelaunching()) {
     markShuttingDown();
+    rememberVisibilityForRestart();
     stopRemoteWork();
     signalAllScriptsBestEffort("SIGTERM");
     killAllCli();
