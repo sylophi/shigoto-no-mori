@@ -1209,6 +1209,7 @@ async function fakeSyncPull(
     detached: false,
     shelved: false,
     autoPull: false,
+    agentWorking: false,
   });
   (local.worktrees[project.id] ??= []).push(landed);
   // The real host pings this after any app-driven mutation, and the
