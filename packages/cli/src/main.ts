@@ -24,6 +24,8 @@ import {
   path,
   worktreesCommand,
 } from "./commands/worktrees.ts";
+import { describe } from "./commands/describe.ts";
+import { agentWorking, autopull, shelve, unshelve } from "./commands/marks.ts";
 import { status } from "./commands/status.ts";
 import { engine } from "./engine.ts";
 import { Killed, report } from "./errors.ts";
@@ -52,6 +54,7 @@ const VERBS: Readonly<Record<string, string>> = {
   ls: "list",
   l: "list",
   st: "status",
+  "auto-pull": "autopull",
 };
 const PROJECT_VERBS: Readonly<Record<string, string>> = {
   ls: "list",
@@ -99,6 +102,11 @@ const sm = Command.make("sm").pipe(
     path.pipe(Command.provide(services)),
     destination.pipe(Command.provide(services)),
     status.pipe(Command.provide(services)),
+    describe.pipe(Command.provide(services)),
+    shelve.pipe(Command.provide(services)),
+    unshelve.pipe(Command.provide(services)),
+    autopull.pipe(Command.provide(services)),
+    agentWorking.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(services)),
   ]),
 );

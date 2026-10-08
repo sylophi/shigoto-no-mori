@@ -27,6 +27,8 @@ import {
   type Styles,
 } from "../output.ts";
 import { divergenceCell, flagNames, truncate } from "./cells.ts";
+import { describe } from "./describe.ts";
+import { agentWorking, autopull, shelve, unshelve } from "./marks.ts";
 import { status } from "./status.ts";
 
 // A title cut to fit a terminal line.
@@ -307,5 +309,15 @@ export { destination, list, path };
 
 export const worktreesCommand = Command.make("worktrees").pipe(
   Command.withDescription("Worktree commands (the prefix is optional)"),
-  Command.withSubcommands([list, path, destination, status]),
+  Command.withSubcommands([
+    list,
+    path,
+    destination,
+    status,
+    describe,
+    shelve,
+    unshelve,
+    autopull,
+    agentWorking,
+  ]),
 );

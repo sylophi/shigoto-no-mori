@@ -497,6 +497,84 @@ describe("status", () => {
   });
 });
 
+describe("describe and the marks", () => {
+  // A project whose managed worktrees go to a folder both sides see,
+  // with one there (fox) and one outside it (owl).
+  const project = () => {
+    const alpha = box.repo("alpha");
+    box.git(alpha, "remote", "add", "origin", "git@github.com:me/alpha.git");
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", `${box.home}/wts/fox`);
+    box.git(alpha, "worktree", "add", "-q", "-b", "owl", `${box.home}/owl`);
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    box.write("projects/A/project.json", {
+      defaultBranch: "main",
+      worktreeLayout: "custom",
+      customWorktreePath: `${box.home}/wts`,
+    });
+    writeFileSync(`${box.home}/notes.md`, "\n\nWhat the fox is for.\n  \n");
+    return { alpha, fox: `${box.home}/wts/fox` };
+  };
+
+  it("sets and shows a worktree's title and description", async () => {
+    const { fox } = project();
+    await same("describe", "fox");
+    await same("--json", "describe", "fox", "-t", "  Fox things  ");
+    await sameAt(fox, "describe", "--description-file", `${box.home}/notes.md`);
+    await sameAt(fox, "describe");
+    await same("--json", "wt", "describe", "fox");
+    await same("describe", "fox", "-t", "a\tb");
+    await same("--json", "describe", "fox", "-t", "x".repeat(257));
+    await same("describe", "fox", "-d", "x", "--description-file", "-");
+    await same("describe", "fox", "--description-file", `${box.home}/nope`);
+    await same("describe", "owl", "-t", "x");
+    await same("describe", "fox", "owl");
+  });
+
+  it("gives way to the branch's open pull request", async () => {
+    project();
+    box.fakeBin(
+      "gh",
+      `if [ "$1" = pr ]; then echo '${JSON.stringify([
+        {
+          number: 9,
+          url: "https://github.com/me/alpha/pull/9",
+          title: "The PR title",
+          body: "  The PR body.  ",
+          isCrossRepository: false,
+        },
+      ])}'; else exit 0; fi`,
+    );
+    await same("describe", "fox");
+    await same("--json", "describe", "fox");
+    await same("--json", "describe", "fox", "-t", "Mine");
+  });
+
+  it("takes gh output it can't read as no pull request", async () => {
+    project();
+    box.fakeBin("gh", `if [ "$1" = pr ]; then echo 'not json'; fi`);
+    await same("describe", "fox");
+    await same("--json", "describe", "fox", "-d", "Mine");
+  });
+
+  it("shelves, and sets and shows the marks", async () => {
+    const { fox } = project();
+    await same("--json", "shelve", "fox");
+    await same("list");
+    await same("unshelve", "fox");
+    await same("shelve", "root");
+    await same("--json", "shelve", "owl");
+    await sameAt(fox, "autopull");
+    await sameAt(fox, "auto-pull", "on");
+    await same("--json", "autopull", "off", "fox");
+    await same("agent-working", "on", "fox");
+    await same("--json", "agent-working", "on", "root");
+    await same("agent-working", "fox");
+    await same("agent-working", "off", "fox", "owl");
+  });
+});
+
 describe("doctor", () => {
   // Each side's data dir, which the checklist names, as one.
   const sideNeutral = (seen: unknown): unknown =>

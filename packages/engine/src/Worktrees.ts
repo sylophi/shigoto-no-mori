@@ -208,6 +208,9 @@ export type DescriptionView = {
   readonly title: string;
   readonly description: string;
   readonly pullRequest: GitHub.OwningPullRequest | null;
+  // Why the pull request couldn't be looked up, when that is worth a
+  // word (a repository off GitHub isn't).
+  readonly pullRequestUnavailable?: string;
 };
 
 // A listing over several projects: the rows of each that could be read,
@@ -640,6 +643,15 @@ export class Worktrees extends Context.Service<
       here: Here,
       projectId: string,
     ) => Effect.Effect<Registry.ListedProject, Registry.UnknownProject>;
+    // The project a command names: by --project-id, else by -p, else the
+    // one at the cwd. An empty flag is no flag.
+    readonly resolveProjectRef: (
+      here: Here,
+      ref: Pick<Target, "project" | "projectId">,
+    ) => Effect.Effect<
+      Registry.ListedProject,
+      TargetError | Registry.UnknownProject | Git.GitError
+    >;
     // The worktree a command means. The reserved names root and primary
     // are the project's primary checkout.
     readonly resolve: (
@@ -671,12 +683,17 @@ export class Worktrees extends Context.Service<
     readonly scriptContext: (
       located: Located,
     ) => Effect.Effect<Lifecycle.ScriptContext>;
-    // Sets the title, the description, or both, and answers the row.
+    // Sets the title, the description, or both, and answers the pair as
+    // stored, with why the pull request couldn't be looked up as
+    // `description` says it.
     readonly describe: (
       located: Located,
       change: { readonly title?: string; readonly description?: string },
     ) => Effect.Effect<
-      WorktreeRow,
+      {
+        readonly described: WorktreeData.Description;
+        readonly pullRequestUnavailable?: string;
+      },
       DescribeRefused | PullRequestOwnsDescription
     >;
 
@@ -848,7 +865,7 @@ const GO_SPACE_START =
   /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/;
 const GO_SPACE_END =
   /[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/;
-const trimGoSpace = (text: string) =>
+export const trimGoSpace = (text: string) =>
   text.replace(GO_SPACE_START, "").replace(GO_SPACE_END, "");
 
 // `{ [key]: value }`, or nothing when the value is empty: the fields
@@ -1593,6 +1610,14 @@ const make = Effect.gen(function* () {
     },
   );
 
+  const resolveProjectRef = (
+    here: Here,
+    ref: Pick<Target, "project" | "projectId">,
+  ) =>
+    ref.projectId !== undefined && ref.projectId !== ""
+      ? resolveProjectById(here, ref.projectId)
+      : resolveProject(here, ref.project);
+
   const primaryOf = Effect.fn(function* (
     here: Here,
     project: RegisteredProject,
@@ -1785,6 +1810,9 @@ const make = Effect.gen(function* () {
       title: stored.title,
       description: stored.description,
       pullRequest: pr.found,
+      ...(pr.unavailable === undefined
+        ? {}
+        : { pullRequestUnavailable: pr.unavailable }),
     };
   });
 
@@ -1825,11 +1853,20 @@ const make = Effect.gen(function* () {
         number: pr.found.number,
       });
     }
-    yield* data.describe(located.project.id, located.worktree.id, {
-      ...(title === undefined ? {} : { title }),
-      ...(text === undefined ? {} : { description: text }),
-    });
-    return yield* row(located);
+    const described = yield* data.describe(
+      located.project.id,
+      located.worktree.id,
+      {
+        ...(title === undefined ? {} : { title }),
+        ...(text === undefined ? {} : { description: text }),
+      },
+    );
+    return {
+      described,
+      ...(pr.unavailable === undefined
+        ? {}
+        : { pullRequestUnavailable: pr.unavailable }),
+    };
   });
 
   // --- making and removing worktrees ---
@@ -2855,6 +2892,7 @@ const make = Effect.gen(function* () {
     here: locate,
     resolveProject,
     resolveProjectById,
+    resolveProjectRef,
     resolve,
     setShelved,
     setAutoPull,
