@@ -10,6 +10,7 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { messageOf } from "./errorDocument.ts";
+import { entryExists } from "./entries.ts";
 import * as Git from "./Git.ts";
 
 export const dirtyRef = (worktreeId: string) =>
@@ -60,8 +61,8 @@ export class ApplyRefused extends Schema.TaggedError<ApplyRefused>()(
     ]),
     // The commits a mismatch names, the files an overwrite names, the
     // count of uncommitted changes.
-    names: Schema.Array(Schema.String),
-    count: Schema.Int,
+    names: Schema.optional(Schema.Array(Schema.String)),
+    count: Schema.optional(Schema.Int),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
@@ -79,19 +80,21 @@ export class ApplyRefused extends Schema.TaggedError<ApplyRefused>()(
   }
 
   override get message(): string {
-    const [first = "", second = ""] = this.names;
+    const names = this.names ?? [];
+    const count = this.count ?? 0;
+    const [first = "", second = ""] = names;
     switch (this.reason) {
       case "no-capture":
         return "No dirty-state capture for this worktree.";
       case "base-mismatch":
         return `The capture was taken on ${first.slice(0, 12)} but this worktree is on ${second.slice(0, 12)}. Sync the branch first, then apply.`;
       case "uncommitted":
-        return `Worktree has ${this.count} uncommitted change(s) that apply would overwrite. Commit them first, or pass --force.`;
+        return `Worktree has ${count} uncommitted change(s) that apply would overwrite. Commit them first, or pass --force.`;
       case "unreadable":
         return `Couldn't check for uncommitted changes (${messageOf(this.cause)}). Fix the worktree, or pass --force to apply anyway.`;
       case "overwrite": {
-        const more = this.count > 3 ? ` and ${this.count - 3} more` : "";
-        return `Applying would overwrite existing file(s) the capture adds: ${this.names.join(", ")}${more}. Move or delete them first.`;
+        const more = count > 3 ? ` and ${count - 3} more` : "";
+        return `Applying would overwrite existing file(s) the capture adds: ${names.join(", ")}${more}. Move or delete them first.`;
       }
       case "overlap":
         return `The worktree's local changes overlap the capture, so git refused to apply it. Commit or discard them first. (${messageOf(this.cause)})`;
@@ -125,27 +128,40 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
-  // The paths that differ between two commits, `filter` narrowing them
-  // (--diff-filter=A for the added ones).
-  const diffPaths = (
-    repo: string,
-    from: string,
-    to: string,
-    filter: ReadonlyArray<string> = [],
-  ) =>
+  // What changed between two commits, each path with its status letter.
+  const changes = (repo: string, from: string, to: string) =>
     git
       .run(repo, [
         "diff-tree",
         "-r",
         "-z",
-        "--name-only",
-        ...filter,
+        "--name-status",
         "--no-renames",
         "--end-of-options",
         from,
         to,
       ])
-      .pipe(Effect.map(nulFields));
+      .pipe(
+        Effect.map((stdout) => {
+          const fields = nulFields(stdout);
+          const found: Array<{ status: string; path: string }> = [];
+          for (let index = 0; index + 1 < fields.length; index += 2) {
+            found.push({
+              status: fields[index] ?? "",
+              path: fields[index + 1] ?? "",
+            });
+          }
+          return found;
+        }),
+      );
+
+  // Made by sm, so it needs no identity of the user's.
+  const IDENTITY = {
+    GIT_AUTHOR_NAME: "Shigoto no Mori",
+    GIT_AUTHOR_EMAIL: "shigomori@localhost",
+    GIT_COMMITTER_NAME: "Shigoto no Mori",
+    GIT_COMMITTER_EMAIL: "shigomori@localhost",
+  };
 
   const capture = Effect.fn("Dirty.capture")(function* (target: DirtyTarget) {
     const { projectPath, worktreePath, worktreeId } = target;
@@ -170,29 +186,29 @@ const make = Effect.gen(function* () {
         return (yield* git.run(worktreePath, ["write-tree"], options)).trim();
       }),
     );
-    const headTree = (yield* git.run(worktreePath, [
-      "rev-parse",
-      "HEAD^{tree}",
-    ])).trim();
-    if (tree === headTree) {
+    // Against the commit the tree was built on, which HEAD may have left.
+    if (tree === (yield* git.treeOf(worktreePath, parent))) {
       yield* git.deleteRef(projectPath, dirtyRef(worktreeId));
       return { captured: false } as const;
     }
-    const commit = (yield* git.run(worktreePath, [
-      "commit-tree",
-      tree,
-      "-p",
-      parent,
-      "-m",
-      `shigomori dirty state ${worktreeId}`,
-    ])).trim();
-    yield* git.run(projectPath, [
-      "update-ref",
-      "--end-of-options",
-      dirtyRef(worktreeId),
+    const commit = (yield* git.run(
+      worktreePath,
+      [
+        "commit-tree",
+        tree,
+        "-p",
+        parent,
+        "-m",
+        `shigomori dirty state ${worktreeId}`,
+      ],
+      { env: IDENTITY },
+    )).trim();
+    yield* git.updateRef({
+      repo: projectPath,
+      ref: dirtyRef(worktreeId),
       commit,
-    ]);
-    const changed = yield* diffPaths(projectPath, parent, commit);
+    });
+    const changed = yield* changes(projectPath, parent, commit);
     return {
       captured: true,
       commit,
@@ -201,76 +217,56 @@ const make = Effect.gen(function* () {
     } as const;
   });
 
-  const refuse = (
-    reason: ApplyRefused["reason"],
-    fields: {
-      readonly names?: ReadonlyArray<string>;
-      readonly count?: number;
-      readonly cause?: unknown;
-    } = {},
-  ) =>
-    new ApplyRefused({
-      reason,
-      names: [...(fields.names ?? [])],
-      count: fields.count ?? 0,
-      ...(fields.cause === undefined ? {} : { cause: fields.cause }),
-    });
-
-  // A file or a link at `file`, a dangling one included.
-  const present = (file: string) =>
-    fs.exists(file).pipe(
-      Effect.flatMap((exists) =>
-        exists ? Effect.succeed(true) : fs.readLink(file).pipe(Effect.as(true)),
-      ),
-      Effect.orElseSucceed(() => false),
-    );
-
   const apply = Effect.fn("Dirty.apply")(function* (
     target: DirtyTarget,
     options: { readonly force: boolean },
   ) {
     const { projectPath, worktreePath, worktreeId } = target;
     const found = yield* git.refTip(projectPath, dirtyRef(worktreeId));
-    if (Option.isNone(found)) return yield* refuse("no-capture");
+    if (Option.isNone(found)) {
+      return yield* new ApplyRefused({ reason: "no-capture" });
+    }
     const commit = found.value;
-    const parent = (yield* git.run(projectPath, [
-      "rev-parse",
-      "--verify",
-      "--end-of-options",
-      `${commit}^`,
-    ])).trim();
+    const parent = yield* git.verifyRev(projectPath, `${commit}^`);
     const head = (yield* git.run(worktreePath, ["rev-parse", "HEAD"])).trim();
     if (head !== parent) {
-      return yield* refuse("base-mismatch", { names: [parent, head] });
+      return yield* new ApplyRefused({
+        reason: "base-mismatch",
+        names: [parent, head],
+      });
     }
     if (!options.force) {
       const status = yield* git
         .status(worktreePath, "normal")
         .pipe(Effect.result);
       if (Result.isFailure(status)) {
-        return yield* refuse("unreadable", { cause: status.failure });
+        return yield* new ApplyRefused({
+          reason: "unreadable",
+          cause: status.failure,
+        });
       }
       if (status.success.length > 0) {
-        return yield* refuse("uncommitted", {
+        return yield* new ApplyRefused({
+          reason: "uncommitted",
           count: status.success.length,
         });
       }
     }
     // The files the capture adds must not be there already: read-tree
     // would overwrite them.
-    const added = yield* diffPaths(projectPath, parent, commit, [
-      "--diff-filter=A",
-    ]);
-    const colliding = yield* Effect.filter(added, (relative) =>
-      present(path.join(worktreePath, relative)),
+    const changed = yield* changes(projectPath, parent, commit);
+    const colliding = yield* Effect.filter(
+      changed.filter(({ status }) => status === "A"),
+      ({ path: relative }) =>
+        entryExists(fs, path.join(worktreePath, relative)),
     );
     if (colliding.length > 0) {
-      return yield* refuse("overwrite", {
-        names: colliding.slice(0, 3),
+      return yield* new ApplyRefused({
+        reason: "overwrite",
+        names: colliding.slice(0, 3).map(({ path: relative }) => relative),
         count: colliding.length,
       });
     }
-    const changed = yield* diffPaths(projectPath, parent, commit);
     yield* git
       .run(worktreePath, [
         "read-tree",
@@ -280,7 +276,11 @@ const make = Effect.gen(function* () {
         parent,
         commit,
       ])
-      .pipe(Effect.mapError((cause) => refuse("overlap", { cause })));
+      .pipe(
+        Effect.mapError(
+          (cause) => new ApplyRefused({ reason: "overlap", cause }),
+        ),
+      );
     // The changes stay in the files, not in the index.
     yield* git.run(worktreePath, ["reset", "-q"]);
     yield* git.deleteRef(projectPath, dirtyRef(worktreeId)).pipe(Effect.ignore);

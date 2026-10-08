@@ -986,8 +986,6 @@ const across = <A>(
 const namesUsed = (found: ReadonlyArray<WorktreeIdentity>) =>
   new Set(found.map((worktree) => worktree.name.toLowerCase()));
 
-// A pending dirty-state capture of the worktree (`worktrees dirty`).
-
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
   const lifecycle = yield* Lifecycle.Lifecycle;

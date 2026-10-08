@@ -23,7 +23,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Config from "../../src/Config.ts";
-import * as Dirty from "../../src/Dirty.ts";
 import * as Control from "../../src/Control.ts";
 import * as Doctor from "../../src/Doctor.ts";
 import { errorDocument } from "../../src/errorDocument.ts";
@@ -45,7 +44,6 @@ import * as Worktrees from "../../src/Worktrees.ts";
 // The services a harness case calls.
 export type Engine =
   | Config.Config
-  | Dirty.Dirty
   | Icons.Icons
   | Launchers.Launchers
   | Layout.Layout

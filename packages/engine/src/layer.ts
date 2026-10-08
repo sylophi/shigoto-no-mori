@@ -47,6 +47,7 @@ const services = (options: EngineOptions) =>
     Projects.layer,
     Doctor.layer,
     Transfer.layer,
+    Dirty.layer,
   ).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
@@ -70,13 +71,7 @@ const services = (options: EngineOptions) =>
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(Darwin.layer(options.macfs)),
     Layer.provideMerge(
-      Layer.mergeAll(
-        Config.layer,
-        Usage.layer,
-        Identity.layer,
-        Icons.layer,
-        Dirty.layer,
-      ),
+      Layer.mergeAll(Config.layer, Usage.layer, Identity.layer, Icons.layer),
     ),
     Layer.provideMerge(Git.layer),
     Layer.provideMerge(options.store),
@@ -101,13 +96,7 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
     ),
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(
-      Layer.mergeAll(
-        Config.layer,
-        Usage.layer,
-        Identity.layer,
-        Icons.layer,
-        Dirty.layer,
-      ),
+      Layer.mergeAll(Config.layer, Usage.layer, Identity.layer, Icons.layer),
     ),
     Layer.provideMerge(store),
   );
