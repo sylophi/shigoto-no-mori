@@ -40,6 +40,7 @@ import {
   ServerEnvelopeSchema,
   utf8ByteLength,
 } from "@shigomori/contracts/hubProtocol";
+import { log } from "@shared/log";
 
 // The one ask this wire serves.
 export const CONNECT_INFO_ASK = "connectInfo";
@@ -203,9 +204,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
   function warnDrop(message: () => string): void {
     droppedInbound += 1;
     if (droppedInbound % 50 === 1) {
-      console.warn(
-        `[hub] ${message()} (dropped ${droppedInbound} inbound so far)`,
-      );
+      log.warn(`[hub] ${message()} (dropped ${droppedInbound} inbound so far)`);
     }
   }
 
@@ -235,7 +234,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     try {
       deps.send(text);
     } catch (error) {
-      console.warn(
+      log.warn(
         `[hub] failed to answer ${truncateId(to)}: ${errorMessageOf(error)}`,
       );
     }
@@ -366,7 +365,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     try {
       deps.onPresence(list);
     } catch (error) {
-      console.warn(`[hub] onPresence threw: ${errorMessageOf(error)}`);
+      log.warn(`[hub] onPresence threw: ${errorMessageOf(error)}`);
     }
   }
 

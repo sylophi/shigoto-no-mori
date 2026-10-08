@@ -27,6 +27,7 @@ import type { CliStatus } from "@shigomori/contracts/modules/cli";
 import { app } from "electron";
 import { cliBinaryPath } from "./cliRunner";
 import { uninstallShellIntegration } from "./cliShell";
+import { log } from "@shared/log";
 
 function cliFlavor(): "prod" | "dev" {
   return app.isPackaged ? "prod" : "dev";
@@ -241,6 +242,6 @@ export async function repairCliLinks(): Promise<void> {
   try {
     await pointLinksAt(binary, false);
   } catch (err) {
-    console.warn("[cli] link repair failed", err);
+    log.warn("[cli] link repair failed", err);
   }
 }

@@ -11,6 +11,7 @@
 // caller keys by whatever it likes, a bare channel on the LAN and hub
 // link paths or a composite deviceId plus channel on the renderer path.
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { log } from "@shared/log";
 
 type SubscriberRegistry = {
   // Register a handler under a key. The returned function removes it and
@@ -55,7 +56,7 @@ export function createSubscriberRegistry(label: string): SubscriberRegistry {
         } catch (error) {
           threw += 1;
           if (threw % 50 === 1) {
-            console.warn(
+            log.warn(
               `[${label}] push handler threw: ${errorMessageOf(error)} (threw ${threw} so far)`,
             );
           }

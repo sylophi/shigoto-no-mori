@@ -29,6 +29,7 @@ import {
   type MirrorSessionRaw,
   requireRunningEngine,
 } from "./registry";
+import { log } from "@shared/log";
 
 export type TransferFilesResult = {
   crossed: boolean;
@@ -111,7 +112,7 @@ export async function transferFilesOnce(
       return await waitSettled(daemon, session, onProgress, signal);
     } finally {
       ended = daemon.terminate(session).catch((error: unknown) => {
-        console.warn(
+        log.warn(
           `[sync] could not end the file transfer session: ${errorMessageOf(error)}`,
         );
       });

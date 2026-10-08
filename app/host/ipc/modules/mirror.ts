@@ -102,6 +102,7 @@ import {
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
 import { rollBackSent, sendWorktree } from "./sync";
+import { log } from "@shared/log";
 
 const decodePullProgress = Schema.decodeOption(SyncPullProgressSchema);
 const decodeMirrorSession = Schema.decodeUnknownSync(MirrorSessionSchema);
@@ -297,7 +298,7 @@ export function currentMirrorList(): MirrorListResult | undefined {
   try {
     return mirrorListOf(daemon);
   } catch (error) {
-    console.warn(
+    log.warn(
       `[mirror] the changed broadcast goes without its list: ${errorMessageOf(error)}`,
     );
     return undefined;
@@ -697,7 +698,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     }
     child.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8").trim();
-      if (text !== "") console.warn(`[mirror] serve ${worktreeId}: ${text}`);
+      if (text !== "") log.warn(`[mirror] serve ${worktreeId}: ${text}`);
     });
     const key = servingKey(ctx, channelId);
     const stopChild = () => {

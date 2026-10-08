@@ -15,6 +15,7 @@
 // drives it under plain node.
 import { spawn } from "node:child_process";
 import { userInfo } from "node:os";
+import { log } from "@shared/log";
 
 type Env = Record<string, string>;
 
@@ -220,10 +221,10 @@ export async function applyUserShellEnv(): Promise<void> {
   const captured = shell === null ? null : await captureShellEnv(shell, base);
   replaceProcessEnv(mergeShellEnv(base, captured, launchEnv));
   if (captured === null) {
-    console.warn(
+    log.warn(
       `[shell] no environment from ${shell ?? "an unknown login shell"}, running on launchd's`,
     );
   } else {
-    console.log(`[shell] rebuilt the environment from ${shell}`);
+    log.info(`[shell] rebuilt the environment from ${shell}`);
   }
 }

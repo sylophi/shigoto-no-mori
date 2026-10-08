@@ -70,6 +70,7 @@ import {
 } from "@shared/ipc/socket/channels";
 import type { RawData } from "ws";
 import { toBytes, toText } from "./rawData";
+import { log } from "@shared/log";
 
 // The binding's auth: short-lived single-use connect tickets minted
 // over the device hub, and the host's command-access switch. Injected
@@ -343,7 +344,7 @@ function createDeflatingWriter(socket: WebSocket): FrameWriter {
       } catch (error) {
         // A send that threw (the socket dying under it) loses this
         // frame only, not the ones queued behind it.
-        console.warn(`[socket] queued send failed: ${errorMessageOf(error)}`);
+        log.warn(`[socket] queued send failed: ${errorMessageOf(error)}`);
       } finally {
         queued -= 1;
       }
@@ -478,7 +479,7 @@ export function createWsServerBinding(
     if (socket.bufferedAmount > PUSH_BUFFER_LIMIT_BYTES) {
       droppedPushes += 1;
       if (droppedPushes % 50 === 1) {
-        console.warn(
+        log.warn(
           `[socket] dropping push under backpressure (dropped ${droppedPushes} so far)`,
         );
       }
@@ -593,7 +594,7 @@ export function createWsServerBinding(
         return;
       }
       if (isLockedOut(ip)) {
-        console.warn(`[socket] rejecting connection from locked-out ${ip}`);
+        log.warn(`[socket] rejecting connection from locked-out ${ip}`);
         // A DISTINCT code from the bad-credential refusal below, and
         // the distinction is load-bearing: this close happens before
         // any hello is read, so the client it refuses may hold a
@@ -693,13 +694,13 @@ export function createWsServerBinding(
 
       socket.on("close", teardown);
       socket.on("error", (error) => {
-        console.warn(`[socket] connection error: ${errorMessageOf(error)}`);
+        log.warn(`[socket] connection error: ${errorMessageOf(error)}`);
       });
       socket.on("message", (data, isBinary) => {
         // The hello path awaits the proof check. A frame that throws
         // kills its own connection, never the host process.
         void handleMessage(data, isBinary).catch((error) => {
-          console.warn(
+          log.warn(
             `[socket] dropping connection after a failed frame: ${errorMessageOf(error)}`,
           );
           kill(CLOSE_GOING_AWAY, "internal error");
@@ -760,7 +761,7 @@ export function createWsServerBinding(
           if (hostProof === null) {
             recordAuthFailure(ip);
             // The owner gets a real signal under a brute force attempt.
-            console.warn(`[socket] CLOSE_AUTH_FAILED: bad proof from ${ip}`);
+            log.warn(`[socket] CLOSE_AUTH_FAILED: bad proof from ${ip}`);
             kill(CLOSE_AUTH_FAILED, "auth failed");
             return;
           }
@@ -805,7 +806,7 @@ export function createWsServerBinding(
           authed.set(socket, { lastInboundAt: Date.now(), kill });
           if (frame.deflate === true && arrivalKind === "tunnel") {
             deflatingWriters.set(socket, createDeflatingWriter(socket));
-            console.info(
+            log.info(
               `[socket] deflating large frames for ${frame.deviceId} (tunnel-borne)`,
             );
           }
@@ -827,7 +828,7 @@ export function createWsServerBinding(
         // malformed message must not kill a connection carrying other
         // in-flight calls.
         if (frame === null || frame.t !== "req") {
-          console.warn("[socket] dropping unparseable frame");
+          log.warn("[socket] dropping unparseable frame");
           return;
         }
         if (inFlight >= MAX_IN_FLIGHT_PER_PEER) {
@@ -871,7 +872,7 @@ export function createWsServerBinding(
             const at = Date.now();
             if (at - originRejectLoggedAt >= ORIGIN_REJECT_LOG_THROTTLE_MS) {
               originRejectLoggedAt = at;
-              console.warn(
+              log.warn(
                 `[socket] refusing direct upgrade from origin ${origin}` +
                   " (not an admitted origin; a web client needs" +
                   " SM_ACCOUNT_WEB_ORIGIN set to its exact origin on this" +
@@ -891,7 +892,7 @@ export function createWsServerBinding(
           bindAddress: opts.bindAddress,
           error: errorMessageOf(error),
         };
-        console.error(
+        log.error(
           `[socket] bind failed on ${opts.bindAddress}:${opts.port}: ${errorMessageOf(error)}`,
         );
         reject(error);
@@ -903,7 +904,7 @@ export function createWsServerBinding(
         // must surface rather than vanish.
         wss.on("error", (error) => {
           status = { ...status, error: errorMessageOf(error) };
-          console.warn(`[socket] server error: ${errorMessageOf(error)}`);
+          log.warn(`[socket] server error: ${errorMessageOf(error)}`);
         });
         listener = { wss, opts, generation };
         // The liveness sweep, one timer per LIVE listener (armed here,
@@ -936,7 +937,7 @@ export function createWsServerBinding(
           bindAddress: opts.bindAddress,
           error: null,
         };
-        console.info(`[socket] listening on ${opts.bindAddress}:${port}`);
+        log.info(`[socket] listening on ${opts.bindAddress}:${port}`);
         resolve(port);
       });
     });

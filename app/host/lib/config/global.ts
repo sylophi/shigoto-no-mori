@@ -27,6 +27,7 @@ import {
 import { withFileLock } from "../util/lockFile";
 import { CONFIG_FILE, dataDir } from "../util/paths";
 import { ttlValueCache } from "../util/ttlCache";
+import { log } from "@shared/log";
 
 function configPath(): string {
   return join(dataDir(), CONFIG_FILE);
@@ -100,7 +101,7 @@ export function invalidateGlobalConfigCache(): void {
     try {
       listener();
     } catch (error) {
-      console.warn(`[config] change listener failed: ${errorMessageOf(error)}`);
+      log.warn(`[config] change listener failed: ${errorMessageOf(error)}`);
     }
   }
 }

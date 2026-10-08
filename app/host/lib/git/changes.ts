@@ -16,6 +16,7 @@ import { isUntracked } from "@shigomori/contracts/schemas";
 import { createLimiter } from "@shared/util/limit";
 import { chunked, run, runLenient, splitZ, type RunOptions } from "./core";
 import { verifyRev } from "./refs";
+import { log } from "@shared/log";
 
 // Discard snapshots kept per repository. Pruned by count rather than
 // age, so a repo you touch monthly keeps as useful a tail as one you
@@ -489,7 +490,7 @@ async function pruneDiscardSnapshots(worktreePath: string): Promise<void> {
         .map((ref) => run(worktreePath, ["update-ref", "-d", ref])),
     );
   } catch (err) {
-    console.warn("[changes] discard snapshot prune failed:", err);
+    log.warn("[changes] discard snapshot prune failed:", err);
   }
 }
 

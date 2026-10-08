@@ -7,6 +7,7 @@
 // state.json, since usage is app-managed state, not the user-editable
 // per-project config.
 import { stateStore } from "../config/store";
+import { log } from "@shared/log";
 
 const USE_LOG_KEY = "projectUseLog";
 
@@ -20,14 +21,14 @@ function bumpProjectUseCount(projectId: string): void {
   // updateKey so the read happens under the cross-process lock: the CLI
   // writes state.json too (its own use logs), and a read taken outside
   // the lock would clobber a concurrent write.
-  stateStore.updateKey<UseLog>(USE_LOG_KEY, {}, (log) => {
+  stateStore.updateKey<UseLog>(USE_LOG_KEY, {}, (uses) => {
     const now = Date.now();
     const cutoff = now - USE_LOG_WINDOW_MS;
-    log[projectId] = [
-      ...(log[projectId] ?? []).filter((t) => t >= cutoff),
+    uses[projectId] = [
+      ...(uses[projectId] ?? []).filter((t) => t >= cutoff),
       now,
     ];
-    return log;
+    return uses;
   });
 }
 
@@ -62,7 +63,7 @@ export function recordProjectActionUsage(input: unknown): string | null {
     // still counts as a success. Log rather than swallow outright.
     if (!usageFailureLogged) {
       usageFailureLogged = true;
-      console.warn("[usage] project use log not recorded:", error);
+      log.warn("[usage] project use log not recorded:", error);
     }
     return null;
   }

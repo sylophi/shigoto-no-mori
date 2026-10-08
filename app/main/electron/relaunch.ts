@@ -11,6 +11,7 @@ import { writeFileSync } from "node:fs";
 import { app } from "electron";
 import { DEV_RELAUNCH_FILE_ENV } from "@shared/packaging/appName.mts";
 import { restoreUpdateEndpointOverrides } from "./updateEndpoints";
+import { log } from "@shared/log";
 
 let requested = false;
 
@@ -44,7 +45,7 @@ export function scheduleRelaunch(): void {
       // A marker that cannot be written must not strand the app on a
       // data dir that has already moved: the plain relaunch is the
       // one that loses the vite server, not the one that loses data.
-      console.warn(`[relaunch] could not write the dev marker: ${error}`);
+      log.warn(`[relaunch] could not write the dev marker: ${error}`);
     }
   }
   restoreUpdateEndpointOverrides();

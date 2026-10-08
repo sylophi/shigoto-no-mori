@@ -41,6 +41,7 @@ import {
 import { createLimiter } from "@shared/util/limit";
 import { killWithGrace } from "@host/lib/scripts/process";
 import { resolveOnPath } from "@host/lib/util/binaries";
+import { log } from "@shared/log";
 
 const execFileP = promisify(execFile);
 
@@ -181,7 +182,7 @@ async function runsAsCloudflared(path: string): Promise<boolean> {
     if (
       !(error instanceof Error && "code" in error && error.code === "ENOENT")
     ) {
-      console.warn(
+      log.warn(
         `[tunnel] cloudflared at ${path} did not run: ${errorMessageOf(error)}`,
       );
     }
@@ -482,7 +483,7 @@ export function createCloudflaredRunner(
     const delayMs = backoffDelayMs(TUNNEL_BACKOFF_LADDER_MS, attempt);
     attempt += 1;
     setStatus({ state: "error", hostname: null });
-    console.warn(`[tunnel] ${detail}, retrying in ${delayMs}ms`);
+    log.warn(`[tunnel] ${detail}, retrying in ${delayMs}ms`);
     retryTimer = clock.setTimeout(() => {
       retryTimer = null;
       // The port is read when the timer FIRES: a stop that beat the
@@ -527,7 +528,7 @@ export function createCloudflaredRunner(
         // provision is held to the short deadline.
         if (lastProvision !== null) lastProvision.dnsCreated = false;
         setStatus({ state: "up", hostname });
-        console.info(`[tunnel] up at ${hostname}`);
+        log.info(`[tunnel] up at ${hostname}`);
         return;
       }
       if (clock.now() - startedAt >= deadlineMs) {
@@ -537,7 +538,7 @@ export function createCloudflaredRunner(
       }
       if (!warned && clock.now() - startedAt >= TUNNEL_PROBE_WARN_MS) {
         warned = true;
-        console.warn(
+        log.warn(
           `[tunnel] ${hostname} is still not routable after ` +
             `${Math.round(TUNNEL_PROBE_WARN_MS / 1000)}s, probing on ` +
             "(a fresh hostname resolves once DNS catches up)",
@@ -575,7 +576,7 @@ export function createCloudflaredRunner(
       // Logged on the transition into no-binary only, not once per
       // reconcile.
       if (status.state !== "no-binary") {
-        console.info(
+        log.info(
           "[tunnel] no usable cloudflared (the cloudflaredPath config " +
             "key, the bundled copy, PATH), tunnel endpoints are off",
         );
@@ -661,7 +662,7 @@ export function createCloudflaredRunner(
         // inputs can have changed.
         provisionDenied = true;
         setStatus({ state: "error", hostname: null });
-        console.warn(
+        log.warn(
           `[tunnel] provisioning denied (${errorMessageOf(error)}), ` +
             "waiting for the next account or config change",
         );

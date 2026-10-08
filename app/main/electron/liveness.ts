@@ -30,6 +30,7 @@ import {
 } from "../ipc/modules/account";
 import { scheduleRelaunch } from "./relaunch";
 import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
+import { log } from "@shared/log";
 
 function keepReachableEnabled(): boolean {
   // Inert on a build with no account service: the setting exists so a
@@ -45,7 +46,7 @@ function keepReachableEnabled(): boolean {
     // never be what crashes the app, so anything that still throws
     // reads as off: a login item is the wrong thing to install on a
     // guess.
-    console.warn(
+    log.warn(
       `[liveness] could not read keepReachable, treating as off: ${errorMessageOf(error)}`,
     );
     return false;
@@ -67,7 +68,7 @@ export function reconcileLaunchAtLogin(): void {
   // there would silently do nothing. Say so rather than pretend it took.
   const os = platform();
   if (os !== "darwin" && os !== "win32") {
-    console.info(
+    log.info(
       `[liveness] launch-at-login is unsupported on ${os}, skipping (keepReachable=${keepReachable})`,
     );
     return;
@@ -77,7 +78,7 @@ export function reconcileLaunchAtLogin(): void {
   // instance at every login. Register only from packaged builds, where
   // the login item points at the real installed app.
   if (!app.isPackaged) {
-    console.info(
+    log.info(
       `[liveness] dev build, not touching the login item (keepReachable=${keepReachable})`,
     );
     return;
@@ -85,7 +86,7 @@ export function reconcileLaunchAtLogin(): void {
   try {
     app.setLoginItemSettings({ openAtLogin: keepReachable });
   } catch (error) {
-    console.error(
+    log.error(
       `[liveness] setLoginItemSettings failed: ${errorMessageOf(error)}`,
     );
   }
@@ -120,7 +121,7 @@ export function attachRenderProcessRecovery(
     // away is expected there, and a recreate would fight the quit.
     if (deps.isShuttingDown()) return;
     if (INTENTIONAL_GONE_REASONS.has(details.reason)) {
-      console.info(
+      log.info(
         `[liveness] renderer exited (${details.reason}), not recreating`,
       );
       return;
@@ -132,12 +133,12 @@ export function attachRenderProcessRecovery(
     );
     recentRendererCrashes = recent;
     if (recreate) {
-      console.error(
+      log.error(
         `[liveness] renderer gone (${details.reason}), recreating the window`,
       );
       deps.recreateWindow();
     } else {
-      console.error(
+      log.error(
         `[liveness] renderer crash loop (${details.reason}), giving up to avoid thrashing`,
       );
       deps.onGiveUp();
@@ -146,10 +147,10 @@ export function attachRenderProcessRecovery(
   // Not a crash: the renderer is alive but wedged. Log it so a hang is
   // visible in the console rather than a silent frozen window.
   webContents.on("unresponsive", () => {
-    console.warn("[liveness] renderer is unresponsive");
+    log.warn("[liveness] renderer is unresponsive");
   });
   webContents.on("responsive", () => {
-    console.info("[liveness] renderer became responsive again");
+    log.info("[liveness] renderer became responsive again");
   });
 }
 
@@ -158,7 +159,7 @@ export function attachRenderProcessRecovery(
 // Registered once at boot, since it is an app-level event.
 export function installChildProcessLogging(): void {
   app.on("child-process-gone", (_event, details) => {
-    console.warn(
+    log.warn(
       `[liveness] child process gone: type=${details.type} reason=${details.reason}`,
     );
   });
@@ -204,7 +205,7 @@ function consumeRelaunchBudget(now: number): boolean {
       selfWrite: false,
     });
   } catch (error) {
-    console.error(
+    log.error(
       `[liveness] could not persist the relaunch marker, not relaunching: ${errorMessageOf(error)}`,
     );
     return false;
@@ -234,12 +235,12 @@ export function installFatalRecovery(deps: {
     // asked to keep reachable.
     if (!keepReachableEnabled()) return false;
     if (!consumeRelaunchBudget(Date.now())) {
-      console.error(
+      log.error(
         "[liveness] fatal-relaunch rate limit reached, letting the crash stand",
       );
       return false;
     }
-    console.error(
+    log.error(
       "[liveness] keepReachable is on, attempting a best-effort relaunch",
     );
     try {
@@ -248,14 +249,14 @@ export function installFatalRecovery(deps: {
       scheduleRelaunch();
       markShuttingDown();
     } catch (error) {
-      console.error(
+      log.error(
         `[liveness] scheduling the relaunch failed: ${errorMessageOf(error)}`,
       );
     }
     return true;
   };
   process.on("uncaughtException", (error) => {
-    console.error("[liveness] uncaughtException:", error);
+    log.error("[liveness] uncaughtException:", error);
     // A process uncaughtException listener suppresses Node and Electron's
     // default crash-and-exit, so this branch must exit explicitly to
     // preserve prior behavior: an uncaught main-process error still
@@ -280,6 +281,6 @@ export function installFatalRecovery(deps: {
   // crash in favor of a console line, which is the right posture for a
   // desktop app the user is hosting.
   process.on("unhandledRejection", (reason) => {
-    console.error("[liveness] unhandledRejection:", reason);
+    log.error("[liveness] unhandledRejection:", reason);
   });
 }

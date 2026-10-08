@@ -17,7 +17,7 @@
 // browser global read at module scope, so the headless bridge check
 // drives the whole factory under node with in-memory storage and a
 // recording fetch.
-import { logFailure } from "@shigomori/contracts/errors";
+import { logFailure } from "@shared/log";
 import { singleFlight } from "@shared/util/singleFlight";
 import { createAccountService } from "@shared/account/service";
 import { buildApi, type RendererContractApi } from "@shared/ipc/client";

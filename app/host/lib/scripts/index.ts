@@ -34,6 +34,7 @@ import {
   signalTreeBestEffort,
   spawnScript,
 } from "./process";
+import { log } from "@shared/log";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
@@ -602,7 +603,7 @@ async function killRecord(record: Killable, opts: KillOptions): Promise<void> {
     // Give up rather than hanging the caller forever. The record stays
     // live on purpose: the process really is still running, so the busy
     // counts stay honest and a later delete attempt can retry.
-    console.warn(
+    log.warn(
       `[scripts] "${record.scriptName}" (pid ${record.pid}) survived SIGKILL; giving up on this kill attempt`,
     );
   }

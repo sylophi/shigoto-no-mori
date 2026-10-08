@@ -11,6 +11,7 @@ import {
 import { safeDecode } from "@shigomori/contracts/codec";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type { Client } from "@shigomori/contracts/types";
+import { log } from "@shared/log";
 
 export function buildClient<M extends ContractModule>(
   module: M,
@@ -67,7 +68,7 @@ function subscriber(call: ContractCall, transport: ClientTransport) {
       const decoded = safeDecode(payload, raw);
       if (decoded.success) handler(decoded.data);
       else
-        console.warn(
+        log.warn(
           `[contracts] dropped a ${channel} push this build does not read: ${decoded.error.message}`,
         );
     });

@@ -37,6 +37,7 @@ import {
 } from "@shared/ipc/socket/channels";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
+import { log } from "@shared/log";
 
 // A connect attempt failed before the welcome landed. `code` is the
 // close code when the failure came from a socket close (null on a
@@ -437,9 +438,7 @@ export function openDevice(
   // that candidate only, and the peer stays reachable on the others.
   const failHandshake = (reason: string, deviceId: string): void => {
     if (closed) return;
-    console.warn(
-      `[socket] ${reason} (peer claimed ${deviceId} at ${options.url})`,
-    );
+    log.warn(`[socket] ${reason} (peer claimed ${deviceId} at ${options.url})`);
     failAttempt(new RemoteConnectError(reason, null, false));
   };
 
@@ -462,7 +461,7 @@ export function openDevice(
       try {
         await (started ?? step());
       } catch (error) {
-        console.warn(
+        log.warn(
           `[socket] a queued frame's handler threw: ${errorMessageOf(error)}`,
         );
       } finally {
@@ -477,7 +476,7 @@ export function openDevice(
   // rejects and the owner redials.
   const inflateFailed = (error: unknown): void => {
     if (closed) return;
-    console.warn(
+    log.warn(
       `[socket] closing on a frame that failed to inflate: ${errorMessageOf(error)}`,
     );
     close();
@@ -540,7 +539,7 @@ export function openDevice(
     if (frame === null) {
       // A malformed inbound frame is logged and dropped, never fatal:
       // one bad message must not kill a socket carrying live invokes.
-      console.warn("[socket] dropping unparseable server frame");
+      log.warn("[socket] dropping unparseable server frame");
       return;
     }
     // Every parseable frame proves the host alive, whatever it carries.
@@ -558,7 +557,7 @@ export function openDevice(
       // Anything else pre-welcome is dropped: the host sends nothing
       // else before it.
       if (frame.t !== "welcome") {
-        console.warn("[socket] dropping pre-welcome frame");
+        log.warn("[socket] dropping pre-welcome frame");
         return;
       }
       // The far end must prove it holds the ticket too, before the
@@ -608,7 +607,7 @@ export function openDevice(
         } catch (error) {
           anyPushThrew += 1;
           if (anyPushThrew % 50 === 1) {
-            console.warn(
+            log.warn(
               `[socket] onAnyPush threw: ${errorMessageOf(error)} (threw ${anyPushThrew} so far)`,
             );
           }
@@ -620,7 +619,7 @@ export function openDevice(
 
     // A second welcome, or any other frame after welcome, is not part
     // of the contract. Drop it.
-    console.warn("[socket] dropping unexpected server frame");
+    log.warn("[socket] dropping unexpected server frame");
   }
 
   // Whatever the platform said about WHY the socket failed, when it

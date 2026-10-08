@@ -10,6 +10,7 @@ import {
   ALL_DIRECT_CANDIDATE_KINDS,
   type DirectCandidateKind,
 } from "@shigomori/contracts/modules/direct";
+import { log } from "@shared/log";
 
 export function devDialKinds(): DirectCandidateKind[] | undefined {
   const raw = process.env.SHIGOMORI_DIAL_KINDS;
@@ -17,6 +18,6 @@ export function devDialKinds(): DirectCandidateKind[] | undefined {
   const wanted = new Set(raw.split(",").map((kind) => kind.trim()));
   const kinds = ALL_DIRECT_CANDIDATE_KINDS.filter((kind) => wanted.has(kind));
   if (kinds.length === 0) return undefined;
-  console.info(`[direct] dev: dialing ${kinds.join(", ")} candidates only`);
+  log.info(`[direct] dev: dialing ${kinds.join(", ")} candidates only`);
   return kinds;
 }

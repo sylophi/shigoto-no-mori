@@ -39,6 +39,7 @@ import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import { listenLoopback } from "../portForward/bridge";
+import { log } from "@shared/log";
 
 // cli/control.go reads this exact name and shape.
 export const CONTROL_FILE_NAME = "control.json";
@@ -83,7 +84,7 @@ export function createControlServer(deps: {
   filePath: () => string;
   log?: (message: string) => void;
 }) {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const warn = deps.log ?? ((message: string) => log.warn(message));
   const handlers = new Map<string, Handler>();
   const sockets = new Set<Socket>();
   let server: Server | null = null;
@@ -102,7 +103,7 @@ export function createControlServer(deps: {
     if (parsed === null) {
       // One malformed line must not kill a connection carrying another
       // call, and with no id there is nothing to answer.
-      log("[control] dropping an unparseable line");
+      warn("[control] dropping an unparseable line");
       return;
     }
     const fn = handlers.get(parsed.channel);
@@ -166,7 +167,7 @@ export function createControlServer(deps: {
       const hello = decodeFrame(line, HelloSchema);
       if (hello === null || !secretsMatch(hello.token, token ?? "")) {
         // Nothing legitimate reaches here, so log it.
-        log("[control] refused a connection with a bad hello");
+        warn("[control] refused a connection with a bad hello");
         refuse(socket, "bad-token", "bad token");
         return;
       }
@@ -242,7 +243,7 @@ export function createControlServer(deps: {
     try {
       if (existsSync(dirname(deps.filePath()))) publish();
     } catch (error) {
-      log(`[control] could not republish: ${errorMessageOf(error)}`);
+      warn(`[control] could not republish: ${errorMessageOf(error)}`);
     }
   }
 

@@ -27,6 +27,7 @@ import {
   readClientConfigSync,
   writeClientConfig,
 } from "./clientConfig";
+import { log } from "@shared/log";
 
 export async function seedClientConfigFromLegacy(): Promise<void> {
   if (existsSync(clientConfigPath())) return;
@@ -36,7 +37,7 @@ export async function seedClientConfigFromLegacy(): Promise<void> {
   } catch (error) {
     // An unreadable config.json must never block boot. The store stays
     // absent, so the migration retries next boot.
-    console.warn("[clientConfig] legacy appearance read failed:", error);
+    log.warn("[clientConfig] legacy appearance read failed:", error);
     return;
   }
   try {
@@ -46,7 +47,7 @@ export async function seedClientConfigFromLegacy(): Promise<void> {
   } catch (error) {
     // The store is still absent and config.json untouched, so seeding
     // retries next boot with nothing lost.
-    console.warn("[clientConfig] seeding the appearance store failed:", error);
+    log.warn("[clientConfig] seeding the appearance store failed:", error);
     return;
   }
   try {
@@ -54,7 +55,7 @@ export async function seedClientConfigFromLegacy(): Promise<void> {
   } catch (error) {
     // The values are in the store. A leftover key in config.json is
     // harmless and drains on a later boot.
-    console.warn("[clientConfig] legacy appearance drain failed:", error);
+    log.warn("[clientConfig] legacy appearance drain failed:", error);
   }
 }
 
@@ -82,7 +83,7 @@ export async function seedProjectsSortFromState(): Promise<void> {
     legacySort = stateStore.readKey<unknown>(LEGACY_SORT_KEY, undefined);
     legacyFold = stateStore.readKey<unknown>(LEGACY_FOLD_KEY, undefined);
   } catch (error) {
-    console.warn("[clientConfig] legacy project sort read failed:", error);
+    log.warn("[clientConfig] legacy project sort read failed:", error);
     return;
   }
   if (legacySort === undefined && legacyFold === undefined) return;
@@ -100,7 +101,7 @@ export async function seedProjectsSortFromState(): Promise<void> {
     try {
       await writeClientConfig({ ...current, projectsSort: sort });
     } catch (error) {
-      console.warn("[clientConfig] seeding the project sort failed:", error);
+      log.warn("[clientConfig] seeding the project sort failed:", error);
       return;
     }
   }
@@ -109,6 +110,6 @@ export async function seedProjectsSortFromState(): Promise<void> {
   } catch (error) {
     // The sort is in the store. The drain retries next boot, which
     // seeds again only if the store holds no sort by then.
-    console.warn("[clientConfig] legacy project sort drain failed:", error);
+    log.warn("[clientConfig] legacy project sort drain failed:", error);
   }
 }

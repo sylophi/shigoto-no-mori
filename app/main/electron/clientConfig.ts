@@ -24,6 +24,7 @@ import {
   readJsonOrNullSync,
   withSchemaVersion,
 } from "@host/lib/util/jsonFile";
+import { log } from "@shared/log";
 
 export function clientConfigPath(): string {
   return join(app.getPath("userData"), "clientConfig.json");
@@ -45,7 +46,7 @@ const corruptStoreNoted = new Set<string>();
 function noteCorruptStore(file: string, error: unknown): void {
   if (corruptStoreNoted.has(file)) return;
   corruptStoreNoted.add(file);
-  console.warn(`[clientConfig] ${file} unreadable, falling back:`, error);
+  log.warn(`[clientConfig] ${file} unreadable, falling back:`, error);
 }
 
 // Corrupt or unreadable content reads as empty defaults (not as an

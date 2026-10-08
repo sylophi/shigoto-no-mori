@@ -21,6 +21,7 @@ import {
 } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { dataDir, isENOENT, REGISTRY_FILE, STATE_FILE } from "../util/paths";
+import { log } from "@shared/log";
 
 // The registry's keys: the two the one-time split below moves (the
 // CLI's, read and written through `sm`), and the app's own.
@@ -142,7 +143,7 @@ const hintFailureLogged = new Set<string>();
 function noteHintFailure(file: string, error: unknown): void {
   if (hintFailureLogged.has(file)) return;
   hintFailureLogged.add(file);
-  console.warn(`[store] ${file} unreadable, falling back:`, error);
+  log.warn(`[store] ${file} unreadable, falling back:`, error);
 }
 
 interface JsonStore {

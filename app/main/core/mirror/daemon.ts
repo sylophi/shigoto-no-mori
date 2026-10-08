@@ -32,6 +32,7 @@ import {
   backoffDelayMs,
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
+import { log } from "@shared/log";
 
 // The lines the daemon writes (file-sync/engine.go, the daemon control
 // protocol): an event, or a response echoing its request's id. Each is
@@ -114,7 +115,7 @@ export function createMirrorDaemon(deps: {
   let restarts = 0;
   let nextRequestId = 1;
   const pending = new Map<string, Pending>();
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const warn = deps.log ?? ((message: string) => log.warn(message));
 
   function setStatus(next: MirrorDaemonStatus): void {
     if (status === next) return;
@@ -141,7 +142,7 @@ export function createMirrorDaemon(deps: {
     try {
       doc = JSON.parse(line);
     } catch {
-      log(`[mirror] daemon emitted a non-JSON line: ${line.slice(0, 200)}`);
+      warn(`[mirror] daemon emitted a non-JSON line: ${line.slice(0, 200)}`);
       return;
     }
     if (typeof doc !== "object" || doc === null) {
@@ -179,7 +180,7 @@ export function createMirrorDaemon(deps: {
   function rejectLine(kind: string, line: string, reason: string): void {
     if (lastRejection.get(kind) === reason) return;
     lastRejection.set(kind, reason);
-    log(
+    warn(
       `[mirror] daemon line dropped, off the protocol: ${reason}: ${line.slice(0, 200)}`,
     );
   }
@@ -201,7 +202,7 @@ export function createMirrorDaemon(deps: {
         deps.onChange?.();
         return;
       case "error":
-        log(`[mirror] daemon error: ${event.error}`);
+        warn(`[mirror] daemon error: ${event.error}`);
         return;
     }
   }
@@ -210,7 +211,7 @@ export function createMirrorDaemon(deps: {
     // mirrorResponse always writes its id, so a request the daemon
     // could not read comes back with an empty one. Nothing to match.
     if (response.id === "") {
-      log(`[mirror] daemon refused a request: ${response.error ?? "unknown"}`);
+      warn(`[mirror] daemon refused a request: ${response.error ?? "unknown"}`);
       return;
     }
     takePending(response.id)?.resolve(response);
@@ -225,7 +226,7 @@ export function createMirrorDaemon(deps: {
     try {
       gateway = deps.gatewayAddress();
     } catch (error) {
-      log(`[mirror] daemon waiting for the gateway: ${errorMessageOf(error)}`);
+      warn(`[mirror] daemon waiting for the gateway: ${errorMessageOf(error)}`);
       setStatus("starting");
       scheduleRestart();
       return;
@@ -240,7 +241,7 @@ export function createMirrorDaemon(deps: {
         },
       );
     } catch (error) {
-      log(`[mirror] daemon spawn failed: ${errorMessageOf(error)}`);
+      warn(`[mirror] daemon spawn failed: ${errorMessageOf(error)}`);
       spawned = null;
     }
     if (spawned === null) {
@@ -255,7 +256,7 @@ export function createMirrorDaemon(deps: {
     spawned.stream.on("error", () => {});
     spawned.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8").trim();
-      if (text !== "") log(`[mirror] daemon: ${text}`);
+      if (text !== "") warn(`[mirror] daemon: ${text}`);
     });
     spawned.onExit((code) => {
       if (child !== spawned) return;
@@ -266,7 +267,7 @@ export function createMirrorDaemon(deps: {
         setStatus("stopped");
         return;
       }
-      log(`[mirror] daemon exited unexpectedly (code ${code}), restarting`);
+      warn(`[mirror] daemon exited unexpectedly (code ${code}), restarting`);
       if (Date.now() - spawnedAt >= STABLE_RUN_MS) restarts = 0;
       setStatus("starting");
       deps.onChange?.();

@@ -24,11 +24,7 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
-import {
-  errorMessageOf,
-  isContractError,
-  logFailure,
-} from "@shigomori/contracts/errors";
+import { errorMessageOf, isContractError } from "@shigomori/contracts/errors";
 import { landInvitedMirror } from "@host/mirror/invites";
 import {
   pullBranchCollision,
@@ -100,6 +96,7 @@ import {
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { notifierFor, worktreesHandlers } from "./worktrees";
+import { log, logFailure } from "@shared/log";
 
 // The ref the CLI's dirty capture lands a worktree's uncommitted state
 // under (cli/cmd_dirty.go owns the name on that side).
@@ -701,7 +698,7 @@ async function landIncoming(
       await dirtyApplyViaCli(project, worktree.id);
       dirtyApplied = true;
     } catch (error) {
-      console.warn("[sync] dirty apply failed after create:", error);
+      log.warn("[sync] dirty apply failed after create:", error);
     }
   }
   return { worktree, dirtyApplied };
