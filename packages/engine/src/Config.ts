@@ -50,6 +50,11 @@ export class UnknownConfigKey extends Schema.TaggedError<UnknownConfigKey>()(
   "UnknownConfigKey",
   { key: Schema.String, keys: Schema.Array(Schema.String) },
 ) {
+  // The command line was what was wrong.
+  get usage(): boolean {
+    return true;
+  }
+
   override get message(): string {
     // The settings that moved into the app's client settings get a
     // pointer to their new home.
@@ -78,6 +83,11 @@ export class InvalidConfigValue extends Schema.TaggedError<InvalidConfigValue>()
     choices: Schema.Array(Schema.String),
   },
 ) {
+  // The command line was what was wrong.
+  get usage(): boolean {
+    return true;
+  }
+
   override get message(): string {
     switch (this.reason) {
       case "boolean":
@@ -107,6 +117,11 @@ export class StructuredConfigKey extends Schema.TaggedError<StructuredConfigKey>
     binaryName: Schema.String,
   },
 ) {
+  // The command line was what was wrong.
+  get usage(): boolean {
+    return true;
+  }
+
   override get message(): string {
     const or = this.orTheApp ? " or the app" : "";
     return `${this.key} is structured: use \`${this.binaryName} ${this.verbs}\`${or}.`;
@@ -176,6 +191,10 @@ export class Config extends Context.Service<
       scope: ConfigScope,
       payload: ConfigDoc,
     ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
+    // The ids of the projects that have settings stored.
+    readonly storedProjectIds: Effect.Effect<ReadonlyArray<string>>;
+    // Drops a project's stored settings.
+    readonly forgetProject: (projectId: string) => Effect.Effect<void>;
   }
 >()("sm/engine/Config") {}
 
@@ -238,6 +257,11 @@ const projectKeys = settingKeys(
 
 const keysOf = (scope: ConfigScope) =>
   scope.kind === "device" ? deviceKeys : projectKeys;
+
+// What is wrong with a stored document, by the keys its scope models:
+// a value of the wrong type, say. None when nothing is.
+export const storedProblem = (scope: ConfigScope, doc: ConfigDoc) =>
+  documentProblem(keysOf(scope), doc);
 
 const lookupKey = (scope: ConfigScope, name: string) => {
   const keys = keysOf(scope);
@@ -484,7 +508,28 @@ const make = Effect.gen(function* () {
     yield* update(scope, (doc) => mergeConfigDoc(keysOf(scope), doc, payload));
   });
 
-  return Config.of({ list, get, read, set, unset, write });
+  const storedProjectIds = sql<{ project_id: string }>`
+    SELECT DISTINCT project_id FROM project_config`.pipe(
+    Effect.map((rows) => rows.map(({ project_id }) => project_id)),
+    Effect.orDie,
+    Effect.withSpan("Config.storedProjectIds"),
+  );
+
+  return Config.of({
+    list,
+    get,
+    read,
+    set,
+    unset,
+    write,
+    storedProjectIds,
+    forgetProject: (projectId) =>
+      sql`DELETE FROM project_config WHERE project_id = ${projectId}`.pipe(
+        Effect.asVoid,
+        Effect.orDie,
+        Effect.withSpan("Config.forgetProject"),
+      ),
+  });
 });
 
 export const layer = Layer.effect(Config, make);

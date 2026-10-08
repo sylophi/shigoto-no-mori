@@ -51,6 +51,7 @@ import {
 import { errorDocument } from "../src/errorDocument.ts";
 import type { Flavor } from "../src/flavor.ts";
 import * as Paths from "../src/Paths.ts";
+import { UpdateInProgress } from "../src/stagingLock.ts";
 import * as Updater from "../src/Updater.ts";
 
 // Real paths, as the updater resolves its own binary through links.
@@ -1033,7 +1034,7 @@ describe("the staging lock", () => {
         return turnedAway;
       }),
     );
-    assert.ok(second instanceof Updater.UpdateInProgress);
+    assert.ok(second instanceof UpdateInProgress);
     assert.deepEqual(manifestOf(box), {
       version: "2.0.0",
       bundleName: APP,
@@ -1448,7 +1449,7 @@ describe("finishing an install for the app", () => {
         Effect.provide(Layer.merge(layerFor({ box, http }), TestClock.layer())),
       ),
     );
-    assert.ok(error instanceof Updater.UpdateInProgress);
+    assert.ok(error instanceof UpdateInProgress);
   });
 });
 

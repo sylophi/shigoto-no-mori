@@ -35,6 +35,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
@@ -51,7 +52,15 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { Flavor } from "./flavor.ts";
 import { parseJson } from "./json.ts";
 import * as Paths from "./Paths.ts";
+import { errnoText } from "./platformErrors.ts";
 import { compareSemver, isPrerelease, parseSemver } from "./semver.ts";
+import {
+  acquireStagingLock,
+  pidAlive,
+  StagingLockUnavailable,
+  stagingLockPath,
+  UpdateInProgress,
+} from "./stagingLock.ts";
 import {
   FeedAnswer,
   formatKitchen,
@@ -77,6 +86,7 @@ const causeText = (cause: unknown): string => {
       ? cause.message
       : `${cause.message}: ${causeText(under)}`;
   }
+  if (PlatformError.isPlatformError(cause)) return errnoText(cause);
   return cause instanceof Error ? cause.message : String(cause);
 };
 
@@ -261,25 +271,6 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
   }
 }
 
-// Another process holds the staging lock and is alive.
-export class UpdateInProgress extends Schema.TaggedError<UpdateInProgress>()(
-  "UpdateInProgress",
-  { pid: Schema.Int },
-) {
-  override get message(): string {
-    return `Another update is already in progress (pid ${this.pid}).`;
-  }
-}
-
-export class StagingLockFailed extends Schema.TaggedError<StagingLockFailed>()(
-  "StagingLockFailed",
-  { path: Schema.String },
-) {
-  override get message(): string {
-    return `Couldn't take the update staging lock at ${this.path}.`;
-  }
-}
-
 export class NothingStaged extends Schema.TaggedError<NothingStaged>()(
   "NothingStaged",
   {},
@@ -438,7 +429,7 @@ export type Updated = {
 
 type QueryError = BadUpdateUrl | FeedFailed | RateLimited;
 
-type LockError = UpdateInProgress | StagingLockFailed | StagingFailed;
+type LockError = UpdateInProgress | StagingLockUnavailable | StagingFailed;
 
 type StageError =
   | NotInBundle
@@ -601,19 +592,6 @@ const bodyText = (
   );
 };
 
-// Whether a pid names a live process, whoever owns it: kill(pid, 0)
-// signals nothing, and EPERM means it lives under another user.
-const isAlive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return Predicate.hasProperty(error, "code") && error.code === "EPERM";
-  }
-};
-
-const pidAlive = (pid: number) => Effect.sync(() => isAlive(pid));
-
 const logged = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
@@ -651,7 +629,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   const stagedDir = path.join(updatesDir, "staged");
   const manifestPath = path.join(stagedDir, "manifest.json");
   const releaseListPath = path.join(updatesDir, "release-list.json");
-  const lockPath = path.join(updatesDir, "staging.pid");
+  const lockPath = stagingLockPath(path, paths.dataDir);
   const downloadPath = path.join(updatesDir, "download.zip");
   const extractDir = path.join(updatesDir, "extract");
   const installLog = path.join(updatesDir, "install.log");
@@ -1053,66 +1031,22 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
 
   // --- staging ---
 
-  // Who holds the staging lock: none without the file, pid 0 when its
-  // content isn't a pid.
-  const lockHolder = Effect.gen(function* () {
-    const raw = yield* fs.readFileString(lockPath).pipe(Effect.option);
-    if (Option.isNone(raw)) return Option.none();
-    const text = raw.value.trim();
-    const pid = /^\d+$/.test(text) ? Number(text) : 0;
-    // kill(0) and kill(-1) always "succeed".
-    if (pid < 2) return Option.some({ pid: 0, alive: false });
-    return Option.some({ pid, alive: yield* pidAlive(pid) });
-  });
-
-  // One stager at a time, across the terminal and the app's periodic
-  // check, which can land mid-run. A pidfile, so a crashed holder shows
-  // as a dead pid instead of being waited out, held for the whole run.
-  const claimLock = (pid: number) =>
-    Effect.gen(function* () {
-      yield* fs.makeDirectory(updatesDir, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new StagingFailed({
-              reason: "directory",
-              path: updatesDir,
-              cause,
-            }),
-        ),
-      );
-      const attempt = Effect.gen(function* () {
-        const created = yield* fs
-          .writeFileString(lockPath, `${pid}\n`, { flag: "wx" })
-          .pipe(
-            Effect.as(true),
-            Effect.orElseSucceed(() => false),
-          );
-        if (created) return true;
-        const holder = yield* lockHolder;
-        if (Option.isSome(holder) && holder.value.alive) {
-          return yield* new UpdateInProgress({ pid: holder.value.pid });
-        }
-        // Stale or unreadable. Claimed by a rename before it goes: the
-        // rename succeeds for exactly one contender, so two processes
-        // breaking the same stale lock can't each remove the other's
-        // fresh one. The loser finds the winner's live lock, or loses the
-        // next create.
-        const stale = `${lockPath}.stale-${pid}`;
-        yield* fs
-          .rename(lockPath, stale)
-          .pipe(Effect.andThen(fs.remove(stale)), Effect.ignore);
-        return false;
-      });
-      const taken = yield* attempt.pipe(
-        Effect.repeat({ until: (done) => done, times: 2 }),
-      );
-      if (!taken) return yield* new StagingLockFailed({ path: lockPath });
-    });
-
-  const lock = (pid: number) =>
-    Effect.acquireRelease(claimLock(pid), () =>
-      fs.remove(lockPath).pipe(Effect.ignore),
-    );
+  // The stager's pidfile for the rest of the run, its folder's failure
+  // in Go's words.
+  const lock = acquireStagingLock(lockPath).pipe(
+    Effect.provideService(FileSystem.FileSystem, fs),
+    Effect.provideService(Path.Path, path),
+    Effect.mapError((error) =>
+      error instanceof UpdateInProgress ||
+      error instanceof StagingLockUnavailable
+        ? error
+        : new StagingFailed({
+            reason: "directory",
+            path: updatesDir,
+            cause: error,
+          }),
+    ),
+  );
 
   // The staged update, when its manifest and its bundle are both there.
   const readManifest = Effect.gen(function* () {
@@ -1256,7 +1190,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     input: UpdateInput,
   ) {
     const { running } = input;
-    yield* lock(running.pid);
+    yield* lock;
     yield* pruneLeftovers(installed.bundle);
     const { release, confirmed } = yield* queryFeed(input);
     if (release === undefined) {
@@ -1426,7 +1360,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     installed: Anchor,
     pid: number,
   ) {
-    yield* lock(pid).pipe(
+    yield* lock.pipe(
       Effect.retry({
         while: (error) => error instanceof UpdateInProgress,
         schedule: polling(APP_QUIT_TIMEOUT),

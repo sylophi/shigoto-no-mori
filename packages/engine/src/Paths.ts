@@ -9,6 +9,19 @@ import * as Schema from "effect/Schema";
 import { type Flavor, flavorNames } from "./flavor.ts";
 import { isAbsent, isNotFound } from "./platformErrors.ts";
 
+// The pointer file as it was read: the file, the target it names, and
+// why that target was refused (empty when it wasn't).
+export type PointerFile = {
+  readonly file: string;
+  readonly target: string;
+  readonly problem: string;
+};
+
+// Whether a directory has been used as a data dir: "present" when one
+// of the state files is there, "absent" when none is (or the directory
+// is missing), "unreadable" when it can't be told.
+export type StateProbe = "present" | "absent" | "unreadable";
+
 // How the data dir was found: the SHIGOMORI_DATA_DIR override, the
 // pointer file, a pre-2.0 default adopted in place, or the flavor's
 // default under the home directory.
@@ -37,6 +50,7 @@ export class Paths extends Context.Service<
   {
     // The user's home directory.
     readonly home: string;
+    readonly flavor: Flavor;
     // A `~` or `~/` path under the home directory, cleaned.
     readonly expandHome: (target: string) => string;
     readonly dataDir: string;
@@ -49,6 +63,12 @@ export class Paths extends Context.Service<
     readonly binaryName: string;
     // The store's database file, in the data dir.
     readonly store: string;
+    // XDG_CONFIG_HOME, else ~/.config.
+    readonly configHome: string;
+    // The pointer file read while finding the data dir, none when there
+    // was none or SHIGOMORI_DATA_DIR made it moot.
+    readonly pointer: Option.Option<PointerFile>;
+    readonly holdsState: (dir: string) => Effect.Effect<StateProbe>;
   }
 >()("sm/engine/Paths") {}
 
@@ -88,30 +108,31 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       Effect.orElseSucceed(() => false),
     );
 
-  // The pointer file's target when it names a usable data dir. The
+  const configHome = Option.getOrElse(yield* env("XDG_CONFIG_HOME"), () =>
+    path.join(home, ".config"),
+  );
+
+  // The pointer file, and why its target is refused when it is. The
   // pre-2.0 file name is read only when the current one is absent.
-  const pointed = Effect.gen(function* () {
-    const configHome = Option.getOrElse(yield* env("XDG_CONFIG_HOME"), () =>
-      path.join(home, ".config"),
-    );
+  const readPointer = Effect.gen(function* () {
     for (const name of [names.pointer, names.legacyPointer]) {
-      const raw = yield* fs
-        .readFileString(path.join(configHome, names.configDir, name))
-        .pipe(Effect.option);
+      const file = path.join(configHome, names.configDir, name);
+      const raw = yield* fs.readFileString(file).pipe(Effect.option);
       if (Option.isNone(raw)) continue;
       const target = expandHome(raw.value.trim());
-      return target !== "" &&
-        path.isAbsolute(target) &&
-        (yield* looksLikeDataDir(target))
-        ? Option.some(target)
-        : Option.none<string>();
+      const problem =
+        target === ""
+          ? "it is empty"
+          : !path.isAbsolute(target)
+            ? "it isn't an absolute path"
+            : !(yield* looksLikeDataDir(target))
+              ? "it holds files that aren't sm's"
+              : "";
+      return Option.some<PointerFile>({ file, target, problem });
     }
-    return Option.none<string>();
+    return Option.none<PointerFile>();
   });
 
-  // Whether a directory has been used as a data dir: "present" when
-  // one of the state files is there, "absent" when none is (or the
-  // directory is missing), "unreadable" when it can't be told.
   const holdsState = Effect.fn(function* (dir: string) {
     let unreadable = false;
     for (const file of STATE_FILES) {
@@ -134,14 +155,19 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       return {
         dataDir: path.resolve(expandHome(override.value)),
         source: "env" as const,
+        pointer: Option.none<PointerFile>(),
       };
     }
     if (Option.isSome(yield* env("SHIGOMORI_ROOT"))) {
       return yield* new RetiredRootVariable();
     }
-    const target = yield* pointed;
-    if (Option.isSome(target)) {
-      return { dataDir: target.value, source: "pointer" as const };
+    const pointer = yield* readPointer;
+    if (Option.isSome(pointer) && pointer.value.problem === "") {
+      return {
+        dataDir: pointer.value.target,
+        source: "pointer" as const,
+        pointer,
+      };
     }
     const current = path.join(home, names.dataDir);
     const legacy = path.join(home, names.legacyDataDir);
@@ -152,19 +178,23 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
       (yield* holdsState(current)) !== "present" &&
       (yield* holdsState(legacy)) !== "absent"
     ) {
-      return { dataDir: legacy, source: "legacy" as const };
+      return { dataDir: legacy, source: "legacy" as const, pointer };
     }
-    return { dataDir: current, source: "default" as const };
+    return { dataDir: current, source: "default" as const, pointer };
   });
 
   return Paths.of({
     home,
+    flavor,
     expandHome,
     dataDir: resolved.dataDir,
     dataDirSource: resolved.source,
     dataDirName: names.dataDir,
     binaryName: names.binaryName,
     store: path.join(resolved.dataDir, "store.db"),
+    configHome,
+    pointer: resolved.pointer,
+    holdsState,
   });
 });
 

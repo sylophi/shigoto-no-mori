@@ -26,7 +26,10 @@ import type {
   CliRunnerImpl,
 } from "../../host/ipc/cliDelegate.ts";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
-import type { SupervisorClock } from "../../shared/remote/supervisor.ts";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as TestClock from "effect/testing/TestClock";
 import type { KeyValueStorage } from "../../web/lib/kvStorage.ts";
 
 // The app root (app/ in the repo), resolved from this file's location
@@ -272,40 +275,28 @@ export function sandboxGit(
     );
 }
 
-export type FakeClock = SupervisorClock & {
-  advance(ms: number): Promise<void>;
-  settle(): Promise<void>;
-};
+// A TestClock for checks that drive supervised loops headlessly (the
+// direct keeper, the supervisor): hand `context` to the loop, and
+// `advance` moves the clock, runs whatever was due, then lets promise
+// chains complete before assertions, as `settle` does on its own.
+async function settleTurns(): Promise<void> {
+  for (let turn = 0; turn < 5; turn += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- turns of the event loop, in order
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
 
-// A controllable SupervisorClock (shared/remote/supervisor.ts) for
-// checks that drive supervised runners headlessly: timers fire when
-// advance crosses them, and a settle tick lets promise chains complete
-// before assertions.
-export function fakeClock(): FakeClock {
-  let time = 0;
-  let nextTimerId = 1;
-  const timers = new Map<unknown, { fn: () => void; at: number }>();
+export function testClock() {
+  const runtime = ManagedRuntime.make(TestClock.layer());
+  const settle = settleTurns;
   return {
-    now: () => time,
-    setTimeout: (fn, ms) => {
-      const id = nextTimerId;
-      nextTimerId += 1;
-      timers.set(id, { fn, at: time + ms });
-      return id;
+    context: runtime.runSync(Effect.context<never>()),
+    now: () => runtime.runSync(Clock.currentTimeMillis),
+    settle,
+    advance: async (ms: number) => {
+      await runtime.runPromise(TestClock.adjust(ms));
+      await settle();
     },
-    clearTimeout: (id) => timers.delete(id),
-    async advance(ms) {
-      time += ms;
-      // Deleting the visited entry is safe under Map iteration.
-      for (const [id, timer] of timers) {
-        if (timer.at <= time) {
-          timers.delete(id);
-          timer.fn();
-        }
-      }
-      await new Promise((resolve) => setImmediate(resolve));
-    },
-    settle: () => new Promise<void>((resolve) => setImmediate(resolve)),
   };
 }
 

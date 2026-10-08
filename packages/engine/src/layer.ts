@@ -6,6 +6,7 @@ import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import * as Darwin from "./Darwin.ts";
+import * as Doctor from "./Doctor.ts";
 import type { Flavor } from "./flavor.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
@@ -17,6 +18,7 @@ import * as Landing from "./Landing.ts";
 import * as Layout from "./Layout.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import * as Paths from "./Paths.ts";
+import * as Projects from "./Projects.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
 import type * as Store from "./Store.ts";
@@ -33,7 +35,7 @@ export const engineLayer = (options: {
   readonly store: ReturnType<typeof Store.layer>;
   readonly macfs: string;
 }) =>
-  Landing.layer.pipe(
+  Layer.mergeAll(Landing.layer, Projects.layer, Doctor.layer).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(
