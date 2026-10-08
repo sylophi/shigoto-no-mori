@@ -259,8 +259,8 @@ export function attachLinkFarEnd(ctx: HandlerContext, channelId: string): Link {
 
 // This device's end of a link to a peer, attached BEFORE the call that
 // opens the peer's end is sent, so the peer's first bytes always find
-// it. The call's rejection resets it, and so does a cancel (`signal`)
-// while it waits, which a peer already asked then meets on the link.
+// it. The call's rejection resets it. A cancel while it waits resets
+// it once it is open (peerSource's release).
 async function openLink(
   peer: Pick<PeerSyncApi, "channels">,
   open: (channelId: string) => Promise<unknown>,

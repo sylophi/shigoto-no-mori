@@ -12,8 +12,9 @@
 // The signal also follows the caller's connection: a window that
 // reloads or a peer whose socket dies (HandlerContext.signal) aborts
 // the move the same way a cancel does, so nothing keeps landing for a
-// caller that is gone. What a cancelled step made is undone by the
-// step (the created worktree removed, the temp bundle dropped) and the
+// caller that is gone. A pull or a send runs as one effect the signal
+// interrupts (runCancellable): what a step made is undone by its
+// finalizer (the created worktree removed, the link reset), and the
 // call fails with MOVE_CANCELLED, whatever the step was waiting on
 // said when it was cut short. Per-key rather than per-call because the
 // wire has no request cancellation: a cancel frame and a per-call
