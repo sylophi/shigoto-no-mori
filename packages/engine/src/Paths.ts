@@ -25,7 +25,7 @@ export class RetiredRootVariable extends Schema.TaggedError<RetiredRootVariable>
 
 // The files whose presence marks a directory as a used data dir: the
 // store, and the JSON files it imports.
-const STATE_FILES = [
+export const STATE_FILES = [
   "store.db",
   "registry.json",
   "state.json",
@@ -37,6 +37,7 @@ export class Paths extends Context.Service<
   {
     // The user's home directory.
     readonly home: string;
+    readonly flavor: Flavor;
     // A `~` or `~/` path under the home directory, cleaned.
     readonly expandHome: (target: string) => string;
     readonly dataDir: string;
@@ -159,6 +160,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
 
   return Paths.of({
     home,
+    flavor,
     expandHome,
     dataDir: resolved.dataDir,
     dataDirSource: resolved.source,

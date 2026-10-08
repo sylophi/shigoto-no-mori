@@ -239,6 +239,11 @@ const projectKeys = settingKeys(
 const keysOf = (scope: ConfigScope) =>
   scope.kind === "device" ? deviceKeys : projectKeys;
 
+// What is wrong with a stored document, by the keys its scope models:
+// a value of the wrong type, say. None when nothing is.
+export const storedProblem = (scope: ConfigScope, doc: ConfigDoc) =>
+  documentProblem(keysOf(scope), doc);
+
 const lookupKey = (scope: ConfigScope, name: string) => {
   const keys = keysOf(scope);
   const key = keys.find((candidate) => candidate.name === name);

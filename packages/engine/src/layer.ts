@@ -5,6 +5,7 @@ import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import * as Darwin from "./Darwin.ts";
+import * as Doctor from "./Doctor.ts";
 import type { Flavor } from "./flavor.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
@@ -29,7 +30,7 @@ export const engineLayer = (options: {
   readonly store: ReturnType<typeof Store.layer>;
   readonly macfs: string;
 }) =>
-  Hygiene.layer.pipe(
+  Layer.mergeAll(Hygiene.layer, Doctor.layer).pipe(
     Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(
       Layer.mergeAll(
