@@ -10,7 +10,7 @@ export type ConfigKey = {
   readonly kind: "boolean" | "string" | "enum" | "int" | "list";
   // An enum's members.
   readonly choices: ReadonlyArray<string>;
-  // The effective value while the key is absent; undefined when the key
+  // The effective value while the key is absent, undefined when the key
   // is genuinely unset.
   readonly default: unknown;
   // The schema requires it: `set` refuses to clear it, and a whole
@@ -162,7 +162,7 @@ function docClear(doc: ConfigDoc, name: string): void {
 
 // A null deletes its key, an object merges into the stored object field
 // by field, anything else replaces what is there. An object the
-// payload's nulls empty is dropped; an empty object sent is kept.
+// payload's nulls empty is dropped. An empty object sent is kept.
 function mergeObjects(doc: ConfigDoc, payload: ConfigDoc): void {
   for (const [name, value] of Object.entries(payload)) {
     if (value === null) {

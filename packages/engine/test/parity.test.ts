@@ -48,7 +48,7 @@ const inTurn = (steps: ReadonlyArray<() => Promise<void>>) =>
   );
 
 // One scope's verbs, each as the engine's call and the Go command line.
-// A project's documents name the project; its errors don't.
+// A project's documents name the project, and its errors don't.
 const verbs = (scope: Config.ConfigScope) => {
   const [command, flags] =
     scope.kind === "device"
