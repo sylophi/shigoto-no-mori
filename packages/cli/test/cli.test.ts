@@ -51,13 +51,19 @@ const withoutHue = (doc: unknown) =>
     ? doc.map((row: unknown) => Object.assign({}, row, { hue: null }))
     : doc;
 
-// A new project's id, random on each side.
+// What differs by side: a new project's id, random on each, and each
+// side's own data dir, where managed worktrees go.
 const withoutIds = (seen: object) =>
   JSON.parse(
-    JSON.stringify(seen).replaceAll(
-      /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
-      "<id>",
-    ),
+    ["go", "cli"]
+      .reduce(
+        (text, side) => text.replaceAll(`${box.home}/${side}/`, "<data>/"),
+        JSON.stringify(seen),
+      )
+      .replaceAll(
+        /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
+        "<id>",
+      ),
   ) as unknown;
 
 // The same command through both binaries from `cwd`, each on its own
@@ -333,6 +339,74 @@ describe("projects add, remove and reorder", () => {
     await same("projects", "list");
     await same("projects", "reorder", "--ids", "A");
     await same("--json", "projects", "list");
+  });
+});
+
+describe("worktrees", () => {
+  // Two projects: one with a linked worktree and a title on it, one
+  // with only its primary.
+  const projects = () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    box.write("projects/A/project.json", { defaultBranch: "main" });
+    return { alpha, beta, fox: `${box.home}/fox` };
+  };
+
+  it("lists the worktrees, scoped to the project at the cwd", async () => {
+    const { alpha, fox } = projects();
+    await same("list");
+    await same("--json", "list");
+    await sameAt(fox, "ls");
+    await sameAt(fox, "--json", "wt", "l", "--all");
+    await same("w", "list", "-p", "alpha");
+    await same("--json", "worktrees", "list", "--project-id", "B");
+    await sameAt(alpha, "list", "--identities");
+    await same("--json", "list", "--identities", "--primary-ref");
+    await same("list", "--primary-ref");
+  });
+
+  it("names one worktree by id, as the app does", async () => {
+    const { fox } = projects();
+    const id = (
+      (await box.runAt(goSm(), "go", fox, ["--json", "path"])).doc as {
+        id: string;
+      }
+    ).id;
+    await same("--json", "list", "--worktree-id", id);
+    await same("list", "--worktree-id", id, "--identities");
+    await same("--json", "list", "--worktree-id", "nope");
+  });
+
+  it("prints a worktree's folder however it's named", async () => {
+    const { alpha, fox } = projects();
+    await same("path", "fox");
+    await same("--json", "path", "alpha/fox");
+    await sameAt(fox, "path");
+    await sameAt(alpha, "--json", "path", "root");
+    await same("path", "fox", "-p", "beta");
+    await same("--json", "path", "nope");
+    await same("path");
+  });
+
+  it("says where a new worktree would go", async () => {
+    projects();
+    await same("--json", "destination", "-p", "alpha", "--name", "owl");
+    await same("worktrees", "destination", "-p", "alpha", "--name", "FOX");
+    await same("--json", "destination", "-p", "alpha", "--name", "primary");
+    await same("destination", "-p", "alpha", "--name", "a/b");
+    await same("destination", "-p", "alpha", "extra");
+  });
+
+  it("says when there are no projects", async () => {
+    await same("list");
+    await same("--json", "list", "--identities");
   });
 });
 

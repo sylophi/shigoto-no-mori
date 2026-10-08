@@ -13,6 +13,12 @@ import * as GlobalFlag from "effect/cli/GlobalFlag";
 import { configCommand } from "./commands/config.ts";
 import { launchersCommand } from "./commands/launchers.ts";
 import { projectsCommand } from "./commands/projects.ts";
+import {
+  destination,
+  list,
+  path,
+  worktreesCommand,
+} from "./commands/worktrees.ts";
 import { engine } from "./engine.ts";
 import { report } from "./errors.ts";
 import { Output } from "./output.ts";
@@ -36,6 +42,33 @@ function globalFlags(args: ReadonlyArray<string>) {
   };
 }
 
+// Go's aliases for the command and the worktree verb, folded before
+// parsing: effect/cli takes one alias per command.
+const COMMANDS: Readonly<Record<string, string>> = {
+  ls: "list",
+  l: "list",
+  worktree: "worktrees",
+  wt: "worktrees",
+  w: "worktrees",
+  project: "projects",
+  p: "projects",
+  launcher: "launchers",
+};
+const WORKTREE_VERBS: Readonly<Record<string, string>> = {
+  ls: "list",
+  l: "list",
+};
+
+function canonical(args: ReadonlyArray<string>) {
+  const [first, ...more] = args;
+  if (first === undefined) return args;
+  const command = COMMANDS[first] ?? first;
+  const [verb, ...after] = more;
+  return command === "worktrees" && verb !== undefined
+    ? [command, WORKTREE_VERBS[verb] ?? verb, ...after]
+    : [command, ...more];
+}
+
 const { json, rest } = globalFlags(process.argv.slice(2));
 const plain =
   json || process.env.NO_COLOR !== undefined || process.env.TERM === "dumb";
@@ -48,11 +81,15 @@ const sm = Command.make("sm").pipe(
     configCommand.pipe(Command.provide(services)),
     projectsCommand.pipe(Command.provide(services)),
     launchersCommand.pipe(Command.provide(services)),
+    worktreesCommand.pipe(Command.provide(services)),
+    list.pipe(Command.provide(services)),
+    path.pipe(Command.provide(services)),
+    destination.pipe(Command.provide(services)),
   ]),
 );
 
 const program = Command.runWith(sm, { version: "dev", renderErrors: false })(
-  rest,
+  canonical(rest),
 ).pipe(
   // Only --help of effect/cli's built-in flags, as Go has no others.
   Effect.provide(
