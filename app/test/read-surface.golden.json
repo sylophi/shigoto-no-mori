@@ -37,10 +37,17 @@
   "terrier:readiness",
   "updater:get",
   "worktreeData:read",
+  "worktrees:branchDiff",
+  "worktrees:branchHistory",
   "worktrees:changeStatus",
   "worktrees:commitDiff",
   "worktrees:commitMessage",
   "worktrees:fileDiff",
+  "worktrees:fileHunks",
   "worktrees:list",
-  "worktrees:listCommits"
+  "worktrees:listCommits",
+  "worktrees:mergePreview",
+  "worktrees:operation",
+  "worktrees:stashDiff",
+  "worktrees:stashes"
 ]

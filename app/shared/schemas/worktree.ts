@@ -30,7 +30,9 @@ export const CommitSummarySchema = z.object({
   author: z.string(),
   date: z.string(),
   // Net additions/deletions across all files in this commit, parsed
-  // from `git log --shortstat`. Zero for empty/merge commits.
+  // from `git log --shortstat`. Zero for an empty commit, and for a
+  // merge from the CLI. The app's own reads count a merge against its
+  // first parent.
   additions: z.number().int().nonnegative(),
   deletions: z.number().int().nonnegative(),
 });
@@ -454,7 +456,39 @@ export const ListCommitsPayloadSchema = WorktreeScopedPayloadSchema.extend({
   // = pageIndex * count and stops when fewer than `count` come back.
   skip: z.number().int().nonnegative(),
   count: z.number().int().positive().max(200),
+  // Only commits whose message holds this, case blind.
+  query: z.string().trim().min(1).optional(),
+  // History from this commit rather than HEAD.
+  from: CommitHashSchema.optional(),
 });
+
+// What the Git page's History tab draws (host/lib/git/worktrees.ts,
+// readBranchHistory): the branch's own commits, newest first, the
+// commit it left its base at, and how it stands against the upstream it
+// pushes to.
+export const BranchHistorySchema = z.object({
+  commits: z.array(CommitSummarySchema),
+  // More commits than were asked for: the list was cut.
+  more: z.boolean(),
+  // Where the branch left the primary ref (`ref`, e.g. "origin/main").
+  // Null for the primary checkout, the primary branch itself, and a
+  // detached HEAD, whose commits are just HEAD's newest.
+  base: z.object({ ref: z.string(), hash: CommitHashSchema }).nullable(),
+  // The upstream's short name ("origin/feature"), null without one.
+  upstream: z.string().nullable(),
+  // HEAD's commits the upstream lacks, by short hash (as `commits` has
+  // them), the upstream's own commits HEAD lacks, newest first (cut like
+  // `commits`, `incomingMore` saying so), and where the two last agreed.
+  // Empty and null without an upstream.
+  unpushed: z.array(CommitHashSchema),
+  incoming: z.array(CommitSummarySchema),
+  incomingMore: z.boolean(),
+  upstreamFork: CommitHashSchema.nullable(),
+  merges: z.array(
+    z.object({ hash: CommitHashSchema, firstParent: CommitHashSchema }),
+  ),
+});
+export type BranchHistory = z.infer<typeof BranchHistorySchema>;
 
 export const CleanupErrorSchema = z.object({
   phase: z.enum(["teardown", "portPoolRelease"]),

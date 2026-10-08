@@ -529,6 +529,49 @@ function hostHandlersFor(
         pushed(w);
       }),
     "worktrees:commitDiff": () => FAKE_DIFF,
+    "worktrees:branchDiff": () => FAKE_DIFF,
+    // The Git timeline's reads: the row's own commits, from a fork on
+    // the primary branch for any worktree but the primary, one stash on
+    // happy-hummingbird, nothing stopped, and a hunk per picked file.
+    "worktrees:branchHistory": ({ worktreeId }) => {
+      const w = findWorktree(worktreeId);
+      return {
+        commits: w?.recentCommits ?? [],
+        more: false,
+        base:
+          w && !w.isPrimary
+            ? { ref: w.primaryRef ?? "origin/main", hash: "a1b2c3d" }
+            : null,
+        upstream: w?.hasUpstream ? `origin/${w.branch}` : null,
+        unpushed: (w?.recentCommits ?? [])
+          .slice(0, w?.ahead ?? 0)
+          .map((c) => c.hash),
+        incoming: [],
+        incomingMore: false,
+        upstreamFork: null,
+        merges: [],
+      };
+    },
+    "worktrees:stashes": ({ worktreeId }) =>
+      worktreeId === "wt_sm_hum"
+        ? [
+            {
+              hash: "5ca1ab1",
+              message: "Badge merged projects with their devices",
+              named: false,
+              date: new Date(Date.now() - 3 * 3600_000).toISOString(),
+            },
+          ]
+        : [],
+    "worktrees:stashDiff": () => FAKE_DIFF,
+    "worktrees:operation": () => ({
+      operation: null,
+      continuable: false,
+      conflicted: 0,
+      rebasing: null,
+    }),
+    "worktrees:fileHunks": ({ worktreeId, path }) =>
+      changes.hunks(worktreeId, path),
     // For an amend's prefill: the subject the row carries, no body.
     "worktrees:commitMessage": ({ worktreeId, hash }) => ({
       summary:

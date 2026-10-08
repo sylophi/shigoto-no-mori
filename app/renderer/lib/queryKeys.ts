@@ -87,6 +87,15 @@ function buildQueryKeys(deviceId: string) {
     ) => host("worktreeDiff", projectId, worktreeId, [...paths], untracked),
     worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
       host("worktreeChanges", projectId, worktreeId),
+    // One file's hunks and which are staged, under the diff prefix so
+    // the working-tree invalidation drops it with the file's diff.
+    worktreeFileHunks: (projectId: string, worktreeId: string, path: string) =>
+      host("worktreeDiff", projectId, worktreeId, "hunks", path),
+    worktreeStashes: (projectId: string, worktreeId: string) =>
+      host("worktreeStashes", projectId, worktreeId),
+    // The git operation a worktree is stopped in, if any.
+    worktreeOperation: (projectId: string, worktreeId: string) =>
+      host("worktreeOperation", projectId, worktreeId),
     // The ignored files a transfer leaves behind on a source worktree
     // (sync:ignoredPaths), read by the transplant dialog.
     worktreeIgnored: (projectId: string, worktreeId: string) =>
@@ -137,7 +146,33 @@ function buildQueryKeys(deviceId: string) {
       projectId: string,
       worktreeId: string,
       headHash: string | undefined,
-    ) => host("branchCommits", projectId, worktreeId, headHash),
+      opts: { query?: string; from?: string },
+    ) =>
+      host(
+        "branchCommits",
+        projectId,
+        worktreeId,
+        headHash,
+        opts.query ?? "",
+        opts.from ?? "",
+      ),
+    branchHistory: (
+      projectId: string,
+      worktreeId: string,
+      headHash: string | undefined,
+    ) => host("branchHistory", projectId, worktreeId, headHash),
+    stashDiff: (projectId: string, worktreeId: string, hash: string) =>
+      host("stashDiff", projectId, worktreeId, hash),
+    // What a branch changes against the primary branch.
+    branchDiff: (projectId: string, worktreeId: string) =>
+      host("branchDiff", projectId, worktreeId),
+    // How a branch and another to bring in stand, while HEAD is here.
+    mergePreview: (
+      projectId: string,
+      worktreeId: string,
+      ref: string,
+      headHash: string | undefined,
+    ) => host("mergePreview", projectId, worktreeId, ref, headHash),
 
     packageScripts: (projectId: string | null, worktreeId: string | null) =>
       host("packageScripts", projectId, worktreeId),
