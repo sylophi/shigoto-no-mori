@@ -32,6 +32,18 @@ export class WorktreeData extends Context.Service<
       worktreeId: string,
       change: { readonly title?: string; readonly description?: string },
     ) => Effect.Effect<Description>;
+    // Carries what is kept under one id to another, the checkout having
+    // moved. Whatever the new id held is replaced.
+    readonly move: (
+      projectId: string,
+      from: string,
+      to: string,
+    ) => Effect.Effect<void>;
+    // Drops what is kept under an id that is going away.
+    readonly forget: (
+      projectId: string,
+      worktreeId: string,
+    ) => Effect.Effect<void>;
   }
 >()("sm/engine/WorktreeData") {}
 
@@ -102,7 +114,30 @@ const make = Effect.gen(function* () {
     );
   }, Effect.orDie);
 
-  return WorktreeData.of({ description, describe });
+  const move = Effect.fn("WorktreeData.move")(function* (
+    projectId: string,
+    from: string,
+    to: string,
+  ) {
+    yield* sql.withTransaction(
+      Effect.all([
+        sql`DELETE FROM worktree_data
+            WHERE project_id = ${projectId} AND worktree_id = ${to}`,
+        sql`UPDATE worktree_data SET worktree_id = ${to}
+            WHERE project_id = ${projectId} AND worktree_id = ${from}`,
+      ]),
+    );
+  }, Effect.orDie);
+
+  const forget = Effect.fn("WorktreeData.forget")(function* (
+    projectId: string,
+    worktreeId: string,
+  ) {
+    yield* sql`DELETE FROM worktree_data
+      WHERE project_id = ${projectId} AND worktree_id = ${worktreeId}`;
+  }, Effect.orDie);
+
+  return WorktreeData.of({ description, describe, move, forget });
 });
 
 export const layer = Layer.effect(WorktreeData, make);
