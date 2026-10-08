@@ -8,6 +8,7 @@ import { sanitizeBranchName } from "@shared/git/branches";
 import { isAnchoredPath } from "@shared/projectPaths";
 import { isHiddenByPrefix } from "@shared/sharedSettings";
 import {
+  isAgentWorking,
   worktreeLastActivityAt,
   type Project,
   type PullRequest,
@@ -37,7 +38,8 @@ export interface PaletteEntry {
   pr: PullRequest | undefined;
   // Matches a hidden-worktree prefix: listed only for a query.
   hidden: boolean;
-  // Merged or shelved: still found, but below the work in progress.
+  // Merged, shelved or agent working: still found, but below the work in
+  // progress.
   sunk: boolean;
 }
 
@@ -58,6 +60,8 @@ interface BuildPaletteEntriesArgs {
   mirrors: readonly MirrorLink[];
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   hiddenPrefixes: readonly string[];
+  // Whether the agent-working mark counts (isAgentWorking).
+  allowAgentWorking: boolean;
   // recordWorktreeVisit's record by row key, read once per open.
   visits: Record<string, number>;
 }
@@ -77,6 +81,7 @@ export function buildPaletteEntries({
   mirrors,
   deviceBadges,
   hiddenPrefixes,
+  allowAgentWorking,
   visits,
 }: BuildPaletteEntriesArgs): PaletteList {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
@@ -98,7 +103,7 @@ export function buildPaletteEntries({
         mirror: mirrorBadgeFor(worktree),
         pr: pullRequests?.[worktree.branch],
         hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
-        sunk: isSunk(worktree),
+        sunk: isSunk(worktree, allowAgentWorking),
       });
     }
   });
@@ -120,7 +125,7 @@ export function buildPaletteEntries({
         mirror: undefined,
         pr: item.pullRequests[worktree.branch],
         hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
-        sunk: isSunk(worktree),
+        sunk: isSunk(worktree, allowAgentWorking),
       });
     }
   }
@@ -143,8 +148,10 @@ export function buildPaletteEntries({
   return { entries: sorted, entryKeyOf };
 }
 
-const isSunk = (worktree: Worktree) =>
-  worktree.shelved || worktree.mergedIntoPrimary;
+const isSunk = (worktree: Worktree, allowAgentWorking: boolean) =>
+  isAgentWorking(worktree, allowAgentWorking) ||
+  worktree.shelved ||
+  worktree.mergedIntoPrimary;
 
 // The row ↩ lands on when the palette opens. The worktree on screen
 // leads the recency order (it was visited last), so opening on it

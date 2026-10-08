@@ -36,6 +36,7 @@ export interface SettingsFormState {
   villageLife: boolean;
   markTerrierProjects: boolean;
   showDeviceBadges: boolean;
+  allowAgentWorking: boolean;
   launchers: readonly LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
@@ -68,6 +69,7 @@ export function fromConfig(
     villageLife: clientConfig.villageLife ?? false,
     markTerrierProjects: clientConfig.markTerrierProjects ?? false,
     showDeviceBadges: clientConfig.showDeviceBadges ?? true,
+    allowAgentWorking: clientConfig.allowAgentWorking ?? false,
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
@@ -167,6 +169,8 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
     markTerrierProjects: state.markTerrierProjects ? true : undefined,
     // Default is on, with the same opt-out serialization as doubutsu.
     showDeviceBadges: state.showDeviceBadges ? undefined : false,
+    // Default is off, the same opt-in serialization as villageLife.
+    allowAgentWorking: state.allowAgentWorking ? true : undefined,
   };
 }
 

@@ -149,6 +149,7 @@ export function SettingsForm({
           villageLife: prev.villageLife,
           markTerrierProjects: prev.markTerrierProjects,
           showDeviceBadges: prev.showDeviceBadges,
+          allowAgentWorking: prev.allowAgentWorking,
         }));
       }
     }
