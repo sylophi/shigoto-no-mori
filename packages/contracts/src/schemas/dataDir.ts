@@ -22,6 +22,7 @@ export const RegistryFileSchema = Schema.Struct({
   // Worktree ids marked on: only `true` counts.
   shelvedWorktrees: Schema.Record(Schema.String, Schema.Boolean),
   autoPullWorktrees: Schema.Record(Schema.String, Schema.Boolean),
+  agentWorkingWorktrees: Schema.Record(Schema.String, Schema.Boolean),
   // Each entry decoded on its own: one that doesn't parse reads as absent.
   shelfSnapshots: Schema.Record(Schema.String, Schema.Unknown),
   deviceId: Schema.String,
