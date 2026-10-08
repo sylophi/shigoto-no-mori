@@ -18,25 +18,16 @@ import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { appRoot } from "./lib/appRoot.mts";
 import { parsePositionalDevProfile } from "./lib/devProfile.mts";
+import { descendantsIn } from "../host/lib/scripts/descendants.ts";
 import { rendererDevServerAnswers } from "./lib/portsEnvFile.mts";
 
-// The launch and everything under it, by ppid: pnpm does not forward a
-// signal to its children.
+// The launch and everything under it: pnpm does not forward a signal
+// to its children.
 function signalPidTree(root: number, signal: NodeJS.Signals): void {
   const table = spawnSync("ps", ["-A", "-o", "pid=,ppid="], {
     encoding: "utf8",
   }).stdout;
-  const children = new Map<number, number[]>();
-  for (const line of table.split("\n")) {
-    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
-    if (pid === undefined || ppid === undefined || Number.isNaN(pid)) continue;
-    children.set(ppid, [...(children.get(ppid) ?? []), pid]);
-  }
-  const tree = [root];
-  for (let i = 0; i < tree.length; i++) {
-    tree.push(...(children.get(tree[i] ?? -1) ?? []));
-  }
-  for (const pid of tree) {
+  for (const pid of [root, ...descendantsIn(table, root)]) {
     try {
       process.kill(pid, signal);
     } catch {

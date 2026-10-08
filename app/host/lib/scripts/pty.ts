@@ -52,25 +52,22 @@ export interface SpawnOptions {
   readonly rows: number;
 }
 
-// How a run is stopped when its scope closes, set by whoever closes it
-// before it does. `wait: false` sends the first SIGTERM and moves on:
-// an update's installer is waiting on the app to exit.
+// How a run is stopped. `wait: false` sends the first SIGTERM and
+// moves on: an update's installer is waiting on the app to exit.
 export interface Stopping {
-  graceMs: number;
-  wait: boolean;
+  readonly graceMs: number;
+  readonly wait: boolean;
 }
+
+// What the layer's close stops a run it finds still open with.
+const DEFAULT_STOPPING: Stopping = { graceMs: 3_000, wait: true };
 
 // How long to wait for a child that survived SIGKILL (kernel-stuck
 // I/O) before giving up. A delete or a quit must not hang behind it.
-const UNKILLABLE_WAIT_MS = 5_000;
+export const UNKILLABLE_WAIT_MS = 5_000;
 
 export interface PtyHandle {
   readonly pid: number;
-  // Settles when the PTY reports the child's exit.
-  readonly exit: Effect.Effect<{
-    readonly exitCode: number;
-    readonly signal: number | undefined;
-  }>;
   readonly write: (data: string) => void;
   readonly resize: (cols: number, rows: number) => void;
   readonly onData: (listener: (data: string) => void) => void;
@@ -91,12 +88,6 @@ function resolveShell(): { command: string; args: string[] } {
   const userShell = envSetting("SHELL") || userInfo().shell;
   if (userShell) return { command: userShell, args: ["-l", "-c"] };
   return { command: "/bin/sh", args: ["-c"] };
-}
-
-// Quote one argument for the shell spawnScript launches (POSIX sh
-// single-quoting).
-export function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
 // Inherited terminal state that would mislead a program in the new
@@ -198,7 +189,6 @@ const pty = Effect.fn("Pty.spawn")(function* (
   ) => void;
   return {
     pid: child.pid,
-    exit,
     write: (data) => child.write(data),
     resize: (cols, rows) => child.resize(cols, rows),
     onData: (listener) => void child.onData(listener),
@@ -223,13 +213,13 @@ const pty = Effect.fn("Pty.spawn")(function* (
 export class ScriptRuns extends Context.Service<
   ScriptRuns,
   {
-    // A PTY run in a scope of its own, and the effect that closes it:
-    // the kill chain under the run's `stopping` policy.
-    readonly open: (
-      opts: SpawnOptions,
-      stopping: () => Stopping,
-    ) => Effect.Effect<
-      { readonly pty: PtyHandle; readonly close: Effect.Effect<void> },
+    // A PTY run in a scope of its own, and how to close it: the kill
+    // chain under the stopping it is given.
+    readonly open: (opts: SpawnOptions) => Effect.Effect<
+      {
+        readonly pty: PtyHandle;
+        readonly close: (stopping: Stopping) => Effect.Effect<void>;
+      },
       PtySpawnError
     >;
   }
@@ -238,17 +228,21 @@ export class ScriptRuns extends Context.Service<
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
-  const open = Effect.fn("ScriptRuns.open")(function* (
-    opts: SpawnOptions,
-    stopping: () => Stopping,
-  ) {
+  const open = Effect.fn("ScriptRuns.open")(function* (opts: SpawnOptions) {
     const run = yield* Scope.fork(scope);
-    const close = Scope.close(run, Exit.void);
-    const handle = yield* pty(opts, stopping).pipe(
+    // Read by the release: the stopping the close was given, or the
+    // default when the layer closes the run.
+    let stopping = DEFAULT_STOPPING;
+    const handle = yield* pty(opts, () => stopping).pipe(
       Scope.provide(run),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Effect.onError(() => close),
+      Effect.onError(() => Scope.close(run, Exit.void)),
     );
+    const close = (given: Stopping) =>
+      Effect.suspend(() => {
+        stopping = given;
+        return Scope.close(run, Exit.void);
+      });
     return { pty: handle, close };
   });
   return ScriptRuns.of({ open });
@@ -269,17 +263,20 @@ const onRuns = <A, E>(
 
 // A run started from a synchronous caller: the spawn is synchronous, so
 // the run exists when this returns. Throws what the spawn threw.
-export function openRun(
-  opts: SpawnOptions,
-  stopping: () => Stopping,
-): { pty: PtyHandle; close: () => Promise<void> } {
+export function openRun(opts: SpawnOptions): {
+  pty: PtyHandle;
+  close: (stopping: Stopping) => Promise<void>;
+} {
   const opened = promiseAdapter.runSyncOr(
-    onRuns((runs) => runs.open(opts, stopping)).pipe(Effect.result),
+    onRuns((runs) => runs.open(opts)).pipe(Effect.result),
     () => {
       throw new Error("The app is still starting; try the script again.");
     },
   );
   if (Result.isFailure(opened)) throw opened.failure;
   const { pty: handle, close } = opened.success;
-  return { pty: handle, close: () => promiseAdapter.run(close) };
+  return {
+    pty: handle,
+    close: (stopping) => promiseAdapter.run(close(stopping)),
+  };
 }

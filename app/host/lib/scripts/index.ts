@@ -29,7 +29,7 @@ import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
 import * as Processes from "../util/processes";
 import { signalPidTree, signalTreeBestEffort } from "./process";
-import { openRun, type PtyHandle, type Stopping } from "./pty";
+import { openRun, type PtyHandle, UNKILLABLE_WAIT_MS } from "./pty";
 import { log } from "@shared/log";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
@@ -43,10 +43,6 @@ export type NotifyScriptEvent = ((payload: ScriptEvent) => void) & {
 };
 
 const DEFAULT_GRACE_MS = 3_000;
-// How long to wait for a child that survived SIGKILL (kernel-stuck I/O)
-// before giving up. Callers (worktree delete, app quit) must not hang
-// forever behind it. The PTY runs' own chain waits as long (./pty.ts).
-const UNKILLABLE_WAIT_MS = 5_000;
 // PTY size a script starts with. The console resizes it to the real
 // viewport as soon as it is on screen, but scripts launched from a
 // worktree row (or by a lifecycle) may run a while before (or without)
@@ -183,7 +179,8 @@ interface Killable {
   cancelling: boolean;
   done: Promise<void>;
   stream: RunStream;
-  // SIGTERM, then SIGKILL past the grace, until the tree is gone.
+  // SIGTERM, then SIGKILL past the grace, then a bounded wait for the
+  // tree to go.
   stop: (graceMs: number) => Promise<void>;
   // Sends whatever output is pooled for the next frame (see
   // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
@@ -193,9 +190,9 @@ interface Killable {
 
 interface RunRecord extends Killable {
   pty: PtyHandle;
-  // How the run's scope closing kills it (./pty.ts): the quit shortens
-  // the grace, a hurried quit stops waiting.
-  stopping: Stopping;
+  // Closes the run's scope (./pty.ts): the kill chain, a hurried quit's
+  // SIGTERM and no wait, or nothing for a run already over.
+  close: (stopping: { graceMs: number; wait: boolean }) => Promise<void>;
   projectId: string;
   worktreeId: string;
   slot: ScriptRunSlot;
@@ -670,17 +667,13 @@ export function startScript(args: RunArgs): string {
 
   // Throws when no process could be started. The caller's IPC rejection
   // carries the message into the console.
-  const stopping: Stopping = { graceMs: DEFAULT_GRACE_MS, wait: true };
-  const { pty, close } = openRun(
-    {
-      command: args.command,
-      cwd: args.worktree.path,
-      env,
-      cols: DEFAULT_COLS,
-      rows: DEFAULT_ROWS,
-    },
-    () => stopping,
-  );
+  const { pty, close } = openRun({
+    command: args.command,
+    cwd: args.worktree.path,
+    env,
+    cols: DEFAULT_COLS,
+    rows: DEFAULT_ROWS,
+  });
 
   // The PTY is one ordered byte stream (stdout and stderr share the
   // terminal), so the renderer's xterm sees exactly what a real
@@ -721,11 +714,8 @@ export function startScript(args: RunArgs): string {
     cancelling: false,
     done,
     stream,
-    stopping,
-    stop: (graceMs) => {
-      stopping.graceMs = graceMs;
-      return close();
-    },
+    close,
+    stop: (graceMs) => close({ graceMs, wait: true }),
     flushOutput,
   };
   runningScripts.set(runId, record);
@@ -743,13 +733,8 @@ export function startScript(args: RunArgs): string {
     stream.emit({ runId, kind: "error", data: errorMessageOf(error) });
   });
 
-  // node-pty reports exit only after the terminal stream has drained
-  // (or a short grace period when a backgrounded grandchild still holds
-  // the PTY open), so the run's last output never races the exit event
-  // that makes the renderer unbind the runId. That grace is also the
-  // only window in which a kill could target an already-reaped pid.
-  // It is a couple hundred milliseconds, and the target would have to
-  // be recycled as a group leader to be hit at all.
+  // The exit comes after the run's last output (./pty.ts), so the
+  // renderer never unbinds the runId ahead of it.
   pty.onExit(({ exitCode, signal }) => {
     // SIGTERM via our kill path commonly surfaces as exit 143 (128+15)
     // because the shell wrapping the user's command translated the
@@ -764,8 +749,9 @@ export function startScript(args: RunArgs): string {
     runningScripts.delete(runId);
     persistSnapshot();
     runningScriptsChanged();
-    // The run is over, and its scope with it.
-    void close();
+    // The run is over: its scope goes too, so the layer stops holding
+    // it. The release finds the child exited and signals nothing.
+    close({ graceMs: 0, wait: false }).catch(() => {});
   });
 
   return runId;
@@ -836,7 +822,7 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
     if (record.exited) continue;
-    record.stopping.wait = false;
     signalTreeBestEffort(record.pid, signal);
+    record.close({ graceMs: 0, wait: false }).catch(() => {});
   }
 }
