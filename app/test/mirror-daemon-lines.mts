@@ -1,8 +1,9 @@
 // Durable proof for how the mirror daemon's supervisor
 // (main/core/mirror/daemon.ts) reads the engine's NDJSON lines
-// (file-sync/engine.go, the daemon control protocol). The child is a
-// fake stream the proof writes the daemon's side of, so each line is
-// exactly the one under test, no engine built.
+// (file-sync/engine.go, the daemon control protocol) and restarts it.
+// The child is a fake the proof writes the daemon's side of and ends
+// when it likes, so each line is exactly the one under test, no engine
+// built, and the clock is a TestClock.
 //
 // Asserts:
 //   - a well-formed state line replaces the sessions, and a response
@@ -18,10 +19,13 @@
 //     fail a request,
 //   - a malformed response settles its request with an error rather
 //     than resolving with what it carried,
-//   - the engine's id-less refusal (an empty id) is logged, not dropped.
+//   - the engine's id-less refusal (an empty id) is logged, not dropped,
+//   - a child that exits is spawned again on the restart ladder, and
+//     one that ran past the stable window restarts from its bottom.
 //
 // Run: pnpm test mirror-daemon-lines.
 import assert from "node:assert/strict";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -30,6 +34,7 @@ import * as Queue from "effect/Queue";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as TestClock from "effect/testing/TestClock";
 import * as FileSync from "@host/fileSync/FileSync";
 import * as MirrorDaemon from "../main/core/mirror/daemon.ts";
 import { it } from "vitest";
@@ -92,34 +97,42 @@ async function harness() {
   const requests: Record<string, unknown>[] = [];
   const logs: string[] = [];
   const out = Effect.runSync(Queue.unbounded<Uint8Array>());
+  // One per spawn: the child's exit, which the proof decides.
+  const exits: Deferred.Deferred<number>[] = [];
   const fakeFileSync = Layer.succeed(
     FileSync.FileSync,
     FileSync.FileSync.of({
       spawn: (_args, { stdin }) =>
-        stdin.pipe(
-          Stream.decodeText(),
-          Stream.splitLines,
-          Stream.runForEach((line) =>
-            Effect.sync(() => requests.push(JSON.parse(line))),
-          ),
-          Effect.ignore,
-          Effect.forkScoped,
-          Effect.as(
-            ChildProcessSpawner.makeHandle({
-              pid: ChildProcessSpawner.ProcessId(2),
-              exitCode: Effect.never,
-              isRunning: Effect.succeed(true),
-              kill: () => Effect.void,
-              stdin: Sink.drain,
-              stdout: Stream.fromQueue(out),
-              stderr: Stream.empty,
-              all: Stream.empty,
-              getInputFd: () => Sink.drain,
-              getOutputFd: () => Stream.empty,
-              unref: Effect.succeed(Effect.void),
-            }),
-          ),
-        ),
+        Effect.gen(function* () {
+          yield* stdin.pipe(
+            Stream.decodeText(),
+            Stream.splitLines,
+            Stream.runForEach((line) =>
+              Effect.sync(() => requests.push(JSON.parse(line))),
+            ),
+            Effect.ignore,
+            Effect.forkScoped,
+          );
+          const exit = yield* Deferred.make<number>();
+          exits.push(exit);
+          return ChildProcessSpawner.makeHandle({
+            pid: ChildProcessSpawner.ProcessId(2),
+            exitCode: Deferred.await(exit).pipe(
+              Effect.map(ChildProcessSpawner.ExitCode),
+            ),
+            isRunning: Effect.succeed(true),
+            kill: () => Effect.void,
+            stdin: Sink.drain,
+            stdout: Stream.fromQueue(out).pipe(
+              Stream.interruptWhen(Deferred.await(exit)),
+            ),
+            stderr: Stream.empty,
+            all: Stream.empty,
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void),
+          });
+        }),
       serve: () => Effect.die("no serve children here"),
     }),
   );
@@ -134,6 +147,7 @@ async function harness() {
     }).pipe(
       Layer.provide(fakeFileSync),
       Layer.provide(Logger.layer([captured])),
+      Layer.provideMerge(TestClock.layer()),
     ),
   );
   trackTest(() => runtime.dispose());
@@ -152,7 +166,18 @@ async function harness() {
     );
     await settle();
   };
-  return { daemon, send, requests, logs };
+  // Moves the daemon's clock on, then lets it act on the time.
+  const adjust = async (ms: number) => {
+    await runtime.runPromise(TestClock.adjust(ms));
+    await settle();
+  };
+  const exit = async (index: number) => {
+    const deferred = exits[index];
+    assert.ok(deferred !== undefined, `no child ${index} was spawned`);
+    Effect.runSync(Deferred.succeed(deferred, 1));
+    await settle();
+  };
+  return { daemon, send, requests, logs, exits, adjust, exit };
 }
 
 it("a well-formed state line is the sessions", async () => {
@@ -260,4 +285,26 @@ it("an id-less refusal is logged", async () => {
   await send({ id: "", ok: false, error: "malformed request: x" });
   assert.equal(logs.length, 1, "the refusal went unreported");
   assert.match(logs[0] ?? "", /malformed request: x/);
+});
+
+it("a daemon that exits is restarted on the ladder, from its bottom after a long run", async () => {
+  const { daemon, send, exits, adjust, exit } = await harness();
+  await send({ event: "ready" });
+  assert.equal(daemon.status(), "running");
+  await exit(0);
+  assert.equal(daemon.status(), "starting");
+  await adjust(999);
+  assert.equal(exits.length, 1, "restarted before the first rung");
+  await adjust(1);
+  assert.equal(exits.length, 2, "not restarted on the first rung");
+  await exit(1);
+  await adjust(1_999);
+  assert.equal(exits.length, 2, "restarted before the second rung");
+  await adjust(1);
+  assert.equal(exits.length, 3, "not restarted on the second rung");
+  // Up past the stable window: the streak is over.
+  await adjust(30_000);
+  await exit(2);
+  await adjust(1_000);
+  assert.equal(exits.length, 4, "a long run did not reset the ladder");
 });
