@@ -24,6 +24,8 @@ const showDeviceBadges = (config: ClientConfig) =>
   config.showDeviceBadges !== false;
 const allowAgentWorking = (config: ClientConfig) =>
   config.allowAgentWorking === true;
+const inlineWorktrees = (config: ClientConfig) =>
+  config.inlineWorktrees === true;
 
 // Terrier's paw on the projects it lists. Off unless switched on, and
 // then shown only where terrierMarksHere holds too.
@@ -59,4 +61,10 @@ export function useShowDeviceBadges(): boolean {
 // switched on.
 export function useAllowAgentWorking(): boolean {
   return useClientFlag(allowAgentWorking);
+}
+
+// Whether the list of projects shows every project's worktrees under it
+// (buildSidebarRows' inline). Off unless switched on.
+export function useInlineWorktrees(): boolean {
+  return useClientFlag(inlineWorktrees);
 }

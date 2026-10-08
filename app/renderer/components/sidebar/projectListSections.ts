@@ -31,6 +31,7 @@ export function projectListSections({
 }: Omit<
   BuildSidebarRowsArgs,
   | "openKey"
+  | "inline"
   | "worktreeSort"
   | "openShelves"
   | "byPrefix"
@@ -41,8 +42,9 @@ export function projectListSections({
   const { rows } = buildSidebarRows({
     ...forest,
     openKey: null,
+    inline: null,
     // Only an open project's rows are sorted.
-    worktreeSort: "name",
+    worktreeSort: () => "name",
     openShelves: NO_SHELVES,
     // Only an open project's rows are grouped.
     byPrefix: null,
