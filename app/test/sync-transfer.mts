@@ -65,7 +65,8 @@ import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { WorktreeSchema } from "@shigomori/contracts/schemas";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { type PeerChannels, setPeerSyncApiImpl } from "@host/ipc/peerSync";
-import { sendWorktree, syncHandlers } from "@host/ipc/modules/sync";
+import { syncHandlers } from "@host/ipc/modules/sync";
+import { sendWorktree } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import {
