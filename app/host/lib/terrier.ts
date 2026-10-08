@@ -3,11 +3,14 @@
 // `terrier` toggle is on. The merge is the CLI's (cli/terrier.go, read
 // through `sm projects list`); what the app keeps is the readiness
 // probe behind the Settings toggle: is terrier installed, and does
-// `terrier ls --json` still answer in the shape the CLI reads.
+// `terrier ls --json` still answer in the shape the CLI reads. And
+// `terrier add`, for the add-project dialog's offer to register a new
+// project there too.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
 import type { TerrierReadiness } from "@shared/schemas";
+import { errorMessageOf } from "@shared/errors";
 import { ttlValueCache } from "./util/ttlCache";
 
 const execFileP = promisify(execFile);
@@ -58,6 +61,20 @@ const readinessCache = ttlValueCache<TerrierReadiness>(
 
 export function terrierReadiness(): Promise<TerrierReadiness> {
   return readinessCache.get();
+}
+
+// Registers a repo in terrier. Already registered is a success there.
+// A refusal throws what terrier said, not execFile's command line.
+export async function terrierAdd(path: string): Promise<void> {
+  try {
+    await execTerrier(["add", "--", path]);
+  } catch (error) {
+    const stderr = (error as { stderr?: string }).stderr?.trim();
+    const reason = stderr
+      ? stderr.replace(/^Error: /, "")
+      : errorMessageOf(error);
+    throw new Error(`terrier add failed: ${reason}`, { cause: error });
+  }
 }
 
 // For the global-config write flipping the toggle: the next read
