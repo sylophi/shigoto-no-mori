@@ -29,10 +29,18 @@
 // child, the echo window after an app-run mutating git command) and
 // those are skipped exactly like the state watcher skips the app's
 // own root writes: their callers already invalidate their targets.
-import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FiberMap from "effect/FiberMap";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
+import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import type { Project } from "@shigomori/contracts/schemas";
 import { loadProjects } from "@host/lib/projects";
+import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 
 const DEBOUNCE_MS = 300;
 
@@ -84,12 +92,6 @@ export function gitDirOf(projectPath: string): string | null {
   }
 }
 
-type Watched = {
-  gitDir: string;
-  watcher: FSWatcher;
-  timer: NodeJS.Timeout | null;
-};
-
 export type GitWatcherDeps = {
   onChange: (projectId: string) => void;
   // Whether events from the named git directory should be dropped
@@ -102,84 +104,88 @@ export type GitWatcherDeps = {
   projects?: () => Project[];
 };
 
-const watched = new Map<string, Watched>();
-let deps: GitWatcherDeps | null = null;
-
-function closeWatched(projectId: string, entry: Watched): void {
-  if (entry.timer !== null) clearTimeout(entry.timer);
-  entry.watcher.close();
-  if (watched.get(projectId) === entry) watched.delete(projectId);
-}
-
-function openWatched(projectId: string, gitDir: string): void {
-  let watcher: FSWatcher;
-  try {
-    watcher = watch(gitDir, { recursive: true, persistent: false });
-  } catch {
-    // Not watchable right now (vanished between the stat and the
-    // watch, or a platform without recursive watches). The next
-    // reconcile tries again.
-    return;
+export class GitWatcher extends Context.Service<
+  GitWatcher,
+  {
+    // Bring the watched set in line with the registry: one watch per
+    // project whose git directory resolves, dropped when the project
+    // leaves the registry or its git directory moves. Runs at boot, on
+    // every managed-root change (a CLI or an external write) and after
+    // every settled host mutation (an app-side add or remove runs as a
+    // CLI child whose write the state watcher drops as the app's own),
+    // which together cover every way a project is added, removed or
+    // relocated.
+    readonly reconcile: Effect.Effect<void>;
   }
-  const entry: Watched = { gitDir, watcher, timer: null };
-  watcher.on("change", (_eventType, file) => {
-    if (deps === null || typeof file !== "string" || !isRelevantGitPath(file))
-      return;
-    // Checked at event time, not timer time, mirroring the state
-    // watcher: a CLI child finishing right after an external commit
-    // must not swallow the refresh that commit deserves.
-    if (deps.suppressed(gitDir)) return;
-    if (entry.timer !== null) clearTimeout(entry.timer);
-    entry.timer = setTimeout(() => {
-      entry.timer = null;
-      deps?.onChange(projectId);
-    }, DEBOUNCE_MS);
-  });
-  watcher.on("error", () => {
-    // The repository went away (deleted, unmounted). Drop the watch.
-    // A later reconcile re-adds it if it comes back.
-    closeWatched(projectId, entry);
-  });
-  watched.set(projectId, entry);
-}
+>()("sm/main/GitWatcher") {}
 
-// Bring the watched set in line with the registry: one watch per
-// project whose git directory resolves, dropped when the project
-// leaves the registry or its git directory moves. Runs at boot, on
-// every managed-root change (a CLI or an external write) and after
-// every settled host mutation (an app-side add or remove runs as a CLI
-// child whose write the state watcher drops as the app's own), which
-// together cover every way a project is added, removed or relocated.
+const make = (deps: GitWatcherDeps) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    // Each watched project's git directory and the fiber watching it.
+    const watches = yield* FiberMap.make<string>();
+    const gitDirs = new Map<string, string>();
+
+    // One project's pings: its git directory's relevant changes,
+    // debounced. Suppression is checked at event time, not when the
+    // debounce fires, mirroring the state watcher: a CLI child finishing
+    // right after an external commit must not swallow the refresh that
+    // commit deserves.
+    const watch = (projectId: string, gitDir: string) =>
+      fs.watch(gitDir, { recursive: true }).pipe(
+        Stream.filter(
+          (event) => isRelevantGitPath(event.path) && !deps.suppressed(gitDir),
+        ),
+        Stream.debounce(DEBOUNCE_MS),
+        Stream.runForEach(() => Effect.sync(() => deps.onChange(projectId))),
+        // The repository went away (deleted, unmounted), or is not
+        // watchable right now: the watch drops, and a later reconcile
+        // re-adds it if it comes back.
+        Effect.ignore,
+        Effect.ensuring(Effect.sync(() => gitDirs.delete(projectId))),
+      );
+
+    const reconcile = Effect.gen(function* () {
+      const projects = yield* Effect.try(() =>
+        (deps.projects ?? loadProjects)(),
+      ).pipe(Effect.option);
+      // The registry is unreadable right now, so keep what is watched.
+      if (Option.isNone(projects)) return;
+      const wanted = new Map<string, string>();
+      for (const project of projects.value) {
+        const gitDir = gitDirOf(project.path);
+        if (gitDir !== null) wanted.set(project.id, gitDir);
+      }
+      for (const [projectId, gitDir] of gitDirs) {
+        if (wanted.get(projectId) !== gitDir) {
+          gitDirs.delete(projectId);
+          yield* FiberMap.remove(watches, projectId);
+        }
+      }
+      for (const [projectId, gitDir] of wanted) {
+        if (gitDirs.has(projectId)) continue;
+        gitDirs.set(projectId, gitDir);
+        yield* FiberMap.run(watches, projectId, watch(projectId, gitDir));
+      }
+    }).pipe(Effect.withSpan("GitWatcher.reconcile"));
+
+    yield* reconcile;
+    return GitWatcher.of({ reconcile });
+  });
+
+export const layer = (deps: GitWatcherDeps) =>
+  Layer.effect(GitWatcher, make(deps));
+
+// For the callers that are not Effect yet.
+const promiseAdapter = PromiseAdapter.make<GitWatcher>("The git watcher");
+export const adapter = promiseAdapter.layer;
+
 export function reconcileGitWatchers(): void {
-  if (deps === null) return;
-  let projects: readonly Project[];
-  try {
-    projects = (deps.projects ?? loadProjects)();
-  } catch {
-    // The registry is unreadable right now, so keep what is watched.
-    return;
-  }
-  const wanted = new Map<string, string>();
-  for (const project of projects) {
-    const gitDir = gitDirOf(project.path);
-    if (gitDir !== null) wanted.set(project.id, gitDir);
-  }
-  for (const [projectId, entry] of watched) {
-    if (wanted.get(projectId) !== entry.gitDir) closeWatched(projectId, entry);
-  }
-  for (const [projectId, gitDir] of wanted) {
-    if (!watched.has(projectId)) openWatched(projectId, gitDir);
-  }
-}
-
-export function startGitWatcher(next: GitWatcherDeps): void {
-  deps = next;
-  reconcileGitWatchers();
-}
-
-// Close every watch and forget the deps, at quit (main/hostLayer.ts)
-// and in the check's teardown.
-export function stopGitWatcher(): void {
-  for (const [projectId, entry] of watched) closeWatched(projectId, entry);
-  deps = null;
+  void promiseAdapter
+    .run(
+      Effect.gen(function* () {
+        yield* (yield* GitWatcher).reconcile;
+      }),
+    )
+    .catch(() => {});
 }

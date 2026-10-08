@@ -21,15 +21,11 @@ import {
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
 import * as Processes from "@host/lib/util/processes";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
-import {
-  gitDirOf,
-  reconcileGitWatchers,
-  startGitWatcher,
-  stopGitWatcher,
-} from "./core/gitWatcher";
+import * as GitWatcher from "./core/gitWatcher";
+import { gitDirOf, reconcileGitWatchers } from "./core/gitWatcher";
 import { cliChildCount, killAllCli } from "./electron/cliRunner";
 import { startBackgroundFetch } from "./electron/fetch";
-import { startStateWatcher, stopStateWatcher } from "./electron/stateWatcher";
+import * as StateWatcher from "./electron/stateWatcher";
 import * as MirrorDaemon from "./core/mirror/daemon";
 import * as FileSyncRunner from "./electron/fileSyncRunner";
 import {
@@ -130,18 +126,15 @@ function onExternalStateChange(worktreeDataProjects: ReadonlySet<string>) {
     });
 }
 
-const stateWatcher = lifetime(
-  "the state watcher",
-  Effect.sync(() => startStateWatcher(onExternalStateChange)),
-  stopStateWatcher,
+const stateWatcher = StateWatcher.adapter.pipe(
+  Layer.provideMerge(StateWatcher.layer(onExternalStateChange)),
 );
 
 // Git state inside every project (commits, checkouts, refs written by
 // any tool), as a project-scoped ping on every wire.
-const gitWatcher = lifetime(
-  "the git watcher",
-  Effect.sync(() => {
-    startGitWatcher({
+const gitWatcher = GitWatcher.adapter.pipe(
+  Layer.provideMerge(
+    GitWatcher.layer({
       onChange: announceProjectChanged,
       // The app's own git commands move refs the same way an agent's
       // do, and their callers already invalidate their targets, so a
@@ -151,12 +144,13 @@ const gitWatcher = lifetime(
       suppressed: (gitDir) =>
         cliChildCount() > 0 ||
         gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
-    });
-    // An app-side project add or remove runs as a CLI child whose
-    // registry write the state watcher drops as the app's own.
-    onHostMutationSettled(reconcileGitWatchers);
-  }),
-  stopGitWatcher,
+    }),
+  ),
+  // An app-side project add or remove runs as a CLI child whose
+  // registry write the state watcher drops as the app's own.
+  Layer.tap(() =>
+    Effect.sync(() => onHostMutationSettled(reconcileGitWatchers)),
+  ),
 );
 
 // The hub socket and the direct listener, which follows the same
