@@ -820,6 +820,65 @@ describe("dirty", () => {
   });
 });
 
+describe("bundle", () => {
+  it("bundles refs less what the far side has, and unpacks them under refs/shigomori/", async () => {
+    const alpha = box.repo("alpha", { "a.txt": "a\n" });
+    const first = box.git(alpha, "rev-parse", "HEAD").trim();
+    box.git(alpha, "commit", "-q", "--allow-empty", "-m", "second");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    const out = `${box.home}/fox.bundle`;
+    const create = ["bundle", "create", "-p", "alpha", "--out", out];
+    await change("--json", ...create, "--ref", "refs/heads/main");
+    await change(
+      ...create,
+      "--ref",
+      "refs/heads/main",
+      "--have",
+      first,
+      "--have",
+      "abcd1234",
+    );
+    await change(...create, "--ref", "refs/heads/../x");
+    await change("--json", ...create, "--ref", "refs/heads/nope");
+    await change(...create, "--ref", "refs/heads/main", "--have", "xyz");
+    await change(...create);
+    box.git(alpha, "bundle", "create", "-q", out, "refs/heads/main");
+    const unpack = ["bundle", "unpack", "--repo", alpha, "--in", out];
+    await change(
+      "--json",
+      ...unpack,
+      "--refspec",
+      "refs/heads/main:refs/shigomori/incoming/main",
+    );
+    await change(...unpack, "--refspec", "refs/heads/main:refs/heads/main");
+    writeFileSync(`${box.home}/not.bundle`, "nope");
+    await change(
+      "--json",
+      "bundle",
+      "unpack",
+      "-p",
+      "alpha",
+      "--in",
+      `${box.home}/not.bundle`,
+      "--refspec",
+      "refs/heads/main:refs/shigomori/x",
+    );
+    await change(
+      "bundle",
+      "create",
+      "--repo",
+      alpha,
+      "--out",
+      out,
+      "--ref",
+      "refs/heads/main",
+    );
+    await change("bundle", "pack");
+  });
+});
+
 describe("doctor", () => {
   // Each side's data dir, which the checklist names, as one.
   const sideNeutral = (seen: unknown): unknown =>
