@@ -64,7 +64,7 @@ import {
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { WorktreeSchema } from "@shigomori/contracts/schemas";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
-import { type PeerChannels, setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import { type PeerChannels, setPeerReach } from "@host/ipc/peerSync";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
@@ -647,33 +647,41 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
   // ---- The pull orchestration, end to end. The handler runs HERE
   // as device B (the registered surface above is A's), with its two
   // real seams injected: the CLI runner (already set) and the peer
-  // sync api, which is the SAME direct-wire client and channels the
-  // transfer tests drove. Everything in between -- the tip, the
+  // reach, which is the SAME direct wire and channels the transfer
+  // tests drove. Everything in between -- the tip, the
   // capture, the bundle, `sm create`, the capture re-key, `sm dirty
   // apply` -- is production code against real git.
-  setPeerSyncApiImpl({
-    syncApiFor: (deviceId) => {
-      assert.equal(deviceId, "A", "the move dialed an unexpected device");
-      return peerSync;
-    },
-    // The transplant teardown's reach, over the same direct wire.
-    worktreesApiFor: (deviceId) => {
-      assert.equal(deviceId, "A", "the teardown dialed an unexpected device");
-      return worktreesOverWire;
-    },
-    // No mirror is asked for here (that is control.mts's).
-    mirrorApiFor: () => {
-      throw new Error("this proof asks for no mirror");
-    },
-    // The title's carry. Both devices share the data dir, so A's
-    // handlers answer in-process.
-    worktreeDataApiFor: (deviceId) => {
-      assert.equal(deviceId, "A", "the carry dialed an unexpected device");
+  setPeerReach({
+    transportFor: (deviceId) => {
+      assert.equal(deviceId, "A", "a peer call dialed an unexpected device");
       return {
-        read: async (input) => worktreeDataHandlers.read(input, handlerCtx()),
-        describe: async (input) =>
-          worktreeDataHandlers.describe(input, handlerCtx()),
+        ...peerA.transport,
+        invoke: async (channel, input) => {
+          // No mirror is asked for here (that is control.mts's).
+          if (channel.startsWith("mirror:")) {
+            throw new Error("this proof asks for no mirror");
+          }
+          // The title's carry. Both devices share the data dir, so A's
+          // handlers answer in-process.
+          if (channel === "worktreeData:read") {
+            return worktreeDataHandlers.read(
+              input as Parameters<typeof worktreeDataHandlers.read>[0],
+              handlerCtx(),
+            );
+          }
+          if (channel === "worktreeData:describe") {
+            return worktreeDataHandlers.describe(
+              input as Parameters<typeof worktreeDataHandlers.describe>[0],
+              handlerCtx(),
+            );
+          }
+          return peerA.transport.invoke(channel, input);
+        },
       };
+    },
+    channelsFor: (deviceId) => {
+      assert.equal(deviceId, "A", "the move dialed an unexpected device");
+      return observed.channels;
     },
     thisDeviceId: () => "B",
   });

@@ -54,6 +54,7 @@ import {
   thisDeviceId,
 } from "@host/ipc/peerSync";
 import { onAbort } from "@host/lib/util/abort";
+import { within } from "@host/lib/util/within";
 import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { inviteMirror, listMirrorInvites } from "./invites";
@@ -419,10 +420,7 @@ function copyIsGone(
     (copy) => copy === undefined,
     () => false,
   );
-  const stalled = new Promise<boolean>((resolve) => {
-    setTimeout(resolve, COPY_PROBE_MS, false).unref?.();
-  });
-  return Promise.race([listed, stalled]);
+  return within(listed, COPY_PROBE_MS, () => false);
 }
 
 // A copy the peer no longer lists (deleted while this device missed

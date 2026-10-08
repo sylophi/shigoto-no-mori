@@ -1,17 +1,20 @@
-// The move orchestrations' reach into a peer device's sync surface,
-// injected at boot following the setCliRunnerImpl precedent: the
-// remote plumbing lives in main/, so this seam owns the api shape and
-// the sync handlers stay free of Electron imports. The injected
-// factory must route through the bridge's SHARED direct-session cache
-// (makeHubHandlers), never a fresh dial: the host keeps exactly one
-// authed socket per deviceId, and a second dial silently supersedes
+// The one seam every reach into a peer device goes through: a client
+// for any contract on the peer's direct session, the byte channels of
+// that session, and this device's own id. main injects it at boot
+// (main/ipc/handlers.ts), since the remote plumbing lives there, and
+// its transport must route through the bridge's SHARED direct-session
+// cache (makeHubHandlers), never a fresh dial: the host keeps exactly
+// one authed socket per deviceId, and a second dial silently supersedes
 // the session every remote-forest query is riding on.
-import type { mirrorContract } from "@shigomori/contracts/modules/mirror";
-import type { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import type { ChannelMux } from "@shared/ipc/socket/channels";
-import type { syncContract } from "@shigomori/contracts/modules/sync";
-import type { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import { syncContract } from "@shigomori/contracts/modules/sync";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import { buildClient } from "@shared/ipc/buildClient";
+import type { ClientTransport } from "@shared/ipc/transport";
 import { implSlot } from "@host/lib/util/implSlot";
+import type { ContractModule } from "@shigomori/contracts/contract";
 import type { Client } from "@shigomori/contracts/types";
 import { type Worktree } from "@shigomori/contracts/schemas";
 
@@ -59,39 +62,49 @@ export type PeerWorktreeDataApi = Pick<
   "read" | "describe"
 >;
 
-type PeerSyncImpl = {
-  syncApiFor: (deviceId: string) => PeerSyncApi;
-  worktreesApiFor: (deviceId: string) => PeerWorktreesApi;
-  mirrorApiFor: (deviceId: string) => PeerMirrorApi;
-  worktreeDataApiFor: (deviceId: string) => PeerWorktreeDataApi;
+type PeerReach = {
+  transportFor: (deviceId: string) => ClientTransport;
+  channelsFor: (deviceId: string) => PeerChannels;
   // This device's own id, the target a mirror asked for from here
   // names to the peer.
   thisDeviceId: () => string;
 };
 
-const { set: setPeerSyncApiImpl, get: requireImpl } = implSlot<PeerSyncImpl>(
-  "peer api requested before setPeerSyncApiImpl ran",
+const { set: setPeerReach, get: requireReach } = implSlot<PeerReach>(
+  "peer reach requested before setPeerReach ran",
 );
-export { setPeerSyncApiImpl };
+export { setPeerReach };
+
+// A peer's surface for one contract, on the cached direct session:
+// built per call, never held.
+export function peerClient<M extends ContractModule>(
+  contract: M,
+  deviceId: string,
+): Client<M> {
+  return buildClient(contract, requireReach().transportFor(deviceId));
+}
 
 export function peerSyncApiFor(deviceId: string): PeerSyncApi {
-  return requireImpl().syncApiFor(deviceId);
+  return {
+    ...peerClient(syncContract, deviceId),
+    channels: requireReach().channelsFor(deviceId),
+  };
 }
 
 export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
-  return requireImpl().worktreesApiFor(deviceId);
+  return peerClient(worktreesContract, deviceId);
 }
 
 export function peerMirrorApiFor(deviceId: string): PeerMirrorApi {
-  return requireImpl().mirrorApiFor(deviceId);
+  return peerClient(mirrorContract, deviceId);
 }
 
 export function peerWorktreeDataApiFor(deviceId: string): PeerWorktreeDataApi {
-  return requireImpl().worktreeDataApiFor(deviceId);
+  return peerClient(worktreeDataContract, deviceId);
 }
 
 export function thisDeviceId(): string {
-  return requireImpl().thisDeviceId();
+  return requireReach().thisDeviceId();
 }
 
 // One of a peer's worktrees, read off its own list (which the peer's
