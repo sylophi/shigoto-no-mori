@@ -8,8 +8,7 @@
 // process ever starts it.
 //
 // Every child runs in its own process group, in a scope under this
-// service's, so closing the layer (the quit) ends whatever is still
-// running and anything it spawned in turn.
+// service's.
 import * as NodeStream from "@effect/platform-node/NodeStream";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -89,6 +88,9 @@ const make = (binaryPath: () => string | null) =>
           env: options.env,
           extendEnv: true,
           stdin: options.stdin,
+          // The daemon halts its sessions on SIGTERM. One that hangs at
+          // it must not hold the quit.
+          forceKillAfter: "2 seconds",
         }),
       );
     });

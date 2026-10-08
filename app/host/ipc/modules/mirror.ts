@@ -696,7 +696,8 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     });
     const key = servingKey(ctx, channelId);
     const stopChild = () => {
-      void child.close();
+      // At quit the scope has closed already.
+      child.close().catch(() => {});
       child.stream.destroy();
     };
     try {

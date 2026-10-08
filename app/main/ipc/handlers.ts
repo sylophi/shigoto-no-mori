@@ -419,9 +419,7 @@ async function ensureMirrorGateway(): Promise<void> {
   }
 }
 
-// The mirror engine is the git follower over the daemon
-// (mirrorDaemonLayer) over the gateway the daemon dials through, each a
-// lifetime of its own in main/hostLayer.ts.
+// The mirror engine's pieces, for main/hostLayer.ts.
 export const startMirrorGateway = ensureMirrorGateway;
 export const stopMirrorGateway = () => mirrorGateway.stop();
 export const startGitFollower = () => gitFollower.start();

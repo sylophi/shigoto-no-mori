@@ -173,10 +173,9 @@ const remotePlanes = lifetime(
   },
 );
 
-// The mirror engine: the git follower, over the daemon, over the
-// gateway the daemon dials peers through, so the quit stops them in
-// that order. The daemon resumes persisted sessions the moment it is
-// up, so it starts with the app. After app ready: the sessions it
+// The mirror engine: the git follower, the daemon, and the gateway the
+// daemon dials peers through. The daemon resumes persisted sessions the
+// moment it is up, so it starts with the app. After app ready: the sessions it
 // resumes are swept for a device on no account, which reads the
 // credential, and safeStorage cannot decrypt it before ready.
 const mirrorFollower = lifetime(

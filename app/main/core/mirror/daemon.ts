@@ -165,13 +165,26 @@ const make = (options: Options) =>
     const sessions = yield* Ref.make<readonly MirrorSessionRaw[]>([]);
     // The running child's stdin, for the requests.
     const stdin = yield* Ref.make(Option.none<Queue.Queue<Uint8Array>>());
+    // The requests waiting on a response, by id. One fiber at a time
+    // touches it, as everything here runs on the main thread.
     const pending = new Map<
       string,
-      Deferred.Deferred<DaemonResponse, MirrorDaemonError>
+      {
+        readonly op: string;
+        readonly response: Deferred.Deferred<DaemonResponse, MirrorDaemonError>;
+      }
     >();
     let nextRequestId = 1;
 
-    const changed = Effect.sync(() => options.onChange?.());
+    // The owner's listener runs the app's bookkeeping. One that throws
+    // is logged, never taken for the daemon failing.
+    const changed = Effect.try(() => options.onChange?.()).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `[mirror] a daemon change listener failed: ${errorMessageOf(error)}`,
+        ),
+      ),
+    );
 
     const setStatus = (next: MirrorDaemonStatus) =>
       Ref.getAndSet(status, next).pipe(
@@ -183,12 +196,9 @@ const make = (options: Options) =>
     const failAllPending = (reason: "exited" | "stopped") =>
       Effect.forEach(
         [...pending],
-        ([id, deferred]) => {
+        ([id, { op, response }]) => {
           pending.delete(id);
-          return Deferred.fail(
-            deferred,
-            new MirrorDaemonError({ op: id, reason }),
-          );
+          return Deferred.fail(response, new MirrorDaemonError({ op, reason }));
         },
         { discard: true },
       );
@@ -230,10 +240,10 @@ const make = (options: Options) =>
           `[mirror] daemon refused a request: ${response.error ?? "unknown"}`,
         );
       }
-      const deferred = pending.get(response.id);
-      return deferred === undefined
+      const waiting = pending.get(response.id);
+      return waiting === undefined
         ? Effect.void
-        : Deferred.succeed(deferred, response);
+        : Deferred.succeed(waiting.response, response);
     };
 
     const handleLine = (line: string) =>
@@ -264,17 +274,20 @@ const make = (options: Options) =>
         if (Result.isFailure(parsed)) {
           const reason = parsed.failure.message.replaceAll("\n", " ");
           // A request the line names is answered now, not at the timeout.
-          const deferred =
+          const waiting =
             "id" in doc && typeof doc.id === "string"
               ? pending.get(doc.id)
               : undefined;
           return rejectLine(kind, line, reason).pipe(
             Effect.andThen(
-              deferred === undefined
+              waiting === undefined
                 ? Effect.void
                 : Deferred.fail(
-                    deferred,
-                    new MirrorDaemonError({ op: kind, reason: "malformed" }),
+                    waiting.response,
+                    new MirrorDaemonError({
+                      op: waiting.op,
+                      reason: "malformed",
+                    }),
                   ),
             ),
           );
@@ -302,21 +315,22 @@ const make = (options: Options) =>
         return;
       }
       const input = yield* Queue.unbounded<Uint8Array>();
-      const spawned = yield* fileSync
-        .spawn(
-          [
-            "daemon",
-            "--gateway",
-            gateway.value,
-            "--data-dir",
-            options.dataDir(),
-          ],
-          {
-            env: { [MIRROR_GATEWAY_TOKEN_ENV]: options.gatewayToken() },
+      const spawned = yield* Effect.try(() => ({
+        args: [
+          "daemon",
+          "--gateway",
+          gateway.value,
+          "--data-dir",
+          options.dataDir(),
+        ],
+        token: options.gatewayToken(),
+      })).pipe(
+        Effect.flatMap(({ args, token }) =>
+          fileSync.spawn(args, {
+            env: { [MIRROR_GATEWAY_TOKEN_ENV]: token },
             stdin: Stream.fromQueue(input),
-          },
-        )
-        .pipe(
+          }),
+        ),
           Effect.tapError((error) =>
             FileSync.isFileSyncUnavailable(error)
               ? Effect.void
@@ -363,6 +377,11 @@ const make = (options: Options) =>
       yield* changed;
     }).pipe(
       Effect.scoped,
+      // Anything this run did not expect ends it like an exit, onto the
+      // restart ladder, never the supervisor with it.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("[mirror] daemon run failed, restarting", cause),
+      ),
       Effect.timed,
       Effect.map(([duration]) => Duration.toMillis(duration)),
     );
@@ -382,21 +401,24 @@ const make = (options: Options) =>
 
     const request = (op: string, fields: Record<string, unknown>) =>
       Effect.gen(function* () {
+        // Booked before the daemon is looked at, so an exit from here on
+        // fails it with the rest.
+        const id = String(nextRequestId++);
+        const deferred = yield* Deferred.make<
+          DaemonResponse,
+          MirrorDaemonError
+        >();
+        pending.set(id, { op, response: deferred });
         const current = yield* Ref.get(status);
         const input = yield* Ref.get(stdin);
         if (Option.isNone(input) || current !== "running") {
+          pending.delete(id);
           return yield* new MirrorDaemonError({
             op,
             reason: "not-running",
             detail: mirrorEngineBlocker(current),
           });
         }
-        const id = String(nextRequestId++);
-        const deferred = yield* Deferred.make<
-          DaemonResponse,
-          MirrorDaemonError
-        >();
-        pending.set(id, deferred);
         yield* Queue.offer(
           input.value,
           encoder.encode(JSON.stringify({ id, op, ...fields }) + "\n"),
