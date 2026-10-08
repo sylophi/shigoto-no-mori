@@ -462,7 +462,7 @@ describe("projects list with terrier", () => {
     const both = box.repo("both");
     const extra = box.repo("zeta");
     fakeTerrier("v0.1.4", [
-      extra,
+      `${extra}/`,
       both,
       "relative/path",
       `${box.home}/alpha-gone`,
@@ -496,7 +496,10 @@ describe("launchers", () => {
       projects: [{ id: "P", name: "repo", path: repo }],
     });
     box.write("config.json", {
-      launchers: [{ id: "a", label: "zsh here", command: "zsh" }],
+      launchers: [
+        { id: "a", label: "zsh here", command: "zsh" },
+        { label: "no id", command: "x" },
+      ],
       hiddenLaunchers: ["app:finder", "custom:gone"],
     });
     box.write("projects/P/project.json", {

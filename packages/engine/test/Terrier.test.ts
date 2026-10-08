@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
 import * as Registry from "../src/Registry.ts";
+import * as Terrier from "../src/Terrier.ts";
 import { terrierProjects } from "../src/Terrier.ts";
 import { terrierProjectId } from "../src/terrierId.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
@@ -66,4 +68,19 @@ it("registers a terrier repo under its terrier id, and hands its settings back o
     [{ id, name: "repo", path: repo, source: "terrier" }],
     "trunk",
   ]);
+});
+
+it("says terrier isn't on PATH only when there is none to run", async () => {
+  box.write("config.json", { terrier: true });
+  process.env.PATH = "/nonexistent";
+  const listing = (await box.engine(
+    Effect.flatMap(
+      Effect.service(Terrier.Terrier),
+      (terrier) => terrier.listing,
+    ),
+  )) as Terrier.TerrierListing;
+  assert.match(
+    Option.getOrThrow(listing.trouble).summary,
+    /`terrier` isn't on PATH/,
+  );
 });

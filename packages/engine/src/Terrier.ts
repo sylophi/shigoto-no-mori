@@ -2,12 +2,14 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Paths from "./Paths.ts";
+import { isNotFound } from "./platformErrors.ts";
 import { terrierProjectId } from "./terrierId.ts";
 
 // Terrier (github.com/dittofleet/terrier) is an external registry of
@@ -53,6 +55,18 @@ const LsSchema = Schema.Struct({
   projects: Schema.Array(Schema.Struct({ path: Schema.String })),
 });
 
+// The last element of a path, as Go's filepath.Base takes it.
+const baseName = (path: string) => {
+  const trimmed = path.replace(/\/+$/, "");
+  return trimmed === "" ? "/" : trimmed.slice(trimmed.lastIndexOf("/") + 1);
+};
+
+// terrier answered with a failure.
+class TerrierCommandFailed extends Schema.TaggedError<TerrierCommandFailed>()(
+  "TerrierCommandFailed",
+  { args: Schema.Array(Schema.String), code: Schema.Number },
+) {}
+
 // Code-unit order, as Go compares strings.
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -75,7 +89,7 @@ export function terrierProjects(
     known.add(path);
     extras.push({
       id: terrierProjectId(path),
-      name: path.slice(path.lastIndexOf("/") + 1),
+      name: baseName(path),
       path,
       source: "terrier",
     });
@@ -91,47 +105,62 @@ const make = Effect.gen(function* () {
   const { expandHome, binaryName } = yield* Paths.Paths;
 
   // terrier's stdout, failing on a spawn error, a nonzero exit or a
-  // wedge: the listing runs before every command.
+  // wedge: the listing runs before every command. stderr is drained so
+  // a chatty terrier can't stall on a full pipe.
   const output = (args: ReadonlyArray<string>) =>
     Effect.scoped(
       Effect.gen(function* () {
         const handle = yield* spawner.spawn(
           ChildProcess.make("terrier", [...args], { stdin: "ignore" }),
         );
-        const [stdout, code] = yield* Effect.all(
+        const [stdout, , code] = yield* Effect.all(
           [
             handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
+            Stream.runDrain(handle.stderr),
             handle.exitCode,
           ],
-          { concurrency: 2 },
+          { concurrency: 3 },
         );
-        if (code !== 0) return yield* Effect.fail(`exit ${code}`);
+        if (code !== 0) {
+          return yield* new TerrierCommandFailed({ args: [...args], code });
+        }
         return stdout;
       }),
     ).pipe(Effect.timeout("10 seconds"));
+
+  // The binary's version, once per process: none when terrier isn't on
+  // PATH, empty when it answers with nothing usable.
+  const version = yield* Effect.cached(
+    output(["version"]).pipe(
+      Effect.map((stdout) => Option.some(stdout.trim())),
+      Effect.catchIf(
+        (error) =>
+          Predicate.isTagged(error, "PlatformError") && isNotFound(error),
+        () => Effect.succeed(Option.none<string>()),
+      ),
+      Effect.orElseSucceed(() => Option.some("")),
+    ),
+  );
 
   const read = Effect.gen(function* () {
     const enabled = yield* config.get({ kind: "device" }, "terrier");
     if (enabled.value !== true) {
       return { paths: [], trouble: Option.none() };
     }
-    const version = yield* output(["version"]).pipe(
-      Effect.map((stdout) => Option.some(stdout.trim())),
-      Effect.orElseSucceed(() => Option.none<string>()),
-    );
-    if (Option.isNone(version)) {
+    const found = yield* version;
+    if (Option.isNone(found)) {
       return trouble(
         "enabled in config.json but `terrier` isn't on PATH, so no terrier projects are listed",
         "Install terrier, or turn the toggle off in the app's Settings.",
       );
     }
-    const [, major, minor] = /^v(\d+)\.(\d+)/.exec(version.value) ?? [];
+    const [, major, minor] = /^v(\d+)\.(\d+)/.exec(found.value) ?? [];
     if (
       Number(major) !== SUPPORTED_MAJOR ||
       Number(minor) !== SUPPORTED_MINOR
     ) {
       return trouble(
-        `${version.value || "(version unreadable)"} isn't a version this build understands (wants v${SUPPORTED_MAJOR}.${SUPPORTED_MINOR}), so no terrier projects are listed`,
+        `${found.value || "(version unreadable)"} isn't a version this build understands (wants v${SUPPORTED_MAJOR}.${SUPPORTED_MINOR}), so no terrier projects are listed`,
         `Update ${binaryName} and terrier to versions that agree.`,
       );
     }

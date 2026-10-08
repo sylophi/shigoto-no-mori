@@ -59,31 +59,55 @@ export class Launchers extends Context.Service<
   }
 >()("sm/engine/Launchers") {}
 
-// The GitHub page of a remote URL, none for another host.
+// Whether a remote URL is a GitHub repo, which gets the web entry.
 const GITHUB_REMOTE =
   /^(?:git@|ssh:\/\/git@|https:\/\/)([^:/]*github[^:/]*)[:/]([^/]+)\/(.+?)(?:\.git)?\/?$/;
 
-export const githubPageOf = (remoteUrl: string) => {
-  const match = GITHUB_REMOTE.exec(remoteUrl.trim());
-  return match === null
-    ? undefined
-    : `https://${match[1]}/${match[2]}/${match[3]}`;
-};
+export const isGithubRemote = (remoteUrl: string) =>
+  GITHUB_REMOTE.test(remoteUrl.trim());
 
-// The custom launchers a settings document stores. One that isn't an
-// object of strings is left out.
-const customOf = (value: unknown): ReadonlyArray<RowEntry> =>
-  Array.isArray(value)
-    ? value.flatMap((entry: unknown) => {
-        const { id, label } = (entry ?? {}) as {
-          id?: unknown;
-          label?: unknown;
-        };
-        return typeof id === "string" && typeof label === "string"
-          ? [{ kind: "custom" as const, id: `custom:${id}`, label }]
-          : [];
-      })
-    : [];
+// A JSON field Go reads into a string: absent, null or text.
+const text = (value: unknown) =>
+  value === undefined || value === null || typeof value === "string";
+
+// A settings document's custom launchers and hidden ids as the Go sm
+// decodes them: a missing field reads as empty, and a document holding
+// one of the wrong type reads as the defaults (none of either).
+const launchersOf = (
+  doc: Readonly<Record<string, unknown>> | null,
+): {
+  readonly custom: ReadonlyArray<RowEntry>;
+  readonly hidden: ReadonlyArray<string>;
+} => {
+  const none = { custom: [], hidden: [] };
+  const { launchers = null, hiddenLaunchers = null } = doc ?? {};
+  if (launchers !== null && !Array.isArray(launchers)) return none;
+  if (hiddenLaunchers !== null && !Array.isArray(hiddenLaunchers)) return none;
+  const entries = (launchers ?? []) as ReadonlyArray<unknown>;
+  const hidden = (hiddenLaunchers ?? []) as ReadonlyArray<unknown>;
+  const wellTyped =
+    entries.every(
+      (entry) =>
+        entry === null ||
+        (typeof entry === "object" &&
+          !Array.isArray(entry) &&
+          ["id", "label", "command"].every((field) =>
+            text((entry as Record<string, unknown>)[field]),
+          )),
+    ) && hidden.every((id) => typeof id === "string");
+  if (!wellTyped) return none;
+  return {
+    custom: entries.map((entry) => {
+      const { id, label } = (entry ?? {}) as { id?: string; label?: string };
+      return {
+        kind: "custom" as const,
+        id: `custom:${id ?? ""}`,
+        label: label ?? "",
+      };
+    }),
+    hidden: hidden as ReadonlyArray<string>,
+  };
+};
 
 const apps: ReadonlyArray<CatalogApp> = catalog;
 
@@ -166,7 +190,7 @@ const make = Effect.gen(function* () {
     readonly id: string;
     readonly path: string;
   }) {
-    const [device, stored, installed, page, stats] = yield* Effect.all(
+    const [device, stored, installed, onGithub, stats] = yield* Effect.all(
       [
         settings.read({ kind: "device" }),
         settings.read({
@@ -176,13 +200,14 @@ const make = Effect.gen(function* () {
         }),
         Effect.filter(apps, available, { concurrency: "unbounded" }),
         git.run(project.path, ["remote", "get-url", "origin"]).pipe(
-          Effect.map(githubPageOf),
-          Effect.orElseSucceed(() => undefined),
+          Effect.map(isGithubRemote),
+          Effect.orElseSucceed(() => false),
         ),
         usage.stats("launcher", ""),
       ],
       { concurrency: "unbounded" },
     );
+    const deviceLaunchers = launchersOf(device);
     // A project's own launchers count once it is configured.
     const configured =
       typeof stored?.defaultBranch === "string" &&
@@ -194,17 +219,13 @@ const make = Effect.gen(function* () {
         label: app.label,
         available: true as const,
       })),
-      ...(page === undefined
-        ? []
-        : [{ kind: "web" as const, id: WEB_GITHUB_ID, label: "GitHub" }]),
-      ...customOf(device?.launchers),
-      ...(configured ? customOf(stored?.launchers) : []),
+      ...(onGithub
+        ? [{ kind: "web" as const, id: WEB_GITHUB_ID, label: "GitHub" }]
+        : []),
+      ...deviceLaunchers.custom,
+      ...(configured ? launchersOf(stored).custom : []),
     ];
-    const hidden = new Set(
-      Array.isArray(device?.hiddenLaunchers)
-        ? device.hiddenLaunchers.filter((id) => typeof id === "string")
-        : [],
-    );
+    const hidden = new Set(deviceLaunchers.hidden);
     const statOf = (id: string) =>
       stats.get(id) ?? { lastUsed: 0, recentCount: 0 };
     const shown = all

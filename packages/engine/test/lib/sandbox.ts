@@ -43,6 +43,7 @@ export type Engine =
   | Layout.Layout
   | Registry.Registry
   | Scripts.Scripts
+  | Terrier.Terrier
   | Usage.Usage;
 
 const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
