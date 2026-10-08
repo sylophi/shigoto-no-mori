@@ -7,6 +7,7 @@ import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import * as Control from "./Control.ts";
 import * as Darwin from "./Darwin.ts";
+import * as Dirty from "./Dirty.ts";
 import * as Doctor from "./Doctor.ts";
 import type { Flavor } from "./flavor.ts";
 import * as Git from "./Git.ts";
@@ -69,7 +70,13 @@ const services = (options: EngineOptions) =>
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(Darwin.layer(options.macfs)),
     Layer.provideMerge(
-      Layer.mergeAll(Config.layer, Usage.layer, Identity.layer, Icons.layer),
+      Layer.mergeAll(
+        Config.layer,
+        Usage.layer,
+        Identity.layer,
+        Icons.layer,
+        Dirty.layer,
+      ),
     ),
     Layer.provideMerge(Git.layer),
     Layer.provideMerge(options.store),
@@ -94,7 +101,13 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
     ),
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(
-      Layer.mergeAll(Config.layer, Usage.layer, Identity.layer, Icons.layer),
+      Layer.mergeAll(
+        Config.layer,
+        Usage.layer,
+        Identity.layer,
+        Icons.layer,
+        Dirty.layer,
+      ),
     ),
     Layer.provideMerge(store),
   );

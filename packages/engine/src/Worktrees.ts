@@ -40,6 +40,7 @@ import type {
 } from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import { findExecutable } from "./executables.ts";
+import { dirtyRef } from "./Dirty.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
 import type { WorktreeEntry } from "./gitParse.ts";
@@ -986,7 +987,6 @@ const namesUsed = (found: ReadonlyArray<WorktreeIdentity>) =>
   new Set(found.map((worktree) => worktree.name.toLowerCase()));
 
 // A pending dirty-state capture of the worktree (`worktrees dirty`).
-const dirtyRef = (worktreeId: string) => `refs/shigomori/dirty/${worktreeId}`;
 
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
