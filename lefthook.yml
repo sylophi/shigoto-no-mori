@@ -43,6 +43,11 @@ pre-commit:
           - name: contracts
             glob: "packages/contracts/**"
             run: pnpm run check:contracts
+          # The engine's tests, its boundary proof among them
+          # (packages/engine/README.md).
+          - name: engine
+            glob: "{packages/engine/**,packages/contracts/**}"
+            run: pnpm run check:engine
           - name: go-test
             glob: "{cli/**,app/shared/fixtures/git-log.json}"
             run: go test -C cli ./...
