@@ -19,6 +19,7 @@ import {
   signalAllScriptsBestEffort,
 } from "@host/lib/scripts";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
+import * as ScriptRuns from "@host/lib/scripts/pty";
 import * as Processes from "@host/lib/util/processes";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import {
@@ -65,7 +66,7 @@ const scripts = (hurried: () => boolean) =>
     "the scripts",
     Effect.suspend(() => {
       if (hurried()) {
-        return Effect.sync(() => signalAllScriptsBestEffort("SIGTERM"));
+        return Effect.sync(() => signalAllScriptsBestEffort());
       }
       return Effect.forEach(
         getInflightDeleteIds(),
@@ -233,6 +234,10 @@ export const layer = (options: { readonly hurried: () => boolean }) =>
     // streams opened.
     Layer.provideMerge(FileSyncRunner.layer),
     Layer.provideMerge(scripts(options.hurried)),
+    // Every script run, each in a scope the quit's policy above has
+    // already closed or shortened.
+    Layer.provideMerge(ScriptRuns.adapter),
+    Layer.provideMerge(ScriptRuns.layer),
     // The Promise face of the platform's child processes for the code
     // that is not Effect yet. Last to go, so every finalizer above can
     // still spawn.

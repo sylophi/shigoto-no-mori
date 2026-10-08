@@ -7,12 +7,15 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, beforeAll } from "vitest";
 import * as FileSync from "../../host/fileSync/FileSync.ts";
+import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
 import * as Processes from "../../host/lib/util/processes.ts";
 
 // No file-sync engine: a proof that runs one brings its own
 // (mirror.mts).
 const runtime = ManagedRuntime.make(
   Processes.adapter.pipe(
+    Layer.provideMerge(ScriptRuns.adapter),
+    Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(FileSync.adapter),
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(NodeServices.layer),

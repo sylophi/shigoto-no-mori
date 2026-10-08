@@ -45,20 +45,33 @@ const withoutFileMarker = (doc: unknown) => {
   return { ...rest, config: stored };
 };
 
-// The same command through both binaries, each on its own copy. Under
-// --json the documents are compared, not their bytes (Go sorts keys and
-// escapes <, > and &); a person's output is compared as text.
-const same = async (...args: string[]) => {
+// A project row's hue, which the engine leaves null (V3.md, decision 12).
+const withoutHue = (doc: unknown) =>
+  Array.isArray(doc)
+    ? doc.map((row: unknown) => Object.assign({}, row, { hue: null }))
+    : doc;
+
+// The same command through both binaries from `cwd`, each on its own
+// copy. Under --json the documents are compared, not their bytes (Go
+// sorts keys and escapes <, > and &); a person's output is compared as
+// text.
+const sameAt = async (cwd: string, ...args: string[]) => {
   const [go, ours] = await Promise.all([
-    box.runAt(goSm(), "go", box.home, args),
-    box.runAt(built, "cli", box.home, args),
+    box.runAt(goSm(), "go", cwd, args),
+    box.runAt(built, "cli", cwd, args),
   ]);
   const seen = (run: typeof go) =>
     args.includes("--json")
-      ? { code: run.code, doc: withoutFileMarker(run.doc), stderr: run.stderr }
+      ? {
+          code: run.code,
+          doc: withoutHue(withoutFileMarker(run.doc)),
+          stderr: run.stderr,
+        }
       : { code: run.code, stdout: run.stdout, stderr: run.stderr };
-  assert.deepStrictEqual(seen(ours), seen(go));
+  assert.deepStrictEqual(seen(ours), seen(go), args.join(" "));
 };
+
+const same = (...args: string[]) => sameAt(box.home, ...args);
 
 describe("config", () => {
   it("lists, gets and reads a fresh install's settings", async () => {
@@ -118,5 +131,134 @@ describe("config", () => {
       '{"launchScripts":false,"launchers":[{"id":"a","label":"A","command":"a"}]}',
     );
     await same("--json", "config", "list");
+  });
+});
+
+describe("projects", () => {
+  // Two projects and one whose folder is gone, in a manual order.
+  const projects = () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>';
+    const alpha = box.repo("alpha", { "public/favicon.svg": svg });
+    const beta = box.repo("beta");
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+        { id: "G", name: "gone", path: `${box.home}/gone` },
+      ],
+      projectOrder: [beta, alpha],
+    });
+    return { alpha, beta };
+  };
+
+  it("says when there are none", async () => {
+    await same("projects", "list");
+    await same("--json", "projects", "list");
+  });
+
+  it("lists the projects in their order", async () => {
+    projects();
+    await same("projects", "list");
+    await same("projects", "ls");
+    await same("p", "list", "--refresh-icons", "--json");
+  });
+
+  it("lists terrier's projects beside the registry's", async () => {
+    projects();
+    box.fakeBin(
+      "terrier",
+      `if [ "$1" = version ]; then echo v0.1.4; else echo '${JSON.stringify({
+        projects: [{ path: box.repo("zeta") }],
+      })}'; fi`,
+    );
+    box.write("config.json", { terrier: true });
+    await same("projects", "list");
+    await same("--json", "projects", "list");
+  });
+
+  it("warns when terrier can't be read", async () => {
+    projects();
+    box.fakeBin("terrier", "echo v0.2.0");
+    box.write("config.json", { terrier: true });
+    await same("projects", "list");
+    await same("--json", "projects", "list");
+  });
+
+  it("prints a project's icon, named or at the cwd", async () => {
+    const { alpha, beta } = projects();
+    await same("--json", "projects", "icon", "alpha");
+    await same("projects", "icon", "-p", "alpha");
+    await same("--json", "projects", "icon", "--project-id", "B");
+    await same("projects", "icon", "beta");
+    await same("projects", "icon", "alpha", "-p", "");
+    await sameAt(alpha, "--json", "projects", "icon");
+    await sameAt(beta, "projects", "icon");
+  });
+
+  it("refuses a project it can't name, as Go does", async () => {
+    projects();
+    await same("projects", "icon", "nope");
+    await same("--json", "projects", "icon", "--project-id", "nope");
+    await same("--json", "projects", "icon");
+    await same("projects", "config", "list", "-p", `${box.home}/elsewhere`);
+  });
+
+  it("lists, gets, sets and unsets a project's settings", async () => {
+    const { alpha } = projects();
+    await same("--json", "projects", "config", "list", "-p", "alpha");
+    await same("projects", "config", "-p", "alpha", "list");
+    await sameAt(alpha, "--json", "projects", "config", "read");
+    await same("projects", "config", "set", "portBase", "4000", "-p", "beta");
+    await sameAt(alpha, "projects", "config", "set", "scripts.setup", "pnpm i");
+    await same(
+      "--json",
+      "projects",
+      "config",
+      "get",
+      "scripts.setup",
+      "-p",
+      "alpha",
+    );
+    await same("projects", "config", "unset", "scripts.setup", "-p", "alpha");
+    await same(
+      "projects",
+      "config",
+      "set",
+      "scripts.teardown",
+      "",
+      "-p",
+      "alpha",
+    );
+    await same(
+      "--json",
+      "projects",
+      "config",
+      "set",
+      "worktreeLayout",
+      "sideways",
+      "-p",
+      "alpha",
+    );
+    await same("projects", "config", "set", "carryOver", "x", "-p", "alpha");
+    await same("--json", "projects", "config", "read", "-p", "beta");
+  });
+});
+
+describe("launchers", () => {
+  it("lists a project's row and the catalog", async () => {
+    const repo = box.repo("repo");
+    box.write("registry.json", {
+      projects: [{ id: "R", name: "repo", path: repo }],
+    });
+    box.write("config.json", {
+      launchers: [{ id: "c1", label: "Shell", command: "zsh" }],
+      hiddenLaunchers: ["app:finder"],
+    });
+    await same("--json", "launchers", "-p", "repo");
+    await same("launchers", "list", "-p", "repo");
+    await sameAt(repo, "launchers");
+    await same("--json", "launchers", "--catalog");
+    await same("launchers", "--catalog");
+    await same("launchers", "bogus", "-p", "repo");
   });
 });
