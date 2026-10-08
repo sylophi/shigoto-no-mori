@@ -355,7 +355,9 @@ function TargetItem({
           deviceId={icon?.deviceId}
         />
       )}
-      <span className="min-w-0 flex-1 truncate">{target.project.name}</span>
+      <SimpleTooltip whenTruncated tip={target.project.name}>
+        <span className="min-w-0 flex-1 truncate">{target.project.name}</span>
+      </SimpleTooltip>
       {badge && <DeviceBadge badge={badge} />}
     </Command.Item>
   );

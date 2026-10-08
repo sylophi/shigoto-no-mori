@@ -68,11 +68,12 @@ export function PortForwardSection({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <Cable
-        aria-hidden
-        className="size-3.5 shrink-0 text-muted-foreground/50"
-      />
-      <span className="sr-only">Port forwards</span>
+      <SimpleTooltip tip="Port forwards">
+        <Cable
+          aria-label="Port forwards"
+          className="size-3.5 shrink-0 text-muted-foreground/50"
+        />
+      </SimpleTooltip>
       {forwards.map((forward) => (
         <Chip key={forward.forwardId} className="gap-0.5 pr-0.5">
           <ExternalLink

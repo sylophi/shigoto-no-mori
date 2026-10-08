@@ -86,12 +86,22 @@ export function TidyRow({
         </TidyEntryTitle>
 
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="truncate font-mono select-text">
-            <BranchLabel
-              branch={worktree.branch}
-              detached={worktree.detached}
-            />
-          </span>
+          <SimpleTooltip
+            whenTruncated
+            tip={
+              <BranchLabel
+                branch={worktree.branch}
+                detached={worktree.detached}
+              />
+            }
+          >
+            <span className="truncate font-mono select-text">
+              <BranchLabel
+                branch={worktree.branch}
+                detached={worktree.detached}
+              />
+            </span>
+          </SimpleTooltip>
           <span aria-hidden>·</span>
           <SimpleTooltip tip={ageTip}>
             <span className="shrink-0">

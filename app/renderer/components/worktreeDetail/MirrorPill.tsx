@@ -40,7 +40,7 @@ function StatusChip({
   tone: StatusTone;
   icon: IconType;
   label: string;
-  tip: string;
+  tip?: string;
   spinning?: boolean;
 }) {
   return (
@@ -74,12 +74,7 @@ function SessionLine({ link }: { link: WorktreeMirrorLink }) {
   if (session === undefined) {
     return (
       <>
-        <StatusChip
-          tone="emerald"
-          icon={RefreshCw}
-          label="Mirrored"
-          tip={`${other} keeps a live copy of this worktree`}
-        />
+        <StatusChip tone="emerald" icon={RefreshCw} label="Mirrored" />
         <span className="text-muted-foreground">with {other}</span>
       </>
     );
@@ -110,7 +105,7 @@ function SessionChip({
           tone={view.tone}
           icon={RefreshCw}
           label={view.label}
-          tip={view.detail || view.label}
+          tip={view.detail}
           spinning={view.spinning}
         />
       )}

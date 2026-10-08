@@ -3,6 +3,7 @@ import { ChevronRight, Loader2 } from "lucide-react";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // What every level of the tree reads the same: which worktree, what is
 // open and picked, and what a click does. Only the folder and its
@@ -170,9 +171,11 @@ function FolderRows({
             expanded={open}
             className="size-4"
           />
-          <span className="min-w-0 flex-1 truncate font-mono text-2xs">
-            {entry.name}
-          </span>
+          <SimpleTooltip whenTruncated lazy tip={entry.name}>
+            <span className="min-w-0 flex-1 truncate font-mono text-2xs">
+              {entry.name}
+            </span>
+          </SimpleTooltip>
         </button>
         {open && <FolderRows ctx={ctx} relative={path} depth={depth + 1} />}
       </Fragment>

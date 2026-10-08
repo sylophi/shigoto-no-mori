@@ -10,6 +10,7 @@ import { type BranchEntry } from "@/components/shared/BranchCombobox";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // Switching the worktree's branch, opened from BranchMenu.
 export function BranchSwitcher({
@@ -122,9 +123,11 @@ export function BranchSwitcher({
                   value={entry.name}
                   className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
                 >
-                  <span className="flex-1 truncate font-mono">
-                    {entry.name}
-                  </span>
+                  <SimpleTooltip whenTruncated lazy tip={entry.name}>
+                    <span className="flex-1 truncate font-mono">
+                      {entry.name}
+                    </span>
+                  </SimpleTooltip>
                   {entry.name === worktree.branch && (
                     <Check className="size-3.5 text-muted-foreground" />
                   )}
