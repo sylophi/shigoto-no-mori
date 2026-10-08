@@ -1,4 +1,9 @@
+// The terminal binary runs under Bun against Node's APIs, so it gets
+// node's types and no DOM.
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src"]
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src", "test"]
 }

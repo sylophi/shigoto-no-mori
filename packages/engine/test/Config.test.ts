@@ -48,11 +48,11 @@ it("points a list key at its own verbs, or at the file and the app", async () =>
     );
   assert.deepEqual(await setList("launchers"), {
     ok: false,
-    error: "launchers is structured: use `sm config launcher add/rm`.",
+    error: "launchers is structured: use `smd config launcher add/rm`.",
   });
   assert.deepEqual(await setList("hiddenLaunchers"), {
     ok: false,
-    error: "hiddenLaunchers is structured: use `sm config edit` or the app.",
+    error: "hiddenLaunchers is structured: use `smd config edit` or the app.",
   });
 });
 
@@ -69,7 +69,7 @@ it("keeps a project's default branch through every write", async () => {
     {
       ok: false,
       error:
-        "Set the project's default branch first: `sm projects config set defaultBranch <ref>`.",
+        "Set the project's default branch first: `smd projects config set defaultBranch <ref>`.",
     },
   );
 });

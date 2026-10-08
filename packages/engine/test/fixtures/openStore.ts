@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Paths from "../../src/Paths.ts";
-import * as Store from "../../src/Store.ts";
+import { nodeStore } from "../lib/nodeStore.ts";
 
 Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -14,7 +14,7 @@ Effect.gen(function* () {
   process.stdout.write(`${row?.n}\n`);
 }).pipe(
   Effect.provide(
-    Store.layer.pipe(
+    nodeStore.pipe(
       Layer.provide(Paths.layer("prod")),
       Layer.provide(NodeServices.layer),
     ),

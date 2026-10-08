@@ -100,11 +100,16 @@ export class InvalidConfigValue extends Schema.TaggedError<InvalidConfigValue>()
 // is edited in the file or the app.
 export class StructuredConfigKey extends Schema.TaggedError<StructuredConfigKey>()(
   "StructuredConfigKey",
-  { key: Schema.String, verbs: Schema.String, orTheApp: Schema.Boolean },
+  {
+    key: Schema.String,
+    verbs: Schema.String,
+    orTheApp: Schema.Boolean,
+    binaryName: Schema.String,
+  },
 ) {
   override get message(): string {
     const or = this.orTheApp ? " or the app" : "";
-    return `${this.key} is structured: use \`sm ${this.verbs}\`${or}.`;
+    return `${this.key} is structured: use \`${this.binaryName} ${this.verbs}\`${or}.`;
   }
 }
 
@@ -112,10 +117,10 @@ export class StructuredConfigKey extends Schema.TaggedError<StructuredConfigKey>
 // would leave out.
 export class MissingDefaultBranch extends Schema.TaggedError<MissingDefaultBranch>()(
   "MissingDefaultBranch",
-  { projectId: Schema.String },
+  { projectId: Schema.String, binaryName: Schema.String },
 ) {
   override get message(): string {
-    return "Set the project's default branch first: `sm projects config set defaultBranch <ref>`.";
+    return `Set the project's default branch first: \`${this.binaryName} projects config set defaultBranch <ref>\`.`;
   }
 }
 
@@ -294,7 +299,7 @@ const parseValue = (
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const { expandHome } = yield* Paths.Paths;
+  const { expandHome, binaryName } = yield* Paths.Paths;
   const git = yield* Git.Git;
 
   const load = (scope: ConfigScope) =>
@@ -356,6 +361,7 @@ const make = Effect.gen(function* () {
             if (Option.isNone(fallbackBranch)) {
               return yield* new MissingDefaultBranch({
                 projectId: scope.projectId,
+                binaryName,
               });
             }
             docSet(next, "defaultBranch", fallbackBranch.value);
@@ -434,6 +440,7 @@ const make = Effect.gen(function* () {
           key.verbs ??
           (scope.kind === "device" ? "config edit" : "projects config edit"),
         orTheApp: key.verbs === undefined,
+        binaryName,
       });
     }
     if (key.required && raw.trim() === "") {
