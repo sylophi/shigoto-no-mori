@@ -29,6 +29,7 @@ import {
   accountSignedIn,
 } from "../ipc/modules/account";
 import { scheduleRelaunch } from "./relaunch";
+import { rememberVisibilityForRestart } from "./restartVisibility";
 import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
 
 function keepReachableEnabled(): boolean {
@@ -245,6 +246,7 @@ export function installFatalRecovery(deps: {
       // index.ts's fast reap path rather than the busy-action prompt.
       scheduleRelaunch();
       markShuttingDown();
+      rememberVisibilityForRestart();
     } catch (error) {
       console.error(
         `[liveness] scheduling the relaunch failed: ${errorMessageOf(error)}`,
