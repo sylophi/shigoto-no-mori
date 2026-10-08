@@ -14,6 +14,8 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -76,7 +78,7 @@ export interface PtyHandle {
   // of a PTY closing.
   readonly onError: (listener: (error: Error) => void) => void;
   readonly onExit: (
-    listener: (exit: { exitCode: number; signal: number | undefined }) => void,
+    listener: (exit: { exitCode: number; signal?: number | undefined }) => void,
   ) => void;
 }
 
@@ -140,7 +142,10 @@ const pty = Effect.fn("Pty.spawn")(function* (
   }>();
   const exit = Deferred.await(exited);
   const waitExit = (ms: number) =>
-    exit.pipe(Effect.timeoutOption(Duration.millis(ms)), Effect.map((o) => o._tag === "Some"));
+    exit.pipe(
+      Effect.timeoutOption(Duration.millis(ms)),
+      Effect.map(Option.isSome),
+    );
   // The PTY child runs in its own session, so its pgid === pid and the
   // whole tree is signaled through -pid.
   const child = yield* Effect.acquireRelease(
@@ -155,20 +160,20 @@ const pty = Effect.fn("Pty.spawn")(function* (
         }),
       catch: (cause) => new PtySpawnError({ shell, reason: "failed", cause }),
     }),
-    (child) =>
+    (spawned) =>
       Effect.gen(function* () {
         if (yield* Deferred.isDone(exited)) return;
         const { graceMs, wait } = stopping();
         if (!wait) {
-          signalTreeBestEffort(child.pid, "SIGTERM");
+          signalTreeBestEffort(spawned.pid, "SIGTERM");
           return;
         }
-        yield* signalTree(child.pid, "SIGTERM");
+        yield* signalTree(spawned.pid, "SIGTERM");
         if (yield* waitExit(graceMs)) return;
-        yield* signalTree(child.pid, "SIGKILL");
+        yield* signalTree(spawned.pid, "SIGKILL");
         if (yield* waitExit(UNKILLABLE_WAIT_MS)) return;
         yield* Effect.logWarning(
-          `[scripts] pid ${child.pid} survived SIGKILL, giving up on it`,
+          `[scripts] pid ${spawned.pid} survived SIGKILL, giving up on it`,
         );
       }),
   );
@@ -255,7 +260,9 @@ export const layer = Layer.effect(ScriptRuns, make);
 const promiseAdapter = PromiseAdapter.make<ScriptRuns>("The scripts");
 export const adapter = promiseAdapter.layer;
 
-const onRuns = <A, E>(f: (runs: ScriptRuns["Service"]) => Effect.Effect<A, E>) =>
+const onRuns = <A, E>(
+  f: (runs: ScriptRuns["Service"]) => Effect.Effect<A, E>,
+) =>
   Effect.gen(function* () {
     return yield* f(yield* ScriptRuns);
   });
@@ -272,7 +279,7 @@ export function openRun(
       throw new Error("The app is still starting; try the script again.");
     },
   );
-  if (opened._tag === "Failure") throw opened.failure;
+  if (Result.isFailure(opened)) throw opened.failure;
   const { pty: handle, close } = opened.success;
   return { pty: handle, close: () => promiseAdapter.run(close) };
 }

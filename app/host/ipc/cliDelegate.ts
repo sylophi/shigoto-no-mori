@@ -70,7 +70,7 @@ import {
   cliScriptStream,
   markCreateInflight,
 } from "@host/lib/scripts";
-import { shellQuote } from "@host/lib/scripts/process";
+import { shellQuote } from "@host/lib/scripts/pty";
 import { onAbort } from "@host/lib/util/abort";
 import { implSlot } from "@host/lib/util/implSlot";
 import { log } from "@shared/log";

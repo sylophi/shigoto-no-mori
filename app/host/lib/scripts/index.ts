@@ -5,8 +5,8 @@
 // watchers, compilers the user's command spawns), not just the wrapping
 // shell.
 //
-// The spawn/signal mechanics live in ./process.ts. This file only
-// runs the SIGTERM -> grace -> SIGKILL escalation over them.
+// The PTY and its kill chain live in ./pty.ts, each run in a scope of
+// its own: stopping a run is closing that scope.
 //
 // On app quit (main/hostLayer.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
@@ -27,13 +27,9 @@ import {
 } from "@shigomori/contracts/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
-import {
-  type ScriptPty,
-  signalPidTree,
-  signalTree,
-  signalTreeBestEffort,
-  spawnScript,
-} from "./process";
+import * as Processes from "../util/processes";
+import { signalPidTree, signalTreeBestEffort } from "./process";
+import { openRun, type PtyHandle, type Stopping } from "./pty";
 import { log } from "@shared/log";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
@@ -49,7 +45,7 @@ export type NotifyScriptEvent = ((payload: ScriptEvent) => void) & {
 const DEFAULT_GRACE_MS = 3_000;
 // How long to wait for a child that survived SIGKILL (kernel-stuck I/O)
 // before giving up. Callers (worktree delete, app quit) must not hang
-// forever behind it.
+// forever behind it. The PTY runs' own chain waits as long (./pty.ts).
 const UNKILLABLE_WAIT_MS = 5_000;
 // PTY size a script starts with. The console resizes it to the real
 // viewport as soon as it is on screen, but scripts launched from a
@@ -187,7 +183,8 @@ interface Killable {
   cancelling: boolean;
   done: Promise<void>;
   stream: RunStream;
-  signal: (signal: NodeJS.Signals) => Promise<void>;
+  // SIGTERM, then SIGKILL past the grace, until the tree is gone.
+  stop: (graceMs: number) => Promise<void>;
   // Sends whatever output is pooled for the next frame (see
   // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
   // must call it first so it lands after the output that preceded it.
@@ -195,7 +192,10 @@ interface Killable {
 }
 
 interface RunRecord extends Killable {
-  pty: ScriptPty;
+  pty: PtyHandle;
+  // How the run's scope closing kills it (./pty.ts): the quit shortens
+  // the grace, a hurried quit stops waiting.
+  stopping: Stopping;
   projectId: string;
   worktreeId: string;
   slot: ScriptRunSlot;
@@ -265,7 +265,7 @@ export function cliScriptStream(notify: NotifyScriptEvent): {
           cancelling: false,
           done,
           stream,
-          signal: (signal) => signalPidTree(pid, signal),
+          stop: (graceMs) => stopPidTree(pid, done, graceMs),
           flushOutput: () => {},
           settle,
           projectId: event.projectId,
@@ -592,19 +592,22 @@ async function killRecord(record: Killable, opts: KillOptions): Promise<void> {
     });
   }
 
-  await record.signal("SIGTERM");
-  const graceMs = opts.graceMs ?? DEFAULT_GRACE_MS;
-  const exited = await waitWithTimeout(record.done, graceMs);
-  if (exited) return;
+  await record.stop(opts.graceMs ?? DEFAULT_GRACE_MS);
+}
 
-  await record.signal("SIGKILL");
-  const died = await waitWithTimeout(record.done, UNKILLABLE_WAIT_MS);
-  if (!died) {
-    // Give up rather than hanging the caller forever. The record stays
-    // live on purpose: the process really is still running, so the busy
-    // counts stay honest and a later delete attempt can retry.
+// The kill chain for a lifecycle script the CLI runs, which is no child
+// of ours: its pid and descendants, never its group (cliScriptStream).
+async function stopPidTree(
+  pid: number,
+  done: Promise<void>,
+  graceMs: number,
+): Promise<void> {
+  await Processes.run(signalPidTree(pid, "SIGTERM"));
+  if (await waitWithTimeout(done, graceMs)) return;
+  await Processes.run(signalPidTree(pid, "SIGKILL"));
+  if (!(await waitWithTimeout(done, UNKILLABLE_WAIT_MS))) {
     log.warn(
-      `[scripts] "${record.scriptName}" (pid ${record.pid}) survived SIGKILL; giving up on this kill attempt`,
+      `[scripts] lifecycle script (pid ${pid}) survived SIGKILL; giving up on this kill attempt`,
     );
   }
 }
@@ -667,13 +670,17 @@ export function startScript(args: RunArgs): string {
 
   // Throws when no process could be started. The caller's IPC rejection
   // carries the message into the console.
-  const pty: ScriptPty = spawnScript({
-    command: args.command,
-    cwd: args.worktree.path,
-    env,
-    cols: DEFAULT_COLS,
-    rows: DEFAULT_ROWS,
-  });
+  const stopping: Stopping = { graceMs: DEFAULT_GRACE_MS, wait: true };
+  const { pty, close } = openRun(
+    {
+      command: args.command,
+      cwd: args.worktree.path,
+      env,
+      cols: DEFAULT_COLS,
+      rows: DEFAULT_ROWS,
+    },
+    () => stopping,
+  );
 
   // The PTY is one ordered byte stream (stdout and stderr share the
   // terminal), so the renderer's xterm sees exactly what a real
@@ -714,7 +721,11 @@ export function startScript(args: RunArgs): string {
     cancelling: false,
     done,
     stream,
-    signal: (signal) => signalTree(pty.pid, signal),
+    stopping,
+    stop: (graceMs) => {
+      stopping.graceMs = graceMs;
+      return close();
+    },
     flushOutput,
   };
   runningScripts.set(runId, record);
@@ -727,20 +738,7 @@ export function startScript(args: RunArgs): string {
     else if (!flushTimer) flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS);
   });
 
-  // A read error on the PTY master is rethrown by node-pty unless
-  // someone else listens for it, and an uncaught throw here takes the
-  // whole main process down. This listener sits on the same socket as
-  // node-pty's own, so it sees the EAGAIN/EIO noise that one filters
-  // as part of a normal PTY lifecycle and must skip it too. node-pty
-  // closes the PTY first, so the exit event follows a real error.
-  // node-pty's type leaves the emitter out (the terminal has one of
-  // its own, not node's), so the method is checked for, not assumed.
-  if (!("on" in pty) || typeof pty.on !== "function") {
-    throw new Error("node-pty's terminal no longer emits events");
-  }
-  pty.on("error", (error: NodeJS.ErrnoException) => {
-    const code = error.code ?? "";
-    if (code.includes("EAGAIN") || code.includes("EIO")) return;
+  pty.onError((error) => {
     flushOutput();
     stream.emit({ runId, kind: "error", data: errorMessageOf(error) });
   });
@@ -766,6 +764,8 @@ export function startScript(args: RunArgs): string {
     runningScripts.delete(runId);
     persistSnapshot();
     runningScriptsChanged();
+    // The run is over, and its scope with it.
+    void close();
   });
 
   return runId;
@@ -836,6 +836,7 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
     if (record.exited) continue;
+    record.stopping.wait = false;
     signalTreeBestEffort(record.pid, signal);
   }
 }
