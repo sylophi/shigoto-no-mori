@@ -1,29 +1,19 @@
-// Resolves and spawns the bundled file-sync engine (file-sync/, built
-// by scripts/build-file-sync.mts) for the host's spawn seam
-// (host/fileSync/spawn.ts). Addressed directly like the CLI binary:
-// Resources/ when packaged, dist-file-sync/ in dev. Children register
-// with the CLI runner's reap so quitting the app never leaves a daemon
-// or a serve process behind.
+// The bundled file-sync engine (file-sync/, built by
+// scripts/build-file-sync.mts) for the host's FileSync service
+// (host/fileSync/FileSync.ts). Addressed directly like the CLI binary:
+// Resources/ when packaged, dist-file-sync/ in dev.
+import * as Layer from "effect/Layer";
 import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
 } from "@shared/packaging/fileSyncDist.mts";
-import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
+import * as FileSync from "@host/fileSync/FileSync";
 import { bundledBinaryResolver } from "./bundledBinary";
-import { registerBackgroundChild } from "./cliRunner";
 
-const fileSyncBinaryPath = bundledBinaryResolver(
-  FILE_SYNC_DIST_DIR,
-  FILE_SYNC_BINARY_NAME,
+export const layer = FileSync.adapter.pipe(
+  Layer.provideMerge(
+    FileSync.layer(
+      bundledBinaryResolver(FILE_SYNC_DIST_DIR, FILE_SYNC_BINARY_NAME),
+    ),
+  ),
 );
-
-export function installFileSyncSpawner(): void {
-  setFileSyncSpawnImpl((args, env) => {
-    const binary = fileSyncBinaryPath();
-    if (binary === null) return null;
-    return spawnStreamChild(binary, args, {
-      onSpawned: registerBackgroundChild,
-      env,
-    });
-  });
-}

@@ -1,0 +1,146 @@
+// The host's one way to run the file-sync engine (file-sync/, the
+// continuous worktree mirror). Two roles are spawned through here: the
+// long-lived `daemon` behind main/core/mirror/daemon.ts and one `serve`
+// child per stream a peer opens (host/ipc/modules/mirror.ts). Both
+// are spoken to as a byte stream over stdin/stdout, never as document
+// runs, so this seam is separate from the CLI delegate on purpose: the
+// engine is not the CLI, nobody types its commands, and only this
+// process ever starts it.
+//
+// Every child runs in its own process group, in a scope under this
+// service's, so closing the layer (the quit) ends whatever is still
+// running and anything it spawned in turn.
+import * as NodeStream from "@effect/platform-node/NodeStream";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as PlatformError from "effect/PlatformError";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import type * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { Duplex, PassThrough, type Readable } from "node:stream";
+import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
+
+// No engine binary here (a dev run before `pnpm file-sync:build`).
+export class FileSyncUnavailableError extends Schema.TaggedError<FileSyncUnavailableError>()(
+  "FileSyncUnavailableError",
+  {},
+) {
+  override get message(): string {
+    return "mirroring is unavailable on this device (no file-sync engine)";
+  }
+}
+
+export const isFileSyncUnavailable = Schema.is(FileSyncUnavailableError);
+
+// A `serve` child: its stdin and stdout as one duplex stream, stderr
+// apart for diagnostics. `close` ends the child.
+export interface ServeChild {
+  readonly pid: number;
+  readonly stream: Duplex;
+  readonly stderr: Readable;
+  readonly close: Effect.Effect<void>;
+}
+
+export class FileSync extends Context.Service<
+  FileSync,
+  {
+    // A child in the caller's scope. `env` is added to the app's.
+    readonly spawn: (
+      args: readonly string[],
+      options: {
+        readonly env: Record<string, string | undefined>;
+        readonly stdin: Stream.Stream<Uint8Array, PlatformError.PlatformError>;
+      },
+    ) => Effect.Effect<
+      ChildProcessSpawner.ChildProcessHandle,
+      FileSyncUnavailableError | PlatformError.PlatformError,
+      Scope.Scope
+    >;
+    // A `serve` child in a scope of its own under the service's.
+    readonly serve: (
+      env: Record<string, string | undefined>,
+    ) => Effect.Effect<
+      ServeChild,
+      FileSyncUnavailableError | PlatformError.PlatformError
+    >;
+  }
+>()("sm/host/FileSync") {}
+
+const make = (binaryPath: () => string | null) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const scope = yield* Effect.scope;
+
+    const spawn = Effect.fn("FileSync.spawn")(function* (
+      args: readonly string[],
+      options: {
+        readonly env: Record<string, string | undefined>;
+        readonly stdin: Stream.Stream<Uint8Array, PlatformError.PlatformError>;
+      },
+    ) {
+      const binary = binaryPath();
+      if (binary === null) return yield* new FileSyncUnavailableError();
+      return yield* spawner.spawn(
+        ChildProcess.make(binary, [...args], {
+          env: options.env,
+          extendEnv: true,
+          stdin: options.stdin,
+        }),
+      );
+    });
+
+    const serve = Effect.fn("FileSync.serve")(function* (
+      env: Record<string, string | undefined>,
+    ) {
+      const child = yield* Scope.fork(scope);
+      const close = Scope.close(child, Exit.void);
+      const input = new PassThrough();
+      const handle = yield* spawn(["serve"], {
+        env,
+        stdin: NodeStream.fromReadable({
+          evaluate: () => input,
+          onError: (cause) =>
+            PlatformError.systemError({
+              _tag: "Unknown",
+              module: "FileSync",
+              method: "serve",
+              cause,
+            }),
+        }),
+      }).pipe(
+        Scope.provide(child),
+        Effect.onError(() => close),
+      );
+      const output = yield* NodeStream.toReadable(handle.stdout);
+      const stderr = yield* NodeStream.toReadable(handle.stderr);
+      return {
+        pid: handle.pid,
+        stream: Duplex.from({ readable: output, writable: input }),
+        stderr,
+        close,
+      };
+    });
+
+    return FileSync.of({ spawn, serve });
+  });
+
+export const layer = (binaryPath: () => string | null) =>
+  Layer.effect(FileSync, make(binaryPath));
+
+// For the callers that are not Effect yet.
+const promiseAdapter = PromiseAdapter.make<FileSync>("The file-sync engine");
+const { run } = promiseAdapter;
+export const adapter = promiseAdapter.layer;
+
+// A `serve` child for a Promise caller, closed with `close()`.
+export const serve = (env: Record<string, string | undefined>) =>
+  run(
+    Effect.gen(function* () {
+      const child = yield* (yield* FileSync).serve(env);
+      return { ...child, close: () => run(child.close) };
+    }),
+  );

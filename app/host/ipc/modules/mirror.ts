@@ -57,7 +57,7 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { spawnFileSync } from "@host/fileSync/spawn";
+import * as FileSync from "@host/fileSync/FileSync";
 import { dataDir } from "@host/lib/util/paths";
 import {
   peerMirrorApiFor,
@@ -687,22 +687,16 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     // Its own data directory under this host's: unset, the engine's
     // caches and staging land in ~/.mutagen, shared with any real
     // Mutagen install and with every other build and profile here.
-    const child = spawnFileSync(["serve"], {
-      ...process.env,
+    const child = await FileSync.serve({
       MUTAGEN_DATA_DIRECTORY: join(dataDir(), "file-sync", "serve"),
     });
-    if (child === null) {
-      throw new Error(
-        "mirroring is unavailable on this device (no file-sync engine)",
-      );
-    }
     child.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8").trim();
       if (text !== "") log.warn(`[mirror] serve ${worktreeId}: ${text}`);
     });
     const key = servingKey(ctx, channelId);
     const stopChild = () => {
-      child.kill();
+      void child.close();
       child.stream.destroy();
     };
     try {
@@ -714,8 +708,8 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       });
     } catch (error) {
       // The connection died or the id was claimed during the lookup
-      // above: the child is detached, so the destroyed stdio alone
-      // would not end it.
+      // above: the child is in its own process group, so the destroyed
+      // stdio alone would not end it.
       stopChild();
       throw error;
     }
