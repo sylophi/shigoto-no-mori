@@ -68,6 +68,7 @@ import {
 } from "./shelf.ts";
 import * as WorktreeData from "./WorktreeData.ts";
 import {
+  cleanPath,
   driveBaseOf,
   isManagedPath,
   worktreeIdFromPath,
@@ -264,6 +265,7 @@ export type PrimaryTarget = {
 export type WorktreeEvent =
   | Lifecycle.LifecycleEvent
   | { readonly event: "carryOver"; readonly report: CarryOverReport }
+  | { readonly event: "cloned"; readonly cloned: Cloned }
   | { readonly event: "created"; readonly worktree: WorktreeRow };
 
 // Where the events go, and whether a script's output may be truecolor
@@ -280,12 +282,10 @@ export type Cloned = {
   readonly outcome: Result.Result<CloneReport, CloneFailed>;
 };
 
-// A new worktree, the lifecycle scripts that failed on it, and how its
-// files were cloned when they were.
+// A new worktree and the lifecycle scripts that failed on it.
 export type Created = {
   readonly worktree: WorktreeRow;
   readonly failures: ReadonlyArray<Lifecycle.ScriptFailure>;
-  readonly cloned?: Cloned | undefined;
 };
 
 // --- errors ---------------------------------------------------------------
@@ -510,6 +510,8 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "remove-primary",
       "changed-during-cleanup",
       "uncommitted-at-remove",
+      "invalid-branch",
+      "invalid-base",
       "move-primary",
       "move-destination-exists",
       "move-not-listed",
@@ -524,7 +526,12 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
 ) {
   // The command line was what was wrong (the terminal exits 2).
   get usage(): boolean {
-    return this.reason === "reserved-name" || this.reason === "invalid-name";
+    return [
+      "reserved-name",
+      "invalid-name",
+      "invalid-branch",
+      "invalid-base",
+    ].includes(this.reason);
   }
 
   override get message(): string {
@@ -548,6 +555,10 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         return `Changes appeared in ${this.subject} while its cleanup scripts ran, so it was kept. Remove them, or pass --force --skip-cleanup to remove it without running the scripts again.`;
       case "uncommitted-at-remove":
         return `Worktree ${this.subject} has uncommitted changes. Pass --force to remove anyway.`;
+      case "invalid-branch":
+        return `Invalid --branch: ${quoted} is not a valid git ref name.`;
+      case "invalid-base":
+        return `Invalid --base: ${quoted} is not a valid git ref name.`;
       case "move-primary":
         return "The primary checkout can't be moved";
       case "move-destination-exists":
@@ -585,6 +596,13 @@ export class CleanupFailed extends Schema.TaggedError<CleanupFailed>()(
     return `${this.phase} ${detail}; worktree not removed`;
   }
 }
+
+// The document's account of a failed cleanup, which the app reads.
+export const cleanupErrorOf = (error: CleanupFailed) => ({
+  phase: error.phase,
+  exitCode: error.exitCode,
+  runId: error.runId,
+});
 
 // A removal git finished on its side (its admin entry is gone) whose
 // checkout is still on disk because the sweep after it failed.
@@ -2219,6 +2237,15 @@ const make = Effect.gen(function* () {
   ) {
     const name = input.name ?? "";
     yield* checkName(name);
+    // A ref git would read as an option.
+    for (const [reason, ref] of [
+      ["invalid-branch", input.branch],
+      ["invalid-base", input.base],
+    ] as const) {
+      if (ref?.startsWith("-")) {
+        return yield* new WorktreeRefused({ reason, subject: ref });
+      }
+    }
     const { made, found, cloned } = yield* addWorktree(project, {
       name,
       branch: input.branch ?? "",
@@ -2238,6 +2265,8 @@ const make = Effect.gen(function* () {
       yield* registry.setMark("agentWorking", made.id, true);
     }
     const worktree = yield* row({ project, worktree: made });
+    if (cloned !== undefined)
+      yield* reporter.report({ event: "cloned", cloned });
     yield* reporter.report({ event: "created", worktree });
     const failures = yield* createLifecycle(
       project,
@@ -2247,7 +2276,7 @@ const make = Effect.gen(function* () {
       input.skipSetup ?? false,
       reporter,
     );
-    return { worktree, failures, cloned };
+    return { worktree, failures };
   });
 
   // Fails closed on a dirty or unreadable worktree, untracked files
@@ -2598,7 +2627,7 @@ const make = Effect.gen(function* () {
         subject: "",
       });
     }
-    const to = path.normalize(target);
+    const to = cleanPath(target);
     if (to !== worktree.path) {
       // git would move the checkout into an existing folder, at a path
       // (and an id) other than the one asked for.
@@ -2644,7 +2673,7 @@ const make = Effect.gen(function* () {
     from: string,
     toPath: string,
   ) {
-    const to = worktreeIdFromPath(path.normalize(toPath));
+    const to = worktreeIdFromPath(cleanPath(toPath));
     if (to !== from) yield* rekeyWorktree(project, from, to);
     return to;
   });
@@ -2702,6 +2731,8 @@ const make = Effect.gen(function* () {
       yield* rekeyWorktree(project, worktree.id, made.id);
     }
     const adopted = yield* row({ project, worktree: made });
+    if (cloned !== undefined)
+      yield* reporter.report({ event: "cloned", cloned });
     yield* reporter.report({ event: "created", worktree: adopted });
     const failures = yield* createLifecycle(
       project,
@@ -2711,7 +2742,7 @@ const make = Effect.gen(function* () {
       false,
       reporter,
     );
-    return { worktree: adopted, failures, cloned };
+    return { worktree: adopted, failures };
   });
 
   const setup = Effect.fn("Worktrees.setup")(function* (

@@ -1155,7 +1155,11 @@ const sameChange = async <A, E>(
     async () => {
       const events: unknown[] = [];
       const reporter: Worktrees.Reporter = {
-        report: (event) => Effect.sync(() => void events.push(event)),
+        // How the files were cloned Go says on stderr, not as a document.
+        report: (event) =>
+          Effect.sync(() => {
+            if (event.event !== "cloned") events.push(event);
+          }),
         color: true,
       };
       const last = await box.engine(engine(reporter).pipe(Effect.map(done)));

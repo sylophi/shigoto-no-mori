@@ -1,9 +1,8 @@
 // sm projects <list|add|remove|reorder|icon|config>: the registered
 // projects, terrier's included, and each one's settings.
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename } from "node:path";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Icons from "@shigomori/engine/Icons";
-import * as Paths from "@shigomori/engine/Paths";
 import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
@@ -15,6 +14,7 @@ import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { Cancelled, UsageError } from "../errors.ts";
 import {
+  absolute,
   given,
   here,
   projectFlags,
@@ -127,20 +127,6 @@ const projectConfig = settingsOf.pipe(
     ),
   ),
 );
-
-// A typed path, home-expanded and made absolute against the cwd, as
-// Go's toAbsolute: an absolute path stays as typed, and without a cwd
-// the path stays relative.
-const absolute = (raw: string) =>
-  Effect.map(Effect.service(Paths.Paths), ({ expandHome }) => {
-    const expanded = expandHome(raw);
-    if (isAbsolute(expanded)) return expanded;
-    try {
-      return resolve(process.cwd(), expanded);
-    } catch {
-      return expanded;
-    }
-  });
 
 const yesFlag = Flag.Boolean("yes").pipe(
   Flag.withAlias("y"),
