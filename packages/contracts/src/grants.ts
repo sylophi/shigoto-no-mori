@@ -30,6 +30,7 @@ export const GRANTS = {
       "git:refreshProject",
       "githubCli:disablePullRequestAutoMerge",
       "githubCli:mergePullRequest",
+      "githubCli:publish",
       "githubCli:resolvePullRequestCheckout",
       "githubCli:setPullRequestDraft",
       "mirror:applyGitState",
@@ -71,7 +72,7 @@ export const GRANTS = {
   browseFiles: {
     title: "Browse your files",
     detail:
-      "List folders anywhere on this machine, read any file in its worktrees, and add or clone projects into it.",
+      "List folders anywhere on this machine, read any file in its worktrees, and add, clone or create projects in it.",
     calls: [
       "fs:isGitRepo",
       "fs:listDirectory",
@@ -80,6 +81,7 @@ export const GRANTS = {
       "mirror:openStream",
       "projects:add",
       "projects:clone",
+      "projects:create",
       "runtime:info",
       "sync:hasCommits",
       "sync:ignoredPaths",

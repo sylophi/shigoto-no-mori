@@ -37,6 +37,20 @@ export function useSharedStringSetting(
   return data ?? undefined;
 }
 
+// A reading over the whole document, for a setting spread over many
+// keys. Narrowed like the one above, so `select` should return a value
+// that compares equal when the reading hasn't moved (a sorted list,
+// not a set).
+export function useSharedSettingsView<T>(
+  select: (doc: SharedSettingsDoc) => T,
+): T | undefined {
+  const { data } = useQuery<SharedSettingsDoc, Error, T>({
+    ...sharedSettingsQuery,
+    select,
+  });
+  return data;
+}
+
 // Whether the local copy has been read (or the read has failed, which
 // leaves nothing to wait for). Until then an unset setting and an
 // unread one look alike, and a surface that acts on the difference

@@ -60,7 +60,7 @@ export function WorktreeSyncPill({
           tone={move.tone}
           icon={move.arrowsInLabel ? undefined : move.Icon}
           label={compact ? move.compactLabel : move.label}
-          tip={move.disabledReason ?? (compact ? move.compactTip : move.tip)}
+          tip={move.disabledReason ?? move.tip}
           disabled={move.disabledReason !== undefined}
           pending={mutation.isPending}
           onClick={() => mutation.mutate(input)}

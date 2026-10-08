@@ -15,6 +15,7 @@ import {
   TICKET_PREFIX,
   TICKET_TTL_MS,
 } from "../src/ticket.ts";
+import type { Env } from "../src/env.ts";
 import {
   BASE,
   TEST_TOKEN_PREFIX,
@@ -466,10 +467,43 @@ describe("POST /tickets", () => {
   });
 });
 
+// A limiter whose window never rolls over. The simulated ratelimits
+// binding counts in windows aligned to the wall clock, so a burst that
+// crosses a minute boundary starts again from zero and never reaches
+// the limit.
+function frozenLimiter(limit: number): RateLimit {
+  const counts = new Map<string, number>();
+  return {
+    async limit({ key }) {
+      const count = (counts.get(key) ?? 0) + 1;
+      counts.set(key, count);
+      return { success: count <= limit };
+    },
+  };
+}
+
+// Made-up budgets, fresh for each case. The cases cover which budget
+// each route draws on and what an over-budget caller gets back, not the
+// sizes in wrangler.jsonc.
+const BUDGET = 5;
+const OPEN_BUDGET = 2;
+
+function limitedEnv(): Env {
+  return {
+    ...env,
+    RATE_LIMIT: frozenLimiter(BUDGET),
+    RATE_LIMIT_OPEN: frozenLimiter(OPEN_BUDGET),
+  };
+}
+
 // The limiters key on CF-Connecting-IP, which only the Cloudflare edge
-// sets, so every other spec (no such header) runs unlimited and each
-// rate limiting case spends its own made-up address.
-async function statusesFrom(ip: string, count: number, path: string) {
+// sets, so every other spec (no such header) runs unlimited.
+async function statusesFrom(
+  testEnv: Env,
+  ip: string,
+  count: number,
+  path: string,
+) {
   const statuses: number[] = [];
   for (let i = 0; i < count; i++) {
     // oxlint-disable-next-line no-await-in-loop -- the limiter counts in arrival order, so these have to land one at a time
@@ -481,78 +515,79 @@ async function statusesFrom(ip: string, count: number, path: string) {
           Upgrade: "websocket",
         },
       }),
+      testEnv,
     );
     statuses.push(response.status);
   }
   return statuses;
 }
 
-// The local limiter counts in windows aligned to the wall clock, so a
-// burst that straddles a minute boundary meets a fresh counter halfway.
-// One that fails across a rollover runs again on addresses of its own,
-// which a minute-long window then holds whole.
-async function inOneWindow(burst: (net: string) => Promise<void>) {
-  const started = Math.floor(Date.now() / 60_000);
-  try {
-    await burst("203.0.113");
-  } catch (error) {
-    if (Math.floor(Date.now() / 60_000) === started) throw error;
-    await burst("198.51.100");
-  }
-}
-
 describe("rate limiting", () => {
+  // A missing binding would fail open in rateLimited, so the cases below,
+  // which stand in their own limiters, would never notice it.
+  it("binds both budgets from wrangler.jsonc", async () => {
+    for (const limiter of [env.RATE_LIMIT, env.RATE_LIMIT_OPEN]) {
+      // oxlint-disable-next-line no-await-in-loop -- two calls, order does not matter
+      expect(await limiter.limit({ key: "203.0.113.30" })).toEqual({
+        success: true,
+      });
+    }
+  });
+
   it("answers 429 with Retry-After once one address is over budget", async () => {
-    await inOneWindow(async (net) => {
-      const statuses = await statusesFrom(
-        `${net}.10`,
-        310,
-        HUB_ROUTES.listDevices.path,
-      );
-      expect(statuses.slice(0, 300).every((status) => status === 401)).toBe(
-        true,
-      );
-      expect(statuses.at(-1)).toBe(429);
-      const response = await call(
-        new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
-          headers: { "CF-Connecting-IP": `${net}.10` },
-        }),
-      );
-      expect(response.status).toBe(429);
-      expect(response.headers.get("Retry-After")).toBe("60");
-      expect(await response.json()).toEqual({ error: "too many requests" });
-      // The 429 still carries CORS, or a browser client could not read it.
-      expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-      // One caller's budget is not another's.
-      const other = await statusesFrom(
-        `${net}.11`,
-        1,
-        HUB_ROUTES.listDevices.path,
-      );
-      expect(other).toEqual([401]);
-    });
+    const testEnv = limitedEnv();
+    const statuses = await statusesFrom(
+      testEnv,
+      "203.0.113.10",
+      BUDGET + 1,
+      HUB_ROUTES.listDevices.path,
+    );
+    expect(statuses.slice(0, BUDGET).every((status) => status === 401)).toBe(
+      true,
+    );
+    expect(statuses.at(-1)).toBe(429);
+    const response = await call(
+      new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
+        headers: { "CF-Connecting-IP": "203.0.113.10" },
+      }),
+      testEnv,
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expect(await response.json()).toEqual({ error: "too many requests" });
+    // The 429 still carries CORS, or a browser client could not read it.
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    // One caller's budget is not another's.
+    const other = await statusesFrom(
+      testEnv,
+      "203.0.113.11",
+      1,
+      HUB_ROUTES.listDevices.path,
+    );
+    expect(other).toEqual([401]);
   });
 
   it("holds the credential-free routes to the tighter budget", async () => {
-    await inOneWindow(async (net) => {
-      const statuses = await statusesFrom(
-        `${net}.20`,
-        70,
-        HUB_ROUTES.connect.path,
-      );
-      expect(statuses.slice(0, 60).every((status) => status === 403)).toBe(
-        true,
-      );
-      expect(statuses.at(-1)).toBe(429);
-      // Enroll draws on the same budget, already spent above.
-      const response = await call(
-        new Request(`${BASE}${HUB_ROUTES.enroll.path}`, {
-          method: HUB_ROUTES.enroll.method,
-          headers: { "CF-Connecting-IP": `${net}.20` },
-        }),
-      );
-      expect(response.status).toBe(429);
-    });
+    const testEnv = limitedEnv();
+    const statuses = await statusesFrom(
+      testEnv,
+      "203.0.113.20",
+      OPEN_BUDGET + 1,
+      HUB_ROUTES.connect.path,
+    );
+    expect(
+      statuses.slice(0, OPEN_BUDGET).every((status) => status === 403),
+    ).toBe(true);
+    expect(statuses.at(-1)).toBe(429);
+    // Enroll draws on the same budget, already spent above.
+    const response = await call(
+      new Request(`${BASE}${HUB_ROUTES.enroll.path}`, {
+        method: HUB_ROUTES.enroll.method,
+        headers: { "CF-Connecting-IP": "203.0.113.20" },
+      }),
+      testEnv,
+    );
+    expect(response.status).toBe(429);
   });
 });
 

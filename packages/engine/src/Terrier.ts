@@ -14,8 +14,9 @@ import { terrierProjectId } from "./terrierId.ts";
 
 // Terrier (github.com/dittofleet/terrier) is an external registry of
 // repo paths, listed as projects beside the registry's own while the
-// device's `terrier` setting is on. Its stable surface is `terrier ls
-// --json`, and a minor version bump is its compatibility signal.
+// device's `terrier` setting is on. `terrier ls --json` is all this
+// reads, so terrier's version doesn't matter, only whether that output
+// still has the shape read here.
 
 // Why the setting is on and no terrier projects are listed: the words
 // a warning and doctor use.
@@ -47,13 +48,61 @@ export class Terrier extends Context.Service<
   }
 >()("sm/engine/Terrier") {}
 
-// The read contract this build understands: v0.1.x.
-const SUPPORTED_MAJOR = 0;
-const SUPPORTED_MINOR = 1;
+// Why `terrier ls --json` couldn't be read, in the Go sm's words where
+// they are its own.
+class TerrierUnreadable extends Schema.TaggedError<TerrierUnreadable>()(
+  "TerrierUnreadable",
+  { reason: Schema.String },
+) {}
 
-const LsSchema = Schema.Struct({
-  projects: Schema.Array(Schema.Struct({ path: Schema.String })),
-});
+// A missing `projects` or a row without `path` is an error rather than
+// an empty list, so a terrier whose output changed shape says so
+// instead of quietly listing nothing. Rows' other fields are terrier's.
+const parseListing = (
+  stdout: string,
+): Effect.Effect<ReadonlyArray<string>, TerrierUnreadable> => {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(stdout);
+  } catch (error) {
+    // Go's words for the commonest case, output that isn't JSON at all.
+    const first = stdout.trimStart()[0];
+    return Effect.fail(
+      new TerrierUnreadable({
+        reason:
+          first !== undefined && !/[[{"\-\d tfn]/.test(first)
+            ? `invalid character '${first}' looking for beginning of value`
+            : String(error),
+      }),
+    );
+  }
+  if (!Predicate.isObject(doc) || Array.isArray(doc)) {
+    return Effect.fail(
+      new TerrierUnreadable({ reason: "its output isn't a JSON object" }),
+    );
+  }
+  const projects = (doc as { projects?: unknown }).projects;
+  if (!Array.isArray(projects)) {
+    return Effect.fail(
+      new TerrierUnreadable({ reason: "no projects list in its output" }),
+    );
+  }
+  const paths: string[] = [];
+  for (const row of projects as ReadonlyArray<unknown>) {
+    const path = Predicate.isObject(row)
+      ? (row as { path?: unknown }).path
+      : undefined;
+    if (typeof path !== "string") {
+      return Effect.fail(
+        new TerrierUnreadable({
+          reason: "a project without a path in its output",
+        }),
+      );
+    }
+    paths.push(path);
+  }
+  return Effect.succeed(paths);
+};
 
 // The last element of a path, as Go's filepath.Base takes it.
 const baseName = (path: string) => {
@@ -128,57 +177,54 @@ const make = Effect.gen(function* () {
       }),
     ).pipe(Effect.timeout("10 seconds"));
 
-  // The binary's version, once per process: none when terrier isn't on
-  // PATH, empty when it answers with nothing usable.
-  const version = yield* Effect.cached(
-    output(["version"]).pipe(
-      Effect.map((stdout) => Option.some(stdout.trim())),
-      Effect.catchIf(
-        (error) =>
-          Predicate.isTagged(error, "PlatformError") && isNotFound(error),
-        () => Effect.succeed(Option.none<string>()),
-      ),
-      Effect.orElseSucceed(() => Option.some("")),
-    ),
-  );
-
   const read = Effect.gen(function* () {
     const enabled = yield* config.get({ kind: "device" }, "terrier");
     if (enabled.value !== true) {
       return { paths: [], trouble: Option.none() };
     }
-    const found = yield* version;
-    if (Option.isNone(found)) {
+    const listed = yield* output(["ls", "--json"]).pipe(
+      Effect.flatMap(parseListing),
+      Effect.map((paths) => ({ kind: "listed" as const, paths })),
+      Effect.catchIf(
+        (error) =>
+          Predicate.isTagged(error, "PlatformError") && isNotFound(error),
+        () => Effect.succeed({ kind: "missing" as const }),
+      ),
+      Effect.catchTags({
+        TerrierCommandFailed: ({ code }) =>
+          Effect.succeed({
+            kind: "unreadable" as const,
+            reason: `exit status ${code}`,
+          }),
+        TerrierUnreadable: ({ reason }) =>
+          Effect.succeed({ kind: "unreadable" as const, reason }),
+        TimeoutError: () =>
+          Effect.succeed({
+            kind: "unreadable" as const,
+            reason: "signal: killed",
+          }),
+        PlatformError: (error) =>
+          Effect.succeed({
+            kind: "unreadable" as const,
+            reason: error.message,
+          }),
+      }),
+    );
+    if (listed.kind === "missing") {
       return trouble(
         "enabled in config.json but `terrier` isn't on PATH, so no terrier projects are listed",
         "Install terrier, or turn the toggle off in the app's Settings.",
       );
     }
-    const [, major, minor] = /^v(\d+)\.(\d+)/.exec(found.value) ?? [];
-    if (
-      Number(major) !== SUPPORTED_MAJOR ||
-      Number(minor) !== SUPPORTED_MINOR
-    ) {
+    if (listed.kind === "unreadable") {
       return trouble(
-        `${found.value || "(version unreadable)"} isn't a version this build understands (wants v${SUPPORTED_MAJOR}.${SUPPORTED_MINOR}), so no terrier projects are listed`,
-        `Update ${binaryName} and terrier to versions that agree.`,
-      );
-    }
-    const listed = yield* output(["ls", "--json"]).pipe(
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(Schema.fromJsonString(LsSchema)),
-      ),
-      Effect.option,
-    );
-    if (Option.isNone(listed)) {
-      return trouble(
-        "`terrier ls --json` failed",
-        "Run `terrier ls` by hand to see what it says.",
+        `\`terrier ls --json\` failed (${listed.reason}), so no terrier projects are listed`,
+        `Run \`terrier ls --json\` by hand to see what it says, and update ${binaryName} if its output changed.`,
       );
     }
     // Home-expanded and absolute, never resolved against the working
     // directory, which differs between the app and a shell.
-    const paths = listed.value.projects.flatMap(({ path }) => {
+    const paths = listed.paths.flatMap((path) => {
       const expanded = expandHome(path);
       return expanded.startsWith("/") ? [expanded] : [];
     });

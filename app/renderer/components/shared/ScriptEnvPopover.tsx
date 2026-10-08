@@ -1,4 +1,3 @@
-import { Variable } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import {
@@ -21,7 +20,6 @@ export function ScriptEnvPopover() {
       <PopoverTrigger
         render={
           <Button variant="ghost" size="sm">
-            <Variable />
             Environment variables
           </Button>
         }

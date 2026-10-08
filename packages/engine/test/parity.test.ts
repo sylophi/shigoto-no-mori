@@ -208,6 +208,18 @@ describe("config", () => {
     ]);
   });
 
+  it("sets the terminal terminal tools open in, and refuses one it doesn't know", async () => {
+    box.write("registry.json", { projects: [] });
+    await device.get("terminal");
+    await inTurn([
+      () => device.set("terminal", "ghostty"),
+      () => device.set("terminal", "xterm"),
+      () => device.get("terminal"),
+      () => device.read(),
+      () => device.write({ terminal: "warp" }),
+    ]);
+  });
+
   it("unsets, and writes a whole document the way the app saves", async () => {
     box.write("config.json", {
       portPool: true,
@@ -301,6 +313,18 @@ describe("projects config", () => {
 
 describe("launchers", () => {
   it("lists the catalog, installed or not, by label", async () => {
+    await same(
+      ["launchers", "--catalog"],
+      Effect.service(Launchers.Launchers).pipe(
+        Effect.flatMap((launchers) => launchers.catalog),
+        Effect.map((apps) => ({ ok: true, apps })),
+      ),
+    );
+  });
+
+  it("finds a terminal tool by its command's first word on PATH", async () => {
+    box.fakeBin("lazygit", "exit 0");
+    box.fakeBin("nvim", "exit 0");
     await same(
       ["launchers", "--catalog"],
       Effect.service(Launchers.Launchers).pipe(
@@ -1005,15 +1029,16 @@ describe("worktrees describe", () => {
   });
 });
 
+// What `terrier ls --json` answers for `paths`, with a field sm
+// doesn't read beside each.
+const terrierListing = (paths: ReadonlyArray<string>) => ({
+  projects: paths.map((path) => ({ path, slug: "o/r" })),
+});
+
 describe("projects list with terrier", () => {
-  // A terrier on PATH that answers as `version` and `ls --json` do.
-  const fakeTerrier = (version: string, paths: ReadonlyArray<string>) =>
-    box.fakeBin(
-      "terrier",
-      `if [ "$1" = version ]; then echo ${version}; else echo '${JSON.stringify(
-        { projects: paths.map((path) => ({ path })) },
-      )}'; fi`,
-    );
+  // A terrier on PATH that answers `ls --json` with `doc`.
+  const fakeTerrier = (doc: unknown) =>
+    box.fakeBin("terrier", `echo '${JSON.stringify(doc)}'`);
   const list = Effect.service(Registry.Registry).pipe(
     Effect.flatMap((registry) => registry.rows()),
   );
@@ -1021,12 +1046,14 @@ describe("projects list with terrier", () => {
   it("adds terrier's repos the registry doesn't hold, read-only, by name", async () => {
     const both = box.repo("both");
     const extra = box.repo("zeta");
-    fakeTerrier("v0.1.4", [
-      `${extra}/`,
-      both,
-      "relative/path",
-      `${box.home}/alpha-gone`,
-    ]);
+    fakeTerrier(
+      terrierListing([
+        `${extra}/`,
+        both,
+        "relative/path",
+        `${box.home}/alpha-gone`,
+      ]),
+    );
     box.write("config.json", { terrier: true });
     box.write("registry.json", {
       projects: [{ id: "B", name: "both", path: both }],
@@ -1034,12 +1061,20 @@ describe("projects list with terrier", () => {
     await same(["projects", "list"], list, withoutHue);
   });
 
-  it("lists none of terrier's while its version isn't one this build reads", async () => {
-    fakeTerrier("v0.2.0", [box.repo("zeta")]);
+  it("lists none of terrier's while its listing isn't in the shape read", async () => {
+    const zeta = box.repo("zeta");
     box.write("config.json", { terrier: true });
     box.write("registry.json", { projects: [] });
-    await same(["projects", "list"], list, withoutHue);
-    assert.deepEqual(await box.engine(list), []);
+    for (const changed of [
+      { repos: [{ path: zeta }] },
+      { projects: [{ dir: zeta }] },
+    ]) {
+      fakeTerrier(changed);
+      // oxlint-disable-next-line no-await-in-loop -- one sandbox, one shape at a time
+      await same(["projects", "list"], list, withoutHue);
+      // oxlint-disable-next-line no-await-in-loop -- one sandbox, one shape at a time
+      assert.deepEqual(await box.engine(list), []);
+    }
   });
 });
 
