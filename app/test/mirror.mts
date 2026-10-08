@@ -56,7 +56,7 @@
 //
 // covers: file-sync/**
 import assert from "node:assert/strict";
-import { type ChildProcess, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -82,10 +82,15 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as FileSync from "@host/fileSync/FileSync";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import {
   listMirrorServing,
+  type MirrorCreateInput,
   mirrorHandlers,
   setMirrorImpl,
 } from "@host/ipc/modules/mirror";
@@ -112,7 +117,7 @@ import {
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import { createMirrorDaemon } from "../main/core/mirror/daemon.ts";
+import * as MirrorDaemon from "../main/core/mirror/daemon.ts";
 import { createMirrorGateway } from "../main/core/mirror/gateway.ts";
 import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -180,10 +185,24 @@ const fakeSession = (
   ...fields,
 });
 
-// A serve child spawned by A's handler, observed through the same seam
-// production uses, so "no child spawned" and "child gone" are facts
-// about real processes.
-const serveChildren = new Set<ChildProcess>();
+// The pids of the serve children A's handler spawned, observed through
+// the FileSync service production uses, so "no child spawned" and
+// "child gone" are facts about real processes.
+const serveChildren = new Set<number>();
+
+// B's daemon, the way main/ipc/handlers.ts reads it.
+const daemon = {
+  status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
+  sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
+  create: (input: MirrorCreateInput) =>
+    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.create(input))),
+  terminate: (id: string) =>
+    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.terminate(id))),
+  pause: (id: string) =>
+    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.pause(id))),
+  resume: (id: string) =>
+    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.resume(id))),
+};
 
 // mirror:stop called the way a caller on this device would, its
 // context unread by the handler.
@@ -203,12 +222,10 @@ let listener: DirectWire["listener"];
 let peerA: DirectWire["peerA"];
 let mirrorOverWire: ReturnType<typeof buildClient<typeof mirrorContract>>;
 let gateway: ReturnType<typeof createMirrorGateway>;
-let daemon: ReturnType<typeof createMirrorDaemon>;
-let createInput: Parameters<ReturnType<typeof createMirrorDaemon>["create"]>[0];
+let runtime: ManagedRuntime.ManagedRuntime<MirrorDaemon.MirrorDaemon, never>;
+let createInput: MirrorCreateInput;
 let hubBaseline: number;
-let session: Awaited<
-  ReturnType<ReturnType<typeof createMirrorDaemon>["create"]>
->;
+let session: string;
 let servePid: number;
 let follower: ReturnType<typeof createGitFollower>;
 let gitHubBaseline: number;
@@ -282,14 +299,6 @@ beforeAll(async () => {
   worktreeIdB = worktreeIdFromPath(rootB);
 
   fixture.useCli();
-  // A's serve children, exactly as the app spawns them, plus the
-  // observation seam.
-  setFileSyncSpawnImpl((args) =>
-    spawnStreamChild(fileSyncBinary, args, {
-      env: smEnv,
-      onSpawned: (child) => serveChildren.add(child),
-    }),
-  );
   projectIdA = await fixture.projectIdOf(repoA);
   projectIdB = await fixture.projectIdOf(repoB);
 
@@ -314,38 +323,10 @@ beforeAll(async () => {
     peerChannelsFor: () => peerA.channels,
     log: () => {},
   });
-  daemon = createMirrorDaemon({
-    // The daemon's env carries the gateway token, so the harness merges
-    // it over its own rather than replacing it.
-    spawn: (args, env) =>
-      spawnStreamChild(fileSyncBinary, args, {
-        env: { ...smEnv, ...env },
-        onSpawned: (child) => track(() => child.kill("SIGKILL")),
-      }),
-    gatewayAddress: () => listening(gateway.address()),
-    gatewayToken: () => listening(gateway.token()),
-    dataDir: () => fileSyncDataDir,
-    onChange: () => {
-      changes++;
-      onSnapshot?.();
-    },
-    log: () => {},
-  });
-  track(() => daemon.stop());
   track(() => gateway.stop());
 });
 
 afterAll(async () => {
-  // A serve child A spawned for a stream dies with its channel. After
-  // a failure mid-scenario the channel may still be up, and the
-  // child's stdio would keep this process alive.
-  for (const child of serveChildren) {
-    try {
-      child.kill("SIGKILL");
-    } catch {
-      // Already gone.
-    }
-  }
   await teardown();
   fixture.remove();
 });
@@ -353,7 +334,40 @@ afterAll(async () => {
 it("gateway bound and the real mirror daemon reported ready", async () => {
   await gateway.start();
   assert.match(listening(gateway.address()), /^127\.0\.0\.1:\d+$/);
-  daemon.start();
+  // B's daemon and A's serve children, on the freshly built binary.
+  const fileSync = Layer.effect(
+    FileSync.FileSync,
+    Effect.gen(function* () {
+      const real = yield* FileSync.FileSync;
+      return FileSync.FileSync.of({
+        ...real,
+        serve: (env) =>
+          real
+            .serve(env)
+            .pipe(
+              Effect.tap((child) =>
+                Effect.sync(() => serveChildren.add(child.pid)),
+              ),
+            ),
+      });
+    }),
+  ).pipe(Layer.provide(FileSync.layer(() => fileSyncBinary)));
+  runtime = ManagedRuntime.make(
+    MirrorDaemon.layer({
+      gatewayAddress: () => listening(gateway.address()),
+      gatewayToken: () => listening(gateway.token()),
+      dataDir: () => fileSyncDataDir,
+      onChange: () => {
+        changes++;
+        onSnapshot?.();
+      },
+    }).pipe(
+      Layer.provideMerge(FileSync.adapter),
+      Layer.provideMerge(fileSync),
+      Layer.provide(NodeServices.layer),
+    ),
+  );
+  track(() => runtime.dispose());
   await waitFor(
     () => daemon.status() === "running",
     "the daemon to report ready",
@@ -472,9 +486,7 @@ it("A serves exactly one stream, attributed to worktree and caller", async () =>
   // The preface carried B's own worktree id for the pair.
   assert.equal(served.peerWorktreeId, worktreeIdB);
   assert.equal(serveChildren.size, 1);
-  const [serveChild] = serveChildren;
-  assert.ok(serveChild !== undefined, "no serve child was spawned");
-  const pid = serveChild.pid;
+  const [pid] = serveChildren;
   assert.ok(
     pid !== undefined && processAlive(pid),
     "the serve child is not running",
@@ -1512,9 +1524,10 @@ it("the no-account sweep asks about each session once, so a misread credential e
 });
 
 it("daemon stop is clean and the gateway holds no streams", async () => {
-  // (7) Stopping the daemon ends it cleanly.
-  daemon.stop();
-  await waitFor(() => daemon.status() === "stopped", "the daemon to stop");
+  // (7) Closing the daemon's layer ends it cleanly.
+  const status = runtime.runSync(MirrorDaemon.onDaemon((d) => d.status));
+  assert.equal(status, "running");
+  await runtime.dispose();
   await delay(50);
   assert.equal(gateway.streamCount(), 0);
 });

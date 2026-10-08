@@ -1,8 +1,9 @@
 // Durable proof for how the mirror daemon's supervisor
 // (main/core/mirror/daemon.ts) reads the engine's NDJSON lines
-// (file-sync/engine.go, the daemon control protocol). The child is a
-// fake stream the proof writes the daemon's side of, so each line is
-// exactly the one under test, no engine built.
+// (file-sync/engine.go, the daemon control protocol) and restarts it.
+// The child is a fake the proof writes the daemon's side of and ends
+// when it likes, so each line is exactly the one under test, no engine
+// built, and the clock is a TestClock.
 //
 // Asserts:
 //   - a well-formed state line replaces the sessions, and a response
@@ -18,14 +19,24 @@
 //     fail a request,
 //   - a malformed response settles its request with an error rather
 //     than resolving with what it carried,
-//   - the engine's id-less refusal (an empty id) is logged, not dropped.
+//   - the engine's id-less refusal (an empty id) is logged, not dropped,
+//   - a child that exits is spawned again on the restart ladder, and
+//     one that ran past the stable window restarts from its bottom.
 //
 // Run: pnpm test mirror-daemon-lines.
 import assert from "node:assert/strict";
-import { Duplex } from "node:stream";
-import type { StreamChild } from "@host/fileSync/spawn";
-import { lineSplitter } from "@host/lib/util/ndjson";
-import { createMirrorDaemon } from "../main/core/mirror/daemon.ts";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Queue from "effect/Queue";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as TestClock from "effect/testing/TestClock";
+import * as FileSync from "@host/fileSync/FileSync";
+import * as MirrorDaemon from "../main/core/mirror/daemon.ts";
 import { it } from "vitest";
 import { trackTest } from "./lib/vitestKit.mts";
 
@@ -64,44 +75,108 @@ function session(id: string) {
   };
 }
 
+// Lets the supervisor read a line, and a request write its own: a few
+// turns of the event loop.
+const settle = () =>
+  [1, 2, 3, 4, 5].reduce<Promise<void>>(
+    (turns) =>
+      turns.then(() => new Promise((resolve) => setImmediate(resolve))),
+    Promise.resolve(),
+  );
+
 // A daemon on a fake child: `send` writes a line from the engine's
 // side, `requests` collects what the supervisor wrote to it.
-function harness() {
+async function harness() {
   const requests: Record<string, unknown>[] = [];
   const logs: string[] = [];
-  const split = lineSplitter((line) => requests.push(JSON.parse(line)));
-  const stream = new Duplex({
-    read() {},
-    write(chunk: Buffer, _encoding, callback) {
-      split(chunk);
-      callback();
-    },
+  const out = Effect.runSync(Queue.unbounded<Uint8Array>());
+  // One per spawn: the child's exit, which the proof decides.
+  const exits: Deferred.Deferred<number>[] = [];
+  const fakeFileSync = Layer.succeed(
+    FileSync.FileSync,
+    FileSync.FileSync.of({
+      spawn: (_args, { stdin }) =>
+        Effect.gen(function* () {
+          yield* stdin.pipe(
+            Stream.decodeText(),
+            Stream.splitLines,
+            Stream.runForEach((line) =>
+              Effect.sync(() => requests.push(JSON.parse(line))),
+            ),
+            Effect.ignore,
+            Effect.forkScoped,
+          );
+          const exit = yield* Deferred.make<number>();
+          exits.push(exit);
+          return ChildProcessSpawner.makeHandle({
+            pid: ChildProcessSpawner.ProcessId(2),
+            exitCode: Deferred.await(exit).pipe(
+              Effect.map(ChildProcessSpawner.ExitCode),
+            ),
+            isRunning: Effect.succeed(true),
+            kill: () => Effect.void,
+            stdin: Sink.drain,
+            stdout: Stream.fromQueue(out).pipe(
+              Stream.interruptWhen(Deferred.await(exit)),
+            ),
+            stderr: Stream.empty,
+            all: Stream.empty,
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void),
+          });
+        }),
+      serve: () => Effect.die("no serve children here"),
+    }),
+  );
+  const captured = Logger.make(({ message }) => {
+    logs.push(Array.isArray(message) ? message.join(" ") : String(message));
   });
-  const child: StreamChild = {
-    stream,
-    stderr: null,
-    pid: undefined,
-    kill: () => {},
-    onExit: () => {},
+  const runtime = ManagedRuntime.make(
+    MirrorDaemon.layer({
+      gatewayAddress: () => "127.0.0.1:1",
+      gatewayToken: () => "token",
+      dataDir: () => "unused",
+    }).pipe(
+      Layer.provide(fakeFileSync),
+      Layer.provide(Logger.layer([captured])),
+      Layer.provideMerge(TestClock.layer()),
+    ),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  const daemon = {
+    status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
+    sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
+    pause: (id: string) =>
+      runtime.runPromise(MirrorDaemon.onDaemon((d) => d.pause(id))),
+    resume: (id: string) =>
+      runtime.runPromise(MirrorDaemon.onDaemon((d) => d.resume(id))),
   };
-  const daemon = createMirrorDaemon({
-    spawn: () => child,
-    gatewayAddress: () => "127.0.0.1:1",
-    gatewayToken: () => "token",
-    dataDir: () => "unused",
-    log: (message) => logs.push(message),
-  });
-  daemon.start();
+  await settle();
   const send = async (line: unknown) => {
-    stream.push(JSON.stringify(line) + "\n");
-    await new Promise((resolve) => setImmediate(resolve));
+    Queue.offerUnsafe(
+      out,
+      new TextEncoder().encode(JSON.stringify(line) + "\n"),
+    );
+    await settle();
   };
-  return { daemon, send, requests, logs };
+  // Moves the daemon's clock on, then lets it act on the time.
+  const adjust = async (ms: number) => {
+    await runtime.runPromise(TestClock.adjust(ms));
+    await settle();
+  };
+  const exit = async (index: number) => {
+    const deferred = exits[index];
+    assert.ok(deferred !== undefined, `no child ${index} was spawned`);
+    Effect.runSync(Deferred.succeed(deferred, 1));
+    await settle();
+  };
+  return { daemon, send, requests, logs, exits, adjust, exit };
 }
 
 it("a well-formed state line is the sessions", async () => {
-  const { daemon, send } = harness();
-  trackTest(() => daemon.stop());
+  const { daemon, send } = await harness();
   await send({ event: "ready" });
   assert.equal(daemon.status(), "running");
   await send({ event: "state", sessions: [session("s1")] });
@@ -112,8 +187,7 @@ it("a well-formed state line is the sessions", async () => {
 });
 
 it("a state line off the contract is dropped and logged", async () => {
-  const { daemon, send, logs } = harness();
-  trackTest(() => daemon.stop());
+  const { daemon, send, logs } = await harness();
   await send({ event: "ready" });
   await send({ event: "state", sessions: [session("s1")] });
   const { labels: _labels, ...unlabelled } = session("s2");
@@ -140,12 +214,12 @@ it("a state line off the contract is dropped and logged", async () => {
 });
 
 it("a repeated rejection logs once", async () => {
-  const { daemon, send, requests, logs } = harness();
-  trackTest(() => daemon.stop());
+  const { daemon, send, requests, logs } = await harness();
   await send({ event: "ready" });
   const bad = { event: "state", sessions: [{ ...session("s1"), status: 7 }] };
   await send(bad);
   const paused = daemon.pause("s1");
+  await settle();
   await send({ id: requests.at(-1)?.["id"], ok: true, session: "s1" });
   await paused;
   await send(bad);
@@ -156,8 +230,7 @@ it("a repeated rejection logs once", async () => {
 });
 
 it("what the protocol does not name is stripped or ignored, not refused", async () => {
-  const { daemon, send, requests, logs } = harness();
-  trackTest(() => daemon.stop());
+  const { daemon, send, requests, logs } = await harness();
   await send({ event: "ready", version: 2 });
   assert.equal(daemon.status(), "running");
   await send({
@@ -171,6 +244,7 @@ it("what the protocol does not name is stripped or ignored, not refused", async 
   );
   assert.equal("newField" in (daemon.sessions()[0] ?? {}), false);
   const paused = daemon.pause("s1");
+  await settle();
   await send({
     id: requests.at(-1)?.["id"],
     ok: true,
@@ -187,23 +261,45 @@ it("what the protocol does not name is stripped or ignored, not refused", async 
 });
 
 it("a response settles its request, a malformed one with an error", async () => {
-  const { daemon, send, requests, logs } = harness();
-  trackTest(() => daemon.stop());
+  const { daemon, send, requests, logs } = await harness();
   await send({ event: "ready" });
   const good = daemon.pause("s1");
+  await settle();
   await send({ id: requests.at(-1)?.["id"], ok: true, session: "s1" });
   assert.equal(await good, "s1");
   const bad = assert.rejects(daemon.resume("s1"), /malformed/);
+  await settle();
   await send({ id: requests.at(-1)?.["id"], ok: true, session: 42 });
   await bad;
   assert.equal(logs.length, 1, logs.join("\n"));
 });
 
 it("an id-less refusal is logged", async () => {
-  const { daemon, send, logs } = harness();
-  trackTest(() => daemon.stop());
+  const { send, logs } = await harness();
   await send({ event: "ready" });
   await send({ id: "", ok: false, error: "malformed request: x" });
   assert.equal(logs.length, 1, "the refusal went unreported");
   assert.match(logs[0] ?? "", /malformed request: x/);
+});
+
+it("a daemon that exits is restarted on the ladder, from its bottom after a long run", async () => {
+  const { daemon, send, exits, adjust, exit } = await harness();
+  await send({ event: "ready" });
+  assert.equal(daemon.status(), "running");
+  await exit(0);
+  assert.equal(daemon.status(), "starting");
+  await adjust(999);
+  assert.equal(exits.length, 1, "restarted before the first rung");
+  await adjust(1);
+  assert.equal(exits.length, 2, "not restarted on the first rung");
+  await exit(1);
+  await adjust(1_999);
+  assert.equal(exits.length, 2, "restarted before the second rung");
+  await adjust(1);
+  assert.equal(exits.length, 3, "not restarted on the second rung");
+  // Up past the stable window: the streak is over.
+  await adjust(30_000);
+  await exit(2);
+  await adjust(1_000);
+  assert.equal(exits.length, 4, "a long run did not reset the ladder");
 });

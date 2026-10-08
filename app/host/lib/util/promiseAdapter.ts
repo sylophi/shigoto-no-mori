@@ -14,6 +14,7 @@ export const make = <I>(name: string) => {
   let context = new Promise<Context.Context<I>>((resolve) => {
     open = resolve;
   });
+  let current: Context.Context<I> | undefined;
   const layer = Layer.effectDiscard(
     Effect.acquireRelease(
       Effect.context<I>().pipe(
@@ -21,11 +22,13 @@ export const make = <I>(name: string) => {
           Effect.sync(() => {
             open(ctx);
             context = Promise.resolve(ctx);
+            current = ctx;
           }),
         ),
       ),
       () =>
         Effect.sync(() => {
+          current = undefined;
           context = Promise.reject(new Error(`${name} stopped with the app`));
           context.catch(() => {});
         }),
@@ -33,5 +36,12 @@ export const make = <I>(name: string) => {
   );
   const run = <A, E>(effect: Effect.Effect<A, E, I>): Promise<A> =>
     context.then((ctx) => Effect.runPromiseWith(ctx)(effect));
-  return { layer, run };
+  // A synchronous read for a caller that cannot wait, `orElse` while
+  // the layer is not up.
+  const runSyncOr = <A>(
+    effect: Effect.Effect<A, never, I>,
+    orElse: () => A,
+  ): A =>
+    current === undefined ? orElse() : Effect.runSyncWith(current)(effect);
+  return { layer, run, runSyncOr };
 };

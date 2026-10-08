@@ -6,7 +6,6 @@
 // it starts the subsystem, and the scope closing stops it.
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { log, logFailure } from "@shared/log";
 import * as Effect from "effect/Effect";
@@ -31,10 +30,15 @@ import {
 import { cliChildCount, killAllCli } from "./electron/cliRunner";
 import { startBackgroundFetch } from "./electron/fetch";
 import { startStateWatcher, stopStateWatcher } from "./electron/stateWatcher";
+import * as MirrorDaemon from "./core/mirror/daemon";
+import * as FileSyncRunner from "./electron/fileSyncRunner";
 import {
   announceProjectChanged,
-  startMirrorEngine,
-  stopMirrorEngine,
+  mirrorDaemonLayer,
+  startGitFollower,
+  startMirrorGateway,
+  stopGitFollower,
+  stopMirrorGateway,
 } from "./ipc/handlers";
 import { stopAllPortForwards } from "./ipc/modules/portForward";
 import {
@@ -78,8 +82,7 @@ const scripts = (hurried: () => boolean) =>
   );
 
 // The CLI's children run in their own process groups, and a lifecycle
-// script one spawned follows it down. The file-sync processes register
-// here too, so a mirror daemon still up after its stop goes with them.
+// script one spawned follows it down.
 const cliChildren = onQuit("the CLI children", Effect.sync(killAllCli));
 
 // The sweeps and watchers read the project list synchronously, from the
@@ -169,16 +172,23 @@ const remotePlanes = lifetime(
   },
 );
 
-// The mirror daemon resumes persisted sessions the moment it is up, so
-// it starts with the app. After app ready: the sessions it resumes are
-// swept for a device on no account, which reads the credential, and
-// safeStorage cannot decrypt it before ready.
-const mirrorEngine = lifetime(
-  "the mirror engine",
-  Effect.promise(() =>
-    logFailure("[mirror] engine failed to start", startMirrorEngine),
-  ),
-  stopMirrorEngine,
+// The mirror engine: the git follower, the daemon, and the gateway the
+// daemon dials peers through. The daemon resumes persisted sessions the
+// moment it is up, so it starts with the app. After app ready: the sessions it
+// resumes are swept for a device on no account, which reads the
+// credential, and safeStorage cannot decrypt it before ready.
+const mirrorFollower = lifetime(
+  "the mirror follower",
+  Effect.sync(startGitFollower),
+  stopGitFollower,
+);
+const mirrorDaemon = MirrorDaemon.adapter.pipe(
+  Layer.provideMerge(mirrorDaemonLayer),
+);
+const mirrorGateway = lifetime(
+  "the mirror gateway",
+  Effect.promise(startMirrorGateway),
+  stopMirrorGateway,
 );
 
 // The control wire the CLI's cross-device verbs ride. Stopping it
@@ -207,17 +217,21 @@ export const layer = (options: { readonly hurried: () => boolean }) =>
   scriptGate.pipe(
     Layer.provideMerge(portForwards),
     Layer.provideMerge(controlHost),
-    Layer.provideMerge(mirrorEngine),
+    Layer.provideMerge(mirrorFollower),
+    Layer.provideMerge(mirrorDaemon),
+    Layer.provideMerge(mirrorGateway),
     Layer.provideMerge(remotePlanes),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(stateWatcher),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),
     Layer.provideMerge(firstProjectList),
     Layer.provideMerge(cliChildren),
+    // Every file-sync child, the daemon and the serve children a peer's
+    // streams opened.
+    Layer.provideMerge(FileSyncRunner.layer),
     Layer.provideMerge(scripts(options.hurried)),
-    // The platform's services, and the Promise face of its child
-    // processes for the code that is not Effect yet. Last to go, so
-    // every finalizer above can still spawn.
+    // The Promise face of the platform's child processes for the code
+    // that is not Effect yet. Last to go, so every finalizer above can
+    // still spawn.
     Layer.provideMerge(Processes.adapter),
-    Layer.provideMerge(NodeServices.layer),
   );
