@@ -18,11 +18,14 @@
 // said when it was cut short. Per-key rather than per-call because the
 // wire has no request cancellation: a cancel frame and a per-call
 // signal on the context would retire this registry.
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
+import { runTraced } from "@shared/trace";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { onAbort } from "@host/lib/util/abort";
 
-export class MoveCancelledError extends Error {
+class MoveCancelledError extends Error {
   constructor() {
     super(MOVE_CANCELLED);
     this.name = "MoveCancelledError";
@@ -66,7 +69,7 @@ export async function runMove<T>(
 // Whatever `run` threw once the signal fired is reported as the
 // cancel: a reset link, a killed CLI child and a poll cut short all
 // say something else, and the caller asked for exactly this.
-export async function underSignal<T>(
+async function underSignal<T>(
   signal: AbortSignal,
   run: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
@@ -89,6 +92,47 @@ export function cancelMove(
   controller.abort();
   return true;
 }
+
+// A move run as one effect, for a Promise caller: the signal firing
+// interrupts it, each step that made something undoes it in its
+// finalizer, and the call fails with the cancel.
+export function runCancellable<A, E>(
+  signal: AbortSignal,
+  move: Effect.Effect<A, E>,
+): Promise<A> {
+  return underSignal(signal, () =>
+    runTraced(
+      // A step's failure reaches the caller as it was thrown: the
+      // surfaces branch on its class.
+      move.pipe(Effect.mapError(unwrapStep)),
+      { signal },
+    ),
+  );
+}
+
+// A step of a move that rejected. `cause` is what it threw.
+export class MoveStepError extends Schema.TaggedError<MoveStepError>()(
+  "MoveStepError",
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return "A step of the move failed.";
+  }
+}
+
+const isMoveStepError = Schema.is(MoveStepError);
+
+// What a move's step threw, for the Promise caller.
+export const unwrapStep = (error: unknown): unknown =>
+  isMoveStepError(error) ? error.cause : error;
+
+// One step of a move that waits on a promise: interrupting the move
+// aborts the signal it is given.
+export const step = <A>(run: (signal: AbortSignal) => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) => new MoveStepError({ cause }),
+  });
 
 export function throwIfCancelled(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw new MoveCancelledError();

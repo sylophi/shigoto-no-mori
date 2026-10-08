@@ -34,10 +34,12 @@
 import { mkdtemp, open as openFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { traced } from "@shared/trace";
+import { runTraced, traced } from "@shared/trace";
 import {
   type SyncCapture,
   SyncCaptureSchema,
@@ -68,8 +70,7 @@ import { listRemoteEntries } from "@host/lib/git/remotes";
 import { mintHexId } from "@host/lib/hexId";
 import { primaryRefOf } from "@host/lib/projects";
 import { requireChannels } from "@host/socket/channelStreams";
-import { onAbort } from "@host/lib/util/abort";
-import { abortable, throwIfCancelled } from "./moves";
+import { MoveStepError, step, unwrapStep } from "./moves";
 
 // ---- The link: JSON lines and raw bytes over one channel.
 
@@ -263,15 +264,12 @@ export function attachLinkFarEnd(ctx: HandlerContext, channelId: string): Link {
 async function openLink(
   peer: Pick<PeerSyncApi, "channels">,
   open: (channelId: string) => Promise<unknown>,
-  signal?: AbortSignal,
 ): Promise<Link> {
-  throwIfCancelled(signal);
   const channelId = mintHexId();
-  const mux = await abortable(signal, peer.channels());
-  throwIfCancelled(signal);
+  const mux = await peer.channels();
   const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
   try {
-    await abortable(signal, open(channelId));
+    await open(channelId);
   } catch (error) {
     link.reset();
     throw error;
@@ -548,49 +546,71 @@ async function cloneFactsOf(project: Project): Promise<CloneFacts> {
   return { branch, remoteUrl: pickCloneUrl(remotes) };
 }
 
+// For the Promise callers below: a failure as its step threw it.
+const runStep = <A>(effect: Effect.Effect<A, MoveStepError>) =>
+  runTraced(effect.pipe(Effect.mapError(unwrapStep)));
+
 // A send's or a push's source end: this device opens a link on the
 // peer through `openOnPeer` (the call that makes the peer ask over it) and
 // answers the peer's questions until the call resolves. A run that
-// failed on this side's own answer throws that, not the peer's echo
-// of it. A cancel (`signal`, the move's) tears the link down and
-// fails the wait at once, without the peer's answer: the peer's
-// landing runs under the link (Link.closed) and stops with it. An
-// answer already on its way when the cancel came is a landing that
-// finished, which `onLate` gets to undo.
-export async function offerSource<T>(
+// failed on this side's own answer fails with that, not the peer's echo
+// of it. The link ends with the answer, and is torn down when the call
+// fails or the move is interrupted, which fails the wait at once: the
+// peer's landing runs under the link (Link.closed) and stops with it.
+// An answer already on its way when the interrupt came is a landing
+// that finished, which `onLate` gets to undo.
+export const offer = <T>(
   peer: Pick<PeerSyncApi, "channels">,
   project: Project,
   worktreeId: string,
   openOnPeer: (channelId: string) => Promise<T>,
   onProgress?: (frame: ProgressFrame) => void,
-  signal?: AbortSignal,
   onLate?: (answer: T) => unknown,
-): Promise<T> {
-  throwIfCancelled(signal);
-  const channelId = mintHexId();
-  const mux = await abortable(signal, peer.channels());
-  const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
-  const offCancel = onAbort(signal, () => link.reset());
-  // Only this side's own answers count as its failure: a link the peer
-  // tore down as its run failed is that run's news, which the call
-  // brings.
-  const failure: { error?: unknown } = {};
-  void serveSource(link, project, worktreeId, { onProgress, failure }).catch(
-    () => {},
-  );
-  try {
-    return await abortable(signal, openOnPeer(channelId), onLate);
-  } catch (error) {
-    const own = failure.error;
-    link.reset();
-    throw own ?? error;
-  } finally {
-    offCancel();
-    // The peer ends its side as its call resolves. Once this side's
-    // queue drains the channel is complete.
-    link.end();
-  }
-}
+) =>
+  Effect.gen(function* () {
+    const channelId = mintHexId();
+    const mux = yield* step(() => peer.channels());
+    const link = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        attachLink((endpoint) => mux.attach(channelId, endpoint)),
+      ),
+      // The peer ends its side as its call resolves. Once this side's
+      // queue drains the channel is complete.
+      (opened, exit) =>
+        Effect.sync(() => {
+          if (Exit.isFailure(exit)) opened.reset();
+          opened.end();
+        }),
+    );
+    // Only this side's own answers count as its failure: a link the
+    // peer tore down as its run failed is that run's news, which the
+    // call brings.
+    const failure: { error?: unknown } = {};
+    void serveSource(link, project, worktreeId, { onProgress, failure }).catch(
+      () => {},
+    );
+    const answering = openOnPeer(channelId);
+    return yield* step(() => answering).pipe(
+      Effect.onInterrupt(() =>
+        Effect.sync(() => {
+          if (onLate !== undefined) answering.then(onLate).catch(() => {});
+        }),
+      ),
+      Effect.mapError((error) =>
+        failure.error === undefined
+          ? error
+          : new MoveStepError({ cause: failure.error }),
+      ),
+    );
+  }).pipe(Effect.scoped);
+
+// The same for a Promise caller (the git follower's push).
+export const offerSource = <T>(
+  peer: Pick<PeerSyncApi, "channels">,
+  project: Project,
+  worktreeId: string,
+  openOnPeer: (channelId: string) => Promise<T>,
+): Promise<T> => runStep(offer(peer, project, worktreeId, openOnPeer));
 
 // ---- The destination's side.
 
@@ -683,61 +703,71 @@ function askSource(linkOrOpen: Link | (() => Promise<Link>)): WorktreeSource {
   };
 }
 
-// A peer's source, for the length of `run`: the link opens on the first
-// question (sync:openSource on the peer), ends once `run` is done, and
-// is torn down when `run` throws, so a source still sending a bundle
-// stops. A cancel (`signal`) tears it down the same way, failing the
-// question `run` is waiting on.
-export async function withPeerSource<T>(
+// A peer's source for the length of the scope: the link opens on the
+// first question (sync:openSource on the peer), ends with the scope,
+// and is torn down when the scope fails or is interrupted, so a source
+// still sending a bundle stops and the question waiting on it fails.
+export const peerSource = (
+  peer: Pick<PeerSyncApi, "channels" | "openSource">,
+  worktree: { projectId: string; worktreeId: string },
+) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      let opened: Promise<Link> | undefined;
+      const source = askSource(
+        () =>
+          (opened ??= openLink(peer, (channelId) =>
+            peer.openSource({ ...worktree, channelId }),
+          )),
+      );
+      return { source, opened: () => opened };
+    }),
+    // Not awaited: a cancel must not wait on a peer that never
+    // answered the open.
+    ({ opened }, exit) =>
+      Effect.sync(() => {
+        void opened()?.then(
+          (link) => (Exit.isSuccess(exit) ? link.end() : link.reset()),
+          () => {},
+        );
+      }),
+  ).pipe(Effect.map(({ source }) => source));
+
+// The same around a Promise caller's `run` (the git follower, the
+// teardown).
+export const withPeerSource = <T>(
   peer: Pick<PeerSyncApi, "channels" | "openSource">,
   worktree: { projectId: string; worktreeId: string },
   run: (source: WorktreeSource) => Promise<T>,
-  signal?: AbortSignal,
-): Promise<T> {
-  let opened: Promise<Link> | undefined;
-  const resetLink = () =>
-    void opened?.then(
-      (link) => link.reset(),
-      () => {},
-    );
-  const source = askSource(
-    () =>
-      (opened ??= openLink(
-        peer,
-        (channelId) => peer.openSource({ ...worktree, channelId }),
-        signal,
-      )),
+): Promise<T> =>
+  runStep(
+    peerSource(peer, worktree).pipe(
+      Effect.flatMap((source) => step(() => run(source))),
+      Effect.scoped,
+    ),
   );
-  const offCancel = onAbort(signal, resetLink);
-  try {
-    const result = await run(source);
-    (await opened)?.end();
-    return result;
-  } catch (error) {
-    resetLink();
-    throw error;
-  } finally {
-    offCancel();
-  }
-}
 
-// A host handler's run over a link a peer opened: the link is the
-// source's, `run` asks over it, and it ends with the run or is torn
-// down when the run throws, or when `signal` fires.
-export async function withLinkSource<T>(
+// A host handler's source over a link a peer opened, for the length of
+// the scope: it ends with the scope, and is torn down when the scope
+// fails or is interrupted.
+export const linkSource = (link: Link) =>
+  Effect.acquireRelease(
+    Effect.sync(() => askSource(link)),
+    (_, exit) =>
+      Effect.sync(() => {
+        if (Exit.isSuccess(exit)) link.end();
+        else link.reset();
+      }),
+  );
+
+// The same around a Promise caller's `run` (sync:receiveBundle).
+export const withLinkSource = <T>(
   link: Link,
   run: (source: WorktreeSource) => Promise<T>,
-  signal?: AbortSignal,
-): Promise<T> {
-  const offCancel = onAbort(signal, () => link.reset());
-  try {
-    const result = await run(askSource(link));
-    link.end();
-    return result;
-  } catch (error) {
-    link.reset();
-    throw error;
-  } finally {
-    offCancel();
-  }
-}
+): Promise<T> =>
+  runStep(
+    linkSource(link).pipe(
+      Effect.flatMap((source) => step(() => run(source))),
+      Effect.scoped,
+    ),
+  );

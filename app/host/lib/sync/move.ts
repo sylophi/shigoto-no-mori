@@ -3,6 +3,8 @@
 // landing (landing.ts) against a source link, then the ignored files,
 // the title and description, and the receipt the teardown reads
 // (receipts.ts).
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import {
   pullBringsIgnoredFiles,
@@ -27,16 +29,32 @@ import {
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { findProjectAndWorktreeOrThrow } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
-import { MoveCancelledError, runMove } from "@host/lib/sync/moves";
+import { runCancellable, runMove, step } from "@host/lib/sync/moves";
 import {
-  offerSource,
+  offer,
+  peerSource,
   type ProgressFrame,
-  withPeerSource,
 } from "@host/lib/sync/sourceLink";
 import { logFailure } from "@shared/log";
-import { landWorktree, moveAttributes, rollBackIfCancelled } from "./landing";
-import { type Span, traced } from "@shared/trace";
+import { landWorktree, moveAttributes } from "./landing";
 import { remember } from "./receipts";
+
+// A worktree the send cannot move, refused before anything crosses.
+class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
+  "MoveRefusedError",
+  { reason: Schema.Literals(["not-on-branch", "primary", "no-identity"]) },
+) {
+  override get message(): string {
+    switch (this.reason) {
+      case "not-on-branch":
+        return "Only a worktree on a branch of its own can be sent.";
+      case "primary":
+        return "The primary checkout can be mirrored but not sent: it is the project itself.";
+      case "no-identity":
+        return "This repository has no shared identity, so no other device can be matched to it.";
+    }
+  }
+}
 
 const decodeReceiveWorktreeResult = Schema.decodeUnknownSync(
   SyncReceiveWorktreeResultSchema,
@@ -77,94 +95,107 @@ export async function pullWorktree(
   ctx: HandlerContext,
 ) {
   const progress = progressTo(ctx, sourceWorktreeId);
-  const attributes = moveAttributes("pull", sourceDeviceId, sourceWorktreeId);
   return runMove(ctx, sourceWorktreeId, (signal) =>
-    traced("Sync.pull", attributes, async (span) => {
-      const { receipt, ...landed } = await withPeerSource(
-        peerSyncApiFor(sourceDeviceId),
-        { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
-        (source) =>
-          landWorktree(
-            source,
-            {
-              identity: sourceIdentity,
-              branch,
-              landBranch: branch,
-              worktreeName,
-              runSetup,
-              cloneInto,
-              sourceWorktreeId,
-            },
-            ctx,
-            progress,
-            signal,
-            span,
+    runCancellable(
+      signal,
+      Effect.gen(function* () {
+        const move = yield* Effect.scope;
+        // The link to the source lives for the landing alone.
+        const { receipt, ...landed } = yield* peerSource(
+          peerSyncApiFor(sourceDeviceId),
+          { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
+        ).pipe(
+          Effect.flatMap((source) =>
+            landWorktree(
+              source,
+              {
+                identity: sourceIdentity,
+                branch,
+                landBranch: branch,
+                worktreeName,
+                runSetup,
+                cloneInto,
+                sourceWorktreeId,
+              },
+              ctx,
+              progress,
+              signal,
+              move,
+            ),
           ),
-        signal,
-      );
-
-      // The ignored files, once the tree has settled: the leave-out rule
-      // admits them and git never carried them, so the mirror engine runs
-      // once between the two worktrees (host/mirror/oneShot.ts).
-      // Gitignored leaves nothing to carry. Never fatal: the worktree is
-      // real, and the outcome rides the result.
-      let files: TransferFilesResult | undefined;
-      if (pullBringsIgnoredFiles(ignoreMode) && !signal.aborted) {
-        progress({ step: "files" });
-        const source = await peerWorktreeOrUndefined(
-          sourceDeviceId,
-          sourceProjectId,
-          sourceWorktreeId,
+          Effect.scoped,
         );
-        files =
-          source === undefined
-            ? {
-                crossed: false,
-                conflicts: 0,
-                error: "the source worktree is no longer listed there",
-              }
-            : await span.step("Sync.files", () =>
-                transferFilesOnce(
-                  {
-                    localRoot: landed.worktree.path,
-                    localWorktreeId: landed.worktree.id,
-                    sourceDeviceId,
-                    sourceProjectId,
-                    sourceWorktreeId,
-                    remoteRoot: source.path,
-                    name: branch,
-                    ignores: ignores ?? [],
-                  },
-                  (bytes, totalBytes) =>
-                    progress({ step: "files", bytes, totalBytes }),
-                  signal,
-                ),
-              );
-      }
-      await rollBackIfCancelled(signal, landed.worktree);
-      await logFailure("[sync] carrying the title and description failed", () =>
-        span.step("Sync.description", () =>
-          followDescription(
-            sourceDeviceId,
-            {
-              projectId: landed.worktree.projectId,
-              worktreeId: landed.worktree.id,
-            },
-            { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
+
+        // The ignored files, once the tree has settled: the leave-out
+        // rule admits them and git never carried them, so the mirror
+        // engine runs once between the two worktrees
+        // (host/mirror/oneShot.ts). Gitignored leaves nothing to carry.
+        // Never fatal: the worktree is real, and the outcome rides the
+        // result.
+        let files: TransferFilesResult | undefined;
+        if (pullBringsIgnoredFiles(ignoreMode)) {
+          progress({ step: "files" });
+          const source = yield* step(() =>
+            peerWorktreeOrUndefined(
+              sourceDeviceId,
+              sourceProjectId,
+              sourceWorktreeId,
+            ),
+          );
+          files =
+            source === undefined
+              ? {
+                  crossed: false,
+                  conflicts: 0,
+                  error: "the source worktree is no longer listed there",
+                }
+              : yield* step((stepSignal) =>
+                  transferFilesOnce(
+                    {
+                      localRoot: landed.worktree.path,
+                      localWorktreeId: landed.worktree.id,
+                      sourceDeviceId,
+                      sourceProjectId,
+                      sourceWorktreeId,
+                      remoteRoot: source.path,
+                      name: branch,
+                      ignores: ignores ?? [],
+                    },
+                    (bytes, totalBytes) =>
+                      progress({ step: "files", bytes, totalBytes }),
+                    stepSignal,
+                  ),
+                ).pipe(Effect.withSpan("Sync.files"));
+        }
+        yield* step(() =>
+          logFailure("[sync] carrying the title and description failed", () =>
+            followDescription(
+              sourceDeviceId,
+              {
+                projectId: landed.worktree.projectId,
+                worktreeId: landed.worktree.id,
+              },
+              { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
+            ),
           ),
-        ),
-      );
-      remember(
-        {
-          direction: "pull",
-          deviceId: sourceDeviceId,
-          projectId: sourceProjectId,
-          worktreeId: sourceWorktreeId,
-        },
-        receipt,
-      );
-      return { ...landed, ...(files === undefined ? {} : { files }) };
-    }),
+        ).pipe(Effect.withSpan("Sync.description"));
+        remember(
+          {
+            direction: "pull",
+            deviceId: sourceDeviceId,
+            projectId: sourceProjectId,
+            worktreeId: sourceWorktreeId,
+          },
+          receipt,
+        );
+        return { ...landed, ...(files === undefined ? {} : { files }) };
+      }).pipe(
+        Effect.scoped,
+        Effect.withSpan("Sync.pull", {
+          attributes: moveAttributes("pull", sourceDeviceId, sourceWorktreeId),
+        }),
+      ),
+    ),
   );
 }
 
@@ -210,13 +241,17 @@ export async function sendWorktree(
   { mirror = false, signal }: { mirror?: boolean; signal?: AbortSignal } = {},
 ) {
   const send = (under: AbortSignal) =>
-    traced(
-      "Sync.send",
-      {
-        ...moveAttributes("send", input.targetDeviceId, input.worktreeId),
-        mirror,
-      },
-      (span) => sendWorktreeUnder(input, ctx, mirror, under, span),
+    runCancellable(
+      under,
+      sendWorktreeEffect(input, ctx, mirror).pipe(
+        Effect.scoped,
+        Effect.withSpan("Sync.send", {
+          attributes: {
+            ...moveAttributes("send", input.targetDeviceId, input.worktreeId),
+            mirror,
+          },
+        }),
+      ),
     );
   return signal === undefined
     ? runMove(ctx, input.worktreeId, send)
@@ -242,7 +277,7 @@ export function rollBackSent(
   );
 }
 
-async function sendWorktreeUnder(
+const sendWorktreeEffect = (
   {
     targetDeviceId,
     projectId,
@@ -254,39 +289,34 @@ async function sendWorktreeUnder(
   }: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
   mirror: boolean,
-  signal: AbortSignal,
-  span: Span,
-) {
-  const progress = progressTo(ctx, worktreeId);
+) =>
+  Effect.gen(function* () {
+    const progress = progressTo(ctx, worktreeId);
 
-  // The local source. A detached head has no branch to land.
-  const { project, worktree } = await findProjectAndWorktreeOrThrow(
-    projectId,
-    worktreeId,
-  );
-  if (worktree.detached || !isRealBranch(worktree.branch)) {
-    throw new Error("Only a worktree on a branch of its own can be sent.");
-  }
-  if (worktree.isPrimary && !mirror) {
-    throw new Error(
-      "The primary checkout can be mirrored but not sent: it is the project itself.",
+    // The local source. A detached head has no branch to land.
+    const { project, worktree } = yield* step(() =>
+      findProjectAndWorktreeOrThrow(projectId, worktreeId),
     );
-  }
-  const identity = await getRepoIdentity(project.path).catch(() => null);
-  if (identity === null) {
-    throw new Error(
-      "This repository has no shared identity, so no other device can be matched to it.",
+    if (worktree.detached || !isRealBranch(worktree.branch)) {
+      return yield* new MoveRefusedError({ reason: "not-on-branch" });
+    }
+    if (worktree.isPrimary && !mirror) {
+      return yield* new MoveRefusedError({ reason: "primary" });
+    }
+    const identity = yield* step(() =>
+      getRepoIdentity(project.path).catch(() => null),
     );
-  }
-  const branch = worktree.branch;
-  const landBranch = pullLandingBranch(worktree);
+    if (identity === null) {
+      return yield* new MoveRefusedError({ reason: "no-identity" });
+    }
+    const branch = worktree.branch;
+    const landBranch = pullLandingBranch(worktree);
 
-  // The landing, on the peer, asking back over the link. A cancel
-  // resets the link (offerSource), which the peer's landing runs under.
-  const peer = peerSyncApiFor(targetDeviceId);
-  const { receipt, ...landed } = decodeReceiveWorktreeResult(
-    await span.step("Sync.offer", () =>
-      offerSource(
+    // The landing, on the peer, asking back over the link. An interrupt
+    // resets the link, which the peer's landing runs under.
+    const peer = peerSyncApiFor(targetDeviceId);
+    const { receipt, ...landed } = decodeReceiveWorktreeResult(
+      yield* offer(
         peer,
         project,
         worktreeId,
@@ -304,63 +334,65 @@ async function sendWorktreeUnder(
             }),
           ),
         progress,
-        signal,
         // A landing that answered as the cancel came: the copy is real
-        // and goes the way a copy the files step outran does.
+        // and goes the way the finalizer below would take it.
         (answer) =>
           rollBackSent(
             targetDeviceId,
             decodeReceiveWorktreeResult(answer).worktree,
           ),
-      ),
-    ),
-  );
-
-  // The ignored files, pushed into the root the peer's landing
-  // answered with (re-parsed above, like everything it sends).
-  let files: TransferFilesResult | undefined;
-  if (pullBringsIgnoredFiles(ignoreMode)) {
-    progress({ step: "files" });
-    files = await span.step("Sync.files", () =>
-      transferFilesOnce(
-        {
-          localRoot: worktree.path,
-          localWorktreeId: worktree.id,
-          sourceDeviceId: targetDeviceId,
-          sourceProjectId: landed.worktree.projectId,
-          sourceWorktreeId: landed.worktree.id,
-          remoteRoot: landed.worktree.path,
-          name: branch,
-          ignores: ignores ?? [],
-          direction: "push",
-        },
-        (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
-        signal,
-      ),
+      ).pipe(Effect.withSpan("Sync.offer")),
     );
-  }
-  if (signal.aborted) {
-    await rollBackSent(targetDeviceId, landed.worktree);
-    throw new MoveCancelledError();
-  }
-  await logFailure("[sync] carrying the title and description failed", () =>
-    span.step("Sync.description", () =>
-      followDescription(
-        targetDeviceId,
-        { projectId, worktreeId },
-        {
-          projectId: landed.worktree.projectId,
-          worktreeId: landed.worktree.id,
-        },
+    // A cancel from here on (the files step, the mirror start's session
+    // after it) removes the copy over the peer's grant, the same
+    // removal a failed mirror start makes.
+    yield* Effect.addFinalizer((exit) =>
+      Exit.hasInterrupts(exit)
+        ? Effect.promise(() => rollBackSent(targetDeviceId, landed.worktree))
+        : Effect.void,
+    );
+
+    // The ignored files, pushed into the root the peer's landing
+    // answered with (re-parsed above, like everything it sends).
+    let files: TransferFilesResult | undefined;
+    if (pullBringsIgnoredFiles(ignoreMode)) {
+      progress({ step: "files" });
+      files = yield* step((stepSignal) =>
+        transferFilesOnce(
+          {
+            localRoot: worktree.path,
+            localWorktreeId: worktree.id,
+            sourceDeviceId: targetDeviceId,
+            sourceProjectId: landed.worktree.projectId,
+            sourceWorktreeId: landed.worktree.id,
+            remoteRoot: landed.worktree.path,
+            name: branch,
+            ignores: ignores ?? [],
+            direction: "push",
+          },
+          (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
+          stepSignal,
+        ),
+      ).pipe(Effect.withSpan("Sync.files"));
+    }
+    yield* step(() =>
+      logFailure("[sync] carrying the title and description failed", () =>
+        followDescription(
+          targetDeviceId,
+          { projectId, worktreeId },
+          {
+            projectId: landed.worktree.projectId,
+            worktreeId: landed.worktree.id,
+          },
+        ),
       ),
-    ),
-  );
-  remember(
-    { direction: "send", deviceId: targetDeviceId, projectId, worktreeId },
-    receipt,
-  );
-  return {
-    source: worktree,
-    result: { ...landed, ...(files === undefined ? {} : { files }) },
-  };
-}
+    ).pipe(Effect.withSpan("Sync.description"));
+    remember(
+      { direction: "send", deviceId: targetDeviceId, projectId, worktreeId },
+      receipt,
+    );
+    return {
+      source: worktree,
+      result: { ...landed, ...(files === undefined ? {} : { files }) },
+    };
+  });
