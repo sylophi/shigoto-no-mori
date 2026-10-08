@@ -6,7 +6,6 @@
 // it starts the subsystem, and the scope closing stops it.
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { log, logFailure } from "@shared/log";
 import * as Effect from "effect/Effect";
@@ -231,9 +230,8 @@ export const layer = (options: { readonly hurried: () => boolean }) =>
     // streams opened.
     Layer.provideMerge(FileSyncRunner.layer),
     Layer.provideMerge(scripts(options.hurried)),
-    // The platform's services, and the Promise face of its child
-    // processes for the code that is not Effect yet. Last to go, so
-    // every finalizer above can still spawn.
+    // The Promise face of the platform's child processes for the code
+    // that is not Effect yet. Last to go, so every finalizer above can
+    // still spawn.
     Layer.provideMerge(Processes.adapter),
-    Layer.provideMerge(NodeServices.layer),
   );

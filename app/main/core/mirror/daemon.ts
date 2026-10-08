@@ -331,15 +331,15 @@ const make = (options: Options) =>
             stdin: Stream.fromQueue(input),
           }),
         ),
-          Effect.tapError((error) =>
-            FileSync.isFileSyncUnavailable(error)
-              ? Effect.void
-              : Effect.logWarning(
-                  `[mirror] daemon spawn failed: ${errorMessageOf(error)}`,
-                ),
-          ),
-          Effect.option,
-        );
+        Effect.tapError((error) =>
+          FileSync.isFileSyncUnavailable(error)
+            ? Effect.void
+            : Effect.logWarning(
+                `[mirror] daemon spawn failed: ${errorMessageOf(error)}`,
+              ),
+        ),
+        Effect.option,
+      );
       if (Option.isNone(spawned)) {
         yield* setStatus("unavailable");
         return;
