@@ -6,26 +6,11 @@
 // command will: the service's answer wrapped the way the verb prints it.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  it,
-  onTestFinished,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
 import * as Icons from "../src/Icons.ts";
 import * as Launchers from "../src/Launchers.ts";
@@ -505,23 +490,13 @@ const seedProject = (files: Record<string, string> = { "a.txt": "a\n" }) => {
 // A gh on PATH that answers `pr list` with `prs`, or fails with
 // `stderr`, for both sides. The engine reads PATH when its runtime is
 // first built, so this goes before any engine call.
-const fakeGh = (answer: { prs?: unknown[]; stderr?: string }) => {
-  const bin = mkdtempSync(join(tmpdir(), "fake-gh-"));
-  const script = join(bin, "gh");
-  writeFileSync(
-    script,
+const fakeGh = (answer: { prs?: unknown[]; stderr?: string }) =>
+  box.fakeBin(
+    "gh",
     answer.stderr === undefined
-      ? `#!/bin/sh\ncat <<'JSON'\n${JSON.stringify(answer.prs ?? [])}\nJSON\n`
-      : `#!/bin/sh\necho ${JSON.stringify(answer.stderr)} >&2\nexit 1\n`,
+      ? `cat <<'JSON'\n${JSON.stringify(answer.prs ?? [])}\nJSON`
+      : `echo ${JSON.stringify(answer.stderr)} >&2\nexit 1`,
   );
-  chmodSync(script, 0o755);
-  const previous = process.env.PATH;
-  process.env.PATH = `${bin}:${previous}`;
-  onTestFinished(() => {
-    process.env.PATH = previous;
-    rmSync(bin, { recursive: true, force: true });
-  });
-};
 
 describe("worktrees list", () => {
   it("lists the project at the cwd, primary first, with sync, changes, commits and marks", async () => {
@@ -847,6 +822,53 @@ describe("worktrees marks", () => {
   });
 });
 
+describe("worktrees agent-working", () => {
+  it("marks a managed worktree as worked in by an agent, refusing the primary and an external", async () => {
+    const { repo, tree } = seedProject();
+    tree("fox");
+    box.git(
+      repo,
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "outside",
+      join(box.home, "outside"),
+    );
+    const mark = (ref: string, mode?: "on" | "off") =>
+      same(
+        ["worktrees", "agent-working", ...(mode ? [mode] : []), ref],
+        onTarget(box.home, { ref }, (service, located) =>
+          Effect.gen(function* () {
+            if (mode) {
+              yield* service.setAgentWorking(located.worktree, mode === "on");
+            }
+            return { ok: true, worktree: yield* service.row(located) };
+          }),
+        ),
+      );
+    await inTurn([
+      () => mark("fox", "on"),
+      () => mark("fox"),
+      () => mark("repo/root", "on"),
+      () => mark("outside", "on"),
+      () => mark("outside", "off"),
+      () => mark("fox", "off"),
+    ]);
+    await same(
+      ["worktrees", "list", "--identities", "-p", "repo"],
+      worktrees.pipe(
+        Effect.flatMap((service) =>
+          service.identityList([{ id: "P1", name: "repo", path: repo }], {
+            primaryRef: false,
+          }),
+        ),
+        Effect.map(({ rows }) => rows),
+      ),
+    );
+  });
+});
+
 describe("worktrees describe", () => {
   const describeVerb = (
     ref: string,
@@ -932,5 +954,92 @@ describe("worktrees describe", () => {
     tree("fox");
     await describeVerb("fox", {});
     await describeVerb("fox", { title: "Mine" });
+  });
+});
+
+describe("projects list with terrier", () => {
+  // A terrier on PATH that answers as `version` and `ls --json` do.
+  const fakeTerrier = (version: string, paths: ReadonlyArray<string>) =>
+    box.fakeBin(
+      "terrier",
+      `if [ "$1" = version ]; then echo ${version}; else echo '${JSON.stringify(
+        { projects: paths.map((path) => ({ path })) },
+      )}'; fi`,
+    );
+  const list = Effect.service(Registry.Registry).pipe(
+    Effect.flatMap((registry) => registry.rows()),
+  );
+
+  it("adds terrier's repos the registry doesn't hold, read-only, by name", async () => {
+    const both = box.repo("both");
+    const extra = box.repo("zeta");
+    fakeTerrier("v0.1.4", [
+      `${extra}/`,
+      both,
+      "relative/path",
+      `${box.home}/alpha-gone`,
+    ]);
+    box.write("config.json", { terrier: true });
+    box.write("registry.json", {
+      projects: [{ id: "B", name: "both", path: both }],
+    });
+    await same(["projects", "list"], list, withoutHue);
+  });
+
+  it("lists none of terrier's while its version isn't one this build reads", async () => {
+    fakeTerrier("v0.2.0", [box.repo("zeta")]);
+    box.write("config.json", { terrier: true });
+    box.write("registry.json", { projects: [] });
+    await same(["projects", "list"], list, withoutHue);
+    assert.deepEqual(await box.engine(list), []);
+  });
+});
+
+describe("launchers", () => {
+  it("lists a project's row: installed apps, its GitHub page, custom ones, by use", async () => {
+    const recent = Date.now() - 60_000;
+    const repo = box.repo("repo");
+    execFileSync(
+      "git",
+      ["remote", "add", "origin", "https://github.com/Me/Repo.git"],
+      { cwd: repo },
+    );
+    box.write("registry.json", {
+      projects: [{ id: "P", name: "repo", path: repo }],
+    });
+    box.write("config.json", {
+      launchers: [
+        { id: "a", label: "zsh here", command: "zsh" },
+        { label: "no id", command: "x" },
+      ],
+      hiddenLaunchers: ["app:finder", "custom:gone"],
+    });
+    box.write("projects/P/project.json", {
+      defaultBranch: "main",
+      launchers: [{ id: "b", label: "Agent", command: "claude" }],
+    });
+    box.write("state.json", {
+      launcherUseLog: {
+        "custom:a": [1, recent, recent],
+        "web:github": [recent],
+      },
+    });
+    await same(
+      ["launchers", "-p", "repo"],
+      Effect.service(Launchers.Launchers).pipe(
+        Effect.flatMap((launchers) => launchers.row({ id: "P", path: repo })),
+        Effect.map((row) => Object.assign({ ok: true }, row)),
+      ),
+    );
+    const row = (await box.engine(
+      Effect.flatMap(Effect.service(Launchers.Launchers), (launchers) =>
+        launchers.row({ id: "P", path: repo }),
+      ),
+    )) as Launchers.LauncherRow;
+    assert.deepEqual(
+      [row.entries.slice(0, 2).map(({ id }) => id), row.hiddenCount],
+      [["custom:a", "web:github"], 1],
+    );
+    assert.ok(row.entries.some(({ id }) => id === "custom:b"));
   });
 });

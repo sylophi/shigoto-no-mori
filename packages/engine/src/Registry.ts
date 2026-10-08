@@ -9,6 +9,9 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Icons from "./Icons.ts";
 import * as Identity from "./Identity.ts";
+import * as Terrier from "./Terrier.ts";
+import { terrierProjects } from "./Terrier.ts";
+import { terrierProjectId } from "./terrierId.ts";
 import * as Usage from "./Usage.ts";
 import { worktreeIdFromPath } from "./worktreeLayout.ts";
 
@@ -20,7 +23,7 @@ export type RegisteredProject = {
 };
 
 // The marks a worktree can carry, keyed by its path-derived id.
-export type WorktreeMark = "shelved" | "autoPull";
+export type WorktreeMark = "shelved" | "autoPull" | "agentWorking";
 
 export class ProjectAlreadyAdded extends Schema.TaggedError<ProjectAlreadyAdded>()(
   "ProjectAlreadyAdded",
@@ -40,11 +43,19 @@ export class UnknownProject extends Schema.TaggedError<UnknownProject>()(
   }
 }
 
+// A listed project: the registry's, or terrier's (read-only).
+export type ListedProject = RegisteredProject & {
+  readonly source?: "terrier";
+};
+
 export class Registry extends Context.Service<
   Registry,
   {
     // The registered projects, in the order they were added.
     readonly projects: Effect.Effect<ReadonlyArray<RegisteredProject>>;
+    // Every project the device lists, in the manual order: the
+    // registry's, then terrier's while that integration is on.
+    readonly listed: Effect.Effect<ReadonlyArray<ListedProject>>;
     // The rows the sidebar shows, in the manual order: each project
     // with whether its folder is there, its identity and remote, its use
     // stats and its icon. The hue is always null (V3.md, decision 12).
@@ -53,7 +64,8 @@ export class Registry extends Context.Service<
     readonly rows: (options?: {
       readonly rescanIconMisses?: boolean;
     }) => Effect.Effect<ReadonlyArray<ProjectRow>>;
-    // Adds a project under a new id.
+    // Adds a project under a new id, or under its terrier id when
+    // terrier lists the path, so its state carries over.
     readonly register: (input: {
       readonly name: string;
       readonly path: string;
@@ -132,6 +144,7 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const identity = yield* Identity.Identity;
   const icons = yield* Icons.Icons;
+  const terrier = yield* Terrier.Terrier;
   const usage = yield* Usage.Usage;
   const crypto = yield* Crypto.Crypto;
   const randomId = Effect.orDie(crypto.randomUUIDv4);
@@ -149,8 +162,11 @@ const make = Effect.gen(function* () {
     readonly name: string;
     readonly path: string;
   }) {
+    const terrierLists = (yield* terrier.listing).paths.includes(input.path);
     const project = {
-      id: (yield* randomId).toUpperCase(),
+      id: terrierLists
+        ? terrierProjectId(input.path)
+        : (yield* randomId).toUpperCase(),
       name: input.name,
       path: input.path,
     };
@@ -173,6 +189,7 @@ const make = Effect.gen(function* () {
   const unregister = Effect.fn("Registry.unregister")(function* (
     projectId: string,
   ) {
+    const stillListed = (yield* terrier.listing).paths;
     return yield* sql
       .withTransaction(
         Effect.gen(function* () {
@@ -180,6 +197,20 @@ const make = Effect.gen(function* () {
           SELECT id, name, path FROM projects WHERE id = ${projectId}`;
           if (!project) return yield* new UnknownProject({ projectId });
           yield* sql`DELETE FROM projects WHERE id = ${projectId}`;
+          // A project terrier still lists stays, under its terrier id,
+          // and keeps its settings and worktree data there.
+          if (stillListed.includes(project.path)) {
+            const kept = terrierProjectId(project.path);
+            if (kept !== projectId) {
+              yield* sql`DELETE FROM project_config WHERE project_id = ${kept}`;
+              yield* sql`DELETE FROM worktree_data WHERE project_id = ${kept}`;
+              yield* sql`UPDATE project_config SET project_id = ${kept}
+                WHERE project_id = ${projectId}`;
+              yield* sql`UPDATE worktree_data SET project_id = ${kept}
+                WHERE project_id = ${projectId}`;
+            }
+            return { id: project.id, name: project.name, path: project.path };
+          }
           yield* sql`DELETE FROM project_config WHERE project_id = ${projectId}`;
           yield* sql`DELETE FROM worktree_data WHERE project_id = ${projectId}`;
           // What is kept by the project's path, which would greet a
@@ -233,13 +264,25 @@ const make = Effect.gen(function* () {
     return true;
   }, Effect.orDie);
 
+  const listed = Effect.gen(function* () {
+    const registered = yield* projects;
+    const extras = terrierProjects(
+      new Set(registered.map(({ path }) => path)),
+      (yield* terrier.listing).paths,
+    );
+    return orderProjects<ListedProject>(
+      [...registered, ...extras],
+      yield* order,
+    );
+  }).pipe(Effect.withSpan("Registry.listed"));
+
   const rows = Effect.fn("Registry.rows")(function* (options?: {
     readonly rescanIconMisses?: boolean;
   }) {
-    const listed = orderProjects(yield* projects, yield* order);
+    const all = yield* listed;
     const uses = yield* usage.statsByScope("project", "");
     return yield* Effect.forEach(
-      listed,
+      all,
       (project) =>
         Effect.gen(function* () {
           const stats = uses.get(project.id);
@@ -342,6 +385,7 @@ const make = Effect.gen(function* () {
 
   return Registry.of({
     projects,
+    listed,
     rows,
     register,
     unregister,

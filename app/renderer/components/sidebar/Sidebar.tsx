@@ -160,6 +160,7 @@ function Forest({
     mirrors,
     deviceBadges,
     hiddenPrefixes,
+    allowAgentWorking,
     groupedPrefixes,
     filter,
     activeFilter,
@@ -181,13 +182,14 @@ function Forest({
   const byGroupKey = (keys: ReadonlySet<string>): GroupIdSet => ({
     has: (groupId) => keys.has(groupKeyOf(groupId)),
   });
-  // Per-group "Show shelved" and "Show hidden" reveals. Transient on
-  // purpose, since the whole point of both is to keep the noise down on
-  // a fresh window.
+  // Per-group "Show agent working", "Show shelved" and "Show hidden"
+  // reveals. Transient on purpose, since the whole point of them is to
+  // keep the noise down on a fresh window.
   const [shelfOpenKeys, setShelfOpenKeys] = useState<
     Record<GroupShelf, Set<string>>
-  >(() => ({ shelved: new Set(), hidden: new Set() }));
+  >(() => ({ agentWorking: new Set(), shelved: new Set(), hidden: new Set() }));
   const groupShelvesOpen: Record<GroupShelf, GroupIdSet> = {
+    agentWorking: byGroupKey(shelfOpenKeys.agentWorking),
     shelved: byGroupKey(shelfOpenKeys.shelved),
     hidden: byGroupKey(shelfOpenKeys.hidden),
   };
@@ -270,6 +272,7 @@ function Forest({
         deviceBadges,
         openShelves,
         hiddenPrefixes,
+        allowAgentWorking,
       })
     : buildSidebarRows({
         ...local,
@@ -278,6 +281,7 @@ function Forest({
         order,
         openShelves: groupShelvesOpen,
         hiddenPrefixes,
+        allowAgentWorking,
         byPrefix: {
           prefixes: groupedPrefixes,
           shut: (groupId, prefix) =>

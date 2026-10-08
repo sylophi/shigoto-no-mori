@@ -27,6 +27,7 @@ import {
   ReadWorktreeFilePayloadSchema,
   RestoreDiscardPayloadSchema,
   SetAutoPullPayloadSchema,
+  SetAgentWorkingPayloadSchema,
   SetShelvedPayloadSchema,
   SetStagedPayloadSchema,
   WorktreeCarryOverCompleteSchema,
@@ -108,6 +109,12 @@ export const worktreesContract = defineContract(
   // A flag flip. The renderer follows a mark with git:refreshProject,
   // whose auto-pull pass answers the "Pull N commits" pill right away.
   invoke("setAutoPull", SetAutoPullPayloadSchema, WorktreeSchema, {
+    tracksProjectUsage: true,
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  invoke("setAgentWorking", SetAgentWorkingPayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,

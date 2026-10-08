@@ -1,16 +1,22 @@
-import { Archive, FolderTree, House } from "lucide-react";
+import { Archive, FolderTree, Hammer, House } from "lucide-react";
+import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import type { Worktree } from "@shigomori/contracts/schemas";
+import { isAgentWorking, type Worktree } from "@shigomori/contracts/schemas";
 
 const KINDS = {
   primary: { Icon: House, label: "Primary checkout" },
   external: { Icon: FolderTree, label: "External worktree" },
+  agentWorking: { Icon: Hammer, label: "Agent working" },
   shelved: { Icon: Archive, label: "Shelved" },
 } as const;
 
-function kindOf(worktree: Worktree): keyof typeof KINDS | null {
+function kindOf(
+  worktree: Worktree,
+  allowAgentWorking: boolean,
+): keyof typeof KINDS | null {
   if (worktree.isPrimary) return "primary";
   if (worktree.isExternal) return "external";
+  if (isAgentWorking(worktree, allowAgentWorking)) return "agentWorking";
   if (worktree.shelved) return "shelved";
   return null;
 }
@@ -22,7 +28,7 @@ export function WorktreeKindIcon({
   worktree: Worktree;
   showTooltip?: boolean;
 }) {
-  const kind = kindOf(worktree);
+  const kind = kindOf(worktree, useAllowAgentWorking());
   if (!kind) return null;
   const { Icon, label } = KINDS[kind];
   return (

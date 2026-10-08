@@ -44,7 +44,7 @@ func TestListIdentities(t *testing.T) {
 	if len(entries) != 2 || entries[0]["id"] != primaryID || entries[1]["id"] != fox.ID {
 		t.Fatalf("identities = %v, want the primary then fox", entries)
 	}
-	wantKeys := []string{"autoPull", "branch", "detached", "id", "isExternal", "isPrimary", "name", "path", "projectId", "shelved"}
+	wantKeys := []string{"agentWorking", "autoPull", "branch", "detached", "id", "isExternal", "isPrimary", "name", "path", "projectId", "shelved"}
 	for _, entry := range entries {
 		var keys []string
 		for key := range entry {
@@ -73,7 +73,8 @@ func TestListIdentities(t *testing.T) {
 	for i, row := range decodeT[[]worktreeJSON](t, onlyDoc(t, docs)) {
 		entry := entries[i]
 		if entry["id"] != row.ID || entry["name"] != row.Name || entry["branch"] != row.Branch ||
-			entry["isExternal"] != row.IsExternal || entry["shelved"] != row.Shelved || entry["autoPull"] != row.AutoPull {
+			entry["isExternal"] != row.IsExternal || entry["shelved"] != row.Shelved || entry["autoPull"] != row.AutoPull ||
+			entry["agentWorking"] != row.AgentWorking {
 			t.Errorf("identity %v disagrees with row %+v", entry, row)
 		}
 	}

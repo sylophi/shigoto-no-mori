@@ -33,6 +33,7 @@ import * as Paths from "../../src/Paths.ts";
 import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Store from "../../src/Store.ts";
+import * as Terrier from "../../src/Terrier.ts";
 import * as Usage from "../../src/Usage.ts";
 import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
@@ -45,6 +46,7 @@ export type Engine =
   | Layout.Layout
   | Registry.Registry
   | Scripts.Scripts
+  | Terrier.Terrier
   | Usage.Usage
   | Worktrees.Worktrees;
 
@@ -135,10 +137,13 @@ export type Sandbox = {
   // git in `cwd` with the sandbox's identity, answering its stdout.
   readonly git: (cwd: string, ...args: string[]) => string;
   readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
+  // A command on PATH for this sandbox's life, as a shell script.
+  readonly fakeBin: (name: string, script: string) => void;
   readonly remove: () => Promise<void>;
 };
 
 export function sandbox(): Sandbox {
+  const originalPath = process.env.PATH;
   const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-parity-")));
   const seed = join(root, "seed");
   mkdirSync(seed);
@@ -163,6 +168,7 @@ export function sandbox(): Sandbox {
             GitHub.layer,
           ),
         ),
+        Layer.provideMerge(Terrier.layer),
         Layer.provideMerge(
           Layer.mergeAll(
             Config.layer,
@@ -191,7 +197,7 @@ export function sandbox(): Sandbox {
     return runtime;
   };
 
-  // Read per call, so a test's PATH change reaches the Go side.
+  // Read when a command runs, so a test's PATH change reaches it.
   const gitEnv = () => ({
     ...childEnv(),
     GIT_AUTHOR_NAME: "t",
@@ -260,7 +266,18 @@ export function sandbox(): Sandbox {
           }),
         ),
       ),
+    fakeBin: (name, script) => {
+      const bin = join(root, "bin");
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(bin, name), `#!/bin/sh\n${script}\n`, {
+        mode: 0o755,
+      });
+      if (!process.env.PATH?.startsWith(`${bin}:`)) {
+        process.env.PATH = `${bin}:${originalPath}`;
+      }
+    },
     remove: async () => {
+      process.env.PATH = originalPath;
       await runtime?.dispose();
       rmSync(root, { recursive: true, force: true });
     },
