@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
+import * as Launchers from "../src/Launchers.ts";
+import * as Scripts from "../src/Scripts.ts";
 import { type Engine, goSm, type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 // A cold build of cli/ takes longer than a test's timeout.
@@ -34,10 +36,11 @@ const same = async (
   go: ReadonlyArray<string>,
   engine: Effect.Effect<unknown, unknown, Engine>,
   normalize: (doc: unknown) => unknown = (doc) => doc,
+  cwd = box.home,
 ) =>
   assert.deepStrictEqual(
     await box.engine(engine),
-    normalize(await box.go(...go)),
+    normalize(await box.goAt(cwd, ...go)),
   );
 
 // Steps that each read what the one before left, run one after another.
@@ -234,5 +237,48 @@ describe("projects config", () => {
         }),
       () => project.read(),
     ]);
+  });
+});
+
+describe("launchers", () => {
+  it("lists the catalog, installed or not, by label", async () => {
+    await same(
+      ["launchers", "--catalog"],
+      Effect.service(Launchers.Launchers).pipe(
+        Effect.flatMap((launchers) => launchers.catalog),
+        Effect.map((apps) => ({ ok: true, apps })),
+      ),
+    );
+  });
+});
+
+describe("run", () => {
+  it("lists a worktree's scripts with the manager, use stats, sort and order", async () => {
+    const recent = Date.now() - 60_000;
+    const repo = box.repo("repo", {
+      "package.json": JSON.stringify({
+        scripts: { dev: "vite", "2": "two", lint: "oxlint", n: 1 },
+      }),
+      "pnpm-lock.yaml": "",
+    });
+    box.write("registry.json", {
+      projects: [{ id: "P", name: "repo", path: repo }],
+    });
+    box.write("state.json", {
+      packageScriptUseLog: { P: { dev: [1000, recent], gone: [recent] } },
+      packageScriptSort: { P: "manual" },
+      packageScriptOrder: { P: ["lint", "missing", "dev"] },
+    });
+    await same(
+      ["run"],
+      Effect.service(Scripts.Scripts).pipe(
+        Effect.flatMap((scripts) =>
+          scripts.list({ projectId: "P", worktreePath: repo }),
+        ),
+        Effect.map((listed) => Object.assign({ ok: true }, listed)),
+      ),
+      undefined,
+      repo,
+    );
   });
 });
