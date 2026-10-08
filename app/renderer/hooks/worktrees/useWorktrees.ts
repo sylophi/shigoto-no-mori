@@ -1,5 +1,5 @@
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
 import {
   useHostScope,

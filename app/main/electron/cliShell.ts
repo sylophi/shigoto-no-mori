@@ -16,8 +16,8 @@ import * as Schema from "effect/Schema";
 import type {
   ShellHookState,
   ShellIntegrationStatus,
-} from "@shared/ipc/modules/cli";
-import { ShellHookStateSchema } from "@shared/ipc/modules/cli";
+} from "@shigomori/contracts/modules/cli";
+import { ShellHookStateSchema } from "@shigomori/contracts/modules/cli";
 import { CAPTURE_TIMEOUT_MS, loginShell } from "../core/shellEnv";
 import { cliFailureMessage, runCli } from "./cliRunner";
 

@@ -1,5 +1,5 @@
 // This device's copy of the shared settings
-// (shared/schemas/sharedSettings.ts), one key in registry.json beside
+// (packages/contracts/src/schemas/sharedSettings.ts), one key in registry.json beside
 // the rest of what the user has set up and cannot rebuild by using the
 // app. The CLI never reads it and carries it through its own registry
 // writes untouched, like the device id.
@@ -12,7 +12,7 @@
 // entries.
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
@@ -20,7 +20,7 @@ import {
 import {
   SharedSettingsDocSchema,
   type SharedSettingsDoc,
-} from "@shared/schemas/sharedSettings";
+} from "@shigomori/contracts/schemas/sharedSettings";
 import { getDeviceId } from "../config/deviceId";
 import { registryStore, SHARED_SETTINGS_KEY } from "../config/store";
 

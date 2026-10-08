@@ -16,7 +16,7 @@ import {
   type ShigomoriWorktreeData,
   ShigomoriWorktreeDataSchema,
   type WorktreeDescription,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { shigomoriReadViaCli } from "@host/ipc/cliDelegate";
 import {
   atomicWriteJsonSync,

@@ -12,7 +12,10 @@
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { errorMessageOf, worktreeSettingUpError } from "@shared/errors";
+import {
+  errorMessageOf,
+  worktreeSettingUpError,
+} from "@shigomori/contracts/errors";
 import { holdRootChecks } from "@host/mirror/registry";
 import {
   type Project,
@@ -21,7 +24,7 @@ import {
   type ScriptEvent,
   scriptErrorLine,
   type ScriptRunSlot,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
 import {

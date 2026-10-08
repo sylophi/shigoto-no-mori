@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { SyncWorktreeFolderEntry } from "@shared/ipc/modules/sync";
+import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // One folder of a worktree with git's ignore verdict per entry

@@ -9,8 +9,11 @@ import {
   Stethoscope,
   Wrench,
 } from "lucide-react";
-import { errorMessageOf } from "@shared/errors";
-import type { DoctorFinding, DoctorReport } from "@shared/ipc/modules/cli";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import type {
+  DoctorFinding,
+  DoctorReport,
+} from "@shigomori/contracts/modules/cli";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { ModalShell } from "@/components/ui/modal-shell";

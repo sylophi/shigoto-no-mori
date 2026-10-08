@@ -1,6 +1,9 @@
-import type { ContractModule } from "./contract";
+import type { ContractModule } from "@shigomori/contracts/contract";
 import type { ChannelMux } from "./socket/channels";
-import type { BroadcastKeys, BroadcastProducerPayload } from "./types";
+import type {
+  BroadcastKeys,
+  BroadcastProducerPayload,
+} from "@shigomori/contracts/types";
 
 // The client's one seam onto the wire. A transport carries invokes and
 // broadcast subscriptions for a single connection to a serving process.

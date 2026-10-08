@@ -1,4 +1,11 @@
+// The sources run in the renderer, the web client, the workerd hub and
+// node alike, so they get the web platform's globals (URL, TextEncoder,
+// console) and none of node's. The fixtures proof has its own config.
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": []
+  },
   "include": ["src"]
 }

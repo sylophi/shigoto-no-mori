@@ -11,7 +11,7 @@
 // pill spells its name out, so the narrowed forest always says which
 // machine it is showing. A radio group: one pick at a time, arrows
 // move it, the way the device tabs do.
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@/components/ui/button";

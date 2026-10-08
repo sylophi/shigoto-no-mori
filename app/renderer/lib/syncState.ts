@@ -20,7 +20,7 @@ import {
   syncWaitsForCleanTree,
   type RemoteSyncState,
   type Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 export type SyncTone = "violet" | "emerald" | "sky" | "indigo" | "rose";
 

@@ -9,9 +9,9 @@
 // and projectPullRequestsRefreshed when a pass changed something so
 // the renderer, local or peer, can invalidate.
 import { BrowserWindow } from "electron";
-import { errorMessageOf } from "@shared/errors";
-import { gitContract } from "@shared/ipc/modules/git";
-import { githubCliContract } from "@shared/ipc/modules/githubCli";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { fetchAllRemotes, snapshotRemoteRefs } from "@host/lib/git/remotes";
 import {
   pullRequestMapsEqual,

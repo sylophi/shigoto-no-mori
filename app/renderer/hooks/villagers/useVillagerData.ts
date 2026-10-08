@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { VillagerDataStatus } from "@shared/schemas";
+import type { VillagerDataStatus } from "@shigomori/contracts/schemas";
 import { hasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 

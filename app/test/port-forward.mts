@@ -55,8 +55,8 @@ import { afterAll, beforeAll, it } from "vitest";
 import { CommandRefusedError } from "@shared/ipc/socket/frames";
 import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
 import { buildClient } from "@shared/ipc/buildClient";
-import { forwardContract } from "@shared/ipc/modules/forward";
-import type { Client } from "@shared/ipc/types";
+import { forwardContract } from "@shigomori/contracts/modules/forward";
+import type { Client } from "@shigomori/contracts/types";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import { mintHexId } from "@host/lib/hexId";
 import {

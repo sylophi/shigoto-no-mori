@@ -3,7 +3,7 @@ import {
   isPrereleaseVersion,
   releaseVersionOf,
 } from "@shared/releases";
-import type { UpdaterState } from "@shared/schemas";
+import type { UpdaterState } from "@shigomori/contracts/schemas";
 
 // Which devices are behind the newest app release, for the update toast
 // and Settings' Update all (hooks/system/useUpdater.ts), kept free of

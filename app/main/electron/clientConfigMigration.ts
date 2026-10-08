@@ -13,7 +13,10 @@
 import { existsSync } from "node:fs";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { type ClientConfig, ClientConfigSchema } from "@shared/schemas";
+import {
+  type ClientConfig,
+  ClientConfigSchema,
+} from "@shigomori/contracts/schemas";
 import {
   dropLegacyAppearance,
   readLegacyAppearance,

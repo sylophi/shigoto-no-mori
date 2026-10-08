@@ -11,7 +11,7 @@
 // going away updates without a refetch.
 import { credentialRevoked } from "@shared/remote/supervisor";
 import { useIsMutating } from "@tanstack/react-query";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isHubRefusal } from "@shared/account/service";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { ErrorBanner } from "@/components/ui/error-banner";

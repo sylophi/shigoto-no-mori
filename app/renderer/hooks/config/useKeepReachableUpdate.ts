@@ -3,7 +3,7 @@
 // Save, this toggle takes effect at once: flipping it should register or
 // clear the OS login item right away, which the main-side write handler
 // does when the value changes. keepReachable is on by default
-// (keepReachableOn in shared/schemas/config.ts), so off is stored as an
+// (keepReachableOn in packages/contracts/src/schemas/config.ts), so off is stored as an
 // explicit false: an omitted key would read as on again. The write
 // protocol is useClientConfigPatch's.
 import { useClientConfigPatch } from "./useClientConfigPatch";

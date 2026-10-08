@@ -1,7 +1,10 @@
 import { AlertTriangle, Copy as CopyIcon, X } from "lucide-react";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { cn } from "@/lib/utils";
-import type { CarryOverEntry, CarryOverStat } from "@shared/schemas";
+import type {
+  CarryOverEntry,
+  CarryOverStat,
+} from "@shigomori/contracts/schemas";
 import { ModePicker } from "./ModePicker";
 import { OnlyInWorktrees } from "./OnlyInWorktrees";
 import { ChipButton } from "@/components/ui/chip-button";

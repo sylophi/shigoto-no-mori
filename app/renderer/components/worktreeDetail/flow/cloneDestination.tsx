@@ -16,8 +16,8 @@
 // waits on). Made once per flow (useLandingTarget) and handed down.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { SyncCloneInto } from "@shared/ipc/modules/sync";
-import type { Project } from "@shared/schemas";
+import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
+import type { Project } from "@shigomori/contracts/schemas";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { useDestinationScope, useHostScope } from "@/hooks/remote/useHostScope";

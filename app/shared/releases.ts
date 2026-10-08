@@ -6,7 +6,7 @@
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { UPDATE_FEED_REPO } from "@shared/packaging/updateFeed.mts";
-import type { Release } from "@shared/schemas";
+import type { Release } from "@shigomori/contracts/schemas";
 
 export const RELEASES_PAGE_URL = `https://github.com/${UPDATE_FEED_REPO}/releases`;
 

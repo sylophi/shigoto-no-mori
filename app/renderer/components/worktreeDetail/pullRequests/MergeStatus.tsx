@@ -2,7 +2,7 @@ import { Chip } from "@/components/ui/chip-button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { describeChecks, type MergeVerdict } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
-import type { PullRequestDetail } from "@shared/schemas";
+import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { ChecksPopover } from "./ChecksPopover";
 import { ChecksSummaryIcon } from "./ChecksSummaryIcon";
 import { MergeStateIcon } from "./MergeStateIcon";

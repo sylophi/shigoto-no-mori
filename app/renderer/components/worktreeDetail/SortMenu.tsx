@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { PackageScriptSortMode } from "@shared/schemas";
+import type { PackageScriptSortMode } from "@shigomori/contracts/schemas";
 
 const SORT_OPTIONS: ReadonlyArray<{
   value: PackageScriptSortMode;

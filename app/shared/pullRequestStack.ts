@@ -8,8 +8,8 @@
 // PRs based on it, each of those heads its own stack over the shared
 // ancestry, and walking up stops at the fork.
 import { only } from "./util/only";
-import type { PullRequest } from "./schemas/pullRequest";
-import type { Worktree } from "./schemas/worktree";
+import type { PullRequest } from "@shigomori/contracts/schemas/pullRequest";
+import type { Worktree } from "@shigomori/contracts/schemas/worktree";
 
 export interface PullRequestStackEntry {
   // The PR's head branch, the key it sits under in the map.

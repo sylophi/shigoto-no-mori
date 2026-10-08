@@ -8,7 +8,7 @@ import { useSyncExternalStore } from "react";
 import {
   MACHINE_FALLBACK_ICON,
   type DeviceIcon,
-} from "@shared/account/deviceIcon";
+} from "@shigomori/contracts/deviceIcon";
 import {
   useLocalDeviceIcon,
   useLocalDeviceName,

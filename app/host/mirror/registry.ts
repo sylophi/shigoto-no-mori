@@ -23,9 +23,9 @@ import {
   MirrorIgnoreModeSchema,
   type MirrorSessionRaw,
   mirrorEngineBlocker,
-} from "@shared/ipc/modules/mirror";
-import { errorMessageOf } from "@shared/errors";
-import { WorktreeRemovalSchema } from "@shared/schemas/worktree";
+} from "@shigomori/contracts/modules/mirror";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
 import { implSlot } from "@host/lib/util/implSlot";
 import { peerMirrorApiFor } from "@host/ipc/peerSync";
 import {
@@ -154,7 +154,7 @@ export function mirrorSessions(
 
 // A mirror an older build started from the copy's device: it ran
 // there, its local side the copy, and carries no copySide label (every
-// start now writes it, shared/ipc/modules/mirror.ts). A mirror runs on
+// start now writes it, packages/contracts/src/modules/mirror.ts). A mirror runs on
 // the device holding the original now, so such a session is ended the
 // first time the engine reports it (main wires this to its snapshots):
 // the session only, never a worktree, and its thread (the copy's page)

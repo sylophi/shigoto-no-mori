@@ -1,4 +1,4 @@
-// The merge behind shared settings (shared/schemas/sharedSettings.ts):
+// The merge behind shared settings (packages/contracts/src/schemas/sharedSettings.ts):
 // pure functions over two copies of the document, shared by every
 // place a copy lives (the host's registry.json, a browser's
 // localStorage) and by the renderer that carries entries between them.
@@ -7,18 +7,18 @@
 // associative and idempotent, so copies may exchange entries in any
 // order, any number of times, over any path, and still agree: there is
 // no sync session to complete and nothing to resume.
+import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { isSafeRelPath } from "@shared/git/gitPaths";
 import {
   MAX_SHARED_SETTING_ENTRIES,
   type SharedSettingEntry,
   type SharedSettingsDoc,
   type SharedSettingValue,
   SharedSettingValueSchema,
-} from "@shared/schemas/sharedSettings";
+} from "@shigomori/contracts/schemas/sharedSettings";
 
 const isSharedSettingValue = Schema.is(SharedSettingValueSchema);
 

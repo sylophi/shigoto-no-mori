@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { WorktreeFile } from "@shared/schemas";
+import type { WorktreeFile } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 

@@ -21,10 +21,10 @@ import {
   SYNC_IGNORED_PATHS_LIMIT,
   type SyncTeardownSourceResult,
   syncContract,
-} from "@shared/ipc/modules/sync";
+} from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
-import { errorMessageOf, logFailure } from "@shared/errors";
+import type { Handlers } from "@shigomori/contracts/types";
+import { errorMessageOf, logFailure } from "@shigomori/contracts/errors";
 import { landInvitedMirror } from "@host/mirror/invites";
 import {
   pullBranchCollision,
@@ -36,7 +36,7 @@ import {
   isRealBranch,
   type Project,
   type Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   type TransferFilesResult,
   transferFilesOnce,

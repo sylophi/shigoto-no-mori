@@ -1,7 +1,7 @@
 import { Moon, Sun, SunMoon } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SectionHeading } from "@/components/ui/section-heading";
-import type { Theme } from "@shared/schemas";
+import type { Theme } from "@shigomori/contracts/schemas";
 import {
   DARK_THEMES,
   type DarkTheme,

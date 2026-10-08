@@ -2,7 +2,7 @@ import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToa
 import { useResetSoft } from "@/hooks/worktrees/useWorktreeChanges";
 import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 
 // Undo commits, as one action for every surface that offers it (the
 // changes page's last-commit strip, a commit row's context menu): soft

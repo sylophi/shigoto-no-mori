@@ -30,7 +30,7 @@ import {
   CLOSE_SUPERSEDED,
   encodeEnvelope,
   type ServerEnvelope,
-} from "@shared/hub/protocol";
+} from "@shigomori/contracts/hubProtocol";
 import {
   AnswerFrameSchema,
   AskFrameSchema,

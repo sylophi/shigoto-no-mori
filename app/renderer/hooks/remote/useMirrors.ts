@@ -28,8 +28,8 @@ import {
   type MirrorListResult,
   type MirrorSession,
   type MirrorServing,
-} from "@shared/ipc/modules/mirror";
-import type { Worktree } from "@shared/schemas";
+} from "@shigomori/contracts/modules/mirror";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   type MirrorIgnoreChoice,

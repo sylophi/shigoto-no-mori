@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { poolPortsFor } from "@host/lib/portPool";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { dialLoopback, isLoopbackPortListening } from "@host/lib/net";
-import { errorCodeOf } from "@shared/errors";
+import { errorCodeOf } from "@shigomori/contracts/errors";
 import {
   freeLoopbackPort,
   startLoopbackServer,

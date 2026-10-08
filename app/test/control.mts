@@ -67,34 +67,34 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import type * as Types from "effect/Types";
-import type { DeviceInfo } from "@shared/hub/protocol";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
   ControlPeerWorktreeSchema,
   controlContract,
-} from "@shared/ipc/modules/control";
+} from "@shigomori/contracts/modules/control";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_MIRROR_BRANCH,
   MIRROR_LABEL_TRANSFER,
   mirrorContract,
   type MirrorGitStatus,
-} from "@shared/ipc/modules/mirror";
-import { projectsContract } from "@shared/ipc/modules/projects";
-import { runtimeContract } from "@shared/ipc/modules/runtime";
-import { shigomoriContract } from "@shared/ipc/modules/shigomori";
-import { syncContract } from "@shared/ipc/modules/sync";
-import { worktreesContract } from "@shared/ipc/modules/worktrees";
+} from "@shigomori/contracts/modules/mirror";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
+import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import { syncContract } from "@shigomori/contracts/modules/sync";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
+import type { Handlers } from "@shigomori/contracts/types";
 import {
   type RuntimeInfo,
   type WorktreeRemoval,
   WorktreeSchema,
-} from "@shared/schemas";
-import { loose } from "@shared/schemas/loose";
-import { strict } from "@shared/schemas/strict";
+} from "@shigomori/contracts/schemas";
+import { loose } from "@shigomori/contracts/schemas/loose";
+import { strict } from "@shigomori/contracts/schemas/strict";
 import { only } from "@shared/util/only";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import {

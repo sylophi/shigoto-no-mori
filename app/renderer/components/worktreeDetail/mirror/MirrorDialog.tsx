@@ -17,8 +17,8 @@
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shared/git/branches";
-import type { MirrorSession } from "@shared/ipc/modules/mirror";
-import type { Project, Worktree } from "@shared/schemas";
+import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Chip } from "@/components/ui/chip-button";

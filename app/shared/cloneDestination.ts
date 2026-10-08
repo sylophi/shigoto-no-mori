@@ -4,7 +4,7 @@
 // renderer/components/worktreeDetail/flow/cloneDestination.tsx, and the
 // CLI's send, host/ipc/modules/control.ts). Tildified, since the
 // device that clones expands `~` itself.
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import {
   getBrowseLeafSegment,
   getBrowseParentPath,

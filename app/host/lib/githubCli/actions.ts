@@ -1,5 +1,8 @@
 import * as Schema from "effect/Schema";
-import { CommitHashSchema, PullRequestSchema } from "@shared/schemas";
+import {
+  CommitHashSchema,
+  PullRequestSchema,
+} from "@shigomori/contracts/schemas";
 import { run } from "../git/core";
 import { getMergeBaseDiff } from "../git/diff";
 import { hasCommit } from "../git/refs";

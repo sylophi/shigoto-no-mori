@@ -18,7 +18,7 @@
 // said when it was cut short. Per-key rather than per-call because the
 // wire has no request cancellation: a cancel frame and a per-call
 // signal on the context would retire this registry.
-import { MOVE_CANCELLED } from "@shared/ipc/modules/sync";
+import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { onAbort } from "@host/lib/util/abort";
 

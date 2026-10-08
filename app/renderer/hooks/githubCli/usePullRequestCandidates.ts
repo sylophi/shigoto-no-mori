@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { PullRequestCandidateList } from "@shared/schemas";
+import type { PullRequestCandidateList } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Open PRs offered as a source in the new-worktree form. The form opens

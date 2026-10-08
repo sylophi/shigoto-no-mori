@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   fillRoutePath,
   matchRoutePath,

@@ -131,6 +131,10 @@ jobs:
       - name: Typecheck
         run: pnpm run check:typecheck
 
+      # The contracts' golden fixtures read sources and JSON only too.
+      - name: Contract fixtures
+        run: pnpm run check:contracts
+
   # The hub Worker's typecheck and its vitest suite inside workerd. The
   # install runs the esbuild and workerd builds pnpm-workspace.yaml
   # allows.

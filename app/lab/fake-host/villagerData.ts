@@ -8,7 +8,10 @@
 // ?villagers=absent|downloading|ready|failed poses the status (default:
 // ready with the folder, absent without). Download, cancel and remove
 // play out on it. ?visits=none empties the Visitors album (below).
-import type { VillagerDataStatus, VillagerProfiles } from "@shared/schemas";
+import type {
+  VillagerDataStatus,
+  VillagerProfiles,
+} from "@shigomori/contracts/schemas";
 import { villagerManifest } from "@shared/villagers/manifest";
 import type { AllChannelHandlers } from "@shared/ipc/client";
 

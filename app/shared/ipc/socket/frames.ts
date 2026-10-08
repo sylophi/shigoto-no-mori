@@ -218,7 +218,7 @@ export function isCommandRefusedError(error: unknown): boolean {
 
 // The err form carries a message string because that is exactly what
 // survives Electron's IPC error serialization too: the matchers in
-// shared/errors.ts key on message text, so both wires degrade handler
+// packages/contracts/src/errors.ts key on message text, so both wires degrade handler
 // failures identically. `code` is the machine-readable refusal
 // classification, absent on an ordinary handler failure.
 const ResErrFrameSchema = z.object({

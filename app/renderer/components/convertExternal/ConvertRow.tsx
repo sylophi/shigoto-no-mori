@@ -5,7 +5,7 @@ import { type RowStatus } from "@/components/ui/row-status";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { tildify } from "@shared/projectPaths";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 
 interface ConvertRowProps {
   worktree: Worktree;

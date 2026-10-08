@@ -16,14 +16,14 @@ import {
   type UseMutationResult,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { MirrorStartToPayload } from "@shared/ipc/modules/mirror";
+import type { MirrorStartToPayload } from "@shigomori/contracts/modules/mirror";
 import type {
   SyncCloneInto,
   SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResult,
-} from "@shared/ipc/modules/sync";
+} from "@shigomori/contracts/modules/sync";
 import type { MirrorIgnoreChoice } from "@shared/leaveOutRule";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateHostDevice, queryKeys } from "@/lib/queryKeys";
 import { quietVillagerMoves } from "@/lib/villagers/moves";

@@ -7,8 +7,8 @@ import type {
   CreateWorktreeResult,
   DeleteWorktreeResult,
   Worktree,
-} from "@shared/schemas";
-import { errorMessageOf } from "@shared/errors";
+} from "@shigomori/contracts/schemas";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackCleanup";
 import {

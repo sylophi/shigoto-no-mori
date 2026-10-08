@@ -19,7 +19,7 @@ import {
   hasWorktreeData,
   MAX_CUSTOM_PORTS,
   type Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";

@@ -6,7 +6,7 @@ import {
   type Worktree,
   type WorktreeDiskUsage,
   type WorktreeHygiene,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 // One row on the tidy page: the worktree, the project it belongs to, and
 // everything we judged about it. `disk` is undefined until that

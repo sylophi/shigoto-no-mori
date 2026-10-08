@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { ShigomoriWorktreeData } from "@shared/schemas";
+import type { ShigomoriWorktreeData } from "@shigomori/contracts/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 

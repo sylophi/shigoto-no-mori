@@ -33,7 +33,7 @@ import {
   BundleAnswerSchema,
   type Link,
 } from "@host/lib/sync/sourceLink";
-import { HexId32Schema } from "@shared/ipc/hexId";
+import { HexId32Schema } from "@shigomori/contracts/schemas/hexId";
 import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
 import {
   CLOUDFLARED_BINARY_NAME,

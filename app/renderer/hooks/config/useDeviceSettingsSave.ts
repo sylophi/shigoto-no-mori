@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { GlobalConfig } from "@shared/schemas";
+import type { GlobalConfig } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   invalidateDeviceSettingsQueries,

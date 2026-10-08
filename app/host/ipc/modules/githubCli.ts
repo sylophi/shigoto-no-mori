@@ -1,5 +1,5 @@
-import { githubCliContract } from "@shared/ipc/modules/githubCli";
-import type { Handlers } from "@shared/ipc/types";
+import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
+import type { Handlers } from "@shigomori/contracts/types";
 import {
   disablePullRequestAutoMerge,
   getPullRequestDiff,

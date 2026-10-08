@@ -1,5 +1,5 @@
-import { portForwardContract } from "@shared/ipc/modules/portForward";
-import type { Handlers } from "@shared/ipc/types";
+import { portForwardContract } from "@shigomori/contracts/modules/portForward";
+import type { Handlers } from "@shigomori/contracts/types";
 import type { PortForwardEngine } from "../../core/portForward/engine";
 import { implSlot } from "@host/lib/util/implSlot";
 

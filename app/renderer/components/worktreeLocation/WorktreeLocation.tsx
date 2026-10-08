@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { LocationForm } from "./LocationForm";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 

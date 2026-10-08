@@ -28,7 +28,7 @@ import {
   ProjectSortModeSchema,
   type Project,
   type ProjectSortMode,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 
 const project = (

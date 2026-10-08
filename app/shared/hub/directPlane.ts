@@ -23,10 +23,10 @@
 // pushes it. The bridge records it on the peer's session so the status
 // snapshot's peerAcceptsCommands follows the switch live.
 const COMMAND_ACCESS_CHANGED = accountContract.calls.commandAccessChanged;
-import { accountContract } from "@shared/ipc/modules/account";
-import { safeDecode } from "@shared/ipc/schema";
-import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
-import type { HubPeerPush, HubStatus } from "@shared/ipc/modules/hub";
+import { accountContract } from "@shigomori/contracts/modules/account";
+import { safeDecode } from "@shigomori/contracts/codec";
+import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
+import type { HubPeerPush, HubStatus } from "@shigomori/contracts/modules/hub";
 import type { HubConnectionStatus } from "@shared/hub/connectionTypes";
 import { makeHubHandlers, type HubHandlers } from "@shared/hub/bridgeHandlers";
 import { createDirectDialer, type DirectDialer } from "@shared/hub/directDial";

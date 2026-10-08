@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ClientConfig } from "@shared/schemas";
+import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { hasLocalHost } from "@/lib/localHost";
 import { clientConfigQueryOptions } from "./useClientConfig";
 import { useLocalGlobalConfig } from "./useGlobalConfig";

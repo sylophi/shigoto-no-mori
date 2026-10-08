@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { VillagerProfiles } from "@shared/schemas";
+import type { VillagerProfiles } from "@shigomori/contracts/schemas";
 import { villageLifeEnabled, villageLifeShows } from "@shared/villageLife";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { villagerDataStatusQueryOptions } from "@/hooks/villagers/useVillagerData";

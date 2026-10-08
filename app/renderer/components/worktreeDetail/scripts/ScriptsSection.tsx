@@ -5,7 +5,7 @@ import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { PackageScripts } from "./PackageScripts";
 import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";

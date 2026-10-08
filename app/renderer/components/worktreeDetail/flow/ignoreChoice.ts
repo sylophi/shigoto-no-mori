@@ -17,7 +17,7 @@ import {
   type MirrorIgnoreMode,
   summarizeIgnores,
   unanchorIgnoredPath,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import {
   exceptionsOf,
   type IgnoreBase,

@@ -16,7 +16,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { signalPidTree } from "../host/lib/scripts/process.ts";
-import { errorMessageOf } from "../shared/errors.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { appRoot } from "./lib/appRoot.mts";
 import { parsePositionalDevProfile } from "./lib/devProfile.mts";
 import { rendererDevServerAnswers } from "./lib/portsEnvFile.mts";

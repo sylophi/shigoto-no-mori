@@ -11,7 +11,7 @@
 //
 // Run: pnpm test villager-visitors.
 import assert from "node:assert/strict";
-import type { VillagerProfiles } from "@shared/schemas";
+import type { VillagerProfiles } from "@shigomori/contracts/schemas";
 import { buildAlbum, sortAlbum, tallyVisits } from "@/lib/villagers/visitors";
 import { it } from "vitest";
 

@@ -19,7 +19,11 @@
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useState } from "react";
 import { RefreshCw, Shovel } from "lucide-react";
-import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
+import {
+  isRealBranch,
+  type Project,
+  type Worktree,
+} from "@shigomori/contracts/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ClientConfig, SidebarView } from "@shared/schemas";
+import type { ClientConfig, SidebarView } from "@shigomori/contracts/schemas";
 import { isBareKeyEvent } from "@/lib/dom";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";

@@ -1,5 +1,5 @@
 // Durable proof for the bring rule's engine patterns
-// (shared/mirrorIgnores.ts): a picked path escapes glob syntax on the
+// (packages/contracts/src/mirrorIgnores.ts): a picked path escapes glob syntax on the
 // way in and reads back as itself, the brought pairs sit past the
 // marker so an allowlist gitignore ending in `!/src` pairs cannot be
 // mistaken for them, the caps hold (64 paths, and the rules squeezed
@@ -16,7 +16,7 @@ import {
   broughtPaths,
   MIRROR_IGNORES_LIMIT,
   unanchorIgnoredPath,
-} from "@shared/mirrorIgnores";
+} from "@shigomori/contracts/mirrorIgnores";
 import { it } from "vitest";
 
 const RULES = ["node_modules/", "*.log", "dist/", "!/keep", "!/keep/**"];

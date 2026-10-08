@@ -11,15 +11,15 @@
 // add`, config seed included, which is why the register waits for the
 // checkout). Up to the register everything is undone on failure: the
 // folder is this call's own, made here.
+import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
 import { mkdir, rm } from "node:fs/promises";
 import * as Schema from "effect/Schema";
-import { isCloneableRemote } from "@shared/cloneUrl";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   type SyncCloneInto,
   SyncBundleRefSchema,
-} from "@shared/ipc/modules/sync";
-import type { Project } from "@shared/schemas";
+} from "@shigomori/contracts/modules/sync";
+import type { Project } from "@shigomori/contracts/schemas";
 import { checkCloneDestination } from "@host/lib/git/clone";
 import { run } from "@host/lib/git/core";
 import { deleteRef, updateRef } from "@host/lib/git/refs";

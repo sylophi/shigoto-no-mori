@@ -39,8 +39,8 @@
 //     switched off), so the slate "Off" is the least-lying option.
 import { hashKey, type QueryClient } from "@tanstack/react-query";
 import { buildApi } from "@shared/ipc/client";
-import type { HubStatus } from "@shared/ipc/modules/hub";
-import type { DeviceInfo } from "@shared/hub/protocol";
+import type { HubStatus } from "@shigomori/contracts/modules/hub";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import { directPresenceRule } from "@shared/hub/directPresence";
 import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";

@@ -11,9 +11,9 @@ import {
   type PullRequestCandidateList,
   type PullRequestCheckoutRef,
   PullRequestSchema,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { forkBranchCandidates } from "@shared/git/branches";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { createLocalBranch } from "../git/branches";
 import { run } from "../git/core";
 import { localBranchExists } from "../git/remotes";

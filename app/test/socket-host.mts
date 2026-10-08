@@ -58,33 +58,33 @@ import {
   type ConnectDeviceOptions,
 } from "@shared/ipc/socket/wsClientTransport";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
-import { VoidSchema } from "@shared/schemas";
-import { defineContract, invoke } from "@shared/ipc/contract";
-import { safeDecode } from "@shared/ipc/schema";
+import { VoidSchema } from "@shigomori/contracts/schemas";
+import { defineContract, invoke } from "@shigomori/contracts/contract";
+import { safeDecode } from "@shigomori/contracts/codec";
 import { registerContract } from "@shared/ipc/registerContract";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
-import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
+import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import type { WsServerBinding, WsServerStartOpts } from "@host/socket/server";
-import { accountContract } from "@shared/ipc/modules/account";
+import { accountContract } from "@shigomori/contracts/modules/account";
 // The authoritative contract registry (the same source check-host-boundary
 // rule 6 derives from), so the explicit-remote-tag invariant covers every
 // host module automatically instead of a hand-maintained list a new module
 // could silently skip.
 import { allContractModules } from "@shared/ipc/client";
 // Contract modules referenced by the explicit spot-checks below.
-import { cliContract } from "@shared/ipc/modules/cli";
-import { forwardContract } from "@shared/ipc/modules/forward";
-import { mirrorContract } from "@shared/ipc/modules/mirror";
-import { fsContract } from "@shared/ipc/modules/fs";
-import { gitContract } from "@shared/ipc/modules/git";
-import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
-import { launchersContract } from "@shared/ipc/modules/launchers";
-import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
-import { projectsContract } from "@shared/ipc/modules/projects";
-import { runtimeContract } from "@shared/ipc/modules/runtime";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
-import { syncContract } from "@shared/ipc/modules/sync";
-import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import { cliContract } from "@shigomori/contracts/modules/cli";
+import { forwardContract } from "@shigomori/contracts/modules/forward";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import { fsContract } from "@shigomori/contracts/modules/fs";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
+import { launchersContract } from "@shigomori/contracts/modules/launchers";
+import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import { syncContract } from "@shigomori/contracts/modules/sync";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import {
   boundPort,
   delay,

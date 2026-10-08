@@ -4,7 +4,11 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
-import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
+import type {
+  PullRequest,
+  PullRequestDetail,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import { DiffButton } from "../DiffButton";
 import { PullRequestStateLabel } from "./PullRequestStateLabel";
 import { MERGE_VERB, openPullRequest } from "./pullRequestShared";

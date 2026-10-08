@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { RATE_LIMITED } from "@shared/releases";
-import type { Release } from "@shared/schemas";
+import type { Release } from "@shigomori/contracts/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
 // The app's GitHub releases, fetched when a changelog opens. GitHub

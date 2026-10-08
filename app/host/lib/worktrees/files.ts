@@ -4,8 +4,11 @@
 import { constants } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { errorCodeOf } from "@shared/errors";
-import { WORKTREE_FILE_MAX_BYTES, type WorktreeFile } from "@shared/schemas";
+import { errorCodeOf } from "@shigomori/contracts/errors";
+import {
+  WORKTREE_FILE_MAX_BYTES,
+  type WorktreeFile,
+} from "@shigomori/contracts/schemas";
 
 // How far in a NUL byte marks a file as binary. The same window git
 // uses for its own text/binary guess.

@@ -1,5 +1,5 @@
 import { InlineError } from "@/components/ui/inline-error";
-import type { UpdaterState } from "@shared/schemas";
+import type { UpdaterState } from "@shigomori/contracts/schemas";
 
 // The muted line for every state but error, null where the button says
 // it all. A Record, so a new state kind has to be given a line here.

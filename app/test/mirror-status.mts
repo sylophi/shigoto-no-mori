@@ -10,7 +10,7 @@
 //
 // Run: pnpm test mirror-status.
 import assert from "node:assert/strict";
-import type { MirrorStatus } from "@shared/ipc/modules/mirror";
+import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
 import { it } from "vitest";
 

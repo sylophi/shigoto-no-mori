@@ -4,7 +4,10 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { SYNC_PILL_SHAPE } from "@/components/worktreeDetail/SyncActionButton";
 import { WorktreeSyncPill } from "@/components/worktreeDetail/WorktreeSyncPill";
 import { cn } from "@/lib/utils";
-import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
+import {
+  deriveRemoteSyncState,
+  type Worktree,
+} from "@shigomori/contracts/schemas";
 
 // Where a commit from this page lands, and what the remote is owed:
 // the branch on the left, the push (or publish, or pull) on the right.

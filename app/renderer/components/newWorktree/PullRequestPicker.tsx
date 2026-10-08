@@ -4,7 +4,7 @@ import type {
   PullRequestCandidate,
   PullRequestCandidateList,
   Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useNow } from "@/hooks/ui/useNow";

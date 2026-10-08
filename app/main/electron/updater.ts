@@ -24,13 +24,16 @@ import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { app } from "electron";
-import { updaterContract } from "@shared/ipc/modules/updater";
-import type { StagedManifest, UpdaterState } from "@shared/schemas";
+import { updaterContract } from "@shigomori/contracts/modules/updater";
+import type {
+  StagedManifest,
+  UpdaterState,
+} from "@shigomori/contracts/schemas";
 import {
   StagedManifestSchema,
   UpdateStageEventSchema,
   UpdateStageResultSchema,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { setUpdaterImpl } from "@host/ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "@host/lib/util/jsonFile";
@@ -40,7 +43,7 @@ import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 import { updateEndpointFlags } from "./updateEndpoints";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 // The first check waits out the boot rush: staging can download

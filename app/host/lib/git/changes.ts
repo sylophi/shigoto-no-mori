@@ -11,8 +11,8 @@ import type {
   ChangeKind,
   CommitMessage,
   StagedState,
-} from "@shared/schemas";
-import { isUntracked } from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
+import { isUntracked } from "@shigomori/contracts/schemas";
 import { createLimiter } from "@shared/util/limit";
 import { chunked, run, runLenient, splitZ, type RunOptions } from "./core";
 import { verifyRev } from "./refs";

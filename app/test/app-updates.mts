@@ -14,7 +14,7 @@
 // Run: pnpm test app-updates.
 import assert from "node:assert/strict";
 import { compareAppVersions } from "@shared/releases";
-import type { UpdaterState } from "@shared/schemas";
+import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { type DeviceUpdater, findOutdated } from "@/lib/updates";
 import { it } from "vitest";
 

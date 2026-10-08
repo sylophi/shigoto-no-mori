@@ -1,5 +1,5 @@
-import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
-import type { Handlers } from "@shared/ipc/types";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
+import type { Handlers } from "@shigomori/contracts/types";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 
 export const sharedSettingsHandlers: Handlers<typeof sharedSettingsContract> = {

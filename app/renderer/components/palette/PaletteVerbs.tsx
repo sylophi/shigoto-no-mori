@@ -24,7 +24,7 @@ import { rankByScore } from "@/lib/fuzzyMatch";
 import { worktreeSyncView } from "@/lib/syncState";
 import { cn } from "@/lib/utils";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
-import type { LauncherEntry } from "@shared/schemas";
+import type { LauncherEntry } from "@shigomori/contracts/schemas";
 import { PaletteGroup, PaletteItem, usePaneHasKeys } from "./PaletteItem";
 import type { PaletteRow } from "./PaletteRows";
 import type { PaletteEntry, PaletteProject } from "./buildPaletteEntries";

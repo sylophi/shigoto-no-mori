@@ -5,7 +5,7 @@ import {
   useQueryClient,
   skipToken,
 } from "@tanstack/react-query";
-import type { BranchList } from "@shared/schemas";
+import type { BranchList } from "@shigomori/contracts/schemas";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 

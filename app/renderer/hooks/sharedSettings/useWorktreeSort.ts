@@ -4,7 +4,10 @@
 // written by a build with a mode this one doesn't know, reads as the
 // name order.
 import * as Schema from "effect/Schema";
-import { type WorktreeSortMode, WorktreeSortModeSchema } from "@shared/schemas";
+import {
+  type WorktreeSortMode,
+  WorktreeSortModeSchema,
+} from "@shigomori/contracts/schemas";
 import { sharedSettingKeys } from "@shared/sharedSettings";
 import {
   useSetSharedSetting,

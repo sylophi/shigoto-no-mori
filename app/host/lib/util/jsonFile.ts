@@ -9,7 +9,11 @@ import {
 } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { type ContractSchema, type Decoded, decode } from "@shared/ipc/schema";
+import {
+  type ContractSchema,
+  type Decoded,
+  decode,
+} from "@shigomori/contracts/codec";
 import { isENOENT } from "./paths";
 import { noteSelfWrite } from "./selfWrite";
 

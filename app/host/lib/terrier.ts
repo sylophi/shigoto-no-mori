@@ -6,7 +6,7 @@
 // version speak the registry-read contract this build understands.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { TerrierReadiness } from "@shared/schemas";
+import type { TerrierReadiness } from "@shigomori/contracts/schemas";
 import { ttlValueCache } from "./util/ttlCache";
 
 const execFileP = promisify(execFile);

@@ -12,7 +12,7 @@
 // the project of the page on screen opens on its own (below).
 import { useEffect } from "react";
 import { useParams } from "@tanstack/react-router";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import { rowDeviceId } from "@/lib/routePaths";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";

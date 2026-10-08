@@ -269,6 +269,9 @@ importers:
       '@pierre/diffs':
         specifier: ^1.4.3
         version: 1.4.3(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@shigomori/contracts':
+        specifier: workspace:*
+        version: link:../packages/contracts
       '@tanstack/react-query':
         specifier: ^5.101.2
         version: 5.101.2(react@19.2.7)
@@ -429,12 +432,12 @@ importers:
       '@clerk/backend':
         specifier: ^3.16.0
         version: 3.16.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@shigomori/contracts':
+        specifier: workspace:*
+        version: link:../packages/contracts
       effect:
         specifier: 'catalog:'
         version: 4.0.2
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.5
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.21.0
@@ -494,7 +497,24 @@ importers:
 
   packages/cli: {}
 
-  packages/contracts: {}
+  packages/contracts:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.2
+    devDependencies:
+      '@effect/tsgo':
+        specifier: 'catalog:'
+        version: 0.51.1
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@24.13.5)
 
   packages/engine: {}
 
@@ -11140,6 +11160,12 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.1
 
+  '@vitest/mocker@4.1.11':
+    dependencies:
+      '@vitest/spy': 4.1.11
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+
   '@vitest/mocker@4.1.11(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.1))':
     dependencies:
       '@vitest/spy': 4.1.11
@@ -15153,6 +15179,32 @@ snapshots:
   vitefu@1.1.3(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1)):
     optionalDependencies:
       vite: 8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1)
+
+  vitest@4.1.11(@types/node@24.13.5):
+    dependencies:
+      '@vitest/expect': 4.1.11
+      '@vitest/mocker': 4.1.11
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/runner': 4.1.11
+      '@vitest/snapshot': 4.1.11
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
+      es-module-lexer: 2.3.0
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.2.1
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.3.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.2.0
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 24.13.5
+    transitivePeerDependencies:
+      - msw
 
   vitest@4.1.11(@types/node@24.13.5)(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.1)):
     dependencies:

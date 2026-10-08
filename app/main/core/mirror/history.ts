@@ -14,7 +14,7 @@ import {
   type MirrorEvent,
   type MirrorEventKind,
   type MirrorGitStatus,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import {
   localWorktreeIdOf,
   type MirrorSessionRaw,

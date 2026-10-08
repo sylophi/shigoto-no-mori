@@ -22,8 +22,8 @@ import {
   SquareTerminal,
   X,
 } from "lucide-react";
-import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
-import type { RunningScript, Worktree } from "@shared/schemas";
+import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
+import type { RunningScript, Worktree } from "@shigomori/contracts/schemas";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";

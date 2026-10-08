@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
-import type { PullRequestCheck } from "@shared/schemas";
+import type { PullRequestCheck } from "@shigomori/contracts/schemas";
 import { CHECK_BUCKET_ICON, TONE_TEXT } from "./pullRequestShared";
 
 export function CheckEntry({ check }: { check: PullRequestCheck }) {

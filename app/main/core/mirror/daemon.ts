@@ -17,7 +17,7 @@
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type { StreamChild } from "@host/fileSync/spawn";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import type { MirrorCreateInput } from "@host/ipc/modules/mirror";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import {
@@ -25,7 +25,7 @@ import {
   type MirrorDaemonStatus,
   type MirrorSessionRaw,
   MirrorSessionRawSchema,
-} from "@shared/ipc/modules/mirror";
+} from "@shigomori/contracts/modules/mirror";
 import { MIRROR_GATEWAY_TOKEN_ENV } from "./gateway";
 import {
   BACKOFF_LADDER_MS,

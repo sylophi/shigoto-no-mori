@@ -1,15 +1,9 @@
 // What a pasted string means to the add-project flow: a remote to
-// clone, or a path to browse. normalizeRemoteUrl is the judge, the same
-// one repo identity uses, so "is a remote" means one thing everywhere:
-// a plain path, a `~` path and file:// all name a disk, never a remote.
-import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
-
-// The one definition of "a remote a device may be asked to clone": it
-// normalizes, and it can't be read as a git option. The clone payload,
-// the dialog and the URL handed to another device all ask this.
-export function isCloneableRemote(url: string): boolean {
-  return !url.trim().startsWith("-") && normalizeRemoteUrl(url) !== null;
-}
+// clone, or a path to browse.
+import {
+  isCloneableRemote,
+  normalizeRemoteUrl,
+} from "@shigomori/contracts/predicates/remoteUrl";
 
 // The folder `git clone` would make for this URL (the repo's own name,
 // `.git` dropped), or null when the string is not a remote.

@@ -8,7 +8,7 @@ import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
 import { useResident } from "@/hooks/villagers/useResident";
 import type { StackPosition } from "@shared/pullRequestStack";
-import type { PullRequest, Worktree } from "@shared/schemas";
+import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
 import { ActivityIcon } from "./ActivityIcon";
 import {
   MirrorBadge,

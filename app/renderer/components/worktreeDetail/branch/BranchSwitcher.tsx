@@ -9,7 +9,7 @@ import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { type BranchEntry } from "@/components/shared/BranchCombobox";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { localBranchOf } from "@shared/git/branches";
-import { isRealBranch, type Worktree } from "@shared/schemas";
+import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";
 
 export function BranchSwitcher({
   worktree,

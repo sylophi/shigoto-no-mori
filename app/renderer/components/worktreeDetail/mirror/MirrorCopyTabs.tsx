@@ -11,7 +11,7 @@ import { DeviceTabBar, useDeviceRoster } from "@/components/shared/DeviceTabs";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { mirrorSideTabs, type MirrorSideTab } from "./mirrorSides";
 
 export type MirrorCopies = { deviceId: string; tabs: MirrorSideTab[] };

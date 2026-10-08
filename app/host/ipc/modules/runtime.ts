@@ -1,9 +1,9 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { runtimeContract } from "@shared/ipc/modules/runtime";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
-import type { NukeProgress } from "@shared/schemas";
+import type { Handlers } from "@shigomori/contracts/types";
+import type { NukeProgress } from "@shigomori/contracts/schemas";
 import { nukeEverything } from "@host/lib/nuke";
 import { moveDataDir } from "@host/lib/dataDirMove";
 import { implSlot } from "@host/lib/util/implSlot";

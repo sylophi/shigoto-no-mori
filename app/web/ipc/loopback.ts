@@ -27,7 +27,7 @@
 //
 // A channel absent from the contract entirely also rejects, because
 // answering it would hide a real wiring bug.
-import type { ContractScope, InvokeDef } from "@shared/ipc/contract";
+import type { ContractScope, InvokeDef } from "@shigomori/contracts/contract";
 import { allContractModules } from "@shared/ipc/client";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import type {

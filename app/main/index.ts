@@ -6,9 +6,9 @@ import {
   DEV_USER_DATA_SUFFIX,
   devProfileUserData,
 } from "@shared/packaging/appName.mts";
-import { gitContract } from "@shared/ipc/modules/git";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
-import { windowContract } from "@shared/ipc/modules/window";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import { windowContract } from "@shigomori/contracts/modules/window";
 import { ensureDataDir } from "@host/lib/bootstrap";
 import { dropRemovedLanKeys } from "@host/lib/config/global";
 import { getDeviceId } from "@host/lib/config/deviceId";
@@ -92,7 +92,7 @@ import {
   installFatalRecovery,
   reconcileLaunchAtLogin,
 } from "./electron/liveness";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   installUpdaterImpl,
   isInstallingUpdate,

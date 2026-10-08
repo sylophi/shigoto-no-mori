@@ -1,4 +1,4 @@
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { isBirthdayOn } from "@/lib/villagers/birthdays";
 import { useToday } from "@/hooks/ui/useToday";
 import { residentOf, type Speaker } from "@/lib/villagerVoice";

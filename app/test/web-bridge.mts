@@ -26,7 +26,7 @@ import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
 import { it } from "vitest";
 import { buildApi } from "@shared/ipc/client";
-import { DeviceIdSchema } from "@shared/hub/protocol";
+import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
 import { createWebBridge, type WebBridgeDeps } from "../web/ipc/register.ts";
 import type { KeyValueStorage } from "../web/lib/kvStorage.ts";
 import { defaultWebDeviceName } from "../web/account/deviceName.ts";
@@ -212,7 +212,7 @@ it("stubs: read-classified channels answer structural defaults, the previewTheme
     ),
     { name: "" },
   );
-  const { strict } = await import("../shared/schemas/strict.ts");
+  const { strict } = await import("@shigomori/contracts/schemas/strict");
   assert.deepEqual(
     stubValueFor(strict(Schema.Struct({ name: Schema.String })), {
       fabricateArms: false,

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ClientConfig } from "@shared/schemas";
+import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
 // The app instance's client store (theme, palettes, villageLife,

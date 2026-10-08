@@ -23,12 +23,12 @@
 import { execFile, spawn } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   TunnelProvisionDeniedError,
   TunnelUnconfiguredError,
 } from "@shared/account/service";
-import type { TunnelState } from "@shared/ipc/modules/hub";
+import type { TunnelState } from "@shigomori/contracts/modules/hub";
 import {
   TUNNEL_PROBE_DEADLINE_FRESH_MS,
   BACKOFF_LADDER_MS,
@@ -146,7 +146,7 @@ export function cloudflaredEnv(
 // ---- binary discovery ----
 
 // Resolution order: the configured override (a device-scoped config
-// key, see cloudflaredPath in shared/schemas/config.ts), then the copy
+// key, see cloudflaredPath in packages/contracts/src/schemas/config.ts), then the copy
 // the app ships (the zero-install path, and the one a packaged build
 // normally takes), then PATH for a build that carries none. Null means
 // tunnels are off: the caller logs ONE clear line and reports the
@@ -196,7 +196,7 @@ const PROBE_TIMEOUT_MS = 10_000;
 // The renderer-safe status snapshot: never the connector token.
 // Operator detail for a failure goes to the log, not here. The state
 // vocabulary is the wire's (HubStatusSchema.tunnel in
-// shared/ipc/modules/hub.ts), imported rather than redeclared so the
+// packages/contracts/src/modules/hub.ts), imported rather than redeclared so the
 // runner and the status surface cannot drift. off: not wanted
 // (listener down, opted out, signed out). no-binary: wanted, but no
 // usable cloudflared. unconfigured: the Worker has no tunnel env

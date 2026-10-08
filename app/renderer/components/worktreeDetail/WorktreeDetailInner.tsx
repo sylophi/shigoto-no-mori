@@ -32,7 +32,7 @@ import {
   CREATE_PHASE_LABEL,
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import {
   BirthdayParty,
   PARTY_HOST,

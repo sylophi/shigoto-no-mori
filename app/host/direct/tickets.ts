@@ -19,7 +19,7 @@
 import {
   type DirectCandidateKind,
   DIRECT_TICKET_TTL_MS,
-} from "@shared/ipc/modules/direct";
+} from "@shigomori/contracts/modules/direct";
 import { mintHexId } from "@host/lib/hexId";
 
 // The distinguishing prefix, following the hub worker's smrt_/smdc_

@@ -14,7 +14,7 @@ import type {
   PullRequestCheckBucket,
   PullRequestDetail,
   PullRequestReviewerState,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 export function openPullRequest(url: string): void {
   openExternalUrl(url, "Couldn't open pull request");

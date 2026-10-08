@@ -31,7 +31,7 @@
 // hub-link check drives it headlessly and main wraps it around a
 // real socket.
 import { z } from "zod";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   decodeEnvelope,
   encodeEnvelope,
@@ -39,7 +39,7 @@ import {
   hubTextWithinLimit,
   ServerEnvelopeSchema,
   utf8ByteLength,
-} from "./protocol";
+} from "@shigomori/contracts/hubProtocol";
 
 // The one ask this wire serves.
 export const CONNECT_INFO_ASK = "connectInfo";
@@ -117,7 +117,7 @@ export class HubAskTimeoutError extends Error {
 }
 
 // The peer answered ok:false. The message is the peer's own text, so
-// the shared/errors.ts matchers read it as they would any remote
+// the packages/contracts/src/errors.ts matchers read it as they would any remote
 // failure, and `code` classifies the refusals a caller acts on.
 export class HubAskRefusedError extends Error {
   readonly code: string | undefined;
@@ -275,7 +275,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       return { answer: frame.ask, id: frame.id, ok: true, result };
     } catch (error) {
       // Message text only, what survives Electron's IPC error
-      // serialization too, so shared/errors.ts matchers behave the
+      // serialization too, so packages/contracts/src/errors.ts matchers behave the
       // same on every wire.
       return refusal(frame, errorMessageOf(error));
     }

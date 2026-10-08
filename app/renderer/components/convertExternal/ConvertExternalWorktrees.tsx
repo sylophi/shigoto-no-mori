@@ -1,3 +1,4 @@
+import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import { useState } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { Button } from "@/components/ui/button";
@@ -10,13 +11,12 @@ import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { sanitizeBranchForPath } from "@shared/git/branches";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { layoutInputsFor, worktreePathFor } from "@shared/git/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
 import { PAGE_BODY } from "@/components/shared/PageShell";
-import { isConvertRefusedError } from "@shared/errors";
+import { isConvertRefusedError } from "@shigomori/contracts/errors";
 
 // For detached HEADs `worktree.branch` is a short SHA. Pass it
 // through unchanged so the managed worktree gets a hash-named dir.
