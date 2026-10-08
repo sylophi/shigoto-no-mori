@@ -7,6 +7,7 @@ import { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
 import { UnknownProject } from "./Registry.ts";
+import { NoPackageJson } from "./Scripts.ts";
 import {
   DirtyWorktree,
   PullRequestOwnsDescription,
@@ -40,6 +41,7 @@ export const codeOf = (error: unknown): string | undefined => {
   }
   if (error instanceof UnknownProject) return "unknown-project";
   if (error instanceof UnknownWorktree) return "unknown-worktree";
+  if (error instanceof NoPackageJson) return "no-package-json";
   if (error instanceof PullRequestOwnsDescription) return "pull-request-open";
   // A tag, not the class: Landing imports this module.
   if (

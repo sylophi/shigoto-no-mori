@@ -663,6 +663,10 @@ export class Worktrees extends Context.Service<
     readonly description: (
       located: Located,
     ) => Effect.Effect<DescriptionView, DescribeRefused>;
+    // What a script is told about the worktree it runs in.
+    readonly scriptContext: (
+      located: Located,
+    ) => Effect.Effect<Lifecycle.ScriptContext>;
     // Sets the title, the description, or both, and answers the row.
     readonly describe: (
       located: Located,
@@ -2852,6 +2856,10 @@ const make = Effect.gen(function* () {
     setAutoPull,
     setAgentWorking,
     description,
+    scriptContext: ({ project, worktree }) =>
+      scriptContext(project, worktree).pipe(
+        Effect.withSpan("Worktrees.scriptContext"),
+      ),
     describe,
     destination,
     create,

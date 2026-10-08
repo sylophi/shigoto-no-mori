@@ -3,10 +3,20 @@
 // errors. Under --json the documents must match (the CLI's surface is
 // frozen, V3.md decision 13); a person's output too, where it's ours.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFile, execFileSync, spawn } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   afterAll,
   afterEach,
@@ -352,5 +362,411 @@ describe("launchers", () => {
     await same("--json", "launchers", "--catalog");
     await same("launchers", "--catalog");
     await same("launchers", "bogus", "-p", "repo");
+  });
+});
+
+// --- shell integration, cd and run ---------------------------------------
+
+// What a binary did, run with more of the environment than the sandbox
+// gives it: how it ended, killed by a signal included, and what it
+// printed.
+type Ended = {
+  readonly code: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+const sides = () => [
+  { name: "go", binary: goSm() },
+  { name: "cli", binary: built },
+];
+
+const start = (
+  binary: string,
+  side: string,
+  cwd: string,
+  args: ReadonlyArray<string>,
+  env: NodeJS.ProcessEnv = {},
+) => {
+  const child = spawn(binary, args, {
+    cwd,
+    env: { ...box.env(side), ...env },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
+  child.stderr.on("data", (chunk: Buffer) => (stderr += chunk));
+  const ended = new Promise<Ended>((resolve) =>
+    child.on("close", (code, signal) =>
+      resolve({ code, signal, stdout, stderr }),
+    ),
+  );
+  return { child, ended };
+};
+
+// Each side's own home, seeded with the same files, since what install
+// writes goes in the shell's config there. `null` names a folder.
+const homeOf = (side: string) => join(box.home, `home-${side}`);
+const seedHomes = (files: Record<string, string | null> = {}) => {
+  for (const { name } of sides()) {
+    mkdirSync(homeOf(name), { recursive: true });
+    for (const [file, content] of Object.entries(files)) {
+      const target = join(homeOf(name), file);
+      mkdirSync(content === null ? target : dirname(target), {
+        recursive: true,
+      });
+      if (content !== null) writeFileSync(target, content, { mode: 0o600 });
+    }
+  }
+};
+
+// Every file under a home, with its permissions.
+const filesUnder = (home: string) =>
+  Object.fromEntries(
+    readdirSync(home, { recursive: true })
+      .map(String)
+      .filter((file) => statSync(join(home, file)).isFile())
+      .toSorted()
+      .map((file) => [
+        file,
+        {
+          mode: statSync(join(home, file)).mode & 0o777,
+          text: readFileSync(join(home, file), "utf8"),
+        },
+      ]),
+  );
+
+// A shell verb on both sides, each in its own home: how it ended, what it
+// printed with each home named alike, and what it left in the home.
+const sameInHomes = async (
+  env: NodeJS.ProcessEnv,
+  ...args: string[]
+): Promise<void> => {
+  const runs = await Promise.all(
+    sides().map(async ({ name, binary }) => {
+      const home = homeOf(name);
+      const { code, signal, stdout, stderr } = await start(
+        binary,
+        name,
+        box.home,
+        args,
+        { HOME: home, ...env },
+      ).ended;
+      const named = (text: string) => text.replaceAll(home, "<home>");
+      return {
+        code,
+        signal,
+        stdout: args.includes("--json")
+          ? (JSON.parse(named(stdout)) as unknown)
+          : stdout,
+        stderr: named(stderr),
+        files: filesUnder(home),
+      };
+    }),
+  );
+  assert.deepStrictEqual(runs[1], runs[0], args.join(" "));
+};
+
+describe("shell", () => {
+  it("prints the wrapper for each shell", async () => {
+    await same("shell", "init", "zsh");
+    await same("shell", "init", "bash");
+    await same("--json", "shell", "init", "fish");
+    await same("shell", "init", "tcsh");
+  });
+
+  it("installs, refreshes and uninstalls the hook in each shell's config", async () => {
+    seedHomes({ ".zshrc": "export A=1\n", ".profile": "# mine\n" });
+    const zsh = { SHELL: "/bin/zsh" };
+    await sameInHomes({}, "shell", "status");
+    await sameInHomes({}, "--json", "shell", "status");
+    await sameInHomes({}, "shell", "install");
+    await sameInHomes(zsh, "shell", "install");
+    // Idempotent.
+    await sameInHomes(zsh, "--json", "shell", "install", "zsh");
+    await sameInHomes({}, "shell", "install", "bash");
+    await sameInHomes({}, "shell", "install", "fish");
+    await sameInHomes({}, "shell", "install", "tcsh");
+    await sameInHomes(zsh, "shell", "status");
+    await sameInHomes({ SHIGOMORI_CD_FILE: "/x" }, "shell", "status");
+    await sameInHomes(zsh, "--json", "shell", "status");
+    await sameInHomes({}, "shell", "uninstall");
+    await sameInHomes({}, "shell", "uninstall");
+    await sameInHomes({}, "--json", "shell", "uninstall");
+    await sameInHomes({}, "shell", "status");
+  });
+
+  it("refreshes an older hook in place, and leaves an edited one alone", async () => {
+    const begin = "# >>> shigomori-dev shell integration >>>";
+    const end = "# <<< shigomori-dev shell integration <<<";
+    seedHomes({
+      // An older guard line, mid-file.
+      ".zshrc": `a\n\n${begin}\neval "$(smd shell init zsh)"\n${end}\nb\n`,
+      ".bash_profile": `${begin}\necho mine\n${end}\n`,
+      ".config/fish/conf.d/shigomori-dev.fish": "set -x A 1\n",
+    });
+    await sameInHomes({}, "--json", "shell", "status");
+    await sameInHomes({}, "shell", "install", "zsh");
+    await sameInHomes({}, "shell", "install", "bash");
+    await sameInHomes({}, "--json", "shell", "install", "fish");
+    await sameInHomes({}, "shell", "status");
+    await sameInHomes({}, "shell", "uninstall");
+    await sameInHomes({}, "--json", "shell", "uninstall");
+  });
+});
+
+// A project "repo" with a linked worktree "w", and a package.json whose
+// scripts a fake npm runs: each says how the run should end.
+const npm = `name=$2; shift 2
+case "$name" in
+  ok) exit 0 ;;
+  fail) exit 3 ;;
+  term) kill -TERM $$ ;;
+  kill) kill -KILL $$ ;;
+  args)
+    for arg in "$@"; do echo "[$arg]"; done
+    pwd
+    env | grep '^SHIGOMORI_' | grep -v '^SHIGOMORI_DATA_DIR=' | sort ;;
+  wait)
+    trap 'echo INT >> "$MARK"; exit 7' INT
+    trap 'echo TERM >> "$MARK"; exit 9' TERM
+    : > "$READY"
+    while :; do sleep 0.02; done ;;
+  sleep) : > "$READY"; exec sleep 30 ;;
+esac`;
+
+const scripted = () => {
+  const scripts = ["ok", "fail", "term", "kill", "args", "wait", "sleep"];
+  const repo = box.repo("repo", {
+    "package.json": JSON.stringify({
+      scripts: Object.fromEntries(scripts.map((name) => [name, name])),
+    }),
+    "sub/package.json": JSON.stringify({ scripts: { nested: "x" } }),
+  });
+  const worktree = join(box.home, "w");
+  box.git(repo, "worktree", "add", "-q", "-b", "w", worktree);
+  box.write("registry.json", {
+    projects: [{ id: "R", name: "repo", path: repo }],
+  });
+  box.fakeBin("npm", npm);
+  return { repo, worktree };
+};
+
+// The same command on both sides from `cwd`, compared by how each ended
+// and what it printed, documents as documents up to a `--`.
+const sameEnding = async (
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ...args: string[]
+) => {
+  const end = args.indexOf("--");
+  const json = (end === -1 ? args : args.slice(0, end)).includes("--json");
+  const [go, ours] = await Promise.all(
+    sides().map(
+      ({ name, binary }) => start(binary, name, cwd, args, env).ended,
+    ),
+  );
+  const seen = (run: Ended | undefined) =>
+    json
+      ? {
+          ...run,
+          stdout: run?.stdout
+            .split("\n")
+            .filter((line) => line !== "")
+            .map((line) => JSON.parse(line) as unknown),
+        }
+      : run;
+  assert.deepStrictEqual(seen(ours), seen(go), args.join(" "));
+  return go as Ended;
+};
+
+describe("cd", () => {
+  it("writes the worktree's path to the wrapper's directive file", async () => {
+    const { repo, worktree } = scripted();
+    const runs = await Promise.all(
+      sides().map(async ({ name, binary }) => {
+        const cdFile = join(box.home, `cd-${name}`);
+        writeFileSync(cdFile, "");
+        const ended = await start(binary, name, repo, ["cd", "w"], {
+          SHIGOMORI_CD_FILE: cdFile,
+        }).ended;
+        return Object.assign({}, ended, {
+          directive: readFileSync(cdFile, "utf8"),
+        });
+      }),
+    );
+    assert.deepStrictEqual(runs[1], runs[0]);
+    assert.equal(runs[0]?.directive, `${worktree}\n`);
+    const cdFile = { SHIGOMORI_CD_FILE: join(box.home, "unused") };
+    await sameEnding(worktree, cdFile, "cd", "w");
+    await sameEnding(repo, cdFile, "cd", "nope");
+    await sameAt(repo, "--json", "cd", "w");
+    await sameEnding(repo, {}, "cd", "w");
+    await sameEnding(repo, cdFile, "cd");
+  });
+
+  // The wrapper as a shell evals it, around this build.
+  it.each(["zsh", "bash"])("moves %s through the wrapper", async (shell) => {
+    const { repo, worktree } = scripted();
+    const script = [
+      `eval "$(smd shell init ${shell})"`,
+      "smd cd w",
+      "pwd",
+      "smd run fail",
+      'echo "rc=$?"',
+      "smd shell status --json",
+      'echo "left=$SHIGOMORI_CD_FILE"',
+    ].join("\n");
+    const { stdout } = await new Promise<{ stdout: string }>(
+      (resolve, reject) =>
+        execFile(
+          shell,
+          ["-f", "-c", script],
+          {
+            cwd: repo,
+            env: {
+              ...box.env("cli"),
+              PATH: `${dirname(built)}:${box.env("cli").PATH}`,
+            },
+          },
+          (error, out) => (error ? reject(error) : resolve({ stdout: out })),
+        ),
+    );
+    const [where, rc, statusLine, left] = stdout.trim().split("\n");
+    assert.equal(where, worktree);
+    assert.equal(rc, "rc=3");
+    assert.equal(
+      (JSON.parse(statusLine ?? "") as { active: boolean }).active,
+      true,
+    );
+    assert.equal(left, "left=");
+  });
+});
+
+// Once the file is there.
+const appeared = async (file: string): Promise<void> => {
+  if (existsSync(file)) return;
+  await sleep(10);
+  return appeared(file);
+};
+describe("run", () => {
+  it("lists the worktree's scripts", async () => {
+    const { repo, worktree } = scripted();
+    await sameAt(worktree, "run");
+    await sameAt(worktree, "--json", "run");
+    await sameAt(
+      box.home,
+      "--json",
+      "run",
+      "--project-id",
+      "R",
+      "--worktree-id",
+      "nope",
+    );
+    await sameAt(box.home, "run");
+    await sameAt(box.repo("loose"), "run");
+    await sameAt(`${repo}/sub`, "--json", "run", "ok");
+    await sameAt(worktree, "run", "nope");
+  });
+
+  it("refuses a worktree with no package.json, by its code", async () => {
+    const bare = box.repo("bare");
+    box.write("registry.json", {
+      projects: [{ id: "B", name: "bare", path: bare }],
+    });
+    await sameAt(bare, "--json", "run");
+    await sameAt(bare, "run", "x");
+  });
+
+  it("says when the lockfile's manager isn't on PATH", async () => {
+    const repo = box.repo("repo", {
+      "package.json": JSON.stringify({ scripts: { ok: "ok" } }),
+      "pnpm-lock.yaml": "",
+    });
+    box.write("registry.json", {
+      projects: [{ id: "R", name: "repo", path: repo }],
+    });
+    await sameEnding(repo, { PATH: "/usr/bin:/bin" }, "run", "ok");
+  });
+
+  it("ends as the script did", async () => {
+    const { worktree } = scripted();
+    const [ok, fail, term, kill] = await Promise.all(
+      ["ok", "fail", "term", "kill"].map((script) =>
+        sameEnding(worktree, {}, "run", script),
+      ),
+    );
+    assert.equal(ok?.code, 0);
+    assert.equal(fail?.code, 3);
+    assert.equal(term?.signal, "SIGTERM");
+    assert.equal(kill?.signal, "SIGKILL");
+    // A shell reads a death by signal as 128+n.
+    const shellSees = execFileSync(
+      "/bin/sh",
+      ["-c", `"$0" run kill; echo $?`, built],
+      { cwd: worktree, env: box.env("cli"), encoding: "utf8" },
+    );
+    assert.equal(shellSees.trim(), "137");
+  });
+
+  it("passes what follows -- to the script as it is, from the worktree's root", async () => {
+    const { repo, worktree } = scripted();
+    const env = { SHIGOMORI_CD_FILE: "/x", SHIGOMORI_SCRIPT_NAME: "stale" };
+    const ran = await sameEnding(
+      `${repo}/sub`,
+      env,
+      "run",
+      "args",
+      "--",
+      "--json",
+      "-h",
+      "--help",
+      "a b",
+      "--",
+      "--project-id",
+    );
+    assert.match(
+      ran.stdout,
+      /^\[--\]\n\[--json\]\n\[-h\]\n\[--help\]\n\[a b\]\n\[--\]\n\[--project-id\]\n/,
+    );
+    assert.match(ran.stdout, /SHIGOMORI_SCRIPT_NAME=args/);
+    assert.doesNotMatch(ran.stdout, /SHIGOMORI_CD_FILE/);
+    await sameEnding(worktree, {}, "run", "args", "plain", "--json");
+    await sameEnding(worktree, {}, "run", "--worktree-id", "nope", "args");
+  });
+
+  // A signal sent to sm reaches the script, and sm ends as Go's sm,
+  // which is the script by then, does.
+  it.each([
+    ["SIGINT", "wait"],
+    ["SIGTERM", "wait"],
+    ["SIGTERM", "sleep"],
+    ["SIGINT", "sleep"],
+  ] as const)("passes %s on to the %s script", async (signal, script) => {
+    const { worktree } = scripted();
+    const runs = await Promise.all(
+      sides().map(async ({ name, binary }) => {
+        const mark = join(box.home, `mark-${name}`);
+        const ready = join(box.home, `ready-${name}`);
+        const run = start(binary, name, worktree, ["run", script], {
+          MARK: mark,
+          READY: ready,
+        });
+        await appeared(ready);
+        run.child.kill(signal);
+        const ended = await run.ended;
+        return Object.assign({}, ended, {
+          mark: existsSync(mark) ? readFileSync(mark, "utf8") : "",
+        });
+      }),
+    );
+    assert.deepStrictEqual(runs[1], runs[0]);
+    if (script === "wait") {
+      assert.equal(runs[0]?.mark, `${signal.slice(3)}\n`);
+    } else {
+      assert.equal(runs[0]?.signal, signal);
+    }
   });
 });

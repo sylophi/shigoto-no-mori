@@ -13,6 +13,8 @@ import * as GlobalFlag from "effect/cli/GlobalFlag";
 import { configCommand } from "./commands/config.ts";
 import { launchersCommand } from "./commands/launchers.ts";
 import { projectsCommand } from "./commands/projects.ts";
+import { runCommand } from "./commands/run.ts";
+import { cdCommand, shellCommand } from "./commands/shell.ts";
 import { engine } from "./engine.ts";
 import { report } from "./errors.ts";
 import { Output } from "./output.ts";
@@ -48,6 +50,9 @@ const sm = Command.make("sm").pipe(
     configCommand.pipe(Command.provide(services)),
     projectsCommand.pipe(Command.provide(services)),
     launchersCommand.pipe(Command.provide(services)),
+    shellCommand.pipe(Command.provide(services)),
+    cdCommand.pipe(Command.provide(services)),
+    runCommand.pipe(Command.provide(services)),
   ]),
 );
 

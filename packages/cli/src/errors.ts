@@ -2,6 +2,7 @@
 // error exits 2, anything else 1. Under --json the failure is the
 // engine's error document with `ok: false`. A person gets `sm: <message>`
 // on stderr.
+import { constants } from "node:os";
 import { errorDocument, isUsage } from "@shigomori/engine/errorDocument";
 import * as Effect from "effect/Effect";
 import * as CliError from "effect/cli/CliError";
@@ -16,6 +17,18 @@ export class UsageError extends Schema.TaggedError<UsageError>()("UsageError", {
     return this.problem;
   }
 }
+
+// A command that has said all it has to and ends with `code`.
+export class ExitCode extends Schema.TaggedError<ExitCode>()("ExitCode", {
+  code: Schema.Int,
+}) {}
+
+// A command whose program was killed by `signal`. sm dies of the same
+// signal, so whoever started it sees what running the program
+// themselves would have shown, a shell's 128+n among it.
+export class Killed extends Schema.TaggedError<Killed>()("Killed", {
+  signal: Schema.String,
+}) {}
 
 // A person answered no.
 export class Cancelled extends Schema.TaggedError<Cancelled>()(
@@ -34,6 +47,17 @@ export const report = (error: unknown) =>
     // only the second is a failure.
     const problems = error instanceof CliError.ShowHelp ? error.errors : [];
     if (error instanceof CliError.ShowHelp && problems.length === 0) return 0;
+    if (error instanceof ExitCode) return error.code;
+    if (error instanceof Killed) {
+      // Raised once everything else is done, when the runtime has let go
+      // of its own handlers and the signal's default action applies. The
+      // code stands in should it not.
+      const { signal } = error;
+      yield* Effect.sync(() =>
+        process.once("exit", () => process.kill(process.pid, signal)),
+      );
+      return 128 + (constants.signals[signal as NodeJS.Signals] ?? 0);
+    }
     const { json, stderrColor, binaryName } = yield* Effect.service(Output);
     const document =
       problems.length > 0

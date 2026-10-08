@@ -37,12 +37,7 @@ import {
   belowGitFloor,
   compareVersions,
   fields,
-  findHookSpan,
-  fishHookContent,
   formatSize,
-  hookBeginMarker,
-  hookBlock,
-  type HookNames,
   launcherProgram,
   parseGitVersion,
   parsePortPoolDirs,
@@ -51,8 +46,6 @@ import {
   plural,
   pluralize,
   scriptFileTokens,
-  SHELL_KINDS,
-  type ShellKind,
   shellWord,
 } from "./doctorParse.ts";
 import { envVar } from "./environment.ts";
@@ -65,6 +58,13 @@ import * as Layout from "./Layout.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
+import {
+  CD_FILE_ENV,
+  type HookPlace,
+  inspectHook,
+  SHELL_KINDS,
+  type ShellKind,
+} from "./shellHook.ts";
 import {
   acquireStagingLock,
   pidAlive,
@@ -296,13 +296,6 @@ type ProjectChecked = {
   readonly identities: Option.Option<ReadonlyArray<WorktreeIdentity>>;
 };
 
-// The state a shell's hook is in: ours and current or an older vintage,
-// absent, or edited past recognizing.
-type Hook =
-  | { readonly state: "missing" }
-  | { readonly state: "modified" }
-  | { readonly state: "installed"; readonly current: boolean };
-
 // --- the service ----------------------------------------------------------
 
 const make = Effect.gen(function* () {
@@ -323,11 +316,15 @@ const make = Effect.gen(function* () {
 
   const { home, dataDir, binaryName, flavor, configHome } = paths;
   const names = flavorNames(flavor);
-  const hookNames: HookNames = { binary: binaryName, alias: names.alias };
-  // Read once, as Paths reads the environment.
-  const zdotdir = yield* envVar("ZDOTDIR");
+  const hookPlace: HookPlace = {
+    names: { binary: binaryName, alias: names.alias },
+    home,
+    configHome,
+    // Read once, as Paths reads the environment.
+    zdotdir: yield* envVar("ZDOTDIR"),
+  };
   // The shell wrapper's directive file, set while the hook is active.
-  const cdFile = yield* envVar("SHIGOMORI_CD_FILE");
+  const cdFile = yield* envVar(CD_FILE_ENV);
 
   const collapseHome = (target: string) => {
     if (home === "") return target;
@@ -387,12 +384,6 @@ const make = Effect.gen(function* () {
     Effect.map(
       statOf(target),
       (info) => Option.isSome(info) && info.value.type === "Directory",
-    );
-
-  const isFile = (target: string) =>
-    Effect.map(
-      statOf(target),
-      (info) => Option.isSome(info) && info.value.type === "File",
     );
 
   const isMissing = (target: string) =>
@@ -624,58 +615,6 @@ const make = Effect.gen(function* () {
     );
   });
 
-  // The rc file each shell reads, where install writes the hook.
-  const hookPath = (kind: ShellKind) =>
-    Effect.gen(function* () {
-      if (kind === "zsh") {
-        return path.join(zdotdir === "" ? home : zdotdir, ".zshrc");
-      }
-      if (kind === "bash") {
-        // macOS terminals start bash as a login shell, which never reads
-        // .bashrc.
-        for (const name of [".bash_profile", ".bash_login", ".profile"]) {
-          const candidate = path.join(home, name);
-          if (yield* isFile(candidate)) return candidate;
-        }
-        return path.join(home, ".bash_profile");
-      }
-      return path.join(configHome, "fish", "conf.d", `${names.alias}.fish`);
-    });
-
-  // Whether the shell's hook is installed and recognizably ours, and
-  // whether it is what this build would write.
-  const inspectHook = (kind: ShellKind) =>
-    Effect.gen(function* () {
-      const text = yield* fs.readFileString(yield* hookPath(kind)).pipe(
-        Effect.asSome,
-        Effect.catchIf(isNotFound, () => Effect.succeed(Option.none<string>())),
-        // Unreadable isn't absent: hands off.
-        Effect.orElseSucceed(() => undefined),
-      );
-      if (text === undefined) return { state: "modified" } satisfies Hook;
-      if (Option.isNone(text)) return { state: "missing" } satisfies Hook;
-      if (kind === "fish") {
-        return text.value.includes(hookBeginMarker(hookNames))
-          ? ({
-              state: "installed",
-              current: text.value === fishHookContent(hookNames),
-            } satisfies Hook)
-          : ({ state: "modified" } satisfies Hook);
-      }
-      const lines = text.value.split("\n");
-      const span = findHookSpan(hookNames, lines);
-      if (span.kind === "none") return { state: "missing" } satisfies Hook;
-      if (span.kind === "broken" || !span.ours) {
-        return { state: "modified" } satisfies Hook;
-      }
-      return {
-        state: "installed",
-        current:
-          lines.slice(span.begin, span.end + 1).join("\n") ===
-          hookBlock(hookNames, kind).replace(/\n+$/, ""),
-      } satisfies Hook;
-    });
-
   // Installed and current: install refreshes the block in place, so one
   // from an older vintage was written by a build whose guard line has
   // since changed.
@@ -686,7 +625,7 @@ const make = Effect.gen(function* () {
       const edited: ShellKind[] = [];
       const stale: ShellKind[] = [];
       for (const kind of SHELL_KINDS) {
-        const hook: Hook = yield* inspectHook(kind);
+        const hook = yield* inspectHook(hookPlace, kind);
         if (hook.state === "installed") {
           installed.push(kind);
           if (!hook.current) stale.push(kind);
