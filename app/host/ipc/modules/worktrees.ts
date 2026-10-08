@@ -32,6 +32,7 @@ import {
   applyStash,
   dropStash,
   listStashes,
+  readStashDiff,
   restoreStash,
   stashChanges,
 } from "@host/lib/git/stash";
@@ -448,6 +449,8 @@ export const worktreesHandlers: Handlers<
     );
     return worktree.detached ? [] : listStashes(worktree.path, worktree.branch);
   },
+  stashDiff: async (input) =>
+    readStashDiff(await findWorktreePathOrThrow(input), input.hash),
   stashChanges: (input) =>
     mutateAndDescribe(input, (wt) => stashChanges(wt.path, input.message)),
   applyStash: (input) =>

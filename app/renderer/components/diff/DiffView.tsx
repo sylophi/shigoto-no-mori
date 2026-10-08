@@ -144,6 +144,7 @@ export function DiffView({
   footer,
   details,
   steps,
+  renderSidebar,
 }: {
   // The patch's read, whichever of the three pages asked for it.
   diff: UseQueryResult<string>;
@@ -164,6 +165,11 @@ export function DiffView({
   details?: ReactNode;
   // Beside the view's own controls: a commit's steps to its neighbours.
   steps?: ReactNode;
+  // What the sidebar (and a phone's sheet) shows in place of the bare
+  // file list: the Git page's timeline, which nests the list under the
+  // selected row and pins the footer under itself. Handed the list
+  // (without the footer) and the footer.
+  renderSidebar?: (index: ReactNode, footer: ReactNode) => ReactNode;
 }) {
   const { data: patch, isLoading, error } = diff;
   const backLabel = useWorktreeName(worktree);
@@ -279,18 +285,23 @@ export function DiffView({
     // control with its handler.
     onToggleAll: singleFile ? undefined : toggleAll,
     changes,
-    footer,
+    footer: renderSidebar ? undefined : footer,
   };
+  // The list, framed by the page when it frames it.
+  const sidebarWith = (index: ReactNode) =>
+    renderSidebar ? renderSidebar(index, footer) : index;
 
   return (
     <div className="flex h-full flex-col">
       <SidebarTakeover back={{ label: backLabel, onClick: onBack }}>
-        {showIndex && (
-          <DiffFileIndex
-            {...indexProps}
-            onSelect={selectFile}
-            className="min-h-0 flex-1"
-          />
+        {sidebarWith(
+          showIndex && (
+            <DiffFileIndex
+              {...indexProps}
+              onSelect={selectFile}
+              className={renderSidebar ? undefined : "min-h-0 flex-1"}
+            />
+          ),
         )}
       </SidebarTakeover>
       <header
@@ -314,16 +325,19 @@ export function DiffView({
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
             {steps}
-            {phone && (singleFile || allFiles.length >= SHEET_MIN_FILES) && (
-              <ChipButton
-                onClick={() => setFileSheetOpen(true)}
-                aria-label={`${filesLabel} (${indexEntries.length})`}
-                className="py-1.5"
-              >
-                <Files aria-hidden className="size-3.5" />
-                <span className="tabular">{indexEntries.length}</span>
-              </ChipButton>
-            )}
+            {phone &&
+              (renderSidebar !== undefined ||
+                singleFile ||
+                allFiles.length >= SHEET_MIN_FILES) && (
+                <ChipButton
+                  onClick={() => setFileSheetOpen(true)}
+                  aria-label={`${filesLabel} (${indexEntries.length})`}
+                  className="py-1.5"
+                >
+                  <Files aria-hidden className="size-3.5" />
+                  <span className="tabular">{indexEntries.length}</span>
+                </ChipButton>
+              )}
             <SimpleTooltip tip="Wrap long lines">
               <IconButton
                 onClick={toggleWrap}
@@ -414,14 +428,28 @@ export function DiffView({
             className="gap-0 p-0"
           >
             <SheetTitle className="sr-only">{filesLabel}</SheetTitle>
-            <DiffFileIndex
-              {...indexProps}
-              onSelect={(key) => {
-                setFileSheetOpen(false);
-                selectFile(key);
-              }}
-              className="h-[70dvh] w-full"
-            />
+            {renderSidebar ? (
+              <div className="flex h-[70dvh] w-full flex-col">
+                {sidebarWith(
+                  <DiffFileIndex
+                    {...indexProps}
+                    onSelect={(key) => {
+                      setFileSheetOpen(false);
+                      selectFile(key);
+                    }}
+                  />,
+                )}
+              </div>
+            ) : (
+              <DiffFileIndex
+                {...indexProps}
+                onSelect={(key) => {
+                  setFileSheetOpen(false);
+                  selectFile(key);
+                }}
+                className="h-[70dvh] w-full"
+              />
+            )}
           </SheetContent>
         </Sheet>
       )}

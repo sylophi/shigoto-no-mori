@@ -157,6 +157,8 @@ function buildQueryKeys(deviceId: string) {
       worktreeId: string,
       headHash: string | undefined,
     ) => host("branchHistory", projectId, worktreeId, headHash),
+    stashDiff: (projectId: string, worktreeId: string, hash: string) =>
+      host("stashDiff", projectId, worktreeId, hash),
     // What a branch changes against the primary branch.
     branchDiff: (projectId: string, worktreeId: string) =>
       host("branchDiff", projectId, worktreeId),

@@ -103,8 +103,18 @@ export function useWorktreeNav() {
     },
 
     // Everything the branch changes against the primary branch.
-    toBranchDiff(projectId: string, worktreeId: string) {
-      go("branchDiff", { projectId, worktreeId });
+    toBranchDiff(projectId: string, worktreeId: string, replace = false) {
+      go("branchDiff", { projectId, worktreeId }, replace);
+    },
+
+    // One stash's contents.
+    toStash(
+      projectId: string,
+      worktreeId: string,
+      hash: string,
+      replace = false,
+    ) {
+      go("stash", { projectId, worktreeId, hash }, replace);
     },
 
     // The files page, opened on `path` when given (a file to show). A

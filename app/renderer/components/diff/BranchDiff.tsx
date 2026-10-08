@@ -3,6 +3,7 @@ import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useBranchDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { pluralize } from "@/lib/pluralize";
+import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { DiffView } from "./DiffView";
 
 // Everything the branch's commits change against where it left the
@@ -36,6 +37,9 @@ export function BranchDiff() {
           </span>
         </>
       }
+      renderSidebar={(files) => (
+        <GitPageSidebar worktree={worktree} selected={"branch"} files={files} />
+      )}
       emptyMessage="This branch changes nothing yet."
     />
   );

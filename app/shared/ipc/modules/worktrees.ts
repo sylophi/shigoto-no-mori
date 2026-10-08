@@ -283,6 +283,11 @@ export const worktreesContract = defineContract("host", {
     z.array(StashEntrySchema),
     { remote: true, gated: false },
   ),
+  // One stash's contents, as a patch.
+  stashDiff: invoke("worktrees:stashDiff", DropStashPayloadSchema, z.string(), {
+    remote: true,
+    gated: false,
+  }),
   stashChanges: invoke(
     "worktrees:stashChanges",
     StashChangesPayloadSchema,

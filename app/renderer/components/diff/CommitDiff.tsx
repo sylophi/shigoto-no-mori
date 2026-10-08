@@ -5,6 +5,7 @@ import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { commitRewriteAt, NO_REWRITE } from "@/lib/commitRewrite";
 import { CommitDetails, CommitSteps } from "./CommitDetails";
+import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { DiffView } from "./DiffView";
 
 export function CommitDiff() {
@@ -74,6 +75,13 @@ export function CommitDiff() {
           />
         )
       }
+      renderSidebar={(files) => (
+        <GitPageSidebar
+          worktree={worktree}
+          selected={`commit:${hash}`}
+          files={files}
+        />
+      )}
       // Merge commits show empty by default (git's combined diff is empty
       // when --cc/-m aren't passed). Note it explicitly so the page
       // doesn't look broken.

@@ -459,6 +459,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       rewordCommit: worktreesClient.rewordCommit,
       squashCommit: worktreesClient.squashCommit,
       stashes: worktreesClient.stashes,
+      stashDiff: worktreesClient.stashDiff,
       stashChanges: worktreesClient.stashChanges,
       applyStash: worktreesClient.applyStash,
       dropStash: worktreesClient.dropStash,

@@ -159,6 +159,10 @@ const BranchDiff = lazyRouteComponent(
   () => import("@/components/diff/BranchDiff"),
   "BranchDiff",
 );
+const StashDiff = lazyRouteComponent(
+  () => import("@/components/diff/StashDiff"),
+  "StashDiff",
+);
 
 // The files page shows code through the same highlighter the diffs
 // use, so it is lazy for the same reason.
@@ -219,6 +223,12 @@ const branchDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.branchDiff,
   component: withDeviceScope(BranchDiff),
+});
+
+const stashDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.stash,
+  component: withDeviceScope(StashDiff),
 });
 
 const commitDiffRoute = createRoute({
@@ -311,6 +321,7 @@ const routeTree = rootRoute.addChildren([
   worktreeDiffRoute,
   pullRequestDiffRoute,
   branchDiffRoute,
+  stashDiffRoute,
   commitDiffRoute,
   worktreeFilesRoute,
   scriptConsoleRoute,

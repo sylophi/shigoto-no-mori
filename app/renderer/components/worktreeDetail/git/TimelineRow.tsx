@@ -73,3 +73,34 @@ export function CommitDot({ local }: { local: boolean }) {
     />
   );
 }
+
+// Which view the timeline is drawn in. On the worktree page it is the
+// overview, and a row opens the Git page on itself. On the Git page it
+// is the page's navigator: the selected row is marked and opens to its
+// files (`expanded`), and a pick replaces the page's entry, so Back
+// still leaves the page.
+export interface TimelineView {
+  onGitPage: boolean;
+  // `changes`, `branch`, `commit:<hash>` or `stash:<hash>`.
+  selected: string | null;
+  expanded: ReactNode;
+}
+
+const TimelineViewContext = createContext<TimelineView>({
+  onGitPage: false,
+  selected: null,
+  expanded: null,
+});
+
+export const TimelineViewProvider = TimelineViewContext;
+
+export function useTimelineView(): TimelineView {
+  return use(TimelineViewContext);
+}
+
+// A row's selected look on the Git page, and what opens under it.
+export function useRowSelection(key: string) {
+  const view = useTimelineView();
+  const selected = view.selected === key;
+  return { selected, expanded: selected ? view.expanded : null };
+}

@@ -34,8 +34,14 @@ scrubProcessGitEnv({
 
 const { cherryPickCommit, revertCommit, rewordCommit, squashIntoParent } =
   await import("../host/lib/git/history.ts");
-const { applyStash, dropStash, listStashes, restoreStash, stashChanges } =
-  await import("../host/lib/git/stash.ts");
+const {
+  applyStash,
+  dropStash,
+  listStashes,
+  readStashDiff,
+  restoreStash,
+  stashChanges,
+} = await import("../host/lib/git/stash.ts");
 
 const { abortOperation, continueOperation, readOperation, resolveConflict } =
   await import("../host/lib/git/operation.ts");
@@ -225,6 +231,10 @@ async function main() {
         ],
       );
       const [unnamed = "", named = ""] = stashes.map((s) => s.hash);
+      // What a stash holds reads as one patch, untracked files and all.
+      const held = await readStashDiff(repo, named);
+      assert.match(held, /\+first stash/);
+      assert.match(held, /new file mode[\s\S]*\+untracked/);
       assert.deepEqual(
         (await listStashes(repo, "other")).map((s) => s.message),
         ["On other"],

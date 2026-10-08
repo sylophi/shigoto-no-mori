@@ -19,6 +19,8 @@ export const WORKTREE_ROUTE_PATHS = {
     "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/pr-diff",
   branchDiff:
     "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/branch-diff",
+  stash:
+    "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/stashes/$hash",
   commit:
     "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
   files: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/files",

@@ -496,6 +496,7 @@ function hostHandlersFor(
       };
     },
     "worktrees:stashes": () => [],
+    "worktrees:stashDiff": () => FAKE_DIFF,
     "worktrees:operation": () => ({
       operation: null,
       continuable: false,

@@ -3,8 +3,8 @@
 // sidebar badge, the sync pill, the palette's git verb and the changes
 // page's clean-tree line say the same thing. The switch is exhaustive,
 // so a new kind fails typecheck here until it says what it shows. The
-// branch bar's "Up to date" stays outside on purpose: it stands in for
-// the pill where the pill has nothing to say, and is the bar's own.
+// remote marker's "Up to date" stays outside on purpose: it stands in for
+// the pill where the pill has nothing to say, and is the marker's own.
 import {
   ArrowDown,
   ArrowDownUp,

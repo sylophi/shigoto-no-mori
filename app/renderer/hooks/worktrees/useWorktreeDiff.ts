@@ -69,3 +69,21 @@ export function useBranchDiff(
     meta: { errorTitle: "Couldn't compute diff" },
   });
 }
+
+// What a stash holds. A stash's commit never changes, so like a
+// commit's diff it is kept.
+export function useStashDiff(
+  projectId: string,
+  worktreeId: string | undefined,
+  hash: string,
+) {
+  const { api, keys } = useHostScope();
+  return useQuery<string>({
+    queryKey: keys.stashDiff(projectId, worktreeId ?? "", hash),
+    queryFn: worktreeId
+      ? () => api.worktrees.stashDiff({ projectId, worktreeId, hash })
+      : skipToken,
+    staleTime: Infinity,
+    meta: { errorTitle: "Couldn't read the stash" },
+  });
+}

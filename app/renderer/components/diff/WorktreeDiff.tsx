@@ -29,7 +29,7 @@ import { commitRewriteAt } from "@/lib/commitRewrite";
 import { worktreeSyncView } from "@/lib/syncState";
 import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
 import { changedFilePaths, includedFiles } from "./changesControls";
-import { BranchBar } from "./BranchBar";
+import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
@@ -289,47 +289,56 @@ function ChangesView({
           );
         },
       }}
+      renderSidebar={(fileList, footer) => (
+        <GitPageSidebar
+          worktree={worktree}
+          selected="changes"
+          files={fileList}
+          footer={footer}
+        />
+      )}
       footer={
-        <div
-          data-slot="changes-footer"
-          className={cn(
-            "flex flex-col border-t border-border",
-            !showComposer && "pb-1.5",
-          )}
-        >
-          <BranchBar worktree={worktree} />
-          {lastCommit && rewrite.canAmend && (
-            <LastCommitStrip
-              commit={lastCommit}
-              amending={amending}
-              canUndo={rewrite.undo !== null}
-              busy={busy}
-              onAmend={() => setAmending(true)}
-              onUndo={() => {
-                const u = rewrite.undo;
-                if (u) undo.undoTo(u.target, u.count, u.head);
-              }}
-            />
-          )}
-          {showComposer && (
-            <CommitComposer
-              files={list}
-              draft={draft}
-              onDraftChange={setDraft}
-              pending={commit.isPending}
-              error={commit.error}
-              amend={
-                amending && lastCommit
-                  ? {
-                      hash: lastCommit.hash,
-                      onCancel: () => setAmending(false),
-                    }
-                  : null
-              }
-              onCommit={onCommit}
-            />
-          )}
-        </div>
+        (showComposer || (lastCommit && rewrite.canAmend)) && (
+          <div
+            data-slot="changes-footer"
+            className={cn(
+              "flex flex-col border-t border-border",
+              !showComposer && "pb-1.5",
+            )}
+          >
+            {lastCommit && rewrite.canAmend && (
+              <LastCommitStrip
+                commit={lastCommit}
+                amending={amending}
+                canUndo={rewrite.undo !== null}
+                busy={busy}
+                onAmend={() => setAmending(true)}
+                onUndo={() => {
+                  const u = rewrite.undo;
+                  if (u) undo.undoTo(u.target, u.count, u.head);
+                }}
+              />
+            )}
+            {showComposer && (
+              <CommitComposer
+                files={list}
+                draft={draft}
+                onDraftChange={setDraft}
+                pending={commit.isPending}
+                error={commit.error}
+                amend={
+                  amending && lastCommit
+                    ? {
+                        hash: lastCommit.hash,
+                        onCancel: () => setAmending(false),
+                      }
+                    : null
+                }
+                onCommit={onCommit}
+              />
+            )}
+          </div>
+        )
       }
     />
   );

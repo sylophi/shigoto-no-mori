@@ -4,7 +4,7 @@
 // the stash@{n} positions shift whenever any worktree stashes or drops.
 import type { StashEntry } from "@shared/schemas";
 import { onIndex } from "./changes";
-import { run, splitZ } from "./core";
+import { PATCH_MAX_BUFFER, run, splitZ } from "./core";
 
 interface RawStash {
   ref: string;
@@ -136,4 +136,18 @@ export async function restoreStash(
     named ? `On ${branch}: ${message}` : `WIP on ${branch}: ${hash} ${message}`,
     hash,
   ]);
+}
+
+// What a stash holds, as one patch: its tracked changes and the
+// untracked files it took, as additions.
+export async function readStashDiff(
+  worktreePath: string,
+  hash: string,
+): Promise<string> {
+  const ref = await refOf(worktreePath, hash);
+  return run(
+    worktreePath,
+    ["stash", "show", "-p", "--include-untracked", "--no-color", ref],
+    { maxBuffer: PATCH_MAX_BUFFER },
+  );
 }

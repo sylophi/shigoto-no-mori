@@ -31,7 +31,12 @@ import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { CommitSummary, Worktree } from "@shared/schemas";
-import { CommitDot, TimelineRow } from "./TimelineRow";
+import {
+  CommitDot,
+  TimelineRow,
+  useRowSelection,
+  useTimelineView,
+} from "./TimelineRow";
 import type { CommitActions } from "./useCommitActions";
 
 // One commit on the Git timeline: its subject, where it can be read in
@@ -58,6 +63,8 @@ export function CommitNode({
   faded?: boolean;
 }) {
   const nav = useWorktreeNav();
+  const { onGitPage } = useTimelineView();
+  const { selected, expanded } = useRowSelection(`commit:${commit.hash}`);
   const items = (
     <CommitMenuItems
       worktree={worktree}
@@ -71,32 +78,48 @@ export function CommitNode({
       <ContextMenu>
         <ContextMenuTrigger
           render={
-            <div className="group/commit -mx-1.5 flex items-center gap-1 rounded-md transition-colors hover:bg-accent/50 has-data-popup-open:bg-accent/50" />
+            <div
+              className={cn(
+                "group/commit -mx-1.5 flex items-start gap-1 rounded-md transition-colors",
+                selected
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent/50 has-data-popup-open:bg-accent/50",
+              )}
+            />
           }
         >
+          {/* One line where the timeline is wide (the worktree page),
+              the subject over its hash, time and counts where it is a
+              column (the Git page's sidebar). */}
           <button
             type="button"
+            aria-current={selected || undefined}
             onClick={() =>
-              nav.toCommit(worktree.projectId, worktree.id, commit.hash)
+              nav.toCommit(
+                worktree.projectId,
+                worktree.id,
+                commit.hash,
+                onGitPage,
+              )
             }
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
+            className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring @md/timeline:flex-row @md/timeline:items-center @md/timeline:gap-3"
           >
             <span
               className={cn(
-                "min-w-0 flex-1 truncate text-sm",
+                "w-full truncate text-sm @md/timeline:w-auto @md/timeline:min-w-0 @md/timeline:flex-1",
                 faded && "text-muted-foreground",
               )}
             >
               {commit.subject}
             </span>
-            {/* Fixed columns, so the hashes, the times and the counts
-                line up down the timeline whatever each row holds. */}
-            <span className="grid shrink-0 grid-cols-[4.5rem_4rem_4.5rem] items-center text-xs text-muted-foreground phone:hidden">
+            {/* Fixed columns when wide, so the hashes, the times and the
+                counts line up down the timeline whatever each row holds. */}
+            <span className="flex w-full items-center gap-2 text-xs text-muted-foreground @md/timeline:grid @md/timeline:w-auto @md/timeline:shrink-0 @md/timeline:grid-cols-[4.5rem_4rem_4.5rem] @md/timeline:gap-0">
               <span className="font-mono">{commit.hash}</span>
               <span className="truncate">
                 <RelativeDate date={commit.date} />
               </span>
-              <span className="flex justify-end">
+              <span className="ml-auto flex justify-end">
                 {(commit.additions > 0 || commit.deletions > 0) && (
                   <DiffStats
                     additions={commit.additions}
@@ -110,7 +133,7 @@ export function CommitNode({
             <DropdownMenuTrigger
               aria-label={`Actions for ${commit.hash}`}
               data-icon-button
-              className="mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover/commit:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-popup-open:opacity-100 phone:opacity-100"
+              className="mt-1 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover/commit:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-popup-open:opacity-100 @md/timeline:mt-1 phone:opacity-100"
             >
               <Ellipsis aria-hidden className="size-4" />
             </DropdownMenuTrigger>
@@ -125,6 +148,7 @@ export function CommitNode({
         </ContextMenuTrigger>
         <ContextMenuContent className="min-w-52">{items}</ContextMenuContent>
       </ContextMenu>
+      {expanded}
     </TimelineRow>
   );
 }
