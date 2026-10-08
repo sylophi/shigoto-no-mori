@@ -24,7 +24,7 @@ export const portForwardHandlers: Handlers<typeof portForwardContract> = {
   list: () => ({ forwards: engine().listForwards() }),
 };
 
-// Quit-path teardown (main/index.ts before-quit): the listeners die
+// Quit's teardown (main/hostLayer.ts): the listeners die
 // with the process anyway, but stopping here also best-effort closes
 // the host-side conns so the peer is not left waiting out its idle
 // sweep. Safe before wiring: a boot that never reached the engine has

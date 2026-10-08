@@ -3,11 +3,10 @@
 // delivered before the window goes away, with no timing guesses. A move
 // asked for by another device has no renderer here to acknowledge it,
 // so that one restarts a beat after answering (relaunchAppUnattended).
-// The flag gives index.ts's before-quit handler the same fast path an
-// update-install quit takes: scripts were already reaped by the move,
-// so there is nothing to prompt about, and a busy dialog here could be
-// cancelled, leaving a live app pointed at a data dir that no longer
-// exists.
+// The flag makes the quit a hurried one, as an update install's is
+// (main/index.ts): scripts were already reaped by the move, so there is
+// nothing to prompt about, and a busy dialog here could be cancelled,
+// leaving a live app pointed at a data dir that no longer exists.
 import { writeFileSync } from "node:fs";
 import { app } from "electron";
 import { DEV_RELAUNCH_FILE_ENV } from "@shared/packaging/appName.mts";
@@ -26,8 +25,8 @@ const devRelaunchMarker = process.env[DEV_RELAUNCH_FILE_ENV];
 // Record that a relaunch is in flight WITHOUT initiating the quit. The
 // data-folder move (relaunchApp) quits through Electron so its reply is
 // delivered first. The fatal-recovery path in liveness.ts instead exits
-// hard, but it still sets this flag so if before-quit does fire it takes
-// index.ts's fast reap path rather than the busy-action prompt.
+// hard, but it still sets this flag so a quit that does start is a
+// hurried one, with no busy-action prompt.
 function markRelaunching(): void {
   requested = true;
 }
@@ -67,7 +66,7 @@ export const UNATTENDED_QUIT_DELAY_MS = 500;
 
 // The relaunch is arranged at once and only the quit waits: a quit
 // from this machine's own user inside the gap then still comes back
-// up, as the peer was told it would, and takes before-quit's fast path.
+// up, as the peer was told it would, and is a hurried quit.
 export function relaunchAppUnattended(): void {
   if (requested) return;
   scheduleRelaunch();

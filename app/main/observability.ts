@@ -1,10 +1,8 @@
 // What the process's layer graph logs and traces through. A line goes
 // to the app's logger (shared/log.ts), and one logged inside a span is
 // also an event on it. Every span that ends is a JSON line in this
-// device's trace.log (electron/logFile.ts): a move's spans carry the
-// move's source worktree on both devices, so it can be followed across
-// both files. A dev build also streams its spans to the Effect devtools
-// when they listen on their default port.
+// device's trace.log (electron/logFile.ts). A dev build also streams its
+// spans to the Effect devtools when they listen on their default port.
 import { app } from "electron";
 import * as Cause from "effect/Cause";
 import * as DevTools from "effect/devtools/DevTools";

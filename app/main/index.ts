@@ -1,4 +1,6 @@
-import { app, BrowserWindow, dialog, powerMonitor, session } from "electron";
+import { app, BrowserWindow, dialog, session } from "electron";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import { platform } from "node:os";
 import path from "node:path";
 import {
@@ -6,8 +8,6 @@ import {
   DEV_USER_DATA_SUFFIX,
   devProfileUserData,
 } from "@shared/packaging/appName.mts";
-import { gitContract } from "@shigomori/contracts/modules/git";
-import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { ensureDataDir } from "@host/lib/bootstrap";
 import { dropRemovedLanKeys } from "@host/lib/config/global";
@@ -33,7 +33,7 @@ import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
-import { startBackgroundFetch, sweepProjects } from "./electron/fetch";
+import { sweepProjects } from "./electron/fetch";
 import {
   applyThemeSource,
   readClientConfigSync,
@@ -42,48 +42,18 @@ import {
   seedClientConfigFromLegacy,
   seedProjectsSortFromState,
 } from "./electron/clientConfigMigration";
-import {
-  announceProjectChanged,
-  registerIpcHandlers,
-  startMirrorEngine,
-  stopMirrorEngine,
-} from "./ipc/handlers";
-import { clerkPublishableKey, retryParkedSignOut } from "./ipc/modules/account";
-import { stopAllPortForwards } from "./ipc/modules/portForward";
+import { registerIpcHandlers } from "./ipc/handlers";
+import { clerkPublishableKey } from "./ipc/modules/account";
 import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import {
-  broadcast,
-  broadcastAll,
-  refreshHubConnection,
-  startControlHost,
-  stopControlHost,
-  stopDirectHost,
-  onHostMutationSettled,
-  probeRemoteConnections,
-  stopHubConnection,
-} from "./ipc/register";
-import {
-  getInflightDeleteIds,
-  killAllScripts,
-  killScriptsForWorktree,
-  markShuttingDown,
-  signalAllScriptsBestEffort,
-} from "@host/lib/scripts";
+import { broadcast } from "./ipc/register";
 import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
-import { refreshProjects } from "@host/lib/projects";
-import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
-import { repairCliLinks } from "./electron/cliInstall";
-import { killAllCli, cliChildCount } from "./electron/cliRunner";
 import { applyUserShellEnv } from "./core/shellEnv";
-import { startStateWatcher } from "./electron/stateWatcher";
-import {
-  gitDirOf,
-  reconcileGitWatchers,
-  startGitWatcher,
-} from "./core/gitWatcher";
-import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
+import * as HostLayer from "./hostLayer";
+import * as Observability from "./observability";
+import { log } from "@shared/log";
+import * as ShellLayer from "./shellLayer";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
@@ -93,13 +63,8 @@ import {
   reconcileLaunchAtLogin,
 } from "./electron/liveness";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import {
-  installUpdaterImpl,
-  isInstallingUpdate,
-  startUpdater,
-} from "./electron/updater";
+import { installUpdaterImpl, isInstallingUpdate } from "./electron/updater";
 import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
-import { log } from "@shared/log";
 
 enableDevCdpPort();
 
@@ -167,8 +132,8 @@ if (!app.requestSingleInstanceLock()) {
 // from the login shell, see core/shellEnv.ts. Started here, after the
 // lock (a losing second instance must not run the user's startup
 // files for nothing) and before Chromium's own startup, which the
-// shell then runs alongside. Awaited before anything spawns on the
-// user's behalf (the mirror daemon below, the ready handler). A dev
+// shell then runs alongside. Awaited in the ready handler, before
+// anything spawns on the user's behalf. A dev
 // launch starts from the developer's terminal and keeps it. macOS
 // only: the base it rebuilds from is launchd's.
 const shellEnvReady =
@@ -212,20 +177,16 @@ installMenuImpl();
 installUpdaterImpl();
 installHostImpls();
 registerIpcHandlers();
-// The mirror daemon resumes persisted sessions the moment it is up, so
-// it starts with the app rather than with the first mirror the user
-// asks for. A gateway that fails to bind is retried inside. Nothing
-// here is fatal, the app works without mirroring. After the
-// environment rebuild: the daemon it spawns inherits process.env. And
-// after ready: the sessions it resumes are swept for a device on no
-// account, which reads the credential, and safeStorage cannot decrypt
-// it before ready (the read would say signed out and end them all).
-// A quit that came first has already stopped it.
-void Promise.all([shellEnvReady, app.whenReady()])
-  .then(() => (isShuttingDown() ? undefined : startMirrorEngine()))
-  .catch((error: unknown) => {
-    log.warn("[mirror] engine failed to start:", errorMessageOf(error));
-  });
+
+// The process's one layer graph, built in the ready handler once the
+// window is up and closed by the quit below. Every subsystem with a
+// lifetime is in it, so its shutdown is the quit sequence.
+const runtime = ManagedRuntime.make(
+  ShellLayer.layer.pipe(
+    Layer.provideMerge(HostLayer.layer({ hurried: isHurriedQuit })),
+    Layer.provideMerge(Observability.layer),
+  ),
+);
 
 let mainWindow: BrowserWindow | null = null;
 // Set once the ready handler's own createWindow() call has run, so
@@ -339,12 +300,17 @@ const createWindow = () => {
   attachContextMenu(mainWindow);
 };
 
+// An update install or a relaunch: a quit that neither asks about busy
+// work nor waits for it (hostLayer.ts has why), counted from the moment
+// it is asked for, before its quit arrives.
+function isHurriedQuit(): boolean {
+  return isInstallingUpdate() || isRelaunching();
+}
+
 // True while the app is on any teardown or restart path, so the crash
-// handlers never fight a quit: an update-install and a relaunch both
-// take before-quit's fast path without setting isQuitting, so they are
-// checked explicitly alongside it.
+// handlers never fight a quit.
 function isShuttingDown(): boolean {
-  return isQuitting || isInstallingUpdate() || isRelaunching();
+  return quitting || isHurriedQuit();
 }
 
 // Recreate the window after its renderer crashed. The crashed shell can
@@ -481,7 +447,7 @@ app.on("ready", async () => {
     app.exit(1);
     return;
   }
-  // A crash, a force quit, or an OOM skips every kill path below, so
+  // A crash, a force quit, or an OOM skips the quit's reap, so
   // anything the last session left running is reaped here. Claims the
   // record file synchronously (before any script can spawn) and does
   // the killing in the background.
@@ -510,155 +476,30 @@ app.on("ready", async () => {
   installFatalRecovery({ isShuttingDown });
   createWindow();
   reconcileLaunchAtLogin();
-  // The sweeps below read the project list synchronously, from the
-  // snapshot host/lib/projects keeps of the CLI's list, so read it once
-  // before they start. The window is already up, so this delays only
-  // the background machinery.
-  await refreshProjects().catch((error: unknown) => {
-    log.warn(`[projects] first list failed: ${errorMessageOf(error)}`);
+  // The window is already up, so the graph delays only the background
+  // machinery. A quit that came first has disposed it.
+  await runtime.context().catch((error: unknown) => {
+    if (!quitting) log.error("[boot] the layer graph failed:", error);
   });
-  startBackgroundFetch();
-  startUpdater();
-  // The control wire the CLI's cross-device verbs ride (`sm worktrees
-  // send|bring|mirror`). Here, past the single-instance lock and the
-  // data dir, so only the instance that owns the data dir publishes
-  // its address there.
-  void startControlHost();
-  // The hub socket: connect to the account's
-  // Durable Object when a credential is stored. The same reconcile
-  // reruns after every account change (the emitChanged path in
-  // main/ipc/handlers.ts), making this the boot-time pass only. The
-  // direct data-plane listener follows the same
-  // enrollment condition, so its reconcile rides this refresh's tail.
-  void refreshHubConnection();
-  // A sign-out whose revoke never reached the hub is delivered
-  // alongside, never ahead of the socket: it can wait out its timeout
-  // on a dead network, and a parked revoke means this device is
-  // signed out, so the socket has nothing to learn from it.
-  void retryParkedSignOut();
-  // Sleep is the one event that reliably kills every remote socket
-  // without a close: on resume, probe the hub socket and every direct
-  // session so the dead ones are found and redialed within seconds,
-  // rather than the UI reading "Connected" off corpses until the next
-  // heartbeat tick.
-  powerMonitor.on("resume", () => probeRemoteConnections());
-  // External CLI writes surface in the UI via an explicit invalidation
-  // broadcast. (The focus signal won't do: React Query's focusManager
-  // only refetches on a blur->focus transition, and the window may be
-  // focused the whole time an agent works in a terminal beside it.)
-  startStateWatcher((worktreeDataProjects) => {
-    broadcastAll(gitContract, "externalChange", undefined);
-    // A title `sm describe` wrote: announced like a git change, so a
-    // mirror of the worktree carries it now (host/mirror/gitFollow.ts),
-    // not on its next sweep.
-    for (const projectId of worktreeDataProjects) {
-      announceProjectChanged(projectId);
-    }
-    // The registry may have changed (a project added or removed by
-    // the CLI): re-read the project list, then follow it with the
-    // git-directory watches.
-    void refreshProjects()
-      .catch(() => undefined)
-      .then(reconcileGitWatchers);
-    // The same refresh is the app's only chance to notice an `sm rm`
-    // run in a terminal: the CLI removes the worktree without knowing
-    // the app exists, leaving any script the app started in it running
-    // against a deleted cwd and still holding its port.
-    void reapScriptsForRemovedWorktrees()
-      .then((removed) => {
-        for (const worktree of removed) {
-          broadcastAll(scriptsContract, "stoppedForRemovedWorktree", {
-            worktreeId: worktree.worktreeId,
-            worktreeName: worktree.worktreeName,
-            scriptCount: worktree.scriptCount,
-          });
-        }
-      })
-      .catch((err: unknown) => {
-        log.warn(
-          `[scripts] reap after external change failed: ${errorMessageOf(err)}`,
-        );
-      });
-  });
-  // Git state inside every project (commits, checkouts, refs written
-  // by any tool) surfaces through the per-project watch, as a
-  // project-scoped ping on every wire: this window and every device
-  // viewing this host refetch that project's rows.
-  startGitWatcher({
-    onChange: announceProjectChanged,
-    // The app's own git commands move refs the same way an agent's
-    // do, and their callers already invalidate their targets, so the
-    // watcher skips a running sm CLI child and any app-run mutating
-    // git command in flight or just done IN THAT REPOSITORY (a
-    // command's cwd is the project path or one of its worktrees, both
-    // of which resolve to the same git directory), exactly as the
-    // state watcher skips the app's own data dir writes.
-    suppressed: (gitDir) =>
-      cliChildCount() > 0 ||
-      gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
-  });
-  // An app-side project add or remove runs as a CLI child whose
-  // registry write the state watcher drops as the app's own, so the
-  // watched set also follows every settled host mutation.
-  onHostMutationSettled(reconcileGitWatchers);
-  // Installing the CLI link is a Settings action; launch only repairs
-  // an already-installed link whose target moved (app update, other
-  // checkout). After the environment rebuild so PATH checks see the
-  // login shell's PATH.
-  void repairCliLinks();
 });
 
 app.on("window-all-closed", () => {
   app.quit();
 });
 
-// Reap any scripts still running before Electron tears down. Without
-// this, long-lived processes (dev servers, watchers) the user kicked
-// off via a script keep running after Cmd-Q, orphaned to launchd.
-//
-// For in-flight deletes we kill only the cleanup scripts for those
-// worktrees, leaving the worktree directory intact (safest partial
-// state). Then we reap everything else with killAllScripts.
-let isQuitting = false;
-
-// The cross-device work, ended on every quit path. Forward teardown
-// first: local listeners die with the process anyway, but stopping
-// before the hub teardown gives the best-effort host-side conn closes
-// a socket to ride out on. The hub and direct closes are fire and
-// forget: the hub close frame either flushes in the handoff window or
-// the DO notices the dead socket on its own, and the direct listener
-// goes down the same way so connected peers see a clean going-away.
-function stopRemoteWork(): void {
-  stopAllPortForwards();
-  stopControlHost();
-  stopMirrorEngine();
-  void stopHubConnection();
-  void stopDirectHost();
-}
+// Every quit path lands here: the graph's shutdown runs its finalizers
+// (hostLayer.ts), then `app.exit` ends the process without coming back
+// through before-quit. A second quit while the graph closes is let
+// through as Electron's own, the way out of a finalizer that hangs.
+let quitting = false;
 
 app.on("before-quit", (event) => {
-  if (isQuitting) return;
-  // An update-triggered quit has to flow through Electron's natural quit so
-  // the detached `sm update --finish-install` installer sees this pid
-  // exit and swaps bundles. Awaiting the full kill chain here would
-  // block that handoff for up to ~1.5s (grace + SIGKILL). Instead we
-  // fire a synchronous
-  // best-effort SIGTERM to each process group, so well-behaved scripts
-  // get the natural quit window ~100ms to clean up. The trade-off vs
-  // the normal-quit path: children that survive the best-effort pass
-  // don't get the escalation fallback and may end up orphaned.
-  // Acceptable for an explicit, user-initiated update.
-  if (isInstallingUpdate() || isRelaunching()) {
-    markShuttingDown();
-    stopRemoteWork();
-    signalAllScriptsBestEffort("SIGTERM");
-    killAllCli();
-    return;
-  }
-  // The install branch above has already gated its own restart via the
-  // renderer-initiated installUpdate dialog, so it skips this prompt.
-  if (!confirmBusyActionSync("quit")) {
-    event.preventDefault();
+  if (quitting) return;
+  event.preventDefault();
+  // An update install was already confirmed by the renderer's
+  // installUpdate dialog, and a relaunch's cancelled quit would leave a
+  // live app on a data dir that has moved.
+  if (!isHurriedQuit() && !confirmBusyActionSync("quit")) {
     // When the user got here by closing the last window (close-X →
     // window-all-closed → app.quit()), the BrowserWindow is already
     // destroyed by the time before-quit fires. Restore it so the
@@ -670,28 +511,11 @@ app.on("before-quit", (event) => {
     }
     return;
   }
-  isQuitting = true;
-  markShuttingDown();
-  event.preventDefault();
-  // The mirror daemon gets its stdin closed here and is reaped with
-  // the CLI children below if it lingers.
-  stopRemoteWork();
-  // Backstop: if a kill chain wedges (unkillable child), don't leave
-  // the app running headless after the window is gone.
-  setTimeout(() => app.exit(1), 15_000);
-  // CLI children (CLI-engine lifecycle operations) get the same reap as
-  // scripts; the CLI's own children share its terminal-style process
-  // group and follow it down.
-  killAllCli();
-  const inflight = getInflightDeleteIds();
-  // allSettled: one rejected per-worktree kill must not skip the
-  // killAllScripts pass for everything else.
-  void Promise.allSettled(
-    Array.from(inflight).map((id) => killScriptsForWorktree(id)),
-  )
-    .then(() => killAllScripts({ graceMs: 1_500 }))
-    .finally(() => {
-      // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.
-      app.exit(0);
-    });
+  quitting = true;
+  void runtime
+    .dispose()
+    .catch((error: unknown) => {
+      log.error("[quit] a finalizer failed:", error);
+    })
+    .finally(() => app.exit(0));
 });

@@ -177,9 +177,8 @@ export function startGitWatcher(next: GitWatcherDeps): void {
   reconcileGitWatchers();
 }
 
-// Close every watch and forget the deps, for the check's teardown (the
-// app never stops watching: the watches are non-persistent handles
-// that die with the process).
+// Close every watch and forget the deps, at quit (main/hostLayer.ts)
+// and in the check's teardown.
 export function stopGitWatcher(): void {
   for (const [projectId, entry] of watched) closeWatched(projectId, entry);
   deps = null;
