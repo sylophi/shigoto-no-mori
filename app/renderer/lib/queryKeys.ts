@@ -92,9 +92,13 @@ function buildQueryKeys(deviceId: string) {
     worktreeIgnored: (projectId: string, worktreeId: string) =>
       host("worktreeIgnored", projectId, worktreeId),
     // One folder of a worktree (sync:worktreeFolder), the mirror
-    // dialog's picker of what stays behind.
-    worktreeFolder: (projectId: string, worktreeId: string, relative: string) =>
-      host("worktreeFolder", projectId, worktreeId, relative),
+    // dialog's picker of what stays behind and the files page's tree.
+    worktreeFolder: (
+      projectId: string,
+      worktreeId: string,
+      relative: string,
+      ruleIgnored: boolean,
+    ) => host("worktreeFolder", projectId, worktreeId, relative, ruleIgnored),
     // Every folder listing of one worktree, the prefix the files page's
     // refresh drops.
     worktreeFolders: (projectId: string, worktreeId: string) =>
@@ -176,6 +180,7 @@ function buildQueryKeys(deviceId: string) {
     // integration can invalidate the whole subtree in one call.
     githubCliAll: () => host("githubCli"),
     githubCliReadiness: () => host("githubCli", "readiness"),
+    githubOwners: () => host("githubCli", "owners"),
     repoMergeConfig: (projectId: string) =>
       host("githubCli", "repoMergeConfig", projectId),
     repoDescription: (projectId: string) =>

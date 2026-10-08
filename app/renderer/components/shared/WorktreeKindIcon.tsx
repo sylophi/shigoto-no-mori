@@ -21,18 +21,12 @@ function kindOf(
   return null;
 }
 
-export function WorktreeKindIcon({
-  worktree,
-  showTooltip = true,
-}: {
-  worktree: Worktree;
-  showTooltip?: boolean;
-}) {
+export function WorktreeKindIcon({ worktree }: { worktree: Worktree }) {
   const kind = kindOf(worktree, useAllowAgentWorking());
   if (!kind) return null;
   const { Icon, label } = KINDS[kind];
   return (
-    <SimpleTooltip tip={showTooltip && label}>
+    <SimpleTooltip tip={label}>
       <span className="inline-flex shrink-0">
         <Icon aria-label={label} className="size-3 text-muted-foreground/70" />
       </span>

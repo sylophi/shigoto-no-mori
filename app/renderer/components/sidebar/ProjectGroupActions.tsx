@@ -34,6 +34,7 @@ import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
+import { useSetProjectPinned } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -66,7 +67,7 @@ export interface GroupMember {
   isThisDevice: boolean;
 }
 
-type LiveMember = GroupMember & { api: HostApi };
+export type LiveMember = GroupMember & { api: HostApi };
 
 // The group as the actions see it: this machine's checkout first when
 // there is one, then every peer's with the api its session provides,
@@ -125,10 +126,32 @@ export function useIconMember(
   );
 }
 
+// Where the group's quick create lands: the pick (useQuickCreateDeviceId)
+// when it can take one, else the first live member (this machine leads
+// the list when it is one). A missing local checkout can't take a
+// create either. Shared by the `+` and the inbox's New worktree menu,
+// so the two land on the same device.
+export function useGroupCreator(
+  members: readonly GroupMember[],
+  identity: string | null | undefined,
+): LiveMember | undefined {
+  const designatedId = useQuickCreateDeviceId(identity);
+  const canCreate = members.filter(
+    (member): member is LiveMember =>
+      member.api !== undefined && member.project.pathExists !== false,
+  );
+  return (
+    canCreate.find((member) => member.deviceId === designatedId) ?? canCreate[0]
+  );
+}
+
 interface ProjectGroupActionsProps {
   name: string;
   // The group's repo identity, which the designation is keyed by.
   identity: string | null | undefined;
+  // The group's key (projectGroupKey), which its pin is kept by.
+  groupKey: string;
+  pinned: boolean;
   members: readonly GroupMember[];
   isHovered: boolean;
   // The `…` trigger, so the header's right-click can pop the same menu.
@@ -140,24 +163,18 @@ interface ProjectGroupActionsProps {
 export function ProjectGroupActions({
   name,
   identity,
+  groupKey,
+  pinned,
   members,
   isHovered,
   triggerRef,
   onLocate,
 }: ProjectGroupActionsProps) {
-  const designatedId = useQuickCreateDeviceId(identity);
+  const creator = useGroupCreator(members, identity);
+  const setPinned = useSetProjectPinned(groupKey);
   const live = members.filter(
     (member): member is LiveMember => member.api !== undefined,
   );
-  // Where the `+` creates: the pick when it can, else the first live
-  // member (this machine leads the list when it is one). A missing
-  // local checkout can't take a create either.
-  const canCreate = live.filter(
-    (member) => member.project.pathExists !== false,
-  );
-  const creator =
-    canCreate.find((member) => member.deviceId === designatedId) ??
-    canCreate[0];
   // Whose copy the pages open for (and, on a group of one, the remove
   // acts on): this machine's, or the `+`'s device on a header with no local checkout.
   const primary =
@@ -215,6 +232,9 @@ export function ProjectGroupActions({
               <DropdownMenuSeparator />
             </>
           )}
+          <DropdownMenuItem onClick={() => setPinned(!pinned)}>
+            {pinned ? "Unpin" : "Pin"}
+          </DropdownMenuItem>
           <AddToDeviceSubmenu
             name={name}
             members={members}

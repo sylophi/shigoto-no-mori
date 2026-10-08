@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { repoNameFromUrl } from "@shared/cloneUrl";
 import { EmptyPanel } from "@/components/ui/empty-panel";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import {
   DeviceTabBar,
@@ -10,7 +12,17 @@ import {
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { localDeviceId } from "@/lib/queryKeys";
-import { AddProjectView } from "./addProject/AddProjectView";
+import { AddExistingView } from "./addProject/AddExistingView";
+import { CloneView } from "./addProject/CloneView";
+import { CreateView } from "./addProject/CreateView";
+
+type AddProjectMode = "existing" | "clone" | "create";
+
+const MODE_OPTIONS = [
+  { value: "existing", label: "Add existing" },
+  { value: "clone", label: "Clone" },
+  { value: "create", label: "Create new" },
+] as const;
 
 // Standalone host for the add-project flow (File → Add project…, ⌘N, and
 // the sidebar ＋ button). The shortcut is a native menu accelerator in
@@ -27,17 +39,45 @@ export function AddProjectModal() {
   return <AddProjectDialog key={addProjectRequest} />;
 }
 
-// The flow under a device pick: the same browse, scan and add, run on
-// whichever machine the tab names. The view reads everything off the
-// scope the panel mounts it under, so a peer's disk browses like this
-// one's. The bar shows only once there is a choice to make.
+// The three ways to a project (an existing repo, a clone, a new one)
+// under a device pick, run on whichever machine the tab names. The
+// views read everything off the scope the panel mounts them under, so
+// a peer's disk browses like this one's. The device bar shows only
+// once there is a choice to make.
 function AddProjectDialog() {
   const { addProjectTarget, setAddProjectOpen } = useOverlays();
   const onClose = () => setAddProjectOpen(false);
-  // Held here, above the per-device view, so what was typed survives a
+  // A target's query is a path to browse or a URL to clone.
+  const targetUrl =
+    addProjectTarget.query !== undefined &&
+    repoNameFromUrl(addProjectTarget.query) !== null
+      ? addProjectTarget.query
+      : null;
+  const [mode, setMode] = useState<AddProjectMode>(
+    targetUrl === null ? "existing" : "clone",
+  );
+  // Held here, above the per-device views, so what was typed survives a
   // change of device: a pasted URL is as good on the next machine, and
   // `~/dev/` means the same folder on each.
-  const [query, setQuery] = useState(addProjectTarget.query ?? "~/");
+  const [query, setQuery] = useState(
+    targetUrl === null ? (addProjectTarget.query ?? "~/") : "~/",
+  );
+  const [url, setUrl] = useState(targetUrl ?? "");
+  const [name, setName] = useState("");
+  // A URL typed or pasted where a path goes is a clone, after the `~/`
+  // the input starts with.
+  const setPathOrUrl = (value: string) => {
+    const pasted = value.replace(/^~\//, "");
+    if (repoNameFromUrl(pasted) === null) {
+      setQuery(value);
+      return;
+    }
+    setUrl(pasted);
+    setMode("clone");
+  };
+  // Held here for the same reason. On by default: a device that lists
+  // terrier's repos as projects has terrier as its registry.
+  const [addToTerrier, setAddToTerrier] = useState(true);
   const tabs = useDeviceTabs();
   const { data: status } = useAccountStatus();
   const [picked, pick] = usePickedDevice(
@@ -56,8 +96,15 @@ function AddProjectDialog() {
       onClose={onClose}
       onEscape={() => (escapeRef.current ?? onClose)()}
     >
-      {tabs.length > 1 && picked && (
-        <div className="border-b border-border py-2">
+      <div className="flex flex-col gap-2 border-b border-border py-2">
+        <SegmentedControl
+          value={mode}
+          onChange={setMode}
+          options={MODE_OPTIONS}
+          aria-label="How to add the project"
+          className="mx-3 self-start"
+        />
+        {tabs.length > 1 && picked && (
           <DeviceTabBar
             tabs={tabs}
             selectedId={picked.deviceId}
@@ -65,16 +112,38 @@ function AddProjectDialog() {
             // phone:px-3 as well: the bar's own phone:px-4 outlives a bare px-3.
             className="px-3 phone:px-3"
           />
-        </div>
-      )}
+        )}
+      </div>
       {picked ? (
         <DeviceTabPanel tab={picked} subject="its folder listing">
-          <AddProjectView
-            query={query}
-            setQuery={setQuery}
-            onClose={onClose}
-            escapeRef={escapeRef}
-          />
+          {mode === "existing" && (
+            <AddExistingView
+              query={query}
+              setQuery={setPathOrUrl}
+              addToTerrier={addToTerrier}
+              setAddToTerrier={setAddToTerrier}
+              onClose={onClose}
+              escapeRef={escapeRef}
+            />
+          )}
+          {mode === "clone" && (
+            <CloneView
+              url={url}
+              setUrl={setUrl}
+              addToTerrier={addToTerrier}
+              setAddToTerrier={setAddToTerrier}
+              onClose={onClose}
+            />
+          )}
+          {mode === "create" && (
+            <CreateView
+              name={name}
+              setName={setName}
+              addToTerrier={addToTerrier}
+              setAddToTerrier={setAddToTerrier}
+              onClose={onClose}
+            />
+          )}
         </DeviceTabPanel>
       ) : (
         <div className="p-6">

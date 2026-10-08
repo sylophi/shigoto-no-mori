@@ -1282,7 +1282,7 @@ it("a peer's removed worktree ends only the mirrors into that copy, nothing dele
   }
 });
 
-it("stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy and says so, and leftovers and delayed stops are swept, sparing a running re-open and a held root and retrying a failed end", async () => {
+it("stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy and says so, a root that went under a seen session ends it the same way whatever the engine calls it, and leftovers and delayed stops are swept, sparing a running re-open and a held root and retrying a failed end", async () => {
   // (6e) The stop's safety and its keep-the-copy, the original gone
   // behind the app's back, a re-open's leftover, and a stop that
   // came while the daemon was down. Against a recording daemon and
@@ -1407,14 +1407,19 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
       ORIGINAL_GONE_DETAIL,
     ]);
 
-    // The same, found by the bookkeeping on a halted session, and a
-    // session a re-open replaced but which outlived it.
+    // The same, found by the bookkeeping on a halted session, on a
+    // session whose root goes after it was seen in place (whatever
+    // the engine makes of that), and a session a re-open replaced
+    // but which outlived it.
     put(
       sessionOf("halted", {
         localRoot: goneRoot,
         status: "halted-on-root-deletion",
       }),
     );
+    const wentRoot = join(sandbox, "original-went");
+    mkdirSync(wentRoot, { recursive: true });
+    put(sessionOf("went", { localRoot: wentRoot }));
     put(sessionOf("old"));
     put(
       sessionOf("new", {
@@ -1429,15 +1434,48 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     // left to their owners. A terminate that fails is tried again.
     failTerminate = true;
     const release = holdRootChecks(["orig-halted"]);
-    await whileRecreating("old", () => settleMirrorBookkeeping());
-    assert.deepEqual([...live.keys()].toSorted(), ["halted", "new", "old"]);
+    const sweptTo = async (
+      expected: string[],
+      settle: () => Promise<unknown> = settleMirrorBookkeeping,
+    ) => {
+      await settle();
+      assert.deepEqual([...live.keys()].toSorted(), expected);
+    };
+    await sweptTo(["halted", "new", "old", "went"], () =>
+      whileRecreating("old", settleMirrorBookkeeping),
+    );
     release();
-    await settleMirrorBookkeeping();
-    assert.deepEqual([...live.keys()].toSorted(), ["halted", "new", "old"]);
+    await sweptTo(["halted", "new", "old", "went"]);
     failTerminate = false;
-    await settleMirrorBookkeeping();
-    assert.deepEqual([...live.keys()].toSorted(), ["new"]);
+    await sweptTo(["new", "went"]);
+    // The root that was there goes: the next snapshot ends the
+    // session, whatever the engine says about it (here a conflict at
+    // the root, the copy having changed too), and two snapshots in
+    // flight at once end it once.
+    rmSync(wentRoot, { recursive: true });
+    put(
+      sessionOf("went", {
+        localRoot: wentRoot,
+        conflicts: [
+          {
+            root: "",
+            localChanges: [{ path: "", kind: "deleted" }],
+            remoteChanges: [{ path: "a.txt", kind: "modified" }],
+          },
+        ],
+      }),
+    );
+    await sweptTo(["new"], () =>
+      Promise.all([settleMirrorBookkeeping(), settleMirrorBookkeeping()]),
+    );
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
+    assert.deepEqual(
+      noted
+        .filter(([, , detail]) => detail === ORIGINAL_GONE_DETAIL)
+        .map(([id]) => id)
+        .toSorted(),
+      ["orig-halted", "orig-orphan", "orig-went"],
+    );
 
     // A delete while the daemon restarts lists nothing to stop: the
     // stop waits for the daemon and ends the session once it runs.

@@ -155,10 +155,12 @@ export function MirrorManageDialog({
           {view.detail !== "" &&
             view.tone !== "rose" &&
             view.tone !== "amber" && (
-              <span className="min-w-0 truncate">
-                <span aria-hidden>· </span>
-                {view.detail}
-              </span>
+              <SimpleTooltip whenTruncated tip={view.detail}>
+                <span className="min-w-0 truncate">
+                  <span aria-hidden>· </span>
+                  {view.detail}
+                </span>
+              </SimpleTooltip>
             )}
         </p>
       </FlowHeader>
@@ -338,10 +340,12 @@ function PairStrip({
         side="original"
         path={session.localRoot}
       />
-      <ArrowLeftRight
-        aria-label="kept in step both ways"
-        className="size-4 text-muted-foreground"
-      />
+      <SimpleTooltip tip="Kept in step both ways">
+        <ArrowLeftRight
+          aria-label="Kept in step both ways"
+          className="size-4 text-muted-foreground"
+        />
+      </SimpleTooltip>
       <PairEnd
         deviceId={session.deviceId}
         name={names.copy}
@@ -378,7 +382,9 @@ function PairEnd({
           icon={useDeviceIcon(deviceId)}
           className="size-3.5 shrink-0 text-muted-foreground"
         />
-        <span className="truncate">{name}</span>
+        <SimpleTooltip whenTruncated tip={name}>
+          <span className="truncate">{name}</span>
+        </SimpleTooltip>
         <span className="shrink-0 text-xs font-normal text-muted-foreground">
           {side}
         </span>

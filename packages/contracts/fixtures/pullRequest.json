@@ -572,15 +572,90 @@
       }
     ]
   },
+  "GithubOwnerListSchema": {
+    "accepts": [["rin", "sylophi", "dittofleet"], []],
+    "rejects": ["rin", [1], null]
+  },
+  "PublishRepoPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "3r",
+        "visibility": "private"
+      },
+      {
+        "projectId": "3r",
+        "owner": "sylophi",
+        "visibility": "public"
+      },
+      {
+        "projectId": "3r",
+        "owner": "dittofleet-2",
+        "visibility": "private"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "3r",
+          "visibility": "public",
+          "name": "ignored"
+        },
+        "output": {
+          "projectId": "3r",
+          "visibility": "public"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "3r"
+      },
+      {
+        "projectId": "",
+        "visibility": "private"
+      },
+      {
+        "projectId": "3r",
+        "visibility": "internal"
+      },
+      {
+        "projectId": "3r",
+        "owner": "-dash",
+        "visibility": "private"
+      },
+      {
+        "projectId": "3r",
+        "owner": "a/b",
+        "visibility": "private"
+      },
+      {
+        "projectId": "3r",
+        "owner": "",
+        "visibility": "private"
+      }
+    ]
+  },
   "GithubCliReadinessSchema": {
     "accepts": [
       {
         "installed": true,
-        "authed": true
+        "authed": true,
+        "unavailable": null
+      },
+      {
+        "installed": true,
+        "authed": false,
+        "unavailable": "gh-signed-out"
       },
       {
         "installed": false,
-        "authed": false
+        "authed": false,
+        "unavailable": "gh-missing"
+      },
+      {
+        "installed": true,
+        "authed": true,
+        "unavailable": "integration-off"
       }
     ],
     "normalizes": [
@@ -588,17 +663,28 @@
         "input": {
           "installed": true,
           "authed": true,
+          "unavailable": null,
           "version": "2.62.0"
         },
         "output": {
           "installed": true,
-          "authed": true
+          "authed": true,
+          "unavailable": null
         }
       }
     ],
     "rejects": [
       {
         "installed": true
+      },
+      {
+        "installed": true,
+        "authed": true
+      },
+      {
+        "installed": true,
+        "authed": true,
+        "unavailable": "gh-broken"
       }
     ]
   },

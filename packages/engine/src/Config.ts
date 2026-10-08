@@ -217,6 +217,7 @@ const deviceKeys = settingKeys(
     "githubCli",
     "launchers",
     "hiddenLaunchers",
+    "terminal",
   ],
   {
     launchers: {
@@ -226,6 +227,13 @@ const deviceKeys = settingKeys(
     hiddenLaunchers: { entryProblem: launcherIdProblem },
   },
 );
+// The Go sm names the terminals by id (terminalIDs), where Settings
+// lists them in its own order.
+for (const key of deviceKeys) {
+  if (key.name === "terminal") {
+    Object.assign(key, { choices: key.choices.toSorted() });
+  }
+}
 
 const projectKeys = settingKeys(
   modeledKeyFields(ShigomoriConfigSchema),
