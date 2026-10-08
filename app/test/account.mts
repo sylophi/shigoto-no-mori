@@ -5,8 +5,8 @@
 // route/method/auth-tier discipline against the shared schemas, the
 // credential store's encrypt and plaintext-fallback round trips plus
 // its corrupt/missing tolerance, deriveAccountId's tolerance of a
-// malformed token, the .env.local parser and the three-layer
-// file/baked/process.env merge precedence, the setDeviceName and enroll
+// malformed token, the three-layer file/baked/process.env merge
+// precedence, the setDeviceName and enroll
 // contract bounds, and the shape guarantee that the device credential
 // never appears in a renderer-visible object.
 //
