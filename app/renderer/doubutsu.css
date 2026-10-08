@@ -742,19 +742,14 @@
 }
 
 /* --- Typography: AC chunky-by-default ---
-   The body font-family is re-declared literally (not via --font-sans)
-   because Tailwind's `@theme inline` inlines the Geist stack into the
-   base-layer body rule, so a token override alone can't reach it.
-   Body lifts to 700 (the AC base weight). Tailwind's explicit weight
+   The face is the --font-sans token above. Body lifts to 700 (the AC
+   base weight). Tailwind's explicit weight
    utilities are re-pinned so anything labeled font-medium is still at
    least as bold as the body, preserving hierarchy. Mono wants roughly
    a 550: 500 looks anemic next to Zen Maru's chunky strokes and 600
    reads too loud, but the system mono stack has no weight between, so
    500 plus a hairline text-stroke splits the difference. */
 .doubutsu body {
-  font-family:
-    "Zen Maru Gothic", "Hiragino Maru Gothic ProN", ui-sans-serif, system-ui,
-    sans-serif;
   font-weight: 700;
 }
 .doubutsu .font-mono,
@@ -765,13 +760,9 @@
   -webkit-text-stroke: 0.2px currentColor;
 }
 /* A mono input's placeholder reads as prose (placeholder:font-sans),
-   but that utility carries the inlined Geist stack, as the body rule
-   did, and it inherits the mono treatment above. It takes the body's
-   font back. */
+   but it inherits the mono treatment above. It takes the body's weight
+   back. */
 .doubutsu .placeholder\:font-sans::placeholder {
-  font-family:
-    "Zen Maru Gothic", "Hiragino Maru Gothic ProN", ui-sans-serif, system-ui,
-    sans-serif;
   font-weight: 700;
   -webkit-text-stroke: 0;
 }
