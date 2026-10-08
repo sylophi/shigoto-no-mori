@@ -15,7 +15,7 @@ import {
   writeToScript,
 } from "@host/lib/scripts";
 import { takeOrphanSweepReport } from "@host/lib/scripts/persistence";
-import { shellQuote } from "@host/lib/scripts/process";
+import { shellQuote } from "@host/lib/util/shellQuote";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 

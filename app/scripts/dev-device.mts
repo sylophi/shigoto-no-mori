@@ -15,11 +15,27 @@
 // weblab stops it when the last session on it ends.
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { signalPidTree } from "../host/lib/scripts/process.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { appRoot } from "./lib/appRoot.mts";
 import { parsePositionalDevProfile } from "./lib/devProfile.mts";
+import { descendantsIn } from "../host/lib/scripts/descendants.ts";
 import { rendererDevServerAnswers } from "./lib/portsEnvFile.mts";
+
+// The launch and everything under it: pnpm does not forward a signal
+// to its children.
+function signalPidTree(root: number, signal: NodeJS.Signals): void {
+  const table =
+    spawnSync("ps", ["-A", "-o", "pid=,ppid="], {
+      encoding: "utf8",
+    }).stdout ?? "";
+  for (const pid of [root, ...descendantsIn(table, root)]) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Already gone.
+    }
+  }
+}
 
 const USAGE = "usage: pnpm device <profile> [--fresh] [--clone-login]";
 
@@ -64,7 +80,7 @@ if (asPeer) {
   });
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      if (child.pid !== undefined) void signalPidTree(child.pid, signal);
+      if (child.pid !== undefined) signalPidTree(child.pid, signal);
     });
   }
   child.on("error", (error) => {
