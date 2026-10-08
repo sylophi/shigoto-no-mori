@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { Command } from "cmdk";
 import { ArrowLeft, FolderSearch } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
@@ -21,6 +21,7 @@ interface ResultsPanelProps {
   onAdd: () => Promise<void>;
   bulkAdding: boolean;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
+  terrierOptIn: ReactNode;
 }
 
 export function ResultsPanel(props: ResultsPanelProps) {
@@ -97,6 +98,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
           data-slot="footer-row"
           className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
         >
+          {props.terrierOptIn}
           <button
             type="button"
             onClick={() => void props.onAdd()}

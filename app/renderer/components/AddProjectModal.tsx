@@ -38,6 +38,9 @@ function AddProjectDialog() {
   // change of device: a pasted URL is as good on the next machine, and
   // `~/dev/` means the same folder on each.
   const [query, setQuery] = useState(addProjectTarget.query ?? "~/");
+  // Held here for the same reason. On by default: a device that lists
+  // terrier's repos as projects has terrier as its registry.
+  const [addToTerrier, setAddToTerrier] = useState(true);
   const tabs = useDeviceTabs();
   const { data: status } = useAccountStatus();
   const [picked, pick] = usePickedDevice(
@@ -72,6 +75,8 @@ function AddProjectDialog() {
           <AddProjectView
             query={query}
             setQuery={setQuery}
+            addToTerrier={addToTerrier}
+            setAddToTerrier={setAddToTerrier}
             onClose={onClose}
             escapeRef={escapeRef}
           />

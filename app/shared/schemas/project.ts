@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isCloneableRemote } from "@shared/cloneUrl";
-import { ProjectScopedPayloadSchema } from "./payloads";
+import { PathPayloadSchema, ProjectScopedPayloadSchema } from "./payloads";
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
 // no detached HEAD we can read. Treated as "not a real branch" by every
@@ -92,6 +92,15 @@ export type WorktreeSortMode = z.infer<typeof WorktreeSortModeSchema>;
 export const SidebarViewSchema = z.enum(["projects", "inbox"]);
 export type SidebarView = z.infer<typeof SidebarViewSchema>;
 
+// `terrier` also registers the repo in terrier (host/lib/terrier.ts),
+// for a device with the integration on. The add and the clone both
+// take it.
+export const AddProjectPayloadSchema = PathPayloadSchema.extend({
+  terrier: z.boolean().optional(),
+});
+
+export type AddProjectPayload = z.infer<typeof AddProjectPayloadSchema>;
+
 // Clone a remote into `parentDir` and register the checkout. What
 // counts as a remote is isCloneableRemote's call (a plain path or
 // file:// names this machine's disk, which means nothing on the device
@@ -112,6 +121,7 @@ export const CloneProjectPayloadSchema = z.object({
       message: "The folder name must be a single path segment",
     })
     .optional(),
+  terrier: z.boolean().optional(),
 });
 
 export type CloneProjectPayload = z.infer<typeof CloneProjectPayloadSchema>;

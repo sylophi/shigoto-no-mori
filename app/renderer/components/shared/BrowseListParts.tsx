@@ -2,9 +2,8 @@
 // browse stage (addProject/AddProjectView.tsx) and the folder picker
 // (FolderPickerModal.tsx), whose input is the path, listed live, and
 // for the key hints also the filter-first picker (PathPickerModal.tsx).
-import type { ReactNode } from "react";
 import { Command } from "cmdk";
-import { ArrowDown, ArrowLeft, ArrowUp, CornerLeftUp } from "lucide-react";
+import { ArrowLeft, CornerLeftUp } from "lucide-react";
 import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 import { KbdHint } from "@/components/ui/kbd";
 
@@ -24,25 +23,17 @@ export function BrowseUpItem({ onSelect }: { onSelect: () => void }) {
   );
 }
 
-// The footer's key hints: the arrows (or the caller's own lead), ↩
-// into the highlighted folder, and ← up out of this one.
+// The footer's key hints: ↩ into the highlighted folder, and ← up out
+// of this one. The arrows go without saying.
 export function BrowseKeyHints({
-  lead,
   enterFolder,
   goUp,
 }: {
-  lead?: ReactNode;
   enterFolder: boolean;
   goUp: boolean;
 }) {
   return (
     <>
-      {lead ?? (
-        <KbdHint
-          keys={[<ArrowUp key="up" />, <ArrowDown key="down" />]}
-          label="Navigate"
-        />
-      )}
       {enterFolder && <KbdHint keys={["↩"]} label="Enter folder" />}
       {goUp && <KbdHint keys={[<ArrowLeft key="left" />]} label="Go up" />}
     </>
