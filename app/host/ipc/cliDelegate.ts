@@ -73,6 +73,7 @@ import {
 import { shellQuote } from "@host/lib/scripts/process";
 import { onAbort } from "@host/lib/util/abort";
 import { implSlot } from "@host/lib/util/implSlot";
+import { log } from "@shared/log";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
 // streamed progress documents (created/phase/carryOver/script/done);
@@ -289,11 +290,7 @@ function runStreamingCreate(
             onDoc(doc);
           } catch (error) {
             if (created === null) reject(error as Error);
-            else
-              console.warn(
-                "[cli] mid-stream document failed validation",
-                error,
-              );
+            else log.warn("[cli] mid-stream document failed validation", error);
           }
         },
         undefined,

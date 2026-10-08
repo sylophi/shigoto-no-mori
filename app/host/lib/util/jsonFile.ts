@@ -16,6 +16,7 @@ import {
 } from "@shigomori/contracts/codec";
 import { isENOENT } from "./paths";
 import { noteSelfWrite } from "./selfWrite";
+import { log } from "@shared/log";
 
 // Best-effort delete: callers fire this on lifecycle events and shouldn't
 // fail just because the file never existed. Used by both the worktree-state
@@ -71,7 +72,7 @@ export function noteNewerSchema(filePath: string, parsed: unknown): void {
   if (typeof found !== "number" || found <= SCHEMA_VERSION) return;
   if (newerSchemaNoted.has(filePath)) return;
   newerSchemaNoted.add(filePath);
-  console.warn(
+  log.warn(
     `[shigomori] ${filePath} was written by a newer build ` +
       `(schemaVersion ${found}, this build writes ${SCHEMA_VERSION}). ` +
       "Reading it anyway.",

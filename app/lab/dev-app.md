@@ -15,6 +15,7 @@ The app has two builds. Each keeps its own state.
 | userData (macOS)      | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (dev)` |
 | CLI                   | `sm` (bundled)                                  | `smd` (`dist-cli/smd`, built by `pnpm dev`)           |
 | Renderer scheme       | `shigomori://app`                               | `shigomori-dev://app`                                 |
+| Logs                  | `~/Library/Logs/Shigoto no Mori/`               | `~/Library/Logs/Shigoto no Mori (Dev)/`, a profile's with ` [<profile>]` |
 | Hub and Clerk config  | Baked in at build time                          | `.env.local` (`hub-dev.shigomori.com`)                |
 
 A device is made of two folders:
@@ -32,6 +33,10 @@ A device is made of two folders:
   `cloudflared.pid`. Sign-in state lives here, not in the data dir. It
   also holds the single-instance lock, so only one app can run per
   userData.
+
+The logs folder holds `main.log`, the main process's log, and
+`trace.log`, one JSON line for every span that ended (its name, ids,
+duration, outcome and attributes).
 
 ## Changing where the data lives
 
@@ -103,6 +108,7 @@ done
 | `SHIGOMORI_PROFILE`                | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
 | `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
 | `SHIGOMORI_DIAL_KINDS`             | Candidate kinds this device dials, e.g. `tunnel`. Dev builds only. See Rules. |
+| `SHIGOMORI_DEVTOOLS`               | `1` streams the main process's spans to the Effect devtools (VS Code) on their default port. Dev builds only. |
 | `RENDERER_PORT`                    | Renderer port, from `.env.ports`. A real env var overrides it.                |
 | `WEB_PORT`                         | Web client port (`pnpm web:dev`). Same source and override rule.              |
 | `FAKE_HOST_PORT`, `FAKE_HOST_WEB_PORT` | Fake host ports (`pnpm fake-host`, `pnpm fake-host:web`). Same source and override rule. |

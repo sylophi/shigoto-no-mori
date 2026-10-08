@@ -23,6 +23,7 @@ import { runningScriptWorktreeIds } from "@host/lib/scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import { announceProjectChanged } from "../ipc/handlers";
 import { broadcastAll } from "../ipc/register";
+import { log } from "@shared/log";
 
 // Skip if a fetch finished within this window. Short enough that rapid
 // focus events don't feel stale, long enough that the focus, sweep and
@@ -102,7 +103,7 @@ async function fetchProject(
     // stop moving.
     if (!failingProjects.has(projectId)) {
       failingProjects.add(projectId);
-      console.warn(`[fetch] ${projectPath}: ${errorMessageOf(error)}`);
+      log.warn(`[fetch] ${projectPath}: ${errorMessageOf(error)}`);
     }
   } finally {
     broadcastAll(gitContract, "fetchActive", { projectId, active: false });
@@ -138,19 +139,19 @@ async function autoPullProject(
       runningScriptWorktreeIds(),
     );
     for (const { worktree, commits } of pulled) {
-      console.log(
+      log.info(
         `[auto-pull] ${worktree.path}: fast-forwarded ${commits} commit(s)`,
       );
     }
     const wasFailing = failingAutoPulls.get(projectId);
     for (const { worktree, message } of failed) {
       if (wasFailing?.has(worktree.id)) continue;
-      console.warn(`[auto-pull] ${worktree.path}: ${message}`);
+      log.warn(`[auto-pull] ${worktree.path}: ${message}`);
     }
     failingAutoPulls.set(projectId, new Set(failed.map((f) => f.worktree.id)));
     if (pulled.length > 0) announceProjectChanged(projectId);
   } catch (error) {
-    console.warn(`[auto-pull] ${projectPath}: ${errorMessageOf(error)}`);
+    log.warn(`[auto-pull] ${projectPath}: ${errorMessageOf(error)}`);
   }
 }
 

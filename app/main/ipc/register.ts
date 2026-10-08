@@ -11,7 +11,6 @@ import { coalesce } from "@host/lib/util/coalesce";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
-import { logFailure } from "@shigomori/contracts/errors";
 import { type ContractModule, scopeOf } from "@shigomori/contracts/contract";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
@@ -58,6 +57,7 @@ import {
   provisionDeviceTunnel,
   hubConnectInputs,
 } from "./modules/account";
+import { log, logFailure } from "@shared/log";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -120,7 +120,7 @@ const electronServer: ServerTransport = {
         fn(contextFor(event.sender), raw).catch((error: unknown) => {
           // What Electron logged for a rejected handler before the
           // failure became a settled value.
-          console.error(`Error occurred in handler for '${channel}':`, error);
+          log.error(`Error occurred in handler for '${channel}':`, error);
           throw error;
         }),
       ),
