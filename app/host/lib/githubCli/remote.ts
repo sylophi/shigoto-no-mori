@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { listRemoteEntries } from "../git/remotes";
 import { ttlMapCache, ttlValueCache } from "../util/ttlCache";
 import { ghReady } from "./readiness";
+import { envSetting } from "@shared/config";
 
 // Per-repo gate for any path that would shell out to gh. Without this,
 // non-github repos eat the full TanStack retry budget on every worktree
@@ -53,9 +54,9 @@ const knownHostsCache = ttlValueCache<Set<string>>(
 // XDG_CONFIG_HOME beats ~/.config/gh. Diverging from gh here would make
 // GHE hosts silently unrecognized for users who set either variable.
 function ghHostsPath(): string {
-  const override = process.env["GH_CONFIG_DIR"];
+  const override = envSetting("GH_CONFIG_DIR");
   if (override) return join(override, "hosts.yml");
-  const xdg = process.env["XDG_CONFIG_HOME"];
+  const xdg = envSetting("XDG_CONFIG_HOME");
   if (xdg) return join(xdg, "gh", "hosts.yml");
   return join(homedir(), ".config", "gh", "hosts.yml");
 }

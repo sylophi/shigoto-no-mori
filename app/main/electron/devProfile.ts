@@ -10,13 +10,16 @@ import {
   devProfileFromEnv,
   devProfileNameSuffix,
 } from "@shared/packaging/appName.mts";
+import { envSetting } from "@shared/config";
 
 let profile: string | null | undefined;
 
 function current(): string | null {
   if (profile === undefined) {
     try {
-      profile = app.isPackaged ? null : devProfileFromEnv(process.env);
+      profile = app.isPackaged
+        ? null
+        : devProfileFromEnv({ [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV) });
     } catch {
       // Malformed: initDevProfile reports it, readers see no profile.
       profile = null;
@@ -33,8 +36,10 @@ function current(): string | null {
 export function initDevProfile(): string | null {
   if (app.isPackaged) return null;
   profile = null;
-  const name = devProfileFromEnv(process.env);
-  if (name !== null && !process.env.SHIGOMORI_DATA_DIR) {
+  const name = devProfileFromEnv({
+    [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV),
+  });
+  if (name !== null && envSetting("SHIGOMORI_DATA_DIR") === undefined) {
     throw new Error(
       `${DEV_PROFILE_ENV} needs SHIGOMORI_DATA_DIR set to the profile's own ` +
         "data dir. Use `pnpm start --profile <name>` or " +
