@@ -1,13 +1,14 @@
 // sm doctor [--fix [--yes]]: the checklist of what is wrong with this
 // install, and the repairs that can put it right.
 import * as Doctor from "@shigomori/engine/Doctor";
+import { plural } from "@shigomori/engine/doctorParse";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Effect from "effect/Effect";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { version } from "../build.ts";
-import { Exit, UsageError } from "../errors.ts";
+import { ExitCode, UsageError } from "../errors.ts";
 import { alignRows, emit, note, out, Output, styles } from "../output.ts";
 import { confirm, interactive } from "../prompt.ts";
 
@@ -89,7 +90,7 @@ const render = (doc: Doctor.DoctorDocument, fix: boolean) =>
     }
     const { ok, warn, fail } = doc.summary;
     const parts = [`${ok} ok`];
-    if (warn > 0) parts.push(yellow(`${warn} warning${warn === 1 ? "" : "s"}`));
+    if (warn > 0) parts.push(yellow(`${warn} warning${plural(warn)}`));
     if (fail > 0) parts.push(red(`${fail} failed`));
     yield* out(parts.join(", "));
     const repairable = doc.checks.filter((check) => check.repairable).length;
@@ -140,6 +141,6 @@ export const doctorCommand = Command.make(
       }
       yield* json ? emit(doc) : render(doc, fix);
       // Every failure is on the checklist already.
-      if (!doc.ok) return yield* new Exit({ code: 1 });
+      if (!doc.ok) return yield* new ExitCode({ code: 1 });
     }),
 ).pipe(Command.withDescription("Check this install, and repair it with --fix"));

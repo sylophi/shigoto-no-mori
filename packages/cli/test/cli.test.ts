@@ -370,22 +370,8 @@ describe("doctor", () => {
     );
   });
 
-  it("checks the install, and refuses a command line it can't use", async () => {
-    const repo = box.repo("repo");
-    box.write("registry.json", {
-      projects: [
-        { id: "P1", name: "repo", path: repo },
-        { id: "P2", name: "ghost", path: `${box.home}/ghost` },
-      ],
-    });
-    box.write("projects/P1/project.json", { defaultBranch: "main" });
-    await sameDoctor("doctor");
-    await sameDoctor("--json", "doctor");
-    await sameDoctor("doctor", "--yes");
-    await sameDoctor("--json", "doctor", "extra");
-  });
-
-  it("repairs what it can, asking before a deletion", async () => {
+  // A project that is there and one whose repo is gone.
+  beforeEach(() => {
     const repo = box.repo("repo");
     box.write("registry.json", {
       projects: [
@@ -395,6 +381,16 @@ describe("doctor", () => {
     });
     box.write("projects/P1/project.json", { defaultBranch: "main" });
     box.write("projects/P2/project.json", { defaultBranch: "main" });
+  });
+
+  it("checks the install, and refuses a command line it can't use", async () => {
+    await sameDoctor("doctor");
+    await sameDoctor("--json", "doctor");
+    await sameDoctor("doctor", "--yes");
+    await sameDoctor("--json", "doctor", "extra");
+  });
+
+  it("repairs what it can, asking before a deletion", async () => {
     await sameDoctor("doctor", "--fix");
     await sameDoctor("--json", "doctor", "--fix", "--yes");
     await sameDoctor("doctor");

@@ -18,7 +18,7 @@ export class UsageError extends Schema.TaggedError<UsageError>()("UsageError", {
 }
 
 // A command that has said all it has to and ends with `code`.
-export class Exit extends Schema.TaggedError<Exit>()("Exit", {
+export class ExitCode extends Schema.TaggedError<ExitCode>()("ExitCode", {
   code: Schema.Int,
 }) {}
 
@@ -39,7 +39,7 @@ export const report = (error: unknown) =>
     // only the second is a failure.
     const problems = error instanceof CliError.ShowHelp ? error.errors : [];
     if (error instanceof CliError.ShowHelp && problems.length === 0) return 0;
-    if (error instanceof Exit) return error.code;
+    if (error instanceof ExitCode) return error.code;
     const { json, stderrColor, binaryName } = yield* Effect.service(Output);
     const document =
       problems.length > 0
