@@ -124,6 +124,7 @@ import {
   worktreesHandlers,
 } from "@host/ipc/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
+import type { ClientTransport } from "@shared/ipc/transport";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
 import { createPortForwardEngine } from "../core/portForward/engine";
@@ -168,7 +169,7 @@ import {
 // Opening a second session directly would supersede-kill the one every
 // remote-forest query is riding, since the host keeps one authed
 // socket per device.
-const peerTransportFor = (deviceId: string) => ({
+const peerTransportFor = (deviceId: string): ClientTransport => ({
   invoke: (channel: string, input: unknown) =>
     Promise.resolve(
       hubHandlers.invokePeer({ deviceId, channel, input }, undefined),
