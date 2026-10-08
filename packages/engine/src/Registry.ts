@@ -54,12 +54,10 @@ export class Registry extends Context.Service<
     // use stats. The icon isn't looked up yet, and the hue is always
     // null (V3.md, decision 12).
     readonly rows: Effect.Effect<ReadonlyArray<ProjectRow>>;
-    // Adds a project under a new id, or under `id` when the repo already
-    // had one (terrier's, which it keeps).
+    // Adds a project under a new id.
     readonly register: (input: {
       readonly name: string;
       readonly path: string;
-      readonly id?: string | undefined;
     }) => Effect.Effect<RegisteredProject, ProjectAlreadyAdded>;
     // Drops the entry and the project's settings and worktree data.
     readonly unregister: (
@@ -168,10 +166,9 @@ const make = Effect.gen(function* () {
   const register = Effect.fn("Registry.register")(function* (input: {
     readonly name: string;
     readonly path: string;
-    readonly id?: string | undefined;
   }) {
     const project = {
-      id: input.id ?? (yield* randomId).toUpperCase(),
+      id: (yield* randomId).toUpperCase(),
       name: input.name,
       path: input.path,
     };
@@ -249,11 +246,12 @@ const make = Effect.gen(function* () {
 
   const rows = Effect.gen(function* () {
     const listed = orderProjects(yield* projects, yield* order);
+    const uses = yield* usage.statsByScope("project", "");
     return yield* Effect.forEach(
       listed,
       (project) =>
         Effect.gen(function* () {
-          const stats = (yield* usage.stats("project", project.id)).get("");
+          const stats = uses.get(project.id);
           const pathExists = yield* fs.stat(project.path).pipe(
             Effect.map((info) => info.type === "Directory"),
             Effect.orElseSucceed(() => false),

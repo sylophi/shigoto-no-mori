@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
+import * as Config from "../src/Config.ts";
 import * as Registry from "../src/Registry.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
@@ -19,27 +20,33 @@ const project = (id: string, path = `/r/${id}`) => ({ id, name: id, path });
 
 it("registers in order under an uppercase id, refusing a path twice", async () => {
   const added = (await run((r) =>
-    Effect.gen(function* () {
-      const first = yield* r.register({ name: "a", path: "/r/a" });
-      yield* r.register({ name: "b", path: "/r/b", id: "KEPT" });
-      return first;
-    }),
-  )) as Registry.RegisteredProject;
-  assert.match(added.id, /^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$/);
-  assert.deepEqual(await run((r) => r.projects), [
-    added,
-    { id: "KEPT", name: "b", path: "/r/b" },
-  ]);
+    Effect.all([
+      r.register({ name: "a", path: "/r/a" }),
+      r.register({ name: "b", path: "/r/b" }),
+    ]),
+  )) as Registry.RegisteredProject[];
+  for (const { id } of added) {
+    assert.match(id, /^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$/);
+  }
+  assert.deepEqual(await run((r) => r.projects), added);
   assert.deepEqual(await run((r) => r.register({ name: "a", path: "/r/a" })), {
     ok: false,
     error: "Project already added: /r/a",
   });
 });
 
-it("forgets a project's settings and worktree data with it", async () => {
+it("forgets a project's settings with it", async () => {
   box.write("registry.json", { projects: [project("A")] });
   box.write("projects/A/project.json", { defaultBranch: "main" });
   assert.deepEqual(await run((r) => r.unregister("A")), project("A"));
+  assert.equal(
+    await box.engine(
+      Effect.flatMap(Effect.service(Config.Config), (config) =>
+        config.read({ kind: "project", projectId: "A", path: "/r/A" }),
+      ),
+    ),
+    null,
+  );
   assert.deepEqual(await run((r) => r.unregister("A")), {
     ok: false,
     error: "Unknown project: A",

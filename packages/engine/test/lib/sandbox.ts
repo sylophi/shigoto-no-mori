@@ -56,14 +56,7 @@ Object.assign(process.env, {
   GIT_CONFIG_SYSTEM: "/dev/null",
 });
 
-const scrubbedEnv = (): NodeJS.ProcessEnv => ({
-  ...Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
-  ),
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-  LC_ALL: "C",
-});
+const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
 
 // The Go sm as cli/ is now, built once per state of its sources (the
 // non-test Go files, the module files, the embedded data) and hashed
@@ -102,7 +95,7 @@ function buildGoSm(): string {
   const partial = `${binary}.${process.pid}`;
   execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
     cwd: cliDir,
-    env: scrubbedEnv(),
+    env: childEnv(),
     stdio: ["ignore", "ignore", "inherit"],
   });
   renameSync(partial, binary);
@@ -168,7 +161,7 @@ export function sandbox(): Sandbox {
   };
 
   const gitEnv = {
-    ...scrubbedEnv(),
+    ...childEnv(),
     GIT_AUTHOR_NAME: "t",
     GIT_AUTHOR_EMAIL: "t@t",
     GIT_COMMITTER_NAME: "t",

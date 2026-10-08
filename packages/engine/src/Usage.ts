@@ -34,6 +34,12 @@ export class Usage extends Context.Service<
       log: UseLog,
       scope: string,
     ) => Effect.Effect<ReadonlyMap<string, UseStat>>;
+    // One name's stats in every scope, by scope: each project's own
+    // uses, say.
+    readonly statsByScope: (
+      log: UseLog,
+      name: string,
+    ) => Effect.Effect<ReadonlyMap<string, UseStat>>;
   }
 >()("sm/engine/Usage") {}
 
@@ -75,7 +81,27 @@ const make = Effect.gen(function* () {
     );
   }, Effect.orDie);
 
-  return Usage.of({ record, stats });
+  const statsByScope = Effect.fn("Usage.statsByScope")(function* (
+    log: UseLog,
+    name: string,
+  ) {
+    const now = yield* Clock.currentTimeMillis;
+    const rows = yield* sql<{
+      scope: string;
+      lastUsed: number;
+      recentCount: number;
+    }>`SELECT scope, max(at) AS lastUsed,
+          count(CASE WHEN at >= ${now - USE_WINDOW_MS} THEN 1 END) AS recentCount
+        FROM usage WHERE log = ${log} AND name = ${name} GROUP BY scope`;
+    return new Map(
+      rows.map(({ scope, lastUsed, recentCount }) => [
+        scope,
+        { lastUsed, recentCount },
+      ]),
+    );
+  }, Effect.orDie);
+
+  return Usage.of({ record, stats, statsByScope });
 });
 
 export const layer = Layer.effect(Usage, make);

@@ -285,7 +285,7 @@ export const branchListOf = (refs: BranchRefs): BranchList => ({
 // Upstream first, then origin, then the rest alphabetically: the
 // precedence repo identity's remote rule applies too, so the default
 // ref and the identity key off the same canonical remote.
-function orderRemotesByPrecedence(remotes: readonly string[]): string[] {
+export function orderRemotesByPrecedence(remotes: readonly string[]): string[] {
   const preferred = ["upstream", "origin"].filter((name) =>
     remotes.includes(name),
   );

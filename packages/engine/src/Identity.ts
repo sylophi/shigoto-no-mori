@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Git from "./Git.ts";
+import { orderRemotesByPrecedence } from "./gitParse.ts";
 
 // What makes the same project on two devices the same repo. Derived,
 // never stored.
@@ -24,14 +25,6 @@ export class Identity extends Context.Service<
   }
 >()("sm/engine/Identity") {}
 
-// upstream, then origin, then the rest by name.
-const byPrecedence = (names: ReadonlyArray<string>) => [
-  ...["upstream", "origin"].filter((name) => names.includes(name)),
-  ...names
-    .filter((name) => name !== "upstream" && name !== "origin")
-    .toSorted(),
-];
-
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
 
@@ -49,7 +42,7 @@ const make = Effect.gen(function* () {
           const normalized = normalizeRemoteUrl(url);
           if (normalized !== null) usable.set(name, normalized);
         }
-        const [first] = byPrecedence([...usable.keys()]);
+        const [first] = orderRemotesByPrecedence([...usable.keys()]);
         return first === undefined ? null : (usable.get(first) ?? null);
       }),
       Effect.orElseSucceed(() => null),
@@ -85,13 +78,21 @@ const make = Effect.gen(function* () {
     });
 
   const of = Effect.fn("Identity.of")(function* (projectPath: string) {
-    const remote = yield* primaryRemote(projectPath);
-    const identity = yield* rootCommitKey(projectPath).pipe(
-      Effect.map(
-        Option.getOrElse(() => (remote === null ? null : `remote:${remote}`)),
-      ),
-      Effect.orElseSucceed(() => null),
+    const [remote, root] = yield* Effect.all(
+      [
+        primaryRemote(projectPath),
+        rootCommitKey(projectPath).pipe(Effect.option),
+      ],
+      { concurrency: 2 },
     );
+    // A failed git run is no identity. A repo the root can't decide
+    // falls back to its remote.
+    const identity = Option.match(root, {
+      onNone: () => null,
+      onSome: Option.getOrElse(() =>
+        remote === null ? null : `remote:${remote}`,
+      ),
+    });
     return { identity, remote };
   });
 

@@ -245,6 +245,17 @@ const lookupKey = (scope: ConfigScope, name: string) => {
       );
 };
 
+const changedDoc = (doc: ConfigDoc, change: (doc: ConfigDoc) => void) => {
+  const next = structuredClone(doc);
+  change(next);
+  return next;
+};
+
+const missingBranch = (doc: ConfigDoc) => {
+  const [branch] = docGet(doc, "defaultBranch");
+  return typeof branch !== "string" || branch.trim() === "";
+};
+
 const listedValue = (key: ConfigKey, doc: ConfigDoc): Setting => {
   const [value, set] = docGet(doc, key.name);
   return { key: key.name, value: set ? value : (key.default ?? null), set };
@@ -337,38 +348,40 @@ const make = Effect.gen(function* () {
     );
 
   // A read-modify-write of the scope's document in one transaction. A
-  // project's document must keep its default branch.
-  // A read-modify-write of the scope's document in one transaction. A
   // project's document keeps its default branch, from git when the
   // write would leave it out, and one on the in-project layout hides
   // `.shigomori/` from the primary's git status.
   const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) =>
     Effect.gen(function* () {
-      const written = yield* sql.withTransaction(
+      // Asked of git before the write, which holds the store's lock.
+      const fallbackBranch =
+        scope.kind === "project" && missingBranch(yield* changed(scope, change))
+          ? yield* git.resolveDefaultBranch(scope.path)
+          : Option.none<string>();
+      const inProject = yield* sql.withTransaction(
         Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
-          const next = structuredClone(before);
-          change(next);
-          if (scope.kind === "project") {
-            const [branch] = docGet(next, "defaultBranch");
-            if (typeof branch !== "string" || branch.trim() === "") {
-              const found = yield* git.resolveDefaultBranch(scope.path);
-              if (Option.isNone(found)) {
-                return yield* new MissingDefaultBranch({
-                  projectId: scope.projectId,
-                });
-              }
-              docSet(next, "defaultBranch", found.value);
+          const next = changedDoc(before, change);
+          if (scope.kind === "project" && missingBranch(next)) {
+            if (Option.isNone(fallbackBranch)) {
+              return yield* new MissingDefaultBranch({
+                projectId: scope.projectId,
+              });
             }
+            docSet(next, "defaultBranch", fallbackBranch.value);
           }
           yield* store(scope, before, next);
-          return next;
+          return docGet(next, "worktreeLayout")[0] === "in-project";
         }),
       );
-      if (scope.kind === "project" && written.worktreeLayout === "in-project") {
+      if (scope.kind === "project" && inProject) {
         yield* git.appendExcludes(scope.path, [".shigomori"]);
       }
     }).pipe(Effect.catchTags({ SqlError: Effect.die }));
+
+  // The document a change leaves, as of now.
+  const changed = (scope: ConfigScope, change: (doc: ConfigDoc) => void) =>
+    Effect.map(load(scope), (doc) => changedDoc(doc ?? {}, change));
 
   // A `~/` path, joined to the home directory and cleaned as Go's
   // filepath.Join cleans it.
