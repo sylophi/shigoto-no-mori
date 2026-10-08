@@ -35,9 +35,9 @@ import * as Layout from "../../src/Layout.ts";
 import * as Paths from "../../src/Paths.ts";
 import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
-import * as Store from "../../src/Store.ts";
 import * as Terrier from "../../src/Terrier.ts";
 import * as Usage from "../../src/Usage.ts";
+import { nodeStore } from "./nodeStore.ts";
 import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 
@@ -122,6 +122,15 @@ function buildGo(
   return binary;
 }
 
+// What a binary did: its exit code, its last JSON document, its output.
+type Run = {
+  readonly code: number;
+  readonly doc: unknown;
+  readonly docs: ReadonlyArray<unknown>;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
 // The stable code Go's error document carries beside the message, for
 // the failures the app maps without reading prose. Go codes an unknown
 // project only where the app names it by id, so that one is the
@@ -185,10 +194,20 @@ export type Sandbox = {
   readonly write: (file: string, value: unknown) => void;
   // A copy of the data dir for each side, taken when first asked for.
   readonly go: (...args: string[]) => Promise<unknown>;
+  // Any binary, against its own copy of the data dir named `side`.
+  readonly runAt: (
+    binary: string,
+    side: string,
+    cwd: string,
+    args: ReadonlyArray<string>,
+  ) => Promise<Run>;
   // The same, run from `cwd`.
   readonly goAt: (cwd: string, ...args: string[]) => Promise<unknown>;
   // Every document the verb prints, in order.
-  readonly goDocs: (cwd: string, ...args: string[]) => Promise<unknown[]>;
+  readonly goDocs: (
+    cwd: string,
+    ...args: string[]
+  ) => Promise<ReadonlyArray<unknown>>;
   // A verb that changes what both sides share (the repos, the
   // worktrees): Go's side first, then the engine's against everything
   // restored to how it was. Answers both.
@@ -212,7 +231,9 @@ export function sandbox(): Sandbox {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-parity-")));
   const seed = join(root, "seed");
   mkdirSync(seed);
-  const side = (name: string) => {
+  const sides = new Set<string>();
+  const sideDir = (name: string) => {
+    sides.add(name);
     const dir = join(root, name);
     if (!existsSync(dir)) cpSync(seed, dir, { recursive: true });
     return dir;
@@ -220,7 +241,7 @@ export function sandbox(): Sandbox {
 
   let runtime: ManagedRuntime.ManagedRuntime<Engine, unknown> | undefined;
   const engineRuntime = () => {
-    const dataDir = side("engine");
+    const dataDir = sideDir("engine");
     runtime ??= ManagedRuntime.make(
       Worktrees.layer.pipe(
         Layer.provideMerge(
@@ -246,7 +267,7 @@ export function sandbox(): Sandbox {
           ),
         ),
         Layer.provideMerge(Git.layer),
-        Layer.provideMerge(Store.layer),
+        Layer.provideMerge(nodeStore),
         Layer.provideMerge(Paths.layer("dev")),
         Layer.provide(NodeServices.layer),
         Layer.provide(
@@ -274,35 +295,63 @@ export function sandbox(): Sandbox {
     GIT_COMMITTER_EMAIL: "t@t",
   });
 
-  // Every document the verb prints, as `sm --json` prints them.
-  const goDocs = (cwd: string, ...args: string[]) =>
-    new Promise<unknown[]>((resolve, reject) => {
+  // A binary run from `cwd` against its own copy of the data dir
+  // (`side`): its exit code, its last JSON document and its stderr.
+  const runAt = (
+    binary: string,
+    side: string,
+    cwd: string,
+    args: ReadonlyArray<string>,
+  ) =>
+    new Promise<Run>((resolve, reject) => {
       execFile(
-        goSm(),
-        ["--json", ...args],
+        binary,
+        [...args],
         {
           cwd,
-          env: { ...gitEnv(), HOME: root, SHIGOMORI_DATA_DIR: side("go") },
+          env: { ...gitEnv(), HOME: root, SHIGOMORI_DATA_DIR: sideDir(side) },
         },
-        (error, stdout) => {
+        (error, stdout, stderr) => {
+          // A spawn failure or a signal has no exit code to compare.
+          if (error !== null && typeof error.code !== "number") {
+            reject(error);
+            return;
+          }
           const docs = stdout
             .split("\n")
             .filter((line) => line.startsWith("{") || line.startsWith("["))
             .map((line) => JSON.parse(line) as unknown);
-          if (docs.length === 0) reject(error ?? new Error("no document"));
-          else resolve(docs);
+          resolve({
+            code: typeof error?.code === "number" ? error.code : 0,
+            doc: docs.at(-1),
+            docs,
+            stdout,
+            stderr,
+          });
         },
       );
     });
 
-  // The verb's last document.
+  // The verb's last document, as `sm --json` prints it.
   const goAt = (cwd: string, ...args: string[]) =>
-    goDocs(cwd, ...args).then((docs) => docs.at(-1));
+    runAt(goSm(), "go", cwd, ["--json", ...args]).then(({ doc, stderr }) => {
+      if (doc === undefined) throw new Error(`no document: ${stderr}`);
+      return doc;
+    });
 
-  // What both sides share in the home directory: everything but the
+  // Every document the verb prints, in order.
+  const goDocs = (cwd: string, ...args: string[]) =>
+    runAt(goSm(), "go", cwd, ["--json", ...args]).then(({ docs, stderr }) => {
+      if (docs.length === 0) throw new Error(`no document: ${stderr}`);
+      return docs;
+    });
+
+  // What the sides share in the home directory: everything but their
   // data dirs, the seed and the fake commands.
-  const OWN = new Set(["go", "engine", "seed", "bin", ".before"]);
-  const shared = () => readdirSync(root).filter((name) => !OWN.has(name));
+  const shared = () =>
+    readdirSync(root).filter(
+      (name) => !sides.has(name) && !["seed", "bin", ".before"].includes(name),
+    );
   const before = join(root, ".before");
 
   return {
@@ -324,6 +373,7 @@ export function sandbox(): Sandbox {
       copyAll(before, root, readdirSync(before));
       return [go, await engineSide()];
     },
+    runAt,
     git: (cwd, ...args) =>
       execFileSync("git", args, { cwd, env: gitEnv(), encoding: "utf8" }),
     goAt,

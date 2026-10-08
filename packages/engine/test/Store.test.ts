@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -19,6 +20,7 @@ import { afterEach, beforeEach, it } from "vitest";
 import { StoreImportError } from "../src/migrations/importJson.ts";
 import * as Paths from "../src/Paths.ts";
 import * as Store from "../src/Store.ts";
+import { nodeStore } from "./lib/nodeStore.ts";
 
 const execFileP = promisify(execFile);
 
@@ -37,7 +39,7 @@ const write = (file: string, value: unknown) => {
 };
 
 const storeLayer = (dir: string) =>
-  Store.layer.pipe(
+  nodeStore.pipe(
     Layer.provide(Paths.layer("prod")),
     Layer.provide(NodeServices.layer),
     Layer.provide(
@@ -94,13 +96,20 @@ it("opens one store from several processes at once, importing once", async () =>
   );
 });
 
-it("fails with the path when the data dir doesn't exist", async () => {
-  const missing = join(dataDir, "missing");
+it("makes the data dir on a device that has none", async () => {
+  const fresh = join(dataDir, "fresh", "data");
+  await query(() => Effect.void, fresh);
+  assert.ok(existsSync(join(fresh, "store.db")));
+});
+
+it("fails with the path when the data dir can't be made", async () => {
+  const blocked = join(dataDir, "file", "data");
+  writeFileSync(join(dataDir, "file"), "");
   await assert.rejects(
-    query(() => Effect.void, missing),
+    query(() => Effect.void, blocked),
     (error) => {
       assert.ok(error instanceof Store.StoreOpenError);
-      assert.equal(error.path, join(missing, "store.db"));
+      assert.equal(error.path, join(blocked, "store.db"));
       return true;
     },
   );

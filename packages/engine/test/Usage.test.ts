@@ -9,8 +9,8 @@ import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Paths from "../src/Paths.ts";
-import * as Store from "../src/Store.ts";
 import * as Usage from "../src/Usage.ts";
+import { nodeStore } from "./lib/nodeStore.ts";
 
 let dataDir: string;
 beforeEach(() => {
@@ -22,7 +22,7 @@ const run = <A>(program: Effect.Effect<A, never, Usage.Usage>) =>
   program.pipe(
     Effect.provide(
       Usage.layer.pipe(
-        Layer.provide(Store.layer),
+        Layer.provide(nodeStore),
         Layer.provide(Paths.layer("prod")),
         Layer.provide(NodeServices.layer),
         Layer.provide(

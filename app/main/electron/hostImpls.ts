@@ -24,7 +24,6 @@ import {
   uninstallCliEverything,
 } from "./cliInstall";
 import { cliFailureMessage, requireCliBinary, runCli } from "./cliRunner";
-import { installFileSyncSpawner } from "./fileSyncRunner";
 import {
   hookPathEnv,
   installShellIntegration,
@@ -77,5 +76,4 @@ export function installHostImpls(): void {
   onSharedSettingsChange((doc) =>
     broadcastAll(sharedSettingsContract, "changed", doc),
   );
-  installFileSyncSpawner();
 }

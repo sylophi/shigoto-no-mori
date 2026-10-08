@@ -40,19 +40,16 @@ export function requireCliBinary(): string {
 const children = new Set<ChildProcess>();
 
 // Children doing invisible housekeeping (the updater's staging
-// download, the file-sync daemon and its serve children): still reaped
-// at quit like every other child, but excluded from the busy aggregate
-// (a background download must not trigger the "tasks are running"
-// quit prompt) and from the echo suppression above.
+// download) and the reads: still reaped at quit like every other
+// child, but excluded from the busy aggregate (a background download
+// must not trigger the "tasks are running" quit prompt) and from the
+// echo suppression above.
 let backgroundChildren = 0;
 
 // The CLI children in flight. stateWatcher.ts and the git watcher read
 // this to suppress the fs echo of a CLI child's own writes into the
 // data dir and the git directories. Background children are NOT
-// counted: the file-sync daemon lives as long as the app, and counting
-// it would mute both watchers for the whole run (its own writes land
-// under its data directory, which neither watcher reads). Neither are
-// reads (opts.readOnly): the app reads rows, projects and config
+// counted. Neither are reads (opts.readOnly): the app reads rows, projects and config
 // through the CLI on every refresh, and counting those would mute the
 // watchers for most of the session while writing nothing they react
 // to (the listing's shelf bookkeeping is the one exception, and the
@@ -66,20 +63,6 @@ export function cliChildCount(): number {
 // every getBusyOperations consumer counts them, so quitting
 // mid-operation still prompts.
 registerInflightContributor(cliChildCount);
-
-// Registers a stream child (spawnStreamChild in host/fileSync/spawn.ts)
-// for the quit-time reap below, as a background child: a mirror
-// daemon or serve process runs for as long as the app does and must
-// never count as a lifecycle operation in flight.
-export function registerBackgroundChild(child: ChildProcess): void {
-  children.add(child);
-  backgroundChildren++;
-  const release = () => {
-    if (children.delete(child)) backgroundChildren--;
-  };
-  child.on("error", release);
-  child.on("close", release);
-}
 
 // Quit-time reap, mirroring killAllScripts for package scripts: a CLI
 // child mid-create/delete must not outlive the app unnoticed. Each CLI
