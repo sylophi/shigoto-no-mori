@@ -492,6 +492,12 @@ function hostHandlersFor(
             ? { ref: w.primaryRef ?? "origin/main", hash: "a1b2c3d" }
             : null,
         upstream: w?.hasUpstream ? `origin/${w.branch}` : null,
+        unpushed: (w?.recentCommits ?? [])
+          .slice(0, w?.ahead ?? 0)
+          .map((c) => c.hash),
+        incoming: [],
+        incomingMore: false,
+        upstreamFork: null,
       };
     },
     "worktrees:stashes": ({ worktreeId }) =>

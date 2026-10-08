@@ -173,17 +173,46 @@ export async function listCommits(
   }
 }
 
-// The commits a worktree's Git timeline draws: the branch's own, newest
-// first, back to where it left `base` (the project's primary ref), and
-// which commit that is. Without a base (the primary checkout, a branch
-// that is the primary branch, a detached HEAD) it is the newest commits
-// of HEAD. `more` says the list was cut at `count`. The upstream's name
-// labels the timeline's remote marker.
+// What the Git page's History tab draws: the branch's own commits,
+// newest first (children before parents, so a merge never lists its
+// side above what it was merged into), back to where it left `base`
+// (the project's primary ref), and which commit that is. Without a base
+// (the primary checkout, a branch that is the primary branch, a
+// detached HEAD) it is the newest commits of HEAD. `more` says the list
+// was cut at `count`.
+//
+// Against the upstream: which of HEAD's commits it lacks (`unpushed`,
+// by the same short hash the list uses), which of its own HEAD lacks
+// (`incoming`, cut at `count` too), and where the two last agreed
+// (`upstreamFork`). Both sides holding commits of their own is a split
+// the tab shows a side of at a time. Without an upstream all are empty.
 export async function readBranchHistory(
   worktreePath: string,
   opts: { base: string | undefined; count: number },
 ): Promise<BranchHistory> {
-  const [upstream, mergeBase] = await Promise.all([
+  const short = async (rev: string) =>
+    (
+      await runLenient(worktreePath, [
+        "log",
+        "-1",
+        "--format=%h",
+        "--end-of-options",
+        rev,
+        "--",
+      ])
+    ).trim();
+  const log = (range: string) =>
+    runLenient(worktreePath, [
+      "log",
+      `-${opts.count + 1}`,
+      "--topo-order",
+      `--pretty=format:${LOG_FORMAT}`,
+      "--shortstat",
+      "--end-of-options",
+      range,
+      "--",
+    ]);
+  const [upstreamOut, mergeBase] = await Promise.all([
     runLenient(worktreePath, [
       "rev-parse",
       "--abbrev-ref",
@@ -194,31 +223,41 @@ export async function readBranchHistory(
       ? runLenient(worktreePath, ["merge-base", "HEAD", opts.base])
       : Promise.resolve(""),
   ]);
+  const upstream = upstreamOut.trim() || null;
   const baseHash = mergeBase.trim();
-  const fork =
+  const [base, own, againstUpstream] = await Promise.all([
     opts.base && baseHash
-      ? {
-          ref: opts.base,
-          hash: (
-            await run(worktreePath, ["rev-parse", "--short", baseHash])
-          ).trim(),
-        }
-      : null;
-  const stdout = await runLenient(worktreePath, [
-    "log",
-    `-${opts.count + 1}`,
-    `--pretty=format:${LOG_FORMAT}`,
-    "--shortstat",
-    "--end-of-options",
-    fork ? `${baseHash}..HEAD` : "HEAD",
-    "--",
+      ? short(baseHash).then((hash) => ({ ref: opts.base ?? "", hash }))
+      : Promise.resolve(null),
+    log(baseHash ? `${baseHash}..HEAD` : "HEAD").then(parseLog),
+    upstream
+      ? Promise.all([
+          runLenient(worktreePath, [
+            "log",
+            "--format=%h",
+            "--max-count=1000",
+            "--end-of-options",
+            "@{u}..HEAD",
+            "--",
+          ]),
+          log("HEAD..@{u}").then(parseLog),
+          runLenient(worktreePath, ["merge-base", "HEAD", "@{u}"]).then((out) =>
+            out.trim() ? short(out.trim()) : "",
+          ),
+        ])
+      : Promise.resolve(null),
   ]);
-  const commits = parseLog(stdout);
+  const [unpushedOut = "", incoming = [], upstreamFork = ""] =
+    againstUpstream ?? [];
   return {
-    commits: commits.slice(0, opts.count),
-    more: commits.length > opts.count,
-    base: fork,
-    upstream: upstream.trim() || null,
+    commits: own.slice(0, opts.count),
+    more: own.length > opts.count,
+    base,
+    upstream,
+    unpushed: unpushedOut.split("\n").filter(isCommitHash),
+    incoming: incoming.slice(0, opts.count),
+    incomingMore: incoming.length > opts.count,
+    upstreamFork: upstreamFork || null,
   };
 }
 

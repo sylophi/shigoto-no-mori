@@ -27,10 +27,14 @@ export function CommitDiff() {
   const timeline = history?.commits ?? worktree.recentCommits;
   const index = timeline.findIndex((c) => c.hash === hash);
   // A commit off the timeline (the history before the branch, a search
-  // result) carries what its row did. Deep-linked, the hash alone is
-  // enough for the diff.
+  // result) carries what its row did, and one only the upstream has (its
+  // side of a split) comes from the history read too. Deep-linked, the
+  // hash alone is enough for the diff.
+  const incoming = history?.incoming.find((c) => c.hash === hash);
   const commit =
-    timeline[index] ?? worktree.recentCommits.find((c) => c.hash === hash);
+    timeline[index] ??
+    incoming ??
+    worktree.recentCommits.find((c) => c.hash === hash);
 
   return (
     <DiffView
@@ -55,6 +59,7 @@ export function CommitDiff() {
             worktree={worktree}
             commit={commit}
             index={index}
+            onlyOn={incoming ? (history?.upstream ?? undefined) : undefined}
             rewrite={
               index >= 0
                 ? commitRewriteAt(worktree, timeline, index)

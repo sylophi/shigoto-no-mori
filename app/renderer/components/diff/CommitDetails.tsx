@@ -31,18 +31,22 @@ import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActio
 
 // Under a commit's title on its page: the rest of its message, and what
 // can be done with it, as buttons rather than a menu to find. The moves
-// that rewrite it only show while no remote has it.
+// that rewrite it only show while no remote has it. A commit only the
+// remote has (its side of a split) says so, and only copies.
 export function CommitDetails({
   worktree,
   commit,
   index,
   rewrite,
+  onlyOn,
 }: {
   worktree: Worktree;
   commit: CommitSummary;
   // Where it sits on HEAD's line, newest first.
   index: number;
   rewrite: CommitRewrite;
+  // The upstream, for a commit only it has.
+  onlyOn?: string;
 }) {
   const nav = useWorktreeNav();
   const scope = useHostScope();
@@ -70,6 +74,12 @@ export function CommitDetails({
       {message?.description && (
         <p className="max-w-prose text-sm whitespace-pre-wrap text-muted-foreground select-text">
           {message.description}
+        </p>
+      )}
+      {onlyOn && (
+        <p className="text-xs text-muted-foreground">
+          Only on <span className="font-mono">{onlyOn}</span>, not on this
+          branch yet.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -121,15 +131,17 @@ export function CommitDetails({
               : `Undo the ${pluralize(undo.count, "commit")} after it`}
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="xs"
-          disabled={busy}
-          onClick={() => actions.revert(commit)}
-        >
-          <RotateCcw />
-          Revert
-        </Button>
+        {!onlyOn && (
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={busy}
+            onClick={() => actions.revert(commit)}
+          >
+            <RotateCcw />
+            Revert
+          </Button>
+        )}
         {actions.pickTargets.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger

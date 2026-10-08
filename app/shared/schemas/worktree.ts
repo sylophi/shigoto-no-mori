@@ -449,9 +449,10 @@ export const ListCommitsPayloadSchema = WorktreeScopedPayloadSchema.extend({
   from: CommitHashSchema.optional(),
 });
 
-// What a worktree's Git timeline draws (host/lib/git/worktrees.ts,
+// What the Git page's History tab draws (host/lib/git/worktrees.ts,
 // readBranchHistory): the branch's own commits, newest first, the
-// commit it left its base at, and the upstream it pushes to.
+// commit it left its base at, and how it stands against the upstream it
+// pushes to.
 export const BranchHistorySchema = z.object({
   commits: z.array(CommitSummarySchema),
   // More commits than were asked for: the list was cut.
@@ -462,6 +463,14 @@ export const BranchHistorySchema = z.object({
   base: z.object({ ref: z.string(), hash: CommitHashSchema }).nullable(),
   // The upstream's short name ("origin/feature"), null without one.
   upstream: z.string().nullable(),
+  // HEAD's commits the upstream lacks, by short hash (as `commits` has
+  // them), the upstream's own commits HEAD lacks, newest first (cut like
+  // `commits`, `incomingMore` saying so), and where the two last agreed.
+  // Empty and null without an upstream.
+  unpushed: z.array(CommitHashSchema),
+  incoming: z.array(CommitSummarySchema),
+  incomingMore: z.boolean(),
+  upstreamFork: CommitHashSchema.nullable(),
 });
 export type BranchHistory = z.infer<typeof BranchHistorySchema>;
 

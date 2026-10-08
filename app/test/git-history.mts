@@ -350,6 +350,44 @@ async function main() {
     },
   );
 
+  await check(
+    "against a split upstream, the history says what each side alone holds and where they last agreed",
+    async (track) => {
+      const repo = seedRepo(track);
+      const remote = tempDir("sm-history-remote-", track);
+      git(remote, "init", "-q", "--bare");
+      git(repo, "remote", "add", "origin", remote);
+      git(repo, "checkout", "-q", "-b", "feature");
+      const fourth = commit(repo, "d.txt", "d\n", "Fourth");
+      git(repo, "push", "-q", "-u", "origin", "feature");
+      // A teammate pushes on top of Fourth from a clone of their own.
+      const theirs = join(tempDir("sm-history-theirs-", track), "theirs");
+      git(repo, "clone", "-q", "-b", "feature", remote, theirs);
+      commit(theirs, "t.txt", "t\n", "Theirs");
+      git(theirs, "push", "-q", "origin", "feature");
+      const fifth = commit(repo, "e.txt", "e\n", "Fifth");
+      git(repo, "fetch", "-q", "origin");
+
+      const history = await readBranchHistory(repo, {
+        base: "main",
+        count: 50,
+      });
+      assert.deepEqual(history.unpushed, [fifth]);
+      assert.deepEqual(
+        history.incoming.map((c) => c.subject),
+        ["Theirs"],
+      );
+      assert.equal(history.incomingMore, false);
+      assert.equal(history.upstreamFork, fourth);
+
+      // In step with the upstream: nothing either way.
+      git(repo, "reset", "-q", "--hard", "origin/feature");
+      const even = await readBranchHistory(repo, { base: "main", count: 50 });
+      assert.deepEqual(even.unpushed, []);
+      assert.deepEqual(even.incoming, []);
+    },
+  );
+
   // main and a side branch that both edited a.txt.
   function seedConflict(track: Track): string {
     const repo = seedRepo(track);

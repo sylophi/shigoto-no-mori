@@ -1,5 +1,6 @@
 import { createContext, use } from "react";
 import {
+  CloudOff,
   Combine,
   Copy,
   Ellipsis,
@@ -53,6 +54,8 @@ export function CommitRow({
   rewrite,
   actions,
   faded = false,
+  menu = true,
+  unpushed = false,
 }: {
   worktree: Worktree;
   commit: CommitSummary;
@@ -64,6 +67,12 @@ export function CommitRow({
   actions: CommitActions;
   // The history before the branch.
   faded?: boolean;
+  // Off for a commit not on this branch (the remote's side of a split):
+  // it can be read, and nothing here acts on it.
+  menu?: boolean;
+  // Marked as on no remote yet, where the list can't say so with the
+  // remote's line (the unpushed commits aren't one run).
+  unpushed?: boolean;
 }) {
   const nav = useWorktreeNav();
   const selected = useRowSelection(`commit:${commit.hash}`);
@@ -75,6 +84,53 @@ export function CommitRow({
       actions={actions}
     />
   );
+  const row = (
+    <button
+      type="button"
+      aria-current={selected || undefined}
+      onClick={() =>
+        nav.toCommit(worktree.projectId, worktree.id, commit.hash, true)
+      }
+      className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      <span
+        className={cn(
+          "w-full truncate text-sm group-hover/commit:pr-6 group-has-data-popup-open/commit:pr-6",
+          faded && "text-muted-foreground",
+        )}
+      >
+        {commit.subject}
+      </span>
+      <span className="flex w-full items-center gap-2 text-xs text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-1 truncate">
+          {unpushed && (
+            <CloudOff aria-label="Not pushed yet" className="size-3 shrink-0" />
+          )}
+          <RelativeDate date={commit.date} />
+        </span>
+        {(commit.additions > 0 || commit.deletions > 0) && (
+          <span className="ml-auto">
+            <DiffStats
+              additions={commit.additions}
+              deletions={commit.deletions}
+            />
+          </span>
+        )}
+      </span>
+    </button>
+  );
+  if (!menu) {
+    return (
+      <div
+        className={cn(
+          "rounded-md transition-colors",
+          selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+        )}
+      >
+        {row}
+      </div>
+    );
+  }
   return (
     <ContextMenu>
       <ContextMenuTrigger
@@ -89,36 +145,7 @@ export function CommitRow({
           />
         }
       >
-        <button
-          type="button"
-          aria-current={selected || undefined}
-          onClick={() =>
-            nav.toCommit(worktree.projectId, worktree.id, commit.hash, true)
-          }
-          className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
-        >
-          <span
-            className={cn(
-              "w-full truncate text-sm group-hover/commit:pr-6 group-has-data-popup-open/commit:pr-6",
-              faded && "text-muted-foreground",
-            )}
-          >
-            {commit.subject}
-          </span>
-          <span className="flex w-full items-center gap-2 text-xs text-muted-foreground">
-            <span className="min-w-0 truncate">
-              <RelativeDate date={commit.date} />
-            </span>
-            {(commit.additions > 0 || commit.deletions > 0) && (
-              <span className="ml-auto">
-                <DiffStats
-                  additions={commit.additions}
-                  deletions={commit.deletions}
-                />
-              </span>
-            )}
-          </span>
-        </button>
+        {row}
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`Actions for ${commit.hash}`}

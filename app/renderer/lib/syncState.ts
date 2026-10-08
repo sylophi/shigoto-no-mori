@@ -188,6 +188,7 @@ function syncStateView(state: RemoteSyncState): SyncStateView {
         },
         held: {
           label: `${both(ahead, behind)} to pull and push`,
+          compactLabel: both(ahead, behind),
           tip: `${pluralize(ahead, "commit")} to push and ${pluralize(behind, "commit")} to pull. Commit or discard your changes to pull and push.`,
         },
         owed: `${pluralize(ahead, "commit")} to push, ${pluralize(behind, "commit")} to pull.`,
@@ -208,6 +209,7 @@ function syncStateView(state: RemoteSyncState): SyncStateView {
         move: null,
         held: {
           label: `Diverged ${both(ahead, behind)}`,
+          compactLabel: both(ahead, behind),
           tip: `History has split: ${ahead} local, ${behind} remote. Commit or discard your changes to pick which side wins.`,
         },
         owed: "History has split from the remote. Pick which side wins below.",
