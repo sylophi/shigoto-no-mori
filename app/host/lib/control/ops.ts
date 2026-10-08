@@ -52,7 +52,12 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
-import { mirrorHandlers } from "@host/ipc/modules/mirror";
+import {
+  mirrorList,
+  startMirrorFrom,
+  startMirrorTo,
+  stopMirror as stopMirrorSession,
+} from "@host/mirror/sessions";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import {
@@ -303,7 +308,7 @@ export const send: Ops["send"] = async (
   if (mirror) {
     // Part of a mirror already: its original (a session run here)
     // or its copy (a session a peer runs).
-    const own = await mirrorOf(ctx, input);
+    const own = mirrorOf(input);
     const running =
       own === undefined
         ? await peerMirrorOf(input, registryOrEmpty())
@@ -336,7 +341,7 @@ export const send: Ops["send"] = async (
       : {}),
   };
   if (mirror) {
-    const { session, ...sent } = await mirrorHandlers.startTo(payload, ctx);
+    const { session, ...sent } = await startMirrorTo(payload, ctx);
     return { ...sent, device, copySide: "remote", session };
   }
   const sent = await syncHandlers.sendWorktree(payload, ctx);
@@ -416,7 +421,7 @@ export const bring: Ops["bring"] = async (
   if (input.mirror === true) {
     // Mirrored already: the peer's worktree is the copy of a
     // session run here, or the original of one the peer runs.
-    const { sessions } = await mirrorHandlers.list(undefined, ctx);
+    const { sessions } = mirrorList();
     const own = sessions.find(
       (candidate) =>
         candidate.deviceId === found.device.deviceId &&
@@ -435,7 +440,7 @@ export const bring: Ops["bring"] = async (
     if (running !== undefined) {
       return alreadyMirrored(ctx, running, undefined);
     }
-    const { session, ...pulled } = await mirrorHandlers.startFrom(
+    const { session, ...pulled } = await startMirrorFrom(
       {
         sourceDeviceId: found.device.deviceId,
         sourceProjectId: found.projectId,
@@ -480,10 +485,10 @@ export const bring: Ops["bring"] = async (
 // The mirrors this device is part of: the ones it runs, and the
 // ones peers run against its worktrees, each seen from this side.
 // One registry read serves the peer scan and the names.
-export const mirrors: Ops["mirrors"] = async (_input, ctx) => {
+export const mirrors: Ops["mirrors"] = async () => {
   const registry = registryOrEmpty();
   const [{ daemon, sessions }, afar, names] = await Promise.all([
-    mirrorHandlers.list(undefined, ctx),
+    mirrorList(),
     registry.then(peerMirrors),
     registry.then(namesOf),
   ]);
@@ -514,10 +519,10 @@ export const mirrorStop: Ops["mirrorStop"] = async (
     mirror: mirror(namesOf(await registry)),
     ...(copyStayed === undefined ? {} : { copyStayed }),
   });
-  const own = await mirrorOf(ctx, target);
+  const own = mirrorOf(target);
   if (own !== undefined) {
     const copyStayed = await stopMirror(() =>
-      mirrorHandlers.stop({ session: own.session, force }, ctx),
+      stopMirrorSession(own.session, force === true),
     );
     return answer((names) => mirrorView(own, names), copyStayed);
   }

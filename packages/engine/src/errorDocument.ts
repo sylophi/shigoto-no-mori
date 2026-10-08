@@ -51,7 +51,12 @@ export const codeOf = (error: unknown): string | undefined => {
   ) {
     return "fork-pull-request";
   }
-  return undefined;
+  // An error that names its own code for the document, which no Node or
+  // platform error does.
+  return Predicate.hasProperty(error, "documentCode") &&
+    typeof error.documentCode === "string"
+    ? error.documentCode
+    : undefined;
 };
 
 // Whether the command line was what was wrong, which the terminal exits

@@ -63,15 +63,13 @@ import { globalConfigHandlers } from "@host/ipc/modules/globalConfig";
 import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
+import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import {
-  currentMirrorList,
-  endMirrorIfCopyGone,
-  mirrorHandlers,
   setMirrorGitAppliedListener,
   setMirrorGitChangedListener,
-  setMirrorImpl,
   setMirrorServingListener,
-} from "@host/ipc/modules/mirror";
+} from "@host/mirror/serving";
+import { currentMirrorList, endMirrorIfCopyGone } from "@host/mirror/sessions";
 import {
   createNoAccountSweep,
   endLegacyMirrors,
@@ -81,6 +79,7 @@ import {
   whileRecreating,
   isOrphanedTransfer,
   mirrorSessions,
+  setMirrorImpl,
 } from "@host/mirror/registry";
 import {
   MirrorInviteSchema,

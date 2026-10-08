@@ -1,8 +1,7 @@
 // What the control ops read off the account and the peers (ops.ts):
 // the roster, where each peer stands for a repo, their worktrees and
 // the mirrors they run against this device, and where a send would
-// clone. An ask that only informs an answer gets a probe's patience
-// (within).
+// clone.
 import { homedir } from "node:os";
 import {
   type ControlDevice,
@@ -18,7 +17,6 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shared/projectPaths";
-import type { HandlerContext } from "@shared/ipc/transport";
 import { isHubRefusal } from "@shared/account/service";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { PROBE_TIMEOUT_MS } from "@shared/ipc/socket/frames";
@@ -29,8 +27,9 @@ import {
   thisDeviceId,
 } from "@host/ipc/peerSync";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
-import { mirrorHandlers } from "@host/ipc/modules/mirror";
+import { mirrorList } from "@host/mirror/sessions";
 import { implSlot } from "@host/lib/util/implSlot";
+import { within } from "@host/lib/util/within";
 import type { Client } from "@shigomori/contracts/types";
 import {
   listed,
@@ -61,23 +60,10 @@ const { set: setControlImpl, get: requireImpl } = implSlot<ControlImpl>(
 );
 export { setControlImpl };
 
-// An ask that only informs an answer gets a probe's patience: a peer
-// whose session is up but whose app is wedged would otherwise hold a
-// listing until the heartbeat gives up on it, and the registry is a
-// hub round trip with no clock of its own.
-async function within<T>(asked: Promise<T>, late: () => T): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      asked,
-      new Promise<T>((resolve) => {
-        timer = setTimeout(() => resolve(late()), PROBE_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// An ask that only informs an answer gets a probe's patience, the
+// registry included: it is a hub round trip with no clock of its own.
+const probe = <T>(asked: Promise<T>, late: () => T) =>
+  within(asked, PROBE_TIMEOUT_MS, late);
 
 export async function roster(): Promise<{ here: Named; peers: DeviceInfo[] }> {
   const { listDevices } = requireImpl();
@@ -146,7 +132,7 @@ async function standingOf(
   const offline = { ...base, block: "offline" as const };
   if (acceptsCommands === undefined) return offline;
   try {
-    const projects = await within(
+    const projects = await probe(
       peerClient(projectsContract, device.deviceId).list(),
       () => null,
     );
@@ -215,7 +201,7 @@ export async function candidates(
 
 export async function registryOrEmpty(): Promise<DeviceInfo[]> {
   try {
-    return await within(requireImpl().listDevices(), () => []);
+    return await probe(requireImpl().listDevices(), () => []);
   } catch {
     return [];
   }
@@ -243,7 +229,7 @@ export async function peerMirrors(
     peers.map(async (device): Promise<PeerMirror[]> => {
       const api = peerClient(mirrorContract, device.deviceId);
       try {
-        const list = await within(api.list(), () => null);
+        const list = await probe(api.list(), () => null);
         if (list === null) return [];
         return list.sessions
           .filter((session) => session.deviceId === hereId)
@@ -269,11 +255,11 @@ export async function peerMirrorOf(
 
 // The mirror one of this device's worktrees is the original of, among
 // the sessions this device runs (a copy here is a peer's session).
-export async function mirrorOf(
-  ctx: HandlerContext,
-  target: { projectId: string; worktreeId: string },
-): Promise<MirrorSession | undefined> {
-  const { sessions } = await mirrorHandlers.list(undefined, ctx);
+export function mirrorOf(target: {
+  projectId: string;
+  worktreeId: string;
+}): MirrorSession | undefined {
+  const { sessions } = mirrorList();
   return sessions.find(
     (candidate) =>
       candidate.localProjectId === target.projectId &&
@@ -328,7 +314,7 @@ export async function worktreesOn(standings: ControlDevice[]): Promise<{
       const { projectId } = device;
       if (projectId === undefined) return [];
       try {
-        const answer = await within(
+        const answer = await probe(
           peerWorktreesApiFor(device.deviceId).list({ projectId }),
           () => null,
         );

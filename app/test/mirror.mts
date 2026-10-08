@@ -71,10 +71,8 @@ import { afterAll, beforeAll, it } from "vitest";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
 import {
-  MIRROR_LABEL_COPY_SIDE,
-  MIRROR_LABEL_MIRROR_BRANCH,
+  MIRROR_LABEL_MODE,
   MIRROR_LABEL_REPLACES,
-  MIRROR_LABEL_TRANSFER,
   isMirrorStopUnconfirmed,
   mirrorContract,
   type MirrorGitStatus,
@@ -88,17 +86,16 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as FileSync from "@host/fileSync/FileSync";
 import { forwardHandlers } from "@host/ipc/modules/forward";
-import {
-  listMirrorServing,
-  type MirrorCreateInput,
-  mirrorHandlers,
-  setMirrorImpl,
-} from "@host/ipc/modules/mirror";
+import { mirrorHandlers } from "@host/ipc/modules/mirror";
+import { type MirrorCreateInput, setMirrorImpl } from "@host/mirror/registry";
+import { listMirrorServing } from "@host/mirror/serving";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
 import { setPeerReach } from "@host/ipc/peerSync";
 import {
+  beginTransfer,
+  carriedLabels,
   COPY_GONE_DETAIL,
   createNoAccountSweep,
   endLegacyMirrors,
@@ -110,6 +107,9 @@ import {
   mirrorSessions,
   type MirrorSessionRaw,
   holdRootChecks,
+  isOrphanedTransfer,
+  isTransferSession,
+  onMirrorBranch,
   ORIGINAL_GONE_DETAIL,
   settleMirrorBookkeeping,
   stopMirrorsForWorktree,
@@ -881,8 +881,7 @@ it("git: a primary mirrored to a mirror/main worktree carries commits both ways 
     labels: {
       localWorktreeId: primaryIdB,
       localProjectId: projectIdB,
-      [MIRROR_LABEL_COPY_SIDE]: "remote",
-      [MIRROR_LABEL_MIRROR_BRANCH]: "1",
+      [MIRROR_LABEL_MODE]: "mirror-branch",
     },
     ignores: [],
   });
@@ -1094,7 +1093,7 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
           deviceId: "A",
           labels: {
             [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-a",
-            [MIRROR_LABEL_COPY_SIDE]: "remote",
+            [MIRROR_LABEL_MODE]: "mirror",
           },
         }),
       ],
@@ -1103,9 +1102,11 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         fakeSession({
           session: "s-with-c",
           deviceId: "C",
+          // A session from before the mode label, which reads as a
+          // mirror through its old one.
           labels: {
             [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-c",
-            [MIRROR_LABEL_COPY_SIDE]: "remote",
+            copySide: "remote",
           },
         }),
       ],
@@ -1114,7 +1115,7 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         fakeSession({
           session: "t-with-a",
           deviceId: "A",
-          labels: { [MIRROR_LABEL_TRANSFER]: "token" },
+          labels: { [MIRROR_LABEL_MODE]: "transfer-token" },
         }),
       ],
     ]);
@@ -1163,14 +1164,14 @@ it("a mirror started from the copy's device by an older build is hidden, ended o
       status: "watching",
       labels: {
         [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-original",
-        [MIRROR_LABEL_COPY_SIDE]: "remote",
+        [MIRROR_LABEL_MODE]: "mirror",
       },
     });
     const transfer = fakeSession({
       session: "t-legacy",
       deviceId: "A",
       status: "watching",
-      labels: { [MIRROR_LABEL_TRANSFER]: "token" },
+      labels: { [MIRROR_LABEL_MODE]: "transfer-token" },
     });
     const live = new Map(
       [legacy, current, transfer].map((raw): [string, MirrorSessionRaw] => [
@@ -1240,7 +1241,7 @@ it("a peer's removed worktree ends only the mirrors into that copy, nothing dele
         worktreeId,
         labels: {
           [MIRROR_LABEL_LOCAL_WORKTREE]: original,
-          [MIRROR_LABEL_COPY_SIDE]: "remote",
+          [MIRROR_LABEL_MODE]: "mirror",
         },
       });
     const live = new Map(
@@ -1306,7 +1307,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
         localRoot: liveRoot,
         labels: {
           [MIRROR_LABEL_LOCAL_WORKTREE]: `orig-${id}`,
-          [MIRROR_LABEL_COPY_SIDE]: "remote",
+          [MIRROR_LABEL_MODE]: "mirror",
         },
         ...settled,
         ...fields,
@@ -1419,7 +1420,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
       sessionOf("new", {
         labels: {
           [MIRROR_LABEL_LOCAL_WORKTREE]: "orig-old",
-          [MIRROR_LABEL_COPY_SIDE]: "remote",
+          [MIRROR_LABEL_MODE]: "mirror",
           [MIRROR_LABEL_REPLACES]: "old",
         },
       }),
@@ -1460,6 +1461,33 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     );
     live.clear();
   }
+});
+
+const oldSession = (labels: Record<string, string>) =>
+  ({ session: "old", labels }) as MirrorSessionRaw;
+
+it("a session from before the mode label reads by its old labels, and a re-open writes them as a mode", () => {
+  const token = beginTransfer();
+  const transfer = oldSession({ transfer: token });
+  assert.ok(isTransferSession(transfer));
+  assert.ok(!isOrphanedTransfer(transfer));
+  assert.ok(isOrphanedTransfer(oldSession({ transfer: "1" })));
+  const primary = oldSession({ copySide: "remote", mirrorBranch: "1" });
+  assert.ok(onMirrorBranch(primary) && !isTransferSession(primary));
+  assert.ok(!onMirrorBranch(oldSession({ copySide: "remote" })));
+  // Neither a legacy mirror nor a mode this build does not know is a
+  // mirror.
+  assert.equal(
+    mirrorSessions({
+      sessions: () => [oldSession({}), oldSession({ mode: "next" })],
+    }).length,
+    0,
+  );
+  assert.deepEqual(carriedLabels(primary, { ignoreMode: "everything" }), {
+    [MIRROR_LABEL_MODE]: "mirror-branch",
+    replaces: "old",
+    ignoreMode: "everything",
+  });
 });
 
 it("the no-account sweep asks about each session once, so a misread credential ends nothing already running", async () => {

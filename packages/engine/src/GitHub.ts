@@ -468,14 +468,19 @@ const make = Effect.gen(function* () {
     return done.value;
   });
 
-  // gh's rows for a lookup, or why there are none to read.
+  // gh's rows for a lookup: the failure that kept them, or none when
+  // gh answered with something this build can't read.
   const listed = (repo: string, args: ReadonlyArray<string>) =>
     run(repo, args, { timeout: PROBE_TIMEOUT }).pipe(
       Effect.map((stdout) =>
-        Result.fromOption(rowsOf(stdout), () => "unexpected gh output"),
+        Result.fromOption(
+          rowsOf(stdout),
+          (): GitHubCliError | undefined => undefined,
+        ),
       ),
       Effect.catchTags({
-        GitHubCliError: (error) => Effect.succeed(Result.fail(reasonOf(error))),
+        GitHubCliError: (error) =>
+          Effect.succeed(Result.fail<GitHubCliError | undefined>(error)),
       }),
     );
 
@@ -528,8 +533,15 @@ const make = Effect.gen(function* () {
         "statusCheckRollup",
       ]),
     );
-    if (Result.isFailure(rows))
-      return { found: null, unavailable: rows.failure };
+    if (Result.isFailure(rows)) {
+      return {
+        found: null,
+        unavailable:
+          rows.failure === undefined
+            ? "unexpected gh output"
+            : reasonOf(rows.failure),
+      };
+    }
     const own = yield* ownOf(
       repo,
       branch,
@@ -548,13 +560,21 @@ const make = Effect.gen(function* () {
   const owningPullRequest = Effect.fn("GitHub.owningPullRequest")(function* (
     repo: string,
     branch: string,
-  ) {
+  ): Effect.fn.Return<Lookup<OwningPullRequest>> {
     const rows = yield* listed(
       repo,
       lookupArgs(branch, "open", ["number,url,title,body,isCrossRepository"]),
     );
-    if (Result.isFailure(rows))
-      return { found: null, unavailable: rows.failure };
+    // Not worth a word, as Go's describe takes them: no gh, a repository
+    // off GitHub, and output that can't be read.
+    if (Result.isFailure(rows)) {
+      const failure = rows.failure;
+      return failure === undefined ||
+        failure.reason === "missing" ||
+        failure.reason === "no-github-remote"
+        ? { found: null }
+        : { found: null, unavailable: reasonOf(failure) };
+    }
     const own = rows.success.find((row) => row["isCrossRepository"] !== true);
     return {
       found:
