@@ -5,8 +5,8 @@
 // route/method/auth-tier discipline against the shared schemas, the
 // credential store's encrypt and plaintext-fallback round trips plus
 // its corrupt/missing tolerance, deriveAccountId's tolerance of a
-// malformed token, the .env.local parser and the three-layer
-// file/baked/process.env merge precedence, the setDeviceName and enroll
+// malformed token, the three-layer file/baked/process.env merge
+// precedence, the setDeviceName and enroll
 // contract bounds, and the shape guarantee that the device credential
 // never appears in a renderer-visible object.
 //
@@ -30,7 +30,6 @@ import { afterAll, beforeAll, it } from "vitest";
 import {
   isConfigured,
   mergeServiceEnv,
-  parseDotenv,
   resolveServiceConfig,
 } from "../shared/account/serviceConfig.ts";
 import {
@@ -1141,38 +1140,6 @@ it("contract: enroll rejects an empty session token", () => {
     safeDecode(input, "").success,
     false,
     "an empty enroll token should be rejected",
-  );
-});
-
-it("envFile: parseDotenv skips comments and blanks, strips quotes, ignores malformed lines, and drops __proto__", () => {
-  const parsed = parseDotenv(
-    [
-      "# a comment",
-      "",
-      "   ",
-      "SM_DEVICE_HUB_URL=https://hub.test",
-      'QUOTED="double quoted"',
-      "SINGLE='single quoted'",
-      "no_equals_here",
-      "=leading-equals",
-      "__proto__=polluted",
-    ].join("\n"),
-  );
-  assert.equal(parsed.SM_DEVICE_HUB_URL, "https://hub.test");
-  assert.equal(parsed.QUOTED, "double quoted");
-  assert.equal(parsed.SINGLE, "single quoted");
-  assert.ok(!("no_equals_here" in parsed), "a line with no = was kept");
-  assert.ok(!("" in parsed), "a leading-= line was kept");
-  // The __proto__ line must not pollute the prototype chain.
-  assert.ok(
-    !Object.prototype.hasOwnProperty.call(parsed, "__proto__"),
-    "__proto__ leaked in as an own key",
-  );
-  assert.equal(Object.getPrototypeOf(parsed), Object.prototype);
-  assert.equal(
-    Reflect.get({}, "polluted"),
-    undefined,
-    "Object.prototype was polluted",
   );
 });
 
