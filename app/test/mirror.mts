@@ -191,21 +191,17 @@ const fakeSession = (
 const serveChildren = new Set<number>();
 
 // B's daemon, the way main/ipc/handlers.ts reads it.
-const onDaemon = <A, E>(
-  f: (daemon: MirrorDaemon.MirrorDaemon["Service"]) => Effect.Effect<A, E>,
-) =>
-  Effect.gen(function* () {
-    return yield* f(yield* MirrorDaemon.MirrorDaemon);
-  });
 const daemon = {
-  status: () => runtime.runSync(onDaemon((d) => d.status)),
-  sessions: () => runtime.runSync(onDaemon((d) => d.sessions)),
+  status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
+  sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
   create: (input: MirrorCreateInput) =>
-    runtime.runPromise(onDaemon((d) => d.create(input))),
+    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.create(input))),
   terminate: (id: string) =>
-    runtime.runPromise(onDaemon((d) => d.terminate(id))),
-  pause: (id: string) => runtime.runPromise(onDaemon((d) => d.pause(id))),
-  resume: (id: string) => runtime.runPromise(onDaemon((d) => d.resume(id))),
+    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.terminate(id))),
+  pause: (id: string) =>
+    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.pause(id))),
+  resume: (id: string) =>
+    runtime.runPromise(MirrorDaemon.onDaemon((d) => d.resume(id))),
 };
 
 // mirror:stop called the way a caller on this device would, its
@@ -1529,7 +1525,7 @@ it("the no-account sweep asks about each session once, so a misread credential e
 
 it("daemon stop is clean and the gateway holds no streams", async () => {
   // (7) Closing the daemon's layer ends it cleanly.
-  const status = runtime.runSync(onDaemon((d) => d.status));
+  const status = runtime.runSync(MirrorDaemon.onDaemon((d) => d.status));
   assert.equal(status, "running");
   await runtime.dispose();
   await delay(50);

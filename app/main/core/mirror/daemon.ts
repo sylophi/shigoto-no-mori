@@ -13,9 +13,9 @@
 // Electron-free on purpose: the binary comes through the FileSync
 // service, so the mirror check drives this exact supervisor against a
 // freshly built engine.
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -288,10 +288,6 @@ const make = (options: Options) =>
     // One life of the child, from its spawn to its exit. Answers how
     // long it ran, which the restart ladder reads.
     const runOnce = Effect.gen(function* () {
-      const startedAt = yield* Clock.currentTimeMillis;
-      const uptime = Clock.currentTimeMillis.pipe(
-        Effect.map((now) => now - startedAt),
-      );
       // The gateway binds on its own retry schedule. Until it has, the
       // daemon has nothing to dial and waits, which is not the engine
       // being missing.
@@ -303,7 +299,7 @@ const make = (options: Options) =>
           "[mirror] daemon waiting for the gateway: mirror gateway is not listening",
         );
         yield* setStatus("starting");
-        return yield* uptime;
+        return;
       }
       const input = yield* Queue.unbounded<Uint8Array>();
       const spawned = yield* fileSync
@@ -332,17 +328,17 @@ const make = (options: Options) =>
         );
       if (Option.isNone(spawned)) {
         yield* setStatus("unavailable");
-        return yield* uptime;
+        return;
       }
       const child = spawned.value;
       yield* Ref.set(stdin, Option.some(input));
       yield* setStatus("starting");
       yield* child.stderr.pipe(
         Stream.decodeText(),
-        Stream.runForEach((text) =>
-          text.trim() === ""
-            ? Effect.void
-            : Effect.logWarning(`[mirror] daemon: ${text.trim()}`),
+        Stream.splitLines,
+        Stream.filter((line) => line.trim() !== ""),
+        Stream.runForEach((line) =>
+          Effect.logWarning(`[mirror] daemon: ${line.trim()}`),
         ),
         Effect.ignore,
         Effect.forkScoped,
@@ -365,8 +361,11 @@ const make = (options: Options) =>
       );
       yield* setStatus("starting");
       yield* changed;
-      return yield* uptime;
-    }).pipe(Effect.scoped);
+    }).pipe(
+      Effect.scoped,
+      Effect.timed,
+      Effect.map(([duration]) => Duration.toMillis(duration)),
+    );
 
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
@@ -449,7 +448,9 @@ const {
 } = PromiseAdapter.make<MirrorDaemon>("The mirror daemon");
 export const adapter = adapterLayer;
 
-const onDaemon = <A, E>(
+// The daemon's own effect, for a caller holding a runtime of its own
+// (the proofs) or the adapter below.
+export const onDaemon = <A, E>(
   f: (daemon: MirrorDaemon["Service"]) => Effect.Effect<A, E>,
 ) =>
   Effect.gen(function* () {

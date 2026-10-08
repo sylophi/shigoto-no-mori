@@ -75,13 +75,6 @@ function session(id: string) {
   };
 }
 
-const onDaemon = <A, E>(
-  f: (daemon: MirrorDaemon.MirrorDaemon["Service"]) => Effect.Effect<A, E>,
-) =>
-  Effect.gen(function* () {
-    return yield* f(yield* MirrorDaemon.MirrorDaemon);
-  });
-
 // Lets the supervisor read a line, and a request write its own: a few
 // turns of the event loop.
 const settle = () =>
@@ -153,10 +146,12 @@ async function harness() {
   trackTest(() => runtime.dispose());
   await runtime.context();
   const daemon = {
-    status: () => runtime.runSync(onDaemon((d) => d.status)),
-    sessions: () => runtime.runSync(onDaemon((d) => d.sessions)),
-    pause: (id: string) => runtime.runPromise(onDaemon((d) => d.pause(id))),
-    resume: (id: string) => runtime.runPromise(onDaemon((d) => d.resume(id))),
+    status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
+    sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
+    pause: (id: string) =>
+      runtime.runPromise(MirrorDaemon.onDaemon((d) => d.pause(id))),
+    resume: (id: string) =>
+      runtime.runPromise(MirrorDaemon.onDaemon((d) => d.resume(id))),
   };
   await settle();
   const send = async (line: unknown) => {

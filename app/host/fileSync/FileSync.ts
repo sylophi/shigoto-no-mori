@@ -45,16 +45,19 @@ export interface ServeChild {
   readonly close: Effect.Effect<void>;
 }
 
+// `env` is added to the app's environment.
+export interface SpawnOptions {
+  readonly env: Record<string, string | undefined>;
+  readonly stdin: Stream.Stream<Uint8Array, PlatformError.PlatformError>;
+}
+
 export class FileSync extends Context.Service<
   FileSync,
   {
-    // A child in the caller's scope. `env` is added to the app's.
+    // A child in the caller's scope.
     readonly spawn: (
       args: readonly string[],
-      options: {
-        readonly env: Record<string, string | undefined>;
-        readonly stdin: Stream.Stream<Uint8Array, PlatformError.PlatformError>;
-      },
+      options: SpawnOptions,
     ) => Effect.Effect<
       ChildProcessSpawner.ChildProcessHandle,
       FileSyncUnavailableError | PlatformError.PlatformError,
@@ -77,10 +80,7 @@ const make = (binaryPath: () => string | null) =>
 
     const spawn = Effect.fn("FileSync.spawn")(function* (
       args: readonly string[],
-      options: {
-        readonly env: Record<string, string | undefined>;
-        readonly stdin: Stream.Stream<Uint8Array, PlatformError.PlatformError>;
-      },
+      options: SpawnOptions,
     ) {
       const binary = binaryPath();
       if (binary === null) return yield* new FileSyncUnavailableError();
@@ -132,9 +132,10 @@ export const layer = (binaryPath: () => string | null) =>
   Layer.effect(FileSync, make(binaryPath));
 
 // For the callers that are not Effect yet.
-const promiseAdapter = PromiseAdapter.make<FileSync>("The file-sync engine");
-const { run } = promiseAdapter;
-export const adapter = promiseAdapter.layer;
+const { layer: adapterLayer, run } = PromiseAdapter.make<FileSync>(
+  "The file-sync engine",
+);
+export const adapter = adapterLayer;
 
 // A `serve` child for a Promise caller, closed with `close()`.
 export const serve = (env: Record<string, string | undefined>) =>
