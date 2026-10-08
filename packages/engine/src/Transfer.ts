@@ -124,7 +124,7 @@ export class StopUnconfirmed extends Schema.TaggedError<StopUnconfirmed>()(
   override get message(): string {
     return `${this.said}\nStopping removes the copy, so make sure both sides hold the work (${this.binary} worktrees mirrors), or pass -f to stop anyway.`;
   }
-  get code(): string {
+  get documentCode(): string {
     return "stop-unconfirmed";
   }
 }
@@ -179,12 +179,13 @@ const TransferResultSchema = reading<ControlTransferResult>()(
   Schema.Struct({
     worktree: struct(
       reading<ControlTransferResult["worktree"]>()(
-        Schema.Struct({ name: text }),
+        Schema.Struct({ name: text, path: text }),
       ),
     ),
     captured: flag,
     dirtyApplied: flag,
     device: namedDevice,
+    copySide: text,
     alreadyMirrored: flag,
     cloned: Schema.optional(
       reading<NonNullable<ControlTransferResult["cloned"]>>()(
@@ -193,7 +194,7 @@ const TransferResultSchema = reading<ControlTransferResult>()(
     ),
     files: Schema.optional(
       reading<NonNullable<ControlTransferResult["files"]>>()(
-        Schema.Struct({ error: text }),
+        Schema.Struct({ crossed: flag, error: text }),
       ),
     ),
     source: Schema.optional(
@@ -272,10 +273,12 @@ type Ok<T> = Readonly<T> & { readonly ok: true };
 type WithCaveats<T> = Ok<T> & { readonly caveats: ReadonlyArray<string> };
 
 // A finished send, bring or mirror: the document `sm --json` prints (the
-// terminal exits 3 when it has caveats), and the headline.
+// terminal exits 3 when it has caveats), the headline, and the fields
+// Go's lines read, each absent one as Go's zero value.
 export type Transferred = {
   readonly document: WithCaveats<ControlTransferResult>;
   readonly headline: string;
+  readonly result: TransferResult;
 };
 
 // A project's worktrees on the other devices: the document (list's
@@ -353,7 +356,10 @@ export class Transfer extends Context.Service<
       ref: Pick<Worktrees.Target, "project"> & {
         readonly from?: string | undefined;
       },
-    ) => Effect.Effect<PeerWorktrees, ResolveError | ReadError>;
+    ) => Effect.Effect<
+      PeerWorktrees,
+      TransferRefused | ResolveError | ReadError
+    >;
   }
 >()("sm/engine/Transfer") {}
 
@@ -457,21 +463,23 @@ export const headlineOf = (
     : `${headline}, having cloned ${result.cloned.name} into ${result.cloned.path} on ${device} first`;
 };
 
-const STEP_LABELS: Readonly<Record<string, string>> = {
-  clone: "cloning the repo",
-  capture: "capturing uncommitted changes",
-  transfer: "transferring commits",
-  create: "creating the worktree",
-  apply: "applying uncommitted changes",
-  files: "copying ignored files",
-};
+const STEP_LABELS: ReadonlyMap<string, string> = new Map([
+  ["clone", "cloning the repo"],
+  ["capture", "capturing uncommitted changes"],
+  ["transfer", "transferring commits"],
+  ["create", "creating the worktree"],
+  ["apply", "applying uncommitted changes"],
+  ["files", "copying ignored files"],
+]);
 
 // A step's line: its label, and the create phase while one runs.
 const stepLine = (payload: unknown): string | undefined => {
-  const decoded = Schema.decodeUnknownOption(ProgressSchema)(payload);
+  const decoded = Schema.decodeUnknownOption(ProgressSchema)(
+    withoutNulls(payload),
+  );
   if (Option.isNone(decoded)) return undefined;
   const { step, createPhase } = decoded.value;
-  const label = STEP_LABELS[step] ?? step;
+  const label = STEP_LABELS.get(step) ?? step;
   return createPhase !== "" && createPhase !== "idle"
     ? `${label} (${createPhase})`
     : label;
@@ -481,6 +489,19 @@ const isDocument = (
   value: unknown,
 ): value is Readonly<Record<string, unknown>> =>
   Predicate.isObject(value) && !Array.isArray(value);
+
+// Go's decode reads an explicit null as absent, and a null answer as an
+// empty one.
+const withoutNulls = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(withoutNulls)
+    : isDocument(value)
+      ? Object.fromEntries(
+          Object.entries(value)
+            .filter(([, field]) => field !== null)
+            .map(([key, field]) => [key, withoutNulls(field)]),
+        )
+      : value;
 
 // The app's own document, whole, with the fields beside it. The app
 // sends what the contracts type, and a field read here was checked.
@@ -503,7 +524,9 @@ const make = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       const raw = yield* control.call(channel, input, onPush);
-      const decoded = yield* Schema.decodeUnknownEffect(schema)(raw).pipe(
+      const decoded = yield* Schema.decodeUnknownEffect(schema)(
+        raw === null ? {} : withoutNulls(raw),
+      ).pipe(
         Effect.mapError((cause) => new UnreadableAnswer({ channel, cause })),
       );
       return { raw, decoded };
@@ -513,9 +536,7 @@ const make = Effect.gen(function* () {
   // variable in `--from "$DEVICE"` would otherwise read as no direction,
   // and turn a bring into a send to whichever device qualifies.
   const checkDeviceFlags = (flags: TransferFlags) => {
-    // Template literals, which the import boundary's scan doesn't read
-    // as a module name.
-    for (const name of [`to`, `from`] as const) {
+    for (const name of ["to", "from"] as const) {
       const value = flags[name];
       if (value !== undefined && value.trim() === "") {
         return Effect.fail(refused(binary, "blank-device", name));
@@ -559,6 +580,7 @@ const make = Effect.gen(function* () {
         caveats: caveatsOf(decoded),
       },
       headline: headlineOf(decoded, direction),
+      result: decoded,
     };
   });
 
@@ -718,6 +740,7 @@ const make = Effect.gen(function* () {
       readonly from?: string | undefined;
     },
   ) {
+    yield* checkDeviceFlags({ from: ref.from });
     const project = yield* worktrees.resolveProject(here, ref.project);
     const from = ref.from ?? "";
     const { decoded } = yield* invoke(

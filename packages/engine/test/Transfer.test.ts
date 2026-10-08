@@ -114,10 +114,11 @@ describe("transfer options", () => {
 });
 
 const result = (fields: Partial<TransferResult> = {}): TransferResult => ({
-  worktree: { name: "feat" },
+  worktree: { name: "feat", path: "/Users/rin/feat" },
   captured: false,
   dirtyApplied: false,
   device: { deviceId: "d1", name: "Studio Mac" },
+  copySide: "remote",
   alreadyMirrored: false,
   ...fields,
 });
@@ -158,7 +159,7 @@ describe("headlines and caveats", () => {
         result({
           captured: true,
           dirtyApplied: true,
-          files: { error: "" },
+          files: { crossed: true, error: "" },
           source: { fate: "teardown", done: true, error: "" },
         }),
       ),
@@ -168,7 +169,7 @@ describe("headlines and caveats", () => {
       caveatsOf(
         result({
           captured: true,
-          files: { error: "peer went away" },
+          files: { crossed: false, error: "peer went away" },
           source: {
             fate: "teardown",
             done: false,
@@ -328,6 +329,66 @@ describe("send, bring and mirror", () => {
     assert.deepEqual(sent, {
       document: { ...transferAnswer, ok: true, caveats: [caveat] },
       headline: 'sent fox to "Studio Mac"',
+      result: {
+        worktree: { name: "fox", path: "/there/fox" },
+        captured: true,
+        dirtyApplied: false,
+        device: { deviceId: "d1", name: "Studio Mac" },
+        copySide: "remote",
+        alreadyMirrored: false,
+        files: { crossed: true, error: "" },
+        source: { fate: "shelve", done: true, error: "" },
+      },
+    });
+  });
+
+  it("reads an explicit null as absent, as Go does, and a wrong type as unreadable", async () => {
+    seed();
+    let answered: unknown = null;
+    await serve((request) => [success(request, answered)]);
+    const sent = () =>
+      outcome((transfer, here) =>
+        transfer.send(here, { ref: "fox" }, {}, noProgress),
+      );
+    const zero = {
+      worktree: { name: "", path: "" },
+      captured: false,
+      dirtyApplied: false,
+      device: { deviceId: "", name: "" },
+      copySide: "",
+      alreadyMirrored: false,
+    };
+    assert.deepEqual(await sent(), {
+      document: { ok: true, caveats: [] },
+      headline: 'sent  to ""',
+      result: zero,
+    });
+    answered = {
+      worktree: { name: "fox", path: null },
+      copySide: null,
+      cloned: null,
+      files: null,
+      source: { fate: "keep", done: false, error: null },
+    };
+    assert.deepEqual(await sent(), {
+      document: {
+        ...(answered as object),
+        ok: true,
+        caveats: ["the source was not : "],
+      },
+      headline: 'sent fox to ""',
+      result: {
+        ...zero,
+        worktree: { name: "fox", path: "" },
+        source: { fate: "keep", done: false, error: "" },
+      },
+    });
+    answered = { captured: "yes" };
+    assert.deepEqual(await sent(), {
+      ok: false,
+      error:
+        "The app answered control:send with something this CLI can't read. The two may be different versions.",
+      usage: false,
     });
   });
 
@@ -643,6 +704,17 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
       },
     );
     assert.deepEqual(
+      await outcome((transfer, here) =>
+        transfer.peerWorktrees(here, { project: "repo", from: " " }),
+      ),
+      {
+        ok: false,
+        error:
+          "--from needs a device: its name, the start of its name, or its id (smd devices).",
+        usage: true,
+      },
+    );
+    assert.deepEqual(
       served.received().map(({ request }) => request),
       [
         {
@@ -742,6 +814,13 @@ describe("the control wire", () => {
         "The app answered control:mirrors with something this CLI can't read. The two may be different versions.",
       usage: false,
     });
+  });
+
+  it("says the connection was lost, in the write's words, when the request can't be sent", () => {
+    assert.equal(
+      new Control.RequestUnsent({ cause: new Error("write EPIPE") }).message,
+      "Lost the connection to the app: write EPIPE",
+    );
   });
 
   it("hands each push to the caller before the result", async () => {

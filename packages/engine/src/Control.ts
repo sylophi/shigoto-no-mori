@@ -10,7 +10,6 @@
 // by `push` lines (progress) and one `res`. Step 4 replaces it with the
 // contracts' RPC client.
 import { createConnection, type Socket } from "node:net";
-import { kill } from "node:process";
 import {
   CONTROL_ERROR_CODES,
   isControlErrorCode,
@@ -21,11 +20,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import type { Flavor } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
+import { pidAlive } from "./processes.ts";
 
 // Nothing answers at the address control.json names, or what answers
 // isn't the app.
@@ -41,7 +40,7 @@ export class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
     return `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${hint}`;
   }
 
-  get code(): string {
+  get documentCode(): string {
     return "app-not-running";
   }
 }
@@ -54,8 +53,20 @@ export class AppBusy extends Schema.TaggedError<AppBusy>()("AppBusy", {
     return `The app is serving as many ${this.binary} commands as it takes at once. Try again in a moment.`;
   }
 
-  get code(): string {
+  get documentCode(): string {
     return "app-busy";
+  }
+}
+
+// The request couldn't be written, so nothing began.
+export class RequestUnsent extends Schema.TaggedError<RequestUnsent>()(
+  "RequestUnsent",
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    const said =
+      this.cause instanceof Error ? this.cause.message : String(this.cause);
+    return `Lost the connection to the app: ${said}`;
   }
 }
 
@@ -81,11 +92,16 @@ export class ControlRefused extends Schema.TaggedError<ControlRefused>()(
   override get message(): string {
     return this.said;
   }
+
+  get documentCode(): string | undefined {
+    return this.code;
+  }
 }
 
 export type ControlError =
   | AppNotRunning
   | AppBusy
+  | RequestUnsent
   | ConnectionLost
   | ControlRefused;
 
@@ -131,17 +147,6 @@ const FrameSchema = Schema.fromJsonString(
   }),
 );
 type Frame = typeof FrameSchema.Type;
-
-// Whether a process is there. One of another user's answers EPERM.
-const pidAlive = (pid: number) =>
-  Effect.sync(() => {
-    try {
-      kill(pid, 0);
-      return true;
-    } catch (error) {
-      return Predicate.hasProperty(error, "code") && error.code === "EPERM";
-    }
-  });
 
 // The lines a socket delivers, each whole, then undefined once it closed.
 const splitLines = (socket: Socket, lines: Queue.Queue<string | undefined>) => {
@@ -200,13 +205,16 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
           : Schema.decodeOption(FrameSchema)(line),
       ),
     );
-    const send = <E>(frame: Readonly<Record<string, unknown>>, error: E) =>
+    const send = <E>(
+      frame: Readonly<Record<string, unknown>>,
+      error: (cause: Error) => E,
+    ) =>
       Effect.callback<void, E>((resume) => {
         socket.write(`${JSON.stringify(frame)}\n`, (failed) =>
           resume(
             failed === undefined || failed === null
               ? Effect.void
-              : Effect.fail(error),
+              : Effect.fail(error(failed)),
           ),
         );
       });
@@ -218,7 +226,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     readonly token: string;
   }) {
     const connection = yield* connect(file.port);
-    yield* connection.send({ t: "hello", token: file.token }, notRunning);
+    yield* connection.send({ t: "hello", token: file.token }, () => notRunning);
     const welcome = yield* connection.next;
     // The app is there and said so. Any other refusal is a control.json
     // this listener didn't write.
@@ -265,7 +273,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
           input === undefined
             ? { t: "req", id: 1, channel }
             : { t: "req", id: 1, channel, input },
-          new ConnectionLost(),
+          (cause) => new RequestUnsent({ cause }),
         );
         for (;;) {
           const frame = yield* connection.next;

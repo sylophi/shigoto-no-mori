@@ -2473,6 +2473,11 @@ describe("transfer", () => {
         service.peerWorktrees(here, { project: "repo", from: "Studio" }),
     );
     await sameAsked(
+      ["worktrees", "list", "--remote", "-p", "repo", "--from", " "],
+      (service, here) =>
+        service.peerWorktrees(here, { project: "repo", from: " " }),
+    );
+    await sameAsked(
       ["worktrees", "list", "--remote"],
       (service, here) => service.peerWorktrees(here, {}),
       repo,
