@@ -1020,7 +1020,7 @@ it("registrar: onMutationResolved fires after a mutating invoke resolves, never 
   );
 });
 
-it("contract invariant: every host invoke classifies itself, and every remote gated one names its consent line", async () => {
+it("contract invariant: every host invoke classifies itself, and every remote gated one names its consent line, as grants.ts lists", async () => {
   // Derive the host modules from the authoritative registry rather
   // than a hand-maintained list, so a newly added host contract module
   // is covered here automatically. A module that forgot to tag a call
@@ -1036,7 +1036,7 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
     `host-module coverage shrank: derived ${hostModules.length} host modules, expected at least ${KNOWN_HOST_MODULE_COUNT}`,
   );
   // Every group the app serves, the CLI's control contract included.
-  const covered = new Set<string>();
+  const granted = new Map<string, string[]>();
   for (const module of [...allContractModules, controlContract]) {
     for (const call of callsOf(module)) {
       // The registrar's fail-closed rule: a host invoke says whether it
@@ -1044,7 +1044,9 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       // one which consent line covers it.
       assert.equal(classificationGap(call), null);
       const grant = annotation(call, Grant);
-      if (grant !== undefined) covered.add(grant);
+      if (grant !== undefined) {
+        granted.set(grant, [...(granted.get(grant) ?? []), channelOf(call)]);
+      }
       // movesHostState opts a gated call out of the remote-viewer
       // cache ping. On an ungated call it is meaningless, so its
       // presence there is a tagging mistake.
@@ -1057,11 +1059,15 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       }
     }
   }
-  // Every consent line the switch shows covers some call.
-  assert.deepEqual(
-    Object.keys(GRANTS).filter((grant) => !covered.has(grant)),
-    [],
-  );
+  // The consent table (grants.ts) lists exactly the calls that name
+  // each line, so reading it is reading what the switch hands over.
+  for (const [grant, { calls }] of Object.entries(GRANTS)) {
+    assert.deepEqual(
+      (granted.get(grant) ?? []).toSorted(),
+      calls.toSorted(),
+      `grants.ts ${grant} lists other calls than the ones naming it`,
+    );
+  }
   // Spot-check the load-bearing decisions so a silent flip is caught.
   assert.equal(annotation(callOf(runtimeContract, "nuke"), Remote), false);
   // A peer may relocate the data folder, but only as a command.
