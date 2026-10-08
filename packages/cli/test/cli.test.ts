@@ -935,6 +935,31 @@ describe("open", () => {
   });
 });
 
+describe("update", () => {
+  it("refuses what Go refuses, and a dev build has no updates", async () => {
+    await same("update");
+    await same("--json", "update", "--check");
+    await same("update", "--stage");
+    await same("update", "--finish-install", "--pid", "0");
+    await same("update", "now");
+    await same("--json", "update", "now");
+  });
+
+  it("refuses the variables the stand-in flags replaced", async () => {
+    const refused = async (name: string) => {
+      const env = { [name]: "http://127.0.0.1:1" };
+      const [go, ours] = await Promise.all([
+        start(goSm(), "go", box.home, ["update"], env).ended,
+        start(built, "cli", box.home, ["update"], env).ended,
+      ]);
+      assert.equal(go.code, 2);
+      assert.deepStrictEqual(ours, go);
+    };
+    await refused("SHIGOMORI_UPDATE_FEED_URL");
+    await refused("SHIGOMORI_UPDATE_RELEASES_URL");
+  });
+});
+
 describe("doctor", () => {
   // Each side's data dir, which the checklist names, as one.
   const sideNeutral = (seen: unknown): unknown =>
