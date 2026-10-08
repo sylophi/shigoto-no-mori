@@ -298,9 +298,6 @@ export const stderrOf = (error: GitHubCliError): string =>
 
 // The failure as one short line, which the status card shows: any other
 // failure is the first line of gh's own words.
-// The one reason not worth a word: the repository isn't on GitHub.
-export const NO_GITHUB_REMOTE = "no GitHub remote";
-
 const reasonOf = (error: GitHubCliError): string => {
   switch (error.reason) {
     case "missing":
@@ -308,7 +305,7 @@ const reasonOf = (error: GitHubCliError): string => {
     case "unauthenticated":
       return "gh isn't authenticated";
     case "no-github-remote":
-      return NO_GITHUB_REMOTE;
+      return "no GitHub remote";
     case "timeout":
       return "gh timed out";
     case "failed": {
@@ -551,19 +548,22 @@ const make = Effect.gen(function* () {
   const owningPullRequest = Effect.fn("GitHub.owningPullRequest")(function* (
     repo: string,
     branch: string,
-  ) {
-    const rows = yield* listed(
+  ): Effect.fn.Return<Lookup<OwningPullRequest>> {
+    // Two failures aren't worth a word, as Go's describe takes them: a
+    // repository off GitHub, and output that can't be read.
+    const stdout = yield* run(
       repo,
       lookupArgs(branch, "open", ["number,url,title,body,isCrossRepository"]),
-    );
-    // Output it can't read is no pull request, said nothing of, as Go's
-    // describe takes it.
-    if (Result.isFailure(rows)) {
-      return rows.failure === "unexpected gh output"
+      { timeout: PROBE_TIMEOUT },
+    ).pipe(Effect.result);
+    if (Result.isFailure(stdout)) {
+      return stdout.failure.reason === "no-github-remote"
         ? { found: null }
-        : { found: null, unavailable: rows.failure };
+        : { found: null, unavailable: reasonOf(stdout.failure) };
     }
-    const own = rows.success.find((row) => row["isCrossRepository"] !== true);
+    const rows = rowsOf(stdout.success);
+    if (Option.isNone(rows)) return { found: null };
+    const own = rows.value.find((row) => row["isCrossRepository"] !== true);
     return {
       found:
         own === undefined

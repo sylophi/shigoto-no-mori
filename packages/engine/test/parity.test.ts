@@ -930,7 +930,7 @@ describe("worktrees describe", () => {
                 .pipe(Effect.map((view) => ({ ok: true, ...view })))
             : service
                 .describe(located, change)
-                .pipe(Effect.map((worktree) => ({ ok: true, worktree }))),
+                .pipe(Effect.map(({ worktree }) => ({ ok: true, worktree }))),
       ),
     );
 

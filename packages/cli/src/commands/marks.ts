@@ -77,11 +77,23 @@ const mark = (
             ? worktrees.setAutoPull(located.worktree, mode === "on")
             : worktrees.setAgentWorking(located.worktree, mode === "on");
         }
-        const row = yield* worktrees.row(located);
-        if (json) return yield* emit({ ok: true, worktree: row });
-        yield* mode === undefined
-          ? out(`${row.name}: ${label} ${row[key] ? "on" : "off"}`)
-          : out(styles(stdoutColor).green(`${label} ${mode} for ${row.name}`));
+        if (json) {
+          return yield* emit({
+            ok: true,
+            worktree: yield* worktrees.row(located),
+          });
+        }
+        const { name: worktree } = located.worktree;
+        if (mode !== undefined) {
+          return yield* out(
+            styles(stdoutColor).green(`${label} ${mode} for ${worktree}`),
+          );
+        }
+        // The marks alone, without probing the checkout.
+        const marks = yield* worktrees.identityRow(located, {
+          primaryRef: false,
+        });
+        yield* out(`${worktree}: ${label} ${marks[key] ? "on" : "off"}`);
       }),
   ).pipe(Command.withDescription(`Set or show a worktree's ${label} mark`));
 

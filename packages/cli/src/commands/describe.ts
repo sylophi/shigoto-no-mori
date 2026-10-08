@@ -2,12 +2,11 @@
 // --description-file <path|->]: a worktree's title and description,
 // set or shown. An open pull request's own take their place.
 import { readFileSync } from "node:fs";
+import { errnoText } from "@shigomori/engine/platformErrors";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import type * as PlatformError from "effect/PlatformError";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
@@ -26,14 +25,6 @@ class UnreadableDescription extends Schema.TaggedError<UnreadableDescription>()(
   }
 }
 
-// Go's words for why a file didn't open.
-const why = (error: PlatformError.PlatformError) =>
-  Predicate.isTagged(error.reason, "NotFound")
-    ? "no such file or directory"
-    : Predicate.isTagged(error.reason, "PermissionDenied")
-      ? "permission denied"
-      : error.message;
-
 // The text a description file holds, stdin for "-".
 const readDescription = (file: string) =>
   file === "-"
@@ -49,7 +40,7 @@ const readDescription = (file: string) =>
           Effect.mapError(
             (error) =>
               new UnreadableDescription({
-                problem: `open ${file}: ${why(error)}`,
+                problem: `open ${file}: ${errnoText(error)}`,
               }),
           ),
         ),
@@ -132,16 +123,16 @@ export const describe = Command.make(
         return;
       }
 
-      const row = yield* worktrees.describe(
-        located,
-        {
+      const { worktree: row, pullRequestUnavailable } =
+        yield* worktrees.describe(located, {
           ...(Option.isSome(input.title) ? { title: input.title.value } : {}),
           ...(Option.isSome(description)
             ? { description: description.value }
             : {}),
-        },
-        unavailable,
-      );
+        });
+      if (pullRequestUnavailable !== undefined) {
+        yield* unavailable(pullRequestUnavailable);
+      }
       yield* json
         ? emit({ ok: true, worktree: row })
         : out(

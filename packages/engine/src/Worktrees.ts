@@ -666,15 +666,17 @@ export class Worktrees extends Context.Service<
     readonly description: (
       located: Located,
     ) => Effect.Effect<DescriptionView, DescribeRefused>;
-    // Sets the title, the description, or both, and answers the row.
-    // `unavailable` hears why the pull request couldn't be looked up,
-    // as `description` says it.
+    // Sets the title, the description, or both, and answers the row,
+    // with why the pull request couldn't be looked up as `description`
+    // says it.
     readonly describe: (
       located: Located,
       change: { readonly title?: string; readonly description?: string },
-      unavailable?: (reason: string) => Effect.Effect<void>,
     ) => Effect.Effect<
-      WorktreeRow,
+      {
+        readonly worktree: WorktreeRow;
+        readonly pullRequestUnavailable?: string;
+      },
       DescribeRefused | PullRequestOwnsDescription
     >;
 
@@ -1765,13 +1767,7 @@ const make = Effect.gen(function* () {
     ) {
       return { found: null };
     }
-    const lookup = yield* github.owningPullRequest(
-      project.path,
-      worktree.branch,
-    );
-    return lookup.unavailable === GitHub.NO_GITHUB_REMOTE
-      ? { found: lookup.found }
-      : lookup;
+    return yield* github.owningPullRequest(project.path, worktree.branch);
   });
 
   const description = Effect.fn("Worktrees.description")(function* (
@@ -1798,7 +1794,6 @@ const make = Effect.gen(function* () {
   const describe = Effect.fn("Worktrees.describe")(function* (
     located: Located,
     change: { readonly title?: string; readonly description?: string },
-    unavailable?: (reason: string) => Effect.Effect<void>,
   ) {
     if (!hasWorktreeData(located.worktree)) {
       return yield* new DescribeRefused({ reason: "external", binary });
@@ -1827,9 +1822,6 @@ const make = Effect.gen(function* () {
     }
     // Last, once the input is known good: it asks GitHub.
     const pr = yield* owningPullRequest(located);
-    if (pr.unavailable !== undefined && unavailable !== undefined) {
-      yield* unavailable(pr.unavailable);
-    }
     if (pr.found !== null) {
       return yield* new PullRequestOwnsDescription({
         worktree: located.worktree.name,
@@ -1840,7 +1832,12 @@ const make = Effect.gen(function* () {
       ...(title === undefined ? {} : { title }),
       ...(text === undefined ? {} : { description: text }),
     });
-    return yield* row(located);
+    return {
+      worktree: yield* row(located),
+      ...(pr.unavailable === undefined
+        ? {}
+        : { pullRequestUnavailable: pr.unavailable }),
+    };
   });
 
   // --- making and removing worktrees ---
