@@ -22,6 +22,7 @@ export class DarwinHelperError extends Schema.TaggedError<DarwinHelperError>()(
       "xattrs",
       "privateSize",
       "fsType",
+      "lstat",
     ]),
     reason: Schema.Literals(["spawn", "exit", "output"]),
     cause: Schema.Defect(),
@@ -59,6 +60,24 @@ const PrivateSize = Schema.Struct({
   path: Schema.String,
   bytes: Schema.NullOr(Schema.Int),
 });
+
+// lstat(2), times to the nanosecond: what git's index records of a file,
+// and its flags.
+const Lstat = Schema.Struct({
+  path: Schema.String,
+  dev: Schema.Int,
+  ino: Schema.Int,
+  mode: Schema.Int,
+  uid: Schema.Int,
+  gid: Schema.Int,
+  size: Schema.Int,
+  ctimeSec: Schema.Int,
+  ctimeNsec: Schema.Int,
+  mtimeSec: Schema.Int,
+  mtimeNsec: Schema.Int,
+  flags: Schema.Int,
+});
+export type LstatEntry = typeof Lstat.Type;
 
 const FsType = Schema.Struct({
   path: Schema.String,
@@ -100,6 +119,10 @@ export class Darwin extends Context.Service<
     readonly privateSize: (
       input: Target,
     ) => Stream.Stream<Entry<typeof PrivateSize.Type>, DarwinHelperError>;
+    // lstat(2) of each entry, a symlink's own.
+    readonly lstat: (
+      input: Target,
+    ) => Stream.Stream<Entry<typeof Lstat.Type>, DarwinHelperError>;
     // The filesystem's type name ("apfs", "smbfs").
     readonly fsType: (
       input: Target,
@@ -202,6 +225,8 @@ const make = (binary: string) =>
         ),
       privateSize: ({ root, paths }) =>
         run("privateSize", ["privsize"], [root], paths, lineOf(PrivateSize)),
+      lstat: ({ root, paths }) =>
+        run("lstat", ["lstat"], [root], paths, lineOf(Lstat)),
       fsType: ({ root, paths }) =>
         run("fsType", ["fstype"], [root], paths, lineOf(FsType)),
     });

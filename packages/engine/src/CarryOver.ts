@@ -139,7 +139,7 @@ const ignoreMatcher = (paths: ReadonlyArray<string>) => {
 // Where entries are looked up, in order: the checkout on the base
 // branch (its ignored files are the ones a branch from it expects), the
 // primary, then the rest by name. The destination is never a source.
-const orderSources = (
+export const orderSources = (
   checkouts: ReadonlyArray<Source>,
   destination: string,
   baseBranch: string,

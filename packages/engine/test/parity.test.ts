@@ -1205,6 +1205,7 @@ describe("worktrees create", () => {
       checkout: true,
       base: "existing",
     });
+    await createVerb(repo, "written", ["--no-clone"], { clone: false });
   });
 
   it("refuses a taken name, an occupied place, a reserved name and checkout without a base", async () => {

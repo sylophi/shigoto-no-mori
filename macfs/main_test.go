@@ -238,3 +238,50 @@ func TestUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestLstatReportsWhatTheIndexRecords(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a/run"), "#!/bin/sh\n", 0o755)
+	if err := os.Symlink("run", filepath.Join(root, "a/link")); err != nil {
+		t.Fatal(err)
+	}
+	lines := macfs(t, "a/run\x00a/link\x00gone", "lstat", "-stdin", root)
+	if len(lines) != 3 {
+		t.Fatalf("lines = %v", lines)
+	}
+	if code := errorCode(lines["gone"]); code != "ENOENT" {
+		t.Fatalf("missing: code %q", code)
+	}
+	for _, rel := range []string{"a/run", "a/link"} {
+		var st unix.Stat_t
+		if err := unix.Lstat(filepath.Join(root, rel), &st); err != nil {
+			t.Fatal(err)
+		}
+		got := lines[rel]
+		want := map[string]float64{
+			"dev": float64(uint32(st.Dev)), "ino": float64(st.Ino), "mode": float64(st.Mode),
+			"uid": float64(st.Uid), "gid": float64(st.Gid), "size": float64(st.Size),
+			"ctimeSec": float64(st.Ctim.Sec), "ctimeNsec": float64(st.Ctim.Nsec),
+			"mtimeSec": float64(st.Mtim.Sec), "mtimeNsec": float64(st.Mtim.Nsec),
+			"flags": float64(st.Flags),
+		}
+		for key, value := range want {
+			if got[key] != value {
+				t.Fatalf("%s %s = %v, want %v", rel, key, got[key], value)
+			}
+		}
+	}
+	// The symlink itself, not what it points at.
+	if mode := uint32(lines["a/link"]["mode"].(float64)); mode&unix.S_IFMT != unix.S_IFLNK {
+		t.Fatalf("link mode %o", mode)
+	}
+	// Without -stdin it walks the tree, the root included.
+	walked := macfs(t, "", "lstat", root)
+	if len(walked) != 4 || walked["."]["error"] != nil {
+		t.Fatalf("walked = %v", slices.Sorted(maps.Keys(walked)))
+	}
+	// A time the file was given comes back to the nanosecond.
+	if got := lines["a/run"]["mtimeNsec"]; got != float64(fixtureTime.Nanosecond()) {
+		t.Fatalf("mtimeNsec = %v", got)
+	}
+}
