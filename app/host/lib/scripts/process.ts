@@ -17,6 +17,7 @@ import { existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
 import { type IPty, spawn as spawnPty } from "node-pty";
+import { envSetting } from "../../../shared/config.ts";
 
 const execFileP = promisify(execFile);
 
@@ -36,7 +37,7 @@ interface SpawnScriptOptions {
 // `.zprofile` / `.bash_profile` runs without zsh's interactive-init code
 // (job control, prompt setup, zle) getting in the way of the command.
 function resolveShell(): { command: string; args: string[] } {
-  const userShell = process.env["SHELL"] || userInfo().shell;
+  const userShell = envSetting("SHELL") || userInfo().shell;
   if (userShell) return { command: userShell, args: ["-l", "-c"] };
   return { command: "/bin/sh", args: ["-c"] };
 }

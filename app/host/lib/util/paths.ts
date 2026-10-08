@@ -12,6 +12,7 @@ import {
   legacyDataDirName,
   legacyDataDirPointerPath as legacyPointerPathFor,
 } from "@shared/packaging/cliDist.mts";
+import { envSetting } from "@shared/config";
 
 // How the data dir was resolved: the env override, a pointer file
 // (either filename), a pre-2.0 default adopted in place, or the flavor
@@ -56,7 +57,7 @@ let cachedPointerRead: string | null = null;
 // inherit the var from the app's own environment already.
 export function initDataDir(isPackaged: boolean): void {
   const flavor: CliFlavor = isPackaged ? "prod" : "dev";
-  const envDir = process.env.SHIGOMORI_DATA_DIR;
+  const envDir = envSetting("SHIGOMORI_DATA_DIR");
   if (envDir) {
     initDataDirAt(toAbsolute(envDir), "env");
     cachedFlavor = flavor;
@@ -64,7 +65,7 @@ export function initDataDir(isPackaged: boolean): void {
   }
   // The override's pre-2.0 name. Its whole point was sandboxing, so a
   // leftover export must not fail open onto the real data dir.
-  if (process.env.SHIGOMORI_ROOT) {
+  if (envSetting("SHIGOMORI_ROOT") !== undefined) {
     throw new Error(
       "SHIGOMORI_ROOT is no longer read. Set SHIGOMORI_DATA_DIR instead.",
     );

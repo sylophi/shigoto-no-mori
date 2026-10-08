@@ -52,6 +52,8 @@ import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { applyUserShellEnv } from "./core/shellEnv";
 import * as HostLayer from "./hostLayer";
 import * as Observability from "./observability";
+import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
@@ -184,7 +186,11 @@ registerIpcHandlers();
 const runtime = ManagedRuntime.make(
   ShellLayer.layer.pipe(
     Layer.provideMerge(HostLayer.layer({ hurried: isHurriedQuit })),
+    // The shell's, but below the host: the renderer asks for its Clerk
+    // session as soon as it loads.
+    Layer.provideMerge(ClerkTokenStorage.layer(app.getPath("userData"))),
     Layer.provideMerge(Observability.layer),
+    Layer.provideMerge(NodeServices.layer),
   ),
 );
 

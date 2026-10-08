@@ -12,6 +12,7 @@ import { app } from "electron";
 import { DEV_RELAUNCH_FILE_ENV } from "@shared/packaging/appName.mts";
 import { restoreUpdateEndpointOverrides } from "./updateEndpoints";
 import { log } from "@shared/log";
+import { envSetting } from "@shared/config";
 
 let requested = false;
 
@@ -20,7 +21,7 @@ let requested = false;
 // copy would open on a dead renderer. The dev launcher
 // (scripts/dev-electron.mts) hands over a marker path instead, and
 // restarts forge when the app quits with the marker present.
-const devRelaunchMarker = process.env[DEV_RELAUNCH_FILE_ENV];
+const devRelaunchMarker = envSetting(DEV_RELAUNCH_FILE_ENV);
 
 // Record that a relaunch is in flight WITHOUT initiating the quit. The
 // data-folder move (relaunchApp) quits through Electron so its reply is

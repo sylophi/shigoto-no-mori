@@ -20,6 +20,7 @@ import type {
 import { ShellHookStateSchema } from "@shigomori/contracts/modules/cli";
 import { CAPTURE_TIMEOUT_MS, loginShell } from "../core/shellEnv";
 import { cliFailureMessage, runCli } from "./cliRunner";
+import { envSetting } from "@shared/config";
 
 const execFileP = promisify(execFile);
 
@@ -41,7 +42,7 @@ const SENTINEL = "__SHIGOMORI_HOOK_ENV__";
 let hookEnvPromise: Promise<Record<string, string>> | null = null;
 
 async function captureHookPathEnv(): Promise<Record<string, string>> {
-  const shell = loginShell(process.env);
+  const shell = loginShell({ SHELL: envSetting("SHELL") });
   if (shell === null) return {};
   try {
     const { stdout } = await execFileP(
@@ -77,7 +78,10 @@ function runShellCli(
 }
 
 function loginShellBase(): string | null {
-  const base = loginShell(process.env)?.split("/").pop() ?? "";
+  const base =
+    loginShell({ SHELL: envSetting("SHELL") })
+      ?.split("/")
+      .pop() ?? "";
   return base === "" ? null : base;
 }
 

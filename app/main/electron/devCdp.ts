@@ -7,9 +7,10 @@
 // a driven session keeps its port across restarts (e.g. the moveDataDir
 // relaunch). No-op in packaged builds.
 import { app } from "electron";
+import { envSetting } from "@shared/config";
 
 export function enableDevCdpPort(): void {
-  const port = process.env.SHIGOMORI_DEBUG_PORT;
+  const port = envSetting("SHIGOMORI_DEBUG_PORT");
   if (!app.isPackaged && port) {
     app.commandLine.appendSwitch("remote-debugging-port", port);
   }

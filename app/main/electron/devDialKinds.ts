@@ -11,9 +11,10 @@ import {
   type DirectCandidateKind,
 } from "@shigomori/contracts/modules/direct";
 import { log } from "@shared/log";
+import { envSetting } from "@shared/config";
 
 export function devDialKinds(): DirectCandidateKind[] | undefined {
-  const raw = process.env.SHIGOMORI_DIAL_KINDS;
+  const raw = envSetting("SHIGOMORI_DIAL_KINDS");
   if (app.isPackaged || raw === undefined) return undefined;
   const wanted = new Set(raw.split(",").map((kind) => kind.trim()));
   const kinds = ALL_DIRECT_CANDIDATE_KINDS.filter((kind) => wanted.has(kind));

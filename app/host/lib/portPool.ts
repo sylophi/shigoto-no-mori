@@ -13,6 +13,7 @@ import type { PoolPort } from "@shared/ports/mergeWorktreePorts";
 import { readGlobalConfig } from "./config/global";
 import * as Processes from "./util/processes";
 import { ttlMapCache, ttlValueCache } from "./util/ttlCache";
+import { envSetting } from "@shared/config";
 
 const INSTALLED_CACHE_TTL_MS = 30_000;
 // A worktree's port list polls every few seconds while shown (its page,
@@ -90,7 +91,7 @@ const decodePortPoolState = Schema.decodeUnknownSync(PortPoolStateSchema);
 
 function portPoolStatePath(): string {
   const dataHome =
-    process.env.XDG_DATA_HOME?.trim() || join(homedir(), ".local", "share");
+    envSetting("XDG_DATA_HOME")?.trim() || join(homedir(), ".local", "share");
   return join(dataHome, "port-pool", "state.json");
 }
 
