@@ -33,6 +33,7 @@ import {
   useProjects,
 } from "@/hooks/projects/useProjects";
 import { fsIsGitRepoQueryOptions } from "@/hooks/fs/useFsIsGitRepo";
+import { useOffersTerrier } from "@/hooks/terrier/useOffersTerrier";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
@@ -51,6 +52,7 @@ import { CloneDestination, CloningPanel } from "./ClonePanel";
 import { defaultCloneParent } from "@shared/cloneDestination";
 import { ScanningPanel } from "./ScanningPanel";
 import { ResultsPanel } from "./ResultsPanel";
+import { TerrierOptIn } from "./TerrierOptIn";
 import { useBrowseState } from "./useBrowseState";
 import { withToggled } from "@/lib/toggleSet";
 
@@ -60,6 +62,10 @@ interface AddProjectViewProps {
   // Owned by the dialog, so it outlives a change of device.
   query: string;
   setQuery: (value: string) => void;
+  // Whether a project added here goes into terrier too, asked only of a
+  // device that lists terrier's repos (useOffersTerrier).
+  addToTerrier: boolean;
+  setAddToTerrier: (value: boolean) => void;
   onClose: () => void;
   // What the dialog's Escape runs instead of closing. Set while there
   // is a scan to back out of, null otherwise.
@@ -73,6 +79,8 @@ type AddProjectStage = "browse" | "scanning" | "results" | "cloning";
 export function AddProjectView({
   query,
   setQuery,
+  addToTerrier,
+  setAddToTerrier,
   onClose,
   escapeRef,
 }: AddProjectViewProps) {
@@ -84,6 +92,8 @@ export function AddProjectView({
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
   const registeredPaths = new Set(existingProjects.map((p) => p.path));
+  const offersTerrier = useOffersTerrier();
+  const terrier = offersTerrier && addToTerrier;
 
   // ---------- Clone mode ----------
 
@@ -105,6 +115,18 @@ export function AddProjectView({
     setCloneParentPickerOpen(false);
     inputRef.current?.focus();
   };
+  // Ticking it hands focus back to the input for the same reason (a
+  // click on its label focuses the box). The scan results have no
+  // input, and the box keeps it inside the panel that hears ⌘↩.
+  const terrierOptIn = offersTerrier && (
+    <TerrierOptIn
+      checked={addToTerrier}
+      onCheckedChange={(next) => {
+        setAddToTerrier(next);
+        inputRef.current?.focus();
+      }}
+    />
+  );
   const cloneParent =
     pickedCloneParent ?? defaultCloneParent(existingProjects, home);
   // Everything the clone is, or null while the input is a path: one
@@ -199,7 +221,7 @@ export function AddProjectView({
 
   const addAndOpen = async (path: string) => {
     try {
-      const project = await addProject.mutateAsync(path);
+      const project = await addProject.mutateAsync({ path, terrier });
       onClose();
       void selectPrimary(project.id);
     } catch {
@@ -218,7 +240,12 @@ export function AddProjectView({
     // useCloneProject surfaces the error via toast. No try here: React
     // Compiler bails on the early return one would need.
     const project = await cloneProject
-      .mutateAsync({ url: clone.url, parentDir: cloneParent, name: clone.name })
+      .mutateAsync({
+        url: clone.url,
+        parentDir: cloneParent,
+        name: clone.name,
+        terrier,
+      })
       .catch(() => null);
     if (project === null) {
       // Back to the URL, still in the input, to fix it or the folder.
@@ -312,7 +339,7 @@ export function AddProjectView({
     for (const path of toAdd) {
       try {
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential to avoid races on the registry.json write
-        const project = await addProject.mutateAsync(path); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the registry.json write
+        const project = await addProject.mutateAsync({ path, terrier }); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the registry.json write
         // Plain if, not ??=: React Compiler can't lower logical assignment and
         // bails out the whole component.
         if (firstAddedId === null) firstAddedId = project.id;
@@ -410,6 +437,7 @@ export function AddProjectView({
         onAdd={bulkAdd}
         bulkAdding={bulkAdding}
         onKeyDown={onResultsKeyDown}
+        terrierOptIn={terrierOptIn}
       />
     );
   }
@@ -569,22 +597,20 @@ export function AddProjectView({
           className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
         >
           <div className="flex items-center gap-3">
-            <BrowseKeyHints
-              lead={
-                cloneMode ? <KbdHint keys={["↩"]} label="Clone" /> : undefined
-              }
-              enterFolder={hasHighlighted}
-              goUp={canBrowseUp}
-            />
+            {cloneMode && <KbdHint keys={["↩"]} label="Clone" />}
+            <BrowseKeyHints enterFolder={hasHighlighted} goUp={canBrowseUp} />
           </div>
-          {/* The native dialog is this machine's, so it can't pick a
-            folder on a peer's disk. */}
-          {!scope.remote && !cloneMode && (
-            <ChipButton onClick={() => void pickViaDialog()}>
-              <FileManagerIcon />
-              Add project from Finder
-            </ChipButton>
-          )}
+          <div className="flex items-center gap-3">
+            {terrierOptIn}
+            {/* The native dialog is this machine's, so it can't pick a
+              folder on a peer's disk. */}
+            {!scope.remote && !cloneMode && (
+              <ChipButton onClick={() => void pickViaDialog()}>
+                <FileManagerIcon />
+                Add project from Finder
+              </ChipButton>
+            )}
+          </div>
         </div>
       </Command>
       {/* Outside the Command: a portal still bubbles through the React

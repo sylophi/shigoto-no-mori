@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
+  AddProjectPayloadSchema,
   BranchListSchema,
   CloneProjectPayloadSchema,
-  PathPayloadSchema,
   ProjectIconSchema,
   ProjectSchema,
   ProjectScopedPayloadSchema,
@@ -22,7 +22,7 @@ export const projectsContract = defineContract("host", {
     remote: true,
     gated: false,
   }),
-  add: invoke("projects:add", PathPayloadSchema, ProjectSchema, {
+  add: invoke("projects:add", AddProjectPayloadSchema, ProjectSchema, {
     remote: true,
     gated: true,
   }),

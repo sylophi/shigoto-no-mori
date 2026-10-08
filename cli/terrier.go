@@ -7,7 +7,9 @@ package main
 // output still has the shape read here. The CLI owns the merge:
 // every command sees the merged list (main.go), and the app reads it
 // through `sm projects list --json`. The app does no merge of its own;
-// host/lib/terrier.ts only checks terrier's readiness for Settings.
+// host/lib/terrier.ts only checks terrier's readiness for Settings, and
+// runs `terrier add` for the add-project dialog before `sm projects
+// add`, which then mints the terrier id (registerProject).
 //
 // Merge semantics: registry.json wins by path. A repo registered in
 // both is an ordinary project (removable), while one only terrier
