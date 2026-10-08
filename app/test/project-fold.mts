@@ -131,7 +131,12 @@ const build = (
       error: null,
     })),
     openKey: open && projectGroupKey(open, undefined),
-    order: projectGroupOrder({ projects, remote, sortMode: "manual" }),
+    order: projectGroupOrder({
+      projects,
+      remote,
+      sortMode: "manual",
+      pinned: new Set(),
+    }),
     worktreeSort,
     openShelves: {
       agentWorking: new Set(),
