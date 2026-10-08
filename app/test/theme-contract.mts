@@ -229,7 +229,7 @@ const clerkSrc = readFileSync(
 // properties (Tailwind inlines them into utilities), so strip those
 // blocks: a token that exists only there is NOT resolvable via var().
 const indexCss = readFileSync(join(root, "renderer/index.css"), "utf8").replace(
-  /@theme[^{]*\{[^}]*\}/g,
+  /@theme\s+inline[^{]*\{[^}]*\}/g,
   "",
 );
 // The doubutsu light block (:root.doubutsu) and dark block

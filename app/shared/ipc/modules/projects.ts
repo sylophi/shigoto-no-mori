@@ -4,6 +4,7 @@ import {
   AddProjectPayloadSchema,
   BranchListSchema,
   CloneProjectPayloadSchema,
+  CreateProjectPayloadSchema,
   ProjectIconSchema,
   ProjectSchema,
   ProjectScopedPayloadSchema,
@@ -29,6 +30,12 @@ export const projectsContract = defineContract("host", {
   // Runs for as long as the clone does. The wire has no per-call
   // timeout, and the device doing the clone uses its own credentials.
   clone: invoke("projects:clone", CloneProjectPayloadSchema, ProjectSchema, {
+    remote: true,
+    gated: true,
+  }),
+  // A new repository with an empty first commit, so its default
+  // branch exists for worktrees to branch off.
+  create: invoke("projects:create", CreateProjectPayloadSchema, ProjectSchema, {
     remote: true,
     gated: true,
   }),

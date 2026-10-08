@@ -3,6 +3,8 @@ import type { Handlers } from "@shared/ipc/types";
 import {
   disablePullRequestAutoMerge,
   getPullRequestDiff,
+  listGithubOwners,
+  publishRepo,
   setPullRequestDraft,
 } from "@host/lib/githubCli/actions";
 import {
@@ -22,6 +24,13 @@ import { findProjectOrThrow } from "@host/lib/projects";
 
 export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   readiness: () => getGithubCliReadiness(),
+
+  owners: () => listGithubOwners(),
+
+  publish: async ({ projectId, owner, visibility }) => {
+    const project = await findProjectOrThrow(projectId);
+    await publishRepo({ cwd: project.path, owner, visibility });
+  },
 
   projectPullRequests: async ({ projectId }) => {
     const project = await findProjectOrThrow(projectId);

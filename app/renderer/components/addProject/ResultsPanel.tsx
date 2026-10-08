@@ -2,7 +2,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { Command } from "cmdk";
 import { ArrowLeft, FolderSearch } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { KeyedButton } from "./DialogParts";
 import { ResultRow } from "./ResultRow";
 import { IconButton } from "@/components/ui/icon-button";
 import { MODAL_COMMAND_CLASS } from "@/components/ui/cmdk-classes";
@@ -99,21 +99,16 @@ export function ResultsPanel(props: ResultsPanelProps) {
           className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
         >
           {props.terrierOptIn}
-          <button
-            type="button"
+          <KeyedButton
+            label={
+              props.bulkAdding
+                ? "Adding…"
+                : `Add ${props.selected.size} project${props.selected.size === 1 ? "" : "s"}`
+            }
+            keys="⌘↩"
             onClick={() => void props.onAdd()}
             disabled={props.selected.size === 0 || props.bulkAdding}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <span>
-              {props.bulkAdding
-                ? "Adding…"
-                : `Add ${props.selected.size} project${props.selected.size === 1 ? "" : "s"}`}
-            </span>
-            <KbdGroup className="pointer-events-none">
-              <Kbd>⌘↩</Kbd>
-            </KbdGroup>
-          </button>
+          />
         </div>
       </Command>
     </div>

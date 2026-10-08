@@ -37,11 +37,7 @@ export const clerkAppearance: ClerkProviderProps["appearance"] = {
     // literal is right here.
     colorModalBackdrop: "rgb(0 0 0 / 0.4)",
     borderRadius: "var(--radius)",
-    // Tailwind's @theme inline never emits --font-sans as a runtime
-    // custom property in v1 (it inlines the stack into utilities), so
-    // the v1 stack rides the var() fallback, and doubutsu declares the
-    // variable to override it with Zen Maru.
-    fontFamily:
-      'var(--font-sans, "Geist Variable", ui-sans-serif, system-ui, sans-serif)',
+    // Geist in v1, Zen Maru under doubutsu.
+    fontFamily: "var(--font-sans)",
   },
 };

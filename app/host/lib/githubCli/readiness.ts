@@ -6,19 +6,22 @@ import { execGh } from "./exec";
 
 const READINESS_CACHE_TTL_MS = 30_000;
 
-const readinessCache = ttlValueCache<GithubCliReadiness>(
-  READINESS_CACHE_TTL_MS,
-  async () => {
-    const installed = await binaryOnPath("gh");
-    // `gh auth status` exits non-zero when not signed in. We don't bother
-    // probing for auth when `gh` is missing, since there's nothing to ask.
-    const authed = installed ? await isAuthed() : false;
-    return { installed, authed };
-  },
-);
+const readinessCache = ttlValueCache<
+  Pick<GithubCliReadiness, "installed" | "authed">
+>(READINESS_CACHE_TTL_MS, async () => {
+  const installed = await binaryOnPath("gh");
+  // `gh auth status` exits non-zero when not signed in. We don't bother
+  // probing for auth when `gh` is missing, since there's nothing to ask.
+  const authed = installed ? await isAuthed() : false;
+  return { installed, authed };
+});
 
-export function getGithubCliReadiness(): Promise<GithubCliReadiness> {
-  return readinessCache.get();
+export async function getGithubCliReadiness(): Promise<GithubCliReadiness> {
+  const [probe, unavailable] = await Promise.all([
+    readinessCache.get(),
+    ghUnavailableReason(),
+  ]);
+  return { ...probe, unavailable };
 }
 
 function isAuthed(): Promise<boolean> {
@@ -41,7 +44,7 @@ export async function ghReady(): Promise<boolean> {
 export async function ghUnavailableReason(): Promise<GhUnavailableReason | null> {
   const config = await readGlobalConfig();
   if (config.githubCli === false) return "integration-off";
-  const { installed, authed } = await getGithubCliReadiness();
+  const { installed, authed } = await readinessCache.get();
   if (!installed) return "gh-missing";
   if (!authed) return "gh-signed-out";
   return null;

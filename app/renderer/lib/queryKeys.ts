@@ -176,6 +176,7 @@ function buildQueryKeys(deviceId: string) {
     // integration can invalidate the whole subtree in one call.
     githubCliAll: () => host("githubCli"),
     githubCliReadiness: () => host("githubCli", "readiness"),
+    githubOwners: () => host("githubCli", "owners"),
     repoMergeConfig: (projectId: string) =>
       host("githubCli", "repoMergeConfig", projectId),
     repoDescription: (projectId: string) =>

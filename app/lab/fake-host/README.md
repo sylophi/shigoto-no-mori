@@ -112,6 +112,9 @@ Poses ride the URL:
   worktree its device no longer lists, a run on Mini (which takes no
   commands from here: add `&peers=tp:connected,mini:connected`), and a
   forward tied to no worktree at another local port.
+- `?gh=missing|signed-out`: the GitHub CLI on every device not
+  installed, or not signed in, for the surfaces that say why they
+  can't use it (the add-project dialog's Publish to GitHub).
 - `?missing=1`: a project on Studio Mac (`tanuki-notes`) whose repo
   was moved by hand, so the sidebar lists it as missing. The repo is
   under `~/dev` now, for Locate… to find.

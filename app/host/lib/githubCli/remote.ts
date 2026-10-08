@@ -125,6 +125,12 @@ export function getGithubRepoInfo(cwd: string): Promise<GithubRepoInfo | null> {
   return githubRepoCache.get(cwd);
 }
 
+// For a path that just gained its GitHub remote (a publish), so the
+// next read sees it rather than a cached "not on GitHub".
+export function evictGithubRepoInfo(cwd: string): void {
+  githubRepoCache.invalidate(cwd);
+}
+
 // The remote pointing at the repo `url` belongs to, by name. Fetching a
 // PR head needs a name, and neither "origin" nor "the first GitHub
 // remote" is a safe stand-in: a fork checkout has both the fork and the

@@ -13,6 +13,7 @@ import {
   type MergeMethod,
   type PullRequest,
   type PullRequestCandidate,
+  type GhUnavailableReason,
   type PullRequestCheck,
   type PullRequestCheckBucket,
   type PullRequestChecksSummary,
@@ -46,6 +47,13 @@ export function describePullRequest(pr: PullRequest): PullRequestDescriptor {
   return { Icon: GitPullRequest, tone: "emerald", label: "Open PR" };
 }
 
+// Why gh can't be used on a device, each line naming the fix.
+export const GH_UNAVAILABLE_TEXT: Record<GhUnavailableReason, string> = {
+  "integration-off": "The GitHub integration is off in Settings.",
+  "gh-missing": "The GitHub CLI (gh) isn't installed.",
+  "gh-signed-out": "The GitHub CLI isn't signed in. Run gh auth login.",
+};
+
 // Why the new-worktree form can't offer the pull request source. Each
 // line names the thing to fix. None of them are recoverable from inside
 // the form, so there's no action attached.
@@ -53,9 +61,7 @@ export const PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT: Record<
   PullRequestSourceUnavailable,
   string
 > = {
-  "integration-off": "The GitHub integration is off in Settings.",
-  "gh-missing": "The GitHub CLI (gh) isn't installed.",
-  "gh-signed-out": "The GitHub CLI isn't signed in. Run gh auth login.",
+  ...GH_UNAVAILABLE_TEXT,
   "no-github-remote": "This project has no GitHub remote.",
   "gh-failed": "Couldn't reach GitHub.",
 };
