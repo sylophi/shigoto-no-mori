@@ -236,44 +236,75 @@ func TestQueryFeedFollowsThePrereleaseChannel(t *testing.T) {
 	}
 }
 
-func TestQueryFeedAsksTheUpdateServerForFullReleaseBuilds(t *testing.T) {
-	listHits := 0
-	stubReleaseList(t, "1.7.1", func(w http.ResponseWriter, r *http.Request) {
-		listHits++
-		w.WriteHeader(http.StatusInternalServerError)
-	})
+func TestQueryFeedReadsTheReleaseListForFullReleaseBuilds(t *testing.T) {
+	arch := feedArch()
+	stubReleaseList(t, "1.7.1", serveReleases(
+		labRelease("v2.0.0-beta.3", arch),
+		labRelease("v1.8.0", arch),
+		labRelease("v1.7.1", arch),
+	))
 	stubEndpoint(t, &feedURLOverride, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
+		t.Error("the update server was asked though the release list answered")
 	})
 
 	release, confirmed, err := queryFeed()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if release != nil || !confirmed {
-		t.Fatalf("release = %+v (confirmed %v), want nil confirmed (204)", release, confirmed)
-	}
-	if listHits != 0 {
-		t.Errorf("the release list was queried %d times by a full-release build", listHits)
+	if release == nil || release.Version != "1.8.0" || !confirmed {
+		t.Fatalf("release = %+v (confirmed %v), want 1.8.0 confirmed", release, confirmed)
 	}
 }
 
-func TestQueryFeedOverrideKeepsAPrereleaseBuildOffTheReleaseList(t *testing.T) {
-	listHits := 0
-	stubReleaseList(t, "2.0.0-beta.2", func(w http.ResponseWriter, r *http.Request) {
-		listHits++
-		w.WriteHeader(http.StatusInternalServerError)
-	})
-	stubEndpoint(t, &feedURLOverride, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
+func TestQueryFeedFallsBackToTheUpdateServer(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		version       string
+		feedStatus    int
+		wantConfirmed bool
+		wantErr       string
+	}{
+		{"full release", "1.7.1", http.StatusNoContent, true, ""},
+		// The update server hides prereleases, so its 204 can't vouch
+		// for the channel.
+		{"prerelease", "2.0.0-beta.2", http.StatusNoContent, false, ""},
+		{"both fail", "1.7.1", http.StatusBadGateway, false, "release list answered HTTP 500"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubReleaseList(t, tc.version, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			})
+			stubEndpoint(t, &feedURLOverride, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.feedStatus)
+			})
 
-	release, _, err := queryFeed()
-	if err != nil {
-		t.Fatal(err)
+			release, confirmed, err := queryFeed()
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if release != nil || confirmed != tc.wantConfirmed {
+				t.Fatalf("release = %+v, confirmed = %v; want nil, %v", release, confirmed, tc.wantConfirmed)
+			}
+		})
 	}
-	if release != nil || listHits != 0 {
-		t.Fatalf("release = %+v, list hits = %d; the override must win", release, listHits)
+}
+
+func TestQueryFeedStandInsTurnTheRealEndpointsOff(t *testing.T) {
+	stubString(t, &releasesURLOverride, "")
+	stubString(t, &feedURLOverride, "http://feed.invalid")
+	if got := releaseListURL(); got != "" {
+		t.Errorf("with only a feed stand-in, release list URL = %q", got)
+	}
+	stubString(t, &feedURLOverride, "")
+	stubString(t, &releasesURLOverride, "http://list.invalid")
+	if got := updateServerURL(); got != "" {
+		t.Errorf("with only a release-list stand-in, update server URL = %q", got)
 	}
 }
 
