@@ -1,6 +1,7 @@
 // The engine's layer graph, which each process that runs the engine
 // builds once: its store over the process's SQLite driver, its flavor,
-// and where the darwin helper (macfs) is.
+// and where the darwin helper (macfs) is. The updater talks HTTP through
+// fetch, the one client Node and Bun both have.
 import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
@@ -24,10 +25,12 @@ import * as Scripts from "./Scripts.ts";
 import type * as Store from "./Store.ts";
 import * as Terrier from "./Terrier.ts";
 import * as Transfer from "./Transfer.ts";
+import * as Updater from "./Updater.ts";
 import * as Usage from "./Usage.ts";
 import * as WorktreeData from "./WorktreeData.ts";
 import * as Worktrees from "./Worktrees.ts";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 export const engineLayer = (options: {
   readonly flavor: Flavor;
@@ -54,6 +57,9 @@ export const engineLayer = (options: {
         Lifecycle.layer,
         CarryOver.layer,
         CloneCheckout.layer,
+        Updater.layer(options.flavor).pipe(
+          Layer.provide(FetchHttpClient.layer),
+        ),
       ),
     ),
     Layer.provideMerge(Terrier.layer),

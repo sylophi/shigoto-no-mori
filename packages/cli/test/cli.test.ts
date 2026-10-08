@@ -51,13 +51,17 @@ const withoutHue = (doc: unknown) =>
     ? doc.map((row: unknown) => Object.assign({}, row, { hue: null }))
     : doc;
 
-// A new project's id, random on each side.
-const withoutIds = (seen: object) =>
+// What differs by side: a new project's id, random on each, and the
+// side's own data dir, where managed worktrees go. Only the run's own
+// dir is masked, so one side using the other's still shows.
+const withoutSideDetails = (seen: object, side: string) =>
   JSON.parse(
-    JSON.stringify(seen).replaceAll(
-      /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
-      "<id>",
-    ),
+    JSON.stringify(seen)
+      .replaceAll(`${box.home}/${side}/`, "<data>/")
+      .replaceAll(
+        /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
+        "<id>",
+      ),
   ) as unknown;
 
 // The same command through both binaries from `cwd`, each on its own
@@ -69,8 +73,8 @@ const sameAt = async (cwd: string, ...args: string[]) => {
     box.runAt(goSm(), "go", cwd, args),
     box.runAt(built, "cli", cwd, args),
   ]);
-  const seen = (run: typeof go) =>
-    withoutIds(
+  const seen = (run: typeof go, side: string) =>
+    withoutSideDetails(
       args.includes("--json")
         ? {
             code: run.code,
@@ -78,8 +82,9 @@ const sameAt = async (cwd: string, ...args: string[]) => {
             stderr: run.stderr,
           }
         : { code: run.code, stdout: run.stdout, stderr: run.stderr },
+      side,
     );
-  assert.deepStrictEqual(seen(ours), seen(go), args.join(" "));
+  assert.deepStrictEqual(seen(ours, "cli"), seen(go, "go"), args.join(" "));
 };
 
 const same = (...args: string[]) => sameAt(box.home, ...args);
@@ -333,6 +338,140 @@ describe("projects add, remove and reorder", () => {
     await same("projects", "list");
     await same("projects", "reorder", "--ids", "A");
     await same("--json", "projects", "list");
+  });
+});
+
+describe("worktrees", () => {
+  // Two projects: one with a linked worktree and a title on it, one
+  // with only its primary.
+  const projects = () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    box.write("projects/A/project.json", { defaultBranch: "main" });
+    return { alpha, beta, fox: `${box.home}/fox` };
+  };
+
+  it("lists the worktrees, scoped to the project at the cwd", async () => {
+    const { alpha, fox } = projects();
+    await same("list");
+    await same("--json", "list");
+    await sameAt(fox, "ls");
+    await sameAt(fox, "--json", "wt", "l", "--all");
+    await same("w", "list", "-p", "alpha");
+    await same("--json", "worktrees", "list", "--project-id", "B");
+    await sameAt(alpha, "list", "--identities");
+    await same("--json", "list", "--identities", "--primary-ref");
+    await same("list", "--primary-ref");
+  });
+
+  it("names one worktree by id, as the app does", async () => {
+    const { fox } = projects();
+    const id = (
+      (await box.runAt(goSm(), "go", fox, ["--json", "path"])).doc as {
+        id: string;
+      }
+    ).id;
+    await same("--json", "list", "--worktree-id", id);
+    await same("list", "--worktree-id", id, "--identities");
+    await sameAt(fox, "list", "--worktree-id", id, "--identities");
+    await same("--json", "list", "--worktree-id", "nope");
+  });
+
+  it("prints a worktree's folder however it's named", async () => {
+    const { alpha, fox } = projects();
+    await same("path", "fox");
+    await same("--json", "path", "alpha/fox");
+    await sameAt(fox, "path");
+    await sameAt(alpha, "--json", "path", "root");
+    await same("path", "fox", "-p", "beta");
+    await same("--json", "path", "nope");
+    await same("path");
+    await same("path", "fox", "extra");
+    await same("list", "alpha");
+    await same("projects", "ls");
+    await same("--json", "p", "rm", "--project-id", "B", "--yes");
+  });
+
+  it("says where a new worktree would go", async () => {
+    projects();
+    await same("--json", "destination", "-p", "alpha", "--name", "owl");
+    await same("worktrees", "destination", "-p", "alpha", "--name", "FOX");
+    await same("--json", "destination", "-p", "alpha", "--name", "primary");
+    await same("destination", "-p", "alpha", "--name", "a/b");
+    await same("destination", "-p", "alpha", "extra");
+  });
+
+  it("says when there are no projects", async () => {
+    await same("list");
+    await same("--json", "list", "--identities");
+  });
+});
+
+describe("doctor", () => {
+  // Each side's data dir, which the checklist names, as one.
+  const sideNeutral = (seen: unknown): unknown =>
+    JSON.parse(
+      ["go", "cli"].reduce(
+        (text, side) =>
+          text
+            .replaceAll(`${box.home}/${side}`, "<data>")
+            .replaceAll(`~/${side}`, "<data>"),
+        JSON.stringify(seen),
+      ),
+    ) as unknown;
+  const sameDoctor = async (...args: string[]) => {
+    const [go, ours] = await Promise.all([
+      box.runAt(goSm(), "go", box.home, args),
+      box.runAt(built, "cli", box.home, args),
+    ]);
+    const seen = (run: typeof go) =>
+      sideNeutral(
+        args.includes("--json")
+          ? { code: run.code, doc: run.doc, stderr: run.stderr }
+          : { code: run.code, stdout: run.stdout, stderr: run.stderr },
+      );
+    assert.deepStrictEqual(seen(ours), seen(go), args.join(" "));
+  };
+
+  // A gh that is signed in, so its line reads the same on any machine.
+  beforeEach(() => {
+    box.fakeBin(
+      "gh",
+      'case "$1" in auth) exit 0;; --version) echo "gh version 9.9.9 (2026-01-01)";; esac',
+    );
+  });
+
+  // A project that is there and one whose repo is gone.
+  beforeEach(() => {
+    const repo = box.repo("repo");
+    box.write("registry.json", {
+      projects: [
+        { id: "P1", name: "repo", path: repo },
+        { id: "P2", name: "ghost", path: `${box.home}/ghost` },
+      ],
+    });
+    box.write("projects/P1/project.json", { defaultBranch: "main" });
+    box.write("projects/P2/project.json", { defaultBranch: "main" });
+  });
+
+  it("checks the install, and refuses a command line it can't use", async () => {
+    await sameDoctor("doctor");
+    await sameDoctor("--json", "doctor");
+    await sameDoctor("doctor", "--yes");
+    await sameDoctor("--json", "doctor", "extra");
+  });
+
+  it("repairs what it can, asking before a deletion", async () => {
+    await sameDoctor("doctor", "--fix");
+    await sameDoctor("--json", "doctor", "--fix", "--yes");
+    await sameDoctor("doctor");
   });
 });
 

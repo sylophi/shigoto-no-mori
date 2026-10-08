@@ -15,6 +15,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Git from "./Git.ts";
+import { parseJson } from "./json.ts";
 import { isNotFound } from "./platformErrors.ts";
 
 // A gh that couldn't answer, sorted where it failed: not installed, not
@@ -389,15 +390,6 @@ const summaryOf = (row: Row): PullRequestSummary => {
       ? { autoMergeRequest: { mergeMethod: text(autoMerge["mergeMethod"]) } }
       : {}),
   };
-};
-
-// JSON text, none when it isn't.
-const parseJson = (raw: string): Option.Option<unknown> => {
-  try {
-    return Option.some(JSON.parse(raw) as unknown);
-  } catch {
-    return Option.none();
-  }
 };
 
 // The repository object of a GraphQL answer, undefined when there is none.
