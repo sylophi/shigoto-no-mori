@@ -42,23 +42,31 @@ func fileFlags(p string) (uint32, error) {
 // Flags clearing leaves: the ones a checkout's own files can carry.
 const keptFlags = unix.UF_COMPRESSED | unix.UF_TRACKED
 
-// Clears every flag on p but keptFlags (immutable, hidden, an iCloud
-// placeholder), given the flags it has now.
+// The flags clearing removes: the owner's (immutable, hidden, ...) but
+// keptFlags. The system's (an iCloud placeholder, restricted) only root
+// may change, so they stay, and asking to drop them would fail the
+// whole call.
+const clearedFlags = unix.UF_SETTABLE &^ keptFlags
+
+// Clears clearedFlags on p, given the flags it has now.
 func clearFlags(p string, flags uint32) error {
-	if flags&^keptFlags == 0 {
+	if flags&clearedFlags == 0 {
 		return nil
 	}
-	return chflagsNoFollow(p, flags&keptFlags)
+	return chflagsNoFollow(p, flags&^clearedFlags)
 }
 
-// chflags on p itself, a symlink included (chflags(2) follows one).
+// chflags on p itself, a symlink included (chflags(2) follows one),
+// without opening it: a fifo would block, and a file the owner can't
+// read still takes its owner's flags.
 func chflagsNoFollow(p string, flags uint32) error {
-	fd, err := unix.Open(p, unix.O_RDONLY|unix.O_SYMLINK|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return err
+	attrs := unix.Attrlist{
+		Bitmapcount: unix.ATTR_BIT_MAP_COUNT,
+		Commonattr:  unix.ATTR_CMN_FLAGS,
 	}
-	defer unix.Close(fd)
-	return unix.Fchflags(fd, int(flags))
+	var buf [4]byte
+	binary.NativeEndian.PutUint32(buf[:], flags)
+	return unix.Setattrlist(p, &attrs, buf[:], unix.FSOPT_NOFOLLOW)
 }
 
 // p's own extended attribute names, a symlink's included.

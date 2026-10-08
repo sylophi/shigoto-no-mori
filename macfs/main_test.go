@@ -133,8 +133,20 @@ func TestFlagsWalkAndClear(t *testing.T) {
 		t.Fatalf("lines = %v", lines)
 	}
 
-	macfs(t, "dir/hidden\x00dir/link", "flags", "-stdin", "-clear", root)
-	for _, rel := range []string{"dir/hidden", "dir/link"} {
+	// Unreadable, and a fifo, which an open would block on.
+	if err := os.Chmod(hidden, 0); err != nil {
+		t.Fatal(err)
+	}
+	fifo := filepath.Join(root, "dir/fifo")
+	if err := unix.Mkfifo(fifo, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := chflagsNoFollow(fifo, unix.UF_HIDDEN); err != nil {
+		t.Fatal(err)
+	}
+
+	macfs(t, "", "flags", "-clear", root)
+	for _, rel := range []string{"dir/hidden", "dir/link", "dir/fifo"} {
 		if flags, err := fileFlags(filepath.Join(root, rel)); err != nil || flags&^keptFlags != 0 {
 			t.Fatalf("%s: flags %#x after clear (%v)", rel, flags, err)
 		}

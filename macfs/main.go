@@ -4,7 +4,7 @@
 // engine's Darwin service. Five verbs:
 //
 //	macfs clone [-stdin] <src> <dst>   clonefile(2) a tree, mode and mtime kept
-//	macfs flags [-stdin] [-clear] <root>   st_flags, cleared but compression and tracking
+//	macfs flags [-stdin] [-clear] <root>   st_flags, the owner's cleared but compression and tracking
 //	macfs xattrs [-stdin] [-strip] <root>  xattr names, stripped but provenance
 //	macfs privsize [-stdin] <root>     APFS private size, null where unknown
 //	macfs fstype [-stdin] <root>       the filesystem's type name
@@ -21,6 +21,8 @@
 //	{"path":"a/b","flags":32}
 //	{"path":"a/c","error":{"code":"ENOENT","message":"no such file or directory"}}
 //
+// With -clear or -strip a line reports the flags or names as found,
+// before they went.
 // A directory a walk can't list adds an error line under its own path.
 // Exit status 0 means every entry was answered, 2 a usage error, 1 a
 // failure reading stdin or writing stdout.
@@ -107,7 +109,7 @@ var verbs = map[string]verb{
 		}
 	}},
 	"flags": {roots: 1, walks: true, op: func(set *flag.FlagSet) op {
-		clear := set.Bool("clear", false, "clear every flag but compression and tracking")
+		clear := set.Bool("clear", false, "clear the owner's flags but compression and tracking")
 		return func(roots []string, rel string) (any, error) {
 			p := filepath.Join(roots[0], rel)
 			flags, err := fileFlags(p)

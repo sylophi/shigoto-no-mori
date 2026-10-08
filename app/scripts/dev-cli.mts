@@ -1,9 +1,9 @@
 // Runs before `pnpm dev`: compiles the dev-flavor CLI into dist-cli/,
 // the file-sync engine into dist-file-sync/ and the darwin helper into
 // dist-macfs/ so the app can delegate to them. Installing the `smd`
-// PATH link is NOT done here; the app prompts for that on launch, same as the
-// packaged app does for `sm` (main/electron/cliInstall.ts). The CLI is
-// the app's only engine, so a failed build (missing Go toolchain)
+// PATH link is NOT done here; the app prompts for that on launch, same
+// as the packaged app does for `sm` (main/electron/cliInstall.ts). The
+// CLI is the app's only engine, so a failed build (missing Go toolchain)
 // aborts the dev run. The Go builds are independent and run side by
 // side.
 import { spawn } from "node:child_process";
