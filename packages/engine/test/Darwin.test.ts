@@ -33,7 +33,8 @@ beforeAll(() => {
     binary,
     ".",
   ]);
-});
+  // A cold Go cache compiles x/sys first.
+}, 120_000);
 
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -113,9 +114,12 @@ it("clones keeping the mtime, and a clone frees nothing", async () => {
   assert.deepEqual(sizes, [{ path: "a/f.txt", bytes: 0 }]);
 });
 
-it("names the filesystem", async () => {
+it("names the filesystem, and a dashed root stays a root", async () => {
   const types = await collect((d) => d.fsType({ root: scratch }));
   assert.deepEqual(types, [{ path: ".", type: "apfs" }]);
+  const dashed = await collect((d) => d.fsType({ root: "-strip" }));
+  assert.equal(dashed.length, 1);
+  assert.ok(dashed[0] && Darwin.isFailed(dashed[0]));
 });
 
 it("fails the stream when the helper does", async () => {
