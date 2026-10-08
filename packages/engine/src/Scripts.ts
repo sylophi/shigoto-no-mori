@@ -287,9 +287,7 @@ const make = Effect.gen(function* () {
     packageManager: (dir) =>
       present(path.join(dir, "package.json")).pipe(
         Effect.flatMap((found) =>
-          found
-            ? Effect.map(packageManager(dir), Option.some)
-            : Effect.succeed(Option.none()),
+          found ? Effect.asSome(packageManager(dir)) : Effect.succeedNone,
         ),
       ),
     recordRun,

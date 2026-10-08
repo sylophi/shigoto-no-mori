@@ -25,6 +25,7 @@ const paint = (text: string, code: string, enabled: boolean) =>
   enabled && text !== "" ? `\u001b[${code}m${text}\u001b[0m` : text;
 
 export const styles = (color: boolean) => ({
+  bold: (text: string) => paint(text, "1", color),
   dim: (text: string) => paint(text, "2", color),
   green: (text: string) => paint(text, "32", color),
   red: (text: string) => paint(text, "31", color),
@@ -36,18 +37,14 @@ export const styles = (color: boolean) => ({
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 const visibleWidth = (text: string) => [...text.replace(ANSI, "")].length;
 
-// Columns padded to their widest cell, two spaces apart, the header
-// dimmed.
-export function renderTable(
-  header: ReadonlyArray<string>,
+// Columns padded to their widest cell, two spaces apart.
+export function alignRows(
   rows: ReadonlyArray<ReadonlyArray<string>>,
-  color: boolean,
-): string {
-  const all = [header, ...rows];
-  const widths = header.map((_, column) =>
-    Math.max(...all.map((row) => visibleWidth(row[column] ?? ""))),
+): ReadonlyArray<string> {
+  const widths = (rows[0] ?? []).map((_, column) =>
+    Math.max(...rows.map((row) => visibleWidth(row[column] ?? ""))),
   );
-  const lines = all.map((row) =>
+  return rows.map((row) =>
     row
       .map(
         (cell, column) =>
@@ -56,5 +53,14 @@ export function renderTable(
       .join("")
       .trimEnd(),
   );
-  return [styles(color).dim(lines[0] ?? ""), ...lines.slice(1)].join("\n");
+}
+
+// A table: its rows aligned under a dimmed header.
+export function renderTable(
+  header: ReadonlyArray<string>,
+  rows: ReadonlyArray<ReadonlyArray<string>>,
+  color: boolean,
+): string {
+  const [head = "", ...body] = alignRows([header, ...rows]);
+  return [styles(color).dim(head), ...body].join("\n");
 }
