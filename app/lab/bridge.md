@@ -1,8 +1,8 @@
 # The bridge
 
 What a `js` step can ask a device window, and the same verbs from a
-terminal. The preload exposes the real IPC bridge as `window.api` in
-the page, and a `js` step awaits what a call returns.
+terminal. The page's `window.api` is built over the real IPC bridge
+the preload exposes, and a `js` step awaits what a call returns.
 
 ## Useful bridge calls
 
