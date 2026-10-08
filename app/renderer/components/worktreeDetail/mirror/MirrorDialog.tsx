@@ -39,6 +39,7 @@ import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
 import { selectionSummary, sessionSummary } from "../flow/ignoreChoice";
 import { describeMirror } from "./mirrorStatus";
 import { MirrorReview } from "./MirrorReview";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;
 
@@ -330,7 +331,11 @@ function MirrorLive({
         <section className="space-y-2">
           <SectionHeading>Copy on {thisDeviceLabel}</SectionHeading>
           <div className={cn(CARD, "space-y-1.5")}>
-            <p className="truncate font-mono text-sm font-semibold">{branch}</p>
+            <SimpleTooltip whenTruncated tip={branch}>
+              <p className="truncate font-mono text-sm font-semibold">
+                {branch}
+              </p>
+            </SimpleTooltip>
             <LandedPath path={landed.path} />
             <div className="flex flex-wrap gap-1.5 pt-0.5">
               <Chip>

@@ -38,6 +38,8 @@ export class GhUnavailableError extends Schema.TaggedError<GhUnavailableError>()
 export class GithubCli extends Context.Service<
   GithubCli,
   {
+    // What gh can do, and with the integration toggle whether anything
+    // may use it.
     readonly readiness: Effect.Effect<GithubCliReadiness>;
     // The integration toggle and readiness together, naming which check
     // failed, or null when gh can be used. Surfaces that explain
@@ -45,6 +47,9 @@ export class GithubCli extends Context.Service<
     readonly unavailableReason: Effect.Effect<GhUnavailableReason | null>;
     // The first remote whose host gh is logged in to, or null.
     readonly repo: (cwd: string) => Effect.Effect<GithubRepoInfo | null>;
+    // For a path that just gained its GitHub remote (a publish), so the
+    // next read sees it rather than a cached "not on GitHub".
+    readonly evictRepo: (cwd: string) => Effect.Effect<void>;
     // The gate for read paths: gh ready, and the repo on a GitHub
     // remote. Mutations check the reason so their errors stay specific.
     readonly readyForRepo: (cwd: string) => Effect.Effect<boolean>;
@@ -109,7 +114,7 @@ const make = Effect.gen(function* () {
 
   // `gh auth status` exits non-zero when not signed in, and is not
   // asked when gh is missing.
-  const readiness = yield* Effect.gen(function* () {
+  const probe = yield* Effect.gen(function* () {
     const installed = (yield* Processes.resolveOnPath("gh")) !== null;
     const authed =
       installed &&
@@ -205,7 +210,7 @@ const make = Effect.gen(function* () {
   const unavailableReason = Effect.gen(function* () {
     const config = yield* Effect.promise(readGlobalConfig);
     if (config.githubCli === false) return "integration-off" as const;
-    const { installed, authed } = yield* readiness;
+    const { installed, authed } = yield* probe;
     if (!installed) return "gh-missing" as const;
     if (!authed) return "gh-signed-out" as const;
     return null;
@@ -223,9 +228,17 @@ const make = Effect.gen(function* () {
   });
 
   return GithubCli.of({
-    readiness: readiness.pipe(Effect.withSpan("GithubCli.readiness")),
+    readiness: Effect.all([probe, unavailableReason], {
+      concurrency: 2,
+    }).pipe(
+      Effect.map(([answer, unavailable]) => ({ ...answer, unavailable })),
+      Effect.withSpan("GithubCli.readiness"),
+    ),
     unavailableReason,
     repo,
+    evictRepo: Effect.fn("GithubCli.evictRepo")((cwd: string) =>
+      Cache.invalidate(repos, cwd),
+    ),
     readyForRepo,
     mergeConfig: Effect.fn("GithubCli.mergeConfig")(function* (cwd) {
       if (!(yield* readyForRepo(cwd))) return null;
@@ -260,6 +273,8 @@ export const getGithubCliReadiness = () => call((cli) => cli.readiness);
 export const ghUnavailableReason = () => call((cli) => cli.unavailableReason);
 export const ghReady = async () => (await ghUnavailableReason()) === null;
 export const getGithubRepoInfo = (cwd: string) => call((cli) => cli.repo(cwd));
+export const evictGithubRepoInfo = (cwd: string) =>
+  call((cli) => cli.evictRepo(cwd));
 export const ghReadyForRepo = (cwd: string) =>
   call((cli) => cli.readyForRepo(cwd));
 export const getRepoMergeConfig = (cwd: string) =>

@@ -5,6 +5,7 @@ import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { DeviceBadge, MirrorBadge } from "@/components/sidebar/DeviceBadge";
+import { ownerOf } from "@/components/sidebar/buildSidebarRows";
 import { PullRequestPill } from "@/components/sidebar/PullRequestPill";
 import { StatusIndicator } from "@/components/sidebar/StatusIndicator";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
@@ -18,13 +19,19 @@ import {
   worktreeLastActivityAt,
   type Project,
 } from "@shigomori/contracts/schemas";
-import type { PaletteEntry, PaletteProject } from "./buildPaletteEntries";
+import type {
+  PaletteEntry,
+  PalettePage,
+  PaletteProject,
+} from "./buildPaletteEntries";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
-// Everything the list can hold: the worktrees, the projects a query
-// names, and, for a query, the worktree it could make.
+// Everything the list can hold: the worktrees, the projects and pages a
+// query names, and, for a query, the worktree it could make.
 export type PaletteRow =
   | { kind: "worktree"; key: string; entry: PaletteEntry }
   | { kind: "project"; key: string; item: PaletteProject }
+  | { kind: "page"; key: string; page: PalettePage }
   | {
       kind: "create";
       key: string;
@@ -49,6 +56,8 @@ export function PaletteRowView({
       return <WorktreeRow entry={row.entry} query={query} now={now} />;
     case "project":
       return <ProjectRow item={row.item} query={query} />;
+    case "page":
+      return <PageRow page={row.page} query={query} />;
     case "create":
       return <CreateRow row={row} creating={creating} />;
   }
@@ -122,15 +131,18 @@ function WorktreeRow({
     >
       <PullRequestPill pr={pr} />
       <StatusIndicator worktree={worktree} />
-      <WorktreeKindIcon worktree={worktree} showTooltip={false} />
+      <WorktreeKindIcon worktree={worktree} />
       {device && <DeviceBadge badge={device} />}
       {mirror && <MirrorBadge mirror={mirror} />}
     </RowLayout>
   );
 }
 
+// A project under its owner, the sidebar's header for it, so a query
+// naming the owner shows why the project is in the list.
 function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
   const { project, device, worktreeCount, deviceCount } = item;
+  const owner = ownerOf(project);
   return (
     <RowLayout
       dim={device !== undefined && !device.reachable}
@@ -144,6 +156,11 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
       title={<Highlight text={project.name} query={query} />}
       detail={
         <>
+          {owner && (
+            <>
+              <Highlight text={owner.name} query={query} /> ·{" "}
+            </>
+          )}
           {worktreeCount > 0
             ? pluralize(worktreeCount, "worktree")
             : "No worktrees"}
@@ -153,6 +170,19 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
     >
       {device && <DeviceBadge badge={device} />}
     </RowLayout>
+  );
+}
+
+function PageRow({ page, query }: { page: PalettePage; query: string }) {
+  const Icon = page.icon;
+  return (
+    <RowLayout
+      icon={
+        <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+      }
+      title={<Highlight text={page.label} query={query} />}
+      detail={page.parent}
+    />
   );
 }
 
@@ -197,7 +227,7 @@ function RowLayout({
 }: {
   icon: ReactNode;
   title: ReactNode;
-  detail: ReactNode;
+  detail?: ReactNode;
   dim?: boolean;
   children?: ReactNode;
 }) {
@@ -210,10 +240,16 @@ function RowLayout({
     >
       {icon}
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-xs">{title}</span>
-        <span className="truncate text-3xs text-muted-foreground">
-          {detail}
-        </span>
+        <SimpleTooltip whenTruncated lazy tip={title}>
+          <span className="truncate text-xs">{title}</span>
+        </SimpleTooltip>
+        {detail && (
+          <SimpleTooltip whenTruncated lazy tip={detail}>
+            <span className="truncate text-3xs text-muted-foreground">
+              {detail}
+            </span>
+          </SimpleTooltip>
+        )}
       </div>
       {children}
     </div>

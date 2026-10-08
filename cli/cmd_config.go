@@ -112,6 +112,8 @@ var globalConfigKeys = []configKey{
 		hint: "config launcher add/rm"},
 	{name: "hiddenLaunchers", kind: jsonKind, def: []any{}, elem: validStringEntry,
 		desc: "Hidden launcher ids (via edit or the app)"},
+	{name: "terminal", kind: enumKind, enum: terminalIDs, def: defaultTerminal,
+		desc: "Terminal that terminal tools (Claude Code, Neovim, …) open in"},
 }
 
 // Mirrors ShigomoriConfigSchema. defaultBranch is required there. A

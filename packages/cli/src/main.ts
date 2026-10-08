@@ -19,6 +19,10 @@ import { doctorCommand } from "./commands/doctor.ts";
 import { runCommand } from "./commands/run.ts";
 import { adopt, create, move, rekey, rm, setup } from "./commands/changes.ts";
 import { done, land, merge, pr } from "./commands/landing.ts";
+import { dirty } from "./commands/dirty.ts";
+import { bundle } from "./commands/bundle.ts";
+import { open } from "./commands/open.ts";
+import { update } from "./commands/update.ts";
 import { cdCommand, shellCommand } from "./commands/shell.ts";
 import {
   destination,
@@ -62,6 +66,7 @@ const VERBS: Readonly<Record<string, string>> = {
   remove: "rm",
   mv: "move",
   c: "cd",
+  o: "open",
 };
 const PROJECT_VERBS: Readonly<Record<string, string>> = {
   ls: "list",
@@ -124,7 +129,11 @@ const sm = Command.make("sm").pipe(
     merge.pipe(Command.provide(services)),
     land.pipe(Command.provide(services)),
     done.pipe(Command.provide(services)),
+    dirty.pipe(Command.provide(services)),
+    bundle.pipe(Command.provide(services)),
+    open.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(services)),
+    update.pipe(Command.provide(services)),
   ]),
 );
 

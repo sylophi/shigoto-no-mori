@@ -30,6 +30,8 @@ import { divergenceCell, flagNames, truncate } from "./cells.ts";
 import { adopt, create, move, rekey, rm, setup } from "./changes.ts";
 import { describe } from "./describe.ts";
 import { done, land, merge, pr } from "./landing.ts";
+import { open } from "./open.ts";
+import { dirty } from "./dirty.ts";
 import { cdCommand } from "./shell.ts";
 import { agentWorking, autopull, shelve, unshelve } from "./marks.ts";
 import { status } from "./status.ts";
@@ -333,5 +335,7 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     merge,
     land,
     done,
+    open,
+    dirty,
   ]),
 );

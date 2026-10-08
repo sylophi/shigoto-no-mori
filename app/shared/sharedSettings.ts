@@ -24,9 +24,12 @@ const isSharedSettingValue = Schema.is(SharedSettingValueSchema);
 
 export const EMPTY_SHARED_SETTINGS: SharedSettingsDoc = { entries: {} };
 
+const PINNED_PROJECT_PREFIX = "pinnedProject/";
+
 // The keys this build reads. Copies hold and forward any key, so a
 // name here is a promise to every build that ever synced it: reuse one
 // for a different meaning and older copies hand the old values back.
+
 export const sharedSettingKeys = {
   // Which device a project header's + creates on, by repo identity
   // (the merged header IS the identity group). The value is a device
@@ -42,6 +45,9 @@ export const sharedSettingKeys = {
   // key (projectGroupKey: the repo identity, or the project's own key
   // when it has none). The value is a WorktreeSortMode.
   worktreeSort: (groupKey: string) => `worktreeSort/${groupKey}`,
+  // Whether the list of projects leads with a project, by its group
+  // key like the sort above. The value is true, or null once unpinned.
+  pinnedProject: (groupKey: string) => `${PINNED_PROJECT_PREFIX}${groupKey}`,
   // The worktrees the sidebar hides the way it hides shelved ones, in
   // every project. The value is the prefixes, one per line
   // (worktreePrefixesValue).
@@ -280,6 +286,18 @@ export function sharedStringSetting(
 ): string | undefined {
   const value = doc?.entries[key]?.value;
   return typeof value === "string" ? value : undefined;
+}
+
+// The group keys of the pinned projects, sorted, so the same pins are
+// the same list.
+export function pinnedProjectKeys(doc: SharedSettingsDoc): string[] {
+  return Object.entries(doc.entries)
+    .filter(
+      ([key, entry]) =>
+        key.startsWith(PINNED_PROJECT_PREFIX) && entry.value === true,
+    )
+    .map(([key]) => key.slice(PINNED_PROJECT_PREFIX.length))
+    .toSorted();
 }
 
 // Where a copy is kept. `transact` runs `next` on the stored copy

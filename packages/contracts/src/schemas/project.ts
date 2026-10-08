@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { isCloneableRemote } from "../predicates/remoteUrl.ts";
-import { ProjectScopedPayloadSchema } from "./payloads.ts";
+import { PathPayloadSchema, ProjectScopedPayloadSchema } from "./payloads.ts";
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
 // no detached HEAD we can read. Treated as "not a real branch" by every
@@ -99,7 +99,8 @@ export type WorktreeSortMode = typeof WorktreeSortModeSchema.Type;
 export const SidebarViewSchema = Schema.Literals(["projects", "inbox"]);
 export type SidebarView = typeof SidebarViewSchema.Type;
 
-// A new checkout's folder name: one path segment.
+// The folder a clone or a new repository lands in: one path segment
+// under the parent the caller picked.
 export const CloneFolderNameSchema = Schema.Trim.check(
   Schema.isMinLength(1),
   Schema.makeFilter(
@@ -109,11 +110,22 @@ export const CloneFolderNameSchema = Schema.Trim.check(
   ),
 );
 
+// `terrier` also registers the repo in terrier (host/lib/terrier.ts),
+// for a device with the integration on. The add, the clone and the
+// create all take it.
+export const AddProjectPayloadSchema = Schema.Struct({
+  ...PathPayloadSchema.fields,
+  terrier: Schema.optional(Schema.Boolean),
+});
+
+export type AddProjectPayload = typeof AddProjectPayloadSchema.Type;
+
 // Clone a remote into `parentDir` and register the checkout. What
 // counts as a remote is isCloneableRemote's call (a plain path or
 // file:// names this machine's disk, which means nothing on the device
 // doing the clone, and a leading dash would read as a git option).
-// `name` is the new folder, defaulting to the repo's own name.
+// `name` is the new folder, one segment, defaulting to the repo's own
+// name.
 export const CloneProjectPayloadSchema = Schema.Struct({
   url: Schema.Trim.check(
     Schema.makeFilter(
@@ -122,9 +134,19 @@ export const CloneProjectPayloadSchema = Schema.Struct({
   ),
   parentDir: Schema.NonEmptyString,
   name: Schema.optional(CloneFolderNameSchema),
+  terrier: Schema.optional(Schema.Boolean),
 });
 
 export type CloneProjectPayload = typeof CloneProjectPayloadSchema.Type;
+
+// Start a new repository at `parentDir/name` and register it.
+export const CreateProjectPayloadSchema = Schema.Struct({
+  parentDir: Schema.NonEmptyString,
+  name: CloneFolderNameSchema,
+  terrier: Schema.optional(Schema.Boolean),
+});
+
+export type CreateProjectPayload = typeof CreateProjectPayloadSchema.Type;
 
 export const RemoveProjectPayloadSchema = Schema.Struct({
   id: Schema.NonEmptyString,

@@ -246,6 +246,42 @@
     ],
     "rejects": ["   ", "forks/port-pool", "forks\\port-pool", ".", ".."]
   },
+  "AddProjectPayloadSchema": {
+    "accepts": [
+      {
+        "path": "/Users/alex/dev/port-pool"
+      },
+      {
+        "path": "~/dev/port-pool",
+        "terrier": true
+      },
+      {
+        "path": "/Users/alex/dev/port-pool",
+        "terrier": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "path": "/Users/alex/dev/port-pool",
+          "name": "port-pool"
+        },
+        "output": {
+          "path": "/Users/alex/dev/port-pool"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "path": ""
+      },
+      {},
+      {
+        "path": "/Users/alex/dev/port-pool",
+        "terrier": "yes"
+      }
+    ]
+  },
   "CloneProjectPayloadSchema": {
     "accepts": [
       {
@@ -256,6 +292,11 @@
       {
         "url": "git@github.com:sylophi/port-pool.git",
         "parentDir": "/Users/alex/dev"
+      },
+      {
+        "url": "git@github.com:sylophi/port-pool.git",
+        "parentDir": "/Users/alex/dev",
+        "terrier": true
       }
     ],
     "normalizes": [
@@ -304,6 +345,57 @@
         "url": "https://github.com/sylophi/port-pool.git",
         "parentDir": "/Users/alex/dev",
         "name": "forks/port-pool"
+      },
+      {
+        "url": "git@github.com:sylophi/port-pool.git",
+        "parentDir": "/Users/alex/dev",
+        "terrier": "yes"
+      }
+    ]
+  },
+  "CreateProjectPayloadSchema": {
+    "accepts": [
+      {
+        "parentDir": "/Users/alex/dev",
+        "name": "lantern"
+      },
+      {
+        "parentDir": "~/dev",
+        "name": "my repo",
+        "terrier": true
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "parentDir": "/Users/alex/dev",
+          "name": " lantern "
+        },
+        "output": {
+          "parentDir": "/Users/alex/dev",
+          "name": "lantern"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "parentDir": "/Users/alex/dev"
+      },
+      {
+        "parentDir": "",
+        "name": "lantern"
+      },
+      {
+        "parentDir": "/Users/alex/dev",
+        "name": "   "
+      },
+      {
+        "parentDir": "/Users/alex/dev",
+        "name": ".."
+      },
+      {
+        "parentDir": "/Users/alex/dev",
+        "name": "a/b"
       }
     ]
   },

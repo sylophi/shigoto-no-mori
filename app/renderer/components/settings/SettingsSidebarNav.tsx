@@ -4,7 +4,6 @@ import {
   useMatches,
   useNavigate,
 } from "@tanstack/react-router";
-import { CircleUserRound, Trees } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { useGoBack } from "@/hooks/ui/useGoBack";
@@ -14,9 +13,11 @@ import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
 import {
+  ACCOUNT_SECTION,
   selectSettingsTab,
   settingsSections,
   useActiveSettingsTab,
+  TIDY_SECTION,
   useSettingsPanelControls,
   type SettingsSection,
 } from "./settingsNav";
@@ -150,18 +151,6 @@ function NavGroup({
 
 const SETTINGS_PATH = "/settings";
 type PagePath = "/tidy" | "/account";
-
-const TIDY_SECTION: SettingsSection = {
-  id: "tidy",
-  label: "Tidy the forest",
-  icon: Trees,
-};
-
-const ACCOUNT_SECTION: SettingsSection = {
-  id: "account",
-  label: "Account",
-  icon: CircleUserRound,
-};
 
 // One row, with the sidebar rows' selection fill, so the list reads as
 // the sidebar's rather than a foreign widget dropped in.

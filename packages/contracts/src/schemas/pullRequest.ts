@@ -259,11 +259,21 @@ export const MergePullRequestResultSchema = Schema.Struct({
 });
 export type MergePullRequestResult = typeof MergePullRequestResultSchema.Type;
 
-export const GithubCliReadinessSchema = Schema.Struct({
-  installed: Schema.Boolean,
-  authed: Schema.Boolean,
+// The accounts a new repository can be published under: the signed-in
+// user first, then their organizations.
+export const GithubOwnerListSchema = Schema.Array(Schema.String);
+
+// Publishes a project with no remote yet to GitHub as
+// `owner/<its folder name>`, and pushes it there. No owner is gh's
+// signed-in user. The owner is held to GitHub's own login shape.
+export const PublishRepoPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  owner: Schema.optional(
+    Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9-]*$/)),
+  ),
+  visibility: Schema.Literals(["private", "public"]),
 });
-export type GithubCliReadiness = typeof GithubCliReadinessSchema.Type;
+export type PublishRepoPayload = typeof PublishRepoPayloadSchema.Type;
 
 // One open PR offered as a worktree source in the create form. Slimmer
 // than PullRequestDetail on purpose: the picker only needs enough to
@@ -297,6 +307,16 @@ const GhUnavailableReasonSchema = Schema.Literals([
   "gh-signed-out",
 ]);
 export type GhUnavailableReason = typeof GhUnavailableReasonSchema.Type;
+
+// What gh can do on a device: installed and signed in, and with the
+// integration's toggle as well, whether anything may use it (null) or
+// why not.
+export const GithubCliReadinessSchema = Schema.Struct({
+  installed: Schema.Boolean,
+  authed: Schema.Boolean,
+  unavailable: Schema.NullOr(GhUnavailableReasonSchema),
+});
+export type GithubCliReadiness = typeof GithubCliReadinessSchema.Type;
 
 // Why the PR source is unavailable for a project: the readiness reasons
 // plus the two that are about this repo. Kept as codes rather than prose

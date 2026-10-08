@@ -138,6 +138,16 @@ const cloneCounts = (run: Run): Run => ({
   ),
 });
 
+// A capture is a commit made now, so its hash differs by side.
+const captureHashes = (run: Run): Run => ({
+  ...run,
+  stdout: run.stdout.replaceAll(/\b[0-9a-f]{40}\b/g, "<commit>"),
+  doc:
+    typeof run.doc === "object" && run.doc !== null && "commit" in run.doc
+      ? { ...run.doc, commit: "<commit>" }
+      : run.doc,
+});
+
 // A command that changes what both sides share (the repos, their
 // worktrees): Go's first, then ours on everything as it was before.
 const changeAt = async (cwd: string, ...args: string[]) => {
@@ -257,9 +267,13 @@ describe("projects", () => {
 
   it("warns when terrier can't be read", async () => {
     projects();
-    box.fakeBin("terrier", "echo v0.2.0");
     box.write("config.json", { terrier: true });
-    await same("projects", "list");
+    // Not JSON, JSON in another shape, and a failed run.
+    for (const answer of ["echo v0.2.0", `echo '{"repos":[]}'`, "exit 3"]) {
+      box.fakeBin("terrier", answer);
+      // oxlint-disable-next-line no-await-in-loop -- one terrier at a time
+      await same("projects", "list");
+    }
     await same("--json", "projects", "list");
   });
 
@@ -908,6 +922,198 @@ describe("landing", () => {
     box.git(repo, "commit", "-q", "--allow-empty", "-m", "unmerged work");
     await change("--json", "done", "repo/root");
     await change("done", "repo/root", "-f");
+  });
+});
+
+describe("dirty", () => {
+  const dirtyAt = async (cwd: string, ...args: string[]) => {
+    const [go, ours] = await box.changeBoth(
+      () => box.runAt(goSm(), "go", cwd, args),
+      () => box.runAt(built, "cli", cwd, args),
+    );
+    compare(args, go, ours, captureHashes);
+  };
+  const dirty = (...args: string[]) => dirtyAt(box.home, ...args);
+
+  // A project with a linked worktree holding an edit and a new file.
+  const project = () => {
+    const alpha = box.repo("alpha", { "a.txt": "a\n" });
+    const fox = `${box.home}/fox`;
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", fox);
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    writeFileSync(`${fox}/a.txt`, "edited\n");
+    writeFileSync(`${fox}/new.txt`, "new\n");
+    const discard = () => {
+      box.git(fox, "checkout", "--", ".");
+      box.git(fox, "clean", "-qfd");
+    };
+    return { fox, discard };
+  };
+
+  it("captures a worktree's changes and applies them back", async () => {
+    const { fox, discard } = project();
+    await dirty("--json", "dirty", "capture", "fox");
+    await dirtyAt(fox, "dirty", "capture");
+    await dirty("dirty", "apply", "fox");
+    discard();
+    await dirty("--json", "dirty", "apply", "fox");
+    await dirty("dirty", "apply", "fox");
+    discard();
+    await dirty("dirty", "capture", "fox");
+    await dirty("wt", "dirty", "nope");
+  });
+
+  it("refuses a capture taken on another commit, or that would overwrite a file", async () => {
+    const { fox, discard } = project();
+    await dirty("dirty", "capture", "fox");
+    discard();
+    writeFileSync(`${fox}/new.txt`, "in the way\n");
+    await dirty("dirty", "apply", "fox");
+    await dirty("--json", "dirty", "apply", "fox", "-f");
+    box.git(fox, "commit", "-q", "--allow-empty", "-m", "moved on");
+    await dirty("--json", "dirty", "apply", "fox", "--force");
+  });
+});
+
+describe("bundle", () => {
+  it("bundles refs less what the far side has, and unpacks them under refs/shigomori/", async () => {
+    const alpha = box.repo("alpha", { "a.txt": "a\n" });
+    const first = box.git(alpha, "rev-parse", "HEAD").trim();
+    box.git(alpha, "commit", "-q", "--allow-empty", "-m", "second");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    const out = `${box.home}/fox.bundle`;
+    const create = ["bundle", "create", "-p", "alpha", "--out", out];
+    await change("--json", ...create, "--ref", "refs/heads/main");
+    await change(
+      ...create,
+      "--ref",
+      "refs/heads/main",
+      "--have",
+      first,
+      "--have",
+      "abcd1234",
+    );
+    await change(...create, "--ref", "refs/heads/../x");
+    await change("--json", ...create, "--ref", "refs/heads/nope");
+    await change(...create, "--ref", "refs/heads/main", "--have", "xyz");
+    await change(...create);
+    box.git(alpha, "bundle", "create", "-q", out, "refs/heads/main");
+    const unpack = ["bundle", "unpack", "--repo", alpha, "--in", out];
+    await change(
+      "--json",
+      ...unpack,
+      "--refspec",
+      "refs/heads/main:refs/shigomori/incoming/main",
+    );
+    await change(...unpack, "--refspec", "refs/heads/main:refs/heads/main");
+    writeFileSync(`${box.home}/not.bundle`, "nope");
+    await change(
+      "--json",
+      "bundle",
+      "unpack",
+      "-p",
+      "alpha",
+      "--in",
+      `${box.home}/not.bundle`,
+      "--refspec",
+      "refs/heads/main:refs/shigomori/x",
+    );
+    await change(
+      "bundle",
+      "create",
+      "--repo",
+      alpha,
+      "--out",
+      out,
+      "--ref",
+      "refs/heads/main",
+    );
+    await change("bundle", "pack");
+  });
+});
+
+describe("open", () => {
+  // A worktree on a GitHub repo, a custom launcher, and a terminal tool
+  // (Claude Code) on PATH whose terminal is driven by a fake osascript.
+  const project = () => {
+    const alpha = box.repo("alpha");
+    box.git(alpha, "remote", "add", "origin", "git@github.com:me/alpha.git");
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    box.write("config.json", {
+      launchers: [{ id: "m", label: "Mark", command: "true" }],
+    });
+    box.fakeBin("open", "exit 0");
+    box.fakeBin("claude", "exit 0");
+    box.fakeBin("osascript", "exit 0");
+    return { fox: `${box.home}/fox` };
+  };
+
+  it("opens a worktree in a launcher, by id, label or name", async () => {
+    const { fox } = project();
+    await same("open", "Mark", "fox");
+    await same("--json", "open", "custom:m", "fox");
+    await sameAt(fox, "open", "github");
+    await same("--json", "o", "claude-code", "fox");
+    await same("wt", "open", "nope", "fox");
+  });
+
+  it("refuses a command line it can't use", async () => {
+    const { fox } = project();
+    await same("open", "Mark");
+    await sameAt(fox, "open");
+    await same("open", "Mark", "--project-id", "A");
+    await same(
+      "open",
+      "Mark",
+      "fox",
+      "--worktree-id",
+      "x",
+      "--project-id",
+      "A",
+    );
+  });
+
+  it("says when macOS won't let the terminal be driven", async () => {
+    project();
+    box.fakeBin(
+      "osascript",
+      "echo 'execution error: Not authorized to send Apple events to Terminal. (-1743)' >&2; exit 1",
+    );
+    await same("open", "Claude Code", "fox");
+    box.fakeBin("osascript", "echo 'something else' >&2; exit 1");
+    await same("--json", "open", "claude-code", "fox");
+  });
+});
+
+describe("update", () => {
+  it("refuses what Go refuses, and a dev build has no updates", async () => {
+    await same("update");
+    await same("--json", "update", "--check");
+    await same("update", "--stage");
+    await same("update", "--finish-install", "--pid", "0");
+    await same("update", "now");
+    await same("--json", "update", "now");
+  });
+
+  it("refuses the variables the stand-in flags replaced", async () => {
+    const refused = async (name: string) => {
+      const env = { [name]: "http://127.0.0.1:1" };
+      const [go, ours] = await Promise.all([
+        start(goSm(), "go", box.home, ["update"], env).ended,
+        start(built, "cli", box.home, ["update"], env).ended,
+      ]);
+      assert.equal(go.code, 2);
+      assert.deepStrictEqual(ours, go);
+    };
+    await refused("SHIGOMORI_UPDATE_FEED_URL");
+    await refused("SHIGOMORI_UPDATE_RELEASES_URL");
   });
 });
 

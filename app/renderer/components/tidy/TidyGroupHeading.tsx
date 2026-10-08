@@ -2,6 +2,7 @@ import type { Project } from "@shigomori/contracts/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { formatBytes } from "@/lib/formatBytes";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface TidyGroupHeadingProps {
   project: Project;
@@ -27,7 +28,9 @@ export function TidyGroupHeading({
           name={project.name}
           className="size-3"
         />
-        <SectionHeading className="truncate">{project.name}</SectionHeading>
+        <SimpleTooltip whenTruncated tip={project.name}>
+          <SectionHeading className="truncate">{project.name}</SectionHeading>
+        </SimpleTooltip>
       </div>
       <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
         {count} {count === 1 ? "worktree" : "worktrees"} · {formatBytes(bytes)}

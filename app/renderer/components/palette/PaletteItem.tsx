@@ -1,6 +1,10 @@
 import { createContext, use, type ReactNode } from "react";
 import { Command } from "cmdk";
-import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
+import {
+  HEADING_CLASS,
+  ITEM_CLASS,
+  keepFocusInInput,
+} from "@/components/ui/cmdk-classes";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -65,9 +69,6 @@ export function PaletteItem({
   if (tip === undefined) return item;
   return <SimpleTooltip tip={tip}>{item}</SimpleTooltip>;
 }
-
-const HEADING_CLASS =
-  "px-2 pt-2 pb-1 text-2xs font-medium text-muted-foreground";
 
 // A heading over a run of items, in cmdk's group when the pane holds
 // the keys (so its filtering hides an empty one) and the same look

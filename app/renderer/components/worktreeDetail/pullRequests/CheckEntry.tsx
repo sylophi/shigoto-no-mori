@@ -3,23 +3,28 @@ import { cn } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import type { PullRequestCheck } from "@shigomori/contracts/schemas";
 import { CHECK_BUCKET_ICON, TONE_TEXT } from "./pullRequestShared";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 export function CheckEntry({ check }: { check: PullRequestCheck }) {
-  const { Icon, tone } = CHECK_BUCKET_ICON[check.bucket];
+  const { Icon, tone, label } = CHECK_BUCKET_ICON[check.bucket];
   const isPending = check.bucket === "pending";
   const Body = (
     <>
-      <Icon
-        aria-hidden
-        className={cn(
-          "size-3 shrink-0",
-          TONE_TEXT[tone],
-          isPending && "animate-spin",
-        )}
-      />
-      <span className="min-w-0 flex-1 truncate text-foreground">
-        {check.name}
-      </span>
+      <SimpleTooltip tip={label}>
+        <Icon
+          aria-label={label}
+          className={cn(
+            "size-3 shrink-0",
+            TONE_TEXT[tone],
+            isPending && "animate-spin",
+          )}
+        />
+      </SimpleTooltip>
+      <SimpleTooltip whenTruncated tip={check.name}>
+        <span className="min-w-0 flex-1 truncate text-foreground">
+          {check.name}
+        </span>
+      </SimpleTooltip>
       {check.url && (
         <ExternalLink
           aria-hidden

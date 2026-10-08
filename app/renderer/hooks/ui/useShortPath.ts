@@ -30,7 +30,7 @@ function fontOf(el: Element): string {
 export function useShortPath(
   path: string,
   home: string | null | undefined,
-): readonly [(el: HTMLElement | null) => void, string] {
+): readonly [(el: HTMLElement | null) => void, string, boolean] {
   const [el, setEl] = useState<HTMLElement | null>(null);
   const [budget, setBudget] = useState<number | null>(null);
 
@@ -49,9 +49,10 @@ export function useShortPath(
     return () => observer.disconnect();
   }, [el]);
 
+  const tildified = tildify(path, home);
   const display =
-    budget === null
-      ? tildify(path, home)
-      : tildifyAndShorten(path, home, budget);
-  return [setEl, display] as const;
+    budget === null ? tildified : tildifyAndShorten(path, home, budget);
+  // Whether a segment was abbreviated to fit.
+  const shortened = display !== tildified;
+  return [setEl, display, shortened] as const;
 }

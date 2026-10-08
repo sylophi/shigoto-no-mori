@@ -54,13 +54,18 @@ Rules that keep both themes cheap to maintain:
   `title` on DOM elements, and the `ui/` wrappers leave `title` out of
   their props. The tooltip is visual only, so an icon-only control
   still needs its `aria-label`.
-- **When in doubt, no tooltip.** A hint is for what the screen doesn't
-  say and the user can't infer: why a control is disabled, what a bare
-  mark or abbreviation stands for, a shortcut or a hidden gesture, the
-  exact value behind a rounded one (the timestamp behind "3d ago").
-  Text already on screen gets one only while it's cut off
-  (`whenTruncated`). A familiar icon (pencil, trash, copy, refresh) or
-  a label says enough on its own, and a chevron says where a row leads.
+- **A tooltip is for text that's cut off or a control that's unclear**,
+  nothing else: hints that pop up over what already reads fine get in
+  the way. Text on screen gets one only while it's cut off
+  (`whenTruncated`). Otherwise a hint says what the screen can't: why
+  a control is disabled, what a bare mark stands for, a shortcut or a
+  hidden gesture, the exact value behind a rounded one (the timestamp
+  behind "3d ago"). A bare icon that marks something gets one naming
+  it (the primary checkout's house, a device's glyph). A label or a
+  familiar icon button (pencil, trash, pin, refresh) needs none, and
+  neither does an option in a picker (device pills and tabs, the
+  device icon grid): a tip that repeats a control's name or explains a
+  plain label is noise.
 - **doubutsu.css may only select**: theme tokens, `data-slot` /
   `data-doubutsu-zone` / `data-doubutsu-page` attributes, upstream
   library attributes (Base UI `data-highlighted` etc.), and plain
@@ -208,9 +213,9 @@ Rules that keep a machine looking like itself everywhere:
   `deviceStatusView`. This device has no connection to show: it wears
   the glyph alone, and where a surface tags it, the tag is
   `THIS_DEVICE_VIEW` (a `RowTag` in a list), never a lowercase aside.
-- **Tooltips use `deviceTitle`** ("Thinkpad, Connected", "Studio Mac,
-  This device"), so a pill, a tab and a badge naming the same machine
-  say the same thing on hover.
+- **A device's tooltip is `deviceTitle`** ("Thinkpad, Connected",
+  "Studio Mac, This device") where it has one, as on the chip. The
+  device pickers have none (above).
 
 ## Village life: rarity
 

@@ -25,6 +25,9 @@ interface ProjectRowProps {
   // (ids derive from the checkout path), so this is what stays unique
   // across the list.
   groupId: string;
+  // What the group goes by (projectGroupKey), which its pin is kept by.
+  groupKey: string;
+  pinned: boolean;
   // The open project, alone in the tree: the row is its title. Else
   // the row is one of the list, to be picked.
   expanded: boolean;
@@ -50,6 +53,8 @@ export function ProjectRow({
   project,
   local,
   groupId,
+  groupKey,
+  pinned,
   expanded,
   current,
   branches,
@@ -139,6 +144,7 @@ export function ProjectRow({
           }
           badges={<DeviceBadgeCluster devices={devices} />}
           terrier={terrierInGroup}
+          pinned={pinned}
           missing={missing}
           relocating={relocating}
           onLocate={arrangeMode ? undefined : onLocate}
@@ -174,6 +180,8 @@ export function ProjectRow({
           <ProjectGroupActions
             name={project.name}
             identity={project.identity}
+            groupKey={groupKey}
+            pinned={pinned}
             members={group}
             // The open project's row is the tree's title, and wears
             // its actions at rest.

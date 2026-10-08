@@ -1,7 +1,8 @@
 // A worktree prefix list. Hidden: a worktree whose name or branch
 // starts with one of them folds away like a shelved one, behind its
 // project's "N hidden" toggle (and the inbox's Hidden shelf). Grouped:
-// it sits under a header for its prefix in its project's tree. Shared
+// it sits under a header for its prefix in its project's tree (and in
+// the inbox, when it is live work). Shared
 // settings, so each applies the moment it changes (outside the page's
 // Save) and holds on every device.
 import { useState } from "react";
