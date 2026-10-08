@@ -34,7 +34,7 @@
 import { mkdtemp, open as openFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shared/errors";
 import {
@@ -42,6 +42,7 @@ import {
   SyncCaptureSchema,
   SyncBundleRefSchema,
   SyncPullProgressSchema,
+  SyncPullWorktreePayloadSchema,
 } from "@shared/ipc/modules/sync";
 import {
   CHANNEL_MAX_FRAME_BYTES,
@@ -49,8 +50,12 @@ import {
   type ChannelHandle,
 } from "@shared/ipc/socket/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Project } from "@shared/schemas";
-import { CommitHashZod, GitRefNameZod } from "@shared/schemas/zodBridge";
+import {
+  CommitHashSchema,
+  GitRefNameSchema,
+  type Project,
+} from "@shared/schemas";
+import { strict } from "@shared/schemas/strict";
 import {
   bundleCreateViaCli,
   bundleUnpackViaCli,
@@ -276,46 +281,67 @@ async function openLink(
 // ---- The messages, validated at both ends: what a peer sends flows
 // into git argv and into strict progress schemas here.
 
-const AskSchema = z.discriminatedUnion("ask", [
-  z.strictObject({
-    ask: z.literal("tip"),
-    branch: GitRefNameZod.refine(
-      (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
-    ),
-  }),
-  z.strictObject({ ask: z.literal("capture") }),
-  z.strictObject({ ask: z.literal("clone") }),
-  z.strictObject({
-    ask: z.literal("bundle"),
-    refs: z.array(SyncBundleRefSchema).min(1).max(64),
-    haves: z.array(CommitHashZod).max(256),
-  }),
+const AskSchema = Schema.Union([
+  strict(
+    Schema.Struct({
+      ask: Schema.Literal("tip"),
+      branch: SyncPullWorktreePayloadSchema.struct.fields.branch,
+    }),
+  ),
+  strict(Schema.Struct({ ask: Schema.Literal("capture") })),
+  strict(Schema.Struct({ ask: Schema.Literal("clone") })),
+  strict(
+    Schema.Struct({
+      ask: Schema.Literal("bundle"),
+      refs: Schema.Array(SyncBundleRefSchema).check(
+        Schema.isBetweenLength(1, 64),
+      ),
+      haves: Schema.Array(CommitHashSchema).check(Schema.isMaxLength(256)),
+    }),
+  ),
 ]);
-const ProgressFrameSchema = SyncPullProgressSchema.omit({
-  sourceWorktreeId: true,
-});
-export type ProgressFrame = z.infer<typeof ProgressFrameSchema>;
-const RequestSchema = z.union([
+const progressFields = SyncPullProgressSchema.struct.fields;
+const ProgressFrameSchema = strict(
+  Schema.Struct({
+    step: progressFields.step,
+    bytes: progressFields.bytes,
+    totalBytes: progressFields.totalBytes,
+    createPhase: progressFields.createPhase,
+  }),
+);
+export type ProgressFrame = typeof ProgressFrameSchema.Type;
+const RequestSchema = Schema.Union([
   AskSchema,
-  z.strictObject({ progress: ProgressFrameSchema }),
+  strict(Schema.Struct({ progress: ProgressFrameSchema })),
 ]);
 
-export const BundleAnswerSchema = z.strictObject({
-  bundle: z.strictObject({ bytes: z.number().int().nonnegative() }),
-});
-const AnswerSchema = z.union([
-  z.strictObject({ ok: z.unknown() }),
-  z.strictObject({ error: z.string() }),
+export const BundleAnswerSchema = strict(
+  Schema.Struct({
+    bundle: strict(Schema.Struct({ bytes: Schema.Natural })),
+  }),
+);
+const AnswerSchema = Schema.Union([
+  strict(Schema.Struct({ ok: Schema.Unknown })),
+  strict(Schema.Struct({ error: Schema.String })),
   BundleAnswerSchema,
 ]);
-const TipAnswerSchema = z.strictObject({
-  commit: CommitHashZod.nullable(),
-});
-const CloneFactsSchema = z.strictObject({
-  branch: GitRefNameZod,
-  remoteUrl: z.string().nullable(),
-});
-type CloneFacts = z.infer<typeof CloneFactsSchema>;
+const TipAnswerSchema = strict(
+  Schema.Struct({
+    commit: Schema.NullOr(CommitHashSchema),
+  }),
+);
+const CloneFactsSchema = strict(
+  Schema.Struct({
+    branch: GitRefNameSchema,
+    remoteUrl: Schema.NullOr(Schema.String),
+  }),
+);
+type CloneFacts = typeof CloneFactsSchema.Type;
+const decodeRequest = Schema.decodeUnknownSync(RequestSchema);
+const decodeAnswer = Schema.decodeUnknownSync(AnswerSchema);
+const decodeTipAnswer = Schema.decodeUnknownSync(TipAnswerSchema);
+const decodeCapture = Schema.decodeUnknownSync(SyncCaptureSchema);
+const decodeCloneFacts = Schema.decodeUnknownSync(CloneFactsSchema);
 
 // Where a fetched branch lands: never the branch itself.
 export function incomingRefFor(branch: string): string {
@@ -388,8 +414,8 @@ class BrokenLink extends Error {}
 async function sendBundle(
   link: Link,
   project: Project,
-  refs: string[],
-  haves: string[],
+  refs: readonly string[],
+  haves: readonly string[],
 ): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "sm-sync-"));
   try {
@@ -398,7 +424,12 @@ async function sendBundle(
     // it resolved, but that list is computed against the repo AFTER
     // `git bundle create` silently dropped any have-covered ref, so it
     // can name refs the bundle lacks.
-    const { bytes } = await bundleCreateViaCli(project, path, refs, haves);
+    const { bytes } = await bundleCreateViaCli(
+      project,
+      path,
+      [...refs],
+      [...haves],
+    );
     const file = await openFile(path, "r");
     try {
       await link.write({ bundle: { bytes } });
@@ -430,7 +461,7 @@ async function answerAsk(
   link: Link,
   project: Project,
   facts: SourceFacts,
-  ask: z.infer<typeof AskSchema>,
+  ask: typeof AskSchema.Type,
 ): Promise<void> {
   switch (ask.ask) {
     case "tip":
@@ -472,7 +503,7 @@ export async function serveSource(
         link.end();
         return;
       }
-      const request = RequestSchema.parse(message);
+      const request = decodeRequest(message);
       if ("progress" in request) {
         opts.onProgress?.(request.progress);
         continue;
@@ -560,8 +591,8 @@ export type WorktreeSource = SourceFacts & {
   // refs/shigomori/ (landingRefspec). Byte progress once with 0 when
   // the size is known, then coalesced.
   fetch(input: {
-    refs: string[];
-    haves: string[];
+    refs: readonly string[];
+    haves: readonly string[];
     into: UnpackTarget;
     onProgress?: (bytes: number, totalBytes: number) => void;
   }): Promise<{ fetched: { ref: string; commit: string }[] }>;
@@ -580,25 +611,28 @@ function askSource(linkOrOpen: Link | (() => Promise<Link>)): WorktreeSource {
   async function answer(
     link: Link,
     message: unknown,
-  ): Promise<z.infer<typeof AnswerSchema>> {
+  ): Promise<typeof AnswerSchema.Type> {
     await link.write(message);
     const reply = await link.read();
     if (reply === null) throw new Error(LINK_GONE);
-    const parsed = AnswerSchema.parse(reply);
+    const parsed = decodeAnswer(reply);
     if ("error" in parsed) throw new Error(parsed.error);
     return parsed;
   }
-  async function ask<T>(message: unknown, schema: z.ZodType<T>): Promise<T> {
+  async function ask<T>(
+    message: unknown,
+    decodeOk: (ok: unknown) => T,
+  ): Promise<T> {
     const parsed = await answer(await linkOf(), message);
     if (!("ok" in parsed))
       throw new Error("the other device answered out of turn");
-    return schema.parse(parsed.ok);
+    return decodeOk(parsed.ok);
   }
   return {
     tip: async (branch) =>
-      (await ask({ ask: "tip", branch }, TipAnswerSchema)).commit,
-    capture: () => ask({ ask: "capture" }, SyncCaptureSchema),
-    cloneFacts: () => ask({ ask: "clone" }, CloneFactsSchema),
+      (await ask({ ask: "tip", branch }, decodeTipAnswer)).commit,
+    capture: () => ask({ ask: "capture" }, decodeCapture),
+    cloneFacts: () => ask({ ask: "clone" }, decodeCloneFacts),
     async fetch({ refs, haves, into, onProgress }) {
       const link = await linkOf();
       const parsed = await answer(link, { ask: "bundle", refs, haves });

@@ -1,20 +1,20 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { broughtPaths } from "@shared/mirrorIgnores";
-import {
-  type MirrorIgnoreMode,
-  MirrorIgnoreModeSchema,
-  MirrorIgnoresSchema,
-  SyncLandingRefSchema,
-  SyncPullWorktreePayloadSchema,
-  SyncPullWorktreeResultSchema,
-  SyncSendWorktreePayloadSchema,
-} from "@shared/ipc/modules/sync";
+import type { MirrorIgnoreMode } from "@shared/ipc/modules/sync";
 import {
   CommitHashZod,
+  DeviceIdZod,
   GitRefNameZod,
   HexId32Zod,
+  MirrorIgnoreModeZod,
+  MirrorIgnoresZod,
+  ProjectZod,
+  SyncCloneIntoZod,
+  SyncLandingRefZod,
+  SyncPullFilesZod,
   WorktreeIdZod,
+  WorktreeZod,
 } from "@shared/schemas/zodBridge";
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
@@ -231,7 +231,7 @@ const MirrorApplyGitStatePayloadSchema = MirrorWorktreePayloadSchema.extend({
   state: GitStateCoreSchema,
   // Landing refs the applier may sweep afterwards: the app's
   // namespace only.
-  sweep: z.array(SyncLandingRefSchema).max(8).optional(),
+  sweep: z.array(SyncLandingRefZod).max(8).optional(),
 });
 
 export const MirrorApplyGitStateResultSchema = z.strictObject({
@@ -279,7 +279,7 @@ export const MirrorSessionSchema = z.strictObject({
   // The engine's ignore list for this session (the .git pointer left
   // out: it is never the user's choice) and the rule it came from.
   ignores: z.array(z.string()),
-  ignoreMode: MirrorIgnoreModeSchema,
+  ignoreMode: MirrorIgnoreModeZod,
   // When the session was created, epoch milliseconds, so the page can
   // say how long the mirror has been running.
   createdAt: z.number().int().nonnegative(),
@@ -379,9 +379,14 @@ export type MirrorListResult = z.infer<typeof MirrorListResultSchema>;
 // reaches the peer through the peer's grant, which the send already
 // needed. Invoked by the peer itself when the mirror is asked for from
 // the copy's side, the target being the caller.
-export const MirrorStartToPayloadSchema = SyncSendWorktreePayloadSchema.extend({
-  ignoreMode: MirrorIgnoreModeSchema,
-  ignores: MirrorIgnoresSchema,
+export const MirrorStartToPayloadSchema = z.strictObject({
+  targetDeviceId: DeviceIdZod,
+  projectId: z.string().min(1),
+  worktreeId: WorktreeIdZod,
+  runSetup: z.boolean().optional(),
+  ignoreMode: MirrorIgnoreModeZod,
+  ignores: MirrorIgnoresZod,
+  cloneInto: SyncCloneIntoZod.optional(),
 });
 export type MirrorStartToPayload = z.infer<typeof MirrorStartToPayloadSchema>;
 
@@ -395,23 +400,27 @@ export type MirrorStartToPayload = z.infer<typeof MirrorStartToPayloadSchema>;
 // target, and the peer's send and session reach the copy through that
 // invitation (host/mirror/invites.ts), so this device's switch is not
 // in the way.
-const MirrorStartFromPayloadSchema = SyncPullWorktreePayloadSchema.pick({
-  sourceDeviceId: true,
-  sourceProjectId: true,
-  sourceWorktreeId: true,
-  sourceIdentity: true,
-  runSetup: true,
-  cloneInto: true,
-}).extend({
-  ignoreMode: MirrorIgnoreModeSchema,
-  ignores: MirrorIgnoresSchema,
+const MirrorStartFromPayloadSchema = z.strictObject({
+  sourceDeviceId: DeviceIdZod,
+  sourceProjectId: z.string().min(1),
+  sourceWorktreeId: WorktreeIdZod,
+  sourceIdentity: z.string().min(1),
+  runSetup: z.boolean().optional(),
+  cloneInto: SyncCloneIntoZod.optional(),
+  ignoreMode: MirrorIgnoreModeZod,
+  ignores: MirrorIgnoresZod,
 });
 export type MirrorStartFromPayload = z.infer<
   typeof MirrorStartFromPayloadSchema
 >;
 
 // The send's result (the copy as the peer landed it) and the session.
-export const MirrorStartToResultSchema = SyncPullWorktreeResultSchema.extend({
+export const MirrorStartToResultSchema = z.strictObject({
+  worktree: WorktreeZod,
+  captured: z.boolean(),
+  dirtyApplied: z.boolean(),
+  files: SyncPullFilesZod.optional(),
+  cloned: ProjectZod.optional(),
   session: MirrorSessionIdSchema,
 });
 
@@ -556,8 +565,8 @@ const MirrorOpenStreamPayloadSchema = MirrorWorktreePayloadSchema.extend({
 // live session, so the host ends it and opens a fresh one on the same
 // pair. The new session id comes back.
 const MirrorSetIgnoresPayloadSchema = MirrorSessionPayloadSchema.extend({
-  ignoreMode: MirrorIgnoreModeSchema,
-  ignores: MirrorIgnoresSchema,
+  ignoreMode: MirrorIgnoreModeZod,
+  ignores: MirrorIgnoresZod,
 });
 
 // What happened to a mirror over time, kept by the device that runs

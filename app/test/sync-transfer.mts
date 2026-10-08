@@ -52,7 +52,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { z } from "zod";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { CommandRefusedError } from "@shared/ipc/socket/frames";
 import { buildClient } from "@shared/ipc/buildClient";
@@ -105,6 +104,10 @@ import { addProject } from "./lib/smBinary.mts";
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
 // wrappers and the real CLI runner seam (test/lib/cliSandbox.mts).
+const decodePullProgresses = Schema.decodeUnknownSync(
+  Schema.Array(SyncPullProgressSchema),
+);
+
 const fixture = cliSandbox("sm-sync-check-");
 const { sandbox, dataDir, git, gitBytes, gitOut, runCli, sm } = fixture;
 const { commitFile, addWorktree } = fixture;
@@ -549,7 +552,9 @@ it("lifecycle: finished links are gone at both ends, a channel id is single use,
       refs: ["refs/heads/huge"],
       haves: [baseSha],
     });
-    const header = BundleAnswerSchema.parse(await giving.link.read());
+    const header = Schema.decodeUnknownSync(BundleAnswerSchema)(
+      await giving.link.read(),
+    );
     assert.ok(header.bundle.bytes > 5_000_000, "the huge bundle is small");
     await waitFor(
       () => syncTempDirs(tmp).length === 1,
@@ -1143,7 +1148,7 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
     /No send recorded/,
   );
   const sent = await syncHandlers.sendWorktree(wt7, sendCtx);
-  const sendFrames = z.array(SyncPullProgressSchema).parse(sendRaw);
+  const sendFrames = decodePullProgresses(sendRaw);
   assert.ok(
     sendFrames.every((frame) => frame.sourceWorktreeId === wt7.worktreeId),
   );
@@ -1652,7 +1657,7 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
         }),
       ),
     );
-    const loneFrames = z.array(SyncPullProgressSchema).parse(loneRaw);
+    const loneFrames = decodePullProgresses(loneRaw);
     assert.ok(loneSent.cloned, "the send made no clone on the peer");
     assert.equal(loneSent.cloned.path, join(sentInto, "lone"));
     assert.equal(

@@ -2,18 +2,17 @@ import type * as Schema from "effect/Schema";
 import { z } from "zod";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import { HexId32Schema } from "@shared/ipc/hexId";
+import {
+  MirrorIgnoreModeSchema,
+  MirrorIgnoresSchema,
+  SyncCloneIntoSchema,
+  SyncLandingRefSchema,
+  SyncPullFilesSchema,
+} from "@shared/ipc/modules/sync";
 import { safeDecode } from "@shared/ipc/schema";
-import {
-  CloneFolderNameSchema,
-  GitRefNameSchema,
-  ProjectSchema,
-} from "./project";
+import { GitRefNameSchema, ProjectSchema } from "./project";
 import { WorktreeIdSchema } from "./config";
-import {
-  CommitHashSchema,
-  CreatePhaseSchema,
-  WorktreeSchema,
-} from "./worktree";
+import { CommitHashSchema, WorktreeSchema } from "./worktree";
 
 // An Effect schema inside a schema still on zod, which cannot hold one
 // directly. It decodes as the Effect schema does, so unknown keys are
@@ -31,11 +30,14 @@ function toZod<S extends Schema.Codec<unknown, unknown>>(
 }
 
 export const DeviceIdZod = toZod(DeviceIdSchema);
-export const CloneFolderNameZod = toZod(CloneFolderNameSchema);
 export const CommitHashZod = toZod(CommitHashSchema);
-export const CreatePhaseZod = toZod(CreatePhaseSchema);
 export const GitRefNameZod = toZod(GitRefNameSchema);
 export const HexId32Zod = toZod(HexId32Schema);
+export const MirrorIgnoreModeZod = toZod(MirrorIgnoreModeSchema);
+export const MirrorIgnoresZod = toZod(MirrorIgnoresSchema);
 export const ProjectZod = toZod(ProjectSchema);
+export const SyncCloneIntoZod = toZod(SyncCloneIntoSchema);
+export const SyncLandingRefZod = toZod(SyncLandingRefSchema);
+export const SyncPullFilesZod = toZod(SyncPullFilesSchema);
 export const WorktreeIdZod = toZod(WorktreeIdSchema);
 export const WorktreeZod = toZod(WorktreeSchema);

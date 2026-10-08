@@ -28,6 +28,7 @@
 // mirror/<branch> in a mirror-<name> folder (shared/git/branches.ts),
 // and the session labelled so the git follower reads the two branch
 // names as one. Both primaries keep what they had.
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { z } from "zod";
 import { join } from "node:path";
@@ -100,6 +101,8 @@ import {
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
 import { rollBackSent, sendWorktree } from "./sync";
+
+const decodePullProgress = Schema.decodeOption(SyncPullProgressSchema);
 
 // The daemon slot, the session labels and the raw session shapes live
 // in host/mirror/registry.ts, where the worktree delete can reach them
@@ -492,9 +495,12 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     const peerSync = peerSyncApiFor(sourceDeviceId);
     const notify = ctx.notifier(syncContract, "pullProgress");
     const stopRelay = peerSync.pullProgress((frame) => {
-      const parsed = SyncPullProgressSchema.safeParse(frame);
-      if (parsed.success && parsed.data.sourceWorktreeId === worktreeId) {
-        notify(parsed.data);
+      const parsed = decodePullProgress(frame);
+      if (
+        Option.isSome(parsed) &&
+        parsed.value.sourceWorktreeId === worktreeId
+      ) {
+        notify(parsed.value);
       }
     });
     try {

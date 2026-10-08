@@ -65,7 +65,7 @@ import {
 import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
@@ -87,8 +87,13 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import type { RuntimeInfo, WorktreeRemoval } from "@shared/schemas";
-import { WorktreeZod } from "@shared/schemas/zodBridge";
+import {
+  type RuntimeInfo,
+  type WorktreeRemoval,
+  WorktreeSchema,
+} from "@shared/schemas";
+import { loose } from "@shared/schemas/loose";
+import { strict } from "@shared/schemas/strict";
 import { only } from "@shared/util/only";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import {
@@ -137,31 +142,58 @@ const progressOf = (result: CliResult) =>
 
 // A finished run's {ok: true} document is the control op's own answer
 // with the CLI's ok (and, on a transfer or a stop, its caveats) on top.
-const okFields = { ok: z.literal(true) };
-const caveatFields = { ...okFields, caveats: z.array(z.string()) };
-const DevicesDocSchema = controlContract.calls.devices.output.extend(okFields);
-const TransferDocSchema =
-  controlContract.calls.send.output.extend(caveatFields);
-const MirrorsDocSchema = controlContract.calls.mirrors.output.extend(okFields);
-const StopDocSchema =
-  controlContract.calls.mirrorStop.output.extend(caveatFields);
+const okFields = { ok: Schema.Literal(true) };
+const caveatFields = { ...okFields, caveats: Schema.Array(Schema.String) };
+const DevicesDocSchema = strict(
+  Schema.Struct({
+    ...controlContract.calls.devices.output.struct.fields,
+    ...okFields,
+  }),
+);
+const TransferDocSchema = strict(
+  Schema.Struct({
+    ...controlContract.calls.send.output.struct.fields,
+    ...caveatFields,
+  }),
+);
+const MirrorsDocSchema = strict(
+  Schema.Struct({
+    ...controlContract.calls.mirrors.output.struct.fields,
+    ...okFields,
+  }),
+);
+const StopDocSchema = strict(
+  Schema.Struct({
+    ...controlContract.calls.mirrorStop.output.struct.fields,
+    ...caveatFields,
+  }),
+);
 // A refused run's {ok: false} document.
-const RefusalDocSchema = z.object({
-  ok: z.literal(false),
-  code: z.string().optional(),
-  error: z.string(),
+const RefusalDocSchema = Schema.Struct({
+  ok: Schema.Literal(false),
+  code: Schema.optional(Schema.String),
+  error: Schema.String,
 });
 // list --remote's rows: list's worktree, each saying whose it is.
-const RemoteRowsSchema = z.array(
-  WorktreeZod.and(z.object({ device: ControlPeerWorktreeSchema.shape.device })),
+const RemoteRowsSchema = Schema.Array(
+  Schema.Struct({
+    ...WorktreeSchema.fields,
+    device: ControlPeerWorktreeSchema.struct.fields.device,
+  }),
 );
-const devicesDoc = (result: CliResult) =>
-  DevicesDocSchema.parse(finalDoc(result));
-const transferDoc = (result: CliResult) =>
-  TransferDocSchema.parse(finalDoc(result));
-const mirrorsDoc = (result: CliResult) =>
-  MirrorsDocSchema.parse(finalDoc(result));
-const stopDoc = (result: CliResult) => StopDocSchema.parse(finalDoc(result));
+const decodeDevicesDoc = Schema.decodeUnknownSync(DevicesDocSchema);
+const decodeTransferDoc = Schema.decodeUnknownSync(TransferDocSchema);
+const decodeMirrorsDoc = Schema.decodeUnknownSync(MirrorsDocSchema);
+const decodeStopDoc = Schema.decodeUnknownSync(StopDocSchema);
+const devicesDoc = (result: CliResult) => decodeDevicesDoc(finalDoc(result));
+const transferDoc = (result: CliResult) => decodeTransferDoc(finalDoc(result));
+const mirrorsDoc = (result: CliResult) => decodeMirrorsDoc(finalDoc(result));
+const stopDoc = (result: CliResult) => decodeStopDoc(finalDoc(result));
+const refusalDoc = Schema.decodeUnknownSync(RefusalDocSchema);
+const remoteRows = Schema.decodeUnknownSync(RemoteRowsSchema);
+const looseRows = Schema.decodeUnknownSync(
+  Schema.Array(loose(Schema.Struct({ id: Schema.String }))),
+);
 
 async function refused(
   args: string[],
@@ -170,7 +202,7 @@ async function refused(
 ) {
   const result = await runCli(args);
   assert.equal(result.code, 1, `sm ${args.join(" ")} should exit 1`);
-  const doc = RefusalDocSchema.parse(finalDoc(result));
+  const doc = refusalDoc(finalDoc(result));
   assert.equal(doc.code, code, `sm ${args.join(" ")}: ${doc.error}`);
   if (pattern !== undefined) assert.match(doc.error, pattern);
   return doc;
@@ -261,7 +293,7 @@ function fakeMirrorEngine() {
         worktreeId: input.worktreeId,
         remoteRoot: input.remoteRoot,
         paused: false,
-        ignores: input.ignores,
+        ignores: [...input.ignores],
         createdAt: Date.now(),
         status: "watching",
         statusText: "Watching for changes",
@@ -480,12 +512,9 @@ it("control.json is owner-only, a bad or missing hello is refused, only the cont
       const result = await peerA.transport.invoke(channel, input);
       return channel === "projects:list"
         ? // Loose: the host under test gets the peer's rows as sent.
-          z
-            .array(z.looseObject({ id: z.string() }))
-            .parse(result)
-            .toSorted(
-              (a, b) => Number(b.id === peerOwns) - Number(a.id === peerOwns),
-            )
+          looseRows(result).toSorted(
+            (a, b) => Number(b.id === peerOwns) - Number(a.id === peerOwns),
+          )
         : result;
     },
   };
@@ -682,7 +711,7 @@ it("list --remote names the peer's worktrees, and bring: points there when given
   peerOwns = sourceProjectId;
   // list's own shape, an array of worktrees, each saying whose it is.
   const remoteList = async (...args: string[]) =>
-    RemoteRowsSchema.parse(
+    remoteRows(
       (await sm("worktrees", "list", "--remote", "-p", "target", ...args))
         .docs[0],
     );
@@ -714,10 +743,7 @@ it("list --remote names the peer's worktrees, and bring: points there when given
   );
   const bare = await runCli(["worktrees", "bring", "-p", "target"]);
   assert.equal(bare.code, 2, "bring with no worktree is a usage error");
-  assert.match(
-    RefusalDocSchema.parse(finalDoc(bare)).error,
-    /worktrees list --remote/,
-  );
+  assert.match(refusalDoc(finalDoc(bare)).error, /worktrees list --remote/);
   await refused(
     ["worktrees", "bring", "no-such-branch", "-p", "target"],
     "no-worktree",
@@ -1159,14 +1185,14 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
   await otherCli.sm("projects", "add", "--", loneRepo);
   const otherDoc = async (args: string[]) =>
     finalDoc(await otherCli.runCli(args));
-  const loneDevices = DevicesDocSchema.parse(
+  const loneDevices = decodeDevicesDoc(
     await otherDoc(["devices", "-p", "lone-repo"]),
   );
   assert.equal(
     loneDevices.devices.find((device) => device.name === "Studio Mac")?.block,
     "no-project",
   );
-  const noBring = RefusalDocSchema.parse(
+  const noBring = refusalDoc(
     await otherDoc([
       "worktrees",
       "bring",

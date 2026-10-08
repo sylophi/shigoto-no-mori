@@ -12,6 +12,7 @@
 // checkout). Up to the register everything is undone on failure: the
 // folder is this call's own, made here.
 import { mkdir, rm } from "node:fs/promises";
+import * as Schema from "effect/Schema";
 import { isCloneableRemote } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shared/errors";
 import {
@@ -26,6 +27,8 @@ import { registerProject } from "@host/lib/projects";
 import { expandHome } from "@host/lib/util/paths";
 import { throwIfCancelled } from "./moves";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
+
+const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
 
 // A cancel (`signal`, the move's) between steps undoes the folder like
 // any failure. During the fetch the link's reset does the failing. A
@@ -66,7 +69,7 @@ export async function cloneProjectFromPeer(
       `The copy would land on ${landing}, which the clone here checks out as the repo's default branch. Bring a worktree on another branch, or mirror the primary checkout.`,
     );
   }
-  const branchRef = SyncBundleRefSchema.parse(`refs/heads/${branch}`);
+  const branchRef = decodeBundleRef(`refs/heads/${branch}`);
   const incomingRef = incomingRefFor(branch);
 
   throwIfCancelled(signal);

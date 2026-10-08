@@ -1,11 +1,12 @@
-import { z } from "zod";
+import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "@shared/ipc/contract";
-import { DeviceIdZod } from "@shared/schemas/zodBridge";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
   SyncCloneIntoSchema,
   SyncPullWorktreeResultSchema,
 } from "@shared/ipc/modules/sync";
-import { WorktreeIdZod, WorktreeZod } from "@shared/schemas/zodBridge";
+import { VoidSchema, WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
+import { strict } from "@shared/schemas/strict";
 
 // What the CLI asks of the running app: the cross-device verbs (`sm
 // worktrees send|bring|mirror|unmirror|mirrors`, `sm devices`). Reaching
@@ -25,121 +26,156 @@ import { WorktreeIdZod, WorktreeZod } from "@shared/schemas/zodBridge";
 
 // Why a device can't take part, in the dialogs' order
 // (renderer/components/shared/deviceTargets.ts).
-const ControlDeviceBlockSchema = z.enum(["offline", "no-project", "no-grant"]);
+const ControlDeviceBlockSchema = Schema.Literals([
+  "offline",
+  "no-project",
+  "no-grant",
+]);
 
-const ControlDeviceSchema = z.strictObject({
-  deviceId: DeviceIdZod,
-  name: z.string(),
-  platform: z.string(),
-  // Absent when no project was asked about: then only `offline` can be
-  // told. With one, absent means the device can take a send or serve a
-  // bring. `no-project` still takes a send (which clones the repo there
-  // first) but cannot serve a bring.
-  block: ControlDeviceBlockSchema.optional(),
-  // The repo's checkout on that device, when it holds one.
-  projectId: z.string().optional(),
-});
-export type ControlDevice = z.infer<typeof ControlDeviceSchema>;
+const ControlDeviceSchema = strict(
+  Schema.Struct({
+    deviceId: DeviceIdSchema,
+    name: Schema.String,
+    platform: Schema.String,
+    // Absent when no project was asked about: then only `offline` can be
+    // told. With one, absent means the device can take a send or serve a
+    // bring. `no-project` still takes a send (which clones the repo there
+    // first) but cannot serve a bring.
+    block: Schema.optional(ControlDeviceBlockSchema),
+    // The repo's checkout on that device, when it holds one.
+    projectId: Schema.optional(Schema.String),
+  }),
+);
+export type ControlDevice = typeof ControlDeviceSchema.Type;
 
 // A device as the caller names it: its id, its name, or an unambiguous
 // start of its name, case-insensitively. Absent picks the only device
 // that qualifies, and refuses when several do.
-const DeviceQuerySchema = z.string().min(1).max(256).optional();
+const DeviceQuerySchema = Schema.optional(
+  Schema.String.check(Schema.isBetweenLength(1, 256)),
+);
 
 // The leave-out rule by name. Absent is the project's saved rule, what
 // the review step opens on.
-const ControlLeaveOutSchema = z.enum(["nothing", "gitignored"]);
+const ControlLeaveOutSchema = Schema.Literals(["nothing", "gitignored"]);
 
 // What becomes of the source once a transplant landed, the finish
 // step's three fates. Never read for a mirror, whose source stays.
-const ControlSourceFateSchema = z.enum(["keep", "shelve", "teardown"]);
+const ControlSourceFateSchema = Schema.Literals(["keep", "shelve", "teardown"]);
 
-const TransferOptionsSchema = z.strictObject({
+const TransferOptionsSchema = Schema.Struct({
   device: DeviceQuerySchema,
   // A mirror keeps the two in step until stopped. Absent or false is a
   // one-shot transplant.
-  mirror: z.boolean().optional(),
-  leaveOut: ControlLeaveOutSchema.optional(),
+  mirror: Schema.optional(Schema.Boolean),
+  leaveOut: Schema.optional(ControlLeaveOutSchema),
   // Absent follows the rule (shared/leaveOutRule.ts setupDefaultFor).
-  setup: z.boolean().optional(),
-  source: ControlSourceFateSchema.optional(),
+  setup: Schema.optional(Schema.Boolean),
+  source: Schema.optional(ControlSourceFateSchema),
 });
 
-const ControlSendPayloadSchema = TransferOptionsSchema.extend({
-  projectId: z.string().min(1),
-  worktreeId: WorktreeIdZod,
-  // Where the target clones the repo when it has no checkout of it: the
-  // folder the checkout goes in, on the target (a leading `~` is its
-  // home). Absent is the dialogs' default. Unread when the target holds
-  // the repo.
-  cloneInto: SyncCloneIntoSchema.shape.parentDir.max(4096).optional(),
-});
+const ControlSendPayloadSchema = strict(
+  Schema.Struct({
+    ...TransferOptionsSchema.fields,
+    projectId: Schema.NonEmptyString,
+    worktreeId: WorktreeIdSchema,
+    // Where the target clones the repo when it has no checkout of it: the
+    // folder the checkout goes in, on the target (a leading `~` is its
+    // home). Absent is the dialogs' default. Unread when the target holds
+    // the repo.
+    cloneInto: Schema.optional(
+      SyncCloneIntoSchema.struct.fields.parentDir.check(
+        Schema.isMaxLength(4096),
+      ),
+    ),
+  }),
+);
 
-const ControlBringPayloadSchema = TransferOptionsSchema.extend({
-  // THIS device's checkout of the repo, which names the repo to look
-  // for on the peers.
-  projectId: z.string().min(1),
-  // The peer's worktree: its id, its folder name or its branch.
-  worktree: z.string().min(1).max(512),
-});
+const ControlBringPayloadSchema = strict(
+  Schema.Struct({
+    ...TransferOptionsSchema.fields,
+    // THIS device's checkout of the repo, which names the repo to look
+    // for on the peers.
+    projectId: Schema.NonEmptyString,
+    // The peer's worktree: its id, its folder name or its branch.
+    worktree: Schema.String.check(Schema.isBetweenLength(1, 512)),
+  }),
+);
 
-const ControlSourceOutcomeSchema = z.strictObject({
-  fate: ControlSourceFateSchema,
-  // False when the fate could not be carried out, with the reason. The
-  // transfer itself still stands.
-  done: z.boolean(),
-  error: z.string().optional(),
-});
+const ControlSourceOutcomeSchema = strict(
+  Schema.Struct({
+    fate: ControlSourceFateSchema,
+    // False when the fate could not be carried out, with the reason. The
+    // transfer itself still stands.
+    done: Schema.Boolean,
+    error: Schema.optional(Schema.String),
+  }),
+);
 
-const ControlTransferResultSchema = SyncPullWorktreeResultSchema.extend({
-  device: z.strictObject({ deviceId: DeviceIdZod, name: z.string() }),
-  // Which device `worktree` (the copy) is on: "remote" for a send,
-  // "local" for a bring. Its path means something here only when local.
-  copySide: z.enum(["local", "remote"]),
-  // The mirror session, when one was asked for.
-  session: z.string().optional(),
-  // The worktree was already mirrored with that device: nothing moved,
-  // and `worktree` is the copy the running session keeps.
-  alreadyMirrored: z.boolean().optional(),
-  source: ControlSourceOutcomeSchema.optional(),
-});
-export type ControlTransferResult = z.infer<typeof ControlTransferResultSchema>;
+const ControlDeviceRefSchema = strict(
+  Schema.Struct({ deviceId: DeviceIdSchema, name: Schema.String }),
+);
+const CopySideSchema = Schema.Literals(["local", "remote"]);
 
-export const ControlPeerWorktreeSchema = z.strictObject({
-  device: z.strictObject({ deviceId: DeviceIdZod, name: z.string() }),
-  projectId: z.string(),
-  worktree: WorktreeZod,
-});
-export type ControlPeerWorktree = z.infer<typeof ControlPeerWorktreeSchema>;
+const ControlTransferResultSchema = strict(
+  Schema.Struct({
+    ...SyncPullWorktreeResultSchema.struct.fields,
+    device: ControlDeviceRefSchema,
+    // Which device `worktree` (the copy) is on: "remote" for a send,
+    // "local" for a bring. Its path means something here only when local.
+    copySide: CopySideSchema,
+    // The mirror session, when one was asked for.
+    session: Schema.optional(Schema.String),
+    // The worktree was already mirrored with that device: nothing moved,
+    // and `worktree` is the copy the running session keeps.
+    alreadyMirrored: Schema.optional(Schema.Boolean),
+    source: Schema.optional(ControlSourceOutcomeSchema),
+  }),
+);
+export type ControlTransferResult = typeof ControlTransferResultSchema.Type;
+
+export const ControlPeerWorktreeSchema = strict(
+  Schema.Struct({
+    device: ControlDeviceRefSchema,
+    projectId: Schema.String,
+    worktree: WorktreeSchema,
+  }),
+);
+export type ControlPeerWorktree = typeof ControlPeerWorktreeSchema.Type;
 
 // A mirror this device is part of, reduced to what a terminal says
 // about it, and seen from this device whichever side runs it: `local`
 // is this device's worktree, `device` the other one.
-const ControlMirrorSchema = z.strictObject({
-  session: z.string(),
-  device: z.strictObject({ deviceId: z.string(), name: z.string() }),
-  localProjectId: z.string(),
-  localWorktreeId: z.string(),
-  localRoot: z.string(),
-  remoteRoot: z.string(),
-  // Which side is the copy a stop removes: "remote" when it is on the
-  // other device, "local" when it is here.
-  copySide: z.enum(["local", "remote"]),
-  paused: z.boolean(),
-  status: z.string(),
-  statusText: z.string(),
-  // The git follower's verdict. "synced" is the one state a stop is
-  // safe in without force.
-  git: z.string().optional(),
-  gitDetail: z.string().optional(),
-  conflicts: z.number().int().nonnegative(),
-});
-export type ControlMirror = z.infer<typeof ControlMirrorSchema>;
+const DeviceNameSchema = strict(
+  Schema.Struct({ deviceId: Schema.String, name: Schema.String }),
+);
+const ControlMirrorSchema = strict(
+  Schema.Struct({
+    session: Schema.String,
+    device: DeviceNameSchema,
+    localProjectId: Schema.String,
+    localWorktreeId: Schema.String,
+    localRoot: Schema.String,
+    remoteRoot: Schema.String,
+    // Which side is the copy a stop removes: "remote" when it is on the
+    // other device, "local" when it is here.
+    copySide: CopySideSchema,
+    paused: Schema.Boolean,
+    status: Schema.String,
+    statusText: Schema.String,
+    // The git follower's verdict. "synced" is the one state a stop is
+    // safe in without force.
+    git: Schema.optional(Schema.String),
+    gitDetail: Schema.optional(Schema.String),
+    conflicts: Schema.Natural,
+  }),
+);
+export type ControlMirror = typeof ControlMirrorSchema.Type;
 
-const ControlMirrorTargetSchema = z.strictObject({
-  projectId: z.string().min(1),
+const ControlMirrorTargetSchema = Schema.Struct({
+  projectId: Schema.NonEmptyString,
   // This device's side of the mirror, original or copy.
-  worktreeId: WorktreeIdZod,
+  worktreeId: WorktreeIdSchema,
 });
 
 export const controlContract = defineContract("host", {
@@ -147,24 +183,35 @@ export const controlContract = defineContract("host", {
   // says whether it could take a send of it or serve a bring.
   devices: invoke(
     "control:devices",
-    z.strictObject({ projectId: z.string().min(1).optional() }),
-    z.strictObject({
-      thisDevice: z.strictObject({ deviceId: z.string(), name: z.string() }),
-      devices: z.array(ControlDeviceSchema),
-    }),
+    strict(
+      Schema.Struct({ projectId: Schema.optional(Schema.NonEmptyString) }),
+    ),
+    strict(
+      Schema.Struct({
+        thisDevice: DeviceNameSchema,
+        devices: Schema.Array(ControlDeviceSchema),
+      }),
+    ),
   ),
   // The repo's worktrees on the other devices, the candidates for a
   // bring. Primary checkouts are left out: only a worktree moves.
   peerWorktrees: invoke(
     "control:peerWorktrees",
-    z.strictObject({ projectId: z.string().min(1), device: DeviceQuerySchema }),
-    z.strictObject({
-      worktrees: z.array(ControlPeerWorktreeSchema),
-      // The devices that hold the repo's account but could not be
-      // asked, by name, so an empty list is never mistaken for "there
-      // is nothing there".
-      unreachable: z.array(z.string()),
-    }),
+    strict(
+      Schema.Struct({
+        projectId: Schema.NonEmptyString,
+        device: DeviceQuerySchema,
+      }),
+    ),
+    strict(
+      Schema.Struct({
+        worktrees: Schema.Array(ControlPeerWorktreeSchema),
+        // The devices that hold the repo's account but could not be
+        // asked, by name, so an empty list is never mistaken for "there
+        // is nothing there".
+        unreachable: Schema.Array(Schema.String),
+      }),
+    ),
   ),
   // One of this device's worktrees to a peer: a transplant, or with
   // `mirror` a mirror whose copy is there. A peer with no checkout of
@@ -186,24 +233,33 @@ export const controlContract = defineContract("host", {
   ),
   mirrors: invoke(
     "control:mirrors",
-    z.void(),
-    z.strictObject({
-      daemon: z.string(),
-      mirrors: z.array(ControlMirrorSchema),
-    }),
+    VoidSchema,
+    strict(
+      Schema.Struct({
+        daemon: Schema.String,
+        mirrors: Schema.Array(ControlMirrorSchema),
+      }),
+    ),
   ),
   // Ends the mirror the worktree is part of and removes the copy,
   // wherever it is. Refused unless the follower reports "synced", as
   // mirror:stop is, until `force`.
   mirrorStop: invoke(
     "control:mirrorStop",
-    ControlMirrorTargetSchema.extend({ force: z.boolean().optional() }),
-    z.strictObject({
-      mirror: ControlMirrorSchema,
-      // The mirror stopped but its copy could not be removed, with the
-      // reason. Absent when the copy went too.
-      copyStayed: z.string().optional(),
-    }),
+    strict(
+      Schema.Struct({
+        ...ControlMirrorTargetSchema.fields,
+        force: Schema.optional(Schema.Boolean),
+      }),
+    ),
+    strict(
+      Schema.Struct({
+        mirror: ControlMirrorSchema,
+        // The mirror stopped but its copy could not be removed, with the
+        // reason. Absent when the copy went too.
+        copyStayed: Schema.optional(Schema.String),
+      }),
+    ),
     { gated: true },
   ),
 });

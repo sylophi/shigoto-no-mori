@@ -66,7 +66,7 @@ export async function transferFilesOnce(
     sourceWorktreeId: string;
     remoteRoot: string;
     name: string;
-    ignores: string[];
+    ignores: readonly string[];
     // Which way the files flow. Absent, a pull: the peer's come here.
     // A replica pushes and makes the peer's side an exact copy (a
     // mirror start's first pass, host/ipc/modules/mirror.ts).

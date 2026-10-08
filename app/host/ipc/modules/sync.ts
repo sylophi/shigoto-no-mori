@@ -9,7 +9,6 @@
 // the grant) and the teardown (the source's delete, on its own device
 // or over the peer's grant).
 import * as Schema from "effect/Schema";
-import type { z } from "zod";
 import {
   pullBringsIgnoredFiles,
   type SyncCloneInto,
@@ -103,6 +102,10 @@ import { notifierFor, worktreesHandlers } from "./worktrees";
 // under (cli/cmd_dirty.go owns the name on that side).
 const dirtyRefFor = (worktreeId: string) =>
   `refs/shigomori/dirty/${worktreeId}`;
+
+const decodeReceiveWorktreeResult = Schema.decodeUnknownSync(
+  SyncReceiveWorktreeResultSchema,
+);
 
 // What each move captured and applied, by source worktree, for the
 // teardown that may follow, kept by the device that ran the move (the
@@ -754,7 +757,7 @@ async function runPullWorktree(
     ignoreMode,
     ignores,
     cloneInto,
-  }: z.infer<typeof SyncPullWorktreePayloadSchema>,
+  }: typeof SyncPullWorktreePayloadSchema.Type,
   ctx: HandlerContext,
 ) {
   const progress = progressTo(ctx, sourceWorktreeId);
@@ -873,7 +876,7 @@ function fromPeer<T>(answer: Promise<T>): Promise<T> {
 // its own (`signal`), since its session open comes after. A plain
 // send registers itself.
 export async function sendWorktree(
-  input: z.infer<typeof SyncSendWorktreePayloadSchema>,
+  input: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
   // The mirror start's send: the one that may take a primary checkout
   // (it lands on the peer as mirror/<branch>, and the session then
@@ -916,7 +919,7 @@ async function sendWorktreeUnder(
     ignoreMode,
     ignores,
     cloneInto,
-  }: z.infer<typeof SyncSendWorktreePayloadSchema>,
+  }: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
   mirror: boolean,
   signal: AbortSignal,
@@ -948,7 +951,7 @@ async function sendWorktreeUnder(
   // The landing, on the peer, asking back over the link. A cancel
   // resets the link (offerSource), which the peer's landing runs under.
   const peer = peerSyncApiFor(targetDeviceId);
-  const { receipt, ...landed } = SyncReceiveWorktreeResultSchema.parse(
+  const { receipt, ...landed } = decodeReceiveWorktreeResult(
     await offerSource(
       peer,
       project,
@@ -973,7 +976,7 @@ async function sendWorktreeUnder(
       (answer) =>
         rollBackSent(
           targetDeviceId,
-          SyncReceiveWorktreeResultSchema.parse(answer).worktree,
+          decodeReceiveWorktreeResult(answer).worktree,
         ),
     ),
   );
