@@ -1347,7 +1347,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
           released.push(worktreeId);
         },
       }),
-      shigomoriApiFor: () => {
+      worktreeDataApiFor: () => {
         throw new Error("not in this check");
       },
       thisDeviceId: () => "B",

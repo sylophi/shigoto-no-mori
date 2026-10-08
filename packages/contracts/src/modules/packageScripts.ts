@@ -14,47 +14,49 @@ import {
   WorktreeScopedPayloadSchema,
 } from "../schemas/index.ts";
 
-export const packageScriptsContract = defineContract("host", {
-  list: invoke(
-    "packageScripts:list",
+export const packageScriptsContract = defineContract(
+  "packageScripts",
+  "host",
+  invoke(
+    "list",
     WorktreeScopedPayloadSchema,
     Schema.NullOr(PackageScriptsResultSchema),
     { remote: true, gated: false },
   ),
-  run: invoke(
-    "packageScripts:run",
+  invoke(
+    "run",
     RunPackageScriptPayloadSchema,
     Schema.Struct({ runId: Schema.String }),
-    { tracksProjectUsage: true, remote: true, gated: true },
+    {
+      tracksProjectUsage: true,
+      remote: true,
+      gated: true,
+      grant: "runCommands",
+    },
   ),
-  getSort: invoke(
-    "packageScripts:getSort",
+  invoke(
+    "getSort",
     GetPackageScriptSortPayloadSchema,
     PackageScriptSortModeSchema,
     { remote: true, gated: false },
   ),
-  setSort: invoke(
-    "packageScripts:setSort",
-    SetPackageScriptSortPayloadSchema,
-    VoidSchema,
-    { remote: true, gated: true },
-  ),
-  getOrder: invoke(
-    "packageScripts:getOrder",
-    ProjectScopedPayloadSchema,
-    PackageScriptOrderSchema,
-    { remote: true, gated: false },
-  ),
-  setOrder: invoke(
-    "packageScripts:setOrder",
-    SetPackageScriptOrderPayloadSchema,
-    VoidSchema,
-    { remote: true, gated: true },
-  ),
-  setLaunchRow: invoke(
-    "packageScripts:setLaunchRow",
-    SetPackageScriptLaunchRowPayloadSchema,
-    VoidSchema,
-    { remote: true, gated: true },
-  ),
-});
+  invoke("setSort", SetPackageScriptSortPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeApp",
+  }),
+  invoke("getOrder", ProjectScopedPayloadSchema, PackageScriptOrderSchema, {
+    remote: true,
+    gated: false,
+  }),
+  invoke("setOrder", SetPackageScriptOrderPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeApp",
+  }),
+  invoke("setLaunchRow", SetPackageScriptLaunchRowPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeApp",
+  }),
+);

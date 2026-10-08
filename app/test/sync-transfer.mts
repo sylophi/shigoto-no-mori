@@ -67,7 +67,7 @@ import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { type PeerChannels, setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { sendWorktree, syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
+import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import {
   readWorktreeData,
   writeWorktreeDescription,
@@ -666,13 +666,12 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
     },
     // The title's carry. Both devices share the data dir, so A's
     // handlers answer in-process.
-    shigomoriApiFor: (deviceId) => {
+    worktreeDataApiFor: (deviceId) => {
       assert.equal(deviceId, "A", "the carry dialed an unexpected device");
       return {
-        worktreeDataRead: async (input) =>
-          shigomoriHandlers.worktreeDataRead(input, handlerCtx()),
-        worktreeDataDescribe: async (input) =>
-          shigomoriHandlers.worktreeDataDescribe(input, handlerCtx()),
+        read: async (input) => worktreeDataHandlers.read(input, handlerCtx()),
+        describe: async (input) =>
+          worktreeDataHandlers.describe(input, handlerCtx()),
       };
     },
     thisDeviceId: () => "B",

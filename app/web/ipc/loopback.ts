@@ -9,16 +9,16 @@
 //
 // Channels no handler was registered for are answered FAIL-CLOSED:
 //
-//   - An invoke explicitly classified `mutating: false` (the socket
-//     check forces every remote-exposed host invoke to classify itself,
-//     and only reads carry false) may resolve to a schema-derived
+//   - An invoke explicitly classified `gated: false` (the registrar
+//     makes every remote-exposed host invoke classify itself, and only
+//     reads carry false) may resolve to a schema-derived
 //     structural stub (stubDefaults.ts), so a shared read-only
 //     component renders an empty state instead of throwing.
 //   - A channel on the small STUB_ALLOWED list below may stub too, with
 //     fabricated enum/union arms permitted, because each entry has been
 //     judged harmless by hand.
 //   - EVERYTHING else rejects with a clear "not available in the
-//     browser" error: mutations (`mutating: true`), unclassified
+//     browser" error: mutations (`gated: true`), unclassified
 //     local-only channels, and any read whose output cannot be met
 //     without fabricating an affirmative value. A future contract
 //     channel therefore rejects by default until someone classifies it
@@ -27,7 +27,17 @@
 //
 // A channel absent from the contract entirely also rejects, because
 // answering it would hide a real wiring bug.
-import type { ContractScope, InvokeDef } from "@shigomori/contracts/contract";
+import {
+  annotation,
+  callsOf,
+  channelOf,
+  type ContractCall,
+  type ContractScope,
+  Gated,
+  isBroadcast,
+  outputOf,
+  scopeOf,
+} from "@shigomori/contracts/contract";
 import { allContractModules } from "@shared/ipc/client";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import type {
@@ -38,7 +48,7 @@ import type {
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 
-// The hand-judged exceptions to the mutating:false rule. Every entry
+// The hand-judged exceptions to the gated:false rule. Every entry
 // must state why answering it with a stub is harmless. Keep this list
 // short on purpose: anything not here and not classified as a read
 // rejects.
@@ -55,16 +65,18 @@ export type LoopbackWire = {
   client: ClientTransport;
 };
 
-// Every invoke def of one scope, keyed by channel, for the stub
+// Every invoke of one scope, keyed by channel, for the stub
 // fallback. Built from the same module list buildApi consumes so the
 // inventory cannot drift from the api surface. Exported for the fake host's
 // fixture wire (lab/fake-host/bridge.ts), which stubs the same way.
-export function invokeIndexFor(scope: ContractScope): Map<string, InvokeDef> {
-  const index = new Map<string, InvokeDef>();
+export function invokeIndexFor(
+  scope: ContractScope,
+): Map<string, ContractCall> {
+  const index = new Map<string, ContractCall>();
   for (const module of allContractModules) {
-    if (module.scope !== scope) continue;
-    for (const def of Object.values(module.calls)) {
-      if (def.kind === "invoke") index.set(def.channel, def);
+    if (scopeOf(module) !== scope) continue;
+    for (const call of callsOf(module)) {
+      if (!isBroadcast(call)) index.set(channelOf(call), call);
     }
   }
   return index;
@@ -83,16 +95,19 @@ export function createLoopbackWire(scope: ContractScope): LoopbackWire {
   type FallbackVerdict = { stub: unknown } | { refusal: string };
   const verdictCache = new Map<string, FallbackVerdict>();
 
-  function fallbackVerdict(channel: string, def: InvokeDef): FallbackVerdict {
+  function fallbackVerdict(
+    channel: string,
+    call: ContractCall,
+  ): FallbackVerdict {
     const allowlisted = STUB_ALLOWED.has(channel);
-    if (def.gated !== false && !allowlisted) {
+    if (annotation(call, Gated) !== false && !allowlisted) {
       // Mutations, and local channels that never classified themselves
       // as reads, must not pretend to succeed.
       return {
         refusal: `${channel} is not available in the browser`,
       };
     }
-    const stub = stubValueFor(def.output, { fabricateArms: allowlisted });
+    const stub = stubValueFor(outputOf(call), { fabricateArms: allowlisted });
     if (stub === NO_STRUCTURAL_STUB) {
       // A read whose output demands a fabricated arm (an enum, a union,
       // a bounded scalar) gets no invented answer either.
@@ -133,15 +148,15 @@ export function createLoopbackWire(scope: ContractScope): LoopbackWire {
         // a handler rejects instead of escaping the transport contract.
         return Promise.resolve().then(() => handler(context, input));
       }
-      const def = invokeIndex.get(channel);
-      if (def === undefined) {
+      const call = invokeIndex.get(channel);
+      if (call === undefined) {
         return Promise.reject(
           new Error(`no handler and no contract entry for channel ${channel}`),
         );
       }
       let verdict = verdictCache.get(channel);
       if (verdict === undefined) {
-        verdict = fallbackVerdict(channel, def);
+        verdict = fallbackVerdict(channel, call);
         verdictCache.set(channel, verdict);
       }
       if ("refusal" in verdict) {

@@ -55,7 +55,8 @@ const SOURCE_EXTENSIONS = /\.(mts|cts|ts|tsx|js|jsx|mjs|cjs)$/;
 const IMPORT_SPECIFIER =
   /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
 const CONTRACT_EXPORT = /export const \w+Contract/;
-const DEFINE_CONTRACT_SCOPE = /defineContract\(\s*["'](host|client)["']/;
+const DEFINE_CONTRACT_SCOPE =
+  /defineContract\(\s*["']\w+["'],\s*["'](host|client)["']/;
 const IS_REMOTE = /\bisRemote\b/;
 const IPC_RENDERER = /\bipcRenderer\b/;
 
@@ -166,7 +167,7 @@ for (const { dir, root, contractLayer } of LAYERS) {
       contractModuleCount += 1;
       if (!DEFINE_CONTRACT_SCOPE.test(src)) {
         failures.push(
-          `${rel} does not declare a scope via defineContract("host" | "client", ...)`,
+          `${rel} does not declare a scope via defineContract(name, "host" | "client", ...)`,
         );
       }
     }
@@ -199,8 +200,7 @@ if (contractModuleCount === 0) {
 // 7. HostApi drift guard. The expected set is derived, not hardcoded:
 //    every top-level namespace in buildApi's return object is mapped to
 //    the contract its client was built from, and a namespace is
-//    host-scoped when that contract is defineContract("host", ...).
-//    This covers facades too (worktreeData rides shigomoriContract).
+//    host-scoped when that contract is defineContract(name, "host", ...).
 //    The HostApi Pick must equal that set exactly, in either direction.
 const HOST_SCOPE_FILE = "renderer/hooks/remote/useHostScope.tsx";
 
@@ -209,7 +209,7 @@ const contractScopes = new Map<string, string>();
 for (const file of walk(modulesDir, SOURCE_EXTENSIONS)) {
   const src = stripComments(readFileSync(file, "utf8"));
   for (const [, contract, scope] of src.matchAll(
-    /export const (\w+Contract) = defineContract\(\s*["'](host|client)["']/g,
+    /export const (\w+Contract) = defineContract\(\s*["']\w+["'],\s*["'](host|client)["']/g,
   )) {
     if (contract && scope) contractScopes.set(contract, scope);
   }

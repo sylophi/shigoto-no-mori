@@ -3,7 +3,7 @@
 What crosses a wire or sits on disk, described once for every side: the app's main process, host and renderer, the web client and the hub.
 
 - `src/schemas/`: the data shapes, as Effect Schema, with `strict` and `loose` for contract payloads and `index.ts` as their barrel.
-- `src/modules/`: one contract per module, the calls and pushes each side serves, defined with `src/contract.ts`. `src/types.ts` derives the client and handler types from them, and `src/codec.ts` holds `decode`, `safeDecode`, `encode` and the `Encoded`/`Decoded` types.
+- `src/modules/`: one contract per module, an `RpcGroup` of the calls and pushes each side serves, each tagged with its channel and classified by annotations (`src/contract.ts`). `src/grants.ts` holds the consent lines a remote gated call names. `src/types.ts` derives the client and handler types from the groups, and `src/codec.ts` holds `decode`, `safeDecode`, `encode` and the `Encoded`/`Decoded` types.
 - `src/hubProtocol.ts`: the device-to-hub wire.
 - `src/errors.ts`: the errors a contract names and the renderer recognizes.
 - `src/predicates/`, `src/deviceIcon.ts`, `src/platform.ts`, `src/mirrorIgnores.ts`: the values and checks the schemas are built from, which the app uses too.

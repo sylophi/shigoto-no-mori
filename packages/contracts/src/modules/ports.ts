@@ -14,11 +14,11 @@ import {
 // a read-only peer could drive. The two ways a port gets onto the list
 // (port-pool provisioning, a worktreeData write) are the host's own
 // doing or a granted peer's.
-export const portsContract = defineContract("host", {
-  list: invoke(
-    "ports:list",
-    WorktreeScopedPayloadSchema,
-    WorktreePortsResultSchema,
-    { remote: true, gated: false },
-  ),
-});
+export const portsContract = defineContract(
+  "ports",
+  "host",
+  invoke("list", WorktreeScopedPayloadSchema, WorktreePortsResultSchema, {
+    remote: true,
+    gated: false,
+  }),
+);

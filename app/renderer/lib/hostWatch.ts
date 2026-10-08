@@ -21,18 +21,19 @@
 // stores that keep a stream (store/scriptRuns.ts,
 // store/worktreeLifecycle.ts).
 import type { QueryClient } from "@tanstack/react-query";
-import type { BroadcastDef } from "@shigomori/contracts/contract";
+import {
+  callOf,
+  type ContractCall,
+  payloadOf,
+} from "@shigomori/contracts/contract";
+import type { BroadcastPayload } from "@shigomori/contracts/types";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
-import {
-  type ContractSchema,
-  type Decoded,
-  safeDecode,
-} from "@shigomori/contracts/codec";
+import { safeDecode } from "@shigomori/contracts/codec";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
 import { noteGitFetchActive } from "@/hooks/git/useProjectGitFetching";
 import { syncProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
@@ -46,17 +47,15 @@ import {
   queryKeysFor,
 } from "@/lib/queryKeys";
 
-const git = gitContract.calls;
-
 // The bridge forwards a peer's pushes wholesale, so a payload is parsed
 // against the contract's own schema rather than trusted. This
 // machine's go through the same check: one path, and it costs nothing.
-function parsed<S extends ContractSchema>(
-  def: BroadcastDef<S>,
-  handler: (payload: Decoded<S>) => void,
+function parsed<R extends ContractCall>(
+  call: R,
+  handler: (payload: BroadcastPayload<R>) => void,
 ): (payload: unknown) => void {
   return (payload) => {
-    const result = safeDecode(def.payload, payload);
+    const result = safeDecode(payloadOf(call), payload);
     if (result.success) handler(result.data);
   };
 }
@@ -86,7 +85,7 @@ export function watchHost(
     // a terminal, seen by the host's git-directory watcher): refetch
     // that project's rows only.
     api.git.onProjectChanged(
-      parsed(git.projectChanged, ({ projectId }) => {
+      parsed(callOf(gitContract, "projectChanged"), ({ projectId }) => {
         invalidateHostProject(queryClient, deviceId, projectId);
       }),
     ),
@@ -97,20 +96,20 @@ export function watchHost(
     // `gh pr view` per other project every sweep, each cancelling the
     // last.
     api.git.onRefsRefreshed(
-      parsed(git.refsRefreshed, ({ projectId }) => {
+      parsed(callOf(gitContract, "refsRefreshed"), ({ projectId }) => {
         invalidateBranchState(queryClient, keys, projectId);
         invalidateWorktreePullRequests(queryClient, keys, projectId);
       }),
     ),
     api.git.onFetchActive(
-      parsed(git.fetchActive, ({ projectId, active }) => {
+      parsed(callOf(gitContract, "fetchActive"), ({ projectId, active }) => {
         noteGitFetchActive(deviceId, projectId, active);
       }),
     ),
     // A project action was recorded there, so the usage sorts reorder
     // live.
     api.projects.onUsageBumped(
-      parsed(projectsContract.calls.usageBumped, () => {
+      parsed(callOf(projectsContract, "usageBumped"), () => {
         void queryClient.invalidateQueries({ queryKey: keys.projects() });
       }),
     ),
@@ -120,7 +119,7 @@ export function watchHost(
     // alone.
     api.githubCli.onProjectPullRequestsRefreshed(
       parsed(
-        githubCliContract.calls.projectPullRequestsRefreshed,
+        callOf(githubCliContract, "projectPullRequestsRefreshed"),
         ({ projectId }) => {
           void syncProjectPullRequests(queryClient, keys, projectId);
         },
@@ -131,7 +130,7 @@ export function watchHost(
     // (the sidebar's Settings dot, Settings' device tabs) follow a
     // check that finishes with no Version section mounted.
     api.updater.onState(
-      parsed(updaterContract.calls.state, (state) => {
+      parsed(callOf(updaterContract, "state"), (state) => {
         writeUpdaterState(queryClient, deviceId, state);
       }),
     ),
@@ -140,14 +139,14 @@ export function watchHost(
     // sidebar's folds and a far end's page follow a device whose pages
     // were never opened.
     api.mirror.onChanged(
-      parsed(mirrorContract.calls.changed, (list) => {
+      parsed(callOf(mirrorContract, "changed"), (list) => {
         writeMirrorList(queryClient, deviceId, list);
       }),
     ),
     // A script started or ended there, whoever ran it: the Live page's
     // list and the sidebar's Live mark re-read.
     api.scripts.onChanged(
-      parsed(scriptsContract.calls.changed, () => {
+      parsed(callOf(scriptsContract, "changed"), () => {
         void queryClient.invalidateQueries({
           queryKey: keys.runningScripts(),
         });

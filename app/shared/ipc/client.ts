@@ -1,7 +1,8 @@
 import { buildClient } from "@shared/ipc/buildClient";
-import type {
-  ContractModule,
-  ContractScope,
+import {
+  type ContractModule,
+  type ContractScope,
+  scopeOf,
 } from "@shigomori/contracts/contract";
 import type { ChannelHandlers } from "@shigomori/contracts/types";
 import { accountContract } from "@shigomori/contracts/modules/account";
@@ -32,6 +33,7 @@ import { cliContract } from "@shigomori/contracts/modules/cli";
 import { shellContract } from "@shigomori/contracts/modules/shell";
 import { terrierContract } from "@shigomori/contracts/modules/terrier";
 import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { villagersContract } from "@shigomori/contracts/modules/villagers";
@@ -53,7 +55,7 @@ import type {
 
 // Every contract module the api surface is built from, in one list, so
 // a platform binding that needs the full channel inventory (the web
-// bridge's stub fallback walks every def to answer unhandled channels
+// bridge's stub fallback walks every call to answer unhandled channels
 // with a typed default) reads the same set buildApi consumes instead of
 // keeping a second import list that could drift. Kept beside buildApi
 // on purpose: adding a module means touching both in this one file.
@@ -86,6 +88,7 @@ export const allContractModules = [
   shellContract,
   terrierContract,
   shigomoriContract,
+  worktreeDataContract,
   syncContract,
   updaterContract,
   villagersContract,
@@ -106,7 +109,7 @@ export type AllChannelHandlers = Partial<
 // in one process there); the web client passes its loopback wires.
 export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const c = <M extends ContractModule>(m: M) =>
-    buildClient(m, transports[m.scope]);
+    buildClient(m, transports[scopeOf(m)]);
 
   const accountClient = c(accountContract);
   const branchesClient = c(branchesContract);
@@ -136,6 +139,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const shellClient = c(shellContract);
   const terrierClient = c(terrierContract);
   const shigomoriClient = c(shigomoriContract);
+  const worktreeDataClient = c(worktreeDataContract);
   const syncClient = c(syncContract);
   const updaterClient = c(updaterContract);
   const villagersClient = c(villagersContract);
@@ -418,12 +422,12 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     worktreeData: {
       read: (projectId: string, worktreeId: string) =>
-        shigomoriClient.worktreeDataRead({ projectId, worktreeId }),
+        worktreeDataClient.read({ projectId, worktreeId }),
       write: (
         projectId: string,
         worktreeId: string,
         data: Pick<ShigomoriWorktreeData, "ports">,
-      ) => shigomoriClient.worktreeDataWrite({ projectId, worktreeId, data }),
+      ) => worktreeDataClient.write({ projectId, worktreeId, data }),
     },
 
     worktrees: {

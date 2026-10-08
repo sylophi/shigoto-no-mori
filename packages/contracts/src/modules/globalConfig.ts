@@ -5,10 +5,12 @@ import {
   WriteDeviceSettingsPayloadSchema,
 } from "../schemas/index.ts";
 
-export const globalConfigContract = defineContract("host", {
+export const globalConfigContract = defineContract(
+  "globalConfig",
+  "host",
   // The stored document, loose so legacy and newer keys pass through.
   // It carries no secret, so every wire serves it ungated.
-  read: invoke("globalConfig:read", VoidSchema, StoredGlobalConfigSchema, {
+  invoke("read", VoidSchema, StoredGlobalConfigSchema, {
     remote: true,
     gated: false,
   }),
@@ -21,10 +23,9 @@ export const globalConfigContract = defineContract("host", {
   // this channel no matter who calls it. Only provided keys change. The
   // host handler applies them over the stored document and writes it
   // through the CLI, whose cache invalidation reconciles the listeners.
-  writeDeviceSettings: invoke(
-    "globalConfig:writeDeviceSettings",
-    WriteDeviceSettingsPayloadSchema,
-    VoidSchema,
-    { remote: true, gated: true },
-  ),
-});
+  invoke("writeDeviceSettings", WriteDeviceSettingsPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeApp",
+  }),
+);

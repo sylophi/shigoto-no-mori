@@ -48,10 +48,13 @@ const ForwardOpenPayloadSchema = strict(
   }),
 );
 
-export const forwardContract = defineContract("host", {
-  open: invoke("forward:open", ForwardOpenPayloadSchema, VoidSchema, {
+export const forwardContract = defineContract(
+  "forward",
+  "host",
+  invoke("open", ForwardOpenPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
+    grant: "reachServers",
     movesHostState: false,
   }),
-});
+);

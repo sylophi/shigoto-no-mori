@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
 import { logFailure } from "@shigomori/contracts/errors";
-import type { ContractModule } from "@shigomori/contracts/contract";
+import { type ContractModule, scopeOf } from "@shigomori/contracts/contract";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { hubContract } from "@shigomori/contracts/modules/hub";
@@ -137,7 +137,7 @@ const electronServer: ServerTransport = {
 
 // The direct data plane's listener. Auth consumes single-use connect
 // tickets minted by connectInfo over the device hub, and dispatch gates
-// every channel not registered mutating:false on the host's live
+// every channel not registered gated:false on the host's live
 // command-access switch (acceptsPeerCommands: every ticketed peer is a
 // device of this account, so the switch is the whole verdict). That
 // gate is the only enforcement; everything else that shows the switch
@@ -278,7 +278,7 @@ const hubServer = createHubConnection({
 // an app-menu mutation.
 const hostServer: ServerTransport = {
   // The Electron wire always serves host calls. The direct listener,
-  // the one remote wire, serves a call ONLY when its def opted into
+  // the one remote wire, serves a call ONLY when it opted into
   // remote exposure, so a host-scoped-but-not-remote channel
   // (runtime:nuke, launchers:launch) is never even registered on it. A
   // remote req for it gets the same no-handler res a client-scoped
@@ -302,7 +302,7 @@ const hostServer: ServerTransport = {
 };
 
 const serverFor = (module: ContractModule): ServerTransport =>
-  module.scope === "host" ? hostServer : electronServer;
+  scopeOf(module) === "host" ? hostServer : electronServer;
 
 // App-driven host mutations never reach viewers through the fs
 // watcher: its self-write suppression exists precisely so the app's own
@@ -370,9 +370,9 @@ export function registerContract<M extends ContractModule>(
       }
     },
     // Only host-scoped modules can move host state a viewer caches.
-    // Client-scoped defs never tag mutating anyway, so this gate is
+    // Client-scoped calls are never gated anyway, so this gate is
     // belt and braces.
-    onMutationResolved: module.scope === "host" ? pingViewers : undefined,
+    onMutationResolved: scopeOf(module) === "host" ? pingViewers : undefined,
   });
 }
 

@@ -6,20 +6,25 @@ import {
   VoidSchema,
 } from "../schemas/index.ts";
 
-export const branchesContract = defineContract("host", {
-  create: invoke("branches:create", CreateBranchPayloadSchema, VoidSchema, {
+export const branchesContract = defineContract(
+  "branches",
+  "host",
+  invoke("create", CreateBranchPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
+    grant: "changeCode",
   }),
-  rename: invoke("branches:rename", RenameAnyBranchPayloadSchema, VoidSchema, {
+  invoke("rename", RenameAnyBranchPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
+    grant: "changeCode",
   }),
-  delete: invoke("branches:delete", DeleteBranchPayloadSchema, VoidSchema, {
+  invoke("delete", DeleteBranchPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
+    grant: "changeCode",
   }),
-});
+);

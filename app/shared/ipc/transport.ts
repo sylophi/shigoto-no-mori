@@ -91,14 +91,14 @@ export function isRemoteCaller(
 // before anything reaches a transport.
 //
 // `opts.remote` is the exposure axis: the registrar passes each call's
-// `def.remote` here so a composite transport can decide whether the
+// Remote annotation here so a composite transport can decide whether the
 // channel reaches a remote (websocket) peer at all. Scope answers "runs
 // where the files live"; remote answers "safe to serve a remote peer",
 // and the two are independent decisions. Single-wire transports ignore
 // it (they already know their reach).
 //
 // `opts.gated` is the command-vs-read axis: the registrar passes each
-// call's `def.gated` here so a remote binding can gate commands. The
+// call's Gated annotation here so a remote binding can gate commands. The
 // direct data-plane listener serves channels explicitly registered
 // gated:false to every peer and gates everything else on the host's
 // command-access switch (fail-closed). The Electron binding ignores
