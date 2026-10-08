@@ -498,6 +498,14 @@ describe("the update server", () => {
       "The update feed answered HTTP 404.",
     );
     assert.equal(
+      await errorFor(json(null)),
+      "The update feed answered without a release URL or name.",
+    );
+    assert.equal(
+      await errorFor(json({ url: null, name: "v2.0.0" })),
+      "The update feed answered without a release URL or name.",
+    );
+    assert.equal(
       await errorFor(json({ name: "v2.0.0" })),
       "The update feed answered without a release URL or name.",
     );
@@ -842,6 +850,19 @@ describe("staging", () => {
         assert.equal(existsSync(staged(box)), false);
       }),
     );
+  });
+
+  it("takes a null release list as a confirmed empty one", async () => {
+    const box = newBox("2.0.0-beta.2");
+    seedStaged(box, "2.0.0-beta.2");
+    const { client } = network((url) =>
+      url.toString() === LIST ? json(null) : undefined,
+    );
+    const doc = await using({ box, http: client }, (u) =>
+      u.stage({ running: running(box, "2.0.0-beta.2") }),
+    );
+    assert.equal(doc.status, "up-to-date");
+    assert.equal(existsSync(staged(box)), false);
   });
 
   it("keeps the staged bundle when a newer download fails", async () => {
@@ -1199,7 +1220,7 @@ describe("installing", () => {
     );
   });
 
-  it("reads the installed app's Team ID once in a run", async () => {
+  it("reads the installed app's Team ID once to stage, and again to swap", async () => {
     const box = newBox();
     const { client } = network(
       serverFor("2.0.0", zipOf([{ version: "2.0.0" }])),
@@ -1208,7 +1229,8 @@ describe("installing", () => {
       u.update({ running: running(box) }),
     );
     assert.equal(versionAt(box.installed), "2.0.0");
-    // Verified when staged and again when placed, against one reading.
+    // Verified when staged and again when placed, the installed app's
+    // team read for each.
     assert.equal(
       calls().filter((line) => line.startsWith("codesign --verify")).length,
       2,
@@ -1216,7 +1238,7 @@ describe("installing", () => {
     assert.equal(
       calls().filter((line) => line === `codesign -dvv -- ${box.installed}`)
         .length,
-      1,
+      2,
     );
   });
 
@@ -1331,6 +1353,23 @@ const log = (box: Box) =>
     });
 
 describe("finishing an install for the app", () => {
+  it("refuses a pid that isn't one, as a usage error", async () => {
+    const box = newBox();
+    const errors = await Promise.all(
+      [0, -1].map((appPid) =>
+        failure({ box, http: network(() => undefined).client }, (u) =>
+          u.finishInstall({ running: running(box), appPid }),
+        ),
+      ),
+    );
+    for (const error of errors) {
+      assert.ok(error instanceof Updater.InvalidAppPid);
+      assert.equal(error.usage, true);
+      assert.equal(words(error), "--finish-install requires --pid <app pid>.");
+    }
+    assert.equal(existsSync(box.updates), false);
+  });
+
   it("waits for the app to quit, installs, and relaunches it", async () => {
     const { box, http } = await readyBox();
     const pid = deadPid();
@@ -1488,11 +1527,8 @@ describe("updating under a running app", () => {
     const app = livePid();
     touch("app-pids", `${app}\n`);
     touch("app-running");
-    status(box, {
-      pid: app,
-      appVersion: "1.0.0",
-      state: { kind: "ready", version: "2.0.0", releaseDate: null },
-    });
+    // All `sm update` needs is the pid: the rest may be missing.
+    status(box, { pid: app, appVersion: "1.0.0", state: null, extra: 1 });
     const { seen, progress } = progressLog();
     const doc = await updating(
       { box, http },

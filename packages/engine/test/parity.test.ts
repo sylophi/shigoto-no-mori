@@ -2179,6 +2179,8 @@ describe("update", () => {
     readonly status: number;
     readonly body?: unknown;
     readonly headers?: Record<string, string>;
+    // Bytes sent as they are, for the zip.
+    readonly raw?: Uint8Array;
   };
   let served: Record<string, Served> = {};
   let server: Server;
@@ -2194,7 +2196,8 @@ describe("update", () => {
         ...answer.headers,
       });
       response.end(
-        answer.body === undefined ? undefined : JSON.stringify(answer.body),
+        answer.raw ??
+          (answer.body === undefined ? undefined : JSON.stringify(answer.body)),
       );
     });
     await new Promise<void>((listening) =>
@@ -2233,8 +2236,9 @@ describe("update", () => {
     readonly binary: string;
   };
 
-  // A mode run on each side: Go's documents (one, with no download) and
-  // the engine's answer, or its failure as the terminal prints it.
+  // A mode run on each side: Go's documents (its events, then one result)
+  // and the engine's events and answer, or its failure as the terminal
+  // prints it.
   // A prerelease build asks the release list only without a feed
   // stand-in, so `feed` leaves that one out.
   const sameUpdate = async (
@@ -2257,7 +2261,14 @@ describe("update", () => {
       ...args,
       ...flags,
     ]);
+    const events: unknown[] = [];
     const input: Updater.UpdateInput = {
+      progress: (step) =>
+        Effect.sync(() => {
+          if (step.phase === "downloading" || step.phase === "verifying") {
+            events.push({ event: step.phase, version: step.version });
+          }
+        }),
       running: {
         version: build.version,
         arch: process.arch,
@@ -2292,8 +2303,7 @@ describe("update", () => {
         ),
       ),
     );
-    assert.equal(go.docs.length, 1, go.stderr);
-    assert.deepStrictEqual(engine, go.doc);
+    assert.deepStrictEqual([...events, engine], go.docs, go.stderr);
     return go.doc;
   };
 
@@ -2372,6 +2382,33 @@ describe("update", () => {
         notes: "notes for 1.2.0",
         releaseDate: "2026-09-15T19:00:00Z",
       },
+    );
+  });
+
+  it("stages from a feed that dates its release in RFC 1123, and refuses an installed app with no Team ID", async () => {
+    // Staging only succeeds under a Developer ID signature, so both sides
+    // run the download, extraction and verification, and refuse at the
+    // unsigned installed app.
+    const dir = join(box.home, "release");
+    const bundle = join(dir, "Shigoto no Mori.app");
+    mkdirSync(join(bundle, "Contents", "MacOS"), { recursive: true });
+    writeFileSync(
+      join(bundle, "Contents", "Info.plist"),
+      '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>x</string><key>CFBundleIdentifier</key><string>test.shigomori</string></dict></plist>\n',
+    );
+    writeFileSync(join(bundle, "Contents", "MacOS", "x"), "#!/bin/sh\n", {
+      mode: 0o755,
+    });
+    execFileSync("/usr/bin/codesign", ["-s", "-", "--deep", bundle]);
+    execFileSync("/usr/bin/ditto", ["-c", "-k", dir, `${dir}.zip`]);
+    served["/feed"] = feedAnswers("1.2.0");
+    served["/zip"] = { status: 200, raw: readFileSync(`${dir}.zip`) };
+    const doc = await sameUpdate(release("1.0.0"), ["--stage"], (u, input) =>
+      u.stage(input),
+    );
+    assert.match(
+      (doc as { error: string }).error,
+      /^Couldn't read the code signature of .*Shigoto no Mori\.app: /,
     );
   });
 

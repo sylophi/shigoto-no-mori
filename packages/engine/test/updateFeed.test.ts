@@ -15,7 +15,7 @@ import {
   ReleaseList,
 } from "../src/updateFeed.ts";
 
-type Release = (typeof ReleaseList.Type)[number];
+type Release = NonNullable<NonNullable<typeof ReleaseList.Type>[number]>;
 
 const semver = (raw: string): Semver => {
   const version = parseSemver(raw);
@@ -154,6 +154,32 @@ describe("pickRelease", () => {
     );
   });
 
+  it("reads what is null or missing as Go's zero values", () => {
+    const sparse = [
+      null,
+      { tag_name: "v2.0.0-beta.4" },
+      {
+        tag_name: "v2.0.0-beta.3",
+        prerelease: null,
+        assets: [
+          null,
+          {
+            name: "Shigoto.no.Mori-darwin-arm64-2.0.0-beta.3.zip",
+            browser_download_url: "z",
+          },
+        ],
+      },
+    ];
+    const decoded = Schema.decodeUnknownOption(ReleaseList)(sparse);
+    assert.ok(Option.isSome(decoded));
+    assert.deepEqual(pickRelease(current, decoded.value ?? [], "arm64"), {
+      url: "z",
+      version: "2.0.0-beta.3",
+      notes: "",
+      releaseDate: "",
+    });
+  });
+
   it("reads GitHub's nulls as empty", () => {
     const picked = pickRelease(
       current,
@@ -182,9 +208,13 @@ describe("the release list as GitHub sends it", () => {
       },
     ]);
     assert.ok(Option.isSome(decoded));
-    assert.deepEqual(decoded.value[0]?.assets, [
+    assert.deepEqual(decoded.value?.[0]?.assets, [
       { name: "a.zip", browser_download_url: "u" },
     ]);
+  });
+
+  it("reads a null list as an empty one", () => {
+    assert.deepEqual(decode(null), Option.some(null));
   });
 
   it("refuses a value of the wrong type", () => {
@@ -203,12 +233,19 @@ const today = (hours: number, minutes: number) =>
   new Date(2026, 9, 8, hours, minutes).getTime();
 
 describe("dates", () => {
-  it("reads RFC 3339, in UTC to the second, and nothing else", () => {
+  it("reads RFC 3339 and RFC 1123, in UTC to the second", () => {
     const cases: Record<string, string> = {
       "2026-09-15T12:00:00Z": "2026-09-15T12:00:00Z",
       "2026-09-15T12:00:00.987654Z": "2026-09-15T12:00:00Z",
       "2026-09-15T14:30:00+02:30": "2026-09-15T12:00:00Z",
-      "Tue, 15 Sep 2026 12:00:00 GMT": "",
+      "Tue, 15 Sep 2026 12:00:00 -0700": "2026-09-15T19:00:00Z",
+      "Tue, 15 Sep 2026 12:00:00 +0530": "2026-09-15T06:30:00Z",
+      "Tue, 15 Sep 2026 12:00:00 GMT": "2026-09-15T12:00:00Z",
+      "Tue, 15 Sep 2026 12:00:00 UTC": "2026-09-15T12:00:00Z",
+      // Go reads an abbreviation it doesn't know as UTC too.
+      "Tue, 15 Sep 2026 12:00:00 EST": "2026-09-15T12:00:00Z",
+      "Tue, 15 Spt 2026 12:00:00 GMT": "",
+      "15 Sep 2026 12:00:00 GMT": "",
       "2026-09-15 12:00:00Z": "",
       "2026-09-15T12:00:00": "",
       "": "",
