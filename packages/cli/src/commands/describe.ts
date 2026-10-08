@@ -1,9 +1,9 @@
 // sm [worktrees] describe [<worktree>] [-t <title>] [-d <text> |
 // --description-file <path|->]: a worktree's title and description,
 // set or shown. An open pull request's own take their place.
-import { readFileSync } from "node:fs";
 import { errnoText } from "@shigomori/engine/platformErrors";
 import * as Worktrees from "@shigomori/engine/Worktrees";
+import { trimGoSpace } from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -27,24 +27,16 @@ class UnreadableDescription extends Schema.TaggedError<UnreadableDescription>()(
 
 // The text a description file holds, stdin for "-".
 const readDescription = (file: string) =>
-  file === "-"
-    ? Effect.try({
-        try: () => readFileSync(0, "utf8"),
-        catch: (cause) =>
+  Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
+    fs.readFileString(file === "-" ? "/dev/stdin" : file).pipe(
+      Effect.mapError(
+        (error) =>
           new UnreadableDescription({
-            problem: `read stdin: ${String(cause)}`,
+            problem: `open ${file}: ${errnoText(error)}`,
           }),
-      })
-    : Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
-        fs.readFileString(file).pipe(
-          Effect.mapError(
-            (error) =>
-              new UnreadableDescription({
-                problem: `open ${file}: ${errnoText(error)}`,
-              }),
-          ),
-        ),
-      );
+      ),
+    ),
+  );
 
 export const describe = Command.make(
   "describe",
@@ -112,7 +104,7 @@ export const describe = Command.make(
           );
         }
         const title = pr === null ? view.title : pr.title;
-        const text = pr === null ? view.description : pr.body.trim();
+        const text = pr === null ? view.description : trimGoSpace(pr.body);
         if (title === "" && text === "") {
           return yield* out(
             `${located.worktree.name} has no title or description`,
@@ -123,21 +115,24 @@ export const describe = Command.make(
         return;
       }
 
-      const { worktree: row, pullRequestUnavailable } =
-        yield* worktrees.describe(located, {
+      const { described, pullRequestUnavailable } = yield* worktrees.describe(
+        located,
+        {
           ...(Option.isSome(input.title) ? { title: input.title.value } : {}),
           ...(Option.isSome(description)
             ? { description: description.value }
             : {}),
-        });
+        },
+      );
       if (pullRequestUnavailable !== undefined) {
         yield* unavailable(pullRequestUnavailable);
       }
+      // The row only for the document: its probes are the slow part.
       yield* json
-        ? emit({ ok: true, worktree: row })
+        ? emit({ ok: true, worktree: yield* worktrees.row(located) })
         : out(
             styles(stdoutColor).green(
-              `described ${row.name}: ${row.title === undefined || row.title === "" ? "(no title)" : row.title}`,
+              `described ${located.worktree.name}: ${described.title === "" ? "(no title)" : described.title}`,
             ),
           );
     }),

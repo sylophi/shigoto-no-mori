@@ -928,9 +928,10 @@ describe("worktrees describe", () => {
             ? service
                 .description(located)
                 .pipe(Effect.map((view) => ({ ok: true, ...view })))
-            : service
-                .describe(located, change)
-                .pipe(Effect.map(({ worktree }) => ({ ok: true, worktree }))),
+            : service.describe(located, change).pipe(
+                Effect.flatMap(() => service.row(located)),
+                Effect.map((worktree) => ({ ok: true, worktree })),
+              ),
       ),
     );
 

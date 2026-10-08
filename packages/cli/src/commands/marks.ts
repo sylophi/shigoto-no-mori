@@ -1,6 +1,7 @@
 // sm [worktrees] shelve|unshelve [<worktree>]: the app's "out of focus"
 // flag. sm autopull|agent-working [on|off] [<worktree>]: the marks a
 // worktree carries, shown without on or off.
+import * as Registry from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -48,7 +49,13 @@ export const unshelve = shelf("unshelve");
 const mark = (
   name: "autopull" | "agent-working",
   label: string,
-  key: "autoPull" | "agentWorking",
+  key: Registry.WorktreeMark,
+  set: (
+    worktrees: Worktrees.Worktrees["Service"],
+  ) => (
+    worktree: Worktrees.WorktreeIdentity,
+    on: boolean,
+  ) => Effect.Effect<void, Worktrees.MarkRefused>,
 ) =>
   Command.make(
     name,
@@ -73,9 +80,7 @@ const mark = (
           ref: Option.fromNullishOr(names[0]),
         })).located;
         if (mode !== undefined) {
-          yield* key === "autoPull"
-            ? worktrees.setAutoPull(located.worktree, mode === "on")
-            : worktrees.setAgentWorking(located.worktree, mode === "on");
+          yield* set(worktrees)(located.worktree, mode === "on");
         }
         if (json) {
           return yield* emit({
@@ -89,17 +94,23 @@ const mark = (
             styles(stdoutColor).green(`${label} ${mode} for ${worktree}`),
           );
         }
-        // The marks alone, without probing the checkout.
-        const marks = yield* worktrees.identityRow(located, {
-          primaryRef: false,
-        });
-        yield* out(`${worktree}: ${label} ${marks[key] ? "on" : "off"}`);
+        // The stored mark, without probing the checkout.
+        const marked = yield* (yield* Registry.Registry).marked(key);
+        yield* out(
+          `${worktree}: ${label} ${marked.has(located.worktree.id) ? "on" : "off"}`,
+        );
       }),
   ).pipe(Command.withDescription(`Set or show a worktree's ${label} mark`));
 
-export const autopull = mark("autopull", "auto-pull", "autoPull");
+export const autopull = mark(
+  "autopull",
+  "auto-pull",
+  "autoPull",
+  (worktrees) => worktrees.setAutoPull,
+);
 export const agentWorking = mark(
   "agent-working",
   "agent working",
   "agentWorking",
+  (worktrees) => worktrees.setAgentWorking,
 );
