@@ -43,9 +43,14 @@ function globalFlags(args: ReadonlyArray<string>) {
 }
 
 // Go's aliases, folded before parsing, since effect/cli takes one per
-// command: a verb's, at the top level and after `worktrees`, and a
-// namespace's.
+// command: a namespace's, a worktree verb's (at the top level and after
+// `worktrees`), and a project verb's, which differ: `rm` alone removes
+// a worktree, after `projects` a project.
 const VERBS: Readonly<Record<string, string>> = { ls: "list", l: "list" };
+const PROJECT_VERBS: Readonly<Record<string, string>> = {
+  ls: "list",
+  rm: "remove",
+};
 const NAMESPACES: Readonly<Record<string, string>> = {
   worktree: "worktrees",
   wt: "worktrees",
@@ -60,9 +65,12 @@ function canonical(args: ReadonlyArray<string>) {
   if (first === undefined) return args;
   const command = NAMESPACES[first] ?? VERBS[first] ?? first;
   const [verb, ...after] = more;
-  return command === "worktrees" && verb !== undefined
-    ? [command, VERBS[verb] ?? verb, ...after]
-    : [command, ...more];
+  if (verb === undefined) return [command];
+  if (command === "worktrees") return [command, VERBS[verb] ?? verb, ...after];
+  if (command === "projects") {
+    return [command, PROJECT_VERBS[verb] ?? verb, ...after];
+  }
+  return [command, ...more];
 }
 
 const { json, rest } = globalFlags(process.argv.slice(2));

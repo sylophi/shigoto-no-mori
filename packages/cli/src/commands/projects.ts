@@ -59,10 +59,7 @@ const list = Command.make(
         ),
       );
     }),
-).pipe(
-  Command.withAlias("ls"),
-  Command.withDescription("List the projects, terrier's included"),
-);
+).pipe(Command.withDescription("List the projects, terrier's included"));
 
 const icon = Command.make(
   "icon",
@@ -272,10 +269,7 @@ const remove = Command.make(
         ? emit({ ok: true, removed: project.name, path: project.path })
         : out(`removed ${project.name} (${project.path})`);
     }),
-).pipe(
-  Command.withAlias("rm"),
-  Command.withDescription("Remove a project. Its checkouts stay on disk"),
-);
+).pipe(Command.withDescription("Remove a project. Its checkouts stay on disk"));
 
 const reorder = Command.make(
   "reorder",

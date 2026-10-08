@@ -60,7 +60,8 @@ export const worktreeFlags = {
   worktreeId: Flag.String("worktree-id").pipe(Flag.optional),
 };
 
-// The worktree a command names, else the one at the cwd.
+// The worktree a command names, else the one at the cwd, and where the
+// command runs.
 export const resolveWorktree = (ref: {
   readonly ref?: Option.Option<string>;
   readonly project: Option.Option<string>;
@@ -69,10 +70,11 @@ export const resolveWorktree = (ref: {
 }) =>
   Effect.gen(function* () {
     const at = yield* here;
-    return yield* (yield* Worktrees.Worktrees).resolve(at, {
+    const located = yield* (yield* Worktrees.Worktrees).resolve(at, {
       ref: Option.getOrUndefined(given(ref.ref ?? Option.none())),
       project: Option.getOrUndefined(given(ref.project)),
       projectId: Option.getOrUndefined(given(ref.projectId)),
       worktreeId: Option.getOrUndefined(given(ref.worktreeId)),
     });
+    return { at, located };
   });

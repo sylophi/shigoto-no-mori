@@ -50,13 +50,10 @@ const changesCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
 // Primary before external, and never both.
 const flagsCell = (
   paint: Styles,
-  row: {
-    readonly isPrimary: boolean;
-    readonly isExternal: boolean;
-    readonly shelved: boolean;
-    readonly autoPull: boolean;
-    readonly agentWorking: boolean;
-  },
+  row: Pick<
+    Worktrees.IdentityRow,
+    "isPrimary" | "isExternal" | "shelved" | "autoPull" | "agentWorking"
+  >,
 ) =>
   paint.dim(
     [
@@ -130,9 +127,22 @@ const list = Command.make(
       Flag.withDescription("With --identities, each project's primary ref"),
       Flag.withDefault(false),
     ),
+    remote: Flag.Boolean("remote").pipe(
+      Flag.withDescription("Another device's worktrees (not yet)"),
+      Flag.withDefault(false),
+    ),
+    from: Flag.String("from").pipe(Flag.optional),
+    // Go lets positionals be.
+    rest: Argument.String("args").pipe(Argument.variadic()),
   },
   (input) =>
     Effect.gen(function* () {
+      if (input.remote || Option.isSome(given(input.from))) {
+        return yield* new UsageError({
+          problem:
+            "--remote and --from list another device's worktrees, which this build can't yet.",
+        });
+      }
       if (input.primaryRef && !input.identities) {
         return yield* new UsageError({
           problem:
@@ -144,15 +154,19 @@ const list = Command.make(
       const paint = styles(stdoutColor);
       const options = { primaryRef: input.primaryRef };
 
-      // One worktree, as the app asks after changing it: no marker
-      // column, as in Go.
+      // One worktree, as the app asks after changing it. Its full row
+      // has no marker column, as in Go.
       if (Option.isSome(given(input.worktreeId))) {
-        const located = yield* resolveWorktree(input);
+        const { at, located } = yield* resolveWorktree(input);
         if (input.identities) {
           const row = yield* worktrees.identityRow(located, options);
           return yield* json
             ? emit([row])
-            : identityTable(paint, [row], { names: new Map(), multi: false });
+            : identityTable(paint, [row], {
+                names: new Map(),
+                multi: false,
+                current: at.current?.worktree.id ?? "",
+              });
         }
         const row = yield* worktrees.row(located, { settle: true });
         return yield* json
@@ -178,7 +192,6 @@ const list = Command.make(
       const listing = yield* worktrees.list(scope);
       yield* warnSkipped(listing.skipped);
       if (json) return yield* emit(listing.rows);
-      if (listing.rows.length === 0) return yield* note("No worktrees found.");
       yield* rowTable(paint, listing.rows, {
         multi: listed(listing.skipped),
         current,
@@ -194,6 +207,7 @@ const rowTable = (
   table: { readonly multi: boolean; readonly current?: string },
 ) =>
   Effect.flatMap(Effect.service(Output), ({ stdoutColor }) => {
+    if (rows.length === 0) return note("No worktrees found.");
     const marked = table.current !== undefined;
     return out(
       renderTable(
@@ -255,10 +269,12 @@ const path = Command.make(
   {
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
+    // Go reads the first and lets the rest be.
+    rest: Argument.String("args").pipe(Argument.variadic()),
   },
   (input) =>
     Effect.gen(function* () {
-      const { worktree, project } = yield* resolveWorktree(input);
+      const { worktree, project } = (yield* resolveWorktree(input)).located;
       const { json } = yield* Effect.service(Output);
       yield* json
         ? emit({
@@ -293,7 +309,7 @@ const destination = Command.make(
       const worktrees = yield* Worktrees.Worktrees;
       const dest = yield* worktrees.destination(
         project,
-        Option.getOrElse(input.name, () => "").trim(),
+        Option.getOrElse(input.name, () => ""),
       );
       yield* json
         ? emit({ ok: true, ...dest })

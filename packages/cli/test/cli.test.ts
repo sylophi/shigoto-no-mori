@@ -380,6 +380,7 @@ describe("worktrees", () => {
     ).id;
     await same("--json", "list", "--worktree-id", id);
     await same("list", "--worktree-id", id, "--identities");
+    await sameAt(fox, "list", "--worktree-id", id, "--identities");
     await same("--json", "list", "--worktree-id", "nope");
   });
 
@@ -392,6 +393,10 @@ describe("worktrees", () => {
     await same("path", "fox", "-p", "beta");
     await same("--json", "path", "nope");
     await same("path");
+    await same("path", "fox", "extra");
+    await same("list", "alpha");
+    await same("projects", "ls");
+    await same("--json", "p", "rm", "--project-id", "B", "--yes");
   });
 
   it("says where a new worktree would go", async () => {
