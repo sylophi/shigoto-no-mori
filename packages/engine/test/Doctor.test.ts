@@ -713,26 +713,42 @@ describe("the run", () => {
 });
 
 describe("a store that can't open", () => {
-  it("names the project whose settings it refused, and skips what needs it", async () => {
+  const standalone = () =>
+    box.doctor({ version: "dev", executable: "", terminal: false });
+
+  it("reads the files it refused, telling bad JSON from a file it can't read", async () => {
     alpha();
-    writeFileSync(
-      join(box.home, "seed", "projects", "A1", "project.json"),
-      "{not json",
-    );
-    const doc = await box.doctor({
-      version: "dev",
-      executable: "",
-      terminal: false,
-    });
-    only(doc, "registry", "ok");
-    const [refused] = findingsFor(doc, "project-config");
-    assert.equal(refused?.title, "alpha");
-    assert.equal(refused?.status, "fail");
+    const settings = join(box.home, "seed", "projects", "A1", "project.json");
+    writeFileSync(settings, "{not json");
+    const bad = await standalone();
+    only(bad, "registry", "ok");
+    const refused = only(bad, "project-config", "fail");
+    assert.equal(refused.title, "alpha");
+    assert.match(refused.fix ?? "", /^Repair the JSON in /);
+    assert.ok(bad.checks.every(({ fix }) => fix !== ""));
+  });
+
+  it("names a project.json it can't read by the error", async () => {
+    alpha();
+    const settings = join(box.home, "seed", "projects", "A1", "project.json");
+    rmSync(settings);
+    // Copied as it is, where a file without read permission wouldn't be.
+    mkdirSync(settings);
+    const refused = only(await standalone(), "project-config", "fail");
+    assert.match(refused.detail, /: is a directory\)/);
+    assert.match(refused.fix ?? "", /^Fix the permissions on /);
+  });
+
+  it("runs only what needs no state when the store itself won't open", async () => {
+    alpha();
+    writeFileSync(join(box.home, "seed", "store.db"), "not a database");
+    const doc = await standalone();
+    only(doc, "store", "fail");
+    assert.deepEqual(findingsFor(doc, "registry"), []);
     assert.deepEqual(
       doc.checks.filter(({ group }) => group === "Projects"),
-      [refused],
+      [],
     );
-    assert.ok(doc.checks.every(({ fix }) => fix !== ""));
   });
 });
 

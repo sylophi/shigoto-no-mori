@@ -36,7 +36,7 @@ import * as Scripts from "../../src/Scripts.ts";
 import * as Terrier from "../../src/Terrier.ts";
 import * as Usage from "../../src/Usage.ts";
 import { doctorLayer, engineLayer } from "../../src/layer.ts";
-import { nodeStore } from "./nodeStore.ts";
+import { nodeStore, openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 
 // The services a harness case calls.
@@ -262,16 +262,12 @@ export function sandbox(): Sandbox {
         }),
       ),
     );
-  const options = () => ({
-    flavor: "dev" as const,
-    store: nodeStore,
-    macfs: macfs(),
-  });
-
   let runtime: ManagedRuntime.ManagedRuntime<Engine, unknown> | undefined;
   const engineRuntime = () => {
     runtime ??= ManagedRuntime.make(
-      engineLayer(options()).pipe(Layer.provide(platform())),
+      engineLayer({ flavor: "dev", store: nodeStore, macfs: macfs() }).pipe(
+        Layer.provide(platform()),
+      ),
     );
     return runtime;
   };
@@ -414,7 +410,9 @@ export function sandbox(): Sandbox {
           doctor.run(input),
         ).pipe(
           Effect.provide(
-            doctorLayer(options()).pipe(Layer.provide(platform())),
+            doctorLayer({ flavor: "dev", open: openNode, macfs: macfs() }).pipe(
+              Layer.provide(platform()),
+            ),
           ),
         ),
       ),

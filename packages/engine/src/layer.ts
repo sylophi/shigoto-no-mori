@@ -21,7 +21,8 @@ import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
-import type * as Store from "./Store.ts";
+import * as Store from "./Store.ts";
+import type * as SqlClient from "effect/sql/SqlClient";
 import * as Terrier from "./Terrier.ts";
 import * as Updater from "./Updater.ts";
 import * as Usage from "./Usage.ts";
@@ -69,11 +70,39 @@ const services = (options: EngineOptions) =>
 export const engineLayer = (options: EngineOptions) =>
   services(options).pipe(Layer.provideMerge(Paths.layer(options.flavor)));
 
+// The store-backed services the doctor's checks read, over `store`.
+const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
+  Worktrees.layer.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layout.layer,
+        Registry.layer,
+        WorktreeData.layer,
+        GitHub.layer,
+        Lifecycle.layer,
+        CarryOver.layer,
+        CloneCheckout.layer,
+      ),
+    ),
+    Layer.provideMerge(Terrier.layer),
+    Layer.provideMerge(
+      Layer.mergeAll(Config.layer, Usage.layer, Identity.layer, Icons.layer),
+    ),
+    Layer.provideMerge(store),
+  );
+
 // The terminal's `sm doctor`, which answers when the store can't open:
-// the engine is built inside each run (`Doctor.standalone`). Paths comes
+// the store is opened inside each run (`Doctor.standalone`). Paths comes
 // along for the checklist's header.
-export const doctorLayer = (options: EngineOptions) =>
-  Doctor.standalone(services(options)).pipe(
+export const doctorLayer = (options: {
+  readonly flavor: Flavor;
+  readonly open: Store.OpenDatabase;
+  readonly macfs: string;
+}) =>
+  Doctor.standalone(
+    doctorStore(Store.layer(options.open)),
+    doctorStore(Store.fromFiles(options.open)),
+  ).pipe(
     Layer.provide(Layer.merge(Git.layer, Darwin.layer(options.macfs))),
     Layer.provideMerge(Paths.layer(options.flavor)),
   );

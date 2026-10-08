@@ -2696,11 +2696,25 @@ describe("doctor", () => {
     assert.deepEqual(after.repaired, ["deleted 1 stale lock file"]);
   });
 
-  it("still answers when the store can't import a config that doesn't parse", async () => {
+  it("checks each registered project when the store can't import a config that doesn't parse", async () => {
+    inProject();
     corrupt("config.json");
     const doc = await sameDoctor();
     assert.ok(ids(doc).includes("config:fail"));
     assert.ok(ids(doc).includes("registry:ok"));
+    assert.ok(ids(doc).includes("project:ok"));
+  });
+
+  it("reads a pre-registry data dir's projects from state.json when the store can't import it", async () => {
+    const { repo } = inProject();
+    rmSync(join(box.home, "seed", "registry.json"));
+    box.write("state.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+    });
+    corrupt("config.json");
+    const doc = await sameDoctor();
+    assert.ok(ids(doc).includes("registry:ok"));
+    assert.ok(doc.checks.some(({ title }) => title === "repo"));
   });
 
   it("finds what a crash left: update files, a staging lock, landing refs and a running script", async () => {
