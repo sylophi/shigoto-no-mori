@@ -23,6 +23,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Config from "../../src/Config.ts";
+import * as Control from "../../src/Control.ts";
 import * as Doctor from "../../src/Doctor.ts";
 import { errorDocument } from "../../src/errorDocument.ts";
 import * as Hygiene from "../../src/Hygiene.ts";
@@ -34,6 +35,7 @@ import * as Projects from "../../src/Projects.ts";
 import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Terrier from "../../src/Terrier.ts";
+import * as Transfer from "../../src/Transfer.ts";
 import * as Usage from "../../src/Usage.ts";
 import { engineLayer } from "../../src/layer.ts";
 import { nodeStore } from "./nodeStore.ts";
@@ -53,7 +55,9 @@ export type Engine =
   | Worktrees.Worktrees
   | Landing.Landing
   | Hygiene.Hygiene
-  | Doctor.Doctor;
+  | Doctor.Doctor
+  | Control.Control
+  | Transfer.Transfer;
 
 const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
 
