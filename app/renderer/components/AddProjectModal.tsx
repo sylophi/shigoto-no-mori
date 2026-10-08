@@ -64,13 +64,15 @@ function AddProjectDialog() {
   );
   const [url, setUrl] = useState(targetUrl ?? "");
   const [name, setName] = useState("");
-  // A URL typed or pasted where a path goes is a clone.
+  // A URL typed or pasted where a path goes is a clone, after the `~/`
+  // the input starts with.
   const setPathOrUrl = (value: string) => {
-    if (repoNameFromUrl(value) === null) {
+    const pasted = value.replace(/^~\//, "");
+    if (repoNameFromUrl(pasted) === null) {
       setQuery(value);
       return;
     }
-    setUrl(value);
+    setUrl(pasted);
     setMode("clone");
   };
   // Held here for the same reason. On by default: a device that lists
