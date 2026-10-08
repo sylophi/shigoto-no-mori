@@ -1,7 +1,6 @@
 // How a failed command reports and exits, the Go sm's way: a usage
 // error exits 2, anything else 1. Under --json the failure is a document,
-// {ok: false, error, code?}, where the code names a failure the app
-// branches on. A person gets `sm: <message>` on stderr.
+// {ok: false, error}. A person gets `sm: <message>` on stderr.
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -32,12 +31,6 @@ const USAGE = new Set([
   "StructuredConfigKey",
 ]);
 
-// The machine-readable codes a --json failure carries, by tag.
-const CODES: Readonly<Record<string, string>> = {
-  UnknownProject: "unknown-project",
-  NoPackageJson: "no-package-json",
-};
-
 // An Effect error's tag, read without naming the field.
 const tagOf = (error: unknown) => {
   const tag: unknown = Predicate.isObject(error)
@@ -54,13 +47,8 @@ export const report = (error: unknown) =>
     if (tag === "ShowHelp") return 0;
     const { json, stderrColor, binaryName } = yield* Effect.service(Output);
     const message = error instanceof Error ? error.message : String(error);
-    const code = tag === undefined ? undefined : CODES[tag];
     if (json) {
-      yield* emit(
-        code === undefined
-          ? { ok: false, error: message }
-          : { ok: false, error: message, code },
-      );
+      yield* emit({ ok: false, error: message });
     } else {
       yield* note(`${styles(stderrColor).red(`${binaryName}:`)} ${message}`);
     }

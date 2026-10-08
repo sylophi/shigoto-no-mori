@@ -2,6 +2,7 @@
 import * as Config from "@shigomori/engine/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
@@ -137,22 +138,15 @@ const write = Command.make(
           problem: "write requires --data '<json>'.",
         });
       }
-      const payload = yield* Effect.try({
-        try: () => JSON.parse(data.value) as unknown,
-        catch: () =>
-          new UsageError({ problem: "--data must be a JSON object." }),
-      });
-      if (
-        typeof payload !== "object" ||
-        payload === null ||
-        Array.isArray(payload)
-      ) {
-        return yield* new UsageError({
-          problem: "--data must be a JSON object.",
-        });
-      }
+      const payload = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
+      )(data.value).pipe(
+        Effect.mapError(
+          () => new UsageError({ problem: "--data must be a JSON object." }),
+        ),
+      );
       const config = yield* Config.Config;
-      yield* config.write(device, payload as Record<string, unknown>);
+      yield* config.write(device, payload);
       yield* emit({ ok: true });
     }),
 ).pipe(Command.withDescription("Write the whole document (app plumbing)"));

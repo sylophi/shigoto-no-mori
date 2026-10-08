@@ -17,19 +17,17 @@ import { report } from "./errors.ts";
 import { Output } from "./output.ts";
 
 declare const SM_FLAVOR: "prod" | "dev" | undefined;
-declare const SM_VERSION: string | undefined;
 
 const flavor = typeof SM_FLAVOR === "undefined" ? "dev" : SM_FLAVOR;
-const version = typeof SM_VERSION === "undefined" ? "dev" : SM_VERSION;
 
 // --json and --verbose are global wherever they sit, up to a `--`,
-// past which everything is the command's.
+// past which everything is the command's, as in Go.
+// --verbose is accepted and has nothing to add yet.
 function globalFlags(args: ReadonlyArray<string>) {
   const end = args.indexOf("--");
   const before = end === -1 ? args : args.slice(0, end);
   return {
     json: before.includes("--json"),
-    verbose: before.includes("--verbose"),
     rest: [
       ...before.filter((arg) => arg !== "--json" && arg !== "--verbose"),
       ...(end === -1 ? [] : args.slice(end)),
@@ -37,12 +35,7 @@ function globalFlags(args: ReadonlyArray<string>) {
   };
 }
 
-const sm = Command.make("sm").pipe(
-  Command.withDescription("Shigoto no Mori"),
-  Command.withSubcommands([configCommand]),
-);
-
-const { json, verbose, rest } = globalFlags(process.argv.slice(2));
+const { json, rest } = globalFlags(process.argv.slice(2));
 const plain =
   json || process.env.NO_COLOR !== undefined || process.env.TERM === "dumb";
 
@@ -52,18 +45,22 @@ const engine = Config.layer.pipe(
   ),
   Layer.provideMerge(Git.layer),
   Layer.provideMerge(Paths.layer(flavor)),
-  Layer.provideMerge(BunServices.layer),
 );
 
-const program = Command.runWith(sm, { version, renderErrors: false })(
+// Provided per command group, so help and usage errors open no store.
+const sm = Command.make("sm").pipe(
+  Command.withDescription("Shigoto no Mori"),
+  Command.withSubcommands([configCommand.pipe(Command.provide(engine))]),
+);
+
+const program = Command.runWith(sm, { version: "dev", renderErrors: false })(
   rest,
 ).pipe(
-  Effect.provide(engine),
+  Effect.provide(BunServices.layer),
   Effect.as(0),
   Effect.catch(report),
   Effect.provideService(Output, {
     json,
-    verbose,
     stdoutColor: !plain && process.stdout.isTTY === true,
     stderrColor: !plain && process.stderr.isTTY === true,
     binaryName: flavorNames(flavor).binaryName,

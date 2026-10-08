@@ -9,7 +9,6 @@ export class Output extends Context.Service<
   Output,
   {
     readonly json: boolean;
-    readonly verbose: boolean;
     readonly stdoutColor: boolean;
     readonly stderrColor: boolean;
     // The command's name, for messages that point at another command.
@@ -36,7 +35,6 @@ export const styles = (color: boolean) => ({
   dim: (text: string) => paint(text, "2", color),
   green: (text: string) => paint(text, "32", color),
   red: (text: string) => paint(text, "31", color),
-  yellow: (text: string) => paint(text, "33", color),
 });
 
 // An SGR escape: ESC, `[`, its parameters, `m`.

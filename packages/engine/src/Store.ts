@@ -1,6 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 import * as Reactivity from "effect/reactivity/Reactivity";
@@ -48,11 +48,14 @@ export const layer = (
 > =>
   Layer.effectContext(
     Effect.gen(function* () {
-      const { store } = yield* Paths.Paths;
+      const { dataDir, store } = yield* Paths.Paths;
+      const fs = yield* FileSystem.FileSystem;
       const platform = yield* Effect.context<
         Paths.Paths | FileSystem.FileSystem | Path.Path
       >();
       const sql = yield* Effect.gen(function* () {
+        // A fresh device has no data dir until its first command.
+        yield* fs.makeDirectory(dataDir, { recursive: true });
         const client = yield* open(store);
         // The schema's history, applied in order. A released migration is
         // never edited. A change is a new one.
