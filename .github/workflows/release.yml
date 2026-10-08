@@ -65,6 +65,7 @@ jobs:
           cache-dependency-path: |
             cli/go.sum
             file-sync/go.sum
+            macfs/go.sum
 
       - name: Install dependencies
         working-directory: .
