@@ -111,9 +111,8 @@ overrides:
 
 # The versions the packages share, or will once code moves into
 # packages/, pinned once. A package depends on one as "catalog:".
-# marketing keeps TypeScript 6 on its own (marketing/README.md has why).
-# vitest stays on 4.1.x: @cloudflare/vitest-pool-workers, which runs the
-# hub's suite, supports ^4.1 only.
+# marketing keeps TypeScript 6 on its own (marketing/README.md has why),
+# and the hub vitest 4.1 (hub/README.md has why).
 catalog:
   "@effect/platform-bun": 4.0.2
   "@effect/platform-node": 4.0.2
@@ -128,5 +127,5 @@ catalog:
   react: ~19.2.7
   react-dom: ~19.2.7
   typescript: ~7.0.2
-  vitest: 4.1.11
+  vitest: 5.0.3
   zod: ^4.4.3
