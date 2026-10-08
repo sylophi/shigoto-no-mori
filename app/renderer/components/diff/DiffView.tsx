@@ -33,6 +33,7 @@ import {
   CODE_THEME,
 } from "./codeTheme";
 import { DiffFileIndex } from "./DiffFileIndex";
+import { HunkBar, hunkAnnotations, type HunkControls } from "./HunkBar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
@@ -141,6 +142,10 @@ export function DiffView({
   emptyMessage,
   changes,
   footer,
+  details,
+  steps,
+  renderSidebar,
+  sidebarActions,
 }: {
   // The patch's read, whichever of the three pages asked for it.
   diff: UseQueryResult<string>;
@@ -157,6 +162,16 @@ export function DiffView({
   changes?: DiffChangesControls;
   // Mounted at the foot of the file list: the commit composer.
   footer?: ReactNode;
+  // Under the title, the header's width: a commit's message and moves.
+  details?: ReactNode;
+  // Beside the view's own controls: a commit's steps to its neighbours.
+  steps?: ReactNode;
+  // What the sidebar (and a phone's sheet) shows in place of the bare
+  // file list: the Git page's tabs, its Changes tab around this list and
+  // its History tab in place of it. Handed the list.
+  renderSidebar?: (index: ReactNode) => ReactNode;
+  // At the end of the sidebar's back row: the Git page's Merge.
+  sidebarActions?: ReactNode;
 }) {
   const { data: patch, isLoading, error } = diff;
   const backLabel = useWorktreeName(worktree);
@@ -274,16 +289,24 @@ export function DiffView({
     changes,
     footer,
   };
+  // The list, framed by the page when it frames it.
+  const sidebarWith = (index: ReactNode) =>
+    renderSidebar ? renderSidebar(index) : index;
 
   return (
     <div className="flex h-full flex-col">
-      <SidebarTakeover back={{ label: backLabel, onClick: onBack }}>
-        {showIndex && (
-          <DiffFileIndex
-            {...indexProps}
-            onSelect={selectFile}
-            className="min-h-0 flex-1"
-          />
+      <SidebarTakeover
+        back={{ label: backLabel, onClick: onBack }}
+        actions={sidebarActions}
+      >
+        {sidebarWith(
+          showIndex && (
+            <DiffFileIndex
+              {...indexProps}
+              onSelect={selectFile}
+              className="min-h-0 flex-1"
+            />
+          ),
         )}
       </SidebarTakeover>
       <header
@@ -294,8 +317,10 @@ export function DiffView({
       >
         {/* A wide viewport's way back is the sidebar's first row. */}
         {phone && <BackButton onClick={onBack} label={backLabel} />}
-        <div className="flex items-start justify-between gap-6">
-          <div className="min-w-0 flex-1 space-y-1">
+        {/* A phone gives the title its own row and the controls the
+            next, rather than a sliver of the width beside them. */}
+        <div className="flex items-start justify-between gap-6 phone:flex-wrap phone:gap-3">
+          <div className="min-w-0 flex-1 space-y-1 phone:basis-full">
             {/* A phone's header row is shared with the chips, so the
                 title wraps there instead of losing its tail. */}
             <SimpleTooltip whenTruncated tip={title}>
@@ -310,16 +335,20 @@ export function DiffView({
             </SimpleTooltip>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
-            {phone && (singleFile || allFiles.length >= SHEET_MIN_FILES) && (
-              <ChipButton
-                onClick={() => setFileSheetOpen(true)}
-                aria-label={`${filesLabel} (${indexEntries.length})`}
-                className="py-1.5"
-              >
-                <Files aria-hidden className="size-3.5" />
-                <span className="tabular">{indexEntries.length}</span>
-              </ChipButton>
-            )}
+            {steps}
+            {phone &&
+              (renderSidebar !== undefined ||
+                singleFile ||
+                allFiles.length >= SHEET_MIN_FILES) && (
+                <ChipButton
+                  onClick={() => setFileSheetOpen(true)}
+                  aria-label={`${filesLabel} (${indexEntries.length})`}
+                  className="py-1.5"
+                >
+                  <Files aria-hidden className="size-3.5" />
+                  <span className="tabular">{indexEntries.length}</span>
+                </ChipButton>
+              )}
             <SimpleTooltip tip="Wrap long lines">
               <IconButton
                 onClick={toggleWrap}
@@ -339,6 +368,7 @@ export function DiffView({
             />
           </div>
         </div>
+        {details}
       </header>
 
       <div
@@ -388,6 +418,8 @@ export function DiffView({
                     // you asked for, and folding it away would leave
                     // the pane blank with nothing to unfold it from.
                     onToggle={singleFile ? undefined : setCollapsed}
+                    hunks={changes?.hunks}
+                    busy={changes?.busy ?? false}
                   />
                 );
               })}
@@ -407,14 +439,18 @@ export function DiffView({
             className="gap-0 p-0"
           >
             <SheetTitle className="sr-only">{filesLabel}</SheetTitle>
-            <DiffFileIndex
-              {...indexProps}
-              onSelect={(key) => {
-                setFileSheetOpen(false);
-                selectFile(key);
-              }}
-              className="h-[70dvh] w-full"
-            />
+            <div className="flex h-[70dvh] w-full flex-col">
+              {sidebarWith(
+                <DiffFileIndex
+                  {...indexProps}
+                  onSelect={(key) => {
+                    setFileSheetOpen(false);
+                    selectFile(key);
+                  }}
+                  className="min-h-0 flex-1"
+                />,
+              )}
+            </div>
           </SheetContent>
         </Sheet>
       )}
@@ -441,6 +477,8 @@ function DiffFileRow({
   wrapLines,
   themeType,
   onToggle,
+  hunks,
+  busy,
 }: {
   fileDiff: FileDiffMetadata;
   fileId: string;
@@ -455,6 +493,9 @@ function DiffFileRow({
   // Absent when the pane shows one picked file, where there is nothing
   // to fold away. The header prefix goes with it.
   onToggle: ((key: string, collapsed: boolean) => void) | undefined;
+  // The changes page's hunk ticks for this file, when it has them.
+  hunks: HunkControls | undefined;
+  busy: boolean;
 }) {
   return (
     <div data-diff-file={fileId}>
@@ -471,6 +512,18 @@ function DiffFileRow({
           collapsed,
         }}
         metrics={DIFF_METRICS}
+        lineAnnotations={hunks && hunkAnnotations(fileDiff, hunks.states)}
+        renderAnnotation={
+          hunks
+            ? (annotation) => (
+                <HunkBar
+                  group={annotation.metadata}
+                  controls={hunks}
+                  busy={busy}
+                />
+              )
+            : undefined
+        }
         renderHeaderPrefix={
           onToggle
             ? () => (

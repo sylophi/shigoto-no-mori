@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
@@ -7,22 +7,38 @@ import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
   useCommitChanges,
   useDiscardChanges,
+  useDiscardHunks,
+  useFileHunks,
   useRestoreDiscard,
+  useSetHunksStaged,
   useSetStaged,
   useWorktreeChanges,
 } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
+import {
+  useResolveConflict,
+  useStashChanges,
+} from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
+import { isOverlayOpen } from "@/lib/dom";
 import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
-import { commitRewriteAt } from "@/lib/commitRewrite";
+import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { worktreeSyncView } from "@/lib/syncState";
+import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
+import { Kbd } from "@/components/ui/kbd";
 import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
-import { changedFilePaths, includedFiles } from "./changesControls";
+import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
+import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { BranchBar } from "./BranchBar";
+import {
+  changedFilePaths,
+  includedFiles,
+  type DiffChangesControls,
+} from "./changesControls";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
@@ -80,6 +96,14 @@ function ChangesView({
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   const picked =
     files?.find((file) => changeKey(file) === pickedKey) ?? files?.[0] ?? null;
+  // Only a modified file ticks by hunk: the others are whole-file
+  // changes (an addition, a removal, a rename) or a conflict.
+  const hunkPath =
+    picked?.kind === "modified" && !picked.conflicted ? picked.path : undefined;
+  const { data: hunkStates } = useFileHunks(projectId, worktreeId, hunkPath);
+  const { mutate: stageHunks, isPending: stagingHunks } = useSetHunksStaged();
+  const { mutate: discardHunks, isPending: discardingHunks } =
+    useDiscardHunks();
   const diff = useFileDiff(
     projectId,
     worktreeId,
@@ -93,15 +117,25 @@ function ChangesView({
   const { mutate: discardPaths, isPending: discarding } = useDiscardChanges();
   const { mutate: restore, isPending: restoring } = useRestoreDiscard();
   const undo = useUndoCommits(worktree);
+  const stash = useStashChanges();
+  const resolve = useResolveConflict();
   const [draft, setDraft] = useCommitDraft(projectId, worktreeId);
 
   // The last commit is only up for rewriting while no remote has it. A
   // requested amend only takes effect while that holds (a push from
   // another window ends it).
   const lastCommit = worktree.recentCommits[0];
-  const rewrite = commitRewriteAt(worktree, worktree.recentCommits, 0);
+  const rewrite = useCommitRewrites(worktree, worktree.recentCommits)(0);
   const amending = amendRequested && rewrite.canAmend;
-  const busy = commit.isPending || discarding || restoring || undo.pending;
+  const busy =
+    commit.isPending ||
+    discarding ||
+    restoring ||
+    undo.pending ||
+    stash.isPending ||
+    resolve.isPending ||
+    stagingHunks ||
+    discardingHunks;
   const resetAmendDraft = useAmendDraft({
     projectId,
     worktreeId,
@@ -183,6 +217,114 @@ function ChangesView({
   // commit to amend. A clean tree keeps the branch bar and the last
   // commit, which is where the next move (push, amend, undo) lives.
   const showComposer = (loading || list.length > 0 || amending) && !failed;
+  // With nothing to commit, ⌘↵ sends the commits instead: the push (or
+  // the publish) the branch bar offers.
+  const sendShortcut = usePushShortcut(
+    worktree,
+    !showComposer && !failed && list.length === 0,
+  );
+
+  const controls: DiffChangesControls = {
+    files: list,
+    loading,
+    failed,
+    busy,
+    selectedKey: picked ? changeKey(picked) : null,
+    onSelect: setPickedKey,
+    onSetStaged: (paths, staged) =>
+      stage({ projectId, worktreeId, paths, staged }),
+    onDiscard,
+    hunks:
+      hunkPath && hunkStates
+        ? {
+            states: hunkStates,
+            onSetStaged: (changes, staged) =>
+              stageHunks({
+                projectId,
+                worktreeId,
+                path: hunkPath,
+                changes,
+                staged,
+              }),
+            onDiscard: (changes) =>
+              discardHunks(
+                { projectId, worktreeId, path: hunkPath, changes },
+                {
+                  onSuccess: ({ snapshot }) =>
+                    toast("Discarded the change", {
+                      description: "The file was snapshotted first.",
+                      duration: UNDO_TOAST_MS,
+                      action: {
+                        label: "Undo",
+                        onClick: () =>
+                          restore(
+                            { projectId, worktreeId, snapshot },
+                            {
+                              onSuccess: () => say(worktree, "Change restored"),
+                            },
+                          ),
+                      },
+                    }),
+                },
+              ),
+          }
+        : undefined,
+    onResolve: (path, side) =>
+      resolve.mutate({ projectId, worktreeId, path, side }),
+    onStash: () => {
+      const count = list.length;
+      stash.mutate(
+        { projectId, worktreeId },
+        {
+          onSuccess: () => say(worktree, `Stashed ${pluralize(count, "file")}`),
+        },
+      );
+    },
+  };
+
+  const footer = (
+    <div
+      data-slot="changes-footer"
+      className={cn(
+        // One rhythm down the foot: rows of one height at one inset,
+        // and the commit box a field's gap under them.
+        "flex flex-col border-t border-border pt-1 pb-2.5",
+      )}
+    >
+      <BranchBar worktree={worktree} />
+      {lastCommit && rewrite.canAmend && (
+        <LastCommitStrip
+          commit={lastCommit}
+          amending={amending}
+          canUndo={rewrite.undo !== null}
+          busy={busy}
+          onAmend={() => setAmending(true)}
+          onUndo={() => {
+            const u = rewrite.undo;
+            if (u) undo.undoTo(u);
+          }}
+        />
+      )}
+      {showComposer && (
+        <CommitComposer
+          files={list}
+          draft={draft}
+          onDraftChange={setDraft}
+          pending={commit.isPending}
+          error={commit.error}
+          amend={
+            amending && lastCommit
+              ? {
+                  hash: lastCommit.hash,
+                  onCancel: () => setAmending(false),
+                }
+              : null
+          }
+          onCommit={onCommit}
+        />
+      )}
+    </div>
+  );
 
   return (
     <DiffView
@@ -202,62 +344,15 @@ function ChangesView({
         failed ? (
           "Couldn't read the changes."
         ) : (
-          <CleanTreeMessage worktree={worktree} />
+          <CleanTreeMessage worktree={worktree} shortcut={sendShortcut} />
         )
       }
-      changes={{
-        files: list,
-        loading,
-        failed,
-        busy,
-        selectedKey: picked ? changeKey(picked) : null,
-        onSelect: setPickedKey,
-        onSetStaged: (paths, staged) =>
-          stage({ projectId, worktreeId, paths, staged }),
-        onDiscard,
-      }}
-      footer={
-        <div
-          data-slot="changes-footer"
-          className={cn(
-            "flex flex-col border-t border-border",
-            !showComposer && "pb-1.5",
-          )}
-        >
-          <BranchBar worktree={worktree} />
-          {lastCommit && rewrite.canAmend && (
-            <LastCommitStrip
-              commit={lastCommit}
-              amending={amending}
-              canUndo={rewrite.undo !== null}
-              busy={busy}
-              onAmend={() => setAmending(true)}
-              onUndo={() => {
-                const u = rewrite.undo;
-                if (u) undo.undoTo(u.target, u.count, u.head);
-              }}
-            />
-          )}
-          {showComposer && (
-            <CommitComposer
-              files={list}
-              draft={draft}
-              onDraftChange={setDraft}
-              pending={commit.isPending}
-              error={commit.error}
-              amend={
-                amending && lastCommit
-                  ? {
-                      hash: lastCommit.hash,
-                      onCancel: () => setAmending(false),
-                    }
-                  : null
-              }
-              onCommit={onCommit}
-            />
-          )}
-        </div>
-      }
+      changes={controls}
+      sidebarActions={<MergeButton worktree={worktree} />}
+      renderSidebar={(fileList) => (
+        <GitPageSidebar worktree={worktree} tab="changes" changes={fileList} />
+      )}
+      footer={footer}
     />
   );
 }
@@ -265,13 +360,59 @@ function ChangesView({
 // What the pane says once everything is committed: that the tree is
 // clean, and what the branch still owes the remote, the next thing to
 // do, which the branch bar below has the button for.
-function CleanTreeMessage({ worktree }: { worktree: Worktree }) {
+function CleanTreeMessage({
+  worktree,
+  shortcut,
+}: {
+  worktree: Worktree;
+  // What ⌘↵ runs here, when it runs anything.
+  shortcut: string | null;
+}) {
   const next = worktreeSyncView(worktree).owed;
   return (
     <span className="flex flex-col items-center gap-2">
       <CircleCheck aria-hidden className="size-6 text-muted-foreground/60" />
       <span className="text-foreground">No uncommitted changes</span>
       {next && <span className="text-xs">{next}</span>}
+      {shortcut && (
+        <span className="flex items-center gap-1.5 text-xs">
+          <Kbd>⌘↵</Kbd>
+          {shortcut}
+        </span>
+      )}
     </span>
   );
+}
+
+// ⌘↵ (or Ctrl+↵) on a page with nothing to commit: run the branch's
+// send, a push or a publish, the move the commit box's chord leads to
+// anyway. Only those two: they send commits and touch nothing here.
+// Answers with what the chord runs ("Push"), or null while it runs
+// nothing.
+function usePushShortcut(worktree: Worktree, enabled: boolean): string | null {
+  const mutations = useSyncMoveMutations();
+  const move = worktreeSyncView(worktree).move;
+  const send =
+    enabled &&
+    move &&
+    (move.key === "push" || move.key === "publish") &&
+    move.disabledReason === undefined
+      ? move
+      : null;
+  const mutation = send ? mutations[send.key] : null;
+  const scope = { projectId: worktree.projectId, worktreeId: worktree.id };
+  useEffect(() => {
+    if (!mutation) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+      if (e.isComposing || e.defaultPrevented || mutation.isPending) return;
+      // A dialog or menu open over the page keeps ⌘↵ for itself.
+      if (isOverlayOpen()) return;
+      e.preventDefault();
+      mutation.mutate(scope);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  return send && (send.key === "push" ? "to push" : "to publish");
 }

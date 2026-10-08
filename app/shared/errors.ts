@@ -116,3 +116,19 @@ export function branchNotMergedError(name: string): Error {
 export function isBranchNotMergedError(error: unknown): boolean {
   return errorMessageOf(error).includes(BRANCH_NOT_MERGED_MARKER);
 }
+
+// "Sync from primary" refused because the primary branch conflicts with
+// this one: the rebase and the merge both stopped and were aborted, so
+// the worktree is as it was. Same message-text contract: the pill
+// offers to merge anyway and leave the conflicts to resolve.
+const SYNC_CONFLICTS_MARKER = "conflicts with this branch";
+
+export function syncConflictsError(ref: string, cause: unknown): Error {
+  return new Error(`${ref} ${SYNC_CONFLICTS_MARKER}, so nothing changed.`, {
+    cause,
+  });
+}
+
+export function isSyncConflictsError(error: unknown): boolean {
+  return errorMessageOf(error).includes(SYNC_CONFLICTS_MARKER);
+}

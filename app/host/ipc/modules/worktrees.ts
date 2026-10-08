@@ -12,8 +12,40 @@ import {
   restoreDiscard,
   setStaged,
 } from "@host/lib/git/changes";
-import { getCommitDiff, getFileDiff } from "@host/lib/git/diff";
 import {
+  getCommitDiff,
+  getFileDiff,
+  getMergeBaseDiff,
+} from "@host/lib/git/diff";
+import {
+  cherryPickCommit,
+  revertCommit,
+  rewordCommit,
+  squashIntoParent,
+} from "@host/lib/git/history";
+import {
+  discardHunks,
+  readHunkStates,
+  setHunksStaged,
+} from "@host/lib/git/hunks";
+import {
+  applyStash,
+  dropStash,
+  listStashes,
+  readStashDiff,
+  restoreStash,
+  stashChanges,
+} from "@host/lib/git/stash";
+import {
+  abortOperation,
+  continueOperation,
+  readOperation,
+  resolveConflict,
+} from "@host/lib/git/operation";
+import { mergeBranch, readMergePreview } from "@host/lib/git/merge";
+import {
+  mergePrimaryKeepingConflicts,
+  mergeUpstreamKeepingConflicts,
   overwriteFromUpstream,
   publishCurrentBranch,
   pullFastForward,
@@ -28,6 +60,7 @@ import {
   listCommits,
   listWorktreeIdentities,
   listWorktrees,
+  readBranchHistory,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
 import {
@@ -311,6 +344,23 @@ export const worktreesHandlers: Handlers<
   setStaged: async (input) =>
     setStaged(await findWorktreePathOrThrow(input), input.paths, input.staged),
 
+  fileHunks: async (input) =>
+    readHunkStates(await findWorktreePathOrThrow(input), input.path),
+  setHunksStaged: async (input) =>
+    setHunksStaged(
+      await findWorktreePathOrThrow(input),
+      input.path,
+      input.changes,
+      input.staged,
+    ),
+  discardHunks: async (input) => {
+    const { result: snapshot, worktree } = await mutateAndDescribeWith(
+      input,
+      (wt) => discardHunks(wt.path, input.path, input.changes),
+    );
+    return { snapshot, worktree };
+  },
+
   commit: async (input) => {
     const { result: hash, worktree } = await mutateAndDescribeWith(
       input,
@@ -344,8 +394,76 @@ export const worktreesHandlers: Handlers<
   commitDiff: async (input) =>
     getCommitDiff(await findWorktreePathOrThrow(input), input.hash),
 
-  listCommits: async ({ skip, count, ...input }) =>
-    listCommits(await findWorktreePathOrThrow(input), { skip, count }),
+  listCommits: async ({ skip, count, query, from, ...input }) =>
+    listCommits(await findWorktreePathOrThrow(input), {
+      skip,
+      count,
+      query,
+      from,
+    }),
+
+  branchHistory: async (input) => {
+    const identity = await findWorktreeIdentityOrThrow(
+      input.projectId,
+      input.worktreeId,
+      { primaryRef: true },
+    );
+    return readBranchHistory(identity.path, {
+      base: branchBaseOf(identity),
+      count: BRANCH_HISTORY_COUNT,
+    });
+  },
+
+  branchDiff: async (input) => {
+    const identity = await findWorktreeIdentityOrThrow(
+      input.projectId,
+      input.worktreeId,
+      { primaryRef: true },
+    );
+    const base = branchBaseOf(identity);
+    if (base === undefined) {
+      throw new Error("This branch has no primary branch to compare with.");
+    }
+    return getMergeBaseDiff(identity.path, base, "HEAD");
+  },
+
+  revertCommit: (input) =>
+    mutateAndDescribe(input, (wt) => revertCommit(wt.path, input.hash)),
+  cherryPick: (input) =>
+    mutateAndDescribe(input, (wt) => cherryPickCommit(wt.path, input.hash)),
+  rewordCommit: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      rewordCommit(wt.path, input.hash, input, input.expectHead),
+    ),
+  squashCommit: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      squashIntoParent(wt.path, input.hash, input.expectHead),
+    ),
+
+  stashes: async (input) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      input.projectId,
+      input.worktreeId,
+    );
+    return worktree.detached ? [] : listStashes(worktree.path, worktree.branch);
+  },
+  stashDiff: async (input) =>
+    readStashDiff(await findWorktreePathOrThrow(input), input.hash),
+  stashChanges: (input) =>
+    mutateAndDescribe(input, (wt) => stashChanges(wt.path, input.message)),
+  applyStash: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      applyStash(wt.path, input.hash, input.drop),
+    ),
+  dropStash: async (input) =>
+    dropStash(await findWorktreePathOrThrow(input), input.hash),
+  restoreStash: async (input) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      input.projectId,
+      input.worktreeId,
+    );
+    await restoreStash(worktree.path, worktree.branch, input.hash, input);
+  },
 
   push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt.path)),
   pull: (input) => mutateAndDescribe(input, (wt) => pullFastForward(wt.path)),
@@ -361,29 +479,90 @@ export const worktreesHandlers: Handlers<
     mutateAndDescribe(input, (wt) => pullRebaseOrMergeAndPush(wt.path)),
   syncWithPrimary: (input) =>
     mutateAndDescribe(input, async (target, project) => {
-      if (target.isPrimary) {
-        throw new Error("The primary checkout can't be synced from itself");
-      }
-      if (target.detached) {
-        throw new Error(
-          "Detached worktrees can't be synced with the primary branch",
-        );
-      }
-      const { primaryRef } = await findWorktreeIdentityOrThrow(
-        project.id,
-        target.id,
-        { primaryRef: true },
-      );
-      if (primaryRef === undefined) {
-        throw new Error(`No primary branch resolves in ${project.path}`);
-      }
+      const primaryRef = await primaryRefToSync(target, project);
       await syncWithPrimary(target.path, project.path, primaryRef);
     }),
+  mergePrimary: async (input) => {
+    const { result, worktree } = await mutateAndDescribeWith(
+      input,
+      async (target, project) =>
+        mergePrimaryKeepingConflicts(
+          target.path,
+          project.path,
+          await primaryRefToSync(target, project),
+        ),
+    );
+    return { worktree, stopped: result };
+  },
+
+  mergeUpstream: async (input) => {
+    const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
+      mergeUpstreamKeepingConflicts(wt.path),
+    );
+    return { worktree, stopped: result };
+  },
+
+  operation: async (input) =>
+    readOperation(await findWorktreePathOrThrow(input)),
+  resolveConflict: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      resolveConflict(wt.path, input.path, input.side),
+    ),
+  mergePreview: async (input) =>
+    readMergePreview(await findWorktreePathOrThrow(input), input.ref),
+  mergeBranch: async (input) => {
+    const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>
+      mergeBranch(wt.path, input.ref, input.method, input.message),
+    );
+    return { worktree, stopped: result };
+  },
+  continueOperation: (input) =>
+    mutateAndDescribe(input, (wt) => continueOperation(wt.path)),
+  abortOperation: (input) =>
+    mutateAndDescribe(input, (wt) => abortOperation(wt.path)),
   switchToPrimaryAndDeleteBranch: async (input) => {
     const project = await findProjectOrThrow(input.projectId);
     return doneViaCli(project, input.worktreeId);
   },
 };
+
+// How many of a branch's own commits the Git timeline is handed. A
+// branch rarely has more, and past this it says there are more.
+const BRANCH_HISTORY_COUNT = 50;
+
+// What a worktree's branch is measured against: the primary ref, for
+// a branch of its own. The primary checkout, the primary branch checked
+// out elsewhere and a detached HEAD have none.
+function branchBaseOf(identity: WorktreeIdentity): string | undefined {
+  if (identity.isPrimary || identity.detached) return undefined;
+  if (identity.branch === identity.primaryBranch) return undefined;
+  return identity.primaryRef;
+}
+
+// The ref a sync from primary takes in, refusing the worktrees it has
+// no meaning for.
+async function primaryRefToSync(
+  target: WorktreeIdentity,
+  project: Project,
+): Promise<string> {
+  if (target.isPrimary) {
+    throw new Error("The primary checkout can't be synced from itself");
+  }
+  if (target.detached) {
+    throw new Error(
+      "Detached worktrees can't be synced with the primary branch",
+    );
+  }
+  const { primaryRef } = await findWorktreeIdentityOrThrow(
+    project.id,
+    target.id,
+    { primaryRef: true },
+  );
+  if (primaryRef === undefined) {
+    throw new Error(`No primary branch resolves in ${project.path}`);
+  }
+  return primaryRef;
+}
 
 // Worktree mutations (remote syncs, local branch ops, commits) all share
 // the same shape: resolve the worktree, run a git action, return the
