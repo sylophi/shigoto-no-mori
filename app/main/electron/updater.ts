@@ -15,9 +15,9 @@
 // Dev builds run from a checkout, so they report `unsupported` and the
 // renderer hides the check button.
 //
-// `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
-// testing of a signed build, and `SHIGOMORI_UPDATE_RELEASES_URL` the
-// release list a prerelease build ranks instead (cli/updater.go).
+// `SHIGOMORI_UPDATE_RELEASES_URL` overrides the release list for
+// end-to-end testing of a signed build, and `SHIGOMORI_UPDATE_FEED_URL`
+// the update server it falls back to (cli/updater.go).
 // updateEndpoints.ts moves both out of our environment and into flags
 // on the check's own CLI child.
 import { join } from "node:path";

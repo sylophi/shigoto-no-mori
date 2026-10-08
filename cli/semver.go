@@ -1,10 +1,8 @@
 package main
 
 // Just enough semver 2.0.0 for the updater: parsing, precedence, and
-// the "channel" a prerelease belongs to. The update server does this
-// comparison for full releases (updater.go queryUpdateServer), but it
-// hides prereleases entirely, so a prerelease build has to rank the
-// release list itself.
+// the "channel" a prerelease belongs to, to rank the release list
+// (updater.go pickRelease).
 
 import (
 	"cmp"
