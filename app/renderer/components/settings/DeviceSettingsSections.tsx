@@ -111,8 +111,8 @@ export function IntegrationToggles({ form, setForm }: ToggleProps) {
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
   const { data: terrierReadiness } = useTerrierReadiness();
   const terrierInstalled = terrierReadiness?.installed ?? true;
-  const terrierCompatible = terrierReadiness?.compatible ?? true;
-  const terrierReady = terrierInstalled && terrierCompatible;
+  const terrierReadable = terrierReadiness?.readable ?? true;
+  const terrierReady = terrierInstalled && terrierReadable;
   const { data: githubCliReadiness } = useGithubCliReadiness();
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
@@ -154,19 +154,15 @@ export function IntegrationToggles({ form, setForm }: ToggleProps) {
       />
       <ToggleRow
         // Shows the persisted truth and stays operable while on:
-        // when terrier vanishes or drifts out of the version
-        // handshake, the CLI warns "turn the toggle off in the
+        // when terrier vanishes or its output stops parsing, the
+        // CLI warns "turn the toggle off in the
         // app's Settings", so the off switch must keep working.
         // Only turning it ON requires a ready binary.
         checked={form.terrier}
         onCheckedChange={setField("terrier")}
         disabled={!terrierReady && !form.terrier}
         label="Automatically use terrier"
-        description={terrierDescription(
-          terrierInstalled,
-          terrierCompatible,
-          terrierReadiness?.version,
-        )}
+        description={terrierDescription(terrierInstalled, terrierReadable)}
       />
     </section>
   );
@@ -174,8 +170,7 @@ export function IntegrationToggles({ form, setForm }: ToggleProps) {
 
 function terrierDescription(
   installed: boolean,
-  compatible: boolean,
-  version: string | undefined,
+  readable: boolean,
 ): React.ReactNode {
   if (!installed) {
     return (
@@ -185,11 +180,11 @@ function terrierDescription(
       </>
     );
   }
-  if (!compatible) {
+  if (!readable) {
     return (
       <>
-        {version ?? "The installed terrier"} isn't a version this build
-        understands. Update both and try again.{" "}
+        <span className="font-mono">terrier ls --json</span> failed or answered
+        in a shape this build doesn't read.{" "}
         <ExternalLink {...TERRIER}>Learn more</ExternalLink>
       </>
     );

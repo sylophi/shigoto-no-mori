@@ -291,8 +291,8 @@ export const GlobalConfigSchema = z.object({
   // projects can't be removed here, only `terrier rm` unregisters them. A
   // path registered in both is an ordinary removable project, and
   // removing its registry entry demotes it back to terrier-sourced. Off by
-  // default, and only active while `terrier` is on PATH at a version
-  // this build understands (cli/terrier.go).
+  // default, and only active while `terrier` is on PATH and `terrier ls
+  // --json` answers in the shape cli/terrier.go reads.
   terrier: z.boolean().optional(),
   // When true, GitHub CLI features light up wherever they apply.
   // Activates only when `gh` is on PATH and authenticated. On by
