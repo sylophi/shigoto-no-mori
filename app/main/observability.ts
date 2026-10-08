@@ -15,7 +15,7 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { logger } from "@shared/log";
 import { writeTraceLine } from "./electron/logFile";
 
-const millis = (nanos: bigint) => Number(nanos / 1_000_000n);
+const millis = (nanos: bigint) => Number(nanos) / 1_000_000;
 
 function outcome(exit: Exit.Exit<unknown, unknown>) {
   if (Exit.isSuccess(exit)) return { outcome: "ok" };
@@ -28,17 +28,7 @@ function outcome(exit: Exit.Exit<unknown, unknown>) {
 
 const fileTracer = Tracer.make({
   span(options) {
-    const span = Tracer.nativeTracer.span(options);
-    const events: Array<{
-      name: string;
-      at: number;
-      attributes?: Record<string, unknown>;
-    }> = [];
-    const event = span.event;
-    span.event = function (name, startTime, attributes) {
-      events.push({ name, at: millis(startTime), attributes });
-      event.call(this, name, startTime, attributes);
-    };
+    const span = new Tracer.NativeSpan(options);
     const end = span.end;
     span.end = function (endTime, exit) {
       end.call(this, endTime, exit);
@@ -54,7 +44,14 @@ const fileTracer = Tracer.make({
             durationMs: millis(endTime) - startTime,
             ...outcome(exit),
             attributes: Object.fromEntries(span.attributes),
-            events: events.length > 0 ? events : undefined,
+            events:
+              span.events.length > 0
+                ? span.events.map(([name, at, attributes]) => ({
+                    name,
+                    at: millis(at),
+                    attributes,
+                  }))
+                : undefined,
           },
           (_key, value: unknown) =>
             typeof value === "bigint" ? value.toString() : value,

@@ -31,12 +31,13 @@ export const logger = Logger.make(({ logLevel, message, cause }) => {
   }
 });
 
-const loggers = new Set([logger]);
+const withLogger = Effect.provideService(
+  Logger.CurrentLoggers,
+  new Set([logger]),
+);
 
 const write = (effect: Effect.Effect<void>) =>
-  Effect.runSync(
-    effect.pipe(Effect.provideService(Logger.CurrentLoggers, loggers)),
-  );
+  Effect.runSync(withLogger(effect));
 
 export const log = {
   info: (...message: ReadonlyArray<unknown>) =>
