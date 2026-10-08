@@ -486,11 +486,18 @@ export const worktreesHandlers: Handlers<
       const primaryRef = await primaryRefToSync(target, project);
       await syncWithPrimary(target.path, project.path, primaryRef);
     }),
-  mergePrimary: (input) =>
-    mutateAndDescribe(input, async (target, project) => {
-      const primaryRef = await primaryRefToSync(target, project);
-      await mergePrimaryKeepingConflicts(target.path, project.path, primaryRef);
-    }),
+  mergePrimary: async (input) => {
+    const { result, worktree } = await mutateAndDescribeWith(
+      input,
+      async (target, project) =>
+        mergePrimaryKeepingConflicts(
+          target.path,
+          project.path,
+          await primaryRefToSync(target, project),
+        ),
+    );
+    return { worktree, stopped: result };
+  },
 
   mergeUpstream: async (input) => {
     const { result, worktree } = await mutateAndDescribeWith(input, (wt) =>

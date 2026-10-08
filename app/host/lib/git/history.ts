@@ -3,6 +3,7 @@
 // branch, and reword or squash commits that exist nowhere but here.
 import { onIndex } from "./changes";
 import { run, runLenient } from "./core";
+import { refuseMidOperation } from "./operation";
 import { isAncestor, verifyRev } from "./refs";
 
 // --- revert and cherry-pick -------------------------------------------
@@ -17,6 +18,7 @@ async function applyCommit(
   hash: string,
 ): Promise<void> {
   await onIndex(worktreePath, async () => {
+    await refuseMidOperation(worktreePath);
     // A merge is applied as what it brought into its first parent.
     const parents = await run(worktreePath, [
       "rev-list",
@@ -122,6 +124,7 @@ async function rewriteLine(
   edit: (commits: CommitSpec[]) => CommitSpec[],
 ): Promise<void> {
   await onIndex(worktreePath, async () => {
+    await refuseMidOperation(worktreePath);
     const [head, expected] = await Promise.all([
       verifyRev(worktreePath, "HEAD"),
       verifyRev(worktreePath, expectHead),

@@ -44,7 +44,7 @@ import { join } from "node:path";
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { run, runLenient } from "@host/lib/git/core";
-import { operationInProgress } from "@host/lib/git/operation";
+import { gitDirOf, operationInProgress } from "@host/lib/git/operation";
 import {
   deleteRef,
   hasCommit,
@@ -152,11 +152,6 @@ async function readHeadFacts(worktreePath: string): Promise<HeadFacts> {
     gitDir,
     operation: await operationInProgress(gitDir),
   };
-}
-
-async function gitDirOfWorktree(worktreePath: string): Promise<string> {
-  const out = await run(worktreePath, ["rev-parse", "--absolute-git-dir"]);
-  return out.trim();
 }
 
 // The last index tree computed per worktree, keyed on the index file's
@@ -546,7 +541,7 @@ export async function watchIndexFile(
   onChange: () => void,
   debounceMs = 300,
 ): Promise<() => void> {
-  const gitDir = await gitDirOfWorktree(worktreePath);
+  const gitDir = await gitDirOf(worktreePath);
   let timer: ReturnType<typeof setTimeout> | null = null;
   let watcher: ReturnType<typeof watch>;
   try {

@@ -439,29 +439,18 @@ export function DiffView({
             className="gap-0 p-0"
           >
             <SheetTitle className="sr-only">{filesLabel}</SheetTitle>
-            {renderSidebar ? (
-              <div className="flex h-[70dvh] w-full flex-col">
-                {sidebarWith(
-                  <DiffFileIndex
-                    {...indexProps}
-                    onSelect={(key) => {
-                      setFileSheetOpen(false);
-                      selectFile(key);
-                    }}
-                    className="min-h-0 flex-1"
-                  />,
-                )}
-              </div>
-            ) : (
-              <DiffFileIndex
-                {...indexProps}
-                onSelect={(key) => {
-                  setFileSheetOpen(false);
-                  selectFile(key);
-                }}
-                className="h-[70dvh] w-full"
-              />
-            )}
+            <div className="flex h-[70dvh] w-full flex-col">
+              {sidebarWith(
+                <DiffFileIndex
+                  {...indexProps}
+                  onSelect={(key) => {
+                    setFileSheetOpen(false);
+                    selectFile(key);
+                  }}
+                  className="min-h-0 flex-1"
+                />,
+              )}
+            </div>
           </SheetContent>
         </Sheet>
       )}

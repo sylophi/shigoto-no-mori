@@ -59,7 +59,7 @@ export async function gitDirOf(worktreePath: string): Promise<string> {
   return (await run(worktreePath, ["rev-parse", "--absolute-git-dir"])).trim();
 }
 
-async function conflictedPaths(worktreePath: string): Promise<string[]> {
+export async function conflictedPaths(worktreePath: string): Promise<string[]> {
   return splitZ(
     await run(worktreePath, ["diff", "--name-only", "--diff-filter=U", "-z"]),
   );
@@ -79,7 +79,10 @@ async function squashPending(
     () => false,
   );
   if (!message) return false;
-  if (conflicted > 0) return true;
+  return conflicted > 0 || (await hasStagedChanges(worktreePath));
+}
+
+export async function hasStagedChanges(worktreePath: string): Promise<boolean> {
   const staged = await run(worktreePath, [
     "diff",
     "--cached",
@@ -87,6 +90,16 @@ async function squashPending(
     "-z",
   ]);
   return staged !== "";
+}
+
+// Refuses a move that rewrites history or makes a commit of its own
+// while git waits on the user mid-operation, where git itself might go
+// along with it.
+export async function refuseMidOperation(worktreePath: string): Promise<void> {
+  const { operation } = await readOperation(worktreePath);
+  if (operation !== null) {
+    throw new Error(`Finish or abort the ${operation} first.`);
+  }
 }
 
 // The branch a rebase replays, which git keeps in its state dir while

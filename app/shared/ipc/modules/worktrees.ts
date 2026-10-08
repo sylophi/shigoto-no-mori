@@ -58,12 +58,17 @@ import {
 
 // Every worktree-scoped git mutation shares this contract; naming it
 // once means a new one can't silently miss tracksProjectUsage.
-const worktreeMutation = <Ch extends string>(channel: Ch) =>
-  invoke(channel, WorktreeScopedPayloadSchema, WorktreeSchema, {
+const worktreeMutationOf = <Ch extends string, P extends z.ZodType>(
+  channel: Ch,
+  payload: P,
+) =>
+  invoke(channel, payload, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
   });
+const worktreeMutation = <Ch extends string>(channel: Ch) =>
+  worktreeMutationOf(channel, WorktreeScopedPayloadSchema);
 
 export const worktreesContract = defineContract("host", {
   list: invoke(
@@ -256,29 +261,21 @@ export const worktreesContract = defineContract("host", {
   ),
   // The commit menu's history moves (host/lib/git/history.ts). A
   // cherry-pick's worktree is the one the commit lands on.
-  revertCommit: invoke(
+  revertCommit: worktreeMutationOf(
     "worktrees:revertCommit",
     CommitDiffPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true, remote: true, gated: true },
   ),
-  cherryPick: invoke(
+  cherryPick: worktreeMutationOf(
     "worktrees:cherryPick",
     CommitDiffPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true, remote: true, gated: true },
   ),
-  rewordCommit: invoke(
+  rewordCommit: worktreeMutationOf(
     "worktrees:rewordCommit",
     RewordCommitPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true, remote: true, gated: true },
   ),
-  squashCommit: invoke(
+  squashCommit: worktreeMutationOf(
     "worktrees:squashCommit",
     SquashCommitPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true, remote: true, gated: true },
   ),
   // The stashes made on the worktree's branch (host/lib/git/stash.ts).
   stashes: invoke(
@@ -292,17 +289,13 @@ export const worktreesContract = defineContract("host", {
     remote: true,
     gated: false,
   }),
-  stashChanges: invoke(
+  stashChanges: worktreeMutationOf(
     "worktrees:stashChanges",
     StashChangesPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true, remote: true, gated: true },
   ),
-  applyStash: invoke(
+  applyStash: worktreeMutationOf(
     "worktrees:applyStash",
     ApplyStashPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true, remote: true, gated: true },
   ),
   dropStash: invoke("worktrees:dropStash", DropStashPayloadSchema, z.void(), {
     remote: true,
@@ -323,11 +316,9 @@ export const worktreesContract = defineContract("host", {
     GitOperationStateSchema,
     { remote: true, gated: false },
   ),
-  resolveConflict: invoke(
+  resolveConflict: worktreeMutationOf(
     "worktrees:resolveConflict",
     ResolveConflictPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true, remote: true, gated: true },
   ),
   // Another branch brought into the worktree's (host/lib/git/merge.ts):
   // first how the two stand, then the move.
@@ -347,7 +338,12 @@ export const worktreesContract = defineContract("host", {
   abortOperation: worktreeMutation("worktrees:abortOperation"),
   // The way on from a sync from primary that conflicts: merge anyway
   // and stop on the conflicts.
-  mergePrimary: worktreeMutation("worktrees:mergePrimary"),
+  mergePrimary: invoke(
+    "worktrees:mergePrimary",
+    WorktreeScopedPayloadSchema,
+    MergeBranchResultSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
   // The way on from a split with the upstream that conflicts: merge it
   // and stop on the conflicts.
   mergeUpstream: invoke(

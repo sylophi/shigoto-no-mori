@@ -20,6 +20,7 @@ import {
 } from "@host/ipc/cliDelegate";
 import { createLimiter } from "@shared/util/limit";
 import { run, runLenient } from "./core";
+import { upstreamName } from "./refs";
 
 export type { WorktreeIdentity };
 
@@ -221,21 +222,30 @@ export async function readBranchHistory(
       range,
       "--",
     ]);
-  const [upstreamOut, mergeBase] = await Promise.all([
-    runLenient(worktreePath, [
-      "rev-parse",
-      "--abbrev-ref",
-      "--symbolic-full-name",
-      "@{u}",
-    ]),
-    opts.base
-      ? runLenient(worktreePath, ["merge-base", "HEAD", opts.base])
-      : Promise.resolve(""),
-  ]);
-  const upstream = upstreamOut.trim() || null;
+  // Two rounds: everything that needs no answer from another, then
+  // what reads past where the branch left its base. Without an upstream
+  // the reads against it fail and come back empty.
+  const [upstream, mergeBase, unpushedOut, incoming, forkOut] =
+    await Promise.all([
+      upstreamName(worktreePath),
+      opts.base
+        ? runLenient(worktreePath, ["merge-base", "HEAD", opts.base])
+        : Promise.resolve(""),
+      runLenient(worktreePath, [
+        "log",
+        "--format=%h",
+        "--max-count=1000",
+        "--end-of-options",
+        "@{u}..HEAD",
+        "--",
+      ]),
+      log("HEAD..@{u}").then(parseLog),
+      runLenient(worktreePath, ["merge-base", "HEAD", "@{u}"]),
+    ]);
   const baseHash = mergeBase.trim();
+  const forkHash = forkOut.trim();
   const range = baseHash ? `${baseHash}..HEAD` : "HEAD";
-  const [base, own, merges, againstUpstream] = await Promise.all([
+  const [base, own, merges, upstreamFork] = await Promise.all([
     opts.base && baseHash
       ? short(baseHash).then((hash) => ({ ref: opts.base ?? "", hash }))
       : Promise.resolve(null),
@@ -249,25 +259,8 @@ export async function readBranchHistory(
       range,
       "--",
     ]),
-    upstream
-      ? Promise.all([
-          runLenient(worktreePath, [
-            "log",
-            "--format=%h",
-            "--max-count=1000",
-            "--end-of-options",
-            "@{u}..HEAD",
-            "--",
-          ]),
-          log("HEAD..@{u}").then(parseLog),
-          runLenient(worktreePath, ["merge-base", "HEAD", "@{u}"]).then((out) =>
-            out.trim() ? short(out.trim()) : "",
-          ),
-        ])
-      : Promise.resolve(null),
+    forkHash ? short(forkHash) : Promise.resolve(""),
   ]);
-  const [unpushedOut = "", incoming = [], upstreamFork = ""] =
-    againstUpstream ?? [];
   return {
     commits: own.slice(0, opts.count),
     more: own.length > opts.count,

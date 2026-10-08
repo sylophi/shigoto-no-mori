@@ -15,6 +15,7 @@ import type {
 import { isUntracked } from "@shared/schemas";
 import { createLimiter } from "@shared/util/limit";
 import { chunked, run, runLenient, splitZ, type RunOptions } from "./core";
+import { refuseMidOperation } from "./operation";
 import { verifyRev } from "./refs";
 
 // Discard snapshots kept per repository. Pruned by count rather than
@@ -381,6 +382,7 @@ export function resetSoft(
   expectHead: string | undefined,
 ): Promise<string> {
   return onIndex(worktreePath, async () => {
+    await refuseMidOperation(worktreePath);
     const [head, expected] = await Promise.all([
       verifyRev(worktreePath, "HEAD"),
       expectHead ? verifyRev(worktreePath, expectHead) : undefined,

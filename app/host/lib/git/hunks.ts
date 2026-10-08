@@ -78,7 +78,6 @@ function applyChanges(
 
 interface FileState {
   head: string[];
-  index: string[];
   tree: string[];
   changes: (LineChange & { staged: boolean })[];
   editable: boolean;
@@ -127,7 +126,6 @@ async function readState(
   );
   return {
     head: headLines,
-    index: indexLines,
     tree: treeLines,
     changes,
     editable,

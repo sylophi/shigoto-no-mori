@@ -43,6 +43,11 @@ const RELEVANT = [
   /^(HEAD|ORIG_HEAD|packed-refs)$/,
   /^refs(\/|$)/,
   /^worktrees\/[^/]+(\/(HEAD|ORIG_HEAD))?$/,
+  // A merge, rebase, cherry-pick, revert or squash starting or ending,
+  // in the main checkout or a worktree's own git dir, for the banner
+  // that offers to continue or abort it. The rebase dirs count by their
+  // own appearing and going, not their contents' churn.
+  /^(worktrees\/[^/]+\/)?(MERGE_HEAD|CHERRY_PICK_HEAD|REVERT_HEAD|SQUASH_MSG|rebase-merge|rebase-apply)$/,
 ];
 
 // Exported for the git-watcher check, which pins the allowlist: the

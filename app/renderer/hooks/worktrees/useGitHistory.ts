@@ -14,6 +14,7 @@ import type {
 } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
+  invalidateTreeState,
   invalidateWorkingTree,
   useWorkingTreeMutation,
 } from "./useWorktreeChanges";
@@ -228,15 +229,11 @@ export function useMergeBranch() {
     mutationFn: (input) => api.worktrees.mergeBranch(input),
     onSuccess: (data, vars) =>
       invalidateWorkingTree(queryClient, keys, vars, data.worktree),
-    onError: (_err, { projectId, worktreeId }) => {
-      for (const key of [
-        keys.worktrees(projectId),
-        keys.worktreeDiff(projectId, worktreeId),
-        keys.worktreeChanges(projectId, worktreeId),
-        keys.worktreeOperation(projectId, worktreeId),
-      ]) {
-        void queryClient.invalidateQueries({ queryKey: key });
-      }
+    onError: (_err, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: keys.worktrees(vars.projectId),
+      });
+      invalidateTreeState(queryClient, keys, vars);
     },
     meta: { silentError: true },
   });

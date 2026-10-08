@@ -27,14 +27,12 @@ export function useBranchHistory(
 // Pages through `git log` in PAGE_SIZE chunks, from `from` (a commit,
 // for the history before the branch) or HEAD, or through a search of
 // the messages. The cursor is the number already loaded, fed back as
-// `skip`, and a short page ends it. Disabled until asked for, so a
-// timeline nobody unfolds runs no log. HEAD's hash is in the key, so
-// any HEAD movement drops the stale pages.
+// `skip`, and a short page ends it. HEAD's hash is in the key, so any
+// HEAD movement drops the stale pages.
 export function useBranchCommits(
   projectId: string,
   worktreeId: string,
   headHash: string | undefined,
-  enabled: boolean,
   opts: { query?: string; from?: string } = {},
 ) {
   const { api, keys } = useHostScope();
@@ -46,7 +44,6 @@ export function useBranchCommits(
     number
   >({
     queryKey: keys.branchCommits(projectId, worktreeId, headHash, opts),
-    enabled,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       api.worktrees.listCommits({

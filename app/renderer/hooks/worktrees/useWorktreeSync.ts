@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { MergeBranchResult, Worktree } from "@shared/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { invalidateWorkingTree } from "./useWorktreeChanges";
 import type { SyncMove } from "@/lib/syncState";
 
 interface SyncWorktreeInput {
@@ -22,24 +23,12 @@ function useSyncMutation(
   const { api, keys } = useHostScope();
   return useMutation<Worktree, Error, SyncWorktreeInput>({
     mutationFn: (input) => apiMethod(api, input),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktrees(vars.projectId),
-      });
-      // Pull, overwrite and sync rewrite the working tree, so an open
-      // changes page has to re-read its patch and its checkbox states.
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktreeDiff(vars.projectId, vars.worktreeId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktreeChanges(vars.projectId, vars.worktreeId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktreeOperation(vars.projectId, vars.worktreeId),
-      });
-      // PR queries refresh via the refs-changed broadcast that the push
-      // itself triggers, so no PR invalidation is needed here.
-    },
+    // Pull, overwrite and sync rewrite the working tree, so an open
+    // changes page has to re-read its patch and its checkbox states. PR
+    // queries refresh via the refs-changed broadcast that the push
+    // itself triggers, so no PR invalidation is needed here.
+    onSuccess: (data, vars) =>
+      invalidateWorkingTree(queryClient, keys, vars, data),
     meta: silentError ? { silentError } : { errorTitle },
   });
 }
@@ -74,28 +63,29 @@ export const useSyncWithPrimaryWorktree = () =>
     "Couldn't sync from primary",
     true,
   );
-// The split with the upstream merged, stopping on its conflicts.
-export function useMergeUpstreamWorktree() {
+// A sync that conflicts, from the upstream or the primary branch,
+// merged anyway and stopped on its conflicts.
+function useMergeKeepingConflicts(
+  call: (api: HostApi, input: SyncWorktreeInput) => Promise<MergeBranchResult>,
+  errorTitle: string,
+) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation<MergeBranchResult, Error, SyncWorktreeInput>({
-    mutationFn: (input) => api.worktrees.mergeUpstream(input),
-    onSuccess: (_data, vars) => {
-      for (const key of [
-        keys.worktrees(vars.projectId),
-        keys.worktreeDiff(vars.projectId, vars.worktreeId),
-        keys.worktreeChanges(vars.projectId, vars.worktreeId),
-        keys.worktreeOperation(vars.projectId, vars.worktreeId),
-      ]) {
-        void queryClient.invalidateQueries({ queryKey: key });
-      }
-    },
-    meta: { errorTitle: "Couldn't merge" },
+    mutationFn: (input) => call(api, input),
+    onSuccess: (data, vars) =>
+      invalidateWorkingTree(queryClient, keys, vars, data.worktree),
+    meta: { errorTitle },
   });
 }
 
+export const useMergeUpstreamWorktree = () =>
+  useMergeKeepingConflicts(
+    (api, i) => api.worktrees.mergeUpstream(i),
+    "Couldn't merge",
+  );
 export const useMergePrimaryWorktree = () =>
-  useSyncMutation(
+  useMergeKeepingConflicts(
     (api, i) => api.worktrees.mergePrimary(i),
     "Couldn't merge from primary",
   );

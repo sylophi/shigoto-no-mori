@@ -504,7 +504,6 @@ function EarlierCommits({
       worktree.projectId,
       worktree.id,
       worktree.recentCommits[0]?.hash,
-      true,
       { from },
     );
   const listed = new Set(shown.map((c) => c.hash));
@@ -540,7 +539,6 @@ function SearchResults({
       worktree.projectId,
       worktree.id,
       worktree.recentCommits[0]?.hash,
-      true,
       { query },
     );
   const commits = data ? data.pages.flat() : [];

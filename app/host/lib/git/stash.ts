@@ -5,6 +5,7 @@
 import type { StashEntry } from "@shared/schemas";
 import { onIndex } from "./changes";
 import { PATCH_MAX_BUFFER, run, splitZ } from "./core";
+import { conflictedPaths } from "./operation";
 
 interface RawStash {
   ref: string;
@@ -94,12 +95,7 @@ export function applyStash(
     try {
       await run(worktreePath, ["stash", "apply", "--end-of-options", ref]);
     } catch (err) {
-      const unmerged = await run(worktreePath, [
-        "diff",
-        "--name-only",
-        "--diff-filter=U",
-      ]);
-      if (unmerged.trim() === "") throw err;
+      if ((await conflictedPaths(worktreePath)).length === 0) throw err;
       throw new Error(
         "The stash applied with conflicts. It's kept until they're resolved.",
         { cause: err },

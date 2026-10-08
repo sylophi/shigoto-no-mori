@@ -183,27 +183,35 @@ export function useDiscardHunks() {
   );
 }
 
-// Everything derived from the working tree: the sidebar's count and
-// recent commits, the patch, the per-file index state, and the
-// operation it may be stopped in.
-export function invalidateWorkingTree(
+// Everything derived from the working tree: the patch, the per-file
+// index state, and the operation it may be stopped in.
+export function invalidateTreeState(
   queryClient: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
+): void {
+  for (const queryKey of [
+    keys.worktreeDiff(projectId, worktreeId),
+    keys.worktreeChanges(projectId, worktreeId),
+    keys.worktreeOperation(projectId, worktreeId),
+  ]) {
+    void queryClient.invalidateQueries({ queryKey });
+  }
+}
+
+// That, and the worktree the call answered with written back, for the
+// sidebar's count and recent commits.
+export function invalidateWorkingTree(
+  queryClient: ReturnType<typeof useQueryClient>,
+  keys: QueryKeyRegistry,
+  scope: { projectId: string; worktreeId: string },
   worktree: Worktree,
 ): void {
-  queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (list) =>
-    list?.map((w) => (w.id === worktree.id ? worktree : w)),
+  queryClient.setQueryData<Worktree[]>(
+    keys.worktrees(scope.projectId),
+    (list) => list?.map((w) => (w.id === worktree.id ? worktree : w)),
   );
-  void queryClient.invalidateQueries({
-    queryKey: keys.worktreeDiff(projectId, worktreeId),
-  });
-  void queryClient.invalidateQueries({
-    queryKey: keys.worktreeChanges(projectId, worktreeId),
-  });
-  void queryClient.invalidateQueries({
-    queryKey: keys.worktreeOperation(projectId, worktreeId),
-  });
+  invalidateTreeState(queryClient, keys, scope);
 }
 
 // Discard, restore and undo share one shape: call the api, then write

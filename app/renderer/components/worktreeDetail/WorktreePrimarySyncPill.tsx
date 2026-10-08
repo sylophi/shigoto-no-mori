@@ -3,6 +3,7 @@ import {
   useMergePrimaryWorktree,
   useSyncWithPrimaryWorktree,
 } from "@/hooks/worktrees/useWorktreeSync";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { pluralize } from "@/lib/pluralize";
 import { notifyError, toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { isSyncConflictsError } from "@shared/errors";
@@ -30,6 +31,7 @@ export function WorktreePrimarySyncPill({
 }) {
   const sync = useSyncWithPrimaryWorktree();
   const merge = useMergePrimaryWorktree();
+  const nav = useWorktreeNav();
   const branchName = worktree.primaryRef ?? "primary";
   const scope = { projectId: worktree.projectId, worktreeId: worktree.id };
   return (
@@ -58,7 +60,13 @@ export function WorktreePrimarySyncPill({
               duration: UNDO_TOAST_MS,
               action: {
                 label: "Merge and resolve",
-                onClick: () => merge.mutate(scope),
+                onClick: () =>
+                  merge.mutate(scope, {
+                    onSuccess: ({ stopped }) => {
+                      if (stopped)
+                        nav.toDiff(scope.projectId, scope.worktreeId);
+                    },
+                  }),
               },
             });
           },

@@ -23,6 +23,7 @@ import {
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
+import { isOverlayOpen } from "@/lib/dom";
 import { cn } from "@/lib/utils";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
@@ -405,6 +406,8 @@ function usePushShortcut(worktree: Worktree, enabled: boolean): string | null {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
       if (e.isComposing || e.defaultPrevented || mutation.isPending) return;
+      // A dialog or menu open over the page keeps ⌘↵ for itself.
+      if (isOverlayOpen()) return;
       e.preventDefault();
       mutation.mutate(scope);
     };
