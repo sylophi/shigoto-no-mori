@@ -14,20 +14,17 @@ const VIEW_OPTIONS = [
     value: "inbox",
     label: <Inbox aria-hidden className="size-3.5" />,
     ariaLabel: "Inbox",
-    tip: "One list across every project, newest work first",
   },
   {
     value: "projects",
     label: <ListTree aria-hidden className="size-3.5" />,
     ariaLabel: "Projects",
-    tip: "Group worktrees by project",
   },
 ] as const satisfies ReadonlyArray<SegmentedOption<SidebarView>>;
 
 // The inbox / projects flip. Both shells' footers carry it. The phone
-// layout has the two views as tabs instead. aria-keyshortcuts restores
-// the AT-audible shortcut hint the old native title carried; Base UI
-// tooltips are visual-only.
+// layout has the two views as tabs instead. aria-keyshortcuts gives
+// assistive tech the Tab shortcut.
 export function SidebarViewToggle() {
   const view = useSidebarView();
   const { mutate: setView } = useSetSidebarView();

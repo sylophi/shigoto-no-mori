@@ -37,7 +37,6 @@ import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import {
   deviceStatusView,
-  deviceTitle,
   type DeviceStatusView,
 } from "@/lib/remote/deviceStatus";
 import { cn, dragRegion } from "@/lib/utils";
@@ -217,7 +216,6 @@ export function DeviceTabBar({
       ? [
           {
             id: ALL_DEVICES_TAB_ID,
-            tip: undefined,
             lead: <MonitorSmartphone className="size-3.5 shrink-0" />,
             label: "All devices",
             note: undefined,
@@ -228,7 +226,6 @@ export function DeviceTabBar({
       : []),
     ...tabs.map((tab) => ({
       id: tab.deviceId,
-      tip: deviceTitle(tab.label, tab.status),
       // The device's connection dot, then its glyph: this device has
       // no connection to show and wears the glyph alone.
       lead: <DeviceLead icon={tab.icon} tone={tab.status?.tone} />,
@@ -273,41 +270,41 @@ export function DeviceTabBar({
                   className="size-3.5 shrink-0 text-muted-foreground"
                 />
               )}
-              <SimpleTooltip tip={pill.tip}>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  tabIndex={selected ? 0 : -1}
-                  data-slot="device-chip"
-                  onClick={() => onSelect(pill.id)}
-                  onKeyDown={onKeyDown}
-                  // A page header puts the row under the window's drag strip
-                  // (AppShell): each pill carves its own click out of it.
-                  style={dragRegion("no-drag")}
-                  className={cn(
-                    DEVICE_PILL_CLASS,
-                    "transition-colors",
-                    selected
-                      ? "border-transparent bg-accent text-accent-foreground"
-                      : "hover:text-foreground",
-                  )}
-                >
-                  {pill.lead}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                data-slot="device-chip"
+                onClick={() => onSelect(pill.id)}
+                onKeyDown={onKeyDown}
+                // A page header puts the row under the window's drag strip
+                // (AppShell): each pill carves its own click out of it.
+                style={dragRegion("no-drag")}
+                className={cn(
+                  DEVICE_PILL_CLASS,
+                  "transition-colors",
+                  selected
+                    ? "border-transparent bg-accent text-accent-foreground"
+                    : "hover:text-foreground",
+                )}
+              >
+                {pill.lead}
+                <SimpleTooltip whenTruncated tip={pill.label}>
                   <span className="max-w-40 truncate">{pill.label}</span>
-                  {pill.note !== undefined && (
-                    <span
-                      className={cn(
-                        "text-2xs",
-                        selected ? "opacity-70" : "text-muted-foreground/70",
-                      )}
-                    >
-                      {pill.note}
-                    </span>
-                  )}
-                  {pill.badge}
-                </button>
-              </SimpleTooltip>
+                </SimpleTooltip>
+                {pill.note !== undefined && (
+                  <span
+                    className={cn(
+                      "text-2xs",
+                      selected ? "opacity-70" : "text-muted-foreground/70",
+                    )}
+                  >
+                    {pill.note}
+                  </span>
+                )}
+                {pill.badge}
+              </button>
             </Fragment>
           );
         })}

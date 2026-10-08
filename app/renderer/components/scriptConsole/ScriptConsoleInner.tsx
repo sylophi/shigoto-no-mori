@@ -38,13 +38,17 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
         <BackButton onClick={onBack} label={backLabel} />
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1 space-y-1">
-            <h1 className="truncate font-mono text-xl font-medium tracking-tight">
-              {label}
-            </h1>
+            <SimpleTooltip whenTruncated tip={label}>
+              <h1 className="truncate font-mono text-xl font-medium tracking-tight">
+                {label}
+              </h1>
+            </SimpleTooltip>
             {command && (
-              <p className="truncate font-mono text-xs text-muted-foreground select-text">
-                {command}
-              </p>
+              <SimpleTooltip whenTruncated tip={command}>
+                <p className="truncate font-mono text-xs text-muted-foreground select-text">
+                  {command}
+                </p>
+              </SimpleTooltip>
             )}
             <div className="min-h-[1rem]">
               <ScriptStatusBadge state={state} variant="header" />

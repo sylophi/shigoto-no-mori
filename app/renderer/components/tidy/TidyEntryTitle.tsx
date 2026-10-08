@@ -2,6 +2,7 @@ import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { cn } from "@/lib/utils";
 import type { TidyEntry } from "./tidyModel";
 import { TidyVerdictBadge } from "./TidyVerdictBadge";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface TidyEntryTitleProps {
   entry: TidyEntry;
@@ -33,21 +34,31 @@ export function TidyEntryTitle({
             className="size-3"
           />
         )}
-        <span
-          className={cn("min-w-0 truncate font-medium select-text", className)}
+        <SimpleTooltip
+          whenTruncated
+          tip={
+            showProject ? `${project.name} / ${worktree.name}` : worktree.name
+          }
         >
-          {showProject && (
-            <>
-              <span className="font-normal text-muted-foreground">
-                {project.name}
-              </span>
-              <span aria-hidden className="px-1 text-muted-foreground/60">
-                /
-              </span>
-            </>
-          )}
-          {worktree.name}
-        </span>
+          <span
+            className={cn(
+              "min-w-0 truncate font-medium select-text",
+              className,
+            )}
+          >
+            {showProject && (
+              <>
+                <span className="font-normal text-muted-foreground">
+                  {project.name}
+                </span>
+                <span aria-hidden className="px-1 text-muted-foreground/60">
+                  /
+                </span>
+              </>
+            )}
+            {worktree.name}
+          </span>
+        </SimpleTooltip>
       </div>
       <TidyVerdictBadge kind={verdict.kind} />
       {children}

@@ -8,10 +8,8 @@ import {
 } from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
-import { useNow } from "@/hooks/ui/useNow";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
 import { BranchTitle } from "./branch/BranchTitle";
@@ -88,16 +86,11 @@ function TitledHeader({
             </PullRequestTitleLink>
           )}
         </h1>
-        {/* Who opened it and when it last moved, behind the state:
-            it's nearly always yours, so it doesn't earn a place. */}
+        {/* At the row's end, where a status sits. */}
         {pr && (
-          <SimpleTooltip
-            tip={detail ? <UpdatedByline detail={detail} /> : null}
-          >
-            <span className="ml-auto inline-flex shrink-0">
-              <PullRequestStateLabel pr={pr} pill />
-            </span>
-          </SimpleTooltip>
+          <span className="ml-auto inline-flex shrink-0">
+            <PullRequestStateLabel pr={pr} pill />
+          </span>
         )}
       </div>
       {/* One line however narrow. The base gives way first, and goes
@@ -110,12 +103,14 @@ function TitledHeader({
         >
           {pr && showBase && (
             <>
-              <span
-                data-pr-base
-                className="min-w-6 shrink-[1000] truncate font-mono text-foreground/80"
-              >
-                {pr.baseRefName}
-              </span>
+              <SimpleTooltip whenTruncated tip={pr.baseRefName}>
+                <span
+                  data-pr-base
+                  className="min-w-6 shrink-[1000] truncate font-mono text-foreground/80"
+                >
+                  {pr.baseRefName}
+                </span>
+              </SimpleTooltip>
               <ArrowLeft
                 aria-label={MERGE_VERB[pr.state]}
                 className="size-3.5 shrink-0 opacity-60"
@@ -169,13 +164,6 @@ function TitledHeader({
       </div>
     </>
   );
-}
-
-// "@someone, updated 5m ago", on its own clock: the tooltip ticks,
-// and the header doesn't re-render with it.
-function UpdatedByline({ detail }: { detail: PullRequestDetail }) {
-  const now = useNow();
-  return `@${detail.authorLogin}, updated ${formatRelativeTime(new Date(detail.updatedAt).getTime(), now)}`;
 }
 
 // Whether the base fits beside the branch with the branch shown in

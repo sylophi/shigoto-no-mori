@@ -16,7 +16,6 @@ const OPTIONS = [
         Symlink
       </>
     ),
-    tip: "Edits stay in sync with the main checkout.",
   },
   {
     value: "copy",
@@ -26,7 +25,6 @@ const OPTIONS = [
         Copy
       </>
     ),
-    tip: "Independent snapshot at worktree creation.",
   },
 ] as const;
 

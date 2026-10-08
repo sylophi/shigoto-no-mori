@@ -32,11 +32,10 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
 
   return (
     <div className={cn("flex items-stretch text-xs")}>
+      {/* The name over the command it runs: the name can be cut off in
+          a narrow column. */}
       <SimpleTooltip
-        tip={
-          disabledReason ??
-          (command ? `${actionLabel}\n${command}` : actionLabel)
-        }
+        tip={disabledReason ?? (command ? `${label}\n${command}` : undefined)}
       >
         <button
           type="button"

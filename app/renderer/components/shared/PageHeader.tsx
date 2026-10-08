@@ -7,6 +7,7 @@
 import type React from "react";
 import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // One padding for both shells: the desktop pages sit under the window
 // chrome, and since the web shell became a sidebar layout its pages
@@ -66,13 +67,17 @@ export function PageHeader({
       <div className="relative z-[1] flex items-center gap-3">
         <div className="flex min-w-0 flex-1 flex-col">
           {eyebrow !== undefined && (
-            <span className="truncate text-xs text-muted-foreground">
-              {eyebrow}
-            </span>
+            <SimpleTooltip whenTruncated tip={eyebrow}>
+              <span className="truncate text-xs text-muted-foreground">
+                {eyebrow}
+              </span>
+            </SimpleTooltip>
           )}
-          <h1 className="truncate text-lg font-medium tracking-tight">
-            {title}
-          </h1>
+          <SimpleTooltip whenTruncated tip={title}>
+            <h1 className="truncate text-lg font-medium tracking-tight">
+              {title}
+            </h1>
+          </SimpleTooltip>
         </div>
         {trailing}
       </div>

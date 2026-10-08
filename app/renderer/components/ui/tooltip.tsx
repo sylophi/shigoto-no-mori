@@ -2,10 +2,12 @@
 
 import {
   cloneElement,
+  type PointerEvent,
   type ReactElement,
   type ReactNode,
   type Ref,
   useRef,
+  useState,
 } from "react";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
@@ -105,25 +107,39 @@ type TooltipChild = ReactElement<
 // Newlines in string tips are preserved like multiline titles were.
 // `delay` overrides the provider's opening delay for this trigger.
 // `whenTruncated` is for a tip that only repeats text on screen in
-// full: it opens only while that text is cut off.
+// full: it opens only while that text is cut off. `lazy` is for such a
+// tip on every row of a long list (the file tree, the palette), where
+// most rows are never cut off: the tooltip isn't built until the
+// pointer first finds the text cut off, the child rendering bare till
+// then, and the next mousemove opens it. Building it remounts the
+// child, so keep it to plain text that nothing anchors to or focuses.
 function SimpleTooltip({
   tip,
-  disabled,
   delay,
   whenTruncated,
+  lazy,
   children,
 }: {
   tip: ReactNode;
-  disabled?: boolean;
   delay?: number;
   whenTruncated?: boolean;
+  lazy?: boolean;
   children: TooltipChild;
 }) {
   const wrapperRef = useRef<HTMLSpanElement>(null);
+  const [armed, setArmed] = useState(false);
   const childDisabled = Boolean(children.props.disabled);
+  if (lazy && whenTruncated && !armed && !childDisabled) {
+    return cloneElement(children, {
+      onPointerEnter: (event: PointerEvent<HTMLElement>) => {
+        children.props.onPointerEnter?.(event);
+        if (overflows(event.currentTarget)) setArmed(true);
+      },
+    });
+  }
   return (
     <Tooltip
-      disabled={disabled || !tip}
+      disabled={!tip}
       onOpenChange={(open, details) => {
         if (open && whenTruncated && !overflows(details.trigger)) {
           details.cancel();

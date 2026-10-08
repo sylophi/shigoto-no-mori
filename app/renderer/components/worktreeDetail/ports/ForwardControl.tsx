@@ -97,11 +97,8 @@ export function ForwardControl({
     else apply({ on: false });
   };
 
-  const switchTip = live
-    ? "Stop forwarding"
-    : granted
-      ? `Forward ${deviceLabel}:${remotePort} to localhost:${localPort}`
-      : peerReadOnlyNote();
+  // Why it can't be turned on, when it can't.
+  const switchTip = live || granted ? undefined : peerReadOnlyNote();
 
   const state = describeState(
     !isPending ? null : !live ? "start" : pendingMove ? "move" : "stop",

@@ -1,6 +1,7 @@
 import { FolderInput, GitBranch, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PathSpan } from "@/components/ui/path-span";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // The body of the add-project dialog while its input holds a remote
 // URL instead of a path: what will be cloned, and where it will land.
@@ -70,9 +71,11 @@ export function CloningPanel({
     <div className="flex flex-col">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <GitBranch className="size-4 shrink-0 text-muted-foreground/80" />
-        <span className="min-w-0 flex-1 truncate font-mono text-sm">
-          {repo}
-        </span>
+        <SimpleTooltip whenTruncated tip={repo}>
+          <span className="min-w-0 flex-1 truncate font-mono text-sm">
+            {repo}
+          </span>
+        </SimpleTooltip>
       </div>
       <div className="flex flex-col items-center gap-3 px-4 py-14 text-sm text-muted-foreground">
         <Loader2 className="size-5 animate-spin text-muted-foreground/60" />

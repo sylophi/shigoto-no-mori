@@ -224,11 +224,7 @@ function ScriptLaunchButton({
   };
 
   return (
-    <SimpleTooltip
-      tip={
-        disabledReason ?? `${actionLabel}\n${command}\n⌘click to view output`
-      }
-    >
+    <SimpleTooltip tip={disabledReason ?? `${command}\n⌘click to view output`}>
       <ScriptPill
         name={name}
         busy={busy}

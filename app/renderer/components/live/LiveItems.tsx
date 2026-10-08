@@ -81,7 +81,9 @@ function DeviceName({ deviceId }: { deviceId: string }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
       <DeviceGlyph icon={icon} className="size-3.5" />
-      <span className="truncate">{name}</span>
+      <SimpleTooltip whenTruncated tip={name}>
+        <span className="truncate">{name}</span>
+      </SimpleTooltip>
     </span>
   );
 }

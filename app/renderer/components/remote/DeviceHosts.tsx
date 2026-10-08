@@ -19,6 +19,7 @@ import { FolderGit2 } from "lucide-react";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { Chip, ChipButton } from "@/components/ui/chip-button";
 import type { HostChip } from "./deviceHostChips";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // Enough to name a machine's forest at a glance. Past this the strip
 // folds behind a count. A power user's main box can register dozens of
@@ -50,11 +51,12 @@ export function DeviceHosts({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <FolderGit2
-        aria-hidden
-        className="size-3.5 shrink-0 text-muted-foreground/50"
-      />
-      <span className="sr-only">Projects</span>
+      <SimpleTooltip tip="Projects">
+        <FolderGit2
+          aria-label="Projects"
+          className="size-3.5 shrink-0 text-muted-foreground/50"
+        />
+      </SimpleTooltip>
       {chips.length === 0 ? (
         <span className="text-xs text-muted-foreground/70">
           {cached ? "No projects known yet" : "No projects yet"}

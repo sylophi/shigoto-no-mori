@@ -330,9 +330,11 @@ function EndCard({
         <SectionHeading>{heading}</SectionHeading>
         <div className="flex items-center gap-2 pt-1 pb-1.5 text-sm">
           {head}
-          <span className="ml-auto truncate text-xs text-muted-foreground">
-            {aside}
-          </span>
+          <SimpleTooltip whenTruncated tip={aside}>
+            <span className="ml-auto truncate text-xs text-muted-foreground">
+              {aside}
+            </span>
+          </SimpleTooltip>
         </div>
         {children}
       </div>
@@ -574,9 +576,11 @@ function SetupRow({
         className="min-w-0 flex-1 cursor-pointer leading-tight"
       >
         <span className="block text-xs font-medium">Run the setup script</span>
-        <span className="block truncate font-mono text-xs text-muted-foreground">
-          {command}
-        </span>
+        <SimpleTooltip whenTruncated tip={command}>
+          <span className="block truncate font-mono text-xs text-muted-foreground">
+            {command}
+          </span>
+        </SimpleTooltip>
       </label>
       <Switch
         id={id}
@@ -611,6 +615,7 @@ function LandingLines({
   );
   const base = useWorktreeBaseLabel(project);
   const folder = pullWorktreeName(worktree);
+  const path = `${base}/${folder ?? "‹new name›"}`;
   return (
     <>
       <BranchLine
@@ -622,9 +627,11 @@ function LandingLines({
       {base === null ? (
         <Skeleton className="h-3.5 w-2/3" />
       ) : (
-        <p className="truncate font-mono text-xs text-muted-foreground">
-          {base}/{folder ?? "‹new name›"}
-        </p>
+        <SimpleTooltip whenTruncated tip={path}>
+          <p className="truncate font-mono text-xs text-muted-foreground">
+            {path}
+          </p>
+        </SimpleTooltip>
       )}
     </>
   );

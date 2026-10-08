@@ -29,6 +29,7 @@ import {
 } from "../useWorktreeRowState";
 import { WorktreeEntry } from "../WorktreeEntry";
 import type { InboxShelf } from "../sidebarRow";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface InboxRowProps {
   worktree: Worktree;
@@ -95,7 +96,9 @@ export function InboxRow({
             deviceId={device?.deviceId}
             className="size-3"
           />
-          <span className="min-w-0 truncate font-medium">{project.name}</span>
+          <SimpleTooltip whenTruncated tip={project.name}>
+            <span className="min-w-0 truncate font-medium">{project.name}</span>
+          </SimpleTooltip>
           {device && <RowDeviceBadge badge={device} />}
           {mirror && <MirrorBadge mirror={mirror} />}
           <TrailingSlot worktree={worktree} state={state} />

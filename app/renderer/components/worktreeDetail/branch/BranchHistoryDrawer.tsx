@@ -14,6 +14,7 @@ import { commitRewriteAt } from "@/lib/commitRewrite";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 import { CommitRow } from "../commits/CommitRow";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface BranchHistoryDrawerProps {
   worktree: Worktree;
@@ -52,9 +53,11 @@ export function BranchHistoryDrawer({
           <SheetTitle className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
             Branch history
           </SheetTitle>
-          <SheetDescription className="truncate font-mono text-sm text-foreground">
-            {worktree.branch}
-          </SheetDescription>
+          <SimpleTooltip whenTruncated tip={worktree.branch}>
+            <SheetDescription className="truncate font-mono text-sm text-foreground">
+              {worktree.branch}
+            </SheetDescription>
+          </SimpleTooltip>
         </SheetHeader>
 
         {/* Inner list lives in its own component so it remounts on each

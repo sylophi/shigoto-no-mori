@@ -57,28 +57,24 @@ export function CarryOverPickerModal({
             onKeyDown={(e) => e.stopPropagation()}
             role="presentation"
           >
-            <SimpleTooltip tip="Edits stay in sync with the main checkout">
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                onClick={() => onPick({ path, mode: "symlink" })}
-              >
-                <LinkIcon />
-                Symlink
-              </Button>
-            </SimpleTooltip>
-            <SimpleTooltip tip="Independent snapshot at worktree creation">
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                onClick={() => onPick({ path, mode: "copy" })}
-              >
-                <CopyIcon />
-                Copy
-              </Button>
-            </SimpleTooltip>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() => onPick({ path, mode: "symlink" })}
+            >
+              <LinkIcon />
+              Symlink
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() => onPick({ path, mode: "copy" })}
+            >
+              <CopyIcon />
+              Copy
+            </Button>
           </div>
         ) : (
           <SimpleTooltip tip="Tracked by git. Only ignored files and folders can be carried over.">

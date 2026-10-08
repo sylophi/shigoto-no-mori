@@ -24,6 +24,7 @@ import type {
   PalettePage,
   PaletteProject,
 } from "./buildPaletteEntries";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // Everything the list can hold: the worktrees, the projects and pages a
 // query names, and, for a query, the worktree it could make.
@@ -130,7 +131,7 @@ function WorktreeRow({
     >
       <PullRequestPill pr={pr} />
       <StatusIndicator worktree={worktree} />
-      <WorktreeKindIcon worktree={worktree} showTooltip={false} />
+      <WorktreeKindIcon worktree={worktree} />
       {device && <DeviceBadge badge={device} />}
       {mirror && <MirrorBadge mirror={mirror} />}
     </RowLayout>
@@ -239,11 +240,15 @@ function RowLayout({
     >
       {icon}
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-xs">{title}</span>
+        <SimpleTooltip whenTruncated lazy tip={title}>
+          <span className="truncate text-xs">{title}</span>
+        </SimpleTooltip>
         {detail && (
-          <span className="truncate text-3xs text-muted-foreground">
-            {detail}
-          </span>
+          <SimpleTooltip whenTruncated lazy tip={detail}>
+            <span className="truncate text-3xs text-muted-foreground">
+              {detail}
+            </span>
+          </SimpleTooltip>
         )}
       </div>
       {children}

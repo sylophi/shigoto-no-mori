@@ -14,6 +14,7 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import type { CommitSummary, Worktree } from "@shared/schemas";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface CommitRowProps {
   worktree: Worktree;
@@ -49,7 +50,9 @@ export function CommitRow({
       className="-mx-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
     >
       <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
-        <div className="w-full truncate text-sm">{commit.subject}</div>
+        <SimpleTooltip whenTruncated tip={commit.subject}>
+          <div className="w-full truncate text-sm">{commit.subject}</div>
+        </SimpleTooltip>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span className="font-mono">{commit.hash}</span>
           <span aria-hidden className="text-muted-foreground/40">

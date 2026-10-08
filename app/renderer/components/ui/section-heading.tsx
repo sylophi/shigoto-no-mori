@@ -1,17 +1,19 @@
+import type { WithoutTitle } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-interface SectionHeadingProps {
-  children: React.ReactNode;
-  className?: string;
-}
-
-export function SectionHeading({ children, className }: SectionHeadingProps) {
+// The rest of the props land on the h2, so a SimpleTooltip can wrap it.
+export function SectionHeading({
+  children,
+  className,
+  ...props
+}: WithoutTitle<React.ComponentProps<"h2">>) {
   return (
     <h2
       className={cn(
         "text-xs font-semibold tracking-wide text-muted-foreground uppercase",
         className,
       )}
+      {...props}
     >
       {children}
     </h2>

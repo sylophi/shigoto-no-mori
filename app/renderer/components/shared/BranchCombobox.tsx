@@ -7,6 +7,7 @@ import { rankByScore } from "@/lib/fuzzyMatch";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBranches } from "@/hooks/git/useBranches";
 import type { BranchList } from "@shared/schemas";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface BranchComboboxProps {
   projectId: string | null;
@@ -117,14 +118,16 @@ export function BranchCombobox({
           className,
         )}
       >
-        <span
-          className={cn(
-            "flex-1 truncate text-left",
-            !value && "text-muted-foreground/70",
-          )}
-        >
-          <Combobox.Value placeholder={placeholder ?? "Select a branch…"} />
-        </span>
+        <SimpleTooltip whenTruncated tip={value}>
+          <span
+            className={cn(
+              "flex-1 truncate text-left",
+              !value && "text-muted-foreground/70",
+            )}
+          >
+            <Combobox.Value placeholder={placeholder ?? "Select a branch…"} />
+          </span>
+        </SimpleTooltip>
         <ChevronsUpDown
           aria-hidden
           className="size-3.5 shrink-0 text-muted-foreground/60"
@@ -172,9 +175,11 @@ export function BranchCombobox({
                   value={entry.name}
                   className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
                 >
-                  <span className="flex-1 truncate font-mono">
-                    {entry.name}
-                  </span>
+                  <SimpleTooltip whenTruncated lazy tip={entry.name}>
+                    <span className="flex-1 truncate font-mono">
+                      {entry.name}
+                    </span>
+                  </SimpleTooltip>
                   {entry.kind === "remote" && (
                     <span className="text-3xs text-muted-foreground">
                       remote

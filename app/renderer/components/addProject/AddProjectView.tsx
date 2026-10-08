@@ -490,32 +490,30 @@ export function AddProjectView({
             placeholder="Folder path, or a git URL to clone"
             className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
           />
-          <SimpleTooltip tip={`${submitLabel} (${submitKbd})`}>
-            <button
-              type="button"
-              onMouseDown={keepFocusInInput}
-              onClick={() => void primaryAction()}
-              disabled={!canPrimary || addProject.isPending}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label={`${submitLabel} (${submitKbd})`}
-            >
-              {cloneMode ? (
-                <GitBranch className="size-3.5" />
-              ) : targetIsGitRepo ? (
-                <FolderGit2 className="size-3.5" />
-              ) : (
-                <FolderSearch className="size-3.5" />
-              )}
-              <span>
-                {addProject.isPending && targetIsGitRepo
-                  ? "Adding…"
-                  : submitLabel}
-              </span>
-              <KbdGroup className="pointer-events-none">
-                <Kbd>{submitKbd}</Kbd>
-              </KbdGroup>
-            </button>
-          </SimpleTooltip>
+          <button
+            type="button"
+            onMouseDown={keepFocusInInput}
+            onClick={() => void primaryAction()}
+            disabled={!canPrimary || addProject.isPending}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={`${submitLabel} (${submitKbd})`}
+          >
+            {cloneMode ? (
+              <GitBranch className="size-3.5" />
+            ) : targetIsGitRepo ? (
+              <FolderGit2 className="size-3.5" />
+            ) : (
+              <FolderSearch className="size-3.5" />
+            )}
+            <span>
+              {addProject.isPending && targetIsGitRepo
+                ? "Adding…"
+                : submitLabel}
+            </span>
+            <KbdGroup className="pointer-events-none">
+              <Kbd>{submitKbd}</Kbd>
+            </KbdGroup>
+          </button>
         </div>
 
         {clone !== null && (
@@ -551,9 +549,11 @@ export function AddProjectView({
                 ) : (
                   <Folder className="size-4 text-muted-foreground/80" />
                 )}
-                <span className="min-w-0 flex-1 truncate font-mono">
-                  {entry.name}
-                </span>
+                <SimpleTooltip whenTruncated lazy tip={entry.name}>
+                  <span className="min-w-0 flex-1 truncate font-mono">
+                    {entry.name}
+                  </span>
+                </SimpleTooltip>
                 {entry.isGitRepo &&
                   (registered ? (
                     <span className="text-xs text-muted-foreground/80">

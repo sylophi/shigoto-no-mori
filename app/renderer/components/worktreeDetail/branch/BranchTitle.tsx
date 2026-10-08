@@ -15,6 +15,7 @@ import type { Worktree } from "@shared/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
 import { IconButton } from "@/components/ui/icon-button";
 import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // The branch's two sizes: the page's title, or a line under the work's
 // own title. The rename field is as tall as the line it stands in for,
@@ -136,17 +137,24 @@ export function BranchTitle({
 
   return (
     <div className="group/branch flex min-w-0 items-center gap-1.5">
-      <Heading
-        ref={titleRef}
-        data-branch-name
-        className={cn("min-w-0 truncate font-mono", size.text)}
+      <SimpleTooltip
+        whenTruncated
+        tip={
+          <BranchLabel branch={worktree.branch} detached={worktree.detached} />
+        }
       >
-        <BranchLabel
-          branch={worktree.branch}
-          detached={worktree.detached}
-          suffixClassName={size.suffix}
-        />
-      </Heading>
+        <Heading
+          ref={titleRef}
+          data-branch-name
+          className={cn("min-w-0 truncate font-mono", size.text)}
+        >
+          <BranchLabel
+            branch={worktree.branch}
+            detached={worktree.detached}
+            suffixClassName={size.suffix}
+          />
+        </Heading>
+      </SimpleTooltip>
       <BranchMenu worktree={worktree} anchorRef={titleRef} onRename={begin} />
     </div>
   );
