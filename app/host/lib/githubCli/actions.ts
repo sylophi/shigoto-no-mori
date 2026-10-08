@@ -32,7 +32,7 @@ async function runGh(
   } catch (err) {
     if (!isCommandError(err)) throw err;
     // gh vanished between the readiness probe (cached 30s) and this
-    // spawn; "not installed" reads as a state rather than a bug.
+    // spawn. "Not installed" reads as a state rather than a bug.
     if (err.reason === "not-found") {
       throw new Error("GitHub CLI isn't installed", { cause: err });
     }
