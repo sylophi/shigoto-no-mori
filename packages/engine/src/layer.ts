@@ -7,6 +7,7 @@ import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import * as Control from "./Control.ts";
 import * as Darwin from "./Darwin.ts";
+import * as Dirty from "./Dirty.ts";
 import * as Doctor from "./Doctor.ts";
 import type { Flavor } from "./flavor.ts";
 import * as Git from "./Git.ts";
@@ -46,6 +47,7 @@ const services = (options: EngineOptions) =>
     Projects.layer,
     Doctor.layer,
     Transfer.layer,
+    Dirty.layer,
   ).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
