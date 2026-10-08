@@ -42,7 +42,7 @@ export function useAllProjectHygiene(
   return useQueries({
     queries: projects.map((project) => ({
       queryKey: keys.worktreeHygiene(project.id),
-      queryFn: () => api.hygiene.list(project.id),
+      queryFn: () => api.hygiene.list({ projectId: project.id }),
       // The sweep costs several git calls per worktree per project, and
       // the app's defaults refetch on every mount and window focus. A
       // window matching the disk cache keeps an alt-tab from re-probing

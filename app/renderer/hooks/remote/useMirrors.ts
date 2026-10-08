@@ -481,7 +481,7 @@ export function useMirrorControls() {
     }) => {
       // Its copy going is the mirror stopping, not its villager leaving.
       quietVillagerMoves([session.worktreeId]);
-      return api.mirror.stop(session.session, force);
+      return api.mirror.stop({ session: session.session, force });
     },
     onSuccess: (result, { copyName }) => {
       toast.success(
@@ -518,12 +518,12 @@ export function useMirrorControls() {
     meta: { silentError: true },
   });
   const pause = useMutation({
-    mutationFn: (session: string) => api.mirror.pause(session),
+    mutationFn: (session: string) => api.mirror.pause({ session }),
     onError: (err) => notifyError("Couldn't pause mirroring", err),
     meta: { silentError: true },
   });
   const resume = useMutation({
-    mutationFn: (session: string) => api.mirror.resume(session),
+    mutationFn: (session: string) => api.mirror.resume({ session }),
     onError: (err) => notifyError("Couldn't resume mirroring", err),
     meta: { silentError: true },
   });

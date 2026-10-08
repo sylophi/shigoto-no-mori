@@ -7,7 +7,7 @@ export function useDefaultBranch(projectId: string | null) {
     queryKey: keys.defaultBranch(projectId),
     queryFn:
       projectId !== null
-        ? () => api.projects.defaultBranch(projectId)
+        ? () => api.projects.defaultBranch({ projectId })
         : skipToken,
     meta: { errorTitle: "Couldn't resolve default branch" },
   });

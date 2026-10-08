@@ -19,7 +19,8 @@ function projectIconQueryOptions(
   const { deviceId, api } = scope;
   return queryOptions<ProjectIcon | null>({
     queryKey: queryKeysFor(deviceId).projectIcon(projectId),
-    queryFn: api === undefined ? skipToken : () => api.projects.icon(projectId),
+    queryFn:
+      api === undefined ? skipToken : () => api.projects.icon({ projectId }),
     retry: false,
     staleTime: Infinity,
     gcTime: Infinity,

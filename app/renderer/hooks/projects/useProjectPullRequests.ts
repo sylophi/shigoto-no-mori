@@ -113,7 +113,7 @@ export function projectPullRequestsQueryOptions(
         ? skipToken
         : async () =>
             ownBranchPullRequests(
-              await api.githubCli.projectPullRequests(projectId),
+              await api.githubCli.projectPullRequests({ projectId }),
             ),
     staleTime: Infinity,
     refetchOnWindowFocus: false,

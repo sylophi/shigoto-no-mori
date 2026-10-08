@@ -33,7 +33,7 @@ export type PeerSyncApi = Pick<
   | "cancelMove"
   // The progress a start the peer runs for this device streams back
   // (mirror:startFrom relays it to its caller).
-  | "pullProgress"
+  | "onPullProgress"
 > & { channels: PeerChannels };
 
 // The reach into a peer's mirror surface: the git follower's (read the

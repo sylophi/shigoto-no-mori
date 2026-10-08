@@ -85,7 +85,7 @@ export function ForwardAllButton({
         for (const forward of toStop) {
           try {
             // oxlint-disable-next-line no-await-in-loop -- same pacing as the starts.
-            await window.api.portForward.stop(forward.forwardId);
+            await window.api.portForward.stop({ forwardId: forward.forwardId });
           } catch (error) {
             failures.push(errorMessageOf(error));
           }

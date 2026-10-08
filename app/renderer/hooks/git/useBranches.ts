@@ -15,7 +15,7 @@ export function useBranches(projectId: string | null) {
     queryKey: keys.branches(projectId),
     queryFn:
       projectId !== null
-        ? () => api.projects.listBranches(projectId)
+        ? () => api.projects.listBranches({ projectId })
         : skipToken,
     meta: { errorTitle: "Couldn't list branches" },
   });

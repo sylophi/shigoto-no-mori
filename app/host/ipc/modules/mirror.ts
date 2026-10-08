@@ -500,7 +500,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     } = input;
     const peerSync = peerSyncApiFor(sourceDeviceId);
     const notify = ctx.notifier(syncContract, "pullProgress");
-    const stopRelay = peerSync.pullProgress((frame) => {
+    const stopRelay = peerSync.onPullProgress((frame) => {
       const parsed = decodePullProgress(frame);
       if (
         Option.isSome(parsed) &&

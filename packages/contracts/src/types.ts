@@ -1,6 +1,7 @@
 // The types a contract module gives its two sides: the handler table
-// that serves it and the client that calls it, both keyed by the call's
-// name (its channel without the module prefix).
+// that serves it and the client that calls it, keyed by the call's name
+// (its channel without the module prefix), a push's subscription as
+// `on` and its capitalized name.
 import type { Decoded, Encoded } from "./codec.ts";
 import type {
   CallsOf,
@@ -23,8 +24,13 @@ type KeyOf<Tag> = Tag extends `${string}:${infer K}` ? K : never;
 // transforms.
 
 // A void input schema decodes to `void`. Map void inputs to a zero-arg call so
-// no-input clients don't force callers to pass `undefined`.
-type Args<I> = [I] extends [void] ? [] : [input: I];
+// no-input clients don't force callers to pass `undefined`, and an input
+// that may be undefined to an optional argument.
+type Args<I> = [I] extends [void]
+  ? []
+  : undefined extends I
+    ? [input?: I]
+    : [input: I];
 
 // Handlers are always called positionally as `(input, context)`. Even
 // when the input schema is void, the registrar still passes
@@ -45,10 +51,27 @@ export type Client<M extends ContractModule> = {
     ...args: Args<Encoded<InputOf<R>>>
   ) => Promise<Decoded<OutputOf<R>>>;
 } & {
-  [R in BroadcastsOf<M> as KeyOf<R["_tag"]>]: (
+  [R in BroadcastsOf<M> as `on${Capitalize<KeyOf<R["_tag"]>>}`]: (
     handler: (payload: BroadcastPayload<R>) => void,
   ) => () => void;
 };
+
+type ContractInfo<M> = NonNullable<
+  M extends { readonly "~contract"?: infer C } ? C : never
+>;
+
+// The API over a set of modules (a union of them): one namespace per
+// module, named for it, holding its client.
+export type Api<M extends ContractModule> = {
+  [K in M as ContractInfo<K> extends { readonly name: infer N extends string }
+    ? N
+    : never]: Client<K>;
+};
+
+// The API over the host-scoped modules of the set only.
+export type HostApiOf<M extends ContractModule> = Api<
+  Extract<M, { readonly "~contract"?: { readonly scope: "host" } }>
+>;
 
 // What a push's subscriber receives.
 export type BroadcastPayload<R> = Decoded<PayloadOf<R>>;
