@@ -114,6 +114,23 @@ it("clones keeping the mtime, and a clone frees nothing", async () => {
   assert.deepEqual(sizes, [{ path: "a/f.txt", bytes: 0 }]);
 });
 
+it("reports each entry's lstat to the nanosecond", async () => {
+  const root = tree();
+  const [entry] = await collect((d) => d.lstat({ root, paths: ["a/f.txt"] }));
+  assert.ok(entry && !Darwin.isFailed(entry));
+  const st = statSync(join(root, "a/f.txt"), { bigint: true });
+  assert.deepEqual(
+    [entry.ino, entry.size, entry.mtimeSec, entry.mtimeNsec, entry.ctimeNsec],
+    [
+      Number(st.ino),
+      1 << 16,
+      Number(st.mtimeNs / 1_000_000_000n),
+      Number(st.mtimeNs % 1_000_000_000n),
+      Number(st.ctimeNs % 1_000_000_000n),
+    ],
+  );
+});
+
 it("names the filesystem, and a dashed root stays a root", async () => {
   const types = await collect((d) => d.fsType({ root: scratch }));
   assert.deepEqual(types, [{ path: ".", type: "apfs" }]);

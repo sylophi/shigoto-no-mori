@@ -13,8 +13,10 @@ import type { CommitSummary } from "@shigomori/contracts/schemas";
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import { isUntracked } from "@shigomori/contracts/schemas";
 import * as Clock from "effect/Clock";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -28,6 +30,14 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as CarryOver from "./CarryOver.ts";
 import type { CarryOverReport } from "./CarryOver.ts";
+import * as CloneCheckout from "./CloneCheckout.ts";
+import type {
+  CheckoutUnfinished,
+  CloneFailed,
+  CloneReport,
+  CloneSource,
+  HookFailed,
+} from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import { findExecutable } from "./executables.ts";
 import * as Git from "./Git.ts";
@@ -252,10 +262,19 @@ export type Reporter = {
   readonly color: boolean;
 };
 
-// A new worktree, and the lifecycle scripts that failed on it.
+// How a new worktree's files were cloned: from which checkout, and how
+// the clone went or why it gave way to git's own checkout.
+export type Cloned = {
+  readonly from: CloneSource;
+  readonly outcome: Result.Result<CloneReport, CloneFailed>;
+};
+
+// A new worktree, the lifecycle scripts that failed on it, and how its
+// files were cloned when they were.
 export type Created = {
   readonly worktree: WorktreeRow;
   readonly failures: ReadonlyArray<Lifecycle.ScriptFailure>;
+  readonly cloned?: Cloned | undefined;
 };
 
 // --- errors ---------------------------------------------------------------
@@ -666,9 +685,15 @@ export class Worktrees extends Context.Service<
         readonly checkout?: boolean | undefined;
         readonly skipSetup?: boolean | undefined;
         readonly agentWorking?: boolean | undefined;
+        // Clone the files from an existing checkout where it can (the
+        // default), instead of having git write them all.
+        readonly clone?: boolean | undefined;
       },
       reporter: Reporter,
-    ) => Effect.Effect<Created, WorktreeRefused | Git.GitError>;
+    ) => Effect.Effect<
+      Created,
+      WorktreeRefused | CheckoutUnfinished | HookFailed | Git.GitError
+    >;
     // Makes an external worktree a managed one: its branch checked out
     // again under the layout, its marks and title carried, set up as a
     // new worktree is.
@@ -678,7 +703,12 @@ export class Worktrees extends Context.Service<
       reporter: Reporter,
     ) => Effect.Effect<
       Created,
-      WorktreeRefused | DirtyWorktree | OrphanedWorktree | Git.GitError
+      | WorktreeRefused
+      | DirtyWorktree
+      | OrphanedWorktree
+      | CheckoutUnfinished
+      | HookFailed
+      | Git.GitError
     >;
     // Runs the setup half of making a worktree again.
     readonly setup: (
@@ -894,6 +924,7 @@ const make = Effect.gen(function* () {
   const git = yield* Git.Git;
   const lifecycle = yield* Lifecycle.Lifecycle;
   const carryOver = yield* CarryOver.CarryOver;
+  const cloneCheckout = yield* CloneCheckout.CloneCheckout;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const github = yield* GitHub.GitHub;
   const config = yield* Config.Config;
@@ -2003,7 +2034,9 @@ const make = Effect.gen(function* () {
   // The one way a worktree is made: the name checked or picked, the
   // layout's place, the base's remote ref refreshed, `git worktree add`,
   // and the identity git settled on. `checkout` puts the existing branch
-  // `base` there (adopt's way) instead of making a new one.
+  // `base` there (adopt's way) instead of making a new one. `clone`
+  // clones the tracked files from an existing checkout where it can,
+  // instead of having git write them all.
   const addWorktree = (
     project: RegisteredProject,
     input: {
@@ -2011,6 +2044,7 @@ const make = Effect.gen(function* () {
       readonly branch: string;
       readonly base: string;
       readonly checkout: boolean;
+      readonly clone: boolean;
     },
   ) =>
     Effect.gen(function* () {
@@ -2020,7 +2054,8 @@ const make = Effect.gen(function* () {
           subject: "",
         });
       }
-      const used = namesUsed(yield* identities(project));
+      const existing = yield* identities(project);
+      const used = namesUsed(existing);
       if (input.name !== "" && used.has(input.name.toLowerCase())) {
         return yield* new WorktreeRefused({
           reason: "name-taken",
@@ -2056,20 +2091,84 @@ const make = Effect.gen(function* () {
       yield* fs
         .makeDirectory(path.dirname(place), { recursive: true })
         .pipe(Effect.orDie);
+      // The checkout on the base branch, else the primary, else another:
+      // where carry-over looks too.
+      const source = input.clone
+        ? yield* cloneCheckout.pickSource({
+            repo: project.path,
+            checkouts: existing,
+            destination: place,
+            baseBranch:
+              input.base === ""
+                ? ""
+                : (yield* git.resolveCheckoutRef(
+                    project.path,
+                    input.base,
+                    remotes,
+                  )).target,
+          })
+        : Option.none<CloneSource>();
+      const noCheckout = Option.isSome(source);
+      // The branch the add makes: a new one, or in checkout mode the local
+      // branch it tracks a remote base with.
+      const branch = input.checkout
+        ? Option.getOrElse(
+            (yield* git.resolveCheckoutRef(project.path, input.base, remotes))
+              .track,
+            () => "",
+          )
+        : input.branch.trim() === ""
+          ? name
+          : input.branch.trim();
       if (input.checkout) {
         yield* git.checkoutWorktree({
           repo: project.path,
           path: place,
           ref: input.base,
           remotes,
+          noCheckout,
         });
       } else {
         yield* git.addWorktree({
           repo: project.path,
           path: place,
-          branch: input.branch.trim() === "" ? name : input.branch.trim(),
+          branch,
           base: input.base === "" ? undefined : input.base,
+          noCheckout,
         });
+      }
+      let cloned: Cloned | undefined;
+      if (Option.isSome(source)) {
+        // Nothing checked out (the clone and git's own checkout both
+        // failed, or the run was interrupted midway): the add goes again,
+        // and the branch it made, as git undoes its own failed checkout. A
+        // failed hook leaves the worktree, as git leaves it.
+        const undo = git
+          .run(project.path, ["worktree", "remove", "--force", place])
+          .pipe(
+            Effect.andThen(
+              branch === ""
+                ? Effect.void
+                : git.run(project.path, ["branch", "-D", branch]),
+            ),
+            Effect.ignore,
+          );
+        const outcome = yield* cloneCheckout
+          .finish({ source: source.value.path, worktree: place })
+          .pipe(
+            Effect.onExit((exit) =>
+              Exit.isFailure(exit) &&
+              (Cause.hasInterrupts(exit.cause) ||
+                Cause.hasDies(exit.cause) ||
+                Option.exists(
+                  Cause.findErrorOption(exit.cause),
+                  (error) => error instanceof CloneCheckout.CheckoutUnfinished,
+                ))
+                ? undo
+                : Effect.void,
+            ),
+          );
+        cloned = { from: source.value, outcome };
       }
       const found = yield* identities(project);
       const made = found.find((id) => id.path === place);
@@ -2079,7 +2178,7 @@ const make = Effect.gen(function* () {
           subject: place,
         });
       }
-      return { made, found };
+      return { made, found, cloned };
     });
 
   const create = Effect.fn("Worktrees.create")(function* (
@@ -2091,16 +2190,18 @@ const make = Effect.gen(function* () {
       readonly checkout?: boolean | undefined;
       readonly skipSetup?: boolean | undefined;
       readonly agentWorking?: boolean | undefined;
+      readonly clone?: boolean | undefined;
     },
     reporter: Reporter,
   ) {
     const name = input.name ?? "";
     yield* checkName(name);
-    const { made, found } = yield* addWorktree(project, {
+    const { made, found, cloned } = yield* addWorktree(project, {
       name,
       branch: input.branch ?? "",
       base: input.base ?? "",
       checkout: input.checkout ?? false,
+      clone: input.clone ?? true,
     });
     // Only a worktree that is new takes the autoPullNew setting's mark.
     const [autoPullNew, primaryOnly] = yield* Effect.all([
@@ -2123,7 +2224,7 @@ const make = Effect.gen(function* () {
       input.skipSetup ?? false,
       reporter,
     );
-    return { worktree, failures };
+    return { worktree, failures, cloned };
   });
 
   // Fails closed on a dirty or unreadable worktree, untracked files
@@ -2252,6 +2353,8 @@ const make = Effect.gen(function* () {
       registry.forgetWorktree(worktreeId),
       data.forget(project.id, worktreeId),
       git.deleteRef(project.path, dirtyRef(worktreeId)).pipe(Effect.ignore),
+      // What clones proved about its files, as a source.
+      cloneCheckout.forget(worktreeId),
     ]);
 
   // What is kept under one id, carried to another.
@@ -2552,11 +2655,12 @@ const make = Effect.gen(function* () {
     yield* removeCheckout(project.path, worktree.path, true);
     yield* registry.setMark("shelved", worktree.id, false);
     yield* registry.setMark("agentWorking", worktree.id, false);
-    const { made, found } = yield* addWorktree(project, {
+    const { made, found, cloned } = yield* addWorktree(project, {
       name,
       branch: "",
       base: worktree.branch,
       checkout: true,
+      clone: true,
     });
     // The checkout moved, so its id did too, like after a move.
     if (made.id !== worktree.id) {
@@ -2572,7 +2676,7 @@ const make = Effect.gen(function* () {
       false,
       reporter,
     );
-    return { worktree: adopted, failures };
+    return { worktree: adopted, failures, cloned };
   });
 
   const setup = Effect.fn("Worktrees.setup")(function* (
