@@ -62,7 +62,7 @@ const PrivateSize = Schema.Struct({
 });
 
 // lstat(2), times to the nanosecond: what git's index records of a file,
-// and its flags.
+// its flags, and the blocks and links a disk usage count needs.
 const Lstat = Schema.Struct({
   path: Schema.String,
   dev: Schema.Int,
@@ -76,8 +76,17 @@ const Lstat = Schema.Struct({
   mtimeSec: Schema.Int,
   mtimeNsec: Schema.Int,
   flags: Schema.Int,
+  blocks: Schema.Int,
+  nlink: Schema.Int,
+  privateBytes: Schema.optionalKey(Schema.Int),
 });
 export type LstatEntry = typeof Lstat.Type;
+
+// A file's kind, from its mode.
+export const S_IFMT = 0o170000;
+export const S_IFDIR = 0o040000;
+export const S_IFREG = 0o100000;
+export const S_IFLNK = 0o120000;
 
 const FsType = Schema.Struct({
   path: Schema.String,
@@ -119,9 +128,14 @@ export class Darwin extends Context.Service<
     readonly privateSize: (
       input: Target,
     ) => Stream.Stream<Entry<typeof PrivateSize.Type>, DarwinHelperError>;
-    // lstat(2) of each entry, a symlink's own.
+    // lstat(2) of each entry, a symlink's own. `private` adds each
+    // regular file's private size, where the volume can tell. A walk
+    // steps over the `skip` folders (relative to the root) whole.
     readonly lstat: (
-      input: Target,
+      input: Target & {
+        readonly private?: boolean | undefined;
+        readonly skip?: ReadonlyArray<string> | undefined;
+      },
     ) => Stream.Stream<Entry<typeof Lstat.Type>, DarwinHelperError>;
     // The filesystem's type name ("apfs", "smbfs").
     readonly fsType: (
@@ -225,8 +239,18 @@ const make = (binary: string) =>
         ),
       privateSize: ({ root, paths }) =>
         run("privateSize", ["privsize"], [root], paths, lineOf(PrivateSize)),
-      lstat: ({ root, paths }) =>
-        run("lstat", ["lstat"], [root], paths, lineOf(Lstat)),
+      lstat: ({ root, paths, private: withPrivate, skip = [] }) =>
+        run(
+          "lstat",
+          [
+            "lstat",
+            ...(withPrivate ? ["-private"] : []),
+            ...skip.flatMap((rel) => ["-skip", rel]),
+          ],
+          [root],
+          paths,
+          lineOf(Lstat),
+        ),
       fsType: ({ root, paths }) =>
         run("fsType", ["fstype"], [root], paths, lineOf(FsType)),
     });
