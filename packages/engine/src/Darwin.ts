@@ -129,9 +129,13 @@ export class Darwin extends Context.Service<
       input: Target,
     ) => Stream.Stream<Entry<typeof PrivateSize.Type>, DarwinHelperError>;
     // lstat(2) of each entry, a symlink's own. `private` adds each
-    // regular file's private size, where the volume can tell.
+    // regular file's private size, where the volume can tell. A walk
+    // steps over the `skip` folders (relative to the root) whole.
     readonly lstat: (
-      input: Target & { readonly private?: boolean | undefined },
+      input: Target & {
+        readonly private?: boolean | undefined;
+        readonly skip?: ReadonlyArray<string> | undefined;
+      },
     ) => Stream.Stream<Entry<typeof Lstat.Type>, DarwinHelperError>;
     // The filesystem's type name ("apfs", "smbfs").
     readonly fsType: (
@@ -235,10 +239,14 @@ const make = (binary: string) =>
         ),
       privateSize: ({ root, paths }) =>
         run("privateSize", ["privsize"], [root], paths, lineOf(PrivateSize)),
-      lstat: ({ root, paths, private: withPrivate }) =>
+      lstat: ({ root, paths, private: withPrivate, skip = [] }) =>
         run(
           "lstat",
-          ["lstat", ...(withPrivate ? ["-private"] : [])],
+          [
+            "lstat",
+            ...(withPrivate ? ["-private"] : []),
+            ...skip.flatMap((rel) => ["-skip", rel]),
+          ],
           [root],
           paths,
           lineOf(Lstat),

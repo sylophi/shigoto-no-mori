@@ -8,10 +8,10 @@
 //	macfs xattrs [-stdin] [-strip] <root>  xattr names, stripped but provenance
 //	macfs privsize [-stdin] <root>     APFS private size, null where unknown
 //	macfs fstype [-stdin] <root>       the filesystem's type name
-//	macfs lstat [-stdin] [-private] <root>  lstat(2): what git's index records, the flags, blocks and links
+//	macfs lstat [-stdin] [-private] [-skip <dir>...] <root>  lstat(2): what git's index records, the flags, blocks and links
 //
 // Without -stdin, clone and fstype answer for the root itself and the
-// other four walk the whole tree under it (the root included, no
+// other four walk the whole tree under it (but any -skip folder) (the root included, no
 // symlink followed). With -stdin they answer for the NUL-separated
 // paths on stdin, each relative to the root (clone: under both roots).
 // A clone's destination must not exist, and its parent must.
@@ -212,6 +212,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	set := flag.NewFlagSet("macfs "+args[0], flag.ContinueOnError)
 	set.SetOutput(stderr)
 	fromStdin := set.Bool("stdin", false, "answer for the NUL-separated relative paths on stdin")
+	// A walk steps over these folders (relative to the root) whole.
+	skip := map[string]bool{}
+	if v.walks {
+		set.Func("skip", "a folder under the root the walk steps over, repeatable", func(rel string) error {
+			skip[filepath.Clean(rel)] = true
+			return nil
+		})
+	}
 	do := v.op(set)
 	if err := set.Parse(args[1:]); err != nil {
 		return 2
@@ -245,7 +253,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case *fromStdin:
 		readErr = readPaths(stdin, paths)
 	case v.walks:
-		walk(roots[0], paths, lines)
+		walk(roots[0], skip, paths, lines)
 	default:
 		paths <- "."
 	}
@@ -262,10 +270,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 // Sends every entry under root, root included, without following a
-// symlink.
-func walk(root string, paths chan<- string, lines chan<- any) {
-	_ = filepath.WalkDir(root, func(p string, _ fs.DirEntry, err error) error {
+// symlink, and without entering a folder in skip.
+func walk(root string, skip map[string]bool, paths chan<- string, lines chan<- any) {
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		rel, _ := filepath.Rel(root, p)
+		if d != nil && d.IsDir() && skip[rel] {
+			return filepath.SkipDir
+		}
 		if err != nil {
 			lines <- failure(rel, err)
 			return nil

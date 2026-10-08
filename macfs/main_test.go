@@ -299,3 +299,13 @@ func TestLstatAddsPrivateSizeWhenAsked(t *testing.T) {
 		t.Fatalf("privateBytes = %v", sized["f"]["privateBytes"])
 	}
 }
+
+func TestWalkStepsOverSkippedFolders(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "keep/a"), "a", 0o644)
+	writeFile(t, filepath.Join(root, "nested/wt/b"), "b", 0o644)
+	walked := macfs(t, "", "lstat", "-skip", "nested/wt", root)
+	if got := slices.Sorted(maps.Keys(walked)); !slices.Equal(got, []string{".", "keep", "keep/a", "nested"}) {
+		t.Fatalf("walked = %v", got)
+	}
+}

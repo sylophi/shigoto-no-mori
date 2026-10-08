@@ -12,6 +12,7 @@ import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -93,7 +94,8 @@ const ACTIVITY_EXCLUDED = new Set([
 // it wouldn't resolve, which turns the containment probe off for it.
 type PrimaryCandidate = { readonly ref: string; readonly tree: string | null };
 
-// Worktrees probed at once. Git caps its own spawns across every caller.
+// Worktrees probed at once, across every project: the page asks for all
+// of them together, and a chain can include a merge-tree.
 const PROBE_SLOTS = 6;
 // Each walk is a helper streaming a whole tree, so a wider window mostly
 // makes the first size land later.
@@ -109,6 +111,7 @@ const make = Effect.gen(function* () {
   const darwin = yield* Darwin.Darwin;
   const worktrees = yield* Worktrees.Worktrees;
   const walks = yield* Semaphore.make(WALK_SLOTS);
+  const probes = yield* Semaphore.make(PROBE_SLOTS);
 
   // --- the facts ---
 
@@ -262,8 +265,9 @@ const make = Effect.gen(function* () {
 
   // A project's identities with its primary ref, kept long enough to
   // serve one page load: the page asks for every row's size at once.
-  const identities = yield* Cache.make({
-    lookup: (project: RegisteredProject) =>
+  // A failed listing isn't kept: the next ask tries again.
+  const identities = yield* Cache.makeWith(
+    (project: RegisteredProject) =>
       worktrees
         .identityList([project], { primaryRef: true })
         .pipe(
@@ -273,9 +277,12 @@ const make = Effect.gen(function* () {
               : Effect.fail(skipped[0].error),
           ),
         ),
-    capacity: 64,
-    timeToLive: Duration.seconds(10),
-  });
+    {
+      capacity: 64,
+      timeToLive: (exit) =>
+        Exit.isFailure(exit) ? Duration.zero : Duration.seconds(10),
+    },
+  );
 
   // A key compares by value: the project's own fields, nothing more.
   const identitiesOf = (project: RegisteredProject) =>
@@ -298,8 +305,11 @@ const make = Effect.gen(function* () {
     const candidates = yield* candidatesOf(project.path, primaryRef, remotes);
     return yield* Effect.forEach(
       listed,
-      (identity) => factsOf(identity, project.path, candidates, primaryBranch),
-      { concurrency: PROBE_SLOTS },
+      (identity) =>
+        probes.withPermit(
+          factsOf(identity, project.path, candidates, primaryBranch),
+        ),
+      { concurrency: "unbounded" },
     );
   });
 
@@ -309,9 +319,12 @@ const make = Effect.gen(function* () {
     root: string,
     exclude: ReadonlyArray<string>,
   ) {
-    const relativeExcludes = exclude
-      .filter((path) => path !== root && isSameOrInside(path, root))
-      .map((path) => path.slice(root.length + 1));
+    const base = root.replace(/\/+$/, "");
+    // Stepped over by the walk itself, never read.
+    const skip = exclude
+      .map((path) => path.replace(/\/+$/, ""))
+      .filter((path) => path !== base && isSameOrInside(path, base))
+      .map((path) => path.slice(base.length + 1));
     // Whether a path's own name and every folder above it may date
     // activity.
     const countsAsActivity = (rel: string) =>
@@ -333,12 +346,6 @@ const make = Effect.gen(function* () {
         total.partial = true;
         return;
       }
-      if (
-        entry.path !== "." &&
-        relativeExcludes.some((ex) => isSameOrInside(entry.path, ex))
-      ) {
-        return;
-      }
       const kind = entry.mode & Darwin.S_IFMT;
       const allocated = entry.blocks * 512;
       if (kind === Darwin.S_IFDIR) {
@@ -350,10 +357,13 @@ const make = Effect.gen(function* () {
       // Symlinks count as themselves, never their target, and never as
       // activity. Anything else (a fifo, a socket) is skipped.
       if (kind !== Darwin.S_IFREG && kind !== Darwin.S_IFLNK) return;
-      if (kind === Darwin.S_IFREG && countsAsActivity(entry.path)) {
+      if (kind === Darwin.S_IFREG) {
         const mtime =
           entry.mtimeSec * 1000 + Math.floor(entry.mtimeNsec / 1_000_000);
-        if (total.lastActivityAt === null || mtime > total.lastActivityAt) {
+        if (
+          (total.lastActivityAt === null || mtime > total.lastActivityAt) &&
+          countsAsActivity(entry.path)
+        ) {
           total.lastActivityAt = mtime;
         }
       }
@@ -375,7 +385,7 @@ const make = Effect.gen(function* () {
     };
 
     yield* walks.withPermit(
-      darwin.lstat({ root, private: true }).pipe(
+      darwin.lstat({ root: base, private: true, skip }).pipe(
         Stream.runForEach((entry) => Effect.sync(() => add(entry))),
         // The helper failing outright is a measure that couldn't finish.
         Effect.catch(() => Effect.sync(() => void (total.partial = true))),
