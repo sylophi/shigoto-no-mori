@@ -4,8 +4,10 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Icons from "./Icons.ts";
 import * as Identity from "./Identity.ts";
 import * as Usage from "./Usage.ts";
 import { worktreeIdFromPath } from "./worktreeLayout.ts";
@@ -44,10 +46,13 @@ export class Registry extends Context.Service<
     // The registered projects, in the order they were added.
     readonly projects: Effect.Effect<ReadonlyArray<RegisteredProject>>;
     // The rows the sidebar shows, in the manual order: each project
-    // with whether its folder is there, its identity and remote, and its
-    // use stats. The icon isn't looked up yet, and the hue is always
-    // null (V3.md, decision 12).
-    readonly rows: Effect.Effect<ReadonlyArray<ProjectRow>>;
+    // with whether its folder is there, its identity and remote, its use
+    // stats and its icon. The hue is always null (V3.md, decision 12).
+    // `rescanIconMisses` looks again for icons of projects remembered as
+    // having none.
+    readonly rows: (options?: {
+      readonly rescanIconMisses?: boolean;
+    }) => Effect.Effect<ReadonlyArray<ProjectRow>>;
     // Adds a project under a new id.
     readonly register: (input: {
       readonly name: string;
@@ -126,6 +131,7 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const fs = yield* FileSystem.FileSystem;
   const identity = yield* Identity.Identity;
+  const icons = yield* Icons.Icons;
   const usage = yield* Usage.Usage;
   const crypto = yield* Crypto.Crypto;
   const randomId = Effect.orDie(crypto.randomUUIDv4);
@@ -177,11 +183,12 @@ const make = Effect.gen(function* () {
           yield* sql`DELETE FROM project_config WHERE project_id = ${projectId}`;
           yield* sql`DELETE FROM worktree_data WHERE project_id = ${projectId}`;
           // What is kept by the project's path, which would greet a
-          // re-add: its place in the order, its primary's marks.
+          // re-add: its place in the order, its primary's marks, its icon.
           yield* sql`DELETE FROM project_order WHERE path = ${project.path}`;
           const primary = worktreeIdFromPath(project.path);
           yield* sql`DELETE FROM worktree_marks WHERE worktree_id = ${primary}`;
           yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${primary}`;
+          yield* sql`DELETE FROM icon_cache WHERE project_path = ${project.path}`;
           return { id: project.id, name: project.name, path: project.path };
         }),
       )
@@ -226,7 +233,9 @@ const make = Effect.gen(function* () {
     return true;
   }, Effect.orDie);
 
-  const rows = Effect.gen(function* () {
+  const rows = Effect.fn("Registry.rows")(function* (options?: {
+    readonly rescanIconMisses?: boolean;
+  }) {
     const listed = orderProjects(yield* projects, yield* order);
     const uses = yield* usage.statsByScope("project", "");
     return yield* Effect.forEach(
@@ -238,9 +247,20 @@ const make = Effect.gen(function* () {
             Effect.map((info) => info.type === "Directory"),
             Effect.orElseSucceed(() => false),
           );
-          const repo = pathExists
-            ? yield* identity.of(project.path)
-            : { identity: null, remote: null };
+          const [repo, icon] = pathExists
+            ? yield* Effect.all(
+                [
+                  identity.of(project.path),
+                  Effect.map(
+                    icons.of(project.path, {
+                      rescanMisses: options?.rescanIconMisses === true,
+                    }),
+                    Option.getOrNull,
+                  ),
+                ],
+                { concurrency: 2 },
+              )
+            : [{ identity: null, remote: null }, null];
           return {
             ...project,
             pathExists,
@@ -248,13 +268,13 @@ const make = Effect.gen(function* () {
             remote: repo.remote,
             lastUsed: stats?.lastUsed ?? 0,
             recentCount: stats?.recentCount ?? 0,
-            icon: null,
+            icon,
             hue: null,
           };
         }),
       { concurrency: "unbounded" },
     );
-  }).pipe(Effect.withSpan("Registry.rows"));
+  });
 
   const marked = Effect.fn("Registry.marked")(function* (mark: WorktreeMark) {
     const found = yield* sql<{ worktree_id: string }>`
