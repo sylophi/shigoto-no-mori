@@ -11,10 +11,8 @@ import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
 import {
   isHaltedStatus,
-  isTransferSession,
-  MIRROR_LABEL_COPY_SIDE,
+  MIRROR_LABEL_MODE,
   MIRROR_LABEL_REPLACES,
-  MIRROR_LABEL_TRANSFER,
   type MirrorDaemonStatus,
   type MirrorEvent,
   type MirrorEventKind,
@@ -46,6 +44,30 @@ export const MIRROR_LABEL_LOCAL_WORKTREE = "localWorktreeId";
 // so the page can say which rule its patterns came from. Absent on a
 // session that predates it, which read as "everything".
 export const MIRROR_LABEL_IGNORE_MODE = "ignoreMode";
+
+// What kind of session it is (MIRROR_LABEL_MODE), or null for a
+// legacy mirror (below). A session from before the mode label says so
+// in three labels of its own: the engine keeps a session's labels for
+// its life, so they are read here until step 7 of V3.md drops them
+// with the legacy sweep.
+type MirrorMode = "mirror" | "mirror-branch" | `transfer-${string}`;
+
+function modeOf(labels: Record<string, string>): MirrorMode | null {
+  const mode = labels[MIRROR_LABEL_MODE];
+  if (mode !== undefined) return mode as MirrorMode;
+  const transfer = labels["transfer"];
+  if (transfer !== undefined) return `transfer-${transfer}`;
+  if (labels["copySide"] !== "remote") return null;
+  return labels["mirrorBranch"] === "1" ? "mirror-branch" : "mirror";
+}
+
+export const isTransferSession = (session: {
+  labels: Record<string, string>;
+}): boolean => modeOf(session.labels)?.startsWith("transfer-") === true;
+
+export const onMirrorBranch = (session: {
+  labels: Record<string, string>;
+}): boolean => modeOf(session.labels) === "mirror-branch";
 
 // What the daemon reports for one session, before annotation (shared/
 // ipc/modules/mirror.ts), re-exported for the host's own callers.
@@ -154,17 +176,15 @@ export function mirrorSessions(
 }
 
 // A mirror an older build started from the copy's device: it ran
-// there, its local side the copy, and carries no copySide label (every
-// start now writes it, packages/contracts/src/modules/mirror.ts). A mirror runs on
+// there, its local side the copy, and carries no mode (modeOf above).
+// A mirror runs on
 // the device holding the original now, so such a session is ended the
 // first time the engine reports it (main wires this to its snapshots):
 // the session only, never a worktree, and its thread (the copy's page)
 // says why and what to do. Each is asked once, like the orphaned
 // transfers: a terminate that fails is logged.
 function isLegacyMirror(raw: MirrorSessionRaw): boolean {
-  return (
-    !isTransferSession(raw) && raw.labels[MIRROR_LABEL_COPY_SIDE] !== "remote"
-  );
+  return modeOf(raw.labels) === null;
 }
 
 export const LEGACY_MIRROR_DETAIL =
@@ -194,8 +214,8 @@ export async function endLegacyMirrors(): Promise<void> {
   );
 }
 
-// Which transfer a session is, written as the transfer label's value:
-// one token per transfer, live from before its create is sent until
+// Which transfer a session is, written into its mode
+// ("transfer-<token>"): one token per transfer, live from before its create is sent until
 // its pull has ended it. A transfer session whose token is not live
 // here has nobody waiting on it, and main ends it on sight, since no
 // mirror surface would ever show it. That covers every way one gets
@@ -221,7 +241,7 @@ export function endTransfer(token: string): void {
 export function isOrphanedTransfer(raw: MirrorSessionRaw): boolean {
   return (
     isTransferSession(raw) &&
-    !liveTransfers.has(raw.labels[MIRROR_LABEL_TRANSFER] ?? "")
+    !liveTransfers.has(modeOf(raw.labels)?.slice("transfer-".length) ?? "")
   );
 }
 

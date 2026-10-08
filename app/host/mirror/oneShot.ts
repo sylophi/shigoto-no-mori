@@ -16,7 +16,7 @@
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   isHaltedStatus,
-  MIRROR_LABEL_TRANSFER,
+  MIRROR_LABEL_MODE,
 } from "@shigomori/contracts/modules/mirror";
 import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
 import { abortable, throwIfCancelled } from "@host/lib/sync/moves";
@@ -94,7 +94,7 @@ export async function transferFilesOnce(
       localWorktreeId: input.localWorktreeId,
       labels: {
         [MIRROR_LABEL_LOCAL_WORKTREE]: input.localWorktreeId,
-        [MIRROR_LABEL_TRANSFER]: token,
+        [MIRROR_LABEL_MODE]: `transfer-${token}`,
       },
       ignores: input.ignores,
       ...(input.direction === "push"
