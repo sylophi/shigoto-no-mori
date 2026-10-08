@@ -62,11 +62,6 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
     binary: Schema.String,
   },
 ) {
-  // The command line was what was wrong (the terminal exits 2).
-  get usage(): boolean {
-    return false;
-  }
-
   override get message(): string {
     const [n0 = 0, n1 = 0] = this.numbers;
     const [a = "", b = "", c = "", d = ""] = this.names;
@@ -209,11 +204,6 @@ const MERGE_FIELDS = ["mergeStateStatus", "autoMergeRequest"];
 // stale ones must end.
 const MAX_STACK_DEPTH = 64;
 
-// GraphQL, since `gh pr view --json` doesn't expose isInMergeQueue.
-const AUTO_MERGE_OUTCOME_QUERY =
-  "query($number: Int!, $owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
-  "{ pullRequest(number: $number) { state isInMergeQueue autoMergeRequest { mergeMethod } } } }";
-
 // The verdicts auto-merge is for: the base branch's rules aren't met yet,
 // or the head must catch up with a base that requires it. Anything else
 // merges now, or keeps the plain merge's refusal.
@@ -239,11 +229,22 @@ const outcomeFields = (o: MergeOutcome) => ({
   queued: o.outcome === "queued",
 });
 
+// The document of a merge that went through, landed or not.
+const mergeDocument = (
+  pr: PullRequestSummary,
+  branch: string,
+  o: MergeOutcome,
+): Document => ({
+  ...mergeResultFields(pr, branch, o.method),
+  ok: true,
+  ...outcomeFields(o),
+});
+
 // The chain from the bottom of the stack up to `number`, or just that PR
 // when nothing sits under it: a PR whose base is another PR's head is
 // stacked on it. The newest PR wins a reused head branch, and a fork's
 // PR never does. The trunk is never a member.
-export function stackBelow(
+function stackBelow(
   prs: ReadonlyArray<PullRequestSummary>,
   number: number,
   trunk: string,
@@ -316,18 +317,6 @@ const cleanupFailed = (
       }
     : { ...extra, ok: false, ...errorDocument(error) };
 
-// A field of a JSON object's text, undefined when it isn't one.
-const jsonField = (raw: string, key: string): unknown => {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)[key]
-      : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
   const github = yield* GitHub.GitHub;
@@ -384,52 +373,6 @@ const make = Effect.gen(function* () {
       .set(projectScope(project), "lastMergeMethod", method)
       .pipe(Effect.ignore);
 
-  // What became of an auto-merge: read back off the PR, since gh's --auto
-  // merges at once when the verdict moved since the lookup, and a merge
-  // queue queues it.
-  const autoMergeOutcome = (
-    repo: string,
-    number: number,
-    method: MergeMethod,
-  ) =>
-    github
-      .run(repo, [
-        "api",
-        "graphql",
-        "-F",
-        `number=${number}`,
-        "-F",
-        "owner={owner}",
-        "-F",
-        "name={repo}",
-        "-f",
-        `query=${AUTO_MERGE_OUTCOME_QUERY}`,
-      ])
-      .pipe(
-        Effect.map((stdout): MergeOutcome => {
-          const armed: MergeOutcome = { method, outcome: "auto-merge" };
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(stdout);
-          } catch {
-            return armed;
-          }
-          const pr = (
-            parsed as {
-              data?: { repository?: { pullRequest?: Record<string, unknown> } };
-            }
-          )?.data?.repository?.pullRequest;
-          if (pr?.["state"] === "MERGED") return { method, outcome: "merged" };
-          if (pr?.["isInMergeQueue"] === true)
-            return { method, outcome: "queued" };
-          return armed;
-        }),
-        // gh accepted the merge: this read only shapes the report.
-        Effect.orElseSucceed(
-          (): MergeOutcome => ({ method, outcome: "auto-merge" }),
-        ),
-      );
-
   // A stacked PR refuses the plain merge: only GitHub's own stack merge
   // lands it, and it lands every open PR under it too. So it is honoured
   // only for the lowest open PR of its stack. Any other failure is
@@ -442,10 +385,12 @@ const make = Effect.gen(function* () {
     verb: LandingRefused["verb"],
   ) =>
     Effect.gen(function* () {
-      const said = failure.cause instanceof Error ? failure.cause.message : "";
-      if (!said.includes("part of a stack")) return yield* failure;
-      const stack = yield* github.stackFor(repo, number).pipe(Effect.option);
-      const found = Option.flatten(stack);
+      if (!GitHub.stderrOf(failure).includes("part of a stack")) {
+        return yield* failure;
+      }
+      const found = yield* github
+        .stackFor(repo, number)
+        .pipe(Effect.orElseSucceed(() => Option.none<GitHub.GitHubStack>()));
       if (Option.isNone(found)) return yield* failure;
       const lowest = found.value.find((entry) => entry.state === "open");
       if (lowest === undefined || lowest.number !== number) {
@@ -513,7 +458,10 @@ const make = Effect.gen(function* () {
             "--auto",
             `--${method}`,
           ]);
-          outcome = yield* autoMergeOutcome(project.path, pr.number, method);
+          outcome = {
+            method,
+            outcome: yield* github.autoMergeOutcome(project.path, pr.number),
+          };
         }
       } else {
         outcome = yield* mergeNow(project.path, pr.number, method, verb);
@@ -534,12 +482,10 @@ const make = Effect.gen(function* () {
   // --- stacks ---
 
   // What a stack's merge or cleanup reads first, at once: the trunk, the
-  // repo's methods (when not already known), the page of PRs and, for a
-  // merge, GitHub's stack object.
+  // page of PRs and, for a merge, GitHub's stack object.
   const lookupStack = (
     project: RegisteredProject,
     number: number,
-    allowed: ReadonlyArray<MergeMethod> | undefined,
     withStack: boolean,
   ) =>
     Effect.all(
@@ -549,10 +495,6 @@ const make = Effect.gen(function* () {
         stack: withStack
           ? github.stackFor(project.path, number)
           : Effect.succeed(Option.none<GitHub.GitHubStack>()),
-        allowed:
-          allowed === undefined
-            ? Effect.map(github.mergeSettings(project.path), (s) => s.allowed)
-            : Effect.succeed(allowed),
       },
       { concurrency: "unbounded" },
     );
@@ -705,19 +647,11 @@ const make = Effect.gen(function* () {
   const settleMergeability = (repo: string, number: number) =>
     Effect.gen(function* () {
       for (let attempt = 0; attempt < 20; attempt++) {
-        const status = yield* github
-          .run(repo, [
-            "pr",
-            "view",
-            String(number),
-            "--json",
-            "mergeStateStatus",
-          ])
+        const verdict = yield* github
+          .mergeStateStatus(repo, number)
           .pipe(Effect.option);
-        if (Option.isNone(status)) return;
-        const verdict = jsonField(status.value, "mergeStateStatus");
-        if (verdict !== "UNKNOWN" && verdict !== "" && verdict !== undefined)
-          return;
+        if (Option.isNone(verdict)) return;
+        if (verdict.value !== "UNKNOWN" && verdict.value !== "") return;
         yield* Effect.sleep(Duration.seconds(1));
       }
     });
@@ -747,13 +681,15 @@ const make = Effect.gen(function* () {
 
   // Best-effort fast-forward of the checkout holding the PR's base branch
   // after the merge, so it sees what landed. An unread base pulls the
-  // primary branch. Never fails the land.
+  // primary branch. Never fails the land. `identities` lists the
+  // project's checkouts, or hands over a listing the caller already has.
   const catchUpBase = (
-    project: RegisteredProject,
-    target: Effect.Success<
-      ReturnType<Worktrees.Worktrees["Service"]["primaryTarget"]>
-    >,
+    target: Worktrees.PrimaryTarget,
     prBase: string,
+    identities: Effect.Effect<
+      ReadonlyArray<Worktrees.WorktreeIdentity>,
+      Git.GitError
+    >,
   ) =>
     Effect.gen(function* () {
       const base = prBase === "" ? target.primaryBranch : prBase;
@@ -762,7 +698,7 @@ const make = Effect.gen(function* () {
           catchUpSkipped: `primary ref ${target.primaryRef} has no remote`,
         };
       }
-      const listed = yield* worktrees.identities(project).pipe(Effect.result);
+      const listed = yield* Effect.result(identities);
       if (Result.isFailure(listed)) {
         return { catchUpSkipped: errorDocument(listed.failure).error };
       }
@@ -794,9 +730,7 @@ const make = Effect.gen(function* () {
   // delete one that is out. The branch landed on is never deleted.
   const execDone = (
     project: RegisteredProject,
-    target: Effect.Success<
-      ReturnType<Worktrees.Worktrees["Service"]["primaryTarget"]>
-    >,
+    target: Worktrees.PrimaryTarget,
     worktree: Worktrees.WorktreeIdentity,
     deleteBranch: boolean,
   ) =>
@@ -810,37 +744,36 @@ const make = Effect.gen(function* () {
         yield* ffPull(worktree.path, target.remote, target.primaryBranch);
       }
       if (deleteBranch && worktree.branch !== target.primaryBranch) {
-        yield* git.run(project.path, ["branch", "-D", "--", worktree.branch]);
+        yield* git.deleteBranch({
+          repo: project.path,
+          name: worktree.branch,
+          force: true,
+        });
         return true;
       }
       return false;
     });
 
-  // The worktree's fresh row, as the app's describe after a mutation.
+  // The worktree's fresh row, as the app's describe after a mutation,
+  // found in `listed`, the project's identities read after it.
   const describeAfterDone = (
     project: RegisteredProject,
     worktree: Worktrees.WorktreeIdentity,
+    listed: ReadonlyArray<Worktrees.WorktreeIdentity>,
   ) =>
     Effect.gen(function* () {
-      const fresh = (yield* worktrees.identities(project)).find(
-        (id) => id.id === worktree.id,
-      );
+      const fresh = listed.find((id) => id.id === worktree.id);
       if (fresh === undefined) return yield* refuse("done", "vanished");
       return yield* worktrees.row({ project, worktree: fresh });
     });
 
   // The cleanup half of a land: catch the base branch's checkout up, then
   // remove the worktree, or land the primary checkout back on the primary
-  // branch.
+  // branch. The removal guards ran before the merge.
   const landCleanup = (
     located: Worktrees.Located,
     base: string,
-    target: Result.Result<
-      Effect.Success<
-        ReturnType<Worktrees.Worktrees["Service"]["primaryTarget"]>
-      >,
-      LandingRefused
-    >,
+    target: Result.Result<Worktrees.PrimaryTarget, LandingRefused>,
     options: RemoveOptions,
     extra: Record<string, unknown>,
     reporter: Reporter,
@@ -855,12 +788,13 @@ const make = Effect.gen(function* () {
           worktree,
           !options.keepBranch,
         );
-        const row = yield* describeAfterDone(project, worktree);
+        const listed = yield* worktrees.identities(project);
+        const row = yield* describeAfterDone(project, worktree, listed);
         // execDone pulled the primary branch. A PR into another line
         // still leaves that line's checkout behind.
         const caught =
           base !== "" && base !== target.success.primaryBranch
-            ? yield* catchUpBase(project, target.success, base)
+            ? yield* catchUpBase(target.success, base, Effect.succeed(listed))
             : {};
         return doneDocument(row, worktree.branch, deleted, {
           ...extra,
@@ -869,9 +803,13 @@ const make = Effect.gen(function* () {
       }
       const caught = Result.isFailure(target)
         ? { catchUpSkipped: target.failure.message }
-        : yield* catchUpBase(project, target.success, base);
+        : yield* catchUpBase(
+            target.success,
+            base,
+            worktrees.identities(project),
+          );
       const removed = yield* worktrees
-        .remove(located, options, reporter)
+        .remove(located, { ...options, preflighted: true }, reporter)
         .pipe(Effect.result);
       if (Result.isFailure(removed)) {
         return cleanupFailed(removed.failure, { ...extra, ...caught });
@@ -923,7 +861,6 @@ const make = Effect.gen(function* () {
           !other.isPrimary,
       );
       for (const other of others) {
-        if (other.isPrimary) continue;
         const guarded = yield* worktrees
           .checkRemovable(
             { project: located.project, worktree: other },
@@ -939,7 +876,7 @@ const make = Effect.gen(function* () {
           );
         }
       }
-      return { chain, landing, others };
+      return { landing, others };
     });
 
   // The removals: the other landed worktrees, then this one through the
@@ -950,16 +887,15 @@ const make = Effect.gen(function* () {
     located: Worktrees.Located,
     pr: PullRequestSummary,
     ownLanded: boolean,
+    chain: ReadonlyArray<PullRequestSummary>,
     plan: Effect.Success<ReturnType<typeof planStackCleanup>>,
-    target: Effect.Success<
-      ReturnType<Worktrees.Worktrees["Service"]["primaryTarget"]>
-    >,
+    target: Worktrees.PrimaryTarget,
     options: RemoveOptions,
     extra: Record<string, unknown>,
     reporter: Reporter,
   ) =>
     Effect.gen(function* () {
-      const landed = plan.chain
+      const landed = chain
         .filter(
           (layer) =>
             plan.landing.has(layer.headRefName) ||
@@ -978,7 +914,7 @@ const make = Effect.gen(function* () {
         const outcome = yield* worktrees
           .remove(
             { project: located.project, worktree: other },
-            options,
+            { ...options, preflighted: true },
             reporter,
           )
           .pipe(Effect.result);
@@ -987,7 +923,7 @@ const make = Effect.gen(function* () {
         }
         removed.push(outcome.success);
       }
-      const base = (plan.chain[0] as PullRequestSummary).baseRefName;
+      const base = (chain[0] as PullRequestSummary).baseRefName;
       return yield* landCleanup(
         located,
         base,
@@ -1026,21 +962,25 @@ const make = Effect.gen(function* () {
     };
   });
 
+  // The repo's methods are read beside the stack when not already known.
   const mergeStack = (
     project: RegisteredProject,
     number: number,
     flag: MergeMethod | undefined,
-    allowed: ReadonlyArray<MergeMethod> | undefined,
+    known: ReadonlyArray<MergeMethod> | undefined,
     reporter: Reporter,
   ) =>
     Effect.gen(function* () {
-      const lookups = yield* lookupStack(project, number, allowed, true);
-      const method = yield* resolveMethod(
-        project,
-        flag,
-        lookups.allowed,
-        "merge",
+      const [lookups, allowed] = yield* Effect.all(
+        [
+          lookupStack(project, number, true),
+          known === undefined
+            ? Effect.map(github.mergeSettings(project.path), (s) => s.allowed)
+            : Effect.succeed(known),
+        ],
+        { concurrency: 2 },
       );
+      const method = yield* resolveMethod(project, flag, allowed, "merge");
       const chain = yield* stackChain(project, number, lookups, "merge");
       const set = yield* stackMergeSet(chain, "merge");
       yield* mergeStackSet(
@@ -1148,11 +1088,7 @@ const make = Effect.gen(function* () {
       settings,
       "merge",
     );
-    return {
-      ...mergeResultFields(pr, branch, outcome.method),
-      ok: true,
-      ...outcomeFields(outcome),
-    };
+    return mergeDocument(pr, branch, outcome);
   });
 
   const land = Effect.fn("Landing.land")(function* (
@@ -1190,7 +1126,6 @@ const make = Effect.gen(function* () {
       const lookups = yield* lookupStack(
         project,
         pr.number,
-        settings.allowed,
         pr.state === "OPEN",
       );
       const chain = yield* stackChain(project, pr.number, lookups, "land");
@@ -1201,7 +1136,7 @@ const make = Effect.gen(function* () {
         method = yield* resolveMethod(
           project,
           options.method,
-          lookups.allowed,
+          settings.allowed,
           "land",
         );
       }
@@ -1219,17 +1154,14 @@ const make = Effect.gen(function* () {
         );
         yield* persistMethod(project, method);
         if (queued) {
-          return {
-            ...mergeResultFields(pr, branch, method),
-            ok: true,
-            ...outcomeFields({ method, outcome: "queued" }),
-          };
+          return mergeDocument(pr, branch, { method, outcome: "queued" });
         }
       }
       return yield* execStackCleanup(
         located,
         pr,
         true,
+        chain,
         plan,
         lookups.target,
         options,
@@ -1270,11 +1202,7 @@ const make = Effect.gen(function* () {
       // A PR that hasn't landed (queued, or auto-merge armed) keeps its
       // worktree: running land again once it merges does the rest.
       if (outcome.outcome !== "merged") {
-        return {
-          ...mergeResultFields(pr, branch, outcome.method),
-          ok: true,
-          ...outcomeFields(outcome),
-        };
+        return mergeDocument(pr, branch, outcome);
       }
       method = outcome.method;
     }
@@ -1304,19 +1232,15 @@ const make = Effect.gen(function* () {
     if (pr.state === "OPEN") {
       return yield* refuse("rm", "stack-still-open", [pr.number], [branch]);
     }
-    // Nothing merges, so neither the methods nor GitHub's stack object.
-    const lookups = yield* lookupStack(
-      project,
-      pr.number,
-      GitHub.MERGE_METHODS,
-      false,
-    );
+    // Nothing merges, so no GitHub stack object.
+    const lookups = yield* lookupStack(project, pr.number, false);
     const chain = yield* stackChain(project, pr.number, lookups, "rm");
     const plan = yield* planStackCleanup(located, chain, [], options);
     return yield* execStackCleanup(
       located,
       pr,
       pr.state === "MERGED",
+      chain,
       plan,
       lookups.target,
       options,
@@ -1351,7 +1275,11 @@ const make = Effect.gen(function* () {
       );
     }
     const deleted = yield* execDone(project, target, worktree, true);
-    const row = yield* describeAfterDone(project, worktree);
+    const row = yield* describeAfterDone(
+      project,
+      worktree,
+      yield* worktrees.identities(project),
+    );
     return doneDocument(row, branch, deleted, {});
   });
 

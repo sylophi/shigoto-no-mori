@@ -248,6 +248,14 @@ export type Removed = {
   readonly projectName: string;
 };
 
+// Where a project's primary branch is, as primaryTarget reads it.
+export type PrimaryTarget = {
+  readonly remotes: ReadonlyArray<string>;
+  readonly primaryRef: string;
+  readonly remote: string;
+  readonly primaryBranch: string;
+};
+
 // What making or removing a worktree reports as it goes, each event the
 // document `sm --json` prints for it.
 export type WorktreeEvent =
@@ -720,12 +728,15 @@ export class Worktrees extends Context.Service<
     }>;
     // Port-pool's release and the teardown script, the checkout, what is
     // kept under its id, and its branch when the device's setting says so.
+    // `preflighted` skips the guards a caller already ran with
+    // checkRemovable.
     readonly remove: (
       located: Located,
       options: {
         readonly force: boolean;
         readonly keepBranch: boolean;
         readonly skipCleanup: boolean;
+        readonly preflighted?: boolean;
       },
       reporter: Reporter,
     ) => Effect.Effect<
@@ -754,12 +765,9 @@ export class Worktrees extends Context.Service<
     // The project's primary ref (the default-branch setting honored),
     // its remote and local branch when it is a remote-tracking ref, and
     // the remotes that resolved it. An empty ref when none resolves.
-    readonly primaryTarget: (project: RegisteredProject) => Effect.Effect<{
-      readonly remotes: ReadonlyArray<string>;
-      readonly primaryRef: string;
-      readonly remote: string;
-      readonly primaryBranch: string;
-    }>;
+    readonly primaryTarget: (
+      project: RegisteredProject,
+    ) => Effect.Effect<PrimaryTarget>;
     // Carries what is kept under `from` to the id a checkout at `toPath`
     // (absolute) will have, ahead of moving it there. Answers that id.
     readonly rekey: (
@@ -2413,11 +2421,12 @@ const make = Effect.gen(function* () {
       readonly force: boolean;
       readonly keepBranch: boolean;
       readonly skipCleanup: boolean;
+      readonly preflighted?: boolean;
     },
     reporter: Reporter,
   ) {
     const { project, worktree } = located;
-    yield* removable(worktree, options.force);
+    if (!options.preflighted) yield* removable(worktree, options.force);
     const deleteBranchOnRemove = (yield* config
       .get({ kind: "device" }, "deleteBranchOnRemove")
       .pipe(Effect.orDie)).value;

@@ -3,6 +3,14 @@
 // it, and a verb whose document goes on after a failure (land's cleanup
 // after its merge) carries it.
 import * as Predicate from "effect/Predicate";
+import { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
+import * as Git from "./Git.ts";
+import * as GitHub from "./GitHub.ts";
+import {
+  DirtyWorktree,
+  PullRequestOwnsDescription,
+  UnknownWorktree,
+} from "./Worktrees.ts";
 
 export type ErrorDocument = {
   readonly error: string;
@@ -12,47 +20,32 @@ export type ErrorDocument = {
 // What a failure says: the words of the git or gh that failed, or of the
 // hook or checkout under it, else the error's own message.
 export const messageOf = (error: unknown): string => {
-  const cause = Predicate.hasProperty(error, "cause") ? error.cause : undefined;
-  const said = (fallback: string) =>
-    cause instanceof Error ? cause.message : fallback;
-  if (Predicate.isTagged(error, "GitCommandError")) {
-    return said(String((error as { message?: unknown }).message));
+  if (error instanceof Git.GitCommandError) return Git.stderrOf(error);
+  if (error instanceof GitHub.GitHubCliError) {
+    return GitHub.commandMessageOf(error);
   }
-  if (Predicate.isTagged(error, "GitHubCliError")) {
-    const reason = (error as { reason?: unknown }).reason;
-    return reason === "missing"
-      ? "GitHub CLI isn't installed"
-      : reason === "timeout"
-        ? "gh timed out"
-        : said("gh failed");
+  if (error instanceof HookFailed) {
+    return `post-checkout hook: ${messageOf(error.cause)}`;
   }
-  if (Predicate.isTagged(error, "HookFailed")) {
-    return `post-checkout hook: ${messageOf(cause)}`;
-  }
-  if (Predicate.isTagged(error, "CheckoutUnfinished")) return messageOf(cause);
+  if (error instanceof CheckoutUnfinished) return messageOf(error.cause);
   return error instanceof Error ? error.message : String(error);
 };
 
-// The codes the app branches on, by error tag.
-const CODES: Readonly<Record<string, string>> = {
-  UnknownWorktree: "unknown-worktree",
-  PullRequestOwnsDescription: "pull-request-open",
-};
-
 export const codeOf = (error: unknown): string | undefined => {
-  if (Predicate.isTagged(error, "DirtyWorktree")) {
-    return (error as { reason?: unknown }).reason === "uncommitted"
+  if (error instanceof DirtyWorktree) {
+    return error.reason === "uncommitted"
       ? "uncommitted-changes"
       : "status-unreadable";
   }
+  if (error instanceof UnknownWorktree) return "unknown-worktree";
+  if (error instanceof PullRequestOwnsDescription) return "pull-request-open";
+  // A tag, not the class: Landing imports this module.
   if (
     Predicate.isTagged(error, "LandingRefused") &&
-    (error as { reason?: unknown }).reason === "fork"
+    Predicate.hasProperty(error, "reason") &&
+    error.reason === "fork"
   ) {
     return "fork-pull-request";
-  }
-  for (const [tag, code] of Object.entries(CODES)) {
-    if (Predicate.isTagged(error, tag)) return code;
   }
   return undefined;
 };
