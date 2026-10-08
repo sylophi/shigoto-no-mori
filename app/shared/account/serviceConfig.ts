@@ -58,35 +58,6 @@ export function isConfigured(config: AccountServiceConfig): boolean {
   return config.hubUrl.length > 0 && config.publishableKey.length > 0;
 }
 
-// Minimal KEY=VALUE dotenv parser for the gitignored dev dotenv file
-// (.env.local). Pure string work so it lives here rather
-// than in the electron glue and the account check can drive it. Not a
-// full dotenv implementation: it skips blanks and comments, strips one
-// layer of surrounding quotes, and ignores anything malformed.
-export function parseDotenv(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    // A __proto__ key would reach the prototype setter. String values
-    // make it a no-op, but skip it explicitly so the intent is legible
-    // and no future object shape can be polluted through this parser.
-    if (key === "__proto__") continue;
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    out[key] = value;
-  }
-  return out;
-}
-
 // Merges the three config layers, lowest to highest precedence: the
 // optional dev .env.local values, the values baked into the bundle at
 // build time, and the real process environment. Real environment
@@ -94,7 +65,7 @@ export function parseDotenv(text: string): Record<string, string> {
 // from the environment, and a build with nothing baked in behaves
 // exactly as before.
 export function mergeServiceEnv(
-  fileEnv: Record<string, string>,
+  fileEnv: Record<string, string | undefined>,
   bakedEnv: Record<string, string>,
   processEnv: Record<string, string | undefined>,
 ): Record<string, string | undefined> {

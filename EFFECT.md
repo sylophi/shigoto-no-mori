@@ -108,13 +108,16 @@ export const layer = Layer.effect(Registry, make);
   is closed, and a `run` that the Promise functions callers already
   import go through. A call made before the graph is up waits for it.
   The proofs bring every adapter's layer up for each file
-  (`app/test/lib/adapters.mts`).
+  (`app/test/lib/adapters.mts`). A subsystem that is one service
+  takes `PromiseAdapter.forService`, whose `call` runs one of the
+  service's methods.
 
   ```ts
-  export const { layer: adapter, run } =
-    PromiseAdapter.make<ChildProcessSpawner>("The host's child processes");
+  const promiseAdapter = PromiseAdapter.forService(Terrier, "terrier");
+  export const adapter = promiseAdapter.layer;
 
-  export const execGh = (args: string[]) => run(exec("gh", args));
+  export const terrierReadiness = () =>
+    promiseAdapter.call((terrier) => terrier.readiness);
   ```
 
 ## 4. Errors

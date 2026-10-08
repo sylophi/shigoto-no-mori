@@ -11,6 +11,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { devProfileSuffix } from "../../electron/devProfile";
 import { platform } from "node:os";
 import { join } from "node:path";
+import { parseEnv } from "node:util";
 import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
 import { accountContract } from "@shigomori/contracts/modules/account";
@@ -52,7 +53,6 @@ import {
 import {
   isConfigured,
   mergeServiceEnv,
-  parseDotenv,
   resolveServiceConfig,
   type AccountServiceConfig,
 } from "@shared/account/serviceConfig";
@@ -192,10 +192,10 @@ function writeAcceptsCommands(record: StoredAccount, enabled: boolean): void {
 // which a file can plant. The dev-convenience file stays in dev.
 function serviceConfig(): AccountServiceConfig {
   if (cachedConfig) return cachedConfig;
-  let fileEnv: Record<string, string> = {};
+  let fileEnv: Record<string, string | undefined> = {};
   if (!app.isPackaged) {
     try {
-      fileEnv = parseDotenv(
+      fileEnv = parseEnv(
         readFileSync(join(process.cwd(), ".env.local"), "utf8"),
       );
     } catch {
