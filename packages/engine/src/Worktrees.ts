@@ -37,7 +37,7 @@ import { splitRemoteRef } from "./gitParse.ts";
 import * as Layout from "./Layout.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import { shellQuote } from "./Lifecycle.ts";
-import { entryExists } from "./entries.ts";
+import { copyTree, entryExists } from "./entries.ts";
 import { pickWorktreeName } from "./names.ts";
 import * as Paths from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
@@ -706,8 +706,8 @@ export class Worktrees extends Context.Service<
       | OrphanedWorktree
       | Git.GitError
     >;
-    // Moves the checkout, across volumes too, and carries what is kept
-    // under its id to the new one.
+    // Moves the checkout to `destination` (absolute), across volumes too,
+    // and carries what is kept under its id to the new one.
     readonly move: (
       located: Located,
       destination: string,
@@ -716,14 +716,15 @@ export class Worktrees extends Context.Service<
       WorktreeRefused | Git.GitError
     >;
     // Carries what is kept under `from` to the id a checkout at `toPath`
-    // will have, ahead of moving it there. Answers that id.
+    // (absolute) will have, ahead of moving it there. Answers that id.
     readonly rekey: (
       project: RegisteredProject,
       from: string,
       toPath: string,
     ) => Effect.Effect<string>;
     // Points a project whose repo was moved or renamed by hand at where
-    // it is now (any folder inside it will do), keeping its id. The
+    // it is now (an absolute path, any folder inside it will do), keeping
+    // its id. The
     // linked worktrees that moved along are re-linked, and the managed
     // ones a rename would leave external move to where new ones go.
     // Answers the project's row.
@@ -2234,11 +2235,12 @@ const make = Effect.gen(function* () {
             : parent === driveBaseOf(projectPath, place)
               ? 3
               : 0;
+      // rmdir, which takes only an empty folder: something written there
+      // since keeps it.
       let dir = parent;
       for (let level = 0; level < levels; level++) {
-        const entries = yield* fs.readDirectory(dir);
-        if (entries.length > 0) return;
-        yield* fs.remove(dir, { recursive: true });
+        const code = yield* spawner.exitCode(ChildProcess.make("rmdir", [dir]));
+        if (code !== 0) return;
         dir = path.dirname(dir);
       }
     }).pipe(Effect.ignore);
@@ -2402,11 +2404,7 @@ const make = Effect.gen(function* () {
         Effect.ignore,
       );
       const cp = (flags: ReadonlyArray<string>) =>
-        spawner
-          .string(ChildProcess.make("cp", ["-R", "-P", ...flags, from, to]), {
-            includeStderr: true,
-          })
-          .pipe(Effect.scoped);
+        copyTree(spawner, from, to, flags);
       // -p keeps the times and modes. A volume that can't hold some of
       // them fails it, so the plain copy is the second try.
       const copied = yield* cp(["-p"]).pipe(
@@ -2418,7 +2416,7 @@ const make = Effect.gen(function* () {
         return yield* new WorktreeRefused({
           reason: "move-copy-failed",
           subject: to,
-          cause: copied.failure,
+          cause: copied.failure.cause,
         });
       }
       const repaired = yield* git
@@ -2462,7 +2460,7 @@ const make = Effect.gen(function* () {
         subject: "",
       });
     }
-    const to = path.resolve(target);
+    const to = path.normalize(target);
     if (to !== worktree.path) {
       // git would move the checkout into an existing folder, at a path
       // (and an id) other than the one asked for.
@@ -2508,7 +2506,7 @@ const make = Effect.gen(function* () {
     from: string,
     toPath: string,
   ) {
-    const to = worktreeIdFromPath(path.resolve(toPath));
+    const to = worktreeIdFromPath(path.normalize(toPath));
     if (to !== from) yield* rekeyWorktree(project, from, to);
     return to;
   });

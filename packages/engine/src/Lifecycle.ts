@@ -75,13 +75,7 @@ export class Lifecycle extends Context.Service<
   {
     // Runs one script to its end, reporting it, and answers its exit
     // code (null when it never ran or died to a signal) and its run id.
-    readonly run: (input: {
-      readonly command: string;
-      readonly slot: LifecycleSlot;
-      readonly context: ScriptContext;
-      readonly color: boolean;
-      readonly report: Report;
-    }) => Effect.Effect<{
+    readonly run: (input: RunInput) => Effect.Effect<{
       readonly code: number | null;
       readonly runId: string;
     }>;
@@ -111,8 +105,6 @@ const scriptName = (slot: LifecycleSlot) =>
 // A single-quoted shell word.
 export const shellQuote = (text: string) =>
   `'${text.replaceAll("'", `'\\''`)}'`;
-
-const decoder = new TextDecoder();
 
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -181,6 +173,10 @@ const make = Effect.gen(function* () {
           .spawn(
             ChildProcess.make(shell, [...args, input.command], {
               cwd: context.worktree.path,
+              // In this process's group, as a terminal runs it: Ctrl-C
+              // reaches the whole tree, and what the script leaves running
+              // in the background (a dev database) outlives it.
+              detached: false,
               extendEnv: true,
               env: {
                 // A script that runs `sm cd` must not retarget the
@@ -218,12 +214,21 @@ const make = Effect.gen(function* () {
         }
         // Started before any output is read, so it comes first.
         yield* started(handle.success.pid);
+        // One decoder for the run, so a character split across two reads
+        // comes out whole.
+        const decoder = new TextDecoder();
         yield* handle.success.all.pipe(
           Stream.runForEach((chunk) =>
-            script({ runId, kind: "data", data: decoder.decode(chunk) }),
+            script({
+              runId,
+              kind: "data",
+              data: decoder.decode(chunk, { stream: true }),
+            }),
           ),
           Effect.ignore,
         );
+        const rest = decoder.decode();
+        if (rest !== "") yield* script({ runId, kind: "data", data: rest });
         // A signal death is no exit code, like a run that never started.
         const code = yield* handle.success.exitCode.pipe(
           Effect.map(Number),

@@ -13,10 +13,9 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Darwin from "./Darwin.ts";
-import { entryExists } from "./entries.ts";
+import { copyFailure, copyTree, entryExists } from "./entries.ts";
 import * as Git from "./Git.ts";
 
 export type CarryOverEntry = {
@@ -83,6 +82,8 @@ const manualEntries = (
     ? entries.flatMap((entry) =>
         Predicate.isObject(entry) &&
         typeof entry["path"] === "string" &&
+        // Never anywhere but inside the worktree, whatever was synced.
+        isSafeRelPath(entry["path"]) &&
         (entry["mode"] === "copy" || entry["mode"] === "symlink")
           ? [{ path: entry["path"], mode: entry["mode"] }]
           : [],
@@ -203,7 +204,10 @@ const make = Effect.gen(function* () {
           if (Result.isFailure(result)) {
             failures.push({
               path: WORKTREE_INCLUDE,
-              reason: Git.stderrOf(result.failure as Git.GitCommandError),
+              reason:
+                result.failure instanceof Git.GitCommandError
+                  ? Git.stderrOf(result.failure)
+                  : result.failure.message,
               ...(source.isPrimary ? {} : { source: source.name }),
             });
           } else {
@@ -216,7 +220,7 @@ const make = Effect.gen(function* () {
 
   // A copy-on-write clone of the tree where the volume can, else `cp -R
   // -P`. The destination must not exist.
-  const copyTree = (from: string, to: string) =>
+  const cloneOrCopy = (from: string, to: string) =>
     Effect.gen(function* () {
       const cloned = yield* darwin.clone({ from, to }).pipe(
         Stream.runCollect,
@@ -231,11 +235,7 @@ const make = Effect.gen(function* () {
       yield* fs
         .remove(to, { recursive: true, force: true })
         .pipe(Effect.mapError((error) => error.message));
-      yield* spawner
-        .string(ChildProcess.make("cp", ["-R", "-P", from, to]), {
-          includeStderr: true,
-        })
-        .pipe(Effect.mapError((error) => error.message));
+      yield* copyTree(spawner, from, to).pipe(Effect.mapError(copyFailure));
     });
 
   // The entry from the first source that has it. Answers the failure,
@@ -281,7 +281,7 @@ const make = Effect.gen(function* () {
             .pipe(Effect.mapError((error) => error.message));
           return isDirectory ? entry.path : undefined;
         }
-        yield* copyTree(from, to);
+        yield* cloneOrCopy(from, to);
         return undefined;
       }).pipe(Effect.result);
       return Result.isSuccess(outcome)
