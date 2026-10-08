@@ -17,54 +17,35 @@ import {
   resolveWorktree,
   worktreeFlags,
 } from "../here.ts";
-import { emit, note, out, Output, renderTable, styles } from "../output.ts";
-
-type Styles = ReturnType<typeof styles>;
+import {
+  emit,
+  note,
+  out,
+  Output,
+  renderTable,
+  styles,
+  type Styles,
+} from "../output.ts";
+import { divergenceCell, flagNames, truncate } from "./cells.ts";
+import { status } from "./status.ts";
 
 // A title cut to fit a terminal line.
-const titleCell = (title: string | undefined) => {
-  const chars = [...(title ?? "")];
-  return chars.length <= 50
-    ? chars.join("")
-    : `${chars.slice(0, 49).join("")}…`;
-};
+const titleCell = (title: string | undefined) => truncate(title ?? "", 50);
 
-// The ↑ahead ↓behind cell, "synced" with no divergence.
-const syncCell = (paint: Styles, row: Worktrees.WorktreeRow) => {
-  if (row.detached) return paint.yellow("detached");
-  if (!row.hasUpstream) return paint.dim("local");
-  if (row.ahead === 0 && row.behind === 0) return paint.green("synced");
-  return [
-    row.ahead > 0 ? paint.cyan(`↑${row.ahead}`) : "",
-    row.behind > 0 ? paint.yellow(`↓${row.behind}`) : "",
-  ]
-    .filter((part) => part !== "")
-    .join(" ");
-};
+const syncCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
+  row.detached
+    ? paint.yellow("detached")
+    : row.hasUpstream
+      ? divergenceCell(paint, row.ahead, row.behind, "synced")
+      : paint.dim("local");
 
 const changesCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
   row.changedCount > 0
     ? paint.yellow(`${row.changedCount} changed`)
     : paint.dim("clean");
 
-// Primary before external, and never both.
-const flagsCell = (
-  paint: Styles,
-  row: Pick<
-    Worktrees.IdentityRow,
-    "isPrimary" | "isExternal" | "shelved" | "autoPull" | "agentWorking"
-  >,
-) =>
-  paint.dim(
-    [
-      row.isPrimary ? "primary" : row.isExternal ? "external" : "",
-      row.shelved ? "shelved" : "",
-      row.autoPull ? "auto-pull" : "",
-      row.agentWorking ? "agent working" : "",
-    ]
-      .filter((flag) => flag !== "")
-      .join(", "),
-  );
+const flagsCell = (paint: Styles, row: Parameters<typeof flagNames>[0]) =>
+  paint.dim(flagNames(row).join(", "));
 
 class NoProjects extends Schema.TaggedError<NoProjects>()("NoProjects", {}) {
   override get message(): string {
@@ -326,5 +307,5 @@ export { destination, list, path };
 
 export const worktreesCommand = Command.make("worktrees").pipe(
   Command.withDescription("Worktree commands (the prefix is optional)"),
-  Command.withSubcommands([list, path, destination]),
+  Command.withSubcommands([list, path, destination, status]),
 );

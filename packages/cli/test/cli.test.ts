@@ -4,7 +4,7 @@
 // frozen, V3.md decision 13); a person's output too, where it's ours.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -411,6 +411,77 @@ describe("worktrees", () => {
   it("says when there are no projects", async () => {
     await same("list");
     await same("--json", "list", "--identities");
+  });
+});
+
+describe("status", () => {
+  // A project with a linked worktree holding staged, unstaged and
+  // untracked changes and a stash, and setup and teardown scripts.
+  const project = () => {
+    const alpha = box.repo("alpha", { "a.txt": "a\n", "b.txt": "b\n" });
+    const fox = `${box.home}/fox`;
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", fox);
+    box.git(
+      fox,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      `Work on the fox, ${"and then some more of it, ".repeat(4)}until it's done`,
+    );
+    writeFileSync(`${fox}/a.txt`, "staged\n");
+    box.git(fox, "add", "a.txt");
+    writeFileSync(`${fox}/b.txt`, "stashed\n");
+    box.git(fox, "stash", "-q");
+    writeFileSync(`${fox}/b.txt`, "unstaged\n");
+    writeFileSync(`${fox}/new.txt`, "untracked\n");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    box.write("projects/A/project.json", {
+      defaultBranch: "main",
+      scripts: { setup: "pnpm install", teardown: "echo bye" },
+    });
+    return { alpha, fox };
+  };
+
+  it("shows a worktree's card, the cwd's or a named one", async () => {
+    const { alpha, fox } = project();
+    await sameAt(fox, "status", "--no-pr");
+    await same("--json", "status", "fox", "--no-pr");
+    await sameAt(alpha, "st", "--no-pr");
+    await same("--json", "wt", "status", "alpha/root", "--no-pr");
+    await same("status", "nope", "--no-pr");
+  });
+
+  it("shows the branch's pull request, or why it couldn't look", async () => {
+    project();
+    box.fakeBin(
+      "gh",
+      `if [ "$1" = pr ]; then echo '${JSON.stringify([
+        {
+          number: 7,
+          title: "Fox things",
+          state: "OPEN",
+          isDraft: false,
+          url: "https://github.com/me/alpha/pull/7",
+          baseRefName: "main",
+          headRefName: "fox",
+          isCrossRepository: false,
+          statusCheckRollup: [
+            {
+              __typename: "CheckRun",
+              status: "COMPLETED",
+              conclusion: "SUCCESS",
+            },
+            { __typename: "CheckRun", status: "IN_PROGRESS", conclusion: "" },
+          ],
+        },
+      ])}'; else exit 0; fi`,
+    );
+    await same("status", "fox");
+    await same("--json", "status", "fox");
+    await same("status", "root");
   });
 });
 
