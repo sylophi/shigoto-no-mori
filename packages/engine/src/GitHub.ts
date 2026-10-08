@@ -298,6 +298,9 @@ export const stderrOf = (error: GitHubCliError): string =>
 
 // The failure as one short line, which the status card shows: any other
 // failure is the first line of gh's own words.
+// The one reason not worth a word: the repository isn't on GitHub.
+export const NO_GITHUB_REMOTE = "no GitHub remote";
+
 const reasonOf = (error: GitHubCliError): string => {
   switch (error.reason) {
     case "missing":
@@ -305,7 +308,7 @@ const reasonOf = (error: GitHubCliError): string => {
     case "unauthenticated":
       return "gh isn't authenticated";
     case "no-github-remote":
-      return "no GitHub remote";
+      return NO_GITHUB_REMOTE;
     case "timeout":
       return "gh timed out";
     case "failed": {
@@ -553,8 +556,13 @@ const make = Effect.gen(function* () {
       repo,
       lookupArgs(branch, "open", ["number,url,title,body,isCrossRepository"]),
     );
-    if (Result.isFailure(rows))
-      return { found: null, unavailable: rows.failure };
+    // Output it can't read is no pull request, said nothing of, as Go's
+    // describe takes it.
+    if (Result.isFailure(rows)) {
+      return rows.failure === "unexpected gh output"
+        ? { found: null }
+        : { found: null, unavailable: rows.failure };
+    }
     const own = rows.success.find((row) => row["isCrossRepository"] !== true);
     return {
       found:

@@ -208,6 +208,9 @@ export type DescriptionView = {
   readonly title: string;
   readonly description: string;
   readonly pullRequest: GitHub.OwningPullRequest | null;
+  // Why the pull request couldn't be looked up, when that is worth a
+  // word (a repository off GitHub isn't).
+  readonly pullRequestUnavailable?: string;
 };
 
 // A listing over several projects: the rows of each that could be read,
@@ -664,9 +667,12 @@ export class Worktrees extends Context.Service<
       located: Located,
     ) => Effect.Effect<DescriptionView, DescribeRefused>;
     // Sets the title, the description, or both, and answers the row.
+    // `unavailable` hears why the pull request couldn't be looked up,
+    // as `description` says it.
     readonly describe: (
       located: Located,
       change: { readonly title?: string; readonly description?: string },
+      unavailable?: (reason: string) => Effect.Effect<void>,
     ) => Effect.Effect<
       WorktreeRow,
       DescribeRefused | PullRequestOwnsDescription
@@ -1759,7 +1765,13 @@ const make = Effect.gen(function* () {
     ) {
       return { found: null };
     }
-    return yield* github.owningPullRequest(project.path, worktree.branch);
+    const lookup = yield* github.owningPullRequest(
+      project.path,
+      worktree.branch,
+    );
+    return lookup.unavailable === GitHub.NO_GITHUB_REMOTE
+      ? { found: lookup.found }
+      : lookup;
   });
 
   const description = Effect.fn("Worktrees.description")(function* (
@@ -1777,12 +1789,16 @@ const make = Effect.gen(function* () {
       title: stored.title,
       description: stored.description,
       pullRequest: pr.found,
+      ...(pr.unavailable === undefined
+        ? {}
+        : { pullRequestUnavailable: pr.unavailable }),
     };
   });
 
   const describe = Effect.fn("Worktrees.describe")(function* (
     located: Located,
     change: { readonly title?: string; readonly description?: string },
+    unavailable?: (reason: string) => Effect.Effect<void>,
   ) {
     if (!hasWorktreeData(located.worktree)) {
       return yield* new DescribeRefused({ reason: "external", binary });
@@ -1811,6 +1827,9 @@ const make = Effect.gen(function* () {
     }
     // Last, once the input is known good: it asks GitHub.
     const pr = yield* owningPullRequest(located);
+    if (pr.unavailable !== undefined && unavailable !== undefined) {
+      yield* unavailable(pr.unavailable);
+    }
     if (pr.found !== null) {
       return yield* new PullRequestOwnsDescription({
         worktree: located.worktree.name,
