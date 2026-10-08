@@ -91,9 +91,9 @@ Poses ride the URL:
   Work PC). The desktop default is `tp:connected`, and the web
   default adds `sm`.
 - `?updates=sm,tp,mini`: the devices holding a staged update, by the
-  same keys (default `tp`). Every device runs 2.0.3 and the update is
+  same keys (default none). Every device runs 2.0.3 and the update is
   2.1.0, so the others count as behind it (the update toast, Update
-  all). `?updates=` with no keys poses none, and no toast.
+  all).
 - `?downloading=sm,tp,mini`: the devices downloading the update.
 - `?crowd=<n>`: up to 20 more projects on Studio Mac, most holding
   their primary checkout alone, for the forest at the size where

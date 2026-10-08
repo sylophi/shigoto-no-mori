@@ -517,7 +517,7 @@ function hostHandlersFor(
     "portPool:isActive": () => true,
     "globalConfig:read": () => fakeGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
-    // The devices ?updates poses (Thinkpad alone by default) have an
+    // The devices ?updates poses (none by default) have an
     // update staged, so the restart-to-update buttons on their Settings
     // General sections have something to show, and the ones ?downloading poses
     // are fetching it. Installing stands in for the restart into the
@@ -1288,7 +1288,7 @@ function initPresence(): void {
     if (state === "connected" || state === "online") roster.add(id);
     if (state === "connected") directSessions.add(id);
   }
-  posedDevices(pose.get("updates") ?? "tp", stagedUpdates);
+  posedDevices(pose.get("updates") ?? "", stagedUpdates);
   posedDevices(pose.get("downloading") ?? "", downloadingUpdates);
 }
 
