@@ -24,6 +24,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as CloneCheckout from "../../src/CloneCheckout.ts";
 import * as Config from "../../src/Config.ts";
+import * as Doctor from "../../src/Doctor.ts";
 import * as Git from "../../src/Git.ts";
 import * as Hygiene from "../../src/Hygiene.ts";
 import * as Icons from "../../src/Icons.ts";
@@ -48,7 +49,8 @@ export type Engine =
   | Terrier.Terrier
   | Usage.Usage
   | Worktrees.Worktrees
-  | Hygiene.Hygiene;
+  | Hygiene.Hygiene
+  | Doctor.Doctor;
 
 const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
 
@@ -243,7 +245,10 @@ export function sandbox(): Sandbox {
   const sideDir = (name: string) => {
     sides.add(name);
     const dir = join(root, name);
-    if (!existsSync(dir)) cpSync(seed, dir, { recursive: true });
+    // Times kept, so a file the seed backdated stays old.
+    if (!existsSync(dir)) {
+      cpSync(seed, dir, { recursive: true, preserveTimestamps: true });
+    }
     return dir;
   };
 
