@@ -1,6 +1,6 @@
 // Names for worktree directories: adjective-animal pairs, or Animal
 // Crossing characters with a face on Nookipedia when the device's
-// doubutsuNames setting is on. A name in `used` is never picked; when
+// doubutsuNames setting is on. A name in `used` is never picked. When
 // the pool runs out, a random name gets the first free -2, -3, ...
 import * as Effect from "effect/Effect";
 import * as Random from "effect/Random";

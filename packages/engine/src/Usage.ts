@@ -6,7 +6,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 // The use logs the sorts rank by: a project's actions, a launcher's
 // opens, a package script's runs. A use older than the window still
-// counts as the last use; only the count is windowed.
+// counts as the last use. Only the count is windowed.
 export type UseLog = "project" | "launcher" | "script";
 
 export type UseStat = {

@@ -89,7 +89,7 @@ export function isManagedPath(
 }
 
 // Where new worktrees go. Custom without a path falls back to the
-// managed root under the data dir; the device's managedOnProjectDrive
+// managed root under the data dir, and the device's managedOnProjectDrive
 // setting moves the managed-root layout onto the project's external
 // drive.
 export function worktreeBase(
