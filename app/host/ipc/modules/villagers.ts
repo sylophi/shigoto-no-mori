@@ -1,12 +1,12 @@
 import { villagersContract } from "@shigomori/contracts/modules/villagers";
 import type { Handlers } from "@shigomori/contracts/types";
-import { villagerData } from "@host/lib/villagers";
+import { call as onData } from "@host/lib/villagers";
 
 export const villagersHandlers: Handlers<typeof villagersContract> = {
-  status: () => villagerData().status(),
-  download: () => villagerData().start(),
-  cancel: () => villagerData().cancel(),
-  remove: () => villagerData().remove(),
-  face: ({ slug }) => villagerData().face(slug),
-  profiles: () => villagerData().profiles(),
+  status: () => onData((data) => data.status),
+  download: () => onData((data) => data.start),
+  cancel: () => onData((data) => data.cancel),
+  remove: () => onData((data) => data.remove),
+  face: ({ slug }) => onData((data) => data.face(slug)),
+  profiles: () => onData((data) => data.profiles),
 };

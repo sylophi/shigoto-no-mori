@@ -8,18 +8,25 @@ import * as Processes from "../util/processes";
 // timeout.
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+interface GhOptions {
+  readonly cwd?: string;
+  readonly maxBuffer?: number;
+  readonly timeout?: number;
+}
+
 // Every gh spawn funnels through here. Fails with a CommandError.
+export const gh = (args: readonly string[], options: GhOptions = {}) =>
+  Processes.exec("gh", args, {
+    cwd: options.cwd,
+    timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
+    maxOutputBytes: options.maxBuffer,
+  });
+
 export function execGh(
   args: string[],
-  options: { cwd?: string; maxBuffer?: number; timeout?: number } = {},
+  options: GhOptions = {},
 ): Promise<{ stdout: string; stderr: string }> {
-  return Processes.run(
-    Processes.exec("gh", args, {
-      cwd: options.cwd,
-      timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
-      maxOutputBytes: options.maxBuffer,
-    }),
-  );
+  return Processes.run(gh(args, options));
 }
 
 // gh's stderr tends to be one long line with a `gh:` prefix; the rest

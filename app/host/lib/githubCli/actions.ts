@@ -9,7 +9,7 @@ import { hasCommit } from "../git/refs";
 import { isCommandError, stderrOf } from "../util/processes";
 import { execGh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
-import { ghReady } from "./readiness";
+import { ghReady } from "./GithubCli";
 import { remoteNameForUrl } from "./remote";
 
 // Every action here shares one policy: gate on readiness, then rethrow

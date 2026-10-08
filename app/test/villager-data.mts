@@ -35,7 +35,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createVillagerData, type VillagerData } from "@host/lib/villagers";
+import * as Effect from "effect/Effect";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Villagers from "@host/lib/villagers";
 import type {
   VillagerDataStatus,
   VillagerKind,
@@ -50,7 +52,7 @@ import {
   villageLifeRow,
   villagerDataView,
 } from "@/components/settings/villagerDataView";
-import { afterAll, beforeAll, it } from "vitest";
+import { afterAll, afterEach, beforeAll, it } from "vitest";
 import { waitFor } from "./lib/checkKit.mts";
 
 let sandbox: string;
@@ -59,6 +61,12 @@ beforeAll(() => {
 });
 afterAll(() => {
   rmSync(sandbox, { recursive: true, force: true });
+});
+// Every case's services, closed after it.
+const runtimes: ManagedRuntime.ManagedRuntime<Villagers.VillagerData, never>[] =
+  [];
+afterEach(async () => {
+  await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()));
 });
 let dirCount = 0;
 const freshDir = () => join(sandbox, `data-${++dirCount}`);
@@ -240,15 +248,34 @@ function fakeWiki(characters: Character[]) {
 function town(characters = TOWN, dir = freshDir()) {
   const wiki = fakeWiki(characters);
   const manifest = manifestFor(characters);
-  const data = createVillagerData({
-    dir: () => dir,
-    manifest,
-    fetch: wiki.fetch,
-  });
+  const runtime = ManagedRuntime.make(
+    Villagers.layer({ dir: () => dir, manifest, fetch: wiki.fetch }),
+  );
+  runtimes.push(runtime);
+  const on = <A,>(
+    f: (service: Villagers.VillagerData["Service"]) => Effect.Effect<A>,
+  ) =>
+    runtime.runPromise(
+      Effect.gen(function* () {
+        return yield* f(yield* Villagers.VillagerData);
+      }),
+    );
+  const data = {
+    status: () => on((service) => service.status),
+    start: () => on((service) => service.start),
+    settled: () => on((service) => service.settled),
+    cancel: () => on((service) => service.cancel),
+    remove: () => on((service) => service.remove),
+    face: (slug: string) => on((service) => service.face(slug)),
+    profiles: () => on((service) => service.profiles),
+  };
   return { dir, wiki, manifest, data, characters };
 }
 
-async function doneReaches(data: VillagerData, count: number) {
+async function doneReaches(
+  data: ReturnType<typeof town>["data"],
+  count: number,
+) {
   await waitFor(async () => {
     const status = await data.status();
     return "done" in status && status.done === count;

@@ -1,19 +1,9 @@
-import { readFile } from "node:fs/promises";
+// Git remotes read as GitHub repos: host, owner and name from a URL,
+// and back from a repo to the remote that points at it.
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { listRemoteEntries } from "../git/remotes";
-import { ttlMapCache, ttlValueCache } from "../util/ttlCache";
-import { ghReady } from "./readiness";
 import { envSetting } from "@shared/config";
-
-// Per-repo gate for any path that would shell out to gh. Without this,
-// non-github repos eat the full TanStack retry budget on every worktree
-// open: gh exits non-zero with "could not determine OWNER, REPO" and the
-// query backs off 1s + 2s + 4s before settling. The cache TTL is short
-// because users do occasionally `git remote add` mid-session, but long
-// enough that the sidebar + open worktree + repo-config queries all
-// share one probe.
-const GH_REPO_TTL_MS = 5 * 60_000;
+import { listRemoteEntries } from "../git/remotes";
 
 export interface GithubRepoInfo {
   // Hostname only, matched against the gh hosts.yml set.
@@ -26,34 +16,10 @@ export interface GithubRepoInfo {
   repo: string;
 }
 
-const KNOWN_HOSTS_TTL_MS = 60 * 60_000;
-
-// gh stores logged-in hosts in a top-level YAML map. We only need the
-// keys, so a regex over "<host>:" lines is enough. Pulling in a YAML
-// parser for this would be overkill. github.com is always allowed even
-// if the file is missing (most users) or unreadable.
-const knownHostsCache = ttlValueCache<Set<string>>(
-  KNOWN_HOSTS_TTL_MS,
-  async () => {
-    const hosts = new Set<string>(["github.com"]);
-    try {
-      const content = await readFile(ghHostsPath(), "utf-8");
-      for (const line of content.split("\n")) {
-        const m = line.match(/^([^\s:#]+):\s*$/);
-        if (m?.[1]) hosts.add(m[1]);
-      }
-    } catch {
-      // hosts.yml may not exist yet (fresh install) or live in an
-      // unexpected location; the github.com fallback covers the common case.
-    }
-    return hosts;
-  },
-);
-
 // Mirrors gh's own config-dir precedence: GH_CONFIG_DIR beats
 // XDG_CONFIG_HOME beats ~/.config/gh. Diverging from gh here would make
 // GHE hosts silently unrecognized for users who set either variable.
-function ghHostsPath(): string {
+export function ghHostsPath(): string {
   const override = envSetting("GH_CONFIG_DIR");
   if (override) return join(override, "hosts.yml");
   const xdg = envSetting("XDG_CONFIG_HOME");
@@ -73,7 +39,7 @@ function normalizeHost(host: string): string {
 // Parses a git remote URL into host/owner/repo. Accepts ssh shorthand
 // (`git@host:owner/repo`) and any URL with a scheme (https, ssh, git, ...).
 // Returns null when the URL isn't shaped like a remote we can resolve.
-function parseRemoteUrl(url: string): GithubRepoInfo | null {
+export function parseRemoteUrl(url: string): GithubRepoInfo | null {
   const ssh = url.match(/^[^@\s]+@([^:\s]+):([^/\s]+)\/([^/\s]+)$/);
   if (ssh?.[1] && ssh[2] && ssh[3]) {
     const repo = ssh[3].replace(/\.git$/, "");
@@ -102,28 +68,6 @@ function parseRemoteUrl(url: string): GithubRepoInfo | null {
     owner,
     repo,
   };
-}
-
-// First remote URL whose host matches a known GitHub host. One probe
-// covers both the "is this a GitHub repo?" gate (ghReadyForRepo) and
-// the web URL builder, since both fire on every worktree open.
-const githubRepoCache = ttlMapCache<string, GithubRepoInfo | null>(
-  GH_REPO_TTL_MS,
-  async (cwd) => {
-    const [remotes, hosts] = await Promise.all([
-      listRemoteEntries(cwd),
-      knownHostsCache.get(),
-    ]);
-    for (const { url } of remotes) {
-      const parsed = parseRemoteUrl(url);
-      if (parsed && hosts.has(parsed.host)) return parsed;
-    }
-    return null;
-  },
-);
-
-export function getGithubRepoInfo(cwd: string): Promise<GithubRepoInfo | null> {
-  return githubRepoCache.get(cwd);
 }
 
 // The remote pointing at the repo `url` belongs to, by name. Fetching a
@@ -157,12 +101,4 @@ export async function remoteNameForUrl(
 
 function sameName(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
-}
-
-// Combined gate for read paths: gh itself ready, AND this specific repo
-// has a remote gh can resolve. Mutations keep ghReady() so their error
-// messages can stay specific.
-export async function ghReadyForRepo(cwd: string): Promise<boolean> {
-  if (!(await ghReady())) return false;
-  return (await getGithubRepoInfo(cwd)) !== null;
 }

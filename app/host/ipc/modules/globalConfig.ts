@@ -10,7 +10,7 @@ import {
   readGlobalConfigFresh,
   withGlobalConfigWriteLock,
 } from "@host/lib/config/global";
-import { invalidateTerrierCaches } from "@host/lib/terrier";
+import { invalidateTerrierReadiness } from "@host/lib/terrier";
 import { type ClearingWrite, globalConfigWriteViaCli } from "../cliDelegate";
 
 // A patched value equal to the key's default is stored by omission, so
@@ -71,6 +71,6 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
       // The terrier toggle may have flipped: re-probe its readiness on
       // the next ask. (The merge itself is the CLI's, read fresh on
       // every project list.)
-      invalidateTerrierCaches();
+      await invalidateTerrierReadiness();
     }),
 };
