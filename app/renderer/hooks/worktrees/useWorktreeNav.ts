@@ -139,7 +139,7 @@ export function useWorktreeNav() {
     },
 
     // Where "leave this worktree's pages" lands. While the sidebar
-    // shows the inbox, its newest work, whichever device that is, other
+    // shows the inbox, its top worktree, whichever device that is, other
     // than the worktrees `gone` from the scoped device (the page's own,
     // and whatever left with it). Otherwise the root for every device:
     // a peer's worktree has no place of its own to fall back to, and

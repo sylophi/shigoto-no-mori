@@ -30,11 +30,11 @@ export function inboxShowing(): boolean {
   return store.get() !== null;
 }
 
-// The inbox's newest work (its top worktree row) on a device that can
-// be reached, or undefined when there is none or the inbox isn't
-// showing. `gone` names worktrees on `device` (undefined for this
-// machine), since a worktree id is only unique per device: a repo at
-// the same path on two machines has the same id on both.
+// The inbox's top worktree row (its newest work, or a group's) on a
+// device that can be reached, or undefined when there is none or the
+// inbox isn't showing. `gone` names worktrees on `device` (undefined
+// for this machine), since a worktree id is only unique per device: a
+// repo at the same path on two machines has the same id on both.
 export function inboxTopRow(
   device: string | undefined,
   gone: readonly string[],

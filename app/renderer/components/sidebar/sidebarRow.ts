@@ -165,6 +165,15 @@ export type SidebarRow =
       shelf: InboxShelf;
       count: number;
       expanded: boolean;
+    }
+  // The head of the inbox's live work gathered by a prefix, the
+  // inbox's "worktree-group".
+  | {
+      kind: "inbox-group";
+      key: string;
+      prefix: string;
+      count: number;
+      expanded: boolean;
     };
 
 // What a view hands the sidebar shell. Both row builders produce this,
@@ -212,6 +221,7 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "shelved-toggle": 24,
   "inbox-worktree": 66,
   "inbox-shelf": 36,
+  "inbox-group": 36,
   "remote-worktree": 49,
 };
 
@@ -257,5 +267,6 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   "shelved-toggle": "px-2",
   "inbox-worktree": WORKTREE_ROW_GAP,
   "inbox-shelf": "px-2 pb-1",
+  "inbox-group": "px-2 pb-1",
   "remote-worktree": WORKTREE_ROW_GAP,
 };
