@@ -63,10 +63,10 @@ import { appFoldersOf, decodedLaunchers } from "./Launchers.ts";
 import * as Layout from "./Layout.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
+import { pidAlive } from "./processes.ts";
 import * as Registry from "./Registry.ts";
 import {
   acquireStagingLock,
-  pidAlive,
   StagingLockUnavailable,
   stagingHolder,
   stagingLockPath,

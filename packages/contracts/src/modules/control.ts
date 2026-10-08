@@ -58,11 +58,15 @@ const DeviceQuerySchema = Schema.optional(
 
 // The leave-out rule by name. Absent is the project's saved rule, what
 // the review step opens on.
-const ControlLeaveOutSchema = Schema.Literals(["nothing", "gitignored"]);
+export const ControlLeaveOutSchema = Schema.Literals(["nothing", "gitignored"]);
 
 // What becomes of the source once a transplant landed, the finish
 // step's three fates. Never read for a mirror, whose source stays.
-const ControlSourceFateSchema = Schema.Literals(["keep", "shelve", "teardown"]);
+export const ControlSourceFateSchema = Schema.Literals([
+  "keep",
+  "shelve",
+  "teardown",
+]);
 
 const TransferOptionsSchema = Schema.Struct({
   device: DeviceQuerySchema,
@@ -263,7 +267,7 @@ export const controlContract = defineContract(
 
 // The failure codes a control op's refusal carries across the wire, so
 // the CLI keys its exit handling on the code and not on the prose.
-const CONTROL_ERROR_CODES = [
+export const CONTROL_ERROR_CODES = [
   "no-device",
   "ambiguous-device",
   "device-blocked",

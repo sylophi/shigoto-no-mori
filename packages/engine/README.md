@@ -1,6 +1,6 @@
 # engine
 
-The data model and the store, git, worktrees, landing, doctor and the updater, as Effect services with no Electron import. It replaces the Go CLI in `cli/` and takes `app/host/lib/git`, `projects`, `config`, `worktrees` and `app/shared/git` in step 2 of `V3.md`.
+The data model and the store, git, worktrees, landing, the cross-device verbs, doctor and the updater, as Effect services with no Electron import. It replaces the Go CLI in `cli/` and takes `app/host/lib/git`, `projects`, `config`, `worktrees` and `app/shared/git` in step 2 of `V3.md`.
 
 - `src/`: one module per service, named for it (`Store.ts`), shaped as `EFFECT.md` section 2 says, and its pure helpers beside it in lowercase modules. Consumers import a module by its name: `@shigomori/engine/Store`.
 - `src/layer.ts`: the engine's layer graph (`engineLayer`), built once per process by the terminal, the host and the parity sandbox.
