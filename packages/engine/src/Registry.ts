@@ -1,13 +1,14 @@
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import * as Context from "effect/Context";
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Identity from "./Identity.ts";
 import * as Usage from "./Usage.ts";
+import { worktreeIdFromPath } from "./worktreeLayout.ts";
 
 // A project as the registry holds it.
 export type RegisteredProject = {
@@ -18,13 +19,6 @@ export type RegisteredProject = {
 
 // The marks a worktree can carry, keyed by its path-derived id.
 export type WorktreeMark = "shelved" | "autoPull";
-
-// What a shelved worktree looked like when it went on the shelf.
-export type ShelfSnapshot = {
-  readonly at: number;
-  readonly head: string | null;
-  readonly changed: number;
-};
 
 export class ProjectAlreadyAdded extends Schema.TaggedError<ProjectAlreadyAdded>()(
   "ProjectAlreadyAdded",
@@ -83,11 +77,6 @@ export class Registry extends Context.Service<
     // Carries the marks of a moved checkout to its new id. The shelf
     // snapshot stays behind: a move can give every file a fresh mtime.
     readonly moveWorktree: (from: string, to: string) => Effect.Effect<void>;
-    readonly shelfSnapshots: Effect.Effect<ReadonlyMap<string, ShelfSnapshot>>;
-    readonly setShelfSnapshot: (
-      worktreeId: string,
-      snapshot: ShelfSnapshot | null,
-    ) => Effect.Effect<void>;
     // The id this data dir goes by, minted on first ask.
     readonly deviceId: Effect.Effect<string>;
   }
@@ -133,26 +122,13 @@ export function keepUnlisted(
 const UUID_SHAPE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// 16 random bytes as a UUID-shaped string, no version bits.
-const randomId = Effect.gen(function* () {
-  const bytes = yield* Effect.forEach(Array.from({ length: 16 }), () =>
-    Random.nextIntBetween(0, 256, { halfOpen: true }),
-  );
-  const hex = bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20),
-  ].join("-");
-});
-
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const fs = yield* FileSystem.FileSystem;
   const identity = yield* Identity.Identity;
   const usage = yield* Usage.Usage;
+  const crypto = yield* Crypto.Crypto;
+  const randomId = Effect.orDie(crypto.randomUUIDv4);
 
   const projects = sql<RegisteredProject>`
     SELECT id, name, path FROM projects ORDER BY position`.pipe(
@@ -200,6 +176,12 @@ const make = Effect.gen(function* () {
           yield* sql`DELETE FROM projects WHERE id = ${projectId}`;
           yield* sql`DELETE FROM project_config WHERE project_id = ${projectId}`;
           yield* sql`DELETE FROM worktree_data WHERE project_id = ${projectId}`;
+          // What is kept by the project's path, which would greet a
+          // re-add: its place in the order, its primary's marks.
+          yield* sql`DELETE FROM project_order WHERE path = ${project.path}`;
+          const primary = worktreeIdFromPath(project.path);
+          yield* sql`DELETE FROM worktree_marks WHERE worktree_id = ${primary}`;
+          yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${primary}`;
           return { id: project.id, name: project.name, path: project.path };
         }),
       )
@@ -285,15 +267,19 @@ const make = Effect.gen(function* () {
     worktreeId: string,
     on: boolean,
   ) {
-    yield* on
-      ? sql`INSERT INTO worktree_marks (worktree_id, mark)
-            VALUES (${worktreeId}, ${mark}) ON CONFLICT DO NOTHING`
-      : sql`DELETE FROM worktree_marks
-            WHERE worktree_id = ${worktreeId} AND mark = ${mark}`;
-    // A fresh shelf starts from a fresh snapshot.
-    if (mark === "shelved") {
-      yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${worktreeId}`;
-    }
+    yield* sql.withTransaction(
+      Effect.gen(function* () {
+        yield* on
+          ? sql`INSERT INTO worktree_marks (worktree_id, mark)
+                VALUES (${worktreeId}, ${mark}) ON CONFLICT DO NOTHING`
+          : sql`DELETE FROM worktree_marks
+                WHERE worktree_id = ${worktreeId} AND mark = ${mark}`;
+        // A fresh shelf starts from a fresh snapshot.
+        if (mark === "shelved") {
+          yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${worktreeId}`;
+        }
+      }),
+    );
   }, Effect.orDie);
 
   const forgetWorktree = Effect.fn("Registry.forgetWorktree")(function* (
@@ -315,37 +301,6 @@ const make = Effect.gen(function* () {
         sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${from}`,
       ]),
     );
-  }, Effect.orDie);
-
-  const shelfSnapshots = sql<{
-    worktree_id: string;
-    at: number;
-    head: string | null;
-    changed: number;
-  }>`SELECT worktree_id, at, head, changed FROM shelf_snapshots`.pipe(
-    Effect.map(
-      (found) =>
-        new Map(
-          found.map(({ worktree_id, at, head, changed }) => [
-            worktree_id,
-            { at, head, changed },
-          ]),
-        ),
-    ),
-    Effect.orDie,
-    Effect.withSpan("Registry.shelfSnapshots"),
-  );
-
-  const setShelfSnapshot = Effect.fn("Registry.setShelfSnapshot")(function* (
-    worktreeId: string,
-    snapshot: ShelfSnapshot | null,
-  ) {
-    yield* snapshot === null
-      ? sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${worktreeId}`
-      : sql`INSERT INTO shelf_snapshots (worktree_id, at, head, changed)
-            VALUES (${worktreeId}, ${snapshot.at}, ${snapshot.head}, ${snapshot.changed})
-            ON CONFLICT (worktree_id) DO UPDATE SET
-              at = excluded.at, head = excluded.head, changed = excluded.changed`;
   }, Effect.orDie);
 
   // A stored id that isn't UUID-shaped is replaced, inside one
@@ -376,8 +331,6 @@ const make = Effect.gen(function* () {
     setMark,
     forgetWorktree,
     moveWorktree,
-    shelfSnapshots,
-    setShelfSnapshot,
     deviceId,
   });
 });

@@ -61,45 +61,40 @@ const make = Effect.gen(function* () {
     );
   }, Effect.orDie);
 
+  // Each group's newest use and its uses within the window.
+  const grouped = (log: UseLog, by: "name" | "scope", within: string) =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const rows = yield* sql<{
+        key: string;
+        lastUsed: number;
+        recentCount: number;
+      }>`SELECT ${sql(by)} AS key, max(at) AS lastUsed,
+            count(CASE WHEN at >= ${now - USE_WINDOW_MS} THEN 1 END) AS recentCount
+          FROM usage WHERE log = ${log}
+            AND ${sql(by === "name" ? "scope" : "name")} = ${within}
+          GROUP BY ${sql(by)}`;
+      return new Map(
+        rows.map(({ key, lastUsed, recentCount }) => [
+          key,
+          { lastUsed, recentCount },
+        ]),
+      );
+    }).pipe(Effect.orDie);
+
   const stats = Effect.fn("Usage.stats")(function* (
     log: UseLog,
     scope: string,
   ) {
-    const now = yield* Clock.currentTimeMillis;
-    const rows = yield* sql<{
-      name: string;
-      lastUsed: number;
-      recentCount: number;
-    }>`SELECT name, max(at) AS lastUsed,
-          count(CASE WHEN at >= ${now - USE_WINDOW_MS} THEN 1 END) AS recentCount
-        FROM usage WHERE log = ${log} AND scope = ${scope} GROUP BY name`;
-    return new Map(
-      rows.map(({ name, lastUsed, recentCount }) => [
-        name,
-        { lastUsed, recentCount },
-      ]),
-    );
-  }, Effect.orDie);
+    return yield* grouped(log, "name", scope);
+  });
 
   const statsByScope = Effect.fn("Usage.statsByScope")(function* (
     log: UseLog,
     name: string,
   ) {
-    const now = yield* Clock.currentTimeMillis;
-    const rows = yield* sql<{
-      scope: string;
-      lastUsed: number;
-      recentCount: number;
-    }>`SELECT scope, max(at) AS lastUsed,
-          count(CASE WHEN at >= ${now - USE_WINDOW_MS} THEN 1 END) AS recentCount
-        FROM usage WHERE log = ${log} AND name = ${name} GROUP BY scope`;
-    return new Map(
-      rows.map(({ scope, lastUsed, recentCount }) => [
-        scope,
-        { lastUsed, recentCount },
-      ]),
-    );
-  }, Effect.orDie);
+    return yield* grouped(log, "scope", name);
+  });
 
   return Usage.of({ record, stats, statsByScope });
 });

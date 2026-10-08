@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
 import * as Registry from "../src/Registry.ts";
+import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -80,34 +81,36 @@ it("stores a reorder whole, keeping paths it doesn't list in place", async () =>
   assert.equal(await run((r) => r.reorder(listed, ["a"])), false);
 });
 
-it("marks worktrees, carries the marks on a move and drops the snapshot", async () => {
+it("marks worktrees, carries the marks on a move and forgets them with the id", async () => {
   const marks = await run((r) =>
     Effect.gen(function* () {
       yield* r.setMark("shelved", "old", true);
       yield* r.setMark("autoPull", "old", true);
-      yield* r.setShelfSnapshot("old", { at: 1, head: null, changed: 0 });
       yield* r.moveWorktree("old", "new");
       yield* r.setMark("autoPull", "other", true);
       yield* r.forgetWorktree("other");
       return [
         [...(yield* r.marked("shelved"))],
         [...(yield* r.marked("autoPull"))],
-        [...(yield* r.shelfSnapshots).keys()],
       ];
     }),
   );
-  assert.deepEqual(marks, [["new"], ["new"], []]);
+  assert.deepEqual(marks, [["new"], ["new"]]);
 });
 
-it("starts a shelf from a fresh snapshot", async () => {
-  const snapshots = await run((r) =>
+it("drops what a removed project's path kept: its place and its primary's marks", async () => {
+  box.write("registry.json", {
+    projects: [project("A"), project("B")],
+    projectOrder: ["/r/B", "/r/A"],
+  });
+  const left = await run((r) =>
     Effect.gen(function* () {
-      yield* r.setShelfSnapshot("w", { at: 1, head: "abc", changed: 2 });
-      yield* r.setMark("shelved", "w", true);
-      return (yield* r.shelfSnapshots).size;
+      yield* r.setMark("shelved", worktreeIdFromPath("/r/A"), true);
+      yield* r.unregister("A");
+      return [yield* r.order, [...(yield* r.marked("shelved"))]];
     }),
   );
-  assert.equal(snapshots, 0);
+  assert.deepEqual(left, [["/r/B"], []]);
 });
 
 it("keeps a device id once minted, and replaces one that isn't UUID-shaped", async () => {

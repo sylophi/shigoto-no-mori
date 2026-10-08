@@ -245,12 +245,6 @@ const lookupKey = (scope: ConfigScope, name: string) => {
       );
 };
 
-const changedDoc = (doc: ConfigDoc, change: (doc: ConfigDoc) => void) => {
-  const next = structuredClone(doc);
-  change(next);
-  return next;
-};
-
 const missingBranch = (doc: ConfigDoc) => {
   const [branch] = docGet(doc, "defaultBranch");
   return typeof branch !== "string" || branch.trim() === "";
@@ -351,17 +345,15 @@ const make = Effect.gen(function* () {
   // project's document keeps its default branch, from git when the
   // write would leave it out, and one on the in-project layout hides
   // `.shigomori/` from the primary's git status.
-  const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) =>
-    Effect.gen(function* () {
-      // Asked of git before the write, which holds the store's lock.
-      const fallbackBranch =
-        scope.kind === "project" && missingBranch(yield* changed(scope, change))
-          ? yield* git.resolveDefaultBranch(scope.path)
-          : Option.none<string>();
-      const inProject = yield* sql.withTransaction(
+  const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) => {
+    // One try at the write. Without a default branch it fails, unless
+    // git named one to fill in.
+    const attempt = (fallbackBranch: Option.Option<string>) =>
+      sql.withTransaction(
         Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
-          const next = changedDoc(before, change);
+          const next = structuredClone(before);
+          change(next);
           if (scope.kind === "project" && missingBranch(next)) {
             if (Option.isNone(fallbackBranch)) {
               return yield* new MissingDefaultBranch({
@@ -374,14 +366,30 @@ const make = Effect.gen(function* () {
           return docGet(next, "worktreeLayout")[0] === "in-project";
         }),
       );
-      if (scope.kind === "project" && inProject) {
-        yield* git.appendExcludes(scope.path, [".shigomori"]);
-      }
-    }).pipe(Effect.catchTags({ SqlError: Effect.die }));
-
-  // The document a change leaves, as of now.
-  const changed = (scope: ConfigScope, change: (doc: ConfigDoc) => void) =>
-    Effect.map(load(scope), (doc) => changedDoc(doc ?? {}, change));
+    return attempt(Option.none()).pipe(
+      // Git is asked outside the write, which holds the store's lock.
+      Effect.catchTags({
+        MissingDefaultBranch: (missing) =>
+          scope.kind === "project"
+            ? git
+                .resolveDefaultBranch(scope.path)
+                .pipe(
+                  Effect.flatMap((found) =>
+                    Option.isSome(found)
+                      ? attempt(found)
+                      : Effect.fail(missing),
+                  ),
+                )
+            : Effect.fail(missing),
+      }),
+      Effect.tap((inProject) =>
+        scope.kind === "project" && inProject
+          ? git.appendExcludes(scope.path, [".shigomori"])
+          : Effect.void,
+      ),
+      Effect.catchTags({ SqlError: Effect.die }),
+    );
+  };
 
   // A `~/` path, joined to the home directory and cleaned as Go's
   // filepath.Join cleans it.

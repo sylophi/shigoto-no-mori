@@ -47,6 +47,7 @@ import {
   subcommandOf,
   type WorktreeEntry,
 } from "./gitParse.ts";
+import { isNotFound } from "./platformErrors.ts";
 
 // --- errors -----------------------------------------------------------
 
@@ -1230,9 +1231,11 @@ const make = Effect.gen(function* () {
         "--git-path",
         "info/exclude",
       ]).pipe(Effect.map((stdout) => stdout.trim()));
+      // Only a file that isn't there yet reads as empty: rewriting one
+      // that couldn't be read would lose the user's lines.
       const existing = yield* fs
         .readFileString(excludeFile)
-        .pipe(Effect.orElseSucceed(() => ""));
+        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed("")));
       const lines = new Set(existing.split("\n"));
       const added = paths
         .map((entry) => `/${escapeGitignorePattern(entry)}`)

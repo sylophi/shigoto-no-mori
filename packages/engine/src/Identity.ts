@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Git from "./Git.ts";
-import { orderRemotesByPrecedence } from "./gitParse.ts";
+import { orderRemotesByPrecedence, pickDefaultRef } from "./gitParse.ts";
 
 // What makes the same project on two devices the same repo. Derived,
 // never stored.
@@ -59,12 +59,16 @@ const make = Effect.gen(function* () {
         "--is-shallow-repository",
       ]);
       if (shallow.trim() !== "false") return Option.none<string>();
-      const ref = yield* git.resolveDefaultRef(projectPath);
-      if (Option.isNone(ref)) return Option.none<string>();
+      const ref = pickDefaultRef(
+        yield* git.branchRefs(projectPath),
+        undefined,
+        yield* git.listRemotes(projectPath),
+      );
+      if (ref === undefined) return Option.none<string>();
       const roots = (yield* git.run(projectPath, [
         "rev-list",
         "--max-parents=0",
-        ref.value,
+        ref,
         "--",
       ]))
         .split("\n")

@@ -1,7 +1,13 @@
 // Where a project's worktrees live, as path math: the managed root
 // under the data dir, the in-project folder, a custom base, and the
 // project's own external drive.
+import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
+
+// A worktree's id: a hash of its path, an on-disk format fixed for good
+// (marks and the per-worktree files are keyed by it).
+export const worktreeIdFromPath = (path: string) =>
+  createHash("sha256").update(path).digest("hex").slice(0, 12);
 
 // The settings the layout reads: the project's and the device's.
 export type LayoutSettings = {
