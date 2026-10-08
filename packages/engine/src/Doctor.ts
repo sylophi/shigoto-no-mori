@@ -1385,35 +1385,6 @@ const make = Effect.gen(function* () {
 
   // --- projects ---
 
-  // The repository `dir` is in: its common dir and its primary checkout,
-  // which the common dir names even from a linked worktree. None outside
-  // a work tree. To become Git.locate once that lands.
-  const locateRepo = (dir: string) =>
-    git
-      .run(dir, [
-        "rev-parse",
-        "--path-format=absolute",
-        "--show-toplevel",
-        "--git-common-dir",
-      ])
-      .pipe(
-        Effect.map((stdout) => {
-          const [toplevel, commonDir] = stdout.trim().split("\n");
-          if (toplevel === undefined || commonDir === undefined) {
-            return Option.none<{ commonDir: string; primaryPath: string }>();
-          }
-          const common = commonDir.trim();
-          return Option.some({
-            commonDir: common,
-            primaryPath:
-              path.basename(common) === ".git" ? path.dirname(common) : common,
-          });
-        }),
-        Effect.orElseSucceed(() =>
-          Option.none<{ commonDir: string; primaryPath: string }>(),
-        ),
-      );
-
   const unregisterHint = (project: ListedProject) =>
     project.source === "terrier"
       ? `\`terrier rm ${project.name}\``
@@ -1464,7 +1435,7 @@ const make = Effect.gen(function* () {
           ),
         );
       }
-      const repo = yield* locateRepo(project.path);
+      const repo = yield* git.locate(project.path);
       if (Option.isNone(repo)) {
         // A bare repo has no work tree to find, and no primary to compare
         // against. Its linked worktrees are checked like any others.
@@ -1532,7 +1503,7 @@ const make = Effect.gen(function* () {
           if (known.has(dir) || !isDirMode(entry.mode)) continue;
           // A sibling project with the same folder name shares a managed
           // base, so only a stray whose metadata points back here counts.
-          const repo = yield* locateRepo(dir);
+          const repo = yield* git.locate(dir);
           if (Option.isSome(repo) && repo.value.primaryPath !== project.path) {
             continue;
           }

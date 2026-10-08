@@ -50,6 +50,11 @@ export class UnknownConfigKey extends Schema.TaggedError<UnknownConfigKey>()(
   "UnknownConfigKey",
   { key: Schema.String, keys: Schema.Array(Schema.String) },
 ) {
+  // The command line was what was wrong.
+  get usage(): boolean {
+    return true;
+  }
+
   override get message(): string {
     // The settings that moved into the app's client settings get a
     // pointer to their new home.
@@ -78,6 +83,11 @@ export class InvalidConfigValue extends Schema.TaggedError<InvalidConfigValue>()
     choices: Schema.Array(Schema.String),
   },
 ) {
+  // The command line was what was wrong.
+  get usage(): boolean {
+    return true;
+  }
+
   override get message(): string {
     switch (this.reason) {
       case "boolean":
@@ -107,6 +117,11 @@ export class StructuredConfigKey extends Schema.TaggedError<StructuredConfigKey>
     binaryName: Schema.String,
   },
 ) {
+  // The command line was what was wrong.
+  get usage(): boolean {
+    return true;
+  }
+
   override get message(): string {
     const or = this.orTheApp ? " or the app" : "";
     return `${this.key} is structured: use \`${this.binaryName} ${this.verbs}\`${or}.`;

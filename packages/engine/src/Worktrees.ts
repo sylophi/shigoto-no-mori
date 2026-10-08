@@ -225,7 +225,7 @@ export type Listing<A> = {
 // of the unregistered repository it sits in.
 export type Here = {
   readonly cwd: string;
-  readonly projects: ReadonlyArray<RegisteredProject>;
+  readonly projects: ReadonlyArray<Registry.ListedProject>;
   readonly current: Located | undefined;
   readonly unregisteredRepo: string | undefined;
 };
@@ -631,11 +631,11 @@ export class Worktrees extends Context.Service<
     readonly resolveProject: (
       here: Here,
       ref: string | undefined,
-    ) => Effect.Effect<RegisteredProject, TargetError>;
+    ) => Effect.Effect<Registry.ListedProject, TargetError>;
     readonly resolveProjectById: (
       here: Here,
       projectId: string,
-    ) => Effect.Effect<RegisteredProject, Registry.UnknownProject>;
+    ) => Effect.Effect<Registry.ListedProject, Registry.UnknownProject>;
     // The worktree a command means. The reserved names root and primary
     // are the project's primary checkout.
     readonly resolve: (
@@ -1483,33 +1483,6 @@ const make = Effect.gen(function* () {
       binary,
     });
 
-  // The worktree's root and its repository's primary checkout, from one
-  // git: the common dir points at the primary's .git even from a linked
-  // worktree.
-  const locateRepo = (dir: string) =>
-    git
-      .run(dir, [
-        "rev-parse",
-        "--path-format=absolute",
-        "--show-toplevel",
-        "--git-common-dir",
-      ])
-      .pipe(
-        Effect.map((stdout) => {
-          const [toplevel, commonDir] = stdout.trim().split("\n");
-          if (toplevel === undefined || commonDir === undefined) {
-            return Option.none();
-          }
-          const common = commonDir.trim();
-          return Option.some({
-            toplevel: toplevel.trim(),
-            primaryPath:
-              path.basename(common) === ".git" ? path.dirname(common) : common,
-          });
-        }),
-        Effect.orElseSucceed(() => Option.none()),
-      );
-
   // The worktree at `toplevel` among the projects whose primary is
   // `primaryPath`. `owned` tells "not a registered repo" from
   // "registered, but its worktrees unreadable".
@@ -1533,7 +1506,7 @@ const make = Effect.gen(function* () {
 
   const locate = Effect.fn("Worktrees.here")(function* (cwd: string) {
     const projects = yield* registry.listed;
-    const repo = yield* locateRepo(cwd);
+    const repo = yield* git.locate(cwd);
     if (Option.isNone(repo)) {
       return { cwd, projects, current: undefined, unregisteredRepo: undefined };
     }
@@ -1578,7 +1551,7 @@ const make = Effect.gen(function* () {
       const abs = absolute(here, ref);
       const exact = here.projects.find((project) => project.path === abs);
       if (exact) return exact;
-      const repo = yield* locateRepo(abs);
+      const repo = yield* git.locate(abs);
       const owner = Option.flatMapNullishOr(repo, ({ primaryPath }) =>
         here.projects.find((project) => project.path === primaryPath),
       );
@@ -1588,7 +1561,7 @@ const make = Effect.gen(function* () {
     const named = here.projects.filter(
       (project) => project.name.toLowerCase() === ref.toLowerCase(),
     );
-    if (named.length === 1) return named[0] as RegisteredProject;
+    if (named.length === 1) return named[0] as Registry.ListedProject;
     if (named.length > 1) {
       // Never guess: the path is how to say which.
       return yield* targetError(
@@ -1666,7 +1639,7 @@ const make = Effect.gen(function* () {
         Effect.orElseSucceed(() => false),
       );
       if (isDirectory) {
-        const repo = yield* locateRepo(abs);
+        const repo = yield* git.locate(abs);
         if (Option.isSome(repo)) {
           const { located } = yield* worktreeAt(
             here.projects,
@@ -2828,7 +2801,7 @@ const make = Effect.gen(function* () {
     }
     // Folded to the primary checkout, so a folder inside the repo or one
     // of its worktrees still lands on the repo.
-    const repo = yield* locateRepo(target);
+    const repo = yield* git.locate(target);
     if (Option.isNone(repo)) return yield* refuse("not-a-repo", target);
     const to = repo.value.primaryPath;
     if (to !== project.path) {

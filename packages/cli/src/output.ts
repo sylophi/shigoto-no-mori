@@ -29,6 +29,7 @@ export const styles = (color: boolean) => ({
   green: (text: string) => paint(text, "32", color),
   red: (text: string) => paint(text, "31", color),
   yellow: (text: string) => paint(text, "33", color),
+  cyan: (text: string) => paint(text, "36", color),
 });
 
 // An SGR escape: ESC, `[`, its parameters, `m`.

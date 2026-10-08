@@ -212,6 +212,18 @@ export class Git extends Context.Service<
       options?: RunOptions,
     ) => Effect.Effect<string, GitError>;
     readonly isRepo: (path: string) => Effect.Effect<boolean>;
+    // The checkout `dir` is in, its repository's common dir and its
+    // primary checkout, from one git: the common dir points at the
+    // primary's .git even from a linked worktree. None outside a
+    // repository.
+    readonly locate: (dir: string) => Effect.Effect<
+      Option.Option<{
+        readonly toplevel: string;
+        readonly commonDir: string;
+        readonly primaryPath: string;
+      }>
+    >;
+
     // --- worktrees ---
     // The admin dir a linked checkout's .git file names, none for a
     // primary checkout (whose .git is a directory) or a folder git never
@@ -1859,6 +1871,28 @@ const make = Effect.gen(function* () {
     isRepo: Effect.fn("Git.isRepo")(function* (repo) {
       return yield* succeeds(repo, ["rev-parse", "--git-dir"]);
     }),
+    locate: (dir) =>
+      run(dir, [
+        "rev-parse",
+        "--path-format=absolute",
+        "--show-toplevel",
+        "--git-common-dir",
+      ]).pipe(
+        Effect.map((stdout) => {
+          const [toplevel, commonDir] = stdout.trim().split("\n");
+          if (toplevel === undefined || commonDir === undefined) {
+            return Option.none();
+          }
+          const common = commonDir.trim();
+          return Option.some({
+            toplevel: toplevel.trim(),
+            commonDir: common,
+            primaryPath:
+              path.basename(common) === ".git" ? path.dirname(common) : common,
+          });
+        }),
+        Effect.orElseSucceed(() => Option.none()),
+      ),
     listWorktrees,
     addWorktree,
     checkoutWorktree,
