@@ -212,17 +212,25 @@ export class Git extends Context.Service<
       options?: RunOptions,
     ) => Effect.Effect<string, GitError>;
     readonly isRepo: (path: string) => Effect.Effect<boolean>;
-    // The checkout `dir` is in and its repository's primary checkout,
-    // from one git: the common dir points at the primary's .git even
-    // from a linked worktree. None outside a repository.
+    // The checkout `dir` is in, its repository's common dir and its
+    // primary checkout, from one git: the common dir points at the
+    // primary's .git even from a linked worktree. None outside a
+    // repository.
     readonly locate: (dir: string) => Effect.Effect<
       Option.Option<{
         readonly toplevel: string;
+        readonly commonDir: string;
         readonly primaryPath: string;
       }>
     >;
 
     // --- worktrees ---
+    // The admin dir a linked checkout's .git file names, none for a
+    // primary checkout (whose .git is a directory) or a folder git never
+    // registered.
+    readonly adminDirOf: (
+      worktreePath: string,
+    ) => Effect.Effect<Option.Option<string>>;
     readonly listWorktrees: (
       repo: string,
     ) => Effect.Effect<WorktreeEntry[], GitError>;
@@ -1848,6 +1856,18 @@ const make = Effect.gen(function* () {
 
   return Git.of({
     run,
+    adminDirOf: (worktreePath) =>
+      fs.readFileString(path.join(worktreePath, ".git")).pipe(
+        Effect.map((text) => {
+          const trimmed = text.trim();
+          if (!trimmed.startsWith("gitdir: ")) return Option.none<string>();
+          const dir = trimmed.slice("gitdir: ".length);
+          return Option.some(
+            path.isAbsolute(dir) ? dir : path.join(worktreePath, dir),
+          );
+        }),
+        Effect.orElseSucceed(() => Option.none<string>()),
+      ),
     isRepo: Effect.fn("Git.isRepo")(function* (repo) {
       return yield* succeeds(repo, ["rev-parse", "--git-dir"]);
     }),
@@ -1866,6 +1886,7 @@ const make = Effect.gen(function* () {
           const common = commonDir.trim();
           return Option.some({
             toplevel: toplevel.trim(),
+            commonDir: common,
             primaryPath:
               path.basename(common) === ".git" ? path.dirname(common) : common,
           });
