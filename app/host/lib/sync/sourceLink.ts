@@ -36,6 +36,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import type * as Scope from "effect/Scope";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -259,15 +260,17 @@ export function attachLinkFarEnd(ctx: HandlerContext, channelId: string): Link {
 
 // This device's end of a link to a peer, attached BEFORE the call that
 // opens the peer's end is sent, so the peer's first bytes always find
-// it. The call's rejection resets it. A cancel while it waits resets
-// it once it is open (peerSource's release).
+// it. The call's rejection resets it, and so does a cancel while it
+// waits (peerSource's release, through `onAttached`).
 async function openLink(
   peer: Pick<PeerSyncApi, "channels">,
   open: (channelId: string) => Promise<unknown>,
+  onAttached: (link: Link) => void = () => {},
 ): Promise<Link> {
   const channelId = mintHexId();
   const mux = await peer.channels();
   const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
+  onAttached(link);
   try {
     await open(channelId);
   } catch (error) {
@@ -384,9 +387,11 @@ function coalescedProgress(
 // What a source knows about its own worktree, read locally: the
 // answers its end of a link gives, and what a send's teardown checks
 // the source against (it is this device's own worktree then).
+// A question asked with a `signal` tears the link down when it fires,
+// so the question fails at once instead of waiting on the answer.
 export type SourceFacts = {
-  tip(branch: string): Promise<string | null>;
-  capture(): Promise<SyncCapture>;
+  tip(branch: string, signal?: AbortSignal): Promise<string | null>;
+  capture(signal?: AbortSignal): Promise<SyncCapture>;
 };
 
 export function localSource(project: Project, worktreeId: string): SourceFacts {
@@ -590,7 +595,12 @@ export const offer = <T>(
       () => {},
     );
     const answering = openOnPeer(channelId);
-    return yield* step(() => answering).pipe(
+    // Not a step: the peer's answer cannot be cut short, so an
+    // interrupt stops waiting at once and hands a late one to `onLate`.
+    return yield* Effect.tryPromise({
+      try: () => answering,
+      catch: (cause) => new MoveStepError({ cause }),
+    }).pipe(
       Effect.onInterrupt(() =>
         Effect.sync(() => {
           if (onLate !== undefined) answering.then(onLate).catch(() => {});
@@ -617,7 +627,7 @@ export const offerSource = <T>(
 type UnpackTarget = Project | { path: string };
 
 export type WorktreeSource = SourceFacts & {
-  cloneFacts(): Promise<CloneFacts>;
+  cloneFacts(signal?: AbortSignal): Promise<CloneFacts>;
   // Asks for a bundle of `refs` thinned by `haves`, writes it to a temp
   // file as it arrives and unpacks it into `into`, every ref under
   // refs/shigomori/ (landingRefspec). Byte progress once with 0 when
@@ -627,6 +637,7 @@ export type WorktreeSource = SourceFacts & {
     haves: readonly string[];
     into: UnpackTarget;
     onProgress?: (bytes: number, totalBytes: number) => void;
+    signal?: AbortSignal;
   }): Promise<{ fetched: { ref: string; commit: string }[] }>;
   // A progress frame for the source's side to relay (a send's, over the
   // link the source opened). Never awaited: progress is presence, and a
@@ -638,8 +649,14 @@ export type WorktreeSource = SourceFacts & {
 // send's, a push's), or a pull's, opened on first use (its refusals are
 // this device's own and come before any question).
 function askSource(linkOrOpen: Link | (() => Promise<Link>)): WorktreeSource {
-  const linkOf =
+  const opened =
     typeof linkOrOpen === "function" ? linkOrOpen : async () => linkOrOpen;
+  const linkOf = async (signal: AbortSignal | undefined) => {
+    const link = await opened();
+    if (signal?.aborted) link.reset();
+    else signal?.addEventListener("abort", () => link.reset(), { once: true });
+    return link;
+  };
   async function answer(
     link: Link,
     message: unknown,
@@ -654,19 +671,20 @@ function askSource(linkOrOpen: Link | (() => Promise<Link>)): WorktreeSource {
   async function ask<T>(
     message: unknown,
     decodeOk: (ok: unknown) => T,
+    signal: AbortSignal | undefined,
   ): Promise<T> {
-    const parsed = await answer(await linkOf(), message);
+    const parsed = await answer(await linkOf(signal), message);
     if (!("ok" in parsed))
       throw new Error("the other device answered out of turn");
     return decodeOk(parsed.ok);
   }
   return {
-    tip: async (branch) =>
-      (await ask({ ask: "tip", branch }, decodeTipAnswer)).commit,
-    capture: () => ask({ ask: "capture" }, decodeCapture),
-    cloneFacts: () => ask({ ask: "clone" }, decodeCloneFacts),
-    async fetch({ refs, haves, into, onProgress }) {
-      const link = await linkOf();
+    tip: async (branch, signal) =>
+      (await ask({ ask: "tip", branch }, decodeTipAnswer, signal)).commit,
+    capture: (signal) => ask({ ask: "capture" }, decodeCapture, signal),
+    cloneFacts: (signal) => ask({ ask: "clone" }, decodeCloneFacts, signal),
+    async fetch({ refs, haves, into, onProgress, signal }) {
+      const link = await linkOf(signal);
       const parsed = await answer(link, { ask: "bundle", refs, haves });
       if (!("bundle" in parsed)) {
         throw new Error("the other device answered out of turn");
@@ -714,38 +732,47 @@ export const peerSource = (
   Effect.acquireRelease(
     Effect.sync(() => {
       let opened: Promise<Link> | undefined;
+      let attached: Link | undefined;
       const source = askSource(
         () =>
-          (opened ??= openLink(peer, (channelId) =>
-            peer.openSource({ ...worktree, channelId }),
+          (opened ??= openLink(
+            peer,
+            (channelId) => peer.openSource({ ...worktree, channelId }),
+            (link) => {
+              attached = link;
+            },
           )),
       );
-      return { source, opened: () => opened };
+      return { source, attached: () => attached };
     }),
-    // Not awaited: a cancel must not wait on a peer that never
-    // answered the open.
-    ({ opened }, exit) =>
+    // A cancel must not wait on a peer that never answered the open,
+    // so the link goes as soon as it is attached.
+    ({ attached }, exit) =>
       Effect.sync(() => {
-        void opened()?.then(
-          (link) => (Exit.isSuccess(exit) ? link.end() : link.reset()),
-          () => {},
-        );
+        const link = attached();
+        if (Exit.isSuccess(exit)) link?.end();
+        else link?.reset();
       }),
   ).pipe(Effect.map(({ source }) => source));
 
-// The same around a Promise caller's `run` (the git follower, the
-// teardown).
-export const withPeerSource = <T>(
-  peer: Pick<PeerSyncApi, "channels" | "openSource">,
-  worktree: { projectId: string; worktreeId: string },
+// A source for the length of a Promise caller's `run`.
+const withSource = <T>(
+  acquire: Effect.Effect<WorktreeSource, never, Scope.Scope>,
   run: (source: WorktreeSource) => Promise<T>,
 ): Promise<T> =>
   runStep(
-    peerSource(peer, worktree).pipe(
+    acquire.pipe(
       Effect.flatMap((source) => step(() => run(source))),
       Effect.scoped,
     ),
   );
+
+// The git follower's and the teardown's.
+export const withPeerSource = <T>(
+  peer: Pick<PeerSyncApi, "channels" | "openSource">,
+  worktree: { projectId: string; worktreeId: string },
+  run: (source: WorktreeSource) => Promise<T>,
+): Promise<T> => withSource(peerSource(peer, worktree), run);
 
 // A host handler's source over a link a peer opened, for the length of
 // the scope: it ends with the scope, and is torn down when the scope
@@ -760,14 +787,8 @@ export const linkSource = (link: Link) =>
       }),
   );
 
-// The same around a Promise caller's `run` (sync:receiveBundle).
+// sync:receiveBundle's.
 export const withLinkSource = <T>(
   link: Link,
   run: (source: WorktreeSource) => Promise<T>,
-): Promise<T> =>
-  runStep(
-    linkSource(link).pipe(
-      Effect.flatMap((source) => step(() => run(source))),
-      Effect.scoped,
-    ),
-  );
+): Promise<T> => withSource(linkSource(link), run);

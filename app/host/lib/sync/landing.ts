@@ -217,16 +217,16 @@ export const landWorktree = (
     // ref covered by a have, so requesting a branch whose tip we already
     // hold would corrupt the transfer, not thin it. Both answers are
     // re-parsed by the link: their hashes flow into LOCAL git argv.
-    const branchTip = yield* step(() => source.tip(branch)).pipe(
-      Effect.withSpan("Landing.tip"),
-    );
+    const branchTip = yield* step((stepSignal) =>
+      source.tip(branch, stepSignal),
+    ).pipe(Effect.withSpan("Landing.tip"));
     if (branchTip === null) {
       return yield* new SourceBranchGoneError({ branch });
     }
     progress({ step: "capture" });
-    const capture = yield* step(() => source.capture()).pipe(
-      Effect.withSpan("Landing.capture"),
-    );
+    const capture = yield* step((stepSignal) =>
+      source.capture(stepSignal),
+    ).pipe(Effect.withSpan("Landing.capture"));
     const captured = capture.captured && capture.commit !== undefined;
     yield* Effect.annotateCurrentSpan("captured", captured);
 
@@ -253,8 +253,9 @@ export const landWorktree = (
           : yield* step(() => localBranchTips(project.path));
         // The fetch opens the transfer step itself with its (0, total)
         // frame, so only the nothing-to-fetch case needs a bare tick.
-        yield* step(() =>
+        yield* step((stepSignal) =>
           source.fetch({
+            signal: stepSignal,
             refs: wantRefs,
             into: project,
             onProgress: (bytes, totalBytes) =>

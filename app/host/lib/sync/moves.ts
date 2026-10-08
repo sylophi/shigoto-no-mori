@@ -127,12 +127,22 @@ const isMoveStepError = Schema.is(MoveStepError);
 export const unwrapStep = (error: unknown): unknown =>
   isMoveStepError(error) ? error.cause : error;
 
-// One step of a move that waits on a promise: interrupting the move
-// aborts the signal it is given.
+// One step of a move that waits on a promise. Interrupting the move
+// aborts the signal it is given and waits for it to settle, so nothing
+// it was writing is still running when a finalizer undoes the move.
 export const step = <A>(run: (signal: AbortSignal) => Promise<A>) =>
-  Effect.tryPromise({
-    try: run,
-    catch: (cause) => new MoveStepError({ cause }),
+  Effect.callback<A, MoveStepError>((resume, signal) => {
+    const running = run(signal);
+    running.then(
+      (value) => resume(Effect.succeed(value)),
+      (cause: unknown) => resume(Effect.fail(new MoveStepError({ cause }))),
+    );
+    return Effect.promise(() =>
+      running.then(
+        () => {},
+        () => {},
+      ),
+    );
   });
 
 export function throwIfCancelled(signal: AbortSignal | undefined): void {

@@ -315,41 +315,51 @@ const sendWorktreeEffect = (
     // The landing, on the peer, asking back over the link. An interrupt
     // resets the link, which the peer's landing runs under.
     const peer = peerSyncApiFor(targetDeviceId);
-    const { receipt, ...landed } = decodeReceiveWorktreeResult(
-      yield* offer(
-        peer,
-        project,
-        worktreeId,
-        (channelId) =>
-          fromPeer(
-            peer.receiveWorktree({
-              identity,
-              branch,
-              worktreeName: pullWorktreeName(worktree),
-              ...(landBranch === branch ? {} : { landBranch }),
-              sourceWorktreeId: worktreeId,
-              runSetup,
-              cloneInto,
-              channelId,
-            }),
+    // The copy's removal is registered the moment the answer is in, with
+    // no interrupt between the two: a cancel from then on (the files
+    // step) removes it over the peer's grant, the same removal a failed
+    // mirror start makes.
+    const { receipt, ...landed } = yield* Effect.uninterruptibleMask(
+      (restore) =>
+        restore(
+          offer(
+            peer,
+            project,
+            worktreeId,
+            (channelId) =>
+              fromPeer(
+                peer.receiveWorktree({
+                  identity,
+                  branch,
+                  worktreeName: pullWorktreeName(worktree),
+                  ...(landBranch === branch ? {} : { landBranch }),
+                  sourceWorktreeId: worktreeId,
+                  runSetup,
+                  cloneInto,
+                  channelId,
+                }),
+              ),
+            progress,
+            // A landing that answered as the cancel came: the copy is real
+            // and goes the way the finalizer below would take it.
+            (answer) =>
+              rollBackSent(
+                targetDeviceId,
+                decodeReceiveWorktreeResult(answer).worktree,
+              ),
+          ).pipe(Effect.withSpan("Sync.offer")),
+        ).pipe(
+          Effect.map(decodeReceiveWorktreeResult),
+          Effect.tap((answer) =>
+            Effect.addFinalizer((exit) =>
+              Exit.hasInterrupts(exit)
+                ? Effect.promise(() =>
+                    rollBackSent(targetDeviceId, answer.worktree),
+                  )
+                : Effect.void,
+            ),
           ),
-        progress,
-        // A landing that answered as the cancel came: the copy is real
-        // and goes the way the finalizer below would take it.
-        (answer) =>
-          rollBackSent(
-            targetDeviceId,
-            decodeReceiveWorktreeResult(answer).worktree,
-          ),
-      ).pipe(Effect.withSpan("Sync.offer")),
-    );
-    // A cancel from here on (the files step, the mirror start's session
-    // after it) removes the copy over the peer's grant, the same
-    // removal a failed mirror start makes.
-    yield* Effect.addFinalizer((exit) =>
-      Exit.hasInterrupts(exit)
-        ? Effect.promise(() => rollBackSent(targetDeviceId, landed.worktree))
-        : Effect.void,
+        ),
     );
 
     // The ignored files, pushed into the root the peer's landing
