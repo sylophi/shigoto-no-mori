@@ -275,7 +275,7 @@ try {
       "# acme",
       "alder",
       "birch",
-      "# gitlab.com/zed",
+      "# zed",
       "dogwood",
       "# No remote",
       "cedar",
@@ -286,7 +286,7 @@ try {
     // dogwood is the most recently used, so its owner leads the recent
     // sort, and the alphabetical one puts it back by name.
     assert.deepEqual(ownerOutline("recent"), [
-      "# gitlab.com/zed",
+      "# zed",
       "dogwood",
       "# acme",
       "alder",
@@ -298,7 +298,7 @@ try {
       "# acme",
       "alder",
       "birch",
-      "# gitlab.com/zed",
+      "# zed",
       "dogwood",
       "# No remote",
       "cedar",
@@ -308,7 +308,7 @@ try {
   await proof.check("by owner: a shut owner is its header alone", () => {
     assert.deepEqual(ownerOutline("manual", new Set(["github.com/acme"])), [
       "# acme (2)",
-      "# gitlab.com/zed",
+      "# zed",
       "dogwood",
       "# No remote",
       "cedar",
@@ -336,6 +336,46 @@ try {
       );
     assert.deepEqual(narrowed(), ["# acme", "alder", "elm", "# beta", "birch"]);
     assert.deepEqual(narrowed(PEER), ["# acme", "elm", "# beta", "birch"]);
+  });
+
+  await proof.check("by owner: one name on two hosts shows its hosts", () => {
+    // acme on GitLab too, through abies at the peer, which leads the
+    // alphabetical sort of projects. The headers go by what they read,
+    // and narrowed to this machine, its acme keeps its host.
+    const peers = [
+      ...ownedRemote,
+      onPeer(
+        owned(project("abies", "repo/abies", 0, 0), "gitlab.com/Acme/abies"),
+      ),
+    ];
+    const twoHosts = (filter?: string) =>
+      outline(
+        treeRows({
+          sortMode: "alphabetical",
+          filter,
+          stored: ownedLocal,
+          peers,
+          shut: new Set(),
+        }),
+      );
+    assert.deepEqual(twoHosts(), [
+      "# github.com/acme",
+      "alder",
+      "birch",
+      "# gitlab.com/Acme",
+      "abies",
+      "# zed",
+      "dogwood",
+      "# No remote",
+      "cedar",
+    ]);
+    assert.deepEqual(twoHosts("local"), [
+      "# github.com/acme",
+      "alder",
+      "birch",
+      "# No remote",
+      "cedar",
+    ]);
   });
 
   await proof.check("by owner: a single owner draws no header", () => {
