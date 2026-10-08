@@ -90,7 +90,7 @@ export function CommitDiff() {
   );
 }
 
-// The commit's details with what its place on the timeline allows; off
+// The commit's details with what its place on the timeline allows. Off
 // it (index -1), nothing that rewrites.
 function TimelineCommitDetails({
   worktree,
