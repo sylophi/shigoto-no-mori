@@ -15,7 +15,7 @@ import {
   readWorktreeData,
   writeWorktreeDescription,
 } from "@host/lib/config/project";
-import { peerShigomoriApiFor } from "@host/ipc/peerSync";
+import { peerWorktreeDataApiFor } from "@host/ipc/peerSync";
 
 export type WorktreeRef = { projectId: string; worktreeId: string };
 
@@ -38,15 +38,15 @@ export async function followDescription(
   local: WorktreeRef,
   peer: WorktreeRef,
 ): Promise<"here" | "there" | null> {
-  const api = peerShigomoriApiFor(deviceId);
+  const api = peerWorktreeDataApiFor(deviceId);
   const [here, there] = await Promise.all([
     readWorktreeData(local.projectId, local.worktreeId).then(descriptionOf),
-    api.worktreeDataRead(peer).then(descriptionOf),
+    api.read(peer).then(descriptionOf),
   ]);
   const hereAt = here.describedAt ?? 0;
   const thereAt = there.describedAt ?? 0;
   if (hereAt > thereAt) {
-    await api.worktreeDataDescribe({ ...peer, description: here });
+    await api.describe({ ...peer, description: here });
     return "there";
   }
   if (thereAt > hereAt) {
@@ -60,7 +60,7 @@ export async function followDescription(
   if (here.title !== there.title || here.description !== there.description) {
     const winner = { ...here, describedAt: hereAt + 1 };
     await writeWorktreeDescription(local.projectId, local.worktreeId, winner);
-    await api.worktreeDataDescribe({ ...peer, description: winner });
+    await api.describe({ ...peer, description: winner });
     return "there";
   }
   return null;

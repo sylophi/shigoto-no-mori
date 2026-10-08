@@ -530,72 +530,76 @@ export const SyncHasCommitsResultSchema = strict(
   }),
 );
 
-export const syncContract = defineContract("host", {
+export const syncContract = defineContract(
+  "sync",
+  "host",
   // A read that discloses repo state (the names of ignored files), so
   // it rides the command grant.
-  worktreeFolder: invoke(
-    "sync:worktreeFolder",
+  invoke(
+    "worktreeFolder",
     SyncWorktreeFolderPayloadSchema,
     Schema.Array(SyncWorktreeFolderEntrySchema),
-    { remote: true, gated: true, movesHostState: false },
+    { remote: true, gated: true, grant: "browseFiles", movesHostState: false },
   ),
-  ignoredPaths: invoke(
-    "sync:ignoredPaths",
+  invoke(
+    "ignoredPaths",
     SyncIgnoredPathsPayloadSchema,
     SyncIgnoredPathsResultSchema,
-    { remote: true, gated: true, movesHostState: false },
+    { remote: true, gated: true, grant: "browseFiles", movesHostState: false },
   ),
   // The git follower's question about the copy's repo, so a mirror
   // into this device asks it (invitable, by the copy's project).
-  hasCommits: invoke(
-    "sync:hasCommits",
+  invoke(
+    "hasCommits",
     SyncHasCommitsPayloadSchema,
     SyncHasCommitsResultSchema,
-    { remote: true, gated: true, movesHostState: false, invitable: "project" },
+    {
+      remote: true,
+      gated: true,
+      grant: "browseFiles",
+      movesHostState: false,
+      invitable: "project",
+    },
   ),
   // The link opens and the call returns: what crosses after is bytes on
   // the channel, and a capture it takes is announced by the git
   // watcher like any ref write, so the open itself pings no viewer. The
   // follower fetching the copy's commits opens one on the copy.
-  openSource: invoke(
-    "sync:openSource",
-    SyncOpenSourcePayloadSchema,
-    VoidSchema,
-    {
-      remote: true,
-      gated: true,
-      movesHostState: false,
-      invitable: "copy",
-    },
-  ),
+  invoke("openSource", SyncOpenSourcePayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "browseFiles",
+    movesHostState: false,
+    invitable: "copy",
+  }),
   // Both land refs (and a worktree), so both keep the viewer ping,
   // which fires once they are done. Both are a mirror's into the copy's
   // device: the landing of the invited original, and the follower's
   // push into the copy's project (under refs/shigomori/, never a
   // branch, so the project is scope enough).
-  receiveWorktree: invoke(
-    "sync:receiveWorktree",
+  invoke(
+    "receiveWorktree",
     SyncReceiveWorktreePayloadSchema,
     SyncReceiveWorktreeResultSchema,
-    { remote: true, gated: true, invitable: "landing" },
+    { remote: true, gated: true, grant: "changeCode", invitable: "landing" },
   ),
-  receiveBundle: invoke(
-    "sync:receiveBundle",
-    SyncReceiveBundlePayloadSchema,
-    SyncFetchedSchema,
-    { remote: true, gated: true, invitable: "project" },
-  ),
+  invoke("receiveBundle", SyncReceiveBundlePayloadSchema, SyncFetchedSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+    invitable: "project",
+  }),
   // The local orchestrators (see the header note): remote:false keeps
   // them off every remote wire, gated:true documents intent and keeps
   // the web loopback's fail-closed refusal.
-  pullWorktree: invoke(
-    "sync:pullWorktree",
+  invoke(
+    "pullWorktree",
     SyncPullWorktreePayloadSchema,
     SyncPullWorktreeResultSchema,
     { remote: false, gated: true },
   ),
-  sendWorktree: invoke(
-    "sync:sendWorktree",
+  invoke(
+    "sendWorktree",
     SyncSendWorktreePayloadSchema,
     SyncPullWorktreeResultSchema,
     { remote: false, gated: true },
@@ -604,21 +608,21 @@ export const syncContract = defineContract("host", {
   // payload's note), so it rides the grant like the moves themselves.
   // Whether it moved host state is the cancelled call's own news (its
   // rollback resolves under that call), so this one skips the ping.
-  cancelMove: invoke(
-    "sync:cancelMove",
+  invoke(
+    "cancelMove",
     SyncCancelMovePayloadSchema,
     SyncCancelMoveResultSchema,
-    { remote: true, gated: true, movesHostState: false },
+    { remote: true, gated: true, grant: "changeCode", movesHostState: false },
   ),
   // A move's second half, local-only like the moves: its remote half,
   // after a pull, is the peer's ordinary grant-gated worktrees:delete.
-  teardownSource: invoke(
-    "sync:teardownSource",
+  invoke(
+    "teardownSource",
     SyncTeardownSourcePayloadSchema,
     SyncTeardownSourceResultSchema,
     { remote: false, gated: true },
   ),
   // Untagged (local-only): the move runs on the device whose renderer
   // invoked it, and the notifier hands the frames back to that caller.
-  pullProgress: broadcast("sync:pullProgress", SyncPullProgressSchema),
-});
+  broadcast("pullProgress", SyncPullProgressSchema),
+);

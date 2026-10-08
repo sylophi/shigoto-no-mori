@@ -6,6 +6,8 @@ import { ReleaseSchema, VoidSchema } from "../schemas/index.ts";
 // for the changelog. A CLIENT module: the release list is the same
 // for every device, so the window fetches it through its own binding
 // (shared/releases.ts) and measures each device's version against it.
-export const releasesContract = defineContract("client", {
-  list: invoke("releases:list", VoidSchema, Schema.Array(ReleaseSchema)),
-});
+export const releasesContract = defineContract(
+  "releases",
+  "client",
+  invoke("list", VoidSchema, Schema.Array(ReleaseSchema)),
+);

@@ -4,10 +4,12 @@ import {
   VoidSchema,
 } from "../schemas/index.ts";
 
-export const menuContract = defineContract("client", {
-  setLaunchToolsEnabled: invoke(
-    "menu:setLaunchToolsEnabled",
+export const menuContract = defineContract(
+  "menu",
+  "client",
+  invoke(
+    "setLaunchToolsEnabled",
     SetLaunchToolsEnabledPayloadSchema,
     VoidSchema,
   ),
-});
+);

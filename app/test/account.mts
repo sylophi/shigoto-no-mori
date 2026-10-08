@@ -20,6 +20,7 @@
 // exercised by hand.
 //
 // Run: pnpm test account.
+import { callOf } from "@shigomori/contracts/contract";
 import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -1121,7 +1122,7 @@ it("shape: the device credential never appears in a renderer-visible object", ()
 });
 
 it("contract: setDeviceName rejects an empty and an over-256-char name", () => {
-  const input = accountContract.calls.setDeviceName.input;
+  const input = callOf(accountContract, "setDeviceName").payloadSchema;
   const rename = (name: string) =>
     safeDecode(input, { deviceId: "device-uuid", name }).success;
   assert.equal(rename("A valid name"), true);
@@ -1134,7 +1135,7 @@ it("contract: setDeviceName rejects an empty and an over-256-char name", () => {
 });
 
 it("contract: enroll rejects an empty session token", () => {
-  const input = accountContract.calls.enroll.input;
+  const input = callOf(accountContract, "enroll").payloadSchema;
   assert.equal(safeDecode(input, fakeSessionJwt("user_x")).success, true);
   assert.equal(
     safeDecode(input, "").success,

@@ -12,10 +12,6 @@
 // the tunnel from anywhere), so its row sits in a panel of its own that
 // spells out what the grant covers and tints while it is on.
 //
-// The GRANTS list is the `remote: true, mutating: true` host channels
-// in packages/contracts/src/modules, grouped the way a person weighs them. A new
-// gated channel that does not fit a line here needs a line.
-//
 // Written immediately through the host store, never staged in a form:
 // flipping it is the whole action. The registry mounts the watcher
 // that follows a flip made in another window.
@@ -36,38 +32,23 @@ import {
   useSetAcceptsCommands,
 } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
+import { GRANTS, type GrantId } from "@shigomori/contracts/grants";
 
-const GRANTS: readonly { icon: LucideIcon; title: string; detail: string }[] = [
-  {
-    icon: SquareTerminal,
-    title: "Run commands as you",
-    detail:
-      "Edit and run setup, teardown and package.json scripts, and type into their terminals.",
-  },
-  {
-    icon: GitBranch,
-    title: "Change your code",
-    detail:
-      "Create, delete and move worktrees, commit, discard changes, push (force push too) and merge pull requests with this machine's Git and GitHub credentials.",
-  },
-  {
-    icon: FolderSearch,
-    title: "Browse your files",
-    detail:
-      "List folders anywhere on this machine, read any file in its worktrees, and add or clone projects into it.",
-  },
-  {
-    icon: Cable,
-    title: "Reach local servers",
-    detail: "Forward ports to anything listening on this machine's localhost.",
-  },
-  {
-    icon: Settings2,
-    title: "Change the app",
-    detail:
-      "Edit settings, install the CLI and shell hooks, run health check repairs, install updates and move the data folder.",
-  },
-];
+// The consent lines are the contract's (packages/contracts/src/grants.ts),
+// each the line a remote gated call names. The icons are this panel's.
+const GRANT_ICONS: Record<GrantId, LucideIcon> = {
+  runCommands: SquareTerminal,
+  changeCode: GitBranch,
+  browseFiles: FolderSearch,
+  reachServers: Cable,
+  changeApp: Settings2,
+};
+
+const GRANT_LINES = Object.entries(GRANTS).map(([id, { title, detail }]) => ({
+  icon: GRANT_ICONS[id as GrantId],
+  title,
+  detail,
+}));
 
 // What the panel says about the switch's current state. Unknown (the
 // read is in flight or failed) claims nothing: the switch reads off
@@ -134,7 +115,7 @@ export function AcceptCommandsToggle() {
           {STATE_COPY[state].heading}
         </p>
         <ul className="flex flex-col gap-2">
-          {GRANTS.map(({ icon: Icon, title, detail }) => (
+          {GRANT_LINES.map(({ icon: Icon, title, detail }) => (
             <li key={title} className="flex items-start gap-2.5">
               <Icon
                 aria-hidden

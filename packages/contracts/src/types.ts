@@ -1,39 +1,26 @@
-import type {
-  BroadcastDef,
-  Contract,
-  ContractModule,
-  InvokeDef,
-} from "./contract.ts";
+// The types a contract module gives its two sides: the handler table
+// that serves it and the client that calls it, both keyed by the call's
+// name (its channel without the module prefix).
 import type { Decoded, Encoded } from "./codec.ts";
+import type {
+  CallsOf,
+  ContractModule,
+  InputOf,
+  OutputOf,
+  PayloadOf,
+  Streaming,
+} from "./contract.ts";
 
-// Internals stay keyed on Contract. The public aliases at the bottom
-// unwrap M["calls"] exactly once, so module wrapping never leaks into
-// the mapped-type machinery.
-type InvokeKeys<C extends Contract> = {
-  [K in keyof C]: C[K] extends InvokeDef ? K : never;
-}[keyof C];
+type InvokesOf<M> = Exclude<CallsOf<M>, Streaming>;
+type BroadcastsOf<M> = Extract<CallsOf<M>, Streaming>;
 
-type BroadcastKeysOf<C extends Contract> = {
-  [K in keyof C]: C[K] extends BroadcastDef ? K : never;
-}[keyof C];
+type KeyOf<Tag> = Tag extends `${string}:${infer K}` ? K : never;
 
 // Inputs are decoded on arrival. Producers (renderer client, broadcast
 // caller) provide the wire shape (`Encoded`); consumers (handler,
 // broadcast subscriber) see the decoded shape (`Decoded`). For plain
 // object schemas the two collapse, but they diverge for defaults and
 // transforms.
-type ClientIn<D> = D extends InvokeDef ? Encoded<D["input"]> : never;
-type HandlerIn<D> = D extends InvokeDef ? Decoded<D["input"]> : never;
-type Out<D> = D extends InvokeDef ? Decoded<D["output"]> : never;
-
-type BroadcastSubscriberPayload<D> = D extends BroadcastDef
-  ? Decoded<D["payload"]>
-  : never;
-
-type BroadcastProducerPayloadOf<
-  C extends Contract,
-  K extends keyof C,
-> = C[K] extends BroadcastDef ? Encoded<C[K]["payload"]> : never;
 
 // A void input schema decodes to `void`. Map void inputs to a zero-arg call so
 // no-input clients don't force callers to pass `undefined`.
@@ -46,49 +33,42 @@ type Args<I> = [I] extends [void] ? [] : [input: I];
 // `(ctx) => ...` and silently receive `undefined` at runtime.
 // Handlers that don't need either argument can drop them via TypeScript
 // variance (callbacks with fewer params are assignable).
-type HandlersOf<C extends Contract, Ctx> = {
-  [K in InvokeKeys<C>]: (
-    input: HandlerIn<C[K]>,
+export type Handlers<M extends ContractModule, Ctx = unknown> = {
+  [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
+    input: Decoded<InputOf<R>>,
     context: Ctx,
-  ) => Promise<Out<C[K]>> | Out<C[K]>;
+  ) => Promise<Decoded<OutputOf<R>>> | Decoded<OutputOf<R>>;
 };
 
-type ClientOf<C extends Contract> = {
-  [K in InvokeKeys<C>]: (...args: Args<ClientIn<C[K]>>) => Promise<Out<C[K]>>;
+export type Client<M extends ContractModule> = {
+  [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
+    ...args: Args<Encoded<InputOf<R>>>
+  ) => Promise<Decoded<OutputOf<R>>>;
 } & {
-  [K in BroadcastKeysOf<C>]: (
-    handler: (payload: BroadcastSubscriberPayload<C[K]>) => void,
+  [R in BroadcastsOf<M> as KeyOf<R["_tag"]>]: (
+    handler: (payload: BroadcastPayload<R>) => void,
   ) => () => void;
 };
 
-// Public surface, keyed on the module.
-export type BroadcastKeys<M extends ContractModule> = BroadcastKeysOf<
-  M["calls"]
-> &
-  string;
+// What a push's subscriber receives.
+export type BroadcastPayload<R> = Decoded<PayloadOf<R>>;
+
+export type BroadcastKeys<M extends ContractModule> = KeyOf<
+  BroadcastsOf<M>["_tag"]
+>;
 
 export type BroadcastProducerPayload<
   M extends ContractModule,
-  K extends keyof M["calls"],
-> = BroadcastProducerPayloadOf<M["calls"], K>;
-
-export type Handlers<M extends ContractModule, Ctx = unknown> = HandlersOf<
-  M["calls"],
-  Ctx
+  K extends string,
+> = Encoded<
+  PayloadOf<Extract<BroadcastsOf<M>, { readonly _tag: `${string}:${K}` }>>
 >;
-
-export type Client<M extends ContractModule> = ClientOf<M["calls"]>;
-
-// Every invoke def of M, or of each module when M is a union of them.
-type InvokeDefsOf<M> = M extends ContractModule
-  ? Extract<M["calls"][keyof M["calls"]], InvokeDef>
-  : never;
 
 // The invokes of M keyed by channel instead of call name, as one table:
 // for something that answers channels straight off the wire. Same
 // shapes as Handlers, minus the context.
 export type ChannelHandlers<M extends ContractModule> = {
-  [D in InvokeDefsOf<M> as D["channel"]]: (
-    input: HandlerIn<D>,
-  ) => Promise<Out<D>> | Out<D>;
+  [R in InvokesOf<M> as R["_tag"]]: (
+    input: Decoded<InputOf<R>>,
+  ) => Promise<Decoded<OutputOf<R>>> | Decoded<OutputOf<R>>;
 };
