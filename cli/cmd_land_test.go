@@ -110,10 +110,10 @@ func TestAutoMergeArms(t *testing.T) {
 
 // A gh on PATH for a one-PR land on a repo that allows auto-merge: the
 // fox branch's PR #5 is waiting on its checks (BLOCKED), posable as
-// already armed through GH_FOX_AUTO. GH_FOX_AFTER poses the state the
-// read-back after the --auto merge sees. Each poll of land's wait
+// already armed through GH_FOX_AUTO. Each read of the PR's progress
+// (the read-back after the --auto merge, then every poll of the wait)
 // takes the next line of the file at GH_FOX_POLLS, the last one
-// answering every poll after it. Every invocation is appended to a log.
+// answering every read after it. Every invocation is appended to a log.
 func fakeGhAutoMerge(t *testing.T) (log string) {
 	t.Helper()
 	bin := t.TempDir()
@@ -122,12 +122,11 @@ func fakeGhAutoMerge(t *testing.T) (log string) {
 echo "$*" >> "$GH_LOG"
 case "$*" in
   "pr list --state all --head fox --limit 10 --json "*) echo '[{"number":5,"title":"Fox","state":"OPEN","isDraft":false,"url":"u5","baseRefName":"main","headRefName":"fox","mergeStateStatus":"BLOCKED","autoMergeRequest":'"${GH_FOX_AUTO:-null}"'}]';;
-  "api graphql -F number=5 "*mergeStateStatus*)
+  "api graphql -F number=5 "*)
     head -n 1 "$GH_FOX_POLLS"
     if [ "$(wc -l < "$GH_FOX_POLLS")" -gt 1 ]; then
       tail -n +2 "$GH_FOX_POLLS" > "$GH_FOX_POLLS.next" && mv "$GH_FOX_POLLS.next" "$GH_FOX_POLLS"
     fi;;
-  "api graphql -F number=5 "*) echo '{"data":{"repository":{"pullRequest":{"state":"'"${GH_FOX_AFTER:-OPEN}"'","isInMergeQueue":false,"autoMergeRequest":{"mergeMethod":"SQUASH"}}}}}';;
   "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":true}}}';;
   "pr merge 5 --auto --squash") ;;
   *) echo "unexpected gh $*" >&2; exit 1;;
@@ -139,18 +138,13 @@ esac
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GH_LOG", log)
 	t.Setenv("GH_FOX_POLLS", filepath.Join(bin, "polls"))
-	pollFast(t)
-	return log
-}
-
-func pollFast(t *testing.T) {
-	t.Helper()
 	interval := autoMergePollInterval
 	autoMergePollInterval = time.Millisecond
 	t.Cleanup(func() { autoMergePollInterval = interval })
+	return log
 }
 
-// What the polls of land's wait see, one poll per line.
+// What the reads of the PR's progress see, one read per line.
 func posePolls(t *testing.T, polls ...string) {
 	t.Helper()
 	if err := os.WriteFile(os.Getenv("GH_FOX_POLLS"), []byte(strings.Join(polls, "\n")+"\n"), 0o644); err != nil {
@@ -158,15 +152,14 @@ func posePolls(t *testing.T, polls ...string) {
 	}
 }
 
-// One poll's answer: the PR's state, its verdict and review decision,
-// whether auto-merge is armed, and its checks as name=verdict pairs, a
-// trailing ! marking a required one.
+// One read's answer: the PR's state, its verdict and review decision,
+// whether auto-merge is armed, and its checks as name=conclusion
+// pairs, an empty conclusion for a running check and a trailing ! for
+// a required one.
 func poll(state, verdict, review string, armed bool, checks ...string) string {
-	pr := map[string]any{"state": state, "mergeStateStatus": verdict, "reviewDecision": review, "isInMergeQueue": false}
+	pr := map[string]any{"state": state, "mergeStateStatus": verdict, "reviewDecision": review}
 	if armed {
 		pr["autoMergeRequest"] = map[string]any{"mergeMethod": "SQUASH"}
-	} else {
-		pr["autoMergeRequest"] = nil
 	}
 	var contexts []map[string]any
 	for _, check := range checks {
@@ -238,6 +231,7 @@ func TestLandWaitsForAutoMergeThenCleansUp(t *testing.T) {
 	log := fakeGhAutoMerge(t)
 	posePolls(t,
 		poll("OPEN", "BLOCKED", "", true, "build=!", "lint=FAILURE"),
+		poll("OPEN", "BLOCKED", "", true, "build=!", "lint=FAILURE"),
 		poll("OPEN", "BLOCKED", "", true, "build=SUCCESS!", "lint=FAILURE"),
 		poll("MERGED", "UNKNOWN", "", false),
 	)
@@ -257,52 +251,99 @@ func TestLandWaitsForAutoMergeThenCleansUp(t *testing.T) {
 // saying why, and removes nothing. Landing again once it's dealt with
 // arms nothing new and waits on the armed auto-merge again.
 func TestLandStopsWhenTheAutoMergedPRNeedsAttention(t *testing.T) {
+	proj, ctx := landFixture(t)
+	log := fakeGhAutoMerge(t)
+	posePolls(t,
+		poll("OPEN", "BLOCKED", "", true, "build=!"),
+		poll("OPEN", "BLOCKED", "", true, "build=FAILURE!"),
+	)
+
+	_, err := cmdLand(ctx, []string{"fox"})
+	if err == nil || errorKindOf(err) != "needs-attention" || !strings.Contains(err.Error(), "check build failed") {
+		t.Fatalf("land error = %v, want needs-attention saying the check failed", err)
+	}
+	if !foxSurvives(t, proj) {
+		t.Fatal("the worktree was removed while its PR needs attention")
+	}
+
+	t.Setenv("GH_FOX_AUTO", `{"mergeMethod":"SQUASH"}`)
+	posePolls(t, poll("OPEN", "BLOCKED", "", true, "build=!"), poll("MERGED", "UNKNOWN", "", false))
+	if code, err := cmdLand(ctx, []string{"fox"}); err != nil || code != 0 {
+		t.Fatalf("land again = %d, %v", code, err)
+	}
+	if got := mergeCalls(t, log); len(got) != 1 {
+		t.Errorf("landing an armed PR merged again: %q", got)
+	}
+	if foxSurvives(t, proj) {
+		t.Error("the worktree survived the land of its merged PR")
+	}
+}
+
+// merge waits the same way, and leaves the worktree to the cleanup.
+func TestMergeWaitsForAutoMerge(t *testing.T) {
+	proj, ctx := landFixture(t)
+	fakeGhAutoMerge(t)
+	posePolls(t, poll("OPEN", "BLOCKED", "", true, "build=!"), poll("MERGED", "UNKNOWN", "", false))
+
+	if code, err := cmdMerge(ctx, []string{"fox"}); err != nil || code != 0 {
+		t.Fatalf("merge = %d, %v", code, err)
+	}
+	if !foxSurvives(t, proj) {
+		t.Error("merge removed the worktree")
+	}
+}
+
+// What a read of the PR says it waits on, or needs a person for.
+func TestMergeProgressProblem(t *testing.T) {
 	for _, tc := range []struct {
-		name, poll, want string
+		name, poll    string
+		queued        bool
+		problem, wait string
 	}{
-		{"required check failed", poll("OPEN", "BLOCKED", "", true, "build=FAILURE!", "lint=SUCCESS"), "check build failed"},
-		{"auto-merge turned off", poll("OPEN", "BLOCKED", "", false), "auto-merge was turned off"},
-		{"conflict", poll("OPEN", "DIRTY", "", true), "it conflicts with main"},
-		{"behind", poll("OPEN", "BEHIND", "", true), "it is behind main"},
-		{"changes requested", poll("OPEN", "BLOCKED", "CHANGES_REQUESTED", true), "changes were requested"},
-		{"closed", poll("CLOSED", "UNKNOWN", "", false), "it was closed"},
+		{"checks running", poll("OPEN", "BLOCKED", "", true, "build=!", "lint=FAILURE"), false, "", "checks are running"},
+		{"review", poll("OPEN", "BLOCKED", "REVIEW_REQUIRED", true, "build=SUCCESS!"), false, "", "it needs a review"},
+		{"required check failed", poll("OPEN", "BLOCKED", "", true, "build=FAILURE!", "test=TIMED_OUT!"), false, "checks build, test failed", ""},
+		{"auto-merge turned off", poll("OPEN", "BLOCKED", "", false), false, "auto-merge was turned off", ""},
+		{"left the queue", poll("OPEN", "BLOCKED", "", false), true, "it left the merge queue unmerged", ""},
+		{"conflict", poll("OPEN", "DIRTY", "", true), false, "it conflicts with main", ""},
+		{"behind", poll("OPEN", "BEHIND", "", true), false, "it is behind main and needs updating", ""},
+		{"changes requested", poll("OPEN", "BLOCKED", "CHANGES_REQUESTED", true), false, "changes were requested", ""},
+		{"closed", poll("CLOSED", "UNKNOWN", "", false), false, "it was closed", ""},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			proj, ctx := landFixture(t)
-			log := fakeGhAutoMerge(t)
-			posePolls(t, poll("OPEN", "BLOCKED", "REVIEW_REQUIRED", true, "build=!"), tc.poll)
+		progress, err := parseMergeProgress(tc.poll)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := progress.problem("main", tc.queued); got != tc.problem {
+			t.Errorf("%s: problem = %q, want %q", tc.name, got, tc.problem)
+		}
+		if tc.problem == "" {
+			if got := progress.waitingOn(); got != tc.wait {
+				t.Errorf("%s: waitingOn = %q, want %q", tc.name, got, tc.wait)
+			}
+		}
+	}
 
-			_, err := cmdLand(ctx, []string{"fox"})
-			if err == nil || errorKindOf(err) != "needs-attention" || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("land error = %v, want needs-attention saying %q", err, tc.want)
-			}
-			if !foxSurvives(t, proj) {
-				t.Fatal("the worktree was removed while its PR needs attention")
-			}
-
-			t.Setenv("GH_FOX_AUTO", `{"mergeMethod":"SQUASH"}`)
-			posePolls(t, poll("MERGED", "UNKNOWN", "", false))
-			if code, err := cmdLand(ctx, []string{"fox"}); err != nil || code != 0 {
-				t.Fatalf("land again = %d, %v", code, err)
-			}
-			if got := mergeCalls(t, log); len(got) != 1 {
-				t.Errorf("landing an armed PR merged again: %q", got)
-			}
-			if foxSurvives(t, proj) {
-				t.Error("the worktree survived the land of its merged PR")
-			}
-		})
+	queue, err := parseMergeProgress(`{"data":{"repository":{"pullRequest":{"state":"OPEN","mergeStateStatus":"BLOCKED","isInMergeQueue":true}}}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := queue.problem("main", true); got != "" {
+		t.Errorf("queued: problem = %q, want none", got)
+	}
+	if got := queue.waitingOn(); got != "it is in the merge queue" {
+		t.Errorf("queued: waitingOn = %q", got)
 	}
 }
 
 // The verdict can flip between the lookup and the merge, and gh's
 // --auto then merges at once. The read-back after it is what tells
-// land so, and land goes on to the cleanup instead of reporting an
+// land so, and land goes on to the cleanup instead of waiting on an
 // armed auto-merge on a PR that has landed.
 func TestLandReadsBackAnAutoMergeThatMergedAtOnce(t *testing.T) {
 	proj, ctx := landFixture(t)
 	log := fakeGhAutoMerge(t)
-	t.Setenv("GH_FOX_AFTER", "MERGED")
+	posePolls(t, poll("MERGED", "UNKNOWN", "", false))
 
 	if code, err := cmdLand(ctx, []string{"fox"}); err != nil || code != 0 {
 		t.Fatalf("land = %d, %v", code, err)

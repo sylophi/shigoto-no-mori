@@ -11,7 +11,10 @@ package main
 // On a repo that allows auto-merge, a PR that is waiting on its base
 // branch's rules (checks still running, a review missing) isn't
 // refused: auto-merge is armed instead, and GitHub merges it the
-// moment the rules are met. A PR that can merge now merges now.
+// moment the rules are met. A PR that can merge now merges now. Either
+// that or a merge queue taking the PR is waited on until GitHub has
+// merged it (awaitMerge), except for the app's --number merge, which
+// shows the armed or queued PR itself.
 //
 // --stack merges the PR together with every open PR under it in its
 // stack, bottom first (stack.go).
@@ -305,7 +308,7 @@ func mergeResultFields(pr *prSummary, branch, method string) map[string]any {
 // shared/schemas/pullRequest.ts). The PR landed, or a merge queue took
 // it (a GitHub stack's, or a base branch with a queue), or auto-merge
 // is armed and GitHub lands it once its requirements are met. The last
-// two leave the PR open, which land reads as "nothing to clean up yet".
+// two leave the PR open, and merge and land wait on them (awaitMerge).
 const (
 	outcomeMerged    = "merged"
 	outcomeQueued    = "queued"
@@ -316,8 +319,6 @@ type mergeOutcome struct {
 	method  string
 	outcome string
 }
-
-func (o mergeOutcome) pending() bool { return o.outcome != outcomeMerged }
 
 // The JSON fields the outcome adds to merge's and land's documents.
 // queued predates outcome and stays for readers of the old shape.
@@ -338,17 +339,10 @@ func (o mergeOutcome) line(pr *prSummary) string {
 	return greenOut(fmt.Sprintf("%s PR #%d (%s): %s", verb, pr.Number, o.method, pr.Title))
 }
 
-// What to run next: the cleanup, once the PR has landed.
-func mergeNextHint(o mergeOutcome, id worktreeIdentity) string {
-	cleanup := fmt.Sprintf("`%s done` (primary checkout) or `%s rm %s` (managed worktree)",
+// What to run next: the cleanup, now the PR has landed.
+func mergeNextHint(id worktreeIdentity) string {
+	return fmt.Sprintf("next: `%s done` (primary checkout) or `%s rm %s` (managed worktree)",
 		binaryName, binaryName, id.Name)
-	switch o.outcome {
-	case outcomeAutoMerge:
-		return "GitHub merges it once its requirements are met; then " + cleanup
-	case outcomeQueued:
-		return "the merge queue lands it; then " + cleanup
-	}
-	return "next: " + cleanup
 }
 
 func cmdMerge(ctx cliContext, args []string) (int, error) {
@@ -433,6 +427,10 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
+	if err := awaitMerge(proj.Path, pr, o, "merge"); err != nil {
+		return exitCodeOf(err), err
+	}
+	o.outcome = outcomeMerged
 
 	if jsonMode {
 		doc := mergeResultFields(pr, id.Branch, o.method)
@@ -441,7 +439,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		emit(doc)
 	} else {
 		out(o.line(pr))
-		note(dimErr(mergeNextHint(o, id)))
+		note(dimErr(mergeNextHint(id)))
 	}
 	return 0, nil
 }
@@ -505,7 +503,6 @@ func armAutoMerge(projectPath string, pr *prSummary, method string) (mergeOutcom
 	if armed := pr.AutoMergeRequest; armed != nil {
 		// GitHub refuses a second enable, and the PR lands on its
 		// own with what is armed.
-		note(dimErr(fmt.Sprintf("auto-merge was already enabled for PR #%d", pr.Number)))
 		return mergeOutcome{method: cmp.Or(armed.method(), method), outcome: outcomeAutoMerge}, nil
 	}
 	if _, err := runGh(projectPath, "pr", "merge", fmt.Sprint(pr.Number), "--auto", "--"+method); err != nil {
@@ -514,35 +511,13 @@ func armAutoMerge(projectPath string, pr *prSummary, method string) (mergeOutcom
 	return autoMergeOutcome(projectPath, pr.Number, method)
 }
 
-// GraphQL, since `gh pr view --json` doesn't expose isInMergeQueue.
-// The number goes first so a test's fake gh can tell this query from
-// the repo settings' by its prefix.
-const autoMergeOutcomeQuery = "query($number: Int!, $owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
-	"{ pullRequest(number: $number) { state isInMergeQueue autoMergeRequest { mergeMethod } } } }"
-
 func autoMergeOutcome(projectPath string, number int, method string) (mergeOutcome, error) {
 	armed := mergeOutcome{method: method, outcome: outcomeAutoMerge}
-	stdout, err := runGh(projectPath, "api", "graphql", "-F", "number="+fmt.Sprint(number),
-		"-F", "owner={owner}", "-F", "name={repo}", "-f", "query="+autoMergeOutcomeQuery)
+	after, err := readMergeProgress(projectPath, number)
 	if err != nil {
 		// gh accepted the merge. This read only shapes the report.
 		return armed, nil
 	}
-	var parsed struct {
-		Data struct {
-			Repository struct {
-				PullRequest struct {
-					State            string            `json:"state"`
-					IsInMergeQueue   bool              `json:"isInMergeQueue"`
-					AutoMergeRequest *autoMergeRequest `json:"autoMergeRequest"`
-				} `json:"pullRequest"`
-			} `json:"repository"`
-		} `json:"data"`
-	}
-	if json.Unmarshal([]byte(stdout), &parsed) != nil {
-		return armed, nil
-	}
-	after := parsed.Data.Repository.PullRequest
 	switch {
 	case after.State == "MERGED":
 		return mergeOutcome{method: method, outcome: outcomeMerged}, nil
@@ -550,6 +525,185 @@ func autoMergeOutcome(projectPath string, number int, method string) (mergeOutco
 		return mergeOutcome{method: method, outcome: outcomeQueued}, nil
 	}
 	return armed, nil
+}
+
+// GraphQL, since `gh pr view --json` exposes neither isInMergeQueue
+// nor whether a check is required. isRequired is what lets land's
+// wait (cmd_land.go) go on past a failing check GitHub merges past
+// anyway. The number goes first so a test's fake gh can tell this
+// query from the repo settings' by its prefix.
+const mergeProgressQuery = "query($number: Int!, $owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
+	"{ pullRequest(number: $number) { state mergeStateStatus reviewDecision isInMergeQueue autoMergeRequest { mergeMethod } " +
+	"commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { " +
+	"... on CheckRun { name status conclusion isRequired(pullRequestNumber: $number) } " +
+	"... on StatusContext { context state isRequired(pullRequestNumber: $number) } } } } } } } } } }"
+
+// Where an open PR stands on its way to merging.
+type mergeProgress struct {
+	State            string
+	MergeStateStatus string
+	ReviewDecision   string
+	IsInMergeQueue   bool
+	AutoMergeRequest *autoMergeRequest
+	// The head commit's checks.
+	Checks []prCheck
+}
+
+type prCheck struct {
+	checkNode
+	Name       string `json:"name"`
+	Context    string `json:"context"`
+	IsRequired bool   `json:"isRequired"`
+}
+
+func readMergeProgress(projectPath string, number int) (mergeProgress, error) {
+	stdout, err := runGh(projectPath, "api", "graphql", "-F", "number="+fmt.Sprint(number),
+		"-F", "owner={owner}", "-F", "name={repo}", "-f", "query="+mergeProgressQuery)
+	if err != nil {
+		return mergeProgress{}, err
+	}
+	return parseMergeProgress(stdout)
+}
+
+func parseMergeProgress(stdout string) (mergeProgress, error) {
+	var parsed struct {
+		Data struct {
+			Repository struct {
+				PullRequest struct {
+					State            string            `json:"state"`
+					MergeStateStatus string            `json:"mergeStateStatus"`
+					ReviewDecision   string            `json:"reviewDecision"`
+					IsInMergeQueue   bool              `json:"isInMergeQueue"`
+					AutoMergeRequest *autoMergeRequest `json:"autoMergeRequest"`
+					Commits          struct {
+						Nodes []struct {
+							Commit struct {
+								StatusCheckRollup *struct {
+									Contexts struct {
+										Nodes []prCheck `json:"nodes"`
+									} `json:"contexts"`
+								} `json:"statusCheckRollup"`
+							} `json:"commit"`
+						} `json:"nodes"`
+					} `json:"commits"`
+				} `json:"pullRequest"`
+			} `json:"repository"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
+		return mergeProgress{}, errf("unexpected gh api output: %s", err)
+	}
+	pr := parsed.Data.Repository.PullRequest
+	progress := mergeProgress{
+		State: pr.State, MergeStateStatus: pr.MergeStateStatus, ReviewDecision: pr.ReviewDecision,
+		IsInMergeQueue: pr.IsInMergeQueue, AutoMergeRequest: pr.AutoMergeRequest,
+	}
+	for _, commit := range pr.Commits.Nodes {
+		if rollup := commit.Commit.StatusCheckRollup; rollup != nil {
+			progress.Checks = append(progress.Checks, rollup.Contexts.Nodes...)
+		}
+	}
+	return progress, nil
+}
+
+var autoMergePollInterval = 10 * time.Second
+
+// A read that fails this many times in a row ends the wait. One that
+// fails now and then (a network blip) is waited out.
+const autoMergeReadAttempts = 5
+
+// Waits for a PR that didn't merge on the spot (auto-merge armed, or a
+// merge queue took it) until GitHub merges it. Every other way out is
+// an error naming what the PR needs, and the command to run again once
+// it's dealt with. The merge has just read the PR back, so the first
+// poll waits a turn too.
+func awaitMerge(projectPath string, pr *prSummary, o mergeOutcome, command string) error {
+	if o.outcome == outcomeMerged {
+		return nil
+	}
+	if !jsonMode {
+		out(o.line(pr))
+	}
+	queued := o.outcome == outcomeQueued
+	lastNote := ""
+	failedReads := 0
+	for {
+		time.Sleep(autoMergePollInterval)
+		progress, err := readMergeProgress(projectPath, pr.Number)
+		if err != nil {
+			if failedReads++; failedReads == autoMergeReadAttempts {
+				return errf("Lost track of PR #%d: %s. Run `%s %s` again to keep waiting",
+					pr.Number, err, binaryName, command)
+			}
+			continue
+		}
+		failedReads = 0
+		if progress.State == "MERGED" {
+			return nil
+		}
+		queued = queued || progress.IsInMergeQueue
+		if problem := progress.problem(pr.BaseRefName, queued); problem != "" {
+			return codedErrf("needs-attention", "PR #%d needs attention: %s (%s). Run `%s %s` again once it's dealt with",
+				pr.Number, problem, pr.URL, binaryName, command)
+		}
+		line := "waiting for GitHub to merge it"
+		if w := progress.waitingOn(); w != "" {
+			line += ": " + w
+		}
+		if line != lastNote {
+			lastNote = line
+			note(dimErr(line))
+		}
+	}
+}
+
+func (p mergeProgress) requiredChecks(verdict checkVerdict) []string {
+	var names []string
+	for _, check := range p.Checks {
+		if check.IsRequired && check.verdict() == verdict {
+			names = append(names, cmp.Or(check.Name, check.Context))
+		}
+	}
+	return names
+}
+
+// Why GitHub won't merge the PR without a person, or "" while it still
+// might. GitHub doesn't update a branch that is behind for auto-merge,
+// so BEHIND waits on a person too. queued is whether the PR has been
+// in a merge queue, which takes it out again when its checks fail.
+func (p mergeProgress) problem(base string, queued bool) string {
+	switch {
+	case p.State == "CLOSED":
+		return "it was closed"
+	case p.AutoMergeRequest == nil && !p.IsInMergeQueue && queued:
+		return "it left the merge queue unmerged"
+	case p.AutoMergeRequest == nil && !p.IsInMergeQueue:
+		return "auto-merge was turned off"
+	case p.MergeStateStatus == "DIRTY":
+		return "it conflicts with " + base
+	case p.MergeStateStatus == "BEHIND":
+		return "it is behind " + base + " and needs updating"
+	case p.ReviewDecision == "CHANGES_REQUESTED":
+		return "changes were requested"
+	}
+	if failed := p.requiredChecks(checkFailing); len(failed) == 1 {
+		return "check " + failed[0] + " failed"
+	} else if len(failed) > 1 {
+		return "checks " + strings.Join(failed, ", ") + " failed"
+	}
+	return ""
+}
+
+func (p mergeProgress) waitingOn() string {
+	switch {
+	case p.IsInMergeQueue:
+		return "it is in the merge queue"
+	case len(p.requiredChecks(checkPending)) > 0:
+		return "checks are running"
+	case p.ReviewDecision == "REVIEW_REQUIRED":
+		return "it needs a review"
+	}
+	return ""
 }
 
 // A PR in a stack GitHub knows refuses the plain merge: only its

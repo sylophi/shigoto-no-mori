@@ -52,9 +52,10 @@ sm worktrees land
 
 It merges the PR and removes the worktree. Without a PR it stops: tell
 the user the branch needs one, and don't merge another way. If it armed
-auto-merge instead, it waits for GitHub to merge the PR, as long as the
-checks take, so run it where a long command won't time out. If it stops
-saying the PR needs attention, deal with that and run it again.
+auto-merge instead, or a merge queue took the PR, it waits for GitHub
+to merge it, as long as the checks take, so run it where a long
+command won't time out. If it stops saying the PR needs attention,
+deal with that and run it again.
 `--stack` from the top layer lands a whole PR stack.
 
 ## Tear it down

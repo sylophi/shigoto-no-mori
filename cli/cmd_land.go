@@ -8,13 +8,12 @@ package main
 // skips straight to cleanup, so re-running after a partial failure
 // (say a teardown script) resumes where it left off.
 //
-// On a repo that allows auto-merge, a PR whose base branch's rules
-// aren't met yet gets auto-merge armed, and land waits for GitHub to
-// merge it, then cleans up as usual. When the PR needs a person
-// instead (a required check failed, a conflict, auto-merge turned
-// off), it stops with an error and removes nothing. Running land again
-// waits on the armed auto-merge again. A merge queue's PR stops before
-// the cleanup: running land again once it has merged does the rest.
+// A PR that doesn't land on the spot (auto-merge was armed, or a merge
+// queue took it) is waited on, as merge does, and the cleanup follows
+// once GitHub has merged it. A PR that needs a person instead stops
+// land with an error and nothing removed. A stack a merge queue took
+// stops before the cleanup: running land again once it has merged
+// does the rest.
 //
 // --stack lands a layer of a stack: the PR with every open PR under it
 // (the sm merge --stack flow), then the cleanup for every worktree
@@ -25,12 +24,10 @@ package main
 
 import (
 	"cmp"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 )
 
 func cmdLand(ctx cliContext, args []string) (int, error) {
@@ -99,12 +96,8 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		if o.outcome == outcomeAutoMerge {
-			if err := awaitAutoMerge(proj.Path, pr, o); err != nil {
-				return exitCodeOf(err), err
-			}
-		} else if o.pending() {
-			return reportPending(pr, id, o)
+		if err := awaitMerge(proj.Path, pr, o, "land"); err != nil {
+			return exitCodeOf(err), err
 		}
 		method = o.method
 	}
@@ -113,13 +106,13 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 	return landCleanup(proj, id, pr.BaseRefName, pt, ptErr, opts, extra)
 }
 
-// The PR hasn't landed: a merge queue took it, or auto-merge is armed
-// and GitHub merges it once its requirements are met. Nothing is
-// cleaned up. Running land again once it has merged does the rest (the
-// merged PR resumes with cleanup).
-func reportPending(pr *prSummary, id worktreeIdentity, o mergeOutcome) (int, error) {
+// A merge queue took the layers of a stack, and nothing is cleaned up.
+// Running land again once it has merged does the rest (the merged PR
+// resumes with cleanup).
+func reportQueued(pr *prSummary, id worktreeIdentity, method string) (int, error) {
+	o := mergeOutcome{method: method, outcome: outcomeQueued}
 	if jsonMode {
-		doc := mergeResultFields(pr, id.Branch, o.method)
+		doc := mergeResultFields(pr, id.Branch, method)
 		doc["ok"] = true
 		o.addTo(doc)
 		emit(doc)
@@ -128,150 +121,6 @@ func reportPending(pr *prSummary, id worktreeIdentity, o mergeOutcome) (int, err
 		note(dimErr(fmt.Sprintf("nothing removed yet. Run `%s land` again once GitHub has merged it", binaryName)))
 	}
 	return 0, nil
-}
-
-var autoMergePollInterval = 10 * time.Second
-
-// A read that fails this many times in a row ends the wait. One that
-// fails now and then (a network blip) is waited out.
-const autoMergeReadAttempts = 5
-
-// What the wait reads off the PR on every poll. isRequired is asked of
-// each check so that a failing check GitHub would merge past anyway
-// doesn't end the wait.
-const autoMergeWaitQuery = "query($number: Int!, $owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
-	"{ pullRequest(number: $number) { state mergeStateStatus reviewDecision isInMergeQueue autoMergeRequest { mergeMethod } " +
-	"commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes { " +
-	"... on CheckRun { name status conclusion isRequired(pullRequestNumber: $number) } " +
-	"... on StatusContext { context state isRequired(pullRequestNumber: $number) } } } } } } } } } }"
-
-type autoMergeWaitState struct {
-	State            string            `json:"state"`
-	MergeStateStatus string            `json:"mergeStateStatus"`
-	ReviewDecision   string            `json:"reviewDecision"`
-	IsInMergeQueue   bool              `json:"isInMergeQueue"`
-	AutoMergeRequest *autoMergeRequest `json:"autoMergeRequest"`
-	Commits          struct {
-		Nodes []struct {
-			Commit struct {
-				StatusCheckRollup *struct {
-					Contexts struct {
-						Nodes []requiredCheck `json:"nodes"`
-					} `json:"contexts"`
-				} `json:"statusCheckRollup"`
-			} `json:"commit"`
-		} `json:"nodes"`
-	} `json:"commits"`
-}
-
-type requiredCheck struct {
-	checkNode
-	Name       string `json:"name"`
-	Context    string `json:"context"`
-	IsRequired bool   `json:"isRequired"`
-}
-
-// Polls the PR until GitHub merges it. Every other way out is an error
-// naming what the PR needs, with nothing removed.
-func awaitAutoMerge(projectPath string, pr *prSummary, o mergeOutcome) error {
-	// An auto-merge armed before this land was noted as such already.
-	if !jsonMode && pr.AutoMergeRequest == nil {
-		out(o.line(pr))
-	}
-	waitingOn, noted := "", false
-	failedReads := 0
-	for {
-		st, err := readAutoMergeWait(projectPath, pr.Number)
-		if err != nil {
-			if failedReads++; failedReads == autoMergeReadAttempts {
-				return errf("Lost track of PR #%d: %s. Nothing was removed. Run `%s land` again to keep waiting",
-					pr.Number, err, binaryName)
-			}
-		} else {
-			failedReads = 0
-			if st.State == "MERGED" {
-				return nil
-			}
-			if problem := st.problem(pr.BaseRefName); problem != "" {
-				return codedErrf("needs-attention", "PR #%d needs attention: %s (%s). Nothing was removed. Run `%s land` again once it's dealt with",
-					pr.Number, problem, pr.URL, binaryName)
-			}
-			if w := st.waitingOn(); (w != waitingOn || !noted) && !jsonMode {
-				waitingOn, noted = w, true
-				note(dimErr(strings.TrimSuffix("waiting for GitHub to merge it: "+w, ": ")))
-			}
-		}
-		time.Sleep(autoMergePollInterval)
-	}
-}
-
-func readAutoMergeWait(projectPath string, number int) (autoMergeWaitState, error) {
-	var parsed struct {
-		Data struct {
-			Repository struct {
-				PullRequest autoMergeWaitState `json:"pullRequest"`
-			} `json:"repository"`
-		} `json:"data"`
-	}
-	stdout, err := runGh(projectPath, "api", "graphql", "-F", "number="+fmt.Sprint(number),
-		"-F", "owner={owner}", "-F", "name={repo}", "-f", "query="+autoMergeWaitQuery)
-	if err != nil {
-		return autoMergeWaitState{}, err
-	}
-	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
-		return autoMergeWaitState{}, errf("unexpected gh api output: %s", err)
-	}
-	return parsed.Data.Repository.PullRequest, nil
-}
-
-func (st autoMergeWaitState) requiredChecks(verdict checkVerdict) []string {
-	var names []string
-	for _, commit := range st.Commits.Nodes {
-		if rollup := commit.Commit.StatusCheckRollup; rollup != nil {
-			for _, check := range rollup.Contexts.Nodes {
-				if check.IsRequired && check.verdict() == verdict {
-					names = append(names, cmp.Or(check.Name, check.Context))
-				}
-			}
-		}
-	}
-	return names
-}
-
-// Why GitHub won't merge the PR without a person, or "" while it still
-// might. GitHub doesn't update a branch that is behind for auto-merge,
-// so BEHIND waits on a person too.
-func (st autoMergeWaitState) problem(base string) string {
-	switch {
-	case st.State == "CLOSED":
-		return "it was closed"
-	case st.AutoMergeRequest == nil && !st.IsInMergeQueue:
-		return "auto-merge was turned off"
-	case st.MergeStateStatus == "DIRTY":
-		return "it conflicts with " + base
-	case st.MergeStateStatus == "BEHIND":
-		return "it is behind " + base + " and needs updating"
-	case st.ReviewDecision == "CHANGES_REQUESTED":
-		return "changes were requested"
-	}
-	if failed := st.requiredChecks(checkFailing); len(failed) == 1 {
-		return "check " + failed[0] + " failed"
-	} else if len(failed) > 1 {
-		return "checks " + strings.Join(failed, ", ") + " failed"
-	}
-	return ""
-}
-
-func (st autoMergeWaitState) waitingOn() string {
-	switch {
-	case st.IsInMergeQueue:
-		return "it is in the merge queue"
-	case len(st.requiredChecks(checkPending)) > 0:
-		return "checks are running"
-	case st.ReviewDecision == "REVIEW_REQUIRED":
-		return "it needs a review"
-	}
-	return ""
 }
 
 // The open PR this PR is based on, or nil when it sits on the trunk
@@ -340,7 +189,7 @@ func landStack(proj project, id worktreeIdentity, pr *prSummary, methodFlag stri
 		}
 		persistMergeMethod(proj, method)
 		if queued {
-			return reportPending(pr, id, mergeOutcome{method: method, outcome: outcomeQueued})
+			return reportQueued(pr, id, method)
 		}
 	} else {
 		reportMerged(pr, "")
