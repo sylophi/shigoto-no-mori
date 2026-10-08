@@ -27,6 +27,8 @@ export const note = (line: string) => Console.error(line);
 const paint = (text: string, code: string, enabled: boolean) =>
   enabled && text !== "" ? `\u001b[${code}m${text}\u001b[0m` : text;
 
+export type Styles = ReturnType<typeof styles>;
+
 export const styles = (color: boolean) => ({
   bold: (text: string) => paint(text, "1", color),
   dim: (text: string) => paint(text, "2", color),
@@ -68,10 +70,12 @@ export function renderTable(
   return [styles(color).dim(head), ...body].join("\n");
 }
 
-// A path under the home folder, written from ~.
+// A path under the home folder, written from ~. Without a home, as is.
 export const collapseHome = (home: string, path: string) =>
-  path === home
-    ? "~"
-    : path.startsWith(`${home}/`)
-      ? `~${path.slice(home.length)}`
-      : path;
+  home === ""
+    ? path
+    : path === home
+      ? "~"
+      : path.startsWith(`${home}/`)
+        ? `~${path.slice(home.length)}`
+        : path;

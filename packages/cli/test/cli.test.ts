@@ -421,7 +421,14 @@ describe("status", () => {
     const alpha = box.repo("alpha", { "a.txt": "a\n", "b.txt": "b\n" });
     const fox = `${box.home}/fox`;
     box.git(alpha, "worktree", "add", "-q", "-b", "fox", fox);
-    box.git(fox, "commit", "-q", "--allow-empty", "-m", "Work on the fox");
+    box.git(
+      fox,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      `Work on the fox, ${"and then some more of it, ".repeat(4)}until it's done`,
+    );
     writeFileSync(`${fox}/a.txt`, "staged\n");
     box.git(fox, "add", "a.txt");
     writeFileSync(`${fox}/b.txt`, "stashed\n");

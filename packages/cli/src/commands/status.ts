@@ -15,8 +15,9 @@ import {
   out,
   Output,
   styles,
+  type Styles,
 } from "../output.ts";
-import { divergenceCell, flagNames, type Styles, truncate } from "./cells.ts";
+import { divergenceCell, flagNames, truncate } from "./cells.ts";
 
 type Card = Worktrees.StatusCard;
 

@@ -17,8 +17,16 @@ import {
   resolveWorktree,
   worktreeFlags,
 } from "../here.ts";
-import { emit, note, out, Output, renderTable, styles } from "../output.ts";
-import { divergenceCell, flagNames, type Styles, truncate } from "./cells.ts";
+import {
+  emit,
+  note,
+  out,
+  Output,
+  renderTable,
+  styles,
+  type Styles,
+} from "../output.ts";
+import { divergenceCell, flagNames, truncate } from "./cells.ts";
 import { status } from "./status.ts";
 
 // A title cut to fit a terminal line.

@@ -1,8 +1,6 @@
 // The cells a worktree's table row and status card share.
 import type * as Worktrees from "@shigomori/engine/Worktrees";
-import type { styles } from "../output.ts";
-
-export type Styles = ReturnType<typeof styles>;
+import type { Styles } from "../output.ts";
 
 // Cut to `max` columns, the last one an ellipsis.
 export const truncate = (text: string, max: number) => {
