@@ -6,7 +6,6 @@
 // (makeHubHandlers), never a fresh dial: the host keeps exactly one
 // authed socket per deviceId, and a second dial silently supersedes
 // the session every remote-forest query is riding on.
-import * as Schema from "effect/Schema";
 import type { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import type { ChannelMux } from "@shared/ipc/socket/channels";
@@ -14,9 +13,7 @@ import type { syncContract } from "@shigomori/contracts/modules/sync";
 import type { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { implSlot } from "@host/lib/util/implSlot";
 import type { Client } from "@shigomori/contracts/types";
-import { type Worktree, WorktreeSchema } from "@shigomori/contracts/schemas";
-
-const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
+import { type Worktree } from "@shigomori/contracts/schemas";
 
 // The remote verbs the orchestrations drive, and the byte channels of
 // the same cached session that their source links ride
@@ -97,17 +94,15 @@ export function thisDeviceId(): string {
   return requireImpl().thisDeviceId();
 }
 
-// One of a peer's worktrees, read off its own list and re-parsed
-// here: its root path flows into a session this device persists, so
-// the caller's say-so is never the source of it. undefined when the
-// peer no longer lists it.
+// One of a peer's worktrees, read off its own list (which the peer's
+// client decoded): its root path flows into a session this device
+// persists, so the caller's say-so is never the source of it.
+// undefined when the peer no longer lists it.
 export async function peerWorktreeOrUndefined(
   deviceId: string,
   projectId: string,
   worktreeId: string,
 ): Promise<Worktree | undefined> {
-  const worktrees = decodeWorktrees(
-    await peerWorktreesApiFor(deviceId).list({ projectId }),
-  );
+  const worktrees = await peerWorktreesApiFor(deviceId).list({ projectId });
   return worktrees.find((worktree) => worktree.id === worktreeId);
 }

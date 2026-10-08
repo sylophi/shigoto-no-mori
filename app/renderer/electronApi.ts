@@ -12,6 +12,7 @@ export function installElectronApi(): void {
   if (bridge === undefined) throw new Error("the preload's bridge is missing");
   const { invoke, subscribe, ...facts } = bridge;
   const transport: ClientTransport = {
+    local: true,
     invoke: async (channel, input) => unsettle(await invoke(channel, input)),
     subscribe,
   };

@@ -58,21 +58,17 @@
 // changed (or that finds a waiting session's files caught up), and a
 // slow periodic sweep as the backstop. Reconciles are coalesced per
 // session: one in flight, one queued.
-import * as Schema from "effect/Schema";
 import type { Project } from "@shigomori/contracts/schemas";
 import { errorMessageOf, isEntityGoneError } from "@shigomori/contracts/errors";
 import type { followDescription } from "@host/lib/sync/worktreeDescription";
 import {
-  GitStateSchema,
   isHaltedStatus,
   MIRROR_LABEL_REPLACES,
   type MirrorGitStatus,
-  MirrorApplyGitStateResultSchema,
   mirrorOnMirrorBranch,
   type MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
 import { mirrorBranchFor, originalBranchOf } from "@shared/git/branches";
-import { SyncHasCommitsResultSchema } from "@shigomori/contracts/modules/sync";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { findProjectOrThrow } from "@host/lib/projects";
 import { offerSource, withPeerSource } from "@host/lib/sync/sourceLink";
@@ -91,12 +87,6 @@ import {
   readGitState,
   watchIndexFile,
 } from "./gitState";
-
-const decodeHasCommitsResult = Schema.decodeSync(SyncHasCommitsResultSchema);
-const decodeGitState = Schema.decodeSync(GitStateSchema);
-const decodeApplyGitStateResult = Schema.decodeSync(
-  MirrorApplyGitStateResultSchema,
-);
 
 // The slice of a daemon session the follower reads. `status` is the
 // file-sync engine's own (watching is idle, everything else is a cycle
@@ -535,7 +525,7 @@ export function createGitFollower(deps: {
         return;
       }
       const local = localRead.value;
-      const peerAsIs = decodeGitState(peerRead.value);
+      const peerAsIs = peerRead.value;
       // Each side's head in the other's names: the peer's is what
       // agreement, divergence and the apply are judged on, this side's
       // is what a push carries. A copy that left the mirror/ rule has
@@ -744,12 +734,10 @@ export function createGitFollower(deps: {
       local.tip,
       ...(local.indexCommit === null ? [] : [local.indexCommit]),
     ];
-    const { present } = decodeHasCommitsResult(
-      await peerSync.hasCommits({
-        projectId: session.projectId,
-        commits: probe,
-      }),
-    );
+    const { present } = await peerSync.hasCommits({
+      projectId: session.projectId,
+      commits: probe,
+    });
     const peerHas = new Set(present);
     const localWorktreeId = session.labels[LABEL_LOCAL_WORKTREE] ?? "";
     const carry = refsToCarry(
@@ -775,15 +763,13 @@ export function createGitFollower(deps: {
         }),
       );
     }
-    const result = decodeApplyGitStateResult(
-      await peerMirror.applyGitState({
-        projectId: session.projectId,
-        worktreeId: session.worktreeId,
-        expect: { tip: peer.tip, indexTree: peer.indexTree },
-        state: { ...core(local), head: headThere },
-        sweep,
-      }),
-    );
+    const result = await peerMirror.applyGitState({
+      projectId: session.projectId,
+      worktreeId: session.worktreeId,
+      expect: { tip: peer.tip, indexTree: peer.indexTree },
+      state: { ...core(local), head: headThere },
+      sweep,
+    });
     if (result.applied) return { applied: true };
     const reason = result.reason ?? "refused";
     return reason === CHANGED_LOCALLY

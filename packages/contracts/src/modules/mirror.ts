@@ -229,7 +229,7 @@ export const GitStateCoreSchema = strict(
   }),
 );
 
-export const GitStateSchema = strict(
+const GitStateSchema = strict(
   Schema.Struct({
     ...GitStateCoreSchema.struct.fields,
     // The carrier commit for a staged index (refs/shigomori/index/<id>
@@ -264,7 +264,7 @@ const MirrorApplyGitStatePayloadSchema = strict(
   }),
 );
 
-export const MirrorApplyGitStateResultSchema = strict(
+const MirrorApplyGitStateResultSchema = strict(
   Schema.Struct({
     applied: Schema.Boolean,
     reason: Schema.optional(Schema.String),

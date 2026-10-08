@@ -524,7 +524,7 @@ const SyncHasCommitsPayloadSchema = strict(
   }),
 );
 
-export const SyncHasCommitsResultSchema = strict(
+const SyncHasCommitsResultSchema = strict(
   Schema.Struct({
     present: Schema.Array(CommitHashSchema),
   }),

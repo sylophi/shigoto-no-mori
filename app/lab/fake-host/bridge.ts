@@ -154,7 +154,9 @@ function createFixtureWire(
     ((input: unknown) => unknown) | undefined
   >;
   return {
+    // The lab's own fixtures, local and peer alike, read as given.
     transport: {
+      local: true,
       invoke(channel, input) {
         const call = index.get(channel);
         if (call === undefined) {

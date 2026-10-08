@@ -12,7 +12,6 @@
 // git itself.
 import { only } from "@shared/util/only";
 import { homedir } from "node:os";
-import * as Schema from "effect/Schema";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
   type ControlDevice,
@@ -52,10 +51,7 @@ import { PROBE_TIMEOUT_MS } from "@shared/ipc/socket/frames";
 import {
   isRealBranch,
   type Project,
-  ProjectSchema,
-  RuntimeInfoSchema,
   type Worktree,
-  WorktreeSchema,
 } from "@shigomori/contracts/schemas";
 import {
   parseLeaveOutPreset,
@@ -78,8 +74,6 @@ import { mirrorHandlers } from "./mirror";
 import { syncHandlers } from "./sync";
 import { worktreesHandlers } from "./worktrees";
 import { implSlot } from "@host/lib/util/implSlot";
-
-const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
 
 // The Electron layer injects the account and the peer reach at boot
 // (main/ipc/handlers.ts), like the other peer seams (peerSync.ts): the
@@ -124,8 +118,6 @@ async function within<T>(asked: Promise<T>, late: () => T): Promise<T> {
 }
 
 // A device with no name of its own still has to be told apart.
-const decodeProjects = Schema.decodeSync(Schema.Array(ProjectSchema));
-
 const nameOf = (device: DeviceInfo): string =>
   device.name.trim() === "" ? device.deviceId : device.name;
 
@@ -929,8 +921,8 @@ async function cloneIntoOn(
     moveCloneParent({
       sourcePath: project.path,
       sourceHome: here,
-      destinationHome: Schema.decodeSync(RuntimeInfoSchema)(info).homedir,
-      destinationProjects: decodeProjects(projects),
+      destinationHome: info.homedir,
+      destinationProjects: projects,
     }),
     project.path,
   );
@@ -940,8 +932,7 @@ async function cloneIntoOn(
 // it, beside the peers that hold it and did not answer. A
 // blocked-for-commands peer still lists (reads are ungated), so a bring
 // can say which device to unblock. A worktree with no branch of its own
-// can't be moved (sync:sendWorktree refuses one the same way), and the
-// list is re-parsed because its branch goes on into git here. A
+// can't be moved (sync:sendWorktree refuses one the same way). A
 // primary is listed: a mirror can take it, and a bring says why not.
 async function worktreesOn(standings: ControlDevice[]): Promise<{
   worktrees: ControlPeerWorktree[];
@@ -958,7 +949,7 @@ async function worktreesOn(standings: ControlDevice[]): Promise<{
           () => null,
         );
         if (answer === null) throw new Error("no answer");
-        return decodeWorktrees(answer)
+        return answer
           .filter(
             (worktree) => !worktree.detached && isRealBranch(worktree.branch),
           )
