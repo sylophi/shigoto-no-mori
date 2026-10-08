@@ -24,7 +24,7 @@ import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first eight fields are client config (appearance), the rest are
+// the first ten fields are client config (appearance), the rest are
 // device config.
 export interface SettingsFormState {
   theme: Theme;
@@ -38,6 +38,7 @@ export interface SettingsFormState {
   markTerrierProjects: boolean;
   showDeviceBadges: boolean;
   allowAgentWorking: boolean;
+  inlineWorktrees: boolean;
   launchers: LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
@@ -72,6 +73,7 @@ export function fromConfig(
     markTerrierProjects: clientConfig.markTerrierProjects ?? false,
     showDeviceBadges: clientConfig.showDeviceBadges ?? true,
     allowAgentWorking: clientConfig.allowAgentWorking ?? false,
+    inlineWorktrees: clientConfig.inlineWorktrees ?? false,
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
@@ -176,6 +178,8 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
     showDeviceBadges: state.showDeviceBadges ? undefined : false,
     // Default is off, the same opt-in serialization as villageLife.
     allowAgentWorking: state.allowAgentWorking ? true : undefined,
+    // Default is off, the same opt-in serialization as villageLife.
+    inlineWorktrees: state.inlineWorktrees ? true : undefined,
   };
 }
 

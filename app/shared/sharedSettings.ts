@@ -20,6 +20,7 @@ import {
 export const EMPTY_SHARED_SETTINGS: SharedSettingsDoc = { entries: {} };
 
 const PINNED_PROJECT_PREFIX = "pinnedProject/";
+const WORKTREE_SORT_PREFIX = "worktreeSort/";
 
 // The keys this build reads. Copies hold and forward any key, so a
 // name here is a promise to every build that ever synced it: reuse one
@@ -39,7 +40,7 @@ export const sharedSettingKeys = {
   // How the tree orders a project's worktrees, by the project's group
   // key (projectGroupKey: the repo identity, or the project's own key
   // when it has none). The value is a WorktreeSortMode.
-  worktreeSort: (groupKey: string) => `worktreeSort/${groupKey}`,
+  worktreeSort: (groupKey: string) => `${WORKTREE_SORT_PREFIX}${groupKey}`,
   // Whether the list of projects leads with a project, by its group
   // key like the sort above. The value is true, or null once unpinned.
   pinnedProject: (groupKey: string) => `${PINNED_PROJECT_PREFIX}${groupKey}`,
@@ -277,16 +278,31 @@ export function sharedStringSetting(
   return typeof value === "string" ? value : undefined;
 }
 
+// The settings kept one per key under `prefix` (a per-project one), by
+// what follows it.
+function entriesUnder(
+  doc: SharedSettingsDoc,
+  prefix: string,
+): [string, SharedSettingValue][] {
+  return Object.entries(doc.entries)
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([key, entry]) => [key.slice(prefix.length), entry.value]);
+}
+
 // The group keys of the pinned projects, sorted, so the same pins are
 // the same list.
 export function pinnedProjectKeys(doc: SharedSettingsDoc): string[] {
-  return Object.entries(doc.entries)
-    .filter(
-      ([key, entry]) =>
-        key.startsWith(PINNED_PROJECT_PREFIX) && entry.value === true,
-    )
-    .map(([key]) => key.slice(PINNED_PROJECT_PREFIX.length))
+  return entriesUnder(doc, PINNED_PROJECT_PREFIX)
+    .filter(([, value]) => value === true)
+    .map(([groupKey]) => groupKey)
     .toSorted();
+}
+
+// Every project's worktree sort as stored, by group key.
+export function worktreeSortValues(doc: SharedSettingsDoc): [string, string][] {
+  return entriesUnder(doc, WORKTREE_SORT_PREFIX).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
 }
 
 // Where a copy is kept. `transact` runs `next` on the stored copy

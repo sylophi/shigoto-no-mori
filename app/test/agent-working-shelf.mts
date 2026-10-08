@@ -60,13 +60,14 @@ const rows = (trees: Worktree[], allowAgentWorking: boolean, open: boolean) =>
       { data: {}, isLoading: false, isPending: false, error: null },
     ],
     openKey: projectGroupKey(project, undefined),
+    inline: null,
     order: projectGroupOrder({
       projects: [project],
       remote: [],
       sortMode: "manual",
       pinned: new Set(),
     }),
-    worktreeSort: "name",
+    worktreeSort: () => "name",
     openShelves: {
       agentWorking: { has: () => open },
       shelved: { has: () => false },

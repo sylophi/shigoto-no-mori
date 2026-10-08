@@ -51,9 +51,14 @@ export type SidebarRow =
       project: Project;
       local: boolean;
       expanded: boolean;
+      // On the inline list (BuildSidebarRowsArgs.inline), whether the
+      // project is folded to its header, its rows unfolding under it in
+      // place. Absent where projects are stepped into.
+      folded?: boolean;
       // On the list of projects, the worktrees the group holds beside
-      // its primary checkouts. Undefined on the open project, while
-      // arranging, and while its listing is loading or failed.
+      // its primary checkouts. Undefined on the open project or an
+      // unfolded one, while arranging, and while its listing is loading
+      // or failed.
       branches?: number;
       devices: readonly SidebarDeviceBadge[];
       members: readonly RemoteProjectMember[];
