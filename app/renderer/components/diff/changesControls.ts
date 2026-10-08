@@ -14,6 +14,8 @@ export interface DiffChangesControls {
   failed: boolean;
   onSetStaged: (paths: string[], staged: boolean) => void;
   onDiscard: (paths: string[]) => void;
+  // Every change, untracked files included, into a stash.
+  onStash: () => void;
   // The row whose diff is in the pane (patchFiles.changeKey), and how
   // to change it. The page owns this because the page fetches that
   // file's diff.

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { ChevronRight, FileDiff, History } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { pluralize } from "@/lib/pluralize";
-import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import type { Worktree } from "@shared/schemas";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -10,6 +9,8 @@ import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { BranchHistoryDrawer } from "../branch/BranchHistoryDrawer";
 import { CommitRow } from "./CommitRow";
+import { StashRows } from "./StashRows";
+import { useCommitActions } from "./useCommitActions";
 
 export function CommitsSection({ worktree }: { worktree: Worktree }) {
   const nav = useWorktreeNav();
@@ -27,13 +28,13 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
     worktree.changedCount === 0 &&
     worktree.behindPrimary > 0;
   const [historyOpen, setHistoryOpen] = useState(false);
-  const undo = useUndoCommits(worktree);
+  const actions = useCommitActions(worktree);
   return (
     <section className="space-y-3">
       {/* Held at the heading's height: the sync and changes buttons
           overhang it, so the commits don't shift when one appears. */}
       <div className="flex h-4 items-center justify-between gap-2">
-        <SectionHeading>Branch</SectionHeading>
+        <SectionHeading>Git</SectionHeading>
         <div className="flex min-w-0 items-center gap-1">
           {/* Commits made with changes left over still push from here. */}
           <WorktreeSyncPill worktree={worktree} />
@@ -64,13 +65,13 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
                   worktree.recentCommits,
                   index,
                 )}
-                onUndo={undo.undoTo}
-                undoPending={undo.pending}
+                actions={actions}
               />
             </li>
           ))}
         </ul>
       )}
+      <StashRows worktree={worktree} />
       {(showPrimarySync || showAll) && (
         <div className="flex items-center gap-2">
           {showPrimarySync && <WorktreePrimarySyncPill worktree={worktree} />}
@@ -92,6 +93,7 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
       />
+      {actions.dialog}
     </section>
   );
 }

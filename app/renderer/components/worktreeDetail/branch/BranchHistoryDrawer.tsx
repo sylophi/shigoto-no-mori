@@ -9,10 +9,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useBranchCommits } from "@/hooks/git/useBranchCommits";
-import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 import { CommitRow } from "../commits/CommitRow";
+import { useCommitActions } from "../commits/useCommitActions";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 
 interface BranchHistoryDrawerProps {
@@ -165,7 +165,7 @@ function VirtualCommitList({
   isFetchingNextPage: boolean;
   fetchNextPage: () => unknown;
 }) {
-  const undo = useUndoCommits(worktree);
+  const actions = useCommitActions(worktree);
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => containerRef.current,
@@ -214,13 +214,13 @@ function VirtualCommitList({
               worktree={worktree}
               commit={commit}
               rewrite={commitRewriteAt(worktree, commits, vi.index)}
-              onUndo={undo.undoTo}
-              undoPending={undo.pending}
+              actions={actions}
               onNavigate={onNavigate}
             />
           </div>
         );
       })}
+      {actions.dialog}
     </div>
   );
 }

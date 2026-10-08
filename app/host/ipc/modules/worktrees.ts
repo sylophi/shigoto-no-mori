@@ -14,6 +14,19 @@ import {
 } from "@host/lib/git/changes";
 import { getCommitDiff, getFileDiff } from "@host/lib/git/diff";
 import {
+  cherryPickCommit,
+  revertCommit,
+  rewordCommit,
+  squashIntoParent,
+} from "@host/lib/git/history";
+import {
+  applyStash,
+  dropStash,
+  listStashes,
+  restoreStash,
+  stashChanges,
+} from "@host/lib/git/stash";
+import {
   overwriteFromUpstream,
   publishCurrentBranch,
   pullFastForward,
@@ -350,6 +363,42 @@ export const worktreesHandlers: Handlers<
 
   listCommits: async ({ skip, count, ...input }) =>
     listCommits(await findWorktreePathOrThrow(input), { skip, count }),
+
+  revertCommit: (input) =>
+    mutateAndDescribe(input, (wt) => revertCommit(wt.path, input.hash)),
+  cherryPick: (input) =>
+    mutateAndDescribe(input, (wt) => cherryPickCommit(wt.path, input.hash)),
+  rewordCommit: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      rewordCommit(wt.path, input.hash, input, input.expectHead),
+    ),
+  squashCommit: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      squashIntoParent(wt.path, input.hash, input.expectHead),
+    ),
+
+  stashes: async (input) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      input.projectId,
+      input.worktreeId,
+    );
+    return worktree.detached ? [] : listStashes(worktree.path, worktree.branch);
+  },
+  stashChanges: (input) =>
+    mutateAndDescribe(input, (wt) => stashChanges(wt.path, input.message)),
+  applyStash: (input) =>
+    mutateAndDescribe(input, (wt) =>
+      applyStash(wt.path, input.hash, input.drop),
+    ),
+  dropStash: async (input) =>
+    dropStash(await findWorktreePathOrThrow(input), input.hash),
+  restoreStash: async (input) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      input.projectId,
+      input.worktreeId,
+    );
+    await restoreStash(worktree.path, worktree.branch, input.hash, input);
+  },
 
   push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt.path)),
   pull: (input) => mutateAndDescribe(input, (wt) => pullFastForward(wt.path)),

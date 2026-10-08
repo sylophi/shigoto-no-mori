@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  Archive,
   Check,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -370,7 +371,7 @@ function DiscardMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label="Discard changes"
+        aria-label="Change actions"
         disabled={total === 0}
         data-icon-button
         className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 data-popup-open:bg-accent data-popup-open:text-foreground"
@@ -378,6 +379,11 @@ function DiscardMenu({
         <Ellipsis aria-hidden className="size-3.5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={4} className="min-w-48">
+        <DropdownMenuItem disabled={changes.busy} onClick={changes.onStash}>
+          <Archive />
+          Stash all changes
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
           disabled={!canDiscardUnticked}

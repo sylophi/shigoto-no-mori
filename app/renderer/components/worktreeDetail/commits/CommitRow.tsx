@@ -1,4 +1,14 @@
-import { ChevronRight, Copy, PencilLine, Undo2 } from "lucide-react";
+import {
+  ChevronRight,
+  Combine,
+  Copy,
+  FolderGit2,
+  GitBranchPlus,
+  PencilLine,
+  RotateCcw,
+  TextCursorInput,
+  Undo2,
+} from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -7,6 +17,9 @@ import {
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DiffStats } from "@/components/ui/diff-stats";
 import { RelativeDate } from "@/components/ui/relative-date";
@@ -14,6 +27,7 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import type { CommitSummary, Worktree } from "@shared/schemas";
+import type { CommitActions } from "./useCommitActions";
 
 interface CommitRowProps {
   worktree: Worktree;
@@ -21,10 +35,9 @@ interface CommitRowProps {
   // What the list allows for this row (lib/commitRewrite). The list
   // knows the neighbours, the row doesn't.
   rewrite: CommitRewrite;
-  // The list's one undo action (see useUndoCommits), shared across rows
-  // rather than subscribed to by each.
-  onUndo: (target: string, count: number, head: string) => void;
-  undoPending: boolean;
+  // The list's one set of menu actions (useCommitActions), shared
+  // across rows rather than subscribed to by each.
+  actions: CommitActions;
   onNavigate?: () => void;
 }
 
@@ -32,8 +45,7 @@ export function CommitRow({
   worktree,
   commit,
   rewrite,
-  onUndo,
-  undoPending,
+  actions,
   onNavigate,
 }: CommitRowProps) {
   const nav = useWorktreeNav();
@@ -73,10 +85,12 @@ export function CommitRow({
   );
 
   // Rewriting is only offered for commits no remote has: HEAD can be
-  // amended, and a run of local commits can be undone back to a row
-  // with a soft reset, so their changes come back staged. Rows past
-  // that line get the plain menu.
-  const { canAmend, undo } = rewrite;
+  // amended, any of them reworded or squashed into the one before, and
+  // a run of them undone back to a row with a soft reset, so their
+  // changes come back staged. Rows past that line get the moves that
+  // only add commits.
+  const { canAmend, undo, reword, squash } = rewrite;
+  const busy = actions.pending;
 
   return (
     <ContextMenu>
@@ -88,7 +102,7 @@ export function CommitRow({
           <Copy />
           Copy hash
         </DropdownMenuItem>
-        {(canAmend || undo) && <DropdownMenuSeparator />}
+        {(canAmend || reword || squash || undo) && <DropdownMenuSeparator />}
         {canAmend && (
           <DropdownMenuItem
             onClick={() => {
@@ -100,10 +114,28 @@ export function CommitRow({
             Amend this commit…
           </DropdownMenuItem>
         )}
+        {reword && (
+          <DropdownMenuItem
+            disabled={busy}
+            onClick={() => actions.reword(commit, reword.head)}
+          >
+            <TextCursorInput />
+            Reword…
+          </DropdownMenuItem>
+        )}
+        {squash && (
+          <DropdownMenuItem
+            disabled={busy}
+            onClick={() => actions.squash(commit, squash.head)}
+          >
+            <Combine />
+            Squash into the commit before
+          </DropdownMenuItem>
+        )}
         {undo && (
           <DropdownMenuItem
-            disabled={undoPending}
-            onClick={() => onUndo(undo.target, undo.count, undo.head)}
+            disabled={busy}
+            onClick={() => actions.undoTo(undo.target, undo.count, undo.head)}
           >
             <Undo2 />
             {canAmend
@@ -112,6 +144,43 @@ export function CommitRow({
             <span className="text-muted-foreground">(keeps changes)</span>
           </DropdownMenuItem>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={busy}
+          onClick={() => actions.revert(commit)}
+        >
+          <RotateCcw />
+          Revert
+        </DropdownMenuItem>
+        {actions.pickTargets.length > 0 && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={busy}>
+              <GitBranchPlus />
+              Cherry-pick onto
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {actions.pickTargets.map((target) => (
+                <DropdownMenuItem
+                  key={target.id}
+                  onClick={() => actions.cherryPickInto(target, commit)}
+                >
+                  <span className="font-mono">{target.branch}</span>
+                  <span className="text-muted-foreground">{target.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        <DropdownMenuItem
+          disabled={busy}
+          onClick={() => {
+            onNavigate?.();
+            actions.newWorktreeFrom(commit);
+          }}
+        >
+          <FolderGit2 />
+          New worktree from here
+        </DropdownMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );

@@ -125,7 +125,7 @@ function invalidateWorkingTree(
 
 // Discard, restore and undo share one shape: call the api, then write
 // back the worktree the call answers with and refresh the working tree.
-function useWorkingTreeMutation<
+export function useWorkingTreeMutation<
   Input extends { projectId: string; worktreeId: string },
   Result,
 >(

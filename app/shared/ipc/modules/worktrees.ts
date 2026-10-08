@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
+  ApplyStashPayloadSchema,
   ChangedFileSchema,
   CheckoutBranchPayloadSchema,
   CommitChangesPayloadSchema,
@@ -17,6 +18,7 @@ import {
   DeleteWorktreeResultSchema,
   DiscardChangesPayloadSchema,
   DiscardChangesResultSchema,
+  DropStashPayloadSchema,
   FileDiffPayloadSchema,
   ListCommitsPayloadSchema,
   ProjectScopedPayloadSchema,
@@ -26,10 +28,15 @@ import {
   ResetSoftResultSchema,
   ReadWorktreeFilePayloadSchema,
   RestoreDiscardPayloadSchema,
+  RestoreStashPayloadSchema,
+  RewordCommitPayloadSchema,
   SetAutoPullPayloadSchema,
   SetAgentWorkingPayloadSchema,
   SetShelvedPayloadSchema,
   SetStagedPayloadSchema,
+  SquashCommitPayloadSchema,
+  StashChangesPayloadSchema,
+  StashEntrySchema,
   WorktreeCarryOverCompleteSchema,
   WorktreeFileSchema,
   WorktreeLifecyclePhaseSchema,
@@ -196,6 +203,62 @@ export const worktreesContract = defineContract("host", {
     ListCommitsPayloadSchema,
     z.array(CommitSummarySchema),
     { remote: true, gated: false },
+  ),
+  // The commit menu's history moves (host/lib/git/history.ts). A
+  // cherry-pick's worktree is the one the commit lands on.
+  revertCommit: invoke(
+    "worktrees:revertCommit",
+    CommitDiffPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  cherryPick: invoke(
+    "worktrees:cherryPick",
+    CommitDiffPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  rewordCommit: invoke(
+    "worktrees:rewordCommit",
+    RewordCommitPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  squashCommit: invoke(
+    "worktrees:squashCommit",
+    SquashCommitPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  // The stashes made on the worktree's branch (host/lib/git/stash.ts).
+  stashes: invoke(
+    "worktrees:stashes",
+    WorktreeScopedPayloadSchema,
+    z.array(StashEntrySchema),
+    { remote: true, gated: false },
+  ),
+  stashChanges: invoke(
+    "worktrees:stashChanges",
+    StashChangesPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  applyStash: invoke(
+    "worktrees:applyStash",
+    ApplyStashPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  dropStash: invoke("worktrees:dropStash", DropStashPayloadSchema, z.void(), {
+    remote: true,
+    gated: true,
+  }),
+  // A drop's undo.
+  restoreStash: invoke(
+    "worktrees:restoreStash",
+    RestoreStashPayloadSchema,
+    z.void(),
+    { remote: true, gated: true },
   ),
   push: worktreeMutation("worktrees:push"),
   pull: worktreeMutation("worktrees:pull"),

@@ -41,5 +41,6 @@
   "worktrees:commitMessage",
   "worktrees:fileDiff",
   "worktrees:list",
-  "worktrees:listCommits"
+  "worktrees:listCommits",
+  "worktrees:stashes"
 ]

@@ -146,3 +146,49 @@ export type DiscardChangesResult = z.infer<typeof DiscardChangesResultSchema>;
 export const RestoreDiscardPayloadSchema = WorktreeScopedPayloadSchema.extend({
   snapshot: CommitHashSchema,
 });
+
+// Rewrite a local commit's message, or fold it into the one before it.
+// `expectHead` is the commit the list showed on top: the rewrite is
+// refused once HEAD has moved past it.
+export const RewordCommitPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  hash: CommitHashSchema,
+  summary: z.string().trim().min(1),
+  description: z.string().optional(),
+  expectHead: CommitHashSchema,
+});
+
+export const SquashCommitPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  hash: CommitHashSchema,
+  expectHead: CommitHashSchema,
+});
+
+// One stash made on the worktree's branch: its commit, the message it
+// was given (`named`) or else the subject of the commit it was made on
+// top of, and when.
+export const StashEntrySchema = z.object({
+  hash: CommitHashSchema,
+  message: z.string(),
+  named: z.boolean(),
+  date: z.string(),
+});
+export type StashEntry = z.infer<typeof StashEntrySchema>;
+
+export const StashChangesPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  message: z.string().optional(),
+});
+
+// `drop` makes it a pop.
+export const ApplyStashPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  hash: CommitHashSchema,
+  drop: z.boolean(),
+});
+
+export const DropStashPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  hash: CommitHashSchema,
+});
+
+export const RestoreStashPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  hash: CommitHashSchema,
+  message: z.string(),
+  named: z.boolean(),
+});

@@ -82,7 +82,10 @@ function kindOf(x: string, y: string): ChangeKind {
 // doesn't block the queue.
 const indexQueues = new Map<string, ReturnType<typeof createLimiter>>();
 
-function onIndex<T>(worktreePath: string, task: () => Promise<T>): Promise<T> {
+export function onIndex<T>(
+  worktreePath: string,
+  task: () => Promise<T>,
+): Promise<T> {
   const queue = indexQueues.get(worktreePath) ?? createLimiter(1);
   indexQueues.set(worktreePath, queue);
   return queue(task);

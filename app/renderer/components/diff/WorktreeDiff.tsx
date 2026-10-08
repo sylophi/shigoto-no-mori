@@ -13,6 +13,7 @@ import {
 } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
+import { useStashChanges } from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
@@ -93,6 +94,7 @@ function ChangesView({
   const { mutate: discardPaths, isPending: discarding } = useDiscardChanges();
   const { mutate: restore, isPending: restoring } = useRestoreDiscard();
   const undo = useUndoCommits(worktree);
+  const stash = useStashChanges();
   const [draft, setDraft] = useCommitDraft(projectId, worktreeId);
 
   // The last commit is only up for rewriting while no remote has it. A
@@ -101,7 +103,12 @@ function ChangesView({
   const lastCommit = worktree.recentCommits[0];
   const rewrite = commitRewriteAt(worktree, worktree.recentCommits, 0);
   const amending = amendRequested && rewrite.canAmend;
-  const busy = commit.isPending || discarding || restoring || undo.pending;
+  const busy =
+    commit.isPending ||
+    discarding ||
+    restoring ||
+    undo.pending ||
+    stash.isPending;
   const resetAmendDraft = useAmendDraft({
     projectId,
     worktreeId,
@@ -215,6 +222,16 @@ function ChangesView({
         onSetStaged: (paths, staged) =>
           stage({ projectId, worktreeId, paths, staged }),
         onDiscard,
+        onStash: () => {
+          const count = list.length;
+          stash.mutate(
+            { projectId, worktreeId },
+            {
+              onSuccess: () =>
+                say(worktree, `Stashed ${pluralize(count, "file")}`),
+            },
+          );
+        },
       }}
       footer={
         <div
