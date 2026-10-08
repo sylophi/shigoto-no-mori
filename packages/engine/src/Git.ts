@@ -561,6 +561,10 @@ export const DISCARD_REF_PREFIX = "refs/shigomori/discards/";
 // fork and exec.
 const SPAWN_SLOTS = Math.max(4, globalThis.navigator?.hardwareConcurrency ?? 4);
 
+// What waits on a remote, and could hold a slot for minutes while the
+// probes the cap is for queue behind it.
+const NETWORK_SUBCOMMANDS = new Set(["clone", "fetch", "pull", "push"]);
+
 // Covers any status, log or ref output by a wide margin.
 const DEFAULT_MAX_OUTPUT = 10 * 1024 * 1024;
 
@@ -606,18 +610,23 @@ const chunksOf = <T>(items: readonly T[]): T[][] => {
   return chunks;
 };
 
-// Reads a pipe to its end, failing once it passes `limit` bytes.
+// Reads a pipe to its end. Past `limit` bytes it fails with
+// `tooLarge`, or without one keeps the first `limit` bytes and drains
+// the rest (stderr, whose volume a hook decides).
 const readAll = <E>(
   stream: Stream.Stream<Uint8Array, E>,
   limit: number,
-  tooLarge: () => GitOutputTooLargeError,
+  tooLarge?: () => GitOutputTooLargeError,
 ) =>
   stream.pipe(
     Stream.runFoldEffect(
       () => ({ chunks: [] as Uint8Array[], size: 0 }),
       (acc, chunk: Uint8Array) => {
+        if (acc.size + chunk.length > limit) {
+          if (tooLarge) return Effect.fail(tooLarge());
+          chunk = chunk.subarray(0, Math.max(0, limit - acc.size));
+        }
         acc.size += chunk.length;
-        if (acc.size > limit) return Effect.fail(tooLarge());
         acc.chunks.push(chunk);
         return Effect.succeed(acc);
       },
@@ -637,6 +646,8 @@ const readAll = <E>(
 // pasted token sits there.
 const redactUserinfo = (text: string): string =>
   text.replace(/(https?:\/\/)[^/\s'"]*@/gi, "$1");
+
+const identity = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect;
 
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -687,7 +698,6 @@ const make = Effect.gen(function* () {
             readAll(
               handle.stderr.pipe(Stream.mapError(failed(null))),
               DEFAULT_MAX_OUTPUT,
-              tooLarge,
             ),
           ],
           { concurrency: 2 },
@@ -700,7 +710,7 @@ const make = Effect.gen(function* () {
         }
         return stdout;
       }),
-    ).pipe(slots.withPermit);
+    ).pipe(NETWORK_SUBCOMMANDS.has(subcommand) ? identity : slots.withPermit);
   });
 
   // Exit 0 or not, for the checks git answers with its exit code.
@@ -772,11 +782,29 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const localBranchExists = (repo: string, branch: string) =>
-    succeeds(repo, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]);
+  const localBranchExists = Effect.fn("Git.localBranchExists")(function* (
+    repo: string,
+    branch: string,
+  ) {
+    return yield* succeeds(repo, [
+      "show-ref",
+      "--verify",
+      "--quiet",
+      `refs/heads/${branch}`,
+    ]);
+  });
 
-  const remoteRefExists = (repo: string, ref: string) =>
-    succeeds(repo, ["show-ref", "--verify", "--quiet", `refs/remotes/${ref}`]);
+  const remoteRefExists = Effect.fn("Git.remoteRefExists")(function* (
+    repo: string,
+    ref: string,
+  ) {
+    return yield* succeeds(repo, [
+      "show-ref",
+      "--verify",
+      "--quiet",
+      `refs/remotes/${ref}`,
+    ]);
+  });
 
   const resolveCheckoutRef = Effect.fn("Git.resolveCheckoutRef")(function* (
     repo: string,
@@ -1121,11 +1149,16 @@ const make = Effect.gen(function* () {
     ])).trim();
   });
 
-  const refTip = (cwd: string, ref: string) =>
-    Effect.option(verifyRev(cwd, ref));
+  const refTip = Effect.fn("Git.refTip")(function* (cwd: string, ref: string) {
+    return yield* Effect.option(verifyRev(cwd, ref));
+  });
 
-  const hasObject = (cwd: string, object: string) =>
-    succeeds(cwd, ["cat-file", "-e", "--end-of-options", object]);
+  const hasObject = Effect.fn("Git.hasObject")(function* (
+    cwd: string,
+    object: string,
+  ) {
+    return yield* succeeds(cwd, ["cat-file", "-e", "--end-of-options", object]);
+  });
 
   // merge-base --is-ancestor answers with its exit code: 0 yes, 1 no,
   // anything else a real failure.
@@ -1142,9 +1175,10 @@ const make = Effect.gen(function* () {
       descendant,
     ]).pipe(
       Effect.as(true),
-      Effect.catchTag("GitCommandError", (error) =>
-        error.exitCode === 1 ? Effect.succeed(false) : Effect.fail(error),
-      ),
+      Effect.catchTags({
+        GitCommandError: (error) =>
+          error.exitCode === 1 ? Effect.succeed(false) : Effect.fail(error),
+      }),
     );
   });
 
@@ -1258,13 +1292,14 @@ const make = Effect.gen(function* () {
       "--",
       input.name,
     ]).pipe(
-      Effect.catchTag(
-        "GitCommandError",
-        (error): Effect.Effect<never, GitCommandError | BranchNotMergedError> =>
+      Effect.catchTags({
+        GitCommandError: (
+          error,
+        ): Effect.Effect<never, GitCommandError | BranchNotMergedError> =>
           !input.force && /not fully merged/.test(stderrOf(error))
             ? Effect.fail(new BranchNotMergedError({ branch: input.name }))
             : Effect.fail(error),
-      ),
+      }),
     );
   });
 
@@ -1342,7 +1377,9 @@ const make = Effect.gen(function* () {
 
   // Tries a rebase first for linear history. A conflicting commit
   // aborts it for a whole-tree merge, and a failed merge is aborted
-  // too, so the worktree is never left half done. Neither command takes
+  // too, so the worktree is never left half done. Uninterruptible for
+  // the same reason: a rebase killed midway leaves the worktree in one,
+  // and this is local work that ends on its own. Neither command takes
   // a trailing `--`, which they would read as a second revision.
   const rebaseOrMerge = (worktree: string, ref: string) =>
     run(worktree, ["rebase", "--end-of-options", ref]).pipe(
@@ -1355,6 +1392,7 @@ const make = Effect.gen(function* () {
         ),
       ),
       Effect.asVoid,
+      Effect.uninterruptible,
     );
 
   const overwriteFromUpstream = Effect.fn("Git.overwriteFromUpstream")(
@@ -1389,16 +1427,10 @@ const make = Effect.gen(function* () {
           "@{u}",
         ]),
       );
-      const collisions = (yield* Effect.forEach(chunksOf(added), (chunk) =>
-        run(worktree, [
-          "ls-files",
-          "-z",
-          "--others",
-          "--ignored",
-          "--exclude-standard",
-          "--",
-          ...chunk,
-        ]),
+      const collisions = (yield* runChunked(
+        worktree,
+        ["ls-files", "-z", "--others", "--ignored", "--exclude-standard"],
+        added,
       )).flatMap(splitZ);
       if (collisions.length > 0) {
         return yield* new OverwriteRefusedError({
@@ -1407,7 +1439,8 @@ const make = Effect.gen(function* () {
           count: collisions.length,
         });
       }
-      yield* run(worktree, ["reset", "--hard", "@{u}"]);
+      // A reset killed midway leaves a half-written tree.
+      yield* Effect.uninterruptible(run(worktree, ["reset", "--hard", "@{u}"]));
     },
   );
 
@@ -1760,12 +1793,14 @@ const make = Effect.gen(function* () {
           : ["diff", "HEAD", "--no-color", "--", ...paths]),
       ],
       { okExitCodes: [1], maxOutputBytes: PATCH_MAX_OUTPUT },
-    ).pipe(Effect.catchTag("GitCommandError", () => Effect.succeed("")));
+    ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
   });
 
   return Git.of({
     run,
-    isRepo: (repo) => succeeds(repo, ["rev-parse", "--git-dir"]),
+    isRepo: Effect.fn("Git.isRepo")(function* (repo) {
+      return yield* succeeds(repo, ["rev-parse", "--git-dir"]);
+    }),
     listWorktrees,
     addWorktree,
     checkoutWorktree,
@@ -1784,9 +1819,13 @@ const make = Effect.gen(function* () {
     readCommitMessage,
     refTip,
     verifyRev,
-    treeOf: (cwd, commit) => verifyRev(cwd, `${commit}^{tree}`),
+    treeOf: Effect.fn("Git.treeOf")(function* (cwd, commit) {
+      return yield* verifyRev(cwd, `${commit}^{tree}`);
+    }),
     hasObject,
-    hasCommit: (cwd, commit) => hasObject(cwd, `${commit}^{commit}`),
+    hasCommit: Effect.fn("Git.hasCommit")(function* (cwd, commit) {
+      return yield* hasObject(cwd, `${commit}^{commit}`);
+    }),
     isAncestor,
     updateRef: Effect.fn("Git.updateRef")(function* (input) {
       yield* run(input.repo, [
@@ -1810,12 +1849,13 @@ const make = Effect.gen(function* () {
       );
       return [...new Set(tips)].slice(0, LOCAL_TIPS_LIMIT);
     }),
-    snapshotRemoteRefs: (repo) =>
-      run(repo, [
+    snapshotRemoteRefs: Effect.fn("Git.snapshotRemoteRefs")(function* (repo) {
+      return yield* run(repo, [
         "for-each-ref",
         "--format=%(objectname) %(refname)",
         "refs/remotes/",
-      ]),
+      ]);
+    }),
     listRemotes,
     listRemoteEntries: Effect.fn("Git.listRemoteEntries")(function* (repo) {
       return yield* run(repo, ["remote", "-v"]).pipe(
@@ -1824,7 +1864,9 @@ const make = Effect.gen(function* () {
       );
     }),
     branchRefs,
-    listBranches: (repo) => branchRefs(repo).pipe(Effect.map(branchListOf)),
+    listBranches: Effect.fn("Git.listBranches")(function* (repo) {
+      return branchListOf(yield* branchRefs(repo));
+    }),
     localBranchExists,
     remoteRefExists,
     resolveDefaultRef,
@@ -1841,9 +1883,14 @@ const make = Effect.gen(function* () {
       yield* run(input.repo, ["branch", "-m", "--", input.from, input.to]);
     }),
     deleteBranch,
-    listIgnoredPaths: (repo) => listOthersIgnored(repo, "--exclude-standard"),
-    listUntrackedMatching: (repo, excludeFile) =>
-      listOthersIgnored(repo, `--exclude-from=${excludeFile}`),
+    listIgnoredPaths: Effect.fn("Git.listIgnoredPaths")(function* (repo) {
+      return yield* listOthersIgnored(repo, "--exclude-standard");
+    }),
+    listUntrackedMatching: Effect.fn("Git.listUntrackedMatching")(
+      function* (repo, excludeFile) {
+        return yield* listOthersIgnored(repo, `--exclude-from=${excludeFile}`);
+      },
+    ),
     listIgnoreRules,
     fetchAll,
     push: Effect.fn("Git.push")(function* (worktree) {
@@ -1886,17 +1933,16 @@ const make = Effect.gen(function* () {
     fileDiff,
     // --format= drops the commit header, so the patch parses as is.
     // Empty for a commit git can't show one for.
-    commitDiff: (worktree, hash) =>
-      run(
+    commitDiff: Effect.fn("Git.commitDiff")(function* (worktree, hash) {
+      return yield* run(
         worktree,
         ["show", "--format=", "--no-color", "--end-of-options", hash, "--"],
-        {
-          maxOutputBytes: PATCH_MAX_OUTPUT,
-        },
-      ).pipe(Effect.catchTag("GitCommandError", () => Effect.succeed(""))),
+        { maxOutputBytes: PATCH_MAX_OUTPUT },
+      ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
+    }),
     // Both have to be commits the repository already holds.
-    mergeBaseDiff: (input) =>
-      run(
+    mergeBaseDiff: Effect.fn("Git.mergeBaseDiff")(function* (input) {
+      return yield* run(
         input.repo,
         [
           "diff",
@@ -1904,10 +1950,9 @@ const make = Effect.gen(function* () {
           "--end-of-options",
           `${input.base}...${input.head}`,
         ],
-        {
-          maxOutputBytes: PATCH_MAX_OUTPUT,
-        },
-      ),
+        { maxOutputBytes: PATCH_MAX_OUTPUT },
+      );
+    }),
   });
 });
 
