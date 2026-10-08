@@ -6,6 +6,7 @@ import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import * as Control from "./Control.ts";
 import * as Darwin from "./Darwin.ts";
+import * as Doctor from "./Doctor.ts";
 import type { Flavor } from "./flavor.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
@@ -33,7 +34,12 @@ export const engineLayer = (options: {
   readonly store: ReturnType<typeof Store.layer>;
   readonly macfs: string;
 }) =>
-  Layer.mergeAll(Landing.layer, Projects.layer, Transfer.layer).pipe(
+  Layer.mergeAll(
+    Landing.layer,
+    Projects.layer,
+    Doctor.layer,
+    Transfer.layer,
+  ).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(Control.layer(options.flavor)),

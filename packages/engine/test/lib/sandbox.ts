@@ -24,6 +24,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Config from "../../src/Config.ts";
 import * as Control from "../../src/Control.ts";
+import * as Doctor from "../../src/Doctor.ts";
 import { errorDocument } from "../../src/errorDocument.ts";
 import * as Hygiene from "../../src/Hygiene.ts";
 import * as Icons from "../../src/Icons.ts";
@@ -54,6 +55,7 @@ export type Engine =
   | Worktrees.Worktrees
   | Landing.Landing
   | Hygiene.Hygiene
+  | Doctor.Doctor
   | Control.Control
   | Transfer.Transfer;
 
@@ -219,7 +221,10 @@ export function sandbox(): Sandbox {
   const sideDir = (name: string) => {
     sides.add(name);
     const dir = join(root, name);
-    if (!existsSync(dir)) cpSync(seed, dir, { recursive: true });
+    // Times kept, so a file the seed backdated stays old.
+    if (!existsSync(dir)) {
+      cpSync(seed, dir, { recursive: true, preserveTimestamps: true });
+    }
     return dir;
   };
 
@@ -254,6 +259,18 @@ export function sandbox(): Sandbox {
     GIT_COMMITTER_EMAIL: "t@t",
   });
 
+  // What a binary sees of this process's environment, as the engine sees
+  // only what its runtime is given: PATH, the temp dir, and git's
+  // variables with the sandbox's identity.
+  const sideEnv = (): NodeJS.ProcessEnv =>
+    Object.fromEntries(
+      Object.entries(gitEnv()).filter(
+        ([name]) =>
+          ["PATH", "TMPDIR", "LC_ALL"].includes(name) ||
+          name.startsWith("GIT_"),
+      ),
+    );
+
   // A binary run from `cwd` against its own copy of the data dir
   // (`side`): its exit code, its last JSON document and its stderr.
   const runAt = (
@@ -268,7 +285,7 @@ export function sandbox(): Sandbox {
         [...args],
         {
           cwd,
-          env: { ...gitEnv(), HOME: root, SHIGOMORI_DATA_DIR: sideDir(side) },
+          env: { ...sideEnv(), HOME: root, SHIGOMORI_DATA_DIR: sideDir(side) },
         },
         (error, stdout, stderr) => {
           // A spawn failure or a signal has no exit code to compare.
