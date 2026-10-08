@@ -122,9 +122,13 @@ async function main() {
       // Let the platform watcher settle before producing events. On
       // macOS a new watch is handed the writes made just before it
       // opened (the setup's commit and worktree add), so the settle
-      // outlasts a debounce and drops the ping those raise.
-      await delay(500);
-      changes.length = 0;
+      // drops the pings those raise until a window longer than a
+      // debounce passes quiet.
+      do {
+        changes.length = 0;
+        // oxlint-disable-next-line no-await-in-loop -- each window waits on the last
+        await delay(500);
+      } while (changes.length > 0);
 
       // Noise first: status refreshes, a working-tree edit, and the
       // objects a `git add` writes, none of which may ping.

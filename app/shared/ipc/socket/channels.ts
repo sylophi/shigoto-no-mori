@@ -41,7 +41,7 @@ const CHANNEL_FRAME_CREDIT = 4;
 
 // Credit each direction starts with. Sized like the byte-conn buffers
 // it replaces (4 MiB high-water marks on both ends).
-const CHANNEL_WINDOW_BYTES = 4 * 1024 * 1024;
+export const CHANNEL_WINDOW_BYTES = 4 * 1024 * 1024;
 // Largest data payload per frame. Comfortably under the host's inbound
 // frame cap (MAX_INBOUND_FRAME_BYTES, 1 MiB) with the header on top.
 export const CHANNEL_MAX_FRAME_BYTES = 256 * 1024;
@@ -248,7 +248,7 @@ export function createChannelMux(deps: {
 
   // Both directions ended cleanly: the channel is complete.
   function maybeComplete(channelId: string, channel: Channel): void {
-    if (!channel.sentEnd || !channel.receivedEnd) return;
+    if (channel.gone || !channel.sentEnd || !channel.receivedEnd) return;
     remove(channelId, channel);
     channel.endpoint.onComplete?.();
   }
