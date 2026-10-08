@@ -21,6 +21,7 @@ import {
   path,
   worktreesCommand,
 } from "./commands/worktrees.ts";
+import { status } from "./commands/status.ts";
 import { engine } from "./engine.ts";
 import { report } from "./errors.ts";
 import { Output } from "./output.ts";
@@ -44,7 +45,11 @@ function globalFlags(args: ReadonlyArray<string>) {
 // command: a namespace's, a worktree verb's (at the top level and after
 // `worktrees`), and a project verb's, which differ: `rm` alone removes
 // a worktree, after `projects` a project.
-const VERBS: Readonly<Record<string, string>> = { ls: "list", l: "list" };
+const VERBS: Readonly<Record<string, string>> = {
+  ls: "list",
+  l: "list",
+  st: "status",
+};
 const PROJECT_VERBS: Readonly<Record<string, string>> = {
   ls: "list",
   rm: "remove",
@@ -87,6 +92,7 @@ const sm = Command.make("sm").pipe(
     list.pipe(Command.provide(services)),
     path.pipe(Command.provide(services)),
     destination.pipe(Command.provide(services)),
+    status.pipe(Command.provide(services)),
     doctorCommand.pipe(Command.provide(services)),
   ]),
 );
