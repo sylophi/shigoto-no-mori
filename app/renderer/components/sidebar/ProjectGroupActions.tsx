@@ -66,7 +66,7 @@ export interface GroupMember {
   isThisDevice: boolean;
 }
 
-type LiveMember = GroupMember & { api: HostApi };
+export type LiveMember = GroupMember & { api: HostApi };
 
 // The group as the actions see it: this machine's checkout first when
 // there is one, then every peer's with the api its session provides,
@@ -125,6 +125,25 @@ export function useIconMember(
   );
 }
 
+// Where the group's quick create lands: the pick (useQuickCreateDeviceId)
+// when it can take one, else the first live member (this machine leads
+// the list when it is one). A missing local checkout can't take a
+// create either. Shared by the `+` and the inbox's New worktree menu,
+// so the two land on the same device.
+export function useGroupCreator(
+  members: readonly GroupMember[],
+  identity: string | null | undefined,
+): LiveMember | undefined {
+  const designatedId = useQuickCreateDeviceId(identity);
+  const canCreate = members.filter(
+    (member): member is LiveMember =>
+      member.api !== undefined && member.project.pathExists !== false,
+  );
+  return (
+    canCreate.find((member) => member.deviceId === designatedId) ?? canCreate[0]
+  );
+}
+
 interface ProjectGroupActionsProps {
   name: string;
   // The group's repo identity, which the designation is keyed by.
@@ -145,19 +164,10 @@ export function ProjectGroupActions({
   triggerRef,
   onLocate,
 }: ProjectGroupActionsProps) {
-  const designatedId = useQuickCreateDeviceId(identity);
+  const creator = useGroupCreator(members, identity);
   const live = members.filter(
     (member): member is LiveMember => member.api !== undefined,
   );
-  // Where the `+` creates: the pick when it can, else the first live
-  // member (this machine leads the list when it is one). A missing
-  // local checkout can't take a create either.
-  const canCreate = live.filter(
-    (member) => member.project.pathExists !== false,
-  );
-  const creator =
-    canCreate.find((member) => member.deviceId === designatedId) ??
-    canCreate[0];
   // Whose copy the pages open for (and, on a group of one, the remove
   // acts on): this machine's, or the `+`'s device on a header with no local checkout.
   const primary =

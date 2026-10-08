@@ -458,6 +458,8 @@ function Forest({
               <NewWorktreeButton
                 projects={orderedProjects}
                 remote={remoteItems}
+                order={order}
+                byOwner={groupByOwner}
               />
             </div>
             <AddProjectButton outline />
