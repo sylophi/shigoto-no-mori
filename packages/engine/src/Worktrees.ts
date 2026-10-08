@@ -248,6 +248,14 @@ export type Removed = {
   readonly projectName: string;
 };
 
+// Where a project's primary branch is, as primaryTarget reads it.
+export type PrimaryTarget = {
+  readonly remotes: ReadonlyArray<string>;
+  readonly primaryRef: string;
+  readonly remote: string;
+  readonly primaryBranch: string;
+};
+
 // What making or removing a worktree reports as it goes, each event the
 // document `sm --json` prints for it.
 export type WorktreeEvent =
@@ -720,12 +728,15 @@ export class Worktrees extends Context.Service<
     }>;
     // Port-pool's release and the teardown script, the checkout, what is
     // kept under its id, and its branch when the device's setting says so.
+    // `preflighted` skips the dirty check a caller already ran with
+    // checkRemovable. The primary checkout is refused regardless.
     readonly remove: (
       located: Located,
       options: {
         readonly force: boolean;
         readonly keepBranch: boolean;
         readonly skipCleanup: boolean;
+        readonly preflighted?: boolean;
       },
       reporter: Reporter,
     ) => Effect.Effect<
@@ -736,6 +747,12 @@ export class Worktrees extends Context.Service<
       | OrphanedWorktree
       | Git.GitError
     >;
+    // The guards every removal shares: never the primary checkout, and no
+    // uncommitted or unreadable worktree unless forced.
+    readonly checkRemovable: (
+      located: Located,
+      force: boolean,
+    ) => Effect.Effect<void, WorktreeRefused | DirtyWorktree>;
     // Moves the checkout to `destination` (absolute), across volumes too,
     // and carries what is kept under its id to the new one.
     readonly move: (
@@ -745,6 +762,12 @@ export class Worktrees extends Context.Service<
       { readonly worktree: WorktreeRow; readonly previousId: string },
       WorktreeRefused | Git.GitError
     >;
+    // The project's primary ref (the default-branch setting honored),
+    // its remote and local branch when it is a remote-tracking ref, and
+    // the remotes that resolved it. An empty ref when none resolves.
+    readonly primaryTarget: (
+      project: RegisteredProject,
+    ) => Effect.Effect<PrimaryTarget>;
     // Carries what is kept under `from` to the id a checkout at `toPath`
     // (absolute) will have, ahead of moving it there. Answers that id.
     readonly rekey: (
@@ -950,14 +973,7 @@ const make = Effect.gen(function* () {
   const projectSettings = (project: RegisteredProject) =>
     config
       .read({ kind: "project", projectId: project.id, path: project.path })
-      .pipe(
-        Effect.map((doc) => {
-          const branch = doc?.["defaultBranch"];
-          return typeof branch === "string" && branch.trim() !== ""
-            ? { settings: doc, defaultBranch: branch }
-            : { settings: null, defaultBranch: undefined };
-        }),
-      );
+      .pipe(Effect.map(Config.projectSettingsOf));
 
   const identities = Effect.fn("Worktrees.identities")(function* (
     project: RegisteredProject,
@@ -2382,23 +2398,35 @@ const make = Effect.gen(function* () {
       }
     });
 
+  const notPrimary = (worktree: WorktreeIdentity) =>
+    worktree.isPrimary
+      ? Effect.fail(
+          new WorktreeRefused({
+            reason: "remove-primary",
+            subject: worktree.path,
+          }),
+        )
+      : Effect.void;
+
+  const removable = (worktree: WorktreeIdentity, force: boolean) =>
+    notPrimary(worktree).pipe(
+      Effect.andThen(requireClean(worktree, force, "remove", "")),
+    );
+
   const remove = Effect.fn("Worktrees.remove")(function* (
     located: Located,
     options: {
       readonly force: boolean;
       readonly keepBranch: boolean;
       readonly skipCleanup: boolean;
+      readonly preflighted?: boolean;
     },
     reporter: Reporter,
   ) {
     const { project, worktree } = located;
-    if (worktree.isPrimary) {
-      return yield* new WorktreeRefused({
-        reason: "remove-primary",
-        subject: worktree.path,
-      });
-    }
-    yield* requireClean(worktree, options.force, "remove", "");
+    yield* options.preflighted
+      ? notPrimary(worktree)
+      : removable(worktree, options.force);
     const deleteBranchOnRemove = (yield* config
       .get({ kind: "device" }, "deleteBranchOnRemove")
       .pipe(Effect.orDie)).value;
@@ -2871,6 +2899,16 @@ const make = Effect.gen(function* () {
     move,
     rekey,
     relocateProject,
+    checkRemovable: (located, force) => removable(located.worktree, force),
+    primaryTarget: (project) =>
+      primaryRefOf(project).pipe(
+        Effect.map(({ remotes, primaryRef, primaryBranch }) => ({
+          remotes,
+          primaryRef,
+          remote: splitRemoteRef(primaryRef, remotes)?.remote ?? "",
+          primaryBranch,
+        })),
+      ),
   });
 });
 
