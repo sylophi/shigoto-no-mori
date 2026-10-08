@@ -124,8 +124,7 @@ export class BranchNotMergedError extends Schema.TaggedError<BranchNotMergedErro
 export const isBranchNotMergedError = Schema.is(BranchNotMergedError);
 
 // A peer's command-access gate refused the call: that machine does not
-// run commands from here (host/socket/server.ts answers the gated call
-// with COMMAND_REFUSED_CODE, and the client transport mints this), as
+// run commands from here (host/socket/server.ts's dispatch gate), as
 // distinct from a real handler failure.
 export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>()(
   "CommandRefusedError",
@@ -149,8 +148,7 @@ export const ContractErrorSchema = Schema.Union([
   CommandRefusedError,
 ]);
 
-const isContractError = Schema.is(ContractErrorSchema);
-const encodeContractError = Schema.encodeSync(ContractErrorSchema);
+const encodeContractError = Schema.encodeUnknownOption(ContractErrorSchema);
 const decodeContractError = Schema.decodeUnknownOption(ContractErrorSchema);
 
 // A failure as a wire carries it: the message every side can show, and
@@ -159,9 +157,10 @@ export type ErrorWire = { message: string; error?: unknown };
 
 export function errorToWire(error: unknown): ErrorWire {
   const message = errorMessageOf(error);
-  return isContractError(error)
-    ? { message, error: encodeContractError(error) }
-    : { message };
+  return Option.match(encodeContractError(error), {
+    onNone: () => ({ message }),
+    onSome: (encoded) => ({ message, error: encoded }),
+  });
 }
 
 // The failure back from its wire form: the class it was sent as, or a

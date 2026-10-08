@@ -16,8 +16,8 @@
 // The command gate: the listener serves a channel registered
 // gated:false to every authed peer, and anything else (a mutating
 // or untagged channel) only while the host accepts commands, refusing
-// it with the shared command-refused code BEFORE its handler runs. The
-// client transport maps that code to the typed CommandRefusedError.
+// it with the contract's CommandRefusedError BEFORE its handler runs,
+// which the client transport decodes back into its class.
 // The switch's one exception, a call the host itself invited
 // (WsServerTicketAuth.isInvited), runs with the switch off, and the
 // byte channel it attaches outlives the drop the switch-off deals
@@ -44,7 +44,6 @@ import {
   CLOSE_AUTH_FAILED,
   CLOSE_GOING_AWAY,
   CLOSE_HELLO_FAILED,
-  COMMAND_REFUSED_CODE,
   encodeFrame,
   MAX_IN_FLIGHT_PER_PEER,
   type ClientFrame,
@@ -651,17 +650,17 @@ it("generation guard: no handler executes under a stopped listener", async () =>
   await stopping;
 });
 
-it("command gate: with commands off a mutating and an untagged channel are refused with the typed code and their handlers never run, a read-only channel is still served, and with commands on both run", async () => {
+it("command gate: with commands off a mutating and an untagged channel are refused with the typed error and their handlers never run, a read-only channel is still served, and with commands on both run", async () => {
   mutateExecutions = 0;
   untaggedExecutions = 0;
   const listener = await startListener(trackTest);
   const { client } = await authenticate(listener);
-  // (a) gated:true is refused with the machine-readable code
+  // (a) gated:true is refused with the contract error
   // and the handler body never runs.
   client.send({ t: "req", id: 1, channel: "test:mutate" });
   const mutateRes = await client.nextRes();
   assert.equal(mutateRes.ok, false);
-  assert.equal(mutateRes.code, COMMAND_REFUSED_CODE);
+  assert.deepEqual(mutateRes.error, { _tag: "CommandRefusedError" });
   assert.match(mutateRes.message, /not permitted to run commands/);
   assert.equal(mutateExecutions, 0, "a mutating handler ran ungranted");
   // (b) an UNTAGGED channel is refused too: only channels proven
@@ -669,7 +668,7 @@ it("command gate: with commands off a mutating and an untagged channel are refus
   client.send({ t: "req", id: 2, channel: "test:untagged" });
   const untaggedRes = await client.nextRes();
   assert.equal(untaggedRes.ok, false);
-  assert.equal(untaggedRes.code, COMMAND_REFUSED_CODE);
+  assert.deepEqual(untaggedRes.error, { _tag: "CommandRefusedError" });
   assert.equal(untaggedExecutions, 0, "an untagged handler ran ungranted");
   // (c) an explicit read on the same socket is served as before.
   client.send({ t: "req", id: 3, channel: "test:echo", input: "read" });
@@ -778,7 +777,7 @@ it("invited calls: with commands off a call the host asked for (isInvited, by th
   connection.close();
 });
 
-it("typed refusal client-side: the client transport maps the code to CommandRefusedError while a real handler failure stays a plain Error", async () => {
+it("typed refusal client-side: the client transport decodes CommandRefusedError while a real handler failure stays a plain Error", async () => {
   const listener = await startListener(trackTest);
   const connection = await dial(listener.url, listener.mint());
   await assert.rejects(

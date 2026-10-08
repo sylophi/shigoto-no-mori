@@ -10,7 +10,7 @@
 // channel registered gated:false to every authed peer, and anything
 // else (a mutation, or an untagged channel) only under the host's live
 // command-access switch, or as a call the host itself invited (the
-// auth's isInvited), refused with the shared command-refused code
+// auth's isInvited), refused with the contract's CommandRefusedError
 // before its handler runs otherwise. One authed socket per deviceId,
 // with supersede.
 //
@@ -38,7 +38,6 @@ import {
   CLOSE_HELLO_FAILED,
   CLOSE_OVER_CAPACITY,
   ClientFrameSchema,
-  COMMAND_REFUSED_CODE,
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
@@ -552,14 +551,7 @@ export function createWsServerBinding(
       ) {
         call = invitedContext(ctx);
       } else if (!auth.isCommandGranted()) {
-        send(
-          socket,
-          resError(
-            frame.id,
-            new CommandRefusedError().message,
-            COMMAND_REFUSED_CODE,
-          ),
-        );
+        send(socket, resHandlerError(frame.id, new CommandRefusedError()));
         return;
       }
     }

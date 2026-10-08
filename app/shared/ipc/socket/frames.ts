@@ -183,11 +183,6 @@ const ResOkFrameSchema = z.object({
   result: z.unknown().optional(),
 });
 
-// The one refusal code a remote gate stamps on a res error: the direct
-// listener's command-access gate. The client transport mints the
-// contract's CommandRefusedError for it.
-export const COMMAND_REFUSED_CODE = "command-refused";
-
 // The err form carries the message every side can show, and `error`,
 // the encoded contract error (packages/contracts/src/errors.ts) when the
 // handler failed with one, which the client decodes back into its

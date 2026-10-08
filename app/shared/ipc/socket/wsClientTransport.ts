@@ -11,14 +11,9 @@
 // by a monotonic id, with push frames fanned out to local subscribers.
 // It owns exactly one socket. Redials live one layer up in the direct
 // keeper, which is the single owner of retry.
-import {
-  CommandRefusedError,
-  errorFromWire,
-  errorMessageOf,
-} from "@shigomori/contracts/errors";
+import { errorFromWire, errorMessageOf } from "@shigomori/contracts/errors";
 import {
   CLOSE_AUTH_FAILED,
-  COMMAND_REFUSED_CODE,
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
@@ -595,12 +590,6 @@ export function openDevice(
       pending.delete(frame.id);
       if (frame.ok) {
         entry.resolve(frame.result);
-      } else if (frame.code === COMMAND_REFUSED_CODE) {
-        // The host's gate refused the command (it does not accept
-        // commands from its peers). Typed, message preserved, so a caller can
-        // distinguish "that machine will not run commands from here"
-        // from a real handler failure.
-        entry.reject(new CommandRefusedError());
       } else {
         // The handler's contract error back as its class, or a plain
         // Error carrying the host's message.
