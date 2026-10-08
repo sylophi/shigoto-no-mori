@@ -34,14 +34,14 @@ import {
   isHaltedStatus,
   MIRROR_LABEL_REPLACES,
   type MirrorGitStatus,
-  mirrorOnMirrorBranch,
 } from "@shigomori/contracts/modules/mirror";
 import { findProjectOrThrow } from "@host/lib/projects";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
 import {
   MIRROR_LABEL_LOCAL_PROJECT,
   MIRROR_LABEL_LOCAL_WORKTREE,
-} from "@host/ipc/modules/mirror";
+  onMirrorBranch,
+} from "./registry";
 import {
   CHANGED_LOCALLY,
   core,
@@ -285,7 +285,7 @@ export function createGitFollower(deps: {
     const localWorktree = { id: localWorktreeId, path: session.localRoot };
     const peerSync = deps.peerSyncApiFor(session.deviceId);
     const peerMirror = deps.peerMirrorApiFor(session.deviceId);
-    const names = mirrorOnMirrorBranch(session) ? MIRROR_NAMES : SAME_NAMES;
+    const names = onMirrorBranch(session) ? MIRROR_NAMES : SAME_NAMES;
     try {
       // Independent reads, so the local git work hides under the peer
       // round trip. The apply's compare-and-set covers either side

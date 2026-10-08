@@ -75,9 +75,7 @@ import {
   controlContract,
 } from "@shigomori/contracts/modules/control";
 import {
-  MIRROR_LABEL_COPY_SIDE,
-  MIRROR_LABEL_MIRROR_BRANCH,
-  MIRROR_LABEL_TRANSFER,
+  MIRROR_LABEL_MODE,
   mirrorContract,
   type MirrorGitStatus,
 } from "@shigomori/contracts/modules/mirror";
@@ -99,13 +97,14 @@ import { loose } from "@shigomori/contracts/schemas/loose";
 import { strict } from "@shigomori/contracts/schemas/strict";
 import { only } from "@shared/util/only";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
+import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import {
-  mirrorHandlers,
+  isTransferSession,
   setMirrorImpl,
   type MirrorCreateInput,
   type MirrorImpl,
   type MirrorSessionRaw,
-} from "@host/ipc/modules/mirror";
+} from "@host/mirror/registry";
 import { setCliRunnerImpl, type CliResult } from "@host/ipc/cliDelegate";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
@@ -838,9 +837,7 @@ it("mirror: sends the worktree and opens a session whose copy is the peer's, a r
   // The transplants above each ran the engine once for their ignored
   // files (host/mirror/oneShot.ts), under the transfer label.
   mirrorsCreated = () =>
-    engine.state.created.filter(
-      (input) => !(MIRROR_LABEL_TRANSFER in input.labels),
-    );
+    engine.state.created.filter((input) => !isTransferSession(input));
   const created = only(mirrorsCreated());
   assert.ok(created !== undefined, "exactly one mirror session is created");
   assert.equal(
@@ -849,7 +846,7 @@ it("mirror: sends the worktree and opens a session whose copy is the peer's, a r
     "the session runs on the original",
   );
   assert.equal(created.remoteRoot, mirrored.worktree.path);
-  assert.equal(created.labels[MIRROR_LABEL_COPY_SIDE], "remote");
+  assert.equal(created.labels[MIRROR_LABEL_MODE], "mirror");
   assert.equal(existsSync(join(mirrored.worktree.path, "m.txt")), true);
 
   const again = transferDoc(
@@ -1000,7 +997,7 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
   assert.equal(inboundInput.localRoot, inPath, "on the original");
   assert.equal(inboundInput.deviceId, "B");
   assert.equal(inboundInput.remoteRoot, inbound.worktree.path);
-  assert.equal(inboundInput.labels[MIRROR_LABEL_COPY_SIDE], "remote");
+  assert.equal(inboundInput.labels[MIRROR_LABEL_MODE], "mirror");
   // The ask's invitation, for the peer and its original. It stays
   // pending here: the landing runs on the one listener both devices
   // share, stamped with the ASKING device as its caller, so it never
@@ -1093,7 +1090,7 @@ it("mirror --from of the peer's primary: lands as a worktree on mirror/main in m
   assert.ok(fromPrimaryInput);
   assert.equal(fromPrimaryInput.localRoot, sourceRepo);
   assert.equal(fromPrimaryInput.remoteRoot, fromPrimary.worktree.path);
-  assert.equal(fromPrimaryInput.labels[MIRROR_LABEL_MIRROR_BRANCH], "1");
+  assert.equal(fromPrimaryInput.labels[MIRROR_LABEL_MODE], "mirror-branch");
   assert.equal(
     await gitOut(fromPrimary.worktree.path, "rev-parse", "HEAD"),
     primaryMainBefore,
