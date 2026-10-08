@@ -85,13 +85,11 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
               onKeyDown={onKeyDown}
               // The picked pill wears the accent fill every selection in
               // the app wears, hover included, over the variant's own
-              // fill. (doubutsu fills outline buttons from an unlayered
-              // rule, so it re-fills the picked pill itself: see
-              // sidebar-device-filter.)
+              // fill.
               className={cn(
                 "font-normal",
                 checked &&
-                  "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
+                  "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground dark:bg-accent dark:hover:bg-accent",
               )}
             >
               {pill.icon && (
