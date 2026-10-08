@@ -18,16 +18,11 @@ import {
   worktreeFlags,
 } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
-import { divergenceCell, flagNames, type Styles } from "./cells.ts";
+import { divergenceCell, flagNames, type Styles, truncate } from "./cells.ts";
 import { status } from "./status.ts";
 
 // A title cut to fit a terminal line.
-const titleCell = (title: string | undefined) => {
-  const chars = [...(title ?? "")];
-  return chars.length <= 50
-    ? chars.join("")
-    : `${chars.slice(0, 49).join("")}…`;
-};
+const titleCell = (title: string | undefined) => truncate(title ?? "", 50);
 
 const syncCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
   row.detached

@@ -114,6 +114,10 @@ const program = Command.runWith(sm, { version, renderErrors: false })(
     json,
     stdoutColor: !plain && process.stdout.isTTY === true,
     stderrColor: !plain && process.stderr.isTTY === true,
+    width: Math.min(
+      Math.max(process.stdout.columns || process.stderr.columns || 80, 60),
+      110,
+    ),
     binaryName: flavorNames(flavor).binaryName,
   }),
   Effect.flatMap((code) =>

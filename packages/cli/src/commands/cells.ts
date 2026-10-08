@@ -4,6 +4,14 @@ import type { styles } from "../output.ts";
 
 export type Styles = ReturnType<typeof styles>;
 
+// Cut to `max` columns, the last one an ellipsis.
+export const truncate = (text: string, max: number) => {
+  const chars = [...text];
+  return max < 2 || chars.length <= max
+    ? text
+    : `${chars.slice(0, max - 1).join("")}…`;
+};
+
 // The ↑ahead ↓behind cell, `even` with no divergence. A status card
 // says the same of the upstream and the base.
 export const divergenceCell = (

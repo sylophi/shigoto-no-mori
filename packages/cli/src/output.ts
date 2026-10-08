@@ -10,6 +10,9 @@ export class Output extends Context.Service<
     readonly json: boolean;
     readonly stdoutColor: boolean;
     readonly stderrColor: boolean;
+    // The terminal's width, clamped: below 60 helps nobody, past 110 is
+    // hard to scan. 80 without a terminal.
+    readonly width: number;
     // The command's name, for messages that point at another command.
     readonly binaryName: string;
   }
@@ -64,3 +67,11 @@ export function renderTable(
   const [head = "", ...body] = alignRows([header, ...rows]);
   return [styles(color).dim(head), ...body].join("\n");
 }
+
+// A path under the home folder, written from ~.
+export const collapseHome = (home: string, path: string) =>
+  path === home
+    ? "~"
+    : path.startsWith(`${home}/`)
+      ? `~${path.slice(home.length)}`
+      : path;

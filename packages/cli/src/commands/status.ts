@@ -2,13 +2,21 @@
 // its git state, ports, scripts and pull request.
 import * as Paths from "@shigomori/engine/Paths";
 import * as Worktrees from "@shigomori/engine/Worktrees";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { resolveWorktree, worktreeFlags } from "../here.ts";
-import { alignRows, emit, out, Output, styles } from "../output.ts";
-import { divergenceCell, flagNames, type Styles } from "./cells.ts";
+import {
+  alignRows,
+  collapseHome,
+  emit,
+  out,
+  Output,
+  styles,
+} from "../output.ts";
+import { divergenceCell, flagNames, type Styles, truncate } from "./cells.ts";
 
 type Card = Worktrees.StatusCard;
 
@@ -20,27 +28,11 @@ const SYNC_SUFFIX = 12;
 const AGE_SUFFIX = 20;
 const CHECKS_SUFFIX = 24;
 
-// The terminal's width, clamped: below 60 helps nobody, past 110 is hard
-// to scan.
-const terminalWidth = () =>
-  Math.min(
-    Math.max(process.stdout.columns || process.stderr.columns || 80, 60),
-    110,
-  );
-
-// Cut to `max` columns, the last one an ellipsis.
-const truncate = (text: string, max: number) => {
-  const chars = [...text];
-  return max < 2 || chars.length <= max
-    ? text
-    : `${chars.slice(0, max - 1).join("")}…`;
-};
-
-// How long ago an ISO time was, in the coarsest unit that fits.
-const relativeAge = (iso: string) => {
+// How long before `now` an ISO time was, in the coarsest unit that fits.
+const relativeAge = (iso: string, now: number) => {
   const stamp = Date.parse(iso);
   if (Number.isNaN(stamp)) return "";
-  const since = Date.now() - stamp;
+  const since = now - stamp;
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
@@ -98,8 +90,17 @@ const prLine = (paint: Styles, pr: NonNullable<Card["pr"]>, width: number) => {
 
 // The header, then an aligned block of label and value, each value
 // painted once its width is fixed.
-const card = (paint: Styles, status: Card, home: string) => {
-  const width = terminalWidth() - LABEL_WIDTH;
+const card = (
+  paint: Styles,
+  status: Card,
+  place: {
+    readonly home: string;
+    readonly width: number;
+    readonly now: number;
+  },
+) => {
+  const { home, now } = place;
+  const width = place.width - LABEL_WIDTH;
   const flags = flagNames(status);
   if (status.detached) flags.push("detached HEAD");
   const header =
@@ -115,13 +116,7 @@ const card = (paint: Styles, status: Card, home: string) => {
   if (status.pr === null || status.pr.state !== "OPEN") {
     row("title", truncate(status.title ?? "", width));
   }
-  const where =
-    status.path === home
-      ? "~"
-      : status.path.startsWith(`${home}/`)
-        ? `~${status.path.slice(home.length)}`
-        : status.path;
-  row("path", paint.dim(truncate(where, width)));
+  row("path", paint.dim(truncate(collapseHome(home, status.path), width)));
   const upstream = status.git.upstream;
   row(
     "branch",
@@ -146,7 +141,7 @@ const card = (paint: Styles, status: Card, home: string) => {
   }
   const commit = status.git.lastCommit;
   if (commit !== null) {
-    const age = relativeAge(commit.date);
+    const age = relativeAge(commit.date, now);
     row(
       "commit",
       `${paint.yellow(commit.hash)}  ${truncate(commit.subject, width - AGE_SUFFIX)}${age === "" ? "" : paint.dim(`  (${age})`)}`,
@@ -195,10 +190,11 @@ export const status = Command.make(
       const found = yield* (yield* Worktrees.Worktrees).status(located, {
         pullRequest: !input.noPr,
       });
-      const { json, stdoutColor } = yield* Effect.service(Output);
+      const { json, stdoutColor, width } = yield* Effect.service(Output);
       if (json) return yield* emit(found);
       const { home } = yield* Paths.Paths;
-      yield* out(card(styles(stdoutColor), found, home));
+      const now = yield* Clock.currentTimeMillis;
+      yield* out(card(styles(stdoutColor), found, { home, width, now }));
     }),
 ).pipe(
   Command.withDescription("One worktree's git state, ports and pull request"),

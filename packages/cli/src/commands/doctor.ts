@@ -9,7 +9,15 @@ import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { version } from "../build.ts";
 import { ExitCode, UsageError } from "../errors.ts";
-import { alignRows, emit, note, out, Output, styles } from "../output.ts";
+import {
+  alignRows,
+  collapseHome,
+  emit,
+  note,
+  out,
+  Output,
+  styles,
+} from "../output.ts";
 import { confirm, interactive } from "../prompt.ts";
 
 const GROUPS: ReadonlyArray<Doctor.Group> = [
@@ -52,12 +60,7 @@ const render = (doc: Doctor.DoctorDocument, fix: boolean) =>
     const { bold, cyan, dim, green, red, yellow } = styles(stdoutColor);
     const glyph = (status: Doctor.Status) =>
       status === "ok" ? green("✓") : status === "warn" ? yellow("!") : red("✗");
-    const where =
-      doc.dataDir === home
-        ? "~"
-        : doc.dataDir.startsWith(`${home}/`)
-          ? `~${doc.dataDir.slice(home.length)}`
-          : doc.dataDir;
+    const where = collapseHome(home, doc.dataDir);
     yield* out(
       `${bold(`${binaryName} doctor`)} ${dim(`${doc.version} (${doc.flavor})`)}  data dir ${cyan(where)}`,
     );
