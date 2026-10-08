@@ -32,7 +32,6 @@ import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
-import { restartSchedule } from "./restartSchedule";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
 // jitter-free so a test asserts the exact sequence.
@@ -114,6 +113,27 @@ export type Supervisor = {
   stop(): void;
 };
 
+// A restart ladder as a Schedule, for a supervised run
+// that is repeated whenever it ends. Its input is how long the run
+// lasted in milliseconds: one that stayed up for `stableMs` broke the
+// failure streak, so the next restart starts the ladder from the
+// bottom. Each restart climbs a rung, capped at the last.
+export const restartSchedule = (
+  ladder: readonly [number, ...number[]],
+  stableMs: number = STABLE_CONNECTION_MS,
+): Schedule.Schedule<number, number> =>
+  Schedule.fromStep(
+    Effect.sync(() => {
+      let attempt = 0;
+      return (_now: number, uptimeMs: number) => {
+        if (uptimeMs >= stableMs) attempt = 0;
+        const delay = Duration.millis(backoffDelayMs(ladder, attempt));
+        attempt += 1;
+        return Effect.succeed([attempt, delay] as [number, Duration.Duration]);
+      };
+    }),
+  );
+
 // The ladder lookup, clamped at both ends. Exported with the ladder as
 // a parameter so other supervised children (the cloudflared runner)
 // share the one rule instead of copying it.
@@ -149,62 +169,76 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
   // closes. Answers how long it stayed up, which the restart schedule
   // reads (a failed attempt never counts as a stable connection), or
   // blocks for good.
-  const attempt = Effect.gen(function* () {
-    yield* setStatus({ phase: "connecting" });
-    const closed = yield* Deferred.make<number | null>();
-    const connected = yield* Effect.callback<
-      Result.Result<SupervisedConnection, unknown>
-    >((resume) => {
-      let orphaned = false;
-      // Fires only for a socket that dropped on its own: the transport
-      // suppresses this for an owner-initiated close.
-      options
-        .connect((code) => Deferred.doneUnsafe(closed, Exit.succeed(code)))
-        .then(
-          (connection) => {
-            // Torn down while the handshake was in flight: the orphan is
-            // closed so it does not leak a live socket.
-            if (orphaned) connection.close();
-            else resume(Effect.succeed(Result.succeed(connection)));
+  // Interruptible only while it waits (the connect, the open socket,
+  // a block): a stop between the connect landing and the socket's wait
+  // still closes the socket.
+  const attempt = Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      yield* setStatus({ phase: "connecting" });
+      const closed = yield* Deferred.make<number | null>();
+      const connected = yield* restore(
+        Effect.callback<Result.Result<SupervisedConnection, unknown>>(
+          (resume) => {
+            let orphaned = false;
+            // Fires only for a socket that dropped on its own: the
+            // transport suppresses this for an owner-initiated close.
+            Promise.resolve()
+              .then(() =>
+                options.connect((code) =>
+                  Deferred.doneUnsafe(closed, Exit.succeed(code)),
+                ),
+              )
+              .then(
+                (connection) => {
+                  // Torn down while the handshake was in flight: the
+                  // orphan is closed so it does not leak a live socket.
+                  if (orphaned) connection.close();
+                  else resume(Effect.succeed(Result.succeed(connection)));
+                },
+                (error: unknown) => resume(Effect.succeed(Result.fail(error))),
+              );
+            return Effect.sync(() => {
+              orphaned = true;
+            });
           },
-          (error: unknown) => resume(Effect.succeed(Result.fail(error))),
-        );
-      return Effect.sync(() => {
-        orphaned = true;
-      });
-    });
-    if (Result.isFailure(connected)) {
-      const error = connected.failure;
-      // The transport tags a blocking close as blocked. Anything else
-      // (hello timeout, host restart, network blip) is retryable.
-      if (error instanceof RemoteConnectError && error.blocked) {
-        // A blocking close names itself through the classifier. A
-        // blocking failure with no close code (a refused ticket mint)
-        // names itself in the error.
-        const verdict = classifyClose(error.code) ?? {
-          reason: "refused" as const,
-          message: error.message,
-        };
-        return yield* block(verdict.reason, verdict.message);
+        ),
+      );
+      if (Result.isFailure(connected)) {
+        const error = connected.failure;
+        // The transport tags a blocking close as blocked. Anything
+        // else (hello timeout, host restart, network blip) is
+        // retryable.
+        if (error instanceof RemoteConnectError && error.blocked) {
+          // A blocking close names itself through the classifier. A
+          // blocking failure with no close code (a refused ticket
+          // mint) names itself in the error.
+          const verdict = classifyClose(error.code) ?? {
+            reason: "refused" as const,
+            message: error.message,
+          };
+          return yield* restore(block(verdict.reason, verdict.message));
+        }
+        return 0;
       }
-      return 0;
-    }
-    const connection = connected.success;
-    const connectedAt = yield* Clock.currentTimeMillis;
-    yield* setStatus({
-      phase: "connected",
-      remoteDeviceId: connection.remoteDeviceId,
-      remoteAppVersion: connection.remoteAppVersion,
-    });
-    options.onConnection?.(connection);
-    const code = yield* Deferred.await(closed).pipe(
-      Effect.onInterrupt(() => Effect.sync(() => connection.close())),
-    );
-    options.onConnection?.(null);
-    const verdict = classifyClose(code);
-    if (verdict !== null) return yield* block(verdict.reason, verdict.message);
-    return (yield* Clock.currentTimeMillis) - connectedAt;
-  });
+      const connection = connected.success;
+      return yield* Effect.gen(function* () {
+        const connectedAt = yield* Clock.currentTimeMillis;
+        yield* setStatus({
+          phase: "connected",
+          remoteDeviceId: connection.remoteDeviceId,
+          remoteAppVersion: connection.remoteAppVersion,
+        });
+        options.onConnection?.(connection);
+        const code = yield* restore(Deferred.await(closed));
+        options.onConnection?.(null);
+        const verdict = classifyClose(code);
+        if (verdict !== null) {
+          return yield* restore(block(verdict.reason, verdict.message));
+        }
+        return (yield* Clock.currentTimeMillis) - connectedAt;
+      }).pipe(Effect.onInterrupt(() => Effect.sync(() => connection.close())));
+    }),
+  );
 
   const supervise = attempt.pipe(
     Effect.repeat(

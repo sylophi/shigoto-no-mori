@@ -53,8 +53,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
-import { BACKOFF_LADDER_MS } from "@shared/remote/supervisor";
-import { restartSchedule } from "@shared/remote/restartSchedule";
+import { BACKOFF_LADDER_MS, restartSchedule } from "@shared/remote/supervisor";
 import { isTerminalDialError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { log } from "@shared/log";
@@ -94,8 +93,9 @@ export type DirectKeeper = {
 };
 
 type PeerState = {
-  readonly loop: Fiber.Fiber<never>;
-  // The established session's drop, which ends its wait.
+  loop: Fiber.Fiber<never> | null;
+  // The current attempt's session drop, armed before its dial, so a
+  // drop reported however early ends the session's wait.
   dropped: Deferred.Deferred<void> | null;
   lastFailure: string | null;
 };
@@ -117,11 +117,14 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
   // a failed dial counts as 0, and only a drop after a STABLE run
   // resets the ladder, so a connect-then-die flapper keeps climbing
   // instead of hammering at the bottom rung.
-  const attempt = (deviceId: string, state: () => PeerState) =>
+  const attempt = (deviceId: string, state: PeerState) =>
     Effect.gen(function* () {
+      const dropped = yield* Deferred.make<void>();
+      state.dropped = dropped;
       const dialed = yield* Effect.callback<Result.Result<unknown, unknown>>(
         (resume) => {
-          deps.dial(deviceId).then(
+          const dialing = Promise.resolve().then(() => deps.dial(deviceId));
+          dialing.then(
             (session) => resume(Effect.succeed(Result.succeed(session))),
             (error: unknown) => resume(Effect.succeed(Result.fail(error))),
           );
@@ -136,10 +139,10 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
         // dial is logged at all (the renderer learns of it only when
         // it asks, through the no-session rejection), so without it a
         // peer that never connects leaves no trace in the log.
-        if (message !== state().lastFailure) {
+        if (message !== state.lastFailure) {
           log.warn(`[direct] dial to ${deviceId} failed: ${message}`);
         }
-        state().lastFailure = message;
+        state.lastFailure = message;
         // Redialing cannot change a terminal verdict and WOULD feed the
         // host's failed-auth lockout, so the loop parks: this peer's
         // next dial comes from its roster re-entry (see the header),
@@ -148,29 +151,28 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
         return 0;
       }
       const connectedAt = yield* Clock.currentTimeMillis;
-      if (state().lastFailure !== null) {
+      if (state.lastFailure !== null) {
         log.info(`[direct] session to ${deviceId} established`);
       }
-      state().lastFailure = null;
-      const dropped = yield* Deferred.make<void>();
-      state().dropped = dropped;
+      state.lastFailure = null;
       yield* Deferred.await(dropped);
       return (yield* Clock.currentTimeMillis) - connectedAt;
     });
 
   const keep = (deviceId: string) => {
-    let state: PeerState | undefined;
-    const loop = run(
-      Effect.suspend(() => attempt(deviceId, () => state as PeerState)).pipe(
+    const state: PeerState = { loop: null, dropped: null, lastFailure: null };
+    state.loop = run(
+      attempt(deviceId, state).pipe(
         Effect.repeat(restartSchedule(BACKOFF_LADDER_MS)),
         Effect.andThen(Effect.never),
       ),
     );
-    state = { loop, dropped: null, lastFailure: null };
     return state;
   };
 
-  const forget = (state: PeerState) => void run(Fiber.interrupt(state.loop));
+  const forget = (state: PeerState) => {
+    if (state.loop !== null) run(Fiber.interrupt(state.loop));
+  };
 
   return {
     reconcile(online) {

@@ -41,9 +41,9 @@ import {
   TUNNEL_PROBE_DEADLINE_FRESH_MS,
   BACKOFF_LADDER_MS,
   backoffDelayMs,
+  restartSchedule,
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
-import { restartSchedule } from "@shared/remote/restartSchedule";
 import * as Processes from "@host/lib/util/processes";
 import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 

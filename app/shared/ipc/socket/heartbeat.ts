@@ -22,6 +22,7 @@
 // Clock: browser-safe.
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
@@ -50,6 +51,29 @@ type Heartbeat = {
   probe(): void;
 };
 
+// The live clock with its sleeps unref'd: a heartbeat must never be what
+// keeps a node process alive (the checks and the wire bench run this
+// headlessly, and a leaked socket would hang them).
+const live = Effect.runSync(Clock.clockWith(Effect.succeed));
+const unrefClock: Clock.Clock = {
+  currentTimeMillisUnsafe: () => live.currentTimeMillisUnsafe(),
+  currentTimeMillis: live.currentTimeMillis,
+  currentTimeNanosUnsafe: () => live.currentTimeNanosUnsafe(),
+  currentTimeNanos: live.currentTimeNanos,
+  monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+  monotonicTimeNanos: live.monotonicTimeNanos,
+  sleep: (duration) =>
+    Effect.callback<void>((resume) => {
+      const timer = setTimeout(
+        () => resume(Effect.void),
+        Duration.toMillis(duration),
+      );
+      // Browsers hand back a number, which has no unref.
+      (timer as { unref?: () => void }).unref?.();
+      return Effect.sync(() => clearTimeout(timer));
+    }),
+};
+
 export function createHeartbeat(
   deps: HeartbeatOptions & {
     // Writes one ping to the wire. May throw once the socket is
@@ -61,7 +85,7 @@ export function createHeartbeat(
   const intervalMs = deps.intervalMs ?? HEARTBEAT_INTERVAL_MS;
   const timeoutMs = deps.timeoutMs ?? HEARTBEAT_TIMEOUT_MS;
   const probeTimeoutMs = deps.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
-  const run = Effect.runForkWith(Context.empty());
+  const run = Effect.runForkWith(Context.make(Clock.Clock, unrefClock));
 
   let pingSentAt: number | null = null;
   let pings: Fiber.Fiber<void> | null = null;
