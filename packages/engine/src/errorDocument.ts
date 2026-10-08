@@ -52,6 +52,11 @@ export const codeOf = (error: unknown): string | undefined => {
   return undefined;
 };
 
+// Whether the command line was what was wrong, which the terminal exits
+// 2 for: the error says so itself.
+export const isUsage = (error: unknown): boolean =>
+  Predicate.hasProperty(error, "usage") && error.usage === true;
+
 export const errorDocument = (error: unknown): ErrorDocument => {
   const code = codeOf(error);
   return code === undefined

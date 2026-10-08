@@ -1,6 +1,7 @@
 // sm projects <list|add|remove|reorder|icon|config>: the registered
 // projects, terrier's included, and each one's settings.
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
+import { errorDocument } from "@shigomori/engine/errorDocument";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Projects from "@shigomori/engine/Projects";
@@ -8,6 +9,7 @@ import * as Registry from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
@@ -141,56 +143,59 @@ const yesFlag = Flag.Boolean("yes").pipe(
   Flag.withDefault(false),
 );
 
-// Every repo under `root` that isn't a project yet, once a person said
-// yes (or --yes did).
+// The line a person reads for a project just added.
+const announce = (project: Registry.RegisteredProject) =>
+  Effect.flatMap(Effect.service(Output), ({ stdoutColor }) =>
+    out(styles(stdoutColor).green(`added ${project.name} (${project.path})`)),
+  );
+
+// A person's yes to adding the repos found under `root`.
+const confirmAll = (root: string, found: Projects.Found) =>
+  Effect.gen(function* () {
+    const { repos, known } = found;
+    if (!(yield* interactive)) {
+      return yield* new UsageError({
+        problem: `Refusing to add ${repos.length} projects without confirmation. Re-run with --yes, or interactively.`,
+      });
+    }
+    const { cyan, dim } = styles((yield* Effect.service(Output)).stderrColor);
+    yield* note(`Found ${repos.length} new repos under ${root}:`);
+    yield* note("");
+    for (const repo of repos) {
+      yield* note(`  ${cyan(basename(repo))}  ${dim(repo)}`);
+    }
+    yield* note("");
+    if (known > 0) yield* note(dim(`(${known} already registered)`));
+    if (!(yield* confirm(`Add ${repos.length} projects?`))) {
+      return yield* new Cancelled();
+    }
+  });
+
+// Every repo under `root` that isn't a project yet.
 const addAll = (root: string, yes: boolean) =>
   Effect.gen(function* () {
     const projects = yield* Projects.Projects;
-    const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
-    const { repos, known } = yield* projects.scan(root);
-    const already = known > 0 ? ` (${known} already registered)` : "";
-    if (repos.length === 0) {
+    const { json } = yield* Effect.service(Output);
+    const found = yield* projects.scan(root);
+    if (found.repos.length === 0) {
+      const already =
+        found.known > 0 ? ` (${found.known} already registered)` : "";
       yield* note(`No new repos found under ${root}${already}.`);
       if (json) yield* emit([]);
       return;
     }
-    if (!yes) {
-      if (!(yield* interactive)) {
-        return yield* new UsageError({
-          problem: `Refusing to add ${repos.length} projects without confirmation. Re-run with --yes, or interactively.`,
-        });
-      }
-      const { cyan, dim } = styles(stderrColor);
-      yield* note(`Found ${repos.length} new repos under ${root}:`);
-      yield* note("");
-      for (const repo of repos) {
-        yield* note(
-          `  ${cyan(repo.slice(repo.lastIndexOf("/") + 1))}  ${dim(repo)}`,
-        );
-      }
-      yield* note("");
-      if (known > 0) yield* note(dim(`(${known} already registered)`));
-      if (!(yield* confirm(`Add ${repos.length} projects?`))) {
-        return yield* new Cancelled();
-      }
-    }
+    if (!yes) yield* confirmAll(root, found);
     const added: Registry.RegisteredProject[] = [];
-    for (const repo of repos) {
-      const project = yield* projects.register(repo).pipe(Effect.option);
-      if (Option.isNone(project)) {
+    for (const repo of found.repos) {
+      const project = yield* projects.add(repo).pipe(Effect.result);
+      if (Result.isFailure(project)) {
         yield* note(
-          `warning: skipping ${repo}: Project already added: ${repo}`,
+          `warning: skipping ${repo}: ${errorDocument(project.failure).error}`,
         );
         continue;
       }
-      added.push(project.value);
-      if (!json) {
-        yield* out(
-          styles(stdoutColor).green(
-            `added ${project.value.name} (${project.value.path})`,
-          ),
-        );
-      }
+      added.push(project.success);
+      if (!json) yield* announce(project.success);
     }
     if (json) yield* emit(added);
   });
@@ -198,7 +203,7 @@ const addAll = (root: string, yes: boolean) =>
 const add = Command.make(
   "add",
   {
-    path: Argument.String("path").pipe(Argument.optional),
+    path: Argument.String("path").pipe(Argument.withDefault(".")),
     all: Flag.Boolean("all").pipe(
       Flag.withAlias("a"),
       Flag.withDescription("Every repo under the folder"),
@@ -209,17 +214,11 @@ const add = Command.make(
   (input) =>
     Effect.gen(function* () {
       yield* warnTerrier;
-      const at = yield* absolute(Option.getOrElse(input.path, () => "."));
+      const at = yield* absolute(input.path);
       if (input.all) return yield* addAll(at, input.yes);
       const project = yield* (yield* Projects.Projects).add(at);
-      const { json, stdoutColor } = yield* Effect.service(Output);
-      yield* json
-        ? emit(project)
-        : out(
-            styles(stdoutColor).green(
-              `added ${project.name} (${project.path})`,
-            ),
-          );
+      const { json } = yield* Effect.service(Output);
+      yield* json ? emit(project) : announce(project);
     }),
 ).pipe(Command.withDescription("Add the repo a folder is in as a project"));
 
@@ -233,6 +232,7 @@ const remove = Command.make(
   (input) =>
     Effect.gen(function* () {
       const worktrees = yield* Worktrees.Worktrees;
+      const projects = yield* Projects.Projects;
       const { json, binaryName } = yield* Effect.service(Output);
       const at = yield* here;
       const projectId = given(input.projectId);
@@ -244,28 +244,24 @@ const remove = Command.make(
           : yield* new UsageError({
               problem: `Specify a project to remove (see \`${binaryName} projects list\`).`,
             });
-      const listed = at.projects.find(({ id }) => id === project.id) ?? project;
-      yield* (yield* Projects.Projects).remove(
-        listed,
-        ({ worktrees: count, stillListed }) =>
-          Effect.gen(function* () {
-            if (input.yes) return;
-            if (!(yield* interactive)) {
-              return yield* new UsageError({
-                problem: `Refusing to remove ${project.name} without confirmation. Re-run with --yes, or interactively.`,
-              });
-            }
-            const remains =
-              (count > 0
-                ? `Its ${count} worktrees stay on disk.`
-                : "No files are deleted from disk.") +
-              (stillListed ? " It stays listed via terrier." : "");
-            const sure = yield* confirm(
-              `Remove ${project.name} (${project.path}) from Shigoto no Mori? ${remains}`,
-            );
-            if (!sure) return yield* new Cancelled();
-          }),
-      );
+      const left = yield* projects.leftovers(project);
+      if (!input.yes) {
+        if (!(yield* interactive)) {
+          return yield* new UsageError({
+            problem: `Refusing to remove ${project.name} without confirmation. Re-run with --yes, or interactively.`,
+          });
+        }
+        const remains =
+          (left.worktrees > 0
+            ? `Its ${left.worktrees} worktrees stay on disk.`
+            : "No files are deleted from disk.") +
+          (left.stillListed ? " It stays listed via terrier." : "");
+        const sure = yield* confirm(
+          `Remove ${project.name} (${project.path}) from Shigoto no Mori? ${remains}`,
+        );
+        if (!sure) return yield* new Cancelled();
+      }
+      yield* projects.remove(project);
       yield* json
         ? emit({ ok: true, removed: project.name, path: project.path })
         : out(`removed ${project.name} (${project.path})`);
@@ -280,7 +276,7 @@ const reorder = Command.make(
   { ids: Flag.String("ids").pipe(Flag.optional) },
   ({ ids }) =>
     Effect.gen(function* () {
-      const { binaryName } = yield* Effect.service(Output);
+      const { json, binaryName } = yield* Effect.service(Output);
       if (Option.isNone(ids)) {
         return yield* new UsageError({
           problem: `Usage: ${binaryName} projects reorder --ids <id1,id2,...>`,
@@ -295,7 +291,6 @@ const reorder = Command.make(
           .map((id) => id.trim())
           .filter((id) => id !== ""),
       );
-      const { json } = yield* Effect.service(Output);
       yield* json ? emit({ ok: true }) : out("reordered projects");
     }),
 ).pipe(Command.withDescription("Put projects first in the given order"));

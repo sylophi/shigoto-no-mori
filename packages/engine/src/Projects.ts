@@ -69,22 +69,18 @@ export class Projects extends Context.Service<
       Registry.RegisteredProject,
       NotARepository | Registry.ProjectAlreadyAdded
     >;
-    // Adds a repository at its primary checkout.
-    readonly register: (
-      primaryPath: string,
-    ) => Effect.Effect<
-      Registry.RegisteredProject,
-      Registry.ProjectAlreadyAdded
-    >;
     // The outermost repositories six levels under `root`, the way the
     // app's folder scan finds them, less the registered ones.
     readonly scan: (root: string) => Effect.Effect<Found, NotADirectory>;
-    // Drops the entry once `confirm` has seen what stays behind. Its
-    // checkouts stay on disk.
-    readonly remove: <E, R>(
+    // What removing the project would leave, for the question asked
+    // before it.
+    readonly leftovers: (
       project: Registry.ListedProject,
-      confirm: (leftovers: Leftovers) => Effect.Effect<void, E, R>,
-    ) => Effect.Effect<void, E | ListedByTerrier | Registry.UnknownProject, R>;
+    ) => Effect.Effect<Leftovers, ListedByTerrier>;
+    // Drops the entry. Its checkouts stay on disk.
+    readonly remove: (
+      project: Registry.ListedProject,
+    ) => Effect.Effect<void, ListedByTerrier | Registry.UnknownProject>;
   }
 >()("sm/engine/Projects") {}
 
@@ -129,7 +125,16 @@ const make = Effect.gen(function* () {
   // default branch stays unconfigured until its first setting.
   const seed = (project: Registry.RegisteredProject) =>
     Effect.gen(function* () {
-      if (yield* deviceOn("autoPullNew")) {
+      const [autoPull, install, branch, manager] = yield* Effect.all(
+        [
+          deviceOn("autoPullNew"),
+          deviceOn("autoPopulateInstall"),
+          git.resolveDefaultBranch(project.path),
+          scripts.packageManager(project.path),
+        ],
+        { concurrency: "unbounded" },
+      );
+      if (autoPull) {
         yield* registry.setMark(
           "autoPull",
           worktreeIdFromPath(project.path),
@@ -141,21 +146,18 @@ const make = Effect.gen(function* () {
         projectId: project.id,
         path: project.path,
       } as const;
-      const branch = yield* git.resolveDefaultBranch(project.path);
       if (Option.isSome(branch)) {
         yield* config.set(scope, "defaultBranch", branch.value);
       }
-      if (yield* deviceOn("autoPopulateInstall")) {
-        const manager = yield* scripts.packageManager(project.path);
-        if (Option.isSome(manager)) {
-          yield* config.set(scope, "scripts.setup", `${manager.value} install`);
-        }
+      if (install && Option.isSome(manager)) {
+        yield* config.set(scope, "scripts.setup", `${manager.value} install`);
       }
     }).pipe(Effect.ignore);
 
-  const register = Effect.fn("Projects.register")(function* (
-    primaryPath: string,
-  ) {
+  const add = Effect.fn("Projects.add")(function* (at: string) {
+    const repo = yield* git.locate(at);
+    if (Option.isNone(repo)) return yield* new NotARepository({ path: at });
+    const primaryPath = repo.value.primaryPath;
     const project = yield* registry.register({
       name: path.basename(primaryPath),
       path: primaryPath,
@@ -164,21 +166,17 @@ const make = Effect.gen(function* () {
     return project;
   });
 
-  const add = Effect.fn("Projects.add")(function* (at: string) {
-    const repo = yield* git.locate(at);
-    if (Option.isNone(repo)) return yield* new NotARepository({ path: at });
-    return yield* register(repo.value.primaryPath);
-  });
-
-  // Not a symlink: readLink answers only for one.
-  const isLink = (file: string) =>
-    fs.readLink(file).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
-    );
-  const isDirectory = (file: string) =>
+  // A folder, not a link to one: readLink answers only for a link.
+  const isFolder = (file: string) =>
     fs.stat(file).pipe(
-      Effect.map((info) => info.type === "Directory"),
+      Effect.flatMap((info) =>
+        info.type === "Directory"
+          ? fs.readLink(file).pipe(
+              Effect.as(false),
+              Effect.orElseSucceed(() => true),
+            )
+          : Effect.succeed(false),
+      ),
       Effect.orElseSucceed(() => false),
     );
 
@@ -193,21 +191,16 @@ const make = Effect.gen(function* () {
       const names = yield* fs
         .readDirectory(dir)
         .pipe(Effect.orElseSucceed((): string[] => []));
-      const dirs = yield* Effect.filter(
-        names,
-        (name) =>
-          Effect.map(
-            Effect.all([
-              isDirectory(path.join(dir, name)),
-              isLink(path.join(dir, name)),
-            ]),
-            ([directory, link]) => directory && !link,
-          ),
+      if (names.includes(".git") && (yield* isFolder(path.join(dir, ".git")))) {
+        return [dir];
+      }
+      const folders = yield* Effect.filter(
+        names.filter((name) => !name.startsWith(".") && !SKIPPED.has(name)),
+        (name) => isFolder(path.join(dir, name)),
         { concurrency: 16 },
       );
-      if (dirs.includes(".git")) return [dir];
       const nested = yield* Effect.forEach(
-        dirs.filter((name) => !name.startsWith(".") && !SKIPPED.has(name)),
+        folders,
         (name) => walk(path.join(dir, name), depth + 1),
         { concurrency: 4 },
       );
@@ -215,7 +208,8 @@ const make = Effect.gen(function* () {
     });
 
   const scan = Effect.fn("Projects.scan")(function* (root: string) {
-    if (!(yield* isDirectory(root))) {
+    const rootInfo = yield* fs.stat(root).pipe(Effect.option);
+    if (Option.isNone(rootInfo) || rootInfo.value.type !== "Directory") {
       return yield* new NotADirectory({ path: root });
     }
     // Against the registry alone: a repo terrier lists is added as an
@@ -240,29 +234,38 @@ const make = Effect.gen(function* () {
     return { repos, known };
   });
 
-  const remove = <E, R>(
-    project: Registry.ListedProject,
-    confirm: (leftovers: Leftovers) => Effect.Effect<void, E, R>,
-  ) =>
-    Effect.gen(function* () {
-      if (project.source === "terrier") {
-        return yield* new ListedByTerrier({
-          name: project.name,
-          binary: binaryName,
-        });
-      }
-      const checkouts = yield* worktrees
-        .identities(project)
-        .pipe(Effect.orElseSucceed(() => []));
-      const { paths } = yield* terrier.listing;
-      yield* confirm({
-        worktrees: checkouts.filter((checkout) => !checkout.isPrimary).length,
-        stillListed: paths.includes(project.path),
-      });
-      yield* registry.unregister(project.id);
-    }).pipe(Effect.withSpan("Projects.remove"));
+  const refuseTerrier = (project: Registry.ListedProject) =>
+    project.source === "terrier"
+      ? Effect.fail(
+          new ListedByTerrier({ name: project.name, binary: binaryName }),
+        )
+      : Effect.void;
 
-  return Projects.of({ add, register, scan, remove });
+  const leftovers = Effect.fn("Projects.leftovers")(function* (
+    project: Registry.ListedProject,
+  ) {
+    yield* refuseTerrier(project);
+    const [checkouts, { paths }] = yield* Effect.all(
+      [
+        worktrees.identities(project).pipe(Effect.orElseSucceed(() => [])),
+        terrier.listing,
+      ],
+      { concurrency: 2 },
+    );
+    return {
+      worktrees: checkouts.filter((checkout) => !checkout.isPrimary).length,
+      stillListed: paths.includes(project.path),
+    };
+  });
+
+  const remove = Effect.fn("Projects.remove")(function* (
+    project: Registry.ListedProject,
+  ) {
+    yield* refuseTerrier(project);
+    yield* registry.unregister(project.id);
+  });
+
+  return Projects.of({ add, scan, leftovers, remove });
 });
 
 export const layer = Layer.effect(Projects, make);

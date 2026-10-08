@@ -2,9 +2,7 @@
 // error exits 2, anything else 1. Under --json the failure is the
 // engine's error document with `ok: false`. A person gets `sm: <message>`
 // on stderr.
-import * as Config from "@shigomori/engine/Config";
-import { errorDocument } from "@shigomori/engine/errorDocument";
-import * as Worktrees from "@shigomori/engine/Worktrees";
+import { errorDocument, isUsage } from "@shigomori/engine/errorDocument";
 import * as Effect from "effect/Effect";
 import * as CliError from "effect/cli/CliError";
 import * as Schema from "effect/Schema";
@@ -29,15 +27,6 @@ export class Cancelled extends Schema.TaggedError<Cancelled>()(
   }
 }
 
-// The failures that are the caller's mistake. A ref that names nothing
-// says which it is.
-const isUsage = (error: unknown) =>
-  error instanceof UsageError ||
-  error instanceof Config.UnknownConfigKey ||
-  error instanceof Config.InvalidConfigValue ||
-  error instanceof Config.StructuredConfigKey ||
-  (error instanceof Worktrees.TargetError && error.usage);
-
 // Reports the failure and answers the exit code.
 export const report = (error: unknown) =>
   Effect.gen(function* () {
@@ -57,5 +46,7 @@ export const report = (error: unknown) =>
         `${styles(stderrColor).red(`${binaryName}:`)} ${document.error}`,
       );
     }
-    return problems.length > 0 || isUsage(error) ? 2 : 1;
+    return problems.length > 0 || error instanceof UsageError || isUsage(error)
+      ? 2
+      : 1;
   });
