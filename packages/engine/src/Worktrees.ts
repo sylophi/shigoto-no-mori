@@ -4,6 +4,7 @@
 // descriptions the app and agents set. The rows and documents keep the
 // shapes `sm worktrees ... --json` prints, field for field.
 import { isValidWorktreeDirName } from "@shigomori/contracts/predicates/worktreeDirName";
+import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import { isUntracked } from "@shigomori/contracts/schemas";
 import * as Clock from "effect/Clock";
@@ -463,6 +464,16 @@ const externalWorktreeName = (
   return isValidWorktreeDirName(parent) ? parent : leaf;
 };
 
+// What Go's unicode.IsSpace calls space, which its TrimSpace trims.
+// JavaScript's trim differs at the edges: it keeps U+0085 and drops
+// U+FEFF.
+const GO_SPACE_START =
+  /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/;
+const GO_SPACE_END =
+  /[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/;
+const trimGoSpace = (text: string) =>
+  text.replace(GO_SPACE_START, "").replace(GO_SPACE_END, "");
+
 // `{ [key]: value }`, or nothing when the value is empty: the fields
 // Go's omitempty leaves out.
 const nonEmpty = <K extends string, V extends string | number>(
@@ -624,9 +635,23 @@ const make = Effect.gen(function* () {
     return { remotes, primaryRef, primaryBranch, settings };
   });
 
-  const marks = Effect.all({
-    shelved: registry.marked("shelved"),
-    autoPull: registry.marked("autoPull"),
+  // The marks, and with any worktree shelved the shelf's snapshots, read
+  // before the probes: a snapshot taken after a row's probes started
+  // must not be compared against them.
+  const marks = Effect.gen(function* () {
+    const [shelved, autoPull] = yield* Effect.all(
+      [registry.marked("shelved"), registry.marked("autoPull")],
+      { concurrency: 2 },
+    );
+    const snapshots = new Map<string, ShelfSnapshot>(
+      shelved.size === 0
+        ? []
+        : (yield* sql<ShelfSnapshot & { worktree_id: string }>`
+            SELECT worktree_id, at, head, changed FROM shelf_snapshots`.pipe(
+            Effect.orElseSucceed(() => []),
+          )).map(({ worktree_id, ...snapshot }) => [worktree_id, snapshot]),
+    );
+    return { shelved, autoPull, snapshots };
   });
 
   // What every row of one project is built against, read once.
@@ -752,21 +777,16 @@ const make = Effect.gen(function* () {
   // between (which drops the snapshot) wins over the listing's stale
   // view. A seed lands only while the worktree is still marked and has
   // none, a retire only while the snapshot is the one compared against.
-  const settle = (probed: ReadonlyArray<Probed>) => {
+  const settle = (
+    probed: ReadonlyArray<Probed>,
+    stored: ReadonlyMap<string, ShelfSnapshot>,
+  ) => {
     const rows = probed.map(({ row }) => row);
     return Effect.gen(function* () {
       const shelved = probed.filter(
         ({ row, statusOk }) => row.shelved && statusOk,
       );
       if (shelved.length === 0) return rows;
-      const stored = new Map(
-        (yield* sql<ShelfSnapshot & { worktree_id: string }>`
-          SELECT worktree_id, at, head, changed FROM shelf_snapshots
-          WHERE ${sql.in(
-            "worktree_id",
-            shelved.map(({ row }) => row.id),
-          )}`).map(({ worktree_id, ...snapshot }) => [worktree_id, snapshot]),
-      );
       const seeds: Array<[string, ShelfSnapshot]> = [];
       const retires: Array<[string, number]> = [];
       for (const { row, at } of shelved) {
@@ -828,7 +848,7 @@ const make = Effect.gen(function* () {
       (worktree) => probe(worktree, context),
       { concurrency: ROW_SLOTS },
     );
-    return yield* settle(probed);
+    return yield* settle(probed, context.snapshots);
   });
 
   const list = Effect.fn("Worktrees.list")(function* (
@@ -845,7 +865,7 @@ const make = Effect.gen(function* () {
     const context = yield* contextOf(located.project, yield* marks);
     const probed = yield* probe(located.worktree, context);
     if (!options.settle) return probed.row;
-    const [settled] = yield* settle([probed]);
+    const [settled] = yield* settle([probed], context.snapshots);
     return settled ?? probed.row;
   });
 
@@ -952,7 +972,8 @@ const make = Effect.gen(function* () {
       );
       const files = new Map(
         (yield* Effect.forEach(
-          Object.keys(pool.envFiles),
+          // A name that would leave the worktree is no env file of its.
+          Object.keys(pool.envFiles).filter(isSafeRelPath),
           (name) =>
             readOptional(path.join(worktree, name)).pipe(
               Effect.map((content) => [name, content] as const),
@@ -997,22 +1018,25 @@ const make = Effect.gen(function* () {
         upstream: git.upstreamSync(worktree.path),
         // The base divergence needs the primary ref, so it is asked
         // beside it.
-        context: Effect.all({
-          primary: primaryRefOf(project).pipe(
-            Effect.flatMap((primary) =>
-              git.aheadBehind(worktree.path, primary.primaryRef).pipe(
-                Effect.map((base) => ({
-                  ...primary,
-                  base: Option.map(base, (sync) => ({
-                    ref: primary.primaryRef,
-                    ...sync,
+        context: Effect.all(
+          {
+            primary: primaryRefOf(project).pipe(
+              Effect.flatMap((primary) =>
+                git.aheadBehind(worktree.path, primary.primaryRef).pipe(
+                  Effect.map((base) => ({
+                    ...primary,
+                    base: Option.map(base, (sync) => ({
+                      ref: primary.primaryRef,
+                      ...sync,
+                    })),
                   })),
-                })),
+                ),
               ),
             ),
-          ),
-          marked: marks,
-        }),
+            marked: marks,
+          },
+          { concurrency: 2 },
+        ),
         ports: portsOf(worktree.path),
       },
       { concurrency: "unbounded" },
@@ -1220,20 +1244,15 @@ const make = Effect.gen(function* () {
       const scope = target.projectId
         ? [yield* resolveProjectById(here, target.projectId)]
         : here.projects;
-      const found = yield* Effect.forEach(
-        scope,
-        (project) =>
-          identities(project).pipe(
-            Effect.map((listed) => {
-              const worktree = listed.find((id) => id.id === target.worktreeId);
-              return worktree ? [{ project, worktree }] : [];
-            }),
-            Effect.orElseSucceed((): Located[] => []),
-          ),
-        { concurrency: "unbounded" },
-      );
-      const [first] = found.flat();
-      if (first) return first;
+      // In order, stopping at the first: the app asks this on every
+      // per-worktree call.
+      for (const project of scope) {
+        const listed = yield* identities(project).pipe(Effect.option);
+        const worktree = Option.getOrUndefined(listed)?.find(
+          (id) => id.id === target.worktreeId,
+        );
+        if (worktree) return { project, worktree };
+      }
       return yield* new UnknownWorktree({ worktreeId: target.worktreeId });
     }
 
@@ -1395,7 +1414,7 @@ const make = Effect.gen(function* () {
     }
     let { title, description: text } = change;
     if (title !== undefined) {
-      title = title.trim();
+      title = trimGoSpace(title);
       // oxlint-disable-next-line no-control-regex -- the control characters are the point
       if (/[\p{Cc}]/u.test(title)) {
         return yield* new DescribeRefused({ reason: "title-control", binary });
@@ -1407,7 +1426,7 @@ const make = Effect.gen(function* () {
     if (text !== undefined) {
       // Blank lines and trailing space go. A first line's indentation
       // stays: in markdown it can make a code block.
-      text = text.replace(/^[\r\n]+/, "").trimEnd();
+      text = text.replace(/^[\r\n]+/, "").replace(GO_SPACE_END, "");
       if ([...text].length > MAX_DESCRIPTION) {
         return yield* new DescribeRefused({
           reason: "description-length",

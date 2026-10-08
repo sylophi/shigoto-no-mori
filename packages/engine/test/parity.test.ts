@@ -894,6 +894,9 @@ describe("worktrees describe", () => {
           description: "\n\n  code\nmore  \n\n",
         }),
       () => describeVerb("fox", { title: "Renamed" }),
+      // Trimmed as Go trims: a next-line character is space to it.
+      () => describeVerb("fox", { title: "Next line\u0085" }),
+      () => describeVerb("fox", { title: "Renamed" }),
       () => describeVerb("fox", {}),
       () => describeVerb("fox", { description: "" }),
       () => describeVerb("fox", { title: "tab\there" }),
