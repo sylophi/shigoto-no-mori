@@ -137,6 +137,16 @@ const cloneCounts = (run: Run): Run => ({
   ),
 });
 
+// A capture is a commit made now, so its hash differs by side.
+const captureHashes = (run: Run): Run => ({
+  ...run,
+  stdout: run.stdout.replaceAll(/\b[0-9a-f]{40}\b/g, "<commit>"),
+  doc:
+    typeof run.doc === "object" && run.doc !== null && "commit" in run.doc
+      ? { ...run.doc, commit: "<commit>" }
+      : run.doc,
+});
+
 // A command that changes what both sides share (the repos, their
 // worktrees): Go's first, then ours on everything as it was before.
 const changeAt = async (cwd: string, ...args: string[]) => {
@@ -755,6 +765,58 @@ describe("making and removing worktrees", () => {
       "--to-path",
       "rel",
     );
+  });
+});
+
+describe("dirty", () => {
+  const dirtyAt = async (cwd: string, ...args: string[]) => {
+    const [go, ours] = await box.changeBoth(
+      () => box.runAt(goSm(), "go", cwd, args),
+      () => box.runAt(built, "cli", cwd, args),
+    );
+    compare(args, go, ours, captureHashes);
+  };
+  const dirty = (...args: string[]) => dirtyAt(box.home, ...args);
+
+  // A project with a linked worktree holding an edit and a new file.
+  const project = () => {
+    const alpha = box.repo("alpha", { "a.txt": "a\n" });
+    const fox = `${box.home}/fox`;
+    box.git(alpha, "worktree", "add", "-q", "-b", "fox", fox);
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    writeFileSync(`${fox}/a.txt`, "edited\n");
+    writeFileSync(`${fox}/new.txt`, "new\n");
+    const discard = () => {
+      box.git(fox, "checkout", "--", ".");
+      box.git(fox, "clean", "-qfd");
+    };
+    return { fox, discard };
+  };
+
+  it("captures a worktree's changes and applies them back", async () => {
+    const { fox, discard } = project();
+    await dirty("--json", "dirty", "capture", "fox");
+    await dirtyAt(fox, "dirty", "capture");
+    await dirty("dirty", "apply", "fox");
+    discard();
+    await dirty("--json", "dirty", "apply", "fox");
+    await dirty("dirty", "apply", "fox");
+    discard();
+    await dirty("dirty", "capture", "fox");
+    await dirty("wt", "dirty", "nope");
+  });
+
+  it("refuses a capture taken on another commit, or that would overwrite a file", async () => {
+    const { fox, discard } = project();
+    await dirty("dirty", "capture", "fox");
+    discard();
+    writeFileSync(`${fox}/new.txt`, "in the way\n");
+    await dirty("dirty", "apply", "fox");
+    await dirty("--json", "dirty", "apply", "fox", "-f");
+    box.git(fox, "commit", "-q", "--allow-empty", "-m", "moved on");
+    await dirty("--json", "dirty", "apply", "fox", "--force");
   });
 });
 
