@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isSafeRelPath } from "../git/gitPaths";
 import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
+import { TERMINAL_IDS } from "./launchers";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
 import { ProjectSortModeSchema, SidebarViewSchema } from "./project";
 
@@ -237,6 +238,10 @@ export const GlobalConfigSchema = z.object({
   // project's script sort. On by default; absent = on, explicit `false` is
   // the opt-out.
   launchScripts: z.boolean().optional(),
+  // The terminal app terminal tools (Claude Code, Neovim, lazygit, …)
+  // open in, a launcher catalog id. Absent = Terminal. Mirrors the
+  // CLI's terminalIDs (cli/terminals.go), which launches them.
+  terminal: z.enum(TERMINAL_IDS).optional(),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
   // use by another worktree). ON by default. Unset means delete
@@ -333,6 +338,7 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     launchers: true,
     hiddenLaunchers: true,
     launchScripts: true,
+    terminal: true,
     deleteBranchOnRemove: true,
     autoPopulateInstall: true,
     autoPullNew: true,
@@ -363,6 +369,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   launchers: [],
   hiddenLaunchers: [],
   launchScripts: true,
+  terminal: "terminal",
   deleteBranchOnRemove: true,
   autoPopulateInstall: false,
   autoPullNew: false,

@@ -30,13 +30,20 @@ type launcherApp struct {
 	bundleNames []string
 	cli         string
 	deepLink    string
+	openArgs    []string
+	inTerminal  string
 }
 
 // The tool catalog is embedded from embed/launcher-catalog.json.
 // bundleNames resolve against appRoots; "__finder__" is the
 // always-available Finder sentinel. deepLink is for apps whose only
 // "open this folder" API is their URL scheme: launching opens it with
-// {path} replaced by the query-escaped worktree path.
+// {path} replaced by the query-escaped worktree path. openArgs is for
+// apps that take the folder as a launch argument rather than a
+// document: they're passed with {path} replaced by the worktree path.
+// inTerminal is for terminal tools: the command line to run in the
+// worktree in the user's terminal (terminals.go), detected by its first
+// word on PATH.
 //
 //go:embed embed/launcher-catalog.json
 var launcherCatalogJSON []byte
@@ -48,13 +55,15 @@ var launcherCatalog = func() []launcherApp {
 		BundleNames []string `json:"bundleNames"`
 		CLI         string   `json:"cli"`
 		DeepLink    string   `json:"deepLink"`
+		OpenArgs    []string `json:"openArgs"`
+		InTerminal  string   `json:"inTerminal"`
 	}
 	if err := json.Unmarshal(launcherCatalogJSON, &entries); err != nil {
 		panic("embedded launcher-catalog.json is invalid: " + err.Error())
 	}
 	catalog := make([]launcherApp, len(entries))
 	for i, e := range entries {
-		catalog[i] = launcherApp{id: e.ID, label: e.Label, bundleNames: e.BundleNames, cli: e.CLI, deepLink: e.DeepLink}
+		catalog[i] = launcherApp{id: e.ID, label: e.Label, bundleNames: e.BundleNames, cli: e.CLI, deepLink: e.DeepLink, openArgs: e.OpenArgs, inTerminal: e.InTerminal}
 	}
 	return catalog
 }()
@@ -85,6 +94,11 @@ func launcherAvailable(a launcherApp) bool {
 	}
 	if a.cli != "" {
 		if _, err := exec.LookPath(a.cli); err == nil {
+			return true
+		}
+	}
+	if a.inTerminal != "" {
+		if _, err := exec.LookPath(strings.Fields(a.inTerminal)[0]); err == nil {
 			return true
 		}
 	}
@@ -264,6 +278,9 @@ func (a launcherApp) deepLinkTo(worktreePath string) string {
 }
 
 func launchDetectedApp(a launcherApp, worktreePath string) error {
+	if a.inTerminal != "" {
+		return launchInTerminal(a.inTerminal, worktreePath)
+	}
 	if a.deepLink != "" {
 		return exec.Command("open", a.deepLinkTo(worktreePath)).Run()
 	}
@@ -280,10 +297,24 @@ func launchDetectedApp(a launcherApp, worktreePath string) error {
 		if name == "__finder__" {
 			return exec.Command("open", worktreePath).Run()
 		}
-		if bundle := bundlePathFor(name); bundle != "" {
-			appName := strings.TrimSuffix(filepath.Base(bundle), ".app")
-			return exec.Command("open", "-a", appName, worktreePath).Run()
+		bundle := bundlePathFor(name)
+		if bundle == "" {
+			continue
 		}
+		if len(a.openArgs) > 0 {
+			// `open --args` only reaches an app as it launches, so this
+			// starts a new process each time (-n). kitty's
+			// --single-instance and WezTerm's start hand the window to an
+			// instance already running where they can, and Alacritty runs
+			// one process per window anyway.
+			args := []string{"-n", "-a", bundle, "--args"}
+			for _, arg := range a.openArgs {
+				args = append(args, strings.ReplaceAll(arg, "{path}", worktreePath))
+			}
+			return exec.Command("open", args...).Run()
+		}
+		appName := strings.TrimSuffix(filepath.Base(bundle), ".app")
+		return exec.Command("open", "-a", appName, worktreePath).Run()
 	}
 	return errf("No installed app found for %s.", a.label)
 }

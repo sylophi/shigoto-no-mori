@@ -29,7 +29,7 @@ export function LastCommitStrip({
   // One row, the subject first and cut where it has to be (its tooltip
   // finishes it), its age and the bare icon buttons after: the
   // sidebar's height is the file list's. The commit mark says what the
-  // row is, and the tooltips what the icons do.
+  // row is.
   return (
     <div
       data-slot="last-commit-strip"
@@ -49,29 +49,25 @@ export function LastCommitStrip({
       </span>
       {!amending && (
         <span className="flex shrink-0 items-center">
-          <SimpleTooltip tip="Amend: fold the next commit into this one, editing its message">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onAmend}
+            disabled={busy}
+            aria-label="Amend the last commit"
+          >
+            <PencilLine />
+          </Button>
+          {canUndo && (
             <Button
               variant="ghost"
               size="icon-xs"
-              onClick={onAmend}
+              onClick={onUndo}
               disabled={busy}
-              aria-label="Amend the last commit"
+              aria-label="Undo the last commit"
             >
-              <PencilLine />
+              <Undo2 />
             </Button>
-          </SimpleTooltip>
-          {canUndo && (
-            <SimpleTooltip tip="Undo this commit; its changes come back staged">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={onUndo}
-                disabled={busy}
-                aria-label="Undo the last commit"
-              >
-                <Undo2 />
-              </Button>
-            </SimpleTooltip>
           )}
         </span>
       )}

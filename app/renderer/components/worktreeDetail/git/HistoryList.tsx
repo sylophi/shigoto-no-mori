@@ -410,12 +410,12 @@ function RefLine({
   icon: ReactNode;
   name: string;
   mono?: boolean;
-  tip?: string;
+  tip: string;
   action?: ReactNode;
 }) {
   return (
     <div className="flex min-h-8 items-center gap-2 px-2 py-1">
-      <SimpleTooltip tip={tip ?? name}>
+      <SimpleTooltip tip={tip}>
         <span className="flex min-w-0 shrink items-center gap-1.5 text-xs text-muted-foreground">
           <span className="shrink-0">{icon}</span>
           <span className={cn("truncate", mono && "font-mono")}>{name}</span>

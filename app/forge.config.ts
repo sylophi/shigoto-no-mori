@@ -25,7 +25,10 @@ import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
 } from "./shared/packaging/fileSyncDist.mts";
-import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "./shared/packaging/infoPlist.mts";
+import {
+  APPLE_EVENTS_USAGE_DESCRIPTION,
+  LOCAL_NETWORK_USAGE_DESCRIPTION,
+} from "./shared/packaging/infoPlist.mts";
 import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 import { rendererSchemeName } from "./shared/packaging/rendererScheme.mts";
 import {
@@ -97,6 +100,17 @@ const packagerIgnore = (file: string): boolean => {
   return !NODE_PTY_SHIPPED.test(file);
 };
 
+// @electron/osx-sign's default.darwin.plist, which the app and its
+// plain helpers are signed with, plus Apple Events: terminal tools
+// open in the user's terminal over AppleScript (cli/terminals.go), and
+// under the hardened runtime the app's child osascript is refused
+// without it.
+const MAC_ENTITLEMENTS = path.join(
+  import.meta.dirname,
+  "assets",
+  "entitlements.mac.plist",
+);
+
 const config: ForgeConfig = {
   packagerConfig: {
     // The native addon and spawn-helper are loaded by path at runtime,
@@ -130,15 +144,24 @@ const config: ForgeConfig = {
       // by the prePackage hook like the CLI and spawned only by main.
       `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
     ],
-    // The Local Network prompt's sentence (macOS 15+), shared with the
-    // dev bundle. See shared/packaging/infoPlist.mts.
+    // The Local Network (macOS 15+) and Automation prompts' sentences,
+    // shared with the dev bundle. See shared/packaging/infoPlist.mts.
     extendInfo: {
       NSLocalNetworkUsageDescription: LOCAL_NETWORK_USAGE_DESCRIPTION,
+      NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
     },
     ...(shouldSignMac
       ? {
           osxSign: {
             identity: signingIdentity,
+            // The Plugin, GPU and Renderer helpers keep their default
+            // entitlements. Everything else gets MAC_ENTITLEMENTS, as a
+            // path, since a list makes osx-sign write a temp plist per
+            // signed file.
+            optionsForFile: (filePath) =>
+              /\((Plugin|GPU|Renderer)\)\.app/.test(filePath)
+                ? {}
+                : { entitlements: MAC_ENTITLEMENTS },
           },
         }
       : {}),

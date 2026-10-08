@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
+  AddProjectPayloadSchema,
   BranchListSchema,
   CloneProjectPayloadSchema,
-  PathPayloadSchema,
+  CreateProjectPayloadSchema,
   ProjectIconSchema,
   ProjectSchema,
   ProjectScopedPayloadSchema,
@@ -22,13 +23,19 @@ export const projectsContract = defineContract("host", {
     remote: true,
     gated: false,
   }),
-  add: invoke("projects:add", PathPayloadSchema, ProjectSchema, {
+  add: invoke("projects:add", AddProjectPayloadSchema, ProjectSchema, {
     remote: true,
     gated: true,
   }),
   // Runs for as long as the clone does. The wire has no per-call
   // timeout, and the device doing the clone uses its own credentials.
   clone: invoke("projects:clone", CloneProjectPayloadSchema, ProjectSchema, {
+    remote: true,
+    gated: true,
+  }),
+  // A new repository with an empty first commit, so its default
+  // branch exists for worktrees to branch off.
+  create: invoke("projects:create", CreateProjectPayloadSchema, ProjectSchema, {
     remote: true,
     gated: true,
   }),

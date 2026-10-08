@@ -19,7 +19,7 @@ import {
   SyncBundleRefSchema,
 } from "@shared/ipc/modules/sync";
 import type { Project } from "@shared/schemas";
-import { checkCloneDestination } from "@host/lib/git/clone";
+import { checkNewCheckoutDestination } from "@host/lib/git/clone";
 import { run } from "@host/lib/git/core";
 import { deleteRef, updateRef } from "@host/lib/git/refs";
 import { registerProject } from "@host/lib/projects";
@@ -54,7 +54,7 @@ export async function cloneProjectFromPeer(
   const parent = expandHome(parentDir);
   await mkdir(parent, { recursive: true }).catch(() => {});
   const [dest, { branch, remoteUrl }] = await Promise.all([
-    checkCloneDestination(parent, name),
+    checkNewCheckoutDestination(parent, name),
     source.cloneFacts(),
   ]);
   if (

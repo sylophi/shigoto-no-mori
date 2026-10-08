@@ -40,11 +40,9 @@ export interface SyncMove {
   Icon: LucideIcon;
   tone: SyncTone;
   label: string;
-  // For a narrow strip ("Push 2"), with `compactTip` as its tooltip.
+  // For a narrow strip ("Push 2").
   compactLabel: string;
-  compactTip: string;
-  // The tooltip at full width, when the label can't say what the move
-  // runs.
+  // The tooltip, when the label can't say what the move runs.
   tip?: string;
   // Why it can't run, when it can't. The button stays up, disabled,
   // so the move is still discoverable.
@@ -111,7 +109,6 @@ function syncStateView(state: RemoteSyncState): SyncStateView {
           key: "publish",
           label: "Publish branch",
           compactLabel: "Publish",
-          compactTip: "Publish this branch to the remote",
           disabledReason: state.canPublish
             ? undefined
             : "No git remote is configured for this project",
@@ -135,7 +132,6 @@ function syncStateView(state: RemoteSyncState): SyncStateView {
           key: "push",
           label: `Push ${commits}`,
           compactLabel: `Push ${state.ahead}`,
-          compactTip: `Push ${commits} to the remote`,
         },
         held: null,
         owed: `${commits} not pushed yet.`,
@@ -156,7 +152,6 @@ function syncStateView(state: RemoteSyncState): SyncStateView {
           key: "pull",
           label: `Pull ${commits}`,
           compactLabel: `Pull ${state.behind}`,
-          compactTip: `Pull ${commits} from the remote`,
         },
         held: {
           label: `${commits} to pull`,
@@ -183,7 +178,6 @@ function syncStateView(state: RemoteSyncState): SyncStateView {
           label: `Pull and push ${both(ahead, behind)}`,
           compactLabel: `Pull, push ${both(ahead, behind)}`,
           arrowsInLabel: true,
-          compactTip: `Pull ${pluralize(behind, "commit")} and push ${pluralize(ahead, "commit")}: ${PULL_AND_PUSH_RUNS}`,
           tip: PULL_AND_PUSH_RUNS,
         },
         held: {

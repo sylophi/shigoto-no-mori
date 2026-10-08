@@ -200,6 +200,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     githubCli: {
       readiness: githubCliClient.readiness,
+      owners: githubCliClient.owners,
+      publish: githubCliClient.publish,
       projectPullRequests: (projectId: string) =>
         githubCliClient.projectPullRequests({ projectId }),
       worktreePullRequest: githubCliClient.worktreePullRequest,
@@ -284,8 +286,9 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     projects: {
       list: projectsClient.list,
-      add: (path: string) => projectsClient.add({ path }),
+      add: projectsClient.add,
       clone: projectsClient.clone,
+      create: projectsClient.create,
       remove: (id: string) => projectsClient.remove({ id }),
       relocate: (id: string, path: string) =>
         projectsClient.relocate({ id, path }),

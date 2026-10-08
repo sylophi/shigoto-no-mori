@@ -231,11 +231,21 @@ export type MergePullRequestResult = z.infer<
   typeof MergePullRequestResultSchema
 >;
 
-export const GithubCliReadinessSchema = z.object({
-  installed: z.boolean(),
-  authed: z.boolean(),
+// The accounts a new repository can be published under: the signed-in
+// user first, then their organizations.
+export const GithubOwnerListSchema = z.array(z.string());
+
+// Publishes a project with no remote yet to GitHub as
+// `owner/<its folder name>`, and pushes it there. No owner is gh's
+// signed-in user. The owner is held to GitHub's own login shape.
+export const PublishRepoPayloadSchema = ProjectScopedPayloadSchema.extend({
+  owner: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9-]*$/)
+    .optional(),
+  visibility: z.enum(["private", "public"]),
 });
-export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
+export type PublishRepoPayload = z.infer<typeof PublishRepoPayloadSchema>;
 
 // One open PR offered as a worktree source in the create form. Slimmer
 // than PullRequestDetail on purpose: the picker only needs enough to
@@ -269,6 +279,16 @@ export const GhUnavailableReasonSchema = z.enum([
   "gh-signed-out",
 ]);
 export type GhUnavailableReason = z.infer<typeof GhUnavailableReasonSchema>;
+
+// What gh can do on a device: installed and signed in, and with the
+// integration's toggle as well, whether anything may use it (null) or
+// why not.
+export const GithubCliReadinessSchema = z.object({
+  installed: z.boolean(),
+  authed: z.boolean(),
+  unavailable: GhUnavailableReasonSchema.nullable(),
+});
+export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 
 // Why the PR source is unavailable for a project: the readiness reasons
 // plus the two that are about this repo. Kept as codes rather than prose

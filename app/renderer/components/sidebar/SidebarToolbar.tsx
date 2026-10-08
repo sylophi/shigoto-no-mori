@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { ArrowUpDown, Check } from "lucide-react";
 import type { ProjectSortMode, WorktreeSortMode } from "@shared/schemas";
 import { BackButton } from "@/components/ui/back-button";
@@ -12,7 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   useGroupProjectsByOwner,
   useProjectSort,
@@ -101,7 +100,7 @@ function ProjectSortMenu({ onArrange }: { onArrange: () => void }) {
   };
 
   return (
-    <ListMenu tip={hasLocalHost ? "Sort projects" : "Group projects"}>
+    <ListMenu label={hasLocalHost ? "Sort projects" : "Group projects"}>
       {hasLocalHost && (
         <>
           <SortOptions
@@ -138,7 +137,7 @@ function WorktreeSortMenu({
   sort: WorktreeSortMode;
 }) {
   return (
-    <ListMenu tip="Sort worktrees">
+    <ListMenu label="Sort worktrees">
       <SortOptions
         options={WORKTREE_SORT_OPTIONS}
         value={sort}
@@ -151,31 +150,26 @@ function WorktreeSortMenu({
 // The toolbar's menu of how a list shows: the trigger and its popup,
 // holding whatever the list offers.
 function ListMenu({
-  tip,
+  label,
   children,
 }: {
-  // The trigger's tooltip and accessible name.
-  tip: string;
+  // The trigger's accessible name.
+  label: string;
   children: ReactNode;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-      {/* Disabled while the menu is open so the tip can't cover the
-          popup. */}
-      <SimpleTooltip tip={tip} disabled={menuOpen}>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              aria-label={tip}
-              className={SIDEBAR_ICON_BUTTON}
-            >
-              <ArrowUpDown className="size-3.5" />
-            </button>
-          }
-        />
-      </SimpleTooltip>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            className={SIDEBAR_ICON_BUTTON}
+          >
+            <ArrowUpDown className="size-3.5" />
+          </button>
+        }
+      />
       {/* Anchored under the trigger now that it sits at the top of the
           sidebar rather than the bottom. */}
       <DropdownMenuContent align="end" side="bottom" sideOffset={2}>

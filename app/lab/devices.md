@@ -55,7 +55,7 @@ the bridge's answers, the other device's window, and the disk.
   checkout on the landing device, a move clones it first, which is
   worth checking too.
 - **Moves, mirrors and their dialogs.** Start them from the UI (a
-  worktree page's footer: Transplant, Mirror) or through
+  worktree page's footer: Mirror, and Transplant under Options) or through
   `window.api.sync` and `window.api.mirror`, then watch both windows
   and the disk. What each should do is in its contract
   (`shared/ipc/modules/`) and in `bridge.md`. Two mirror cases

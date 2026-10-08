@@ -249,7 +249,10 @@ async function main() {
         refused,
       );
       await assert.rejects(bridge.api.runtime.nuke(), refused);
-      await assert.rejects(bridge.api.projects.add("/tmp/x"), refused);
+      await assert.rejects(
+        bridge.api.projects.add({ path: "/tmp/x" }),
+        refused,
+      );
       await assert.rejects(
         bridge.api.scripts.run({
           projectId: "p",

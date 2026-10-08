@@ -42,6 +42,7 @@ import {
   stepPosition,
   stepStates,
 } from "./pullSteps";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 type ExtraRow = { title: string; detail: ReactNode };
 const NO_EXTRA_ROWS: ExtraRow[] = [];
@@ -431,10 +432,19 @@ function StepRow({
       )}
     >
       <StepMark state={state} ended={endedHere} />
-      <span className="min-w-0 flex-1 truncate">
-        <span className="font-medium">{title}</span>
-        <span className="ml-2 text-xs text-muted-foreground">{detail}</span>
-      </span>
+      <SimpleTooltip
+        whenTruncated
+        tip={
+          <>
+            {title} {detail}
+          </>
+        }
+      >
+        <span className="min-w-0 flex-1 truncate">
+          <span className="font-medium">{title}</span>
+          <span className="ml-2 text-xs text-muted-foreground">{detail}</span>
+        </span>
+      </SimpleTooltip>
       <span className="shrink-0 text-xs text-muted-foreground">
         {endedHere === null ? state : ENDED_LOOK[endedHere].word}
       </span>

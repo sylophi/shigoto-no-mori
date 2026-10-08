@@ -11,6 +11,7 @@ import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shared/schemas";
 import { PullRequestTitleLink } from "./PullRequestIdentity";
 import { TONE_TEXT } from "./pullRequestShared";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 
 export function StackList({
   worktree,
@@ -38,11 +39,18 @@ export function StackList({
             <span className="tabular w-3 shrink-0 text-right text-2xs text-muted-foreground/60">
               {position}
             </span>
-            <Icon
-              aria-label={label}
-              className={cn("size-3.5 shrink-0", TONE_TEXT[tone])}
-            />
-            <PullRequestTitleLink pr={entry.pr} className="min-w-0 truncate" />
+            <SimpleTooltip tip={label}>
+              <Icon
+                aria-label={label}
+                className={cn("size-3.5 shrink-0", TONE_TEXT[tone])}
+              />
+            </SimpleTooltip>
+            <SimpleTooltip whenTruncated tip={entry.pr.title}>
+              <PullRequestTitleLink
+                pr={entry.pr}
+                className="min-w-0 truncate"
+              />
+            </SimpleTooltip>
             <span className="shrink-0 text-muted-foreground/60">
               #{entry.pr.number}
             </span>

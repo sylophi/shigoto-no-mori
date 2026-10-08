@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Project } from "@shared/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
+import { PinnedMark } from "@/components/shared/PinnedMark";
 import { TerrierMark } from "./TerrierMark";
 
 interface ProjectHeaderProps {
@@ -19,6 +20,8 @@ interface ProjectHeaderProps {
   // the paw after the open project's name while Mark terrier projects
   // is on.
   terrier?: boolean;
+  // Pinned to the top of the list, which puts the pin after the name.
+  pinned?: boolean;
   // The open project, heading the tree on its own: a title, with
   // nothing left for it to open.
   expanded?: boolean;
@@ -51,6 +54,7 @@ export function ProjectHeader({
   iconFrom,
   badges,
   terrier = false,
+  pinned = false,
   expanded,
   current,
   onToggle,
@@ -132,6 +136,7 @@ export function ProjectHeader({
     >
       {lead}
       {name}
+      {pinned && <PinnedMark />}
       <TerrierMark terrier={terrier} />
       {badges}
     </div>
@@ -156,6 +161,7 @@ export function ProjectHeader({
     >
       {lead}
       {name}
+      {pinned && <PinnedMark />}
     </button>
   );
 

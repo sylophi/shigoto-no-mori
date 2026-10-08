@@ -27,10 +27,12 @@ export function PathSpan({
   className,
   copyable = false,
 }: PathSpanProps) {
-  const [ref, display] = useShortPath(path, home);
+  // The full path shows on hover only once some of it is hidden: a
+  // segment abbreviated, or the text cut off.
+  const [ref, display, shortened] = useShortPath(path, home);
   if (copyable) {
     return (
-      <SimpleTooltip tip={path}>
+      <SimpleTooltip whenTruncated={!shortened} tip={path}>
         <span
           ref={ref}
           className={cn(
@@ -49,7 +51,7 @@ export function PathSpan({
     e.clipboardData.setData("text/plain", path);
   };
   return (
-    <SimpleTooltip tip={path}>
+    <SimpleTooltip whenTruncated={!shortened} tip={path}>
       <span
         ref={ref}
         className={cn("select-text", className)}

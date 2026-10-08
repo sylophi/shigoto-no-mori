@@ -67,4 +67,11 @@ function PopoverContent({
   );
 }
 
-export { Popover, PopoverTrigger, PopoverContent };
+// Closes the popover it sits in: a row that hands off to a dialog.
+function PopoverClose({
+  ...props
+}: WithoutTitle<PopoverPrimitive.Close.Props>) {
+  return <PopoverPrimitive.Close {...props} />;
+}
+
+export { Popover, PopoverTrigger, PopoverContent, PopoverClose };

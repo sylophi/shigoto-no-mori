@@ -9,6 +9,7 @@ import {
   type DeviceSettingsPatch,
   type GlobalConfig,
   type LauncherCommand,
+  type TerminalId,
   type Theme,
 } from "@shared/schemas";
 import {
@@ -40,6 +41,7 @@ export interface SettingsFormState {
   launchers: LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
+  terminal: TerminalId;
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   autoPullNew: boolean;
@@ -77,6 +79,7 @@ export function fromConfig(
     // different order would read as an unsaved change.
     hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
     launchScripts: config.launchScripts ?? DEFAULTS.launchScripts,
+    terminal: config.terminal ?? DEFAULTS.terminal,
     deleteBranchOnRemove:
       config.deleteBranchOnRemove ?? DEFAULTS.deleteBranchOnRemove,
     autoPopulateInstall:
@@ -107,12 +110,13 @@ function validLaunchers(state: SettingsFormState): LauncherCommand[] {
 // The peer encoding: the globalConfig.writeDeviceSettings patch,
 // carrying ONLY the keys a peer's Settings section edits. The host
 // applies the patch as absent-means-keep, which is what keeps the
-// launch catalog (launchers, hiddenLaunchers, launchScripts) out of it:
-// those keys are local by nature and edited only on this machine's
-// Launch tools section, so a peer save must not re-send a snapshot of
-// them taken when the peer's form was seeded. Every key carries an
-// EXPLICIT value, default included: absent means keep, so only an
-// explicit default reverts a key (the host then stores it by omission).
+// launch catalog (launchers, hiddenLaunchers, launchScripts, terminal)
+// out of it: those keys are local by nature and edited only on this
+// machine's Launch tools section, so a peer save must not re-send a
+// snapshot of them taken when the peer's form was seeded. Every key
+// carries an EXPLICIT value, default included: absent means keep, so
+// only an explicit default reverts a key (the host then stores it by
+// omission).
 export function toDeviceSettingsPatch(
   state: SettingsFormState,
 ): DeviceSettingsPatch {
@@ -141,6 +145,7 @@ function toLocalDeviceSettingsPatch(
     launchers: validLaunchers(state),
     hiddenLaunchers: state.hiddenLaunchers,
     launchScripts: state.launchScripts,
+    terminal: state.terminal,
   };
 }
 
