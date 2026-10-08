@@ -247,7 +247,7 @@ export class Git extends Context.Service<
     // --- the working tree ---
     // Every changed file. `untracked: "normal"` sees untracked files
     // even where the user turned them off (`status.showUntrackedFiles
-    // no`), for the guards ahead of an overwrite or a removal; "all"
+    // no`), for the guards ahead of an overwrite or a removal. "all"
     // lists each file of an untracked directory. Without it the user's
     // setting holds, which keeps the display probes cheap.
     readonly status: (
@@ -384,10 +384,10 @@ export class Git extends Context.Service<
       override?: string,
       remotes?: readonly string[],
     ) => Effect.Effect<Option.Option<string>>;
-    // What to hand git so a checkout of `ref` lands on a branch: an
-    // exact local branch wins; a qualified remote ref resolves to its
-    // local branch where that exists, and otherwise stays the ref with
-    // `track` naming the tracking branch to create from it; anything
+    // What to hand git so a checkout of `ref` lands on a branch. An
+    // exact local branch wins. A qualified remote ref resolves to its
+    // local branch where that exists, and otherwise stays the ref, with
+    // `track` naming the tracking branch to create from it. Anything
     // else goes to git as it is.
     readonly resolveCheckoutRef: (
       repo: string,
