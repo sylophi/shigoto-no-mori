@@ -1,10 +1,5 @@
-// POSIX script processes: login-shell spawning under a pseudo-terminal
-// and process-group signaling.
-//
-// Scripts run in a PTY (node-pty) rather than on pipes, so the console
-// behaves like a terminal: programs see a TTY, get a real window size,
-// emit color without coaxing, and can read keystrokes the renderer
-// forwards (interactive prompts, vite's "r"/"q" shortcuts, TUIs).
+// POSIX process-group signaling for the scripts (./pty.ts) and the
+// children of the CLI runner.
 //
 // Kill strategy:
 //   1. SIGTERM the process group (negative pgid), covering normal forks.
@@ -12,85 +7,10 @@
 //      double-forked daemons) and SIGTERM those too.
 //   3. The caller escalates to SIGKILL through the same path after its
 //      grace period.
-import { type ChildProcess, execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { userInfo } from "node:os";
-import { promisify } from "node:util";
-import { type IPty, spawn as spawnPty } from "node-pty";
-import { envSetting } from "../../../shared/config.ts";
-
-const execFileP = promisify(execFile);
-
-export type ScriptPty = IPty;
-
-interface SpawnScriptOptions {
-  command: string;
-  cwd: string;
-  env: NodeJS.ProcessEnv;
-  cols: number;
-  rows: number;
-}
-
-// $SHELL is reliable when launched from a terminal, but can be empty in
-// GUI launches depending on launchd state. os.userInfo().shell reads the
-// passwd entry directly. We use a *login* shell (no `-i`) so the user's
-// `.zprofile` / `.bash_profile` runs without zsh's interactive-init code
-// (job control, prompt setup, zle) getting in the way of the command.
-function resolveShell(): { command: string; args: string[] } {
-  const userShell = envSetting("SHELL") || userInfo().shell;
-  if (userShell) return { command: userShell, args: ["-l", "-c"] };
-  return { command: "/bin/sh", args: ["-c"] };
-}
-
-// Quote one argument for the shell spawnScript launches (POSIX sh
-// single-quoting).
-export function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
-
-// Inherited terminal state that would mislead a program in the new
-// PTY: the app may itself have been launched from a tmux pane or a
-// shell exporting its own size. node-pty strips the same set, but only
-// when handed process.env itself, not a copy with additions.
-const STALE_TERMINAL_ENV = new Set([
-  "COLUMNS",
-  "LINES",
-  "TERMCAP",
-  "WINDOWID",
-  "TMUX",
-  "TMUX_PANE",
-  "STY",
-  "WINDOW",
-]);
-
-// Throws synchronously when no process could be started (a missing
-// shell, PTY allocation failure), which callers report as a failed run.
-// The check for the shell is deliberate: node-pty's helper execs it in
-// the child and exits 1 without a word if that fails, which would show
-// as a bare "exit 1". The PTY child runs in its own session, so its
-// pgid === pid and the whole tree can be signaled via
-// process.kill(-pid, sig).
-export function spawnScript(opts: SpawnScriptOptions): ScriptPty {
-  const { command: shellCmd, args: shellArgs } = resolveShell();
-  if (!existsSync(shellCmd)) {
-    throw new Error(`Login shell not found: ${shellCmd}`);
-  }
-  // node-pty's env is a plain string map, so the undefined entries
-  // NodeJS.ProcessEnv allows are dropped.
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(opts.env)) {
-    if (value !== undefined && !STALE_TERMINAL_ENV.has(key)) {
-      env[key] = value;
-    }
-  }
-  return spawnPty(shellCmd, [...shellArgs, opts.command], {
-    name: "xterm-256color",
-    cols: opts.cols,
-    rows: opts.rows,
-    cwd: opts.cwd,
-    env,
-  });
-}
+import type { ChildProcess } from "node:child_process";
+import * as Effect from "effect/Effect";
+import * as Processes from "../util/processes";
+import { descendantsIn } from "./descendants";
 
 function safeKill(pid: number, signal: NodeJS.Signals): void {
   // kill(-1) signals every process the user may signal, kill(0) our
@@ -111,71 +31,38 @@ function safeKill(pid: number, signal: NodeJS.Signals): void {
 // ppid chain. Catches grandchildren that called setsid() and left our
 // process group. They stay reachable here as long as their ppid hasn't
 // been re-parented to init.
-async function listDescendantPids(rootPid: number): Promise<number[]> {
-  let stdout: string;
-  try {
-    const result = await execFileP("ps", ["-A", "-o", "pid=,ppid="]);
-    stdout = result.stdout;
-  } catch {
-    return [];
-  }
-  const byParent = new Map<number, number[]>();
-  for (const line of stdout.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const m = trimmed.match(/^(\d+)\s+(\d+)$/);
-    if (!m) continue;
-    const pid = Number(m[1]);
-    const ppid = Number(m[2]);
-    if (pid === rootPid) continue;
-    const bucket = byParent.get(ppid);
-    if (bucket) bucket.push(pid);
-    else byParent.set(ppid, [pid]);
-  }
-  const out: number[] = [];
-  const stack: number[] = [rootPid];
-  const seen = new Set<number>([rootPid]);
-  for (let cur = stack.pop(); cur !== undefined; cur = stack.pop()) {
-    const kids = byParent.get(cur);
-    if (!kids) continue;
-    for (const k of kids) {
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push(k);
-      stack.push(k);
-    }
-  }
-  return out;
-}
+const descendantPids = (rootPid: number) =>
+  Processes.exec("ps", ["-A", "-o", "pid=,ppid="]).pipe(
+    Effect.map(({ stdout }) => descendantsIn(stdout, rootPid)),
+    Effect.orElseSucceed((): number[] => []),
+  );
 
 // Callers escalate SIGTERM -> grace -> SIGKILL through this same path.
-export async function signalTree(
-  pid: number,
-  signal: NodeJS.Signals,
-): Promise<void> {
-  safeKill(-pid, signal);
-  const descendants = await listDescendantPids(pid);
-  for (const d of descendants) safeKill(d, signal);
-}
+export const signalTree = (pid: number, signal: NodeJS.Signals) =>
+  Effect.sync(() => safeKill(-pid, signal)).pipe(
+    Effect.andThen(descendantPids(pid)),
+    Effect.map((descendants) => {
+      for (const d of descendants) safeKill(d, signal);
+    }),
+  );
 
 // The same for a process that leads no group of its own: a lifecycle
 // script the CLI ran shares the CLI's group (a terminal's Ctrl-C must
 // reach the whole tree, and killAllCli takes the group down at quit),
 // so stopping it means the pid and its descendants, never the group,
 // which would take the CLI down mid-lifecycle.
-export async function signalPidTree(
-  pid: number,
-  signal: NodeJS.Signals,
-): Promise<void> {
-  const descendants = await listDescendantPids(pid);
-  safeKill(pid, signal);
-  for (const d of descendants) safeKill(d, signal);
-}
+export const signalPidTree = (pid: number, signal: NodeJS.Signals) =>
+  descendantPids(pid).pipe(
+    Effect.map((descendants) => {
+      safeKill(pid, signal);
+      for (const d of descendants) safeKill(d, signal);
+    }),
+  );
 
 // SIGTERM one direct child, escalating to SIGKILL after graceMs unless
 // it exits first. For plain (non-detached) children whose whole work is
-// the one process (the cloudflared connector), where the process-group
-// walk above would be overkill. `tree` signals the child's process
+// the one process, where the process-group walk above would be
+// overkill. `tree` signals the child's process
 // group instead (signalChildTree): a detached CLI child whose
 // lifecycle script must die with it. The group outlives the child, so
 // the escalation then stays armed past the child's own exit, for a

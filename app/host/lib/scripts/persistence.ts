@@ -15,20 +15,17 @@
 // then, so isSameProcess below has to prove the pid is still ours
 // before anything is signaled. Every inconclusive answer leaves the
 // process alone.
-import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { promisify } from "node:util";
 import * as Schema from "effect/Schema";
 import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
 import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { isENOENT, dataDir } from "../util/paths";
+import * as Processes from "../util/processes";
 import { signalTree } from "./process";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { log } from "@shared/log";
-
-const execFileP = promisify(execFile);
 
 const FILE = "running-scripts.json";
 
@@ -159,12 +156,14 @@ async function readProcessTable(
   if (pids.length === 0) return table;
   let stdout: string;
   try {
-    const result = await execFileP(
-      "ps",
-      // -ww so a long dev-server command line isn't truncated, LC_ALL
-      // so lstart's month and day names stay parseable.
-      ["-ww", "-p", pids.join(","), "-o", "pid=,pgid=,lstart=,command="],
-      { env: { ...process.env, LC_ALL: "C" } },
+    const result = await Processes.run(
+      Processes.exec(
+        "ps",
+        // -ww so a long dev-server command line isn't truncated, LC_ALL
+        // so lstart's month and day names stay parseable.
+        ["-ww", "-p", pids.join(","), "-o", "pid=,pgid=,lstart=,command="],
+        { env: { ...process.env, LC_ALL: "C" } },
+      ),
     );
     stdout = result.stdout;
   } catch {
@@ -216,7 +215,7 @@ function commandMatches(recorded: string, live: string): boolean {
 
 // The identity proof. A live pid says nothing on its own, so three
 // independent facts have to agree before the sweep signals anything:
-// the process leads its own group (spawnScript always detaches, and
+// the process leads its own group (a script's PTY child leads a session of its own, and
 // setsid survives an exec), it started when we recorded that it
 // started, and its command line still looks like the one we launched.
 function isSameProcess(
@@ -252,14 +251,14 @@ function waitForExit(pid: number, ms: number): Promise<boolean> {
 }
 
 async function killOrphan(record: PersistedScript): Promise<boolean> {
-  await signalTree(record.pid, "SIGTERM");
+  await Processes.run(signalTree(record.pid, "SIGTERM"));
   if (await waitForExit(record.pid, ORPHAN_GRACE_MS)) return true;
   // Still alive after the grace period, or the number was freed and
   // taken over in the meantime. Re-prove the identity before escalating
   // so SIGKILL can't chase whatever inherited the pid.
   const table = await readProcessTable([record.pid]);
   if (!isSameProcess(record, table.get(record.pid))) return true;
-  await signalTree(record.pid, "SIGKILL");
+  await Processes.run(signalTree(record.pid, "SIGKILL"));
   const died = await waitForExit(record.pid, ORPHAN_GRACE_MS);
   if (!died) {
     log.warn(

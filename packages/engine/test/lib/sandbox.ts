@@ -22,25 +22,19 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as CarryOver from "../../src/CarryOver.ts";
 import * as CloneCheckout from "../../src/CloneCheckout.ts";
 import * as Config from "../../src/Config.ts";
-import * as Darwin from "../../src/Darwin.ts";
 import * as Git from "../../src/Git.ts";
-import * as GitHub from "../../src/GitHub.ts";
 import * as Hygiene from "../../src/Hygiene.ts";
 import * as Icons from "../../src/Icons.ts";
-import * as Identity from "../../src/Identity.ts";
 import * as Launchers from "../../src/Launchers.ts";
-import * as Lifecycle from "../../src/Lifecycle.ts";
 import * as Layout from "../../src/Layout.ts";
-import * as Paths from "../../src/Paths.ts";
 import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Terrier from "../../src/Terrier.ts";
 import * as Usage from "../../src/Usage.ts";
+import { engineLayer } from "../../src/layer.ts";
 import { nodeStore } from "./nodeStore.ts";
-import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
 
 // The services a harness case calls.
@@ -68,13 +62,6 @@ for (const key of Object.keys(process.env)) {
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
-  // No background gc or maintenance: a sandbox's repos are copied while
-  // git runs, and a pack rewritten mid-copy loses files.
-  GIT_CONFIG_COUNT: "2",
-  GIT_CONFIG_KEY_0: "gc.auto",
-  GIT_CONFIG_VALUE_0: "0",
-  GIT_CONFIG_KEY_1: "maintenance.auto",
-  GIT_CONFIG_VALUE_1: "false",
 });
 
 const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
@@ -257,34 +244,7 @@ export function sandbox(): Sandbox {
   const engineRuntime = () => {
     const dataDir = sideDir("engine");
     runtime ??= ManagedRuntime.make(
-      Hygiene.layer.pipe(
-        Layer.provideMerge(Worktrees.layer),
-        Layer.provideMerge(
-          Layer.mergeAll(
-            Launchers.layer,
-            Layout.layer,
-            Registry.layer,
-            Scripts.layer,
-            WorktreeData.layer,
-            GitHub.layer,
-            Lifecycle.layer,
-            CarryOver.layer,
-            CloneCheckout.layer,
-          ),
-        ),
-        Layer.provideMerge(Terrier.layer),
-        Layer.provideMerge(Darwin.layer(macfs())),
-        Layer.provideMerge(
-          Layer.mergeAll(
-            Config.layer,
-            Usage.layer,
-            Identity.layer,
-            Icons.layer,
-          ),
-        ),
-        Layer.provideMerge(Git.layer),
-        Layer.provideMerge(nodeStore),
-        Layer.provideMerge(Paths.layer("dev")),
+      engineLayer({ flavor: "dev", store: nodeStore, macfs: macfs() }).pipe(
         Layer.provide(NodeServices.layer),
         Layer.provide(
           ConfigProvider.layer(

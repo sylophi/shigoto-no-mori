@@ -3,7 +3,6 @@
 // terminal, never under --json, NO_COLOR or TERM=dumb.
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 
 export class Output extends Context.Service<
   Output,
@@ -22,12 +21,6 @@ export const out = (line: string) => Console.log(line);
 
 export const note = (line: string) => Console.error(line);
 
-// The JSON document under --json, the person's line otherwise.
-export const emitOrOut = (doc: unknown, line: string) =>
-  Effect.flatMap(Effect.service(Output), ({ json }) =>
-    json ? emit(doc) : out(line),
-  );
-
 const paint = (text: string, code: string, enabled: boolean) =>
   enabled && text !== "" ? `\u001b[${code}m${text}\u001b[0m` : text;
 
@@ -35,6 +28,7 @@ export const styles = (color: boolean) => ({
   dim: (text: string) => paint(text, "2", color),
   green: (text: string) => paint(text, "32", color),
   red: (text: string) => paint(text, "31", color),
+  yellow: (text: string) => paint(text, "33", color),
 });
 
 // An SGR escape: ESC, `[`, its parameters, `m`.
