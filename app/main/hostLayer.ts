@@ -49,6 +49,7 @@ import {
   stopControlHost,
   stopDirectHost,
   stopHubConnection,
+  tunnelLayer,
 } from "./ipc/register";
 import { lifetime, onQuit, starts } from "./lifetimes";
 
@@ -221,6 +222,8 @@ export const layer = (options: { readonly hurried: () => boolean }) =>
     Layer.provideMerge(mirrorDaemon),
     Layer.provideMerge(mirrorGateway),
     Layer.provideMerge(remotePlanes),
+    // The cloudflared child, fronting the direct listener above.
+    Layer.provideMerge(tunnelLayer),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(stateWatcher),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),

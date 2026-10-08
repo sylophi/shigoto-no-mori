@@ -379,8 +379,10 @@ const make = (options: Options) =>
       Effect.scoped,
       // Anything this run did not expect ends it like an exit, onto the
       // restart ladder, never the supervisor with it.
-      Effect.catchCause((cause) =>
-        Effect.logWarning("[mirror] daemon run failed, restarting", cause),
+      Effect.catchDefect((defect) =>
+        Effect.logWarning(
+          `[mirror] daemon run failed, restarting: ${errorMessageOf(defect)}`,
+        ),
       ),
       Effect.timed,
       Effect.map(([duration]) => Duration.toMillis(duration)),
