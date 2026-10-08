@@ -32,7 +32,8 @@ export function Rail({
 // the page's wallpaper shows around the node rather than a patch. The
 // node sits on the content's first line (rows pad by py-1.5 and lead
 // with a text-sm line), so a two-line row keeps its mark beside the
-// heading. `faded` is history past the branch.
+// heading. The rail is slim: every pixel of it comes off the subjects
+// in the Git page's sidebar. `faded` is history past the branch.
 export function TimelineRow({
   node,
   faded = false,
@@ -47,14 +48,9 @@ export function TimelineRow({
   const place = use(RailPlaceContext);
   const line = faded ? "bg-muted-foreground/20" : "bg-muted-foreground/35";
   return (
-    // A slimmer rail in a column (the Git page's sidebar), where every
-    // pixel of it comes off the subjects.
     <div
       data-slot="git-timeline-row"
-      className={cn(
-        "grid grid-cols-[1.25rem_1fr] gap-x-2 @max-md/timeline:grid-cols-[0.875rem_1fr] @max-md/timeline:gap-x-1.5",
-        className,
-      )}
+      className={cn("grid grid-cols-[0.875rem_1fr] gap-x-1.5", className)}
     >
       <div aria-hidden className="flex flex-col items-center">
         <span className={cn("mb-0.5 h-1.5 w-px", !place.first && line)} />
@@ -79,30 +75,11 @@ export function CommitDot({ local }: { local: boolean }) {
   );
 }
 
-// Which view the timeline is drawn in. On the worktree page it is the
-// overview of the worktree's git, and a row opens the Git page on
-// itself. On the Git page it is the History tab: the branch's commits
-// alone (the changes and stashes have the Changes tab), the selected
-// one marked, and a pick replaces the page's entry, so Back still
-// leaves the page.
-export interface TimelineView {
-  onGitPage: boolean;
-  // `branch` or `commit:<hash>`.
-  selected: string | null;
-}
+// The row the Git page shows, `branch` or `commit:<hash>`, marked in
+// the timeline. A pick replaces the page's entry, so Back still leaves
+// the page.
+export const TimelineSelection = createContext<string | null>(null);
 
-const TimelineViewContext = createContext<TimelineView>({
-  onGitPage: false,
-  selected: null,
-});
-
-export const TimelineViewProvider = TimelineViewContext;
-
-export function useTimelineView(): TimelineView {
-  return use(TimelineViewContext);
-}
-
-// Whether a row is the Git page's selection.
 export function useRowSelection(key: string): boolean {
-  return useTimelineView().selected === key;
+  return use(TimelineSelection) === key;
 }

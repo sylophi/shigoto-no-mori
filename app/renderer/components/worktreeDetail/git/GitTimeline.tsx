@@ -1,19 +1,10 @@
 import { useState, type ReactNode } from "react";
-import {
-  ChevronRight,
-  EllipsisVertical,
-  Layers,
-  Search,
-  X,
-} from "lucide-react";
-import { IconButton } from "@/components/ui/icon-button";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { EllipsisVertical, Layers, Search } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
 import {
   useBranchCommits,
   useBranchHistory,
 } from "@/hooks/git/useBranchCommits";
-import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { commitRewriteAt, NO_REWRITE } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
@@ -27,17 +18,13 @@ import {
 } from "@shared/schemas";
 import { CommitNode } from "./CommitNode";
 import { BaseMarker, RemoteMarker } from "./Markers";
-import { StashNode } from "./StashNodes";
 import {
   Rail,
   TimelineRow,
-  TimelineViewProvider,
+  TimelineSelection,
   useRowSelection,
-  useTimelineView,
-  type TimelineView,
 } from "./TimelineRow";
 import { useCommitActions, type CommitActions } from "./useCommitActions";
-import { WorkingTreeNode } from "./WorkingTreeNode";
 
 // How many of the branch's own commits show before the rest fold into
 // a "more" row. A branch rarely runs past it.
@@ -45,114 +32,63 @@ const SHOWN_COMMITS = 10;
 
 type Row = { key: string; row: ReactNode };
 
-// The worktree's git as one line, read from now down to where the work
-// began: what is uncommitted (or a merge stopped on conflicts), what is
-// stashed, the branch's own commits, where the remote stands among them,
-// and where the branch left the primary branch. The worktree page draws
-// all of it. The Git page's History tab draws the commits and markers. Each move sits on the
-// thing it moves: commit and stash on the working tree, the push on the
-// remote's marker, the sync on the primary's, a commit's own on its row.
-// The history before the branch folds behind its marker, and a search
-// reaches all of it.
+// The Git page's History tab: the branch's own commits, newest first,
+// with where the remote stands among them (the commits above it are the
+// ones it doesn't have yet, and the push sits on it) and where the
+// branch left the primary branch (with the sync), led by a row for
+// everything the branch changes. The history before the branch folds
+// behind its marker, and the search reaches all of it.
 export function GitTimeline({
   worktree,
-  view = OVERVIEW,
+  selected,
 }: {
   worktree: Worktree;
-  view?: TimelineView;
+  // `branch` or `commit:<hash>`: what the page shows.
+  selected: string | null;
 }) {
   const { projectId, id: worktreeId } = worktree;
   const head = worktree.recentCommits[0]?.hash;
   const { data: history } = useBranchHistory(projectId, worktreeId, head);
   const actions = useCommitActions(worktree);
-  const [searching, setSearching] = useState(false);
   const [search, setSearch] = useState("");
   const query = useDebouncedValue(search.trim(), 250);
-  const closeSearch = () => {
-    setSearching(false);
-    setSearch("");
-  };
-  // The Git page's History tab is the history, so its search is always
-  // there, as GitHub Desktop's is. The overview opens one on demand.
-  const searchOpen = view.onGitPage || searching;
 
-  // A reading width on a wide window, so a row's hash and counts stay
-  // within reach of its subject. The rows lay out by the timeline's own
-  // width (@container/timeline): one line on the worktree page, two in
-  // the Git page's sidebar.
   return (
-    <TimelineViewProvider value={view}>
-      <section
-        className={cn(
-          "@container/timeline",
-          view.onGitPage ? "space-y-1" : "max-w-4xl space-y-2",
-        )}
-      >
-        {!view.onGitPage && (
-          <div className="flex h-4 items-center justify-between gap-2">
-            <SectionHeading>Git</SectionHeading>
-            <IconButton
-              aria-label={searching ? "Close the search" : "Search the history"}
-              aria-pressed={searching}
-              onClick={() => (searching ? closeSearch() : setSearching(true))}
-            >
-              {searching ? (
-                <X aria-hidden className="size-3.5" />
-              ) : (
-                <Search aria-hidden className="size-3.5" />
-              )}
-            </IconButton>
-          </div>
-        )}
-        {searchOpen && (
-          <div
-            data-slot="search-row"
-            className={cn(
-              "flex items-center gap-1.5",
-              // The Changes tab's filter row, on the Git page.
-              view.onGitPage
-                ? "-mx-3 border-b border-border px-3.5 py-1.5"
-                : "rounded-md bg-muted/50 px-2 py-1.5",
-            )}
-          >
-            <Search
-              aria-hidden
-              className="size-3.5 shrink-0 text-muted-foreground/60"
-            />
-            <input
-              // oxlint-disable-next-line jsx-a11y/no-autofocus -- opened to type into
-              autoFocus={!view.onGitPage}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  if (view.onGitPage) setSearch("");
-                  else closeSearch();
-                }
-              }}
-              placeholder="Search commit messages"
-              aria-label="Search commit messages"
-              spellCheck={false}
-              className={cn(
-                "min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground/70",
-                view.onGitPage ? "text-xs" : "text-sm",
-              )}
-            />
-          </div>
-        )}
-        {searchOpen && query ? (
+    <TimelineSelection value={selected}>
+      <section className="space-y-1">
+        <div
+          data-slot="search-row"
+          className="-mx-3 flex items-center gap-1.5 border-b border-border px-3.5 py-1.5"
+        >
+          <Search
+            aria-hidden
+            className="size-3.5 shrink-0 text-muted-foreground/60"
+          />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && search) {
+                e.stopPropagation();
+                setSearch("");
+              }
+            }}
+            placeholder="Search commit messages"
+            aria-label="Search commit messages"
+            spellCheck={false}
+            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
+          />
+        </div>
+        {query ? (
           <SearchResults worktree={worktree} query={query} actions={actions} />
         ) : (
           <Timeline worktree={worktree} history={history} actions={actions} />
         )}
         {actions.dialog}
       </section>
-    </TimelineViewProvider>
+    </TimelineSelection>
   );
 }
-
-const OVERVIEW: TimelineView = { onGitPage: false, selected: null };
 
 function Timeline({
   worktree,
@@ -163,7 +99,6 @@ function Timeline({
   history: BranchHistory | undefined;
   actions: CommitActions;
 }) {
-  const { data: stashes = [] } = useWorktreeStashes(worktree);
   const [expanded, setExpanded] = useState(false);
   const [earlierOpen, setEarlierOpen] = useState(false);
 
@@ -187,21 +122,7 @@ function Timeline({
   // one, past the newest commits shown.
   const earlierFrom = base ? base.hash : own[shown]?.hash;
 
-  const { onGitPage } = useTimelineView();
-  // The Git page's History tab draws the commits alone: the changes and
-  // the stashes are its Changes tab.
-  const rows: Row[] = onGitPage
-    ? []
-    : [
-        {
-          key: "working-tree",
-          row: <WorkingTreeNode worktree={worktree} />,
-        },
-        ...stashes.map((stash) => ({
-          key: `stash:${stash.hash}`,
-          row: <StashNode worktree={worktree} stash={stash} />,
-        })),
-      ];
+  const rows: Row[] = [];
   const remoteRow: Row | null =
     remoteAt === null || history === undefined
       ? null
@@ -252,9 +173,6 @@ function Timeline({
   }
   const pastLinks = (
     <div className="flex flex-wrap items-center gap-x-3 pb-1 text-xs">
-      {base && own.length > 0 && !onGitPage && (
-        <BranchChangesLink worktree={worktree} />
-      )}
       {earlierFrom && (
         <button
           type="button"
@@ -280,20 +198,17 @@ function Timeline({
 
   return (
     <div>
-      {/* On the Git page the branch's whole diff leads the History tab,
-          one row to pick like a commit, rather than a link under the
-          base marker. */}
-      {onGitPage && base && own.length > 0 && (
+      {base && own.length > 0 && (
         <BranchChangesRow worktree={worktree} base={base.ref} />
       )}
       <Rail rows={rows} />
       {history === undefined && (
-        <div className="py-1.5 pl-7 text-sm text-muted-foreground @max-md/timeline:pl-5">
+        <div className="py-1.5 pl-5 text-sm text-muted-foreground">
           Reading the history…
         </div>
       )}
       {history && !base && earlierFrom && !earlierOpen && (
-        <div className="pl-7 @max-md/timeline:pl-5">{pastLinks}</div>
+        <div className="pl-5">{pastLinks}</div>
       )}
       {earlierOpen && earlierFrom && (
         <EarlierHistory
@@ -303,34 +218,6 @@ function Timeline({
         />
       )}
     </div>
-  );
-}
-
-// The way to everything the branch changes against where it began: a
-// page of its own from the worktree page, the selection on the Git page.
-function BranchChangesLink({ worktree }: { worktree: Worktree }) {
-  const nav = useWorktreeNav();
-  const { onGitPage } = useTimelineView();
-  const selected = useRowSelection("branch");
-  return (
-    <button
-      type="button"
-      aria-current={selected || undefined}
-      onClick={() =>
-        nav.toBranchDiff(worktree.projectId, worktree.id, onGitPage)
-      }
-      className={cn(
-        "-mx-1.5 inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 transition-colors",
-        selected
-          ? "bg-accent text-accent-foreground"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      All branch changes
-      {!onGitPage && (
-        <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-      )}
-    </button>
   );
 }
 
@@ -477,7 +364,7 @@ function PastCommits({
           type="button"
           disabled={more.pending}
           onClick={more.load}
-          className="py-1.5 pl-7 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+          className="py-1.5 pl-5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
         >
           {more.pending ? "Loading…" : "Show more"}
         </button>

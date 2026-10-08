@@ -31,17 +31,12 @@ import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { CommitSummary, Worktree } from "@shared/schemas";
-import {
-  CommitDot,
-  TimelineRow,
-  useRowSelection,
-  useTimelineView,
-} from "./TimelineRow";
+import { CommitDot, TimelineRow, useRowSelection } from "./TimelineRow";
 import type { CommitActions } from "./useCommitActions";
 
-// One commit on the Git timeline: its subject, where it can be read in
-// full (the row opens its page), and its moves, behind a "⋯" that shows
-// on hover or a right click.
+// One commit on the History tab's timeline: its subject, picked to show
+// it beside the list, and its moves, behind a "⋯" that shows on hover or
+// a right click.
 export function CommitNode({
   worktree,
   commit,
@@ -63,7 +58,6 @@ export function CommitNode({
   faded?: boolean;
 }) {
   const nav = useWorktreeNav();
-  const { onGitPage } = useTimelineView();
   const selected = useRowSelection(`commit:${commit.hash}`);
   const items = (
     <CommitMenuItems
@@ -88,56 +82,43 @@ export function CommitNode({
             />
           }
         >
-          {/* One line where the timeline is wide (the worktree page),
-              the subject over its hash, time and counts where it is a
-              column (the Git page's sidebar). */}
+          {/* The subject over its age and counts. The hash is the
+              picked commit's pane's to say. */}
           <button
             type="button"
             aria-current={selected || undefined}
             onClick={() =>
-              nav.toCommit(
-                worktree.projectId,
-                worktree.id,
-                commit.hash,
-                onGitPage,
-              )
+              nav.toCommit(worktree.projectId, worktree.id, commit.hash, true)
             }
-            className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring @md/timeline:flex-row @md/timeline:items-center @md/timeline:gap-3"
+            className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md px-1.5 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
           >
             <span
               className={cn(
-                "w-full truncate text-sm @md/timeline:w-auto @md/timeline:min-w-0 @md/timeline:flex-1",
+                "w-full truncate text-sm",
                 faded && "text-muted-foreground",
               )}
             >
               {commit.subject}
             </span>
-            {/* Fixed columns when wide, so the hashes, the times and the
-                counts line up down the timeline whatever each row holds. */}
-            <span className="flex w-full items-center gap-2 text-xs text-muted-foreground @md/timeline:grid @md/timeline:w-auto @md/timeline:shrink-0 @md/timeline:grid-cols-[4.5rem_4rem_4.5rem] @md/timeline:gap-0">
-              {/* A column has no room for it, and the picked commit's
-                  pane says it. */}
-              <span className="font-mono @max-md/timeline:hidden">
-                {commit.hash}
-              </span>
+            <span className="flex w-full items-center gap-2 text-xs text-muted-foreground">
               <span className="truncate">
                 <RelativeDate date={commit.date} />
               </span>
-              <span className="ml-auto flex justify-end">
-                {(commit.additions > 0 || commit.deletions > 0) && (
+              {(commit.additions > 0 || commit.deletions > 0) && (
+                <span className="ml-auto">
                   <DiffStats
                     additions={commit.additions}
                     deletions={commit.deletions}
                   />
-                )}
-              </span>
+                </span>
+              )}
             </span>
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label={`Actions for ${commit.hash}`}
               data-icon-button
-              className="mt-1 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover/commit:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-popup-open:opacity-100 @md/timeline:mt-1 phone:opacity-100"
+              className="mt-1 mr-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover/commit:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-popup-open:opacity-100 phone:opacity-100"
             >
               <Ellipsis aria-hidden className="size-4" />
             </DropdownMenuTrigger>

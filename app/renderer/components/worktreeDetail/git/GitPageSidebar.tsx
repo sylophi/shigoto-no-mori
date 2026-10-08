@@ -4,6 +4,7 @@ import { useWorktreeStashes } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shared/schemas";
 import { GitTimeline } from "./GitTimeline";
+import { OperationBanner } from "./OperationBanner";
 import { StashList } from "./StashList";
 
 export type GitTab = "changes" | "stashes" | "history";
@@ -69,15 +70,19 @@ export function GitPageSidebar({
         />
       </div>
       {tab === "changes" ? (
-        changes
+        <>
+          {/* A merge or rebase stopped on conflicts: settled in the list
+              below, then continued (or abandoned) here. */}
+          <div className="px-2 pb-1.5 empty:hidden">
+            <OperationBanner worktree={worktree} onGitPage />
+          </div>
+          {changes}
+        </>
       ) : tab === "stashes" ? (
         <StashList worktree={worktree} selected={selected} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-          <GitTimeline
-            worktree={worktree}
-            view={{ onGitPage: true, selected: selected ?? null }}
-          />
+          <GitTimeline worktree={worktree} selected={selected ?? null} />
         </div>
       )}
     </div>
