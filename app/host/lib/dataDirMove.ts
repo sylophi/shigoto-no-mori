@@ -52,7 +52,7 @@ export async function moveDataDir(
   // Electron-side pre-rename hook: the caller closes its fs watchers on
   // the data dir here -- they're moot anyway, the app relaunches after
   // the move.
-  opts: { beforeMove?: () => void } = {},
+  opts: { beforeMove?: () => void | Promise<void> } = {},
 ): Promise<void> {
   const oldDir = dataDir();
   // Resolved first: they throw when this session's data dir came from
@@ -165,7 +165,7 @@ export async function moveDataDir(
     await rekeyWorktrees(repairTargets, false);
     rekeyed = true;
 
-    opts.beforeMove?.();
+    await opts.beforeMove?.();
 
     // rename() can't cross volumes. Fall back to copy, commit the
     // pointer, then remove the old tree. Symlinks (carry-over entries)

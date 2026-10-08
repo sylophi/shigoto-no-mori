@@ -8,6 +8,7 @@ import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { log, logFailure } from "@shared/log";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { refreshProjects } from "@host/lib/projects";
@@ -26,15 +27,11 @@ import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/villagers";
 import * as Processes from "@host/lib/util/processes";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
-import {
-  gitDirOf,
-  reconcileGitWatchers,
-  startGitWatcher,
-  stopGitWatcher,
-} from "./core/gitWatcher";
+import * as GitWatcher from "./core/gitWatcher";
+import { gitDirOf, reconcileGitWatchers } from "./core/gitWatcher";
 import { cliChildCount, killAllCli } from "./electron/cliRunner";
 import { startBackgroundFetch } from "./electron/fetch";
-import { startStateWatcher, stopStateWatcher } from "./electron/stateWatcher";
+import * as StateWatcher from "./electron/stateWatcher";
 import * as MirrorDaemon from "./core/mirror/daemon";
 import * as FileSyncRunner from "./electron/fileSyncRunner";
 import {
@@ -135,33 +132,48 @@ function onExternalStateChange(worktreeDataProjects: ReadonlySet<string>) {
     });
 }
 
-const stateWatcher = lifetime(
+// A layer that failed to start is logged and the rest of the graph
+// still comes up, like a lifetime (lifetimes.ts).
+const logged = <R>(name: string, layer: Layer.Layer<never, never, R>) =>
+  layer.pipe(
+    Layer.catchCause((cause) =>
+      Layer.effectDiscard(
+        Effect.logError(`[boot] ${name} failed to start:`, Cause.squash(cause)),
+      ),
+    ),
+  );
+
+const stateWatcher = logged(
   "the state watcher",
-  Effect.sync(() => startStateWatcher(onExternalStateChange)),
-  stopStateWatcher,
+  StateWatcher.adapter.pipe(
+    Layer.provide(StateWatcher.layer(onExternalStateChange)),
+  ),
 );
 
 // Git state inside every project (commits, checkouts, refs written by
 // any tool), as a project-scoped ping on every wire.
-const gitWatcher = lifetime(
+const gitWatcher = logged(
   "the git watcher",
-  Effect.sync(() => {
-    startGitWatcher({
-      onChange: announceProjectChanged,
-      // The app's own git commands move refs the same way an agent's
-      // do, and their callers already invalidate their targets, so a
-      // running sm child and an app-run mutating git command in flight
-      // or just done in that repository are skipped, as the state
-      // watcher skips the app's own data dir writes.
-      suppressed: (gitDir) =>
-        cliChildCount() > 0 ||
-        gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
-    });
+  GitWatcher.adapter.pipe(
+    Layer.provide(
+      GitWatcher.layer({
+        onChange: announceProjectChanged,
+        // The app's own git commands move refs the same way an agent's
+        // do, and their callers already invalidate their targets, so a
+        // running sm child and an app-run mutating git command in flight
+        // or just done in that repository are skipped, as the state
+        // watcher skips the app's own data dir writes.
+        suppressed: (gitDir) =>
+          cliChildCount() > 0 ||
+          gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
+      }),
+    ),
     // An app-side project add or remove runs as a CLI child whose
     // registry write the state watcher drops as the app's own.
-    onHostMutationSettled(reconcileGitWatchers);
-  }),
-  stopGitWatcher,
+    Layer.tap(() =>
+      Effect.sync(() => onHostMutationSettled(reconcileGitWatchers)),
+    ),
+  ),
 );
 
 // The hub socket and the direct listener, which follows the same
