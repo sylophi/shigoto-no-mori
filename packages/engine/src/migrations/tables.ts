@@ -91,4 +91,12 @@ export const tables = Effect.gen(function* () {
     name TEXT NOT NULL,
     PRIMARY KEY (project_id, list, position)
   ) STRICT`;
+  // Each project's icon as last found, by the project's path, so a
+  // listing pays the repo scan once. An entry with no source path
+  // remembers that the project has none.
+  yield* sql`CREATE TABLE icon_cache (
+    project_path TEXT PRIMARY KEY,
+    source_path TEXT,
+    updated_at INTEGER NOT NULL
+  ) STRICT`;
 });
