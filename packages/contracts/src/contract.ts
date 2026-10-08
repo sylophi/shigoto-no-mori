@@ -3,10 +3,6 @@
 // annotations on it, which the registrar and the transports read. An
 // invoke is a plain Rpc. A push (what the transport still calls a
 // broadcast) is a streaming Rpc whose chunks are its payloads.
-// effect/rpc is @stability unstable in the pinned Effect (V3.md, decision
-// 1: pinned exactly, bumped in its own PR), and this module is where the
-// contracts meet it, so the unstable-API warning is off here only.
-// @effect-diagnostics unstableApiUsage:off
 import * as Context from "effect/Context";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
