@@ -249,6 +249,15 @@ const lookupKey = (scope: ConfigScope, name: string) => {
       );
 };
 
+// A project's settings as they apply: none until its default branch is
+// set, a blank one counting as unset.
+export const projectSettingsOf = (doc: ConfigDoc | null) => {
+  const branch = doc?.["defaultBranch"];
+  return doc !== null && typeof branch === "string" && branch.trim() !== ""
+    ? { settings: doc, defaultBranch: branch }
+    : { settings: null, defaultBranch: undefined };
+};
+
 const missingBranch = (doc: ConfigDoc) => {
   const [branch] = docGet(doc, "defaultBranch");
   return typeof branch !== "string" || branch.trim() === "";

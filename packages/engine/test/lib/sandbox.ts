@@ -22,11 +22,11 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as CloneCheckout from "../../src/CloneCheckout.ts";
 import * as Config from "../../src/Config.ts";
-import * as Git from "../../src/Git.ts";
+import { errorDocument } from "../../src/errorDocument.ts";
 import * as Hygiene from "../../src/Hygiene.ts";
 import * as Icons from "../../src/Icons.ts";
+import * as Landing from "../../src/Landing.ts";
 import * as Launchers from "../../src/Launchers.ts";
 import * as Layout from "../../src/Layout.ts";
 import * as Registry from "../../src/Registry.ts";
@@ -48,6 +48,7 @@ export type Engine =
   | Terrier.Terrier
   | Usage.Usage
   | Worktrees.Worktrees
+  | Landing.Landing
   | Hygiene.Hygiene;
 
 const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
@@ -134,37 +135,6 @@ type Run = {
   readonly stdout: string;
   readonly stderr: string;
 };
-
-// The stable code Go's error document carries beside the message, for
-// the failures the app maps without reading prose. Go codes an unknown
-// project only where the app names it by id, so that one is the
-// terminal's to add.
-const CODES = [
-  [Worktrees.UnknownWorktree, "unknown-worktree"],
-  [Worktrees.PullRequestOwnsDescription, "pull-request-open"],
-] as const;
-const codeOf = (error: unknown) => {
-  const code =
-    error instanceof Worktrees.DirtyWorktree
-      ? error.reason === "uncommitted"
-        ? "uncommitted-changes"
-        : "status-unreadable"
-      : CODES.find(([cls]) => error instanceof cls)?.[1];
-  return code === undefined ? {} : { code };
-};
-
-// What the terminal says for a failure: git's own words for a git that
-// failed, the message otherwise.
-const messageOf = (error: unknown): string =>
-  error instanceof Git.GitCommandError
-    ? Git.stderrOf(error)
-    : error instanceof CloneCheckout.HookFailed
-      ? `post-checkout hook: ${messageOf(error.cause)}`
-      : error instanceof CloneCheckout.CheckoutUnfinished
-        ? messageOf(error.cause)
-        : error instanceof Error
-          ? error.message
-          : String(error);
 
 // Copies `names` from one folder to another as they are, links and
 // times included: worktrees name their repo by absolute path.
@@ -383,8 +353,7 @@ export function sandbox(): Sandbox {
             onSuccess: (value) => value as unknown,
             onFailure: (error) => ({
               ok: false,
-              error: messageOf(error),
-              ...codeOf(error),
+              ...errorDocument(error),
             }),
           }),
         ),

@@ -12,6 +12,7 @@ import * as Hygiene from "./Hygiene.ts";
 import * as Icons from "./Icons.ts";
 import * as Identity from "./Identity.ts";
 import * as Launchers from "./Launchers.ts";
+import * as Landing from "./Landing.ts";
 import * as Layout from "./Layout.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import * as Paths from "./Paths.ts";
@@ -29,7 +30,8 @@ export const engineLayer = (options: {
   readonly store: ReturnType<typeof Store.layer>;
   readonly macfs: string;
 }) =>
-  Hygiene.layer.pipe(
+  Landing.layer.pipe(
+    Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(
       Layer.mergeAll(
