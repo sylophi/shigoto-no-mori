@@ -390,8 +390,8 @@ export const worktreesHandlers: Handlers<
   commitDiff: async (input) =>
     getCommitDiff(await findWorktreePathOrThrow(input), input.hash),
 
-  listCommits: async ({ skip, count, ...input }) =>
-    listCommits(await findWorktreePathOrThrow(input), { skip, count }),
+  listCommits: async ({ skip, count, query, ...input }) =>
+    listCommits(await findWorktreePathOrThrow(input), { skip, count, query }),
 
   revertCommit: (input) =>
     mutateAndDescribe(input, (wt) => revertCommit(wt.path, input.hash)),

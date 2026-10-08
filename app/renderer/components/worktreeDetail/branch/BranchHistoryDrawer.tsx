@@ -1,5 +1,5 @@
-import { useEffect, useRef, type RefObject } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { Loader2, Search } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Sheet,
@@ -9,7 +9,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useBranchCommits } from "@/hooks/git/useBranchCommits";
-import { commitRewriteAt } from "@/lib/commitRewrite";
+import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
+import { commitRewriteAt, type CommitRewrite } from "@/lib/commitRewrite";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 import { CommitRow } from "../commits/CommitRow";
 import { useCommitActions } from "../commits/useCommitActions";
@@ -31,6 +32,15 @@ const PHONE_ROW_ESTIMATE = 70;
 // How many rows from the bottom of the rendered window trigger the next
 // page fetch. Five gives a comfortable head-start on scroll.
 const FETCH_AHEAD = 5;
+
+// A search's rows aren't HEAD's line, so none of the moves that rewrite
+// it from a row are offered there.
+const NO_REWRITE: CommitRewrite = {
+  canAmend: false,
+  undo: null,
+  reword: null,
+  squash: null,
+};
 
 export function BranchHistoryDrawer({
   worktree,
@@ -73,6 +83,8 @@ interface BranchHistoryListProps {
 }
 
 function BranchHistoryList({ worktree, onNavigate }: BranchHistoryListProps) {
+  const [search, setSearch] = useState("");
+  const query = useDebouncedValue(search.trim(), 250) || undefined;
   const {
     data,
     hasNextPage,
@@ -87,61 +99,85 @@ function BranchHistoryList({ worktree, onNavigate }: BranchHistoryListProps) {
     worktree.id,
     worktree.recentCommits[0]?.hash,
     true,
+    query,
   );
 
   const commits = data ? data.pages.flat() : [];
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   return (
-    <div
-      ref={containerRef}
-      className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4"
-    >
-      {isLoading ? (
-        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 aria-hidden className="size-3.5 animate-spin" />
-          Loading commits…
-        </div>
-      ) : isError ? (
-        <div className="space-y-2 py-6 text-sm">
-          <div className="text-destructive select-text">
-            {error?.message ?? "Couldn't load branch history."}
-          </div>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            Retry
-          </button>
-        </div>
-      ) : commits.length === 0 ? (
-        <div className="py-6 text-sm text-muted-foreground">
-          No commits yet.
-        </div>
-      ) : (
-        <VirtualCommitList
-          commits={commits}
-          containerRef={containerRef}
-          worktree={worktree}
-          onNavigate={onNavigate}
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          fetchNextPage={fetchNextPage}
+    <>
+      <div className="flex items-center gap-1.5 border-b border-border px-4 py-2">
+        <Search
+          aria-hidden
+          className="size-3.5 shrink-0 text-muted-foreground/60"
         />
-      )}
-      {isFetchingNextPage && (
-        <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
-          <Loader2 aria-hidden className="size-3 animate-spin" />
-          Loading more…
-        </div>
-      )}
-      {!hasNextPage && !isLoading && commits.length > 0 && (
-        <div className="py-3 text-center text-2xs text-muted-foreground/60">
-          End of history
-        </div>
-      )}
-    </div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && search) {
+              e.stopPropagation();
+              setSearch("");
+            }
+          }}
+          placeholder="Search messages"
+          aria-label="Search the history"
+          spellCheck={false}
+          className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
+        />
+      </div>
+      <div
+        ref={containerRef}
+        className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4"
+      >
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+            <Loader2 aria-hidden className="size-3.5 animate-spin" />
+            Loading commits…
+          </div>
+        ) : isError ? (
+          <div className="space-y-2 py-6 text-sm">
+            <div className="text-destructive select-text">
+              {error?.message ?? "Couldn't load branch history."}
+            </div>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              Retry
+            </button>
+          </div>
+        ) : commits.length === 0 ? (
+          <div className="py-6 text-sm text-muted-foreground">
+            {query ? "No commits match." : "No commits yet."}
+          </div>
+        ) : (
+          <VirtualCommitList
+            commits={commits}
+            containerRef={containerRef}
+            worktree={worktree}
+            onNavigate={onNavigate}
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            fetchNextPage={fetchNextPage}
+            searching={query !== undefined}
+          />
+        )}
+        {isFetchingNextPage && (
+          <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+            <Loader2 aria-hidden className="size-3 animate-spin" />
+            Loading more…
+          </div>
+        )}
+        {!hasNextPage && !isLoading && commits.length > 0 && (
+          <div className="py-3 text-center text-2xs text-muted-foreground/60">
+            End of history
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -156,6 +192,7 @@ function VirtualCommitList({
   hasNextPage,
   isFetchingNextPage,
   fetchNextPage,
+  searching,
 }: {
   commits: CommitSummary[];
   containerRef: RefObject<HTMLDivElement | null>;
@@ -164,6 +201,7 @@ function VirtualCommitList({
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   fetchNextPage: () => unknown;
+  searching: boolean;
 }) {
   const actions = useCommitActions(worktree);
   const virtualizer = useVirtualizer({
@@ -213,7 +251,11 @@ function VirtualCommitList({
             <CommitRow
               worktree={worktree}
               commit={commit}
-              rewrite={commitRewriteAt(worktree, commits, vi.index)}
+              rewrite={
+                searching
+                  ? NO_REWRITE
+                  : commitRewriteAt(worktree, commits, vi.index)
+              }
               actions={actions}
               onNavigate={onNavigate}
             />

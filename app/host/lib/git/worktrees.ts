@@ -149,10 +149,18 @@ export function parseLog(stdout: string): CommitSummary[] {
 // don't have to fork on error.
 export async function listCommits(
   worktreePath: string,
-  opts: { skip: number; count: number },
+  opts: { skip: number; count: number; query?: string },
 ): Promise<CommitSummary[]> {
   try {
     const args = ["log", `--skip=${opts.skip}`, `-${opts.count}`];
+    // A search of the messages, literal and case blind.
+    if (opts.query) {
+      args.push(
+        "--fixed-strings",
+        "--regexp-ignore-case",
+        `--grep=${opts.query}`,
+      );
+    }
     args.push(`--pretty=format:${LOG_FORMAT}`, "--shortstat");
     const stdout = await run(worktreePath, args);
     return parseLog(stdout);

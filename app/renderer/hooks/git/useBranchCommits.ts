@@ -21,6 +21,8 @@ export function useBranchCommits(
   worktreeId: string,
   headHash: string | undefined,
   enabled: boolean,
+  // A search of the history's messages.
+  query?: string,
 ) {
   const { api, keys } = useHostScope();
   return useInfiniteQuery<
@@ -30,7 +32,7 @@ export function useBranchCommits(
     ReturnType<QueryKeyRegistry["branchCommits"]>,
     number
   >({
-    queryKey: keys.branchCommits(projectId, worktreeId, headHash),
+    queryKey: keys.branchCommits(projectId, worktreeId, headHash, query),
     enabled,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
@@ -39,6 +41,7 @@ export function useBranchCommits(
         worktreeId,
         skip: pageParam,
         count: BRANCH_COMMITS_PAGE_SIZE,
+        query,
       }),
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage.length < BRANCH_COMMITS_PAGE_SIZE) return undefined;

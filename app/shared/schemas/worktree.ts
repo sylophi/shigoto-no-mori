@@ -443,6 +443,8 @@ export const ListCommitsPayloadSchema = WorktreeScopedPayloadSchema.extend({
   // = pageIndex * count and stops when fewer than `count` come back.
   skip: z.number().int().nonnegative(),
   count: z.number().int().positive().max(200),
+  // Only commits whose message holds this, case blind.
+  query: z.string().trim().min(1).optional(),
 });
 
 export const CleanupErrorSchema = z.object({

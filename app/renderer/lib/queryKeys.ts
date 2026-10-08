@@ -142,7 +142,8 @@ function buildQueryKeys(deviceId: string) {
       projectId: string,
       worktreeId: string,
       headHash: string | undefined,
-    ) => host("branchCommits", projectId, worktreeId, headHash),
+      query?: string,
+    ) => host("branchCommits", projectId, worktreeId, headHash, query ?? ""),
 
     packageScripts: (projectId: string | null, worktreeId: string | null) =>
       host("packageScripts", projectId, worktreeId),
