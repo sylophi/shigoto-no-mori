@@ -13,6 +13,8 @@ import * as GlobalFlag from "effect/cli/GlobalFlag";
 import { configCommand } from "./commands/config.ts";
 import { launchersCommand } from "./commands/launchers.ts";
 import { projectsCommand } from "./commands/projects.ts";
+import { flavor, version } from "./build.ts";
+import { doctorCommand } from "./commands/doctor.ts";
 import {
   destination,
   list,
@@ -22,10 +24,6 @@ import {
 import { engine } from "./engine.ts";
 import { report } from "./errors.ts";
 import { Output } from "./output.ts";
-
-declare const SM_FLAVOR: "prod" | "dev" | undefined;
-
-const flavor = typeof SM_FLAVOR === "undefined" ? "dev" : SM_FLAVOR;
 
 // --json and --verbose are global wherever they sit, up to a `--`,
 // past which everything is the command's, as in Go.
@@ -89,10 +87,11 @@ const sm = Command.make("sm").pipe(
     list.pipe(Command.provide(services)),
     path.pipe(Command.provide(services)),
     destination.pipe(Command.provide(services)),
+    doctorCommand.pipe(Command.provide(services)),
   ]),
 );
 
-const program = Command.runWith(sm, { version: "dev", renderErrors: false })(
+const program = Command.runWith(sm, { version, renderErrors: false })(
   canonical(rest),
 ).pipe(
   // Only --help of effect/cli's built-in flags, as Go has no others.

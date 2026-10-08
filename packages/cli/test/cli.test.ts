@@ -414,6 +414,67 @@ describe("worktrees", () => {
   });
 });
 
+describe("doctor", () => {
+  // Each side's data dir, which the checklist names, as one.
+  const sideNeutral = (seen: unknown): unknown =>
+    JSON.parse(
+      ["go", "cli"].reduce(
+        (text, side) =>
+          text
+            .replaceAll(`${box.home}/${side}`, "<data>")
+            .replaceAll(`~/${side}`, "<data>"),
+        JSON.stringify(seen),
+      ),
+    ) as unknown;
+  const sameDoctor = async (...args: string[]) => {
+    const [go, ours] = await Promise.all([
+      box.runAt(goSm(), "go", box.home, args),
+      box.runAt(built, "cli", box.home, args),
+    ]);
+    const seen = (run: typeof go) =>
+      sideNeutral(
+        args.includes("--json")
+          ? { code: run.code, doc: run.doc, stderr: run.stderr }
+          : { code: run.code, stdout: run.stdout, stderr: run.stderr },
+      );
+    assert.deepStrictEqual(seen(ours), seen(go), args.join(" "));
+  };
+
+  // A gh that is signed in, so its line reads the same on any machine.
+  beforeEach(() => {
+    box.fakeBin(
+      "gh",
+      'case "$1" in auth) exit 0;; --version) echo "gh version 9.9.9 (2026-01-01)";; esac',
+    );
+  });
+
+  // A project that is there and one whose repo is gone.
+  beforeEach(() => {
+    const repo = box.repo("repo");
+    box.write("registry.json", {
+      projects: [
+        { id: "P1", name: "repo", path: repo },
+        { id: "P2", name: "ghost", path: `${box.home}/ghost` },
+      ],
+    });
+    box.write("projects/P1/project.json", { defaultBranch: "main" });
+    box.write("projects/P2/project.json", { defaultBranch: "main" });
+  });
+
+  it("checks the install, and refuses a command line it can't use", async () => {
+    await sameDoctor("doctor");
+    await sameDoctor("--json", "doctor");
+    await sameDoctor("doctor", "--yes");
+    await sameDoctor("--json", "doctor", "extra");
+  });
+
+  it("repairs what it can, asking before a deletion", async () => {
+    await sameDoctor("doctor", "--fix");
+    await sameDoctor("--json", "doctor", "--fix", "--yes");
+    await sameDoctor("doctor");
+  });
+});
+
 describe("launchers", () => {
   it("lists a project's row and the catalog", async () => {
     const repo = box.repo("repo");
