@@ -53,13 +53,21 @@ const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
 // git's variables point a child at the repository a hook runs in, and
 // the user's git config would reach the sandbox's repos. The engine's
 // Git service runs git under this process's environment, so the
-// process's own goes the same way.
+// process's own goes the same way, and every git either side runs
+// inherits it. git's background maintenance stays off: it repacks a
+// repo's objects while a snapshot copies them (cli/main_test.go does
+// the same for the Go tests).
 for (const key of Object.keys(process.env)) {
   if (key.startsWith("GIT_")) delete process.env[key];
 }
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_CONFIG_COUNT: "2",
+  GIT_CONFIG_KEY_0: "maintenance.auto",
+  GIT_CONFIG_VALUE_0: "false",
+  GIT_CONFIG_KEY_1: "gc.auto",
+  GIT_CONFIG_VALUE_1: "0",
 });
 
 const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
@@ -158,13 +166,15 @@ const messageOf = (error: unknown): string =>
           : String(error);
 
 // Copies `names` from one folder to another as they are, links and
-// times included: worktrees name their repo by absolute path.
+// times included: worktrees name their repo by absolute path. A lock
+// belongs to the git that held it, not to the copy.
 const copyAll = (from: string, to: string, names: ReadonlyArray<string>) => {
   for (const name of names) {
     cpSync(join(from, name), join(to, name), {
       recursive: true,
       verbatimSymlinks: true,
       preserveTimestamps: true,
+      filter: (source) => !source.endsWith(".lock"),
     });
   }
 };
