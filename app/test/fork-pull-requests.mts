@@ -32,7 +32,7 @@ import {
   scrubProcessGitEnv,
   tempDir,
 } from "./lib/checkKit.mts";
-import { trackTest } from "./lib/vitestKit.mts";
+import { processesLayer, trackTest, withLayer } from "./lib/vitestKit.mts";
 
 scrubProcessGitEnv();
 
@@ -87,6 +87,8 @@ case "$*" in
   *) echo "unexpected gh $*" >&2; exit 1;;
 esac
 `;
+
+withLayer(processesLayer);
 
 it("the host's reads skip a fork's PR of the same name", async () => {
   const root = tempDir("sm-fork-prs-", trackTest);

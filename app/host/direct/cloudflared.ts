@@ -40,7 +40,7 @@ import {
 } from "@shared/remote/supervisor";
 import { createLimiter } from "@shared/util/limit";
 import { killWithGrace } from "@host/lib/scripts/process";
-import { resolveOnPath } from "@host/lib/util/binaries";
+import * as Processes from "@host/lib/util/processes";
 
 const execFileP = promisify(execFile);
 
@@ -162,7 +162,7 @@ export async function resolveCloudflaredBinary(
   if (bundledPath !== null && (await runsAsCloudflared(bundledPath))) {
     return bundledPath;
   }
-  return resolveOnPath("cloudflared");
+  return Processes.run(Processes.resolveOnPath("cloudflared"));
 }
 
 // `-x` semantics via the binary itself: asking cloudflared for its

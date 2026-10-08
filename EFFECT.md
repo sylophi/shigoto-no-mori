@@ -102,6 +102,20 @@ export const layer = Layer.effect(Registry, make);
 - During the migration a converted subsystem keeps its Promise
   interface for unconverted callers through one named adapter next to
   its layer. The adapter is deleted when the last caller moves.
+  `PromiseAdapter.make` (`app/host/lib/util/promiseAdapter.ts`) builds
+  it: a layer that goes into the graph beside the subsystem's, which
+  captures the context when it is built and turns calls away once it
+  is closed, and a `run` that the Promise functions callers already
+  import go through. A call made before the graph is up waits for it.
+  A proof that reaches the subsystem brings the layer up itself
+  (`withLayer` in `app/test/lib/vitestKit.mts`).
+
+  ```ts
+  export const { layer: adapter, run } =
+    PromiseAdapter.make<ChildProcessSpawner>("The host's child processes");
+
+  export const execGh = (args: string[]) => run(exec("gh", args));
+  ```
 
 ## 4. Errors
 

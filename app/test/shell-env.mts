@@ -17,6 +17,8 @@ import {
   parseShellEnv,
   replaceProcessEnv,
 } from "../main/core/shellEnv.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
 import { makeTracker, tempDir } from "./lib/checkKit.mts";
 
@@ -158,6 +160,12 @@ it("replaceProcessEnv drops what the target lacks", () => {
 // path_helper, which is the point: PATH comes back rebuilt from the
 // system's, not from launchd's four entries.
 const ZSH = "/bin/zsh";
+const capture = (base: Record<string, string>, timeoutMs?: number) =>
+  Effect.runPromise(
+    captureShellEnv(ZSH, base, timeoutMs).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  );
 if (existsSync(ZSH)) {
   let zdotdir: string;
   const rc = (lines: string[]): void =>
@@ -177,7 +185,7 @@ if (existsSync(ZSH)) {
       "SM_SHELL_ENV_TEST_UNEXPORTED=1",
     ]);
     writeFileSync(join(zdotdir, ".zlogout"), "echo 'session=1 ended'\n");
-    const captured = await captureShellEnv(ZSH, base);
+    const captured = await capture(base);
     assert.notEqual(captured, null, "the capture failed");
     assert.equal(captured?.["SM_SHELL_ENV_TEST_EXPORT"], "two\nlines");
     assert.equal(captured?.["SM_SHELL_ENV_TEST_UNEXPORTED"], undefined);
@@ -192,7 +200,7 @@ if (existsSync(ZSH)) {
     // the capture be, not when the child lets go of the pipe.
     rc(["(sleep 2 &)", "export SM_SHELL_ENV_TEST_EXPORT=orphaned"]);
     started = Date.now();
-    const orphaned = await captureShellEnv(ZSH, base);
+    const orphaned = await capture(base);
     assert.equal(orphaned?.["SM_SHELL_ENV_TEST_EXPORT"], "orphaned");
     assert.ok(
       Date.now() - started < 1500,
@@ -205,7 +213,7 @@ if (existsSync(ZSH)) {
     // this is also the proof the timeout really ends the shell.
     rc(["sleep 1"]);
     started = Date.now();
-    const hung = await captureShellEnv(ZSH, base, 200);
+    const hung = await capture(base, 200);
     assert.equal(hung, null);
     assert.ok(
       Date.now() - started < 1500,

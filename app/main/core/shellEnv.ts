@@ -13,7 +13,12 @@
 // Every launch then looks the same however it was started, and the
 // shell's exports reach every child. Electron-free, so test/shell-env.mts
 // drives it under plain node.
-import { spawn } from "node:child_process";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { userInfo } from "node:os";
 
 type Env = Record<string, string>;
@@ -136,45 +141,56 @@ export function parseShellEnv(stdout: string): Env | null {
 // closing: a startup file that leaves an agent or a `nohup x &`
 // behind leaves the pipe open with it. Null when the shell failed,
 // ran out of time, or never reached END. The shell is SIGKILLed
-// either way: an interactive zsh ignores SIGTERM.
-export function captureShellEnv(
+// either way: an interactive zsh ignores SIGTERM. It shares the app's
+// process group, so what its startup files left behind is not
+// signalled with it.
+export const captureShellEnv = (
   shell: string,
   base: Env,
   timeoutMs = CAPTURE_TIMEOUT_MS,
-): Promise<Env | null> {
-  return new Promise((resolve) => {
-    const child = spawn(
-      shell,
-      ["-ilc", `printf '%s' '${START}'; command env -0; printf '%s' '${END}'`],
-      { env: base, stdio: ["ignore", "pipe", "ignore"] },
+) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const handle = yield* spawner.spawn(
+      ChildProcess.make(
+        shell,
+        [
+          "-ilc",
+          `printf '%s' '${START}'; command env -0; printf '%s' '${END}'`,
+        ],
+        {
+          env: base,
+          stdin: "ignore",
+          stderr: "ignore",
+          detached: false,
+          killSignal: "SIGKILL",
+        },
+      ),
     );
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let settled = false;
-    const settle = (env: Env | null): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      child.kill("SIGKILL");
-      resolve(env);
-    };
-    const timer = setTimeout(() => settle(null), timeoutMs);
-    child.on("error", () => settle(null));
-    child.on("exit", () =>
-      settle(parseShellEnv(Buffer.concat(chunks).toString())),
+    const output = yield* handle.stdout.pipe(
+      Stream.decodeText(),
+      Stream.scan(
+        () => "",
+        (text, chunk) => text + chunk,
+      ),
+      Stream.takeUntil(
+        (text) => text.includes(END) || text.length > MAX_OUTPUT,
+      ),
+      Stream.runLast,
     );
-    child.stdout.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-      size += chunk.length;
-      if (size > MAX_OUTPUT) {
-        settle(null);
-        return;
-      }
-      const text = Buffer.concat(chunks).toString();
-      if (text.includes(END)) settle(parseShellEnv(text));
-    });
-  });
-}
+    return Option.getOrElse(output, () => "");
+  }).pipe(
+    Effect.scoped,
+    Effect.timeoutOption(timeoutMs),
+    Effect.map((output) =>
+      Option.match(output, {
+        onNone: () => null,
+        onSome: (text) =>
+          text.length > MAX_OUTPUT ? null : parseShellEnv(text),
+      }),
+    ),
+    Effect.orElseSucceed(() => null),
+  );
 
 // The rebuilt environment: the base the capture ran from, then the
 // shell's exports (its PATH, SSH_AUTH_SOCK, LANG win over launchd's,
@@ -212,12 +228,19 @@ export function replaceProcessEnv(env: Env): void {
 }
 
 // The startup entry. Resolves once process.env is rebuilt. The caller
-// holds the first spawn until then. Never rejects.
+// holds the first spawn until then. Never rejects. It runs before the
+// layer graph, which inherits the environment it rebuilds, so it
+// brings the platform's services along itself.
 export async function applyUserShellEnv(): Promise<void> {
   const launchEnv = { ...process.env };
   const shell = loginShell(launchEnv);
   const base = launchBaseEnv(launchEnv, shell);
-  const captured = shell === null ? null : await captureShellEnv(shell, base);
+  const captured =
+    shell === null
+      ? null
+      : await Effect.runPromise(
+          captureShellEnv(shell, base).pipe(Effect.provide(NodeServices.layer)),
+        );
   replaceProcessEnv(mergeShellEnv(base, captured, launchEnv));
   if (captured === null) {
     console.warn(
