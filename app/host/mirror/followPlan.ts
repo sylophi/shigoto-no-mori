@@ -29,7 +29,7 @@
 // peer when it is the other way round. Anything else is diverged from
 // the start.
 //
-// A primary checkout's mirror (the session's mirrorBranch label) has
+// A primary checkout's mirror (its mode is mirror-branch) has
 // its copy on mirror/<branch> for whatever branch the original is on
 // (shared/git/branches.ts). The original is here, so the follower
 // reads the peer's state with the mirror/ prefix taken off and sends

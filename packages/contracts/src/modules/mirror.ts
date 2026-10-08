@@ -66,46 +66,22 @@ export {
   unanchorIgnoredPath,
 } from "../mirrorIgnores.ts";
 
-// A session the pull opens to carry a transplant's ignored files
-// across once and then ends (host/mirror/oneShot.ts), marked by a
-// label so nothing treats it as a mirror: the git follower leaves it
-// alone and the sidebar does not fold the pair over it. The label's
-// value is the transfer's own token (host/mirror/registry.ts
-// beginTransfer), so the mark alone says it is a transfer.
-export const MIRROR_LABEL_TRANSFER = "transfer";
-
-// Which side holds the copy: always the peer, since a session runs on
-// the device holding the original (its local side) and the copy is
-// its remote side. Every start writes it as "remote". Its one reader
-// is the legacy sweep (host/mirror/registry.ts isLegacyMirror): an
-// older build also started mirrors from the copy's device, and those
-// sessions carry no such label. A label and not a session field: the
-// session document crosses to peers that parse it strictly.
-export const MIRROR_LABEL_COPY_SIDE = "copySide";
-// A primary checkout's mirror: the copy sits on mirror/<branch> for
-// whatever branch the original is on (shared/git/branches.ts
-// mirrorBranchFor), since the copy's device holds the original's
-// branch in its own primary. The git follower reads the two names as
-// one branch. The label says so.
-export const MIRROR_LABEL_MIRROR_BRANCH = "mirrorBranch";
+// What kind of session it is, one label the host writes at the start
+// (host/mirror/registry.ts modeOf reads it): "mirror", "mirror-branch"
+// for a primary checkout's mirror (the copy sits on mirror/<branch> for
+// whatever branch the original is on, shared/git/branches.ts, and the
+// git follower reads the two names as one branch), or
+// "transfer-<token>" for the session a pull opens to carry a
+// transplant's ignored files across once (host/mirror/oneShot.ts),
+// which nothing treats as a mirror. A label and not a session field:
+// the session document crosses to peers that parse it strictly.
+export const MIRROR_LABEL_MODE = "mode";
 // The session a re-open (an ignore change) replaced, on the session
 // that replaced it: the git follower carries the old one's agreement
 // across, and the host ends the old one on sight should it outlive the
 // re-open (a quit or a failed terminate between the two). Mutagen's
 // ids fit the label alphabet.
 export const MIRROR_LABEL_REPLACES = "replaces";
-export function mirrorOnMirrorBranch(session: {
-  labels: Record<string, string>;
-}): boolean {
-  return session.labels[MIRROR_LABEL_MIRROR_BRANCH] === "1";
-}
-
-export function isTransferSession(session: {
-  labels: Record<string, string>;
-}): boolean {
-  return session.labels[MIRROR_LABEL_TRANSFER] !== undefined;
-}
-
 // The engine's terminal states share a prefix (MirrorStatusSchema
 // below): a root emptied, deleted or changed type under the session.
 export function isHaltedStatus(status: string): boolean {
@@ -263,6 +239,8 @@ const MirrorApplyGitStatePayloadSchema = strict(
     ),
   }),
 );
+export type MirrorApplyGitStatePayload =
+  typeof MirrorApplyGitStatePayloadSchema.Type;
 
 const MirrorApplyGitStateResultSchema = strict(
   Schema.Struct({
@@ -604,6 +582,7 @@ const MirrorOpenStreamPayloadSchema = strict(
     peerWorktreeId: Schema.optional(WorktreeIdSchema),
   }),
 );
+export type MirrorOpenStreamPayload = typeof MirrorOpenStreamPayloadSchema.Type;
 
 // Changing what a mirror leaves out: the engine cannot re-configure a
 // live session, so the host ends it and opens a fresh one on the same
