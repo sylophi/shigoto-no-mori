@@ -189,8 +189,8 @@ const peerTransportFor = (deviceId: string): ClientTransport => ({
 // gateway the daemon dials peers through and the daemon itself
 // (main/core/mirror/*, both electron-free), bound here to the peer sessions
 // and to the renderer's changed signal exactly like the port-forward
-// engine. Started from main/index.ts once the app is ready and stopped
-// on every quit path. A boot without the engine binary (a dev run
+// engine. Started and stopped by the host's layer graph
+// (main/hostLayer.ts). A boot without the engine binary (a dev run
 // before file-sync:build) reports "unavailable" and keeps retrying.
 // A peer's surface for one contract, on the cached direct session
 // (peerTransportFor): built per call, never held.

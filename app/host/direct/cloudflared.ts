@@ -333,7 +333,7 @@ async function probeTunnelEdge(hostname: string): Promise<boolean> {
 
 // Kill a previous app instance's orphaned cloudflared, recorded in the
 // pid file: nothing reaps the child when Electron dies without running
-// before-quit (a crash, a SIGKILL), so the next launch does. The
+// its quit (a crash, a SIGKILL), so the next launch does. The
 // process NAME is verified before killing so a recycled pid never
 // takes out an innocent process. Residual exposure, accepted: when the
 // app is SIGKILLed and never launched again, the orphan connector
@@ -385,8 +385,8 @@ export function createCloudflaredRunner(
   let status: TunnelStatus = { state: "off", hostname: null };
   // The port the owner currently wants fronted, null when stopped.
   let wantedPort: number | null = null;
-  // The terminal quit latch. stop() has exactly one caller, main's
-  // before-quit path via stopDirectHost (config-off and account-off
+  // The terminal quit latch. stop() has exactly one caller, the quit
+  // via stopDirectHost (config-off and account-off
   // arrive as reconcile(null) instead), so once set it never clears:
   // a task that drains from the lifecycle queue after quit began must
   // do nothing, whatever it was queued to do.

@@ -243,8 +243,8 @@ export function installFatalRecovery(deps: {
       "[liveness] keepReachable is on, attempting a best-effort relaunch",
     );
     try {
-      // Mark relaunching first so if before-quit somehow fires it takes
-      // index.ts's fast reap path rather than the busy-action prompt.
+      // Mark relaunching first so a quit that somehow starts is a
+      // hurried one, with no busy-action prompt.
       scheduleRelaunch();
       markShuttingDown();
     } catch (error) {
