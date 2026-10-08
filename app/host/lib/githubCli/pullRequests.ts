@@ -24,7 +24,7 @@ import {
   checkedOutPullRequest,
   checkedOutPullRequests,
 } from "./pullRequestCheckout";
-import { ghReadyForRepo } from "./remote";
+import { ghReadyForRepo } from "./GithubCli";
 
 const GhPrListItemSchema = Schema.Struct({
   number: PullRequestSchema.fields.number,
