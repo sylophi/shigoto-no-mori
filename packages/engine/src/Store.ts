@@ -9,7 +9,6 @@ import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Schema from "effect/Schema";
 import * as Migrator from "effect/sql/Migrator";
 import * as SqlClient from "effect/sql/SqlClient";
-import { iconCache } from "./migrations/iconCache.ts";
 import { importJson, StoreImportError } from "./migrations/importJson.ts";
 import { tables } from "./migrations/tables.ts";
 import * as Paths from "./Paths.ts";
@@ -44,7 +43,6 @@ export const layer: Layer.Layer<
         loader: SqliteMigrator.fromRecord({
           "1_tables": tables,
           "2_import_json": Effect.provideContext(importJson, platform),
-          "3_icon_cache": iconCache,
         }),
       }).pipe(Effect.provideService(SqlClient.SqlClient, client));
       return client;

@@ -50,9 +50,14 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const git = yield* Git.Git;
 
+  // A regular file this process can read, which an icon has to be.
   const isFile = (file: string) =>
     fs.stat(file).pipe(
-      Effect.map((info) => info.type === "File"),
+      Effect.flatMap((info) =>
+        info.type === "File"
+          ? fs.access(file, { readable: true }).pipe(Effect.as(true))
+          : Effect.succeed(false),
+      ),
       Effect.orElseSucceed(() => false),
     );
 
@@ -60,13 +65,12 @@ const make = Effect.gen(function* () {
   // when git can't say, which falls back to the folder as it is.
   const visibleFiles = (projectPath: string) =>
     git
-      .run(projectPath, [
-        "ls-files",
-        "--cached",
-        "--others",
-        "--exclude-standard",
-        "-z",
-      ])
+      .run(
+        projectPath,
+        ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        // A monorepo's listing runs past the usual cap.
+        { maxOutputBytes: 256 * 1024 * 1024 },
+      )
       .pipe(
         Effect.map((stdout) => {
           const files = splitZ(stdout).filter((file) => file !== "");
@@ -147,6 +151,8 @@ const make = Effect.gen(function* () {
     return Option.none<string>();
   });
 
+  // Best effort, like the lookup: a cache that can't be written costs
+  // the next listing a scan.
   const remember = (projectPath: string, source: Option.Option<string>) =>
     Effect.gen(function* () {
       yield* sql`INSERT OR REPLACE INTO icon_cache ${sql.insert({
@@ -154,7 +160,7 @@ const make = Effect.gen(function* () {
         source_path: Option.getOrNull(source),
         updated_at: yield* Clock.currentTimeMillis,
       })}`;
-    });
+    }).pipe(Effect.ignore);
 
   const of = Effect.fn("Icons.of")(function* (
     projectPath: string,
@@ -164,7 +170,7 @@ const make = Effect.gen(function* () {
       source_path: string | null;
       updated_at: number;
     }>`SELECT source_path, updated_at FROM icon_cache
-      WHERE project_path = ${projectPath}`;
+      WHERE project_path = ${projectPath}`.pipe(Effect.orElseSucceed(() => []));
     const now = yield* Clock.currentTimeMillis;
     // A remembered icon stands while it is still a file. A remembered
     // miss stands for a day, unless asked to look again.
@@ -184,7 +190,7 @@ const make = Effect.gen(function* () {
       path: source,
       mime: mimeOf(source),
     }));
-  }, Effect.orDie);
+  });
 
   const bytes = Effect.fn("Icons.bytes")(function* (
     projectPath: string,

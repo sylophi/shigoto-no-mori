@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Icons from "../src/Icons.ts";
+import * as Registry from "../src/Registry.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -47,4 +48,32 @@ it("looks again when the remembered icon is gone", async () => {
     ((await iconOf(repo)) as { path: string }).path,
     join(repo, "assets", "icon.png"),
   );
+});
+
+it("forgets a removed project's remembered miss, so a re-add looks again", async () => {
+  const repo = box.repo("repo");
+  box.write("registry.json", {
+    projects: [{ id: "A", name: "a", path: repo }],
+  });
+  const icons = () =>
+    box.engine(
+      Effect.service(Registry.Registry).pipe(
+        Effect.flatMap((registry) => registry.rows()),
+        Effect.map((rows) => rows.map(({ icon }) => icon?.path ?? null)),
+      ),
+    );
+  assert.deepEqual(await icons(), [null]);
+  writeFileSync(join(repo, "favicon.png"), "png");
+  assert.deepEqual(await icons(), [null]);
+  await box.engine(
+    Effect.service(Registry.Registry).pipe(
+      Effect.flatMap((registry) =>
+        Effect.andThen(
+          registry.unregister("A"),
+          registry.register({ name: "a", path: repo }),
+        ),
+      ),
+    ),
+  );
+  assert.deepEqual(await icons(), [join(repo, "favicon.png")]);
 });
