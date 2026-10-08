@@ -20,6 +20,7 @@ import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
+import { json, wireForms } from "./wireForms.ts";
 import { ContractErrorSchema } from "../src/errors.ts";
 import * as hubProtocol from "../src/hubProtocol.ts";
 import * as schemas from "../src/schemas/index.ts";
@@ -63,18 +64,6 @@ it("every exported schema has fixtures, and every fixture a schema", () => {
     [],
   );
 });
-
-const json = (value: unknown) => JSON.stringify(value);
-
-// The JSON forms a value takes on its way through the schema: the
-// decoded value and its encoding.
-function wireForms(
-  schema: Schema.Codec<unknown, unknown>,
-  value: unknown,
-): string[] {
-  const decoded = Schema.decodeUnknownSync(schema)(value);
-  return [json(decoded), json(Schema.encodeSync(schema)(decoded))];
-}
 
 function refuses(
   schema: Schema.Codec<unknown, unknown>,
