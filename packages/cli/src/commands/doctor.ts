@@ -72,7 +72,7 @@ const render = (doc: Doctor.DoctorDocument, fix: boolean) =>
       for (const [index, line] of lines.entries()) {
         yield* out(`  ${line}`);
         const check = shown[index];
-        if (check?.fix === undefined) continue;
+        if (!check?.fix) continue;
         // That --fix can do it is the terminal's to add: the app offers
         // a button.
         const can =
@@ -132,7 +132,7 @@ export const doctorCommand = Command.make(
       const doc = yield* (yield* Doctor.Doctor).run({
         version,
         executable: process.execPath,
-        terminal: process.stdout.isTTY === true,
+        terminal: yield* interactive,
         ...(fix ? { fix: { approve: yield* approve(yes) } } : {}),
       });
       const { json, stderrColor } = yield* Effect.service(Output);

@@ -7,8 +7,11 @@ import { execFileSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const flavor = args.includes("--prod") ? "prod" : "dev";
-const version =
-  args.find((arg) => arg.startsWith("--version="))?.slice(10) ?? "dev";
+const stamp = args.find((arg) => arg.startsWith("--version"));
+if (stamp !== undefined && !/^--version=./.test(stamp)) {
+  throw new Error("Give the version as --version=<v>.");
+}
+const version = stamp?.slice("--version=".length) ?? "dev";
 const outfile =
   args.find((arg) => !arg.startsWith("--")) ??
   `dist/${flavor === "prod" ? "sm" : "smd"}`;
