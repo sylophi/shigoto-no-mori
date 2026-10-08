@@ -1,6 +1,6 @@
 import { app, dialog } from "electron";
-import { dialogContract } from "@shared/ipc/modules/dialog";
-import type { Handlers } from "@shared/ipc/types";
+import { dialogContract } from "@shigomori/contracts/modules/dialog";
+import type { Handlers } from "@shigomori/contracts/types";
 
 export const dialogHandlers: Handlers<typeof dialogContract> = {
   pickFolder: async (opts) => {

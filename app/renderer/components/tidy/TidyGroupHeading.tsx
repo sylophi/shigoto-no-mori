@@ -1,4 +1,4 @@
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { formatBytes } from "@/lib/formatBytes";

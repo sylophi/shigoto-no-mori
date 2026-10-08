@@ -34,11 +34,15 @@ pre-commit:
           # proofs' covers lines (app/test/README.md).
           - name: proofs
             run: pnpm -C app test --changed {staged_files}
-          # hub/'s typecheck and suite, for hub/, the app files it imports
-          # (hub/README.md) and the workspace files that pin its packages.
+          # hub/'s typecheck and suite, for hub/, the contracts it imports
+          # and the workspace files that pin its packages.
           - name: hub
-            glob: "{hub/**,pnpm-lock.yaml,pnpm-workspace.yaml,app/shared/hub/protocol.ts,app/shared/schemas/ports.ts,app/shared/account/deviceIcon.ts,app/shared/account/platform.ts,app/shared/util/only.ts}"
+            glob: "{hub/**,packages/contracts/src/**,pnpm-lock.yaml,pnpm-workspace.yaml}"
             run: pnpm -C hub run check
+          # The contracts' golden fixtures (packages/contracts/README.md).
+          - name: contracts
+            glob: "packages/contracts/**"
+            run: pnpm run check:contracts
           - name: go-test
             glob: "{cli/**,app/shared/fixtures/git-log.json}"
             run: go test -C cli ./...

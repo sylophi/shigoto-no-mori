@@ -26,7 +26,7 @@
 import type { IncomingMessage } from "node:http";
 import { deflateRaw } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,
@@ -59,7 +59,7 @@ import {
   DEFLATE_MIN_TEXT_LENGTH,
   DEFLATED_FRAME_KIND,
 } from "@shared/ipc/socket/deflatedFrame";
-import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
+import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
 import {
@@ -561,7 +561,7 @@ export function createWsServerBinding(
       send(socket, { t: "res", id: frame.id, ok: true, result });
     } catch (error) {
       // Message text only, mirroring what survives Electron's IPC
-      // error serialization, so the shared/errors.ts matchers behave
+      // error serialization, so the packages/contracts/src/errors.ts matchers behave
       // the same on both wires.
       send(socket, resError(frame.id, errorMessageOf(error)));
     }

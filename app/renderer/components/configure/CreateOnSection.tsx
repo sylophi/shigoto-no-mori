@@ -16,7 +16,7 @@ import {
   useSetQuickCreateDevice,
 } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { cn } from "@/lib/utils";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import {
   BLOCK_REASON,
   useDeviceTargets,

@@ -1,6 +1,6 @@
 // The typed HTTP client for the hub Worker's device and ticket
 // endpoints. Pure: it takes a base URL and an injected fetch, uses the
-// shared route table and schemas from shared/hub/protocol.ts, and
+// shared route table and schemas from packages/contracts/src/hubProtocol.ts, and
 // imports no electron and no node builtins, so the account check script
 // can drive every method with a recording fetch stub.
 //
@@ -28,8 +28,8 @@ import {
   type EnrollResponse,
   type TicketResponse,
   type TunnelProvisionResponse,
-} from "@shared/hub/protocol";
-import type { DeviceIcon } from "./deviceIcon";
+} from "@shigomori/contracts/hubProtocol";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
 // A hub call answered non-2xx. Carries the HTTP status so callers that
 // classify outcomes (the tunnel provision path) can read it off the

@@ -25,9 +25,13 @@
 // push under backpressure would otherwise leave an always-mounted row
 // stale for good), gated by the stale window below so a quick alt-tab
 // does not re-list every peer.
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { useQueries } from "@tanstack/react-query";
-import type { Project, PullRequest, Worktree } from "@shared/schemas";
+import type {
+  Project,
+  PullRequest,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
 import {
   shigomoriConfigQueryOptions,

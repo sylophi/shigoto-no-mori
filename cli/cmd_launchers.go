@@ -16,7 +16,7 @@ import (
 )
 
 // One launcher-row entry, the app's LauncherEntrySchema
-// (shared/schemas/launchers.ts): kind "detected" carries available
+// (packages/contracts/src/schemas/launchers.ts): kind "detected" carries available
 // (always true in the row, since only installed tools are listed there;
 // either way in --catalog), "custom" and "web" don't.
 type launcherEntryJSON struct {

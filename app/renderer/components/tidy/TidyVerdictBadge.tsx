@@ -9,7 +9,7 @@ import {
 import {
   HYGIENE_VERDICT_LABEL,
   type HygieneVerdictKind,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { cn } from "@/lib/utils";
 
 // Tone per verdict, spelled out as whole class strings because Tailwind

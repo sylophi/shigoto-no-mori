@@ -17,7 +17,7 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { peerFilesHiddenNote } from "@/lib/commandAccessCopy";
 import { withMember } from "@/lib/toggleSet";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { ancestorsOf, FileTree } from "./FileTree";
 import { FileViewer } from "./FileViewer";
 

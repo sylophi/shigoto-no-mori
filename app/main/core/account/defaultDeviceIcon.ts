@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import {
   fallbackDeviceIcon,
   type DeviceShape,
-} from "@shared/account/deviceIcon";
+} from "@shigomori/contracts/deviceIcon";
 
 const execFileP = promisify(execFile);
 

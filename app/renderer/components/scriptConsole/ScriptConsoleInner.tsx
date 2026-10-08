@@ -8,7 +8,7 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { assertNever } from "@/lib/utils";
 import { slotLabel, type ScriptSlot } from "@/store/scriptRuns";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { ConsoleBody } from "./ConsoleBody";
 import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
 

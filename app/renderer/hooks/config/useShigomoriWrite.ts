@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ShigomoriConfig } from "@shared/schemas";
+import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 interface WriteVariables {

@@ -1,7 +1,7 @@
 // The worktree layouts as the UI names them. Data only, so the Configure
 // page's summary can name the saved layout without pulling the location
 // form into its chunk.
-import type { WorktreeLayout } from "@shared/schemas";
+import type { WorktreeLayout } from "@shigomori/contracts/schemas";
 
 export interface LayoutOption {
   value: WorktreeLayout;

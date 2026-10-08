@@ -180,7 +180,7 @@ smaller and larger:
 ## Devices: one identity, drawn one way
 
 A device is its name and its icon. The icon is one of the closed
-catalog in `shared/account/deviceIcon.ts`: seven device shapes (laptop,
+catalog in `packages/contracts/src/deviceIcon.ts`: seven device shapes (laptop,
 desktop, mini, server, phone, tablet, browser) and a set of marks that
 are only ever picked (a leaf, a cat, a rocket), for telling two laptops
 apart. The device detects its own shape at

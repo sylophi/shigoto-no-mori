@@ -12,7 +12,7 @@
 // offers one (enc:true), and stored as plaintext with enc:false when it
 // does not, so sign-in still works on a machine without a keychain.
 
-import { isDeviceIcon, type DeviceIcon } from "./deviceIcon";
+import { isDeviceIcon, type DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
 // The injected encryption seam. `available` records whether the backing
 // could actually encrypt: when false the store writes plaintext and
@@ -28,7 +28,7 @@ export type StoreCipher = {
 // What the caller reads and writes. accountId may be empty (a token
 // that does not parse yields "", see token.ts), deviceName is always
 // set. deviceIcon is the owner's pick of what this device looks like
-// (shared/account/deviceIcon.ts), present only once they picked one:
+// (packages/contracts/src/deviceIcon.ts), present only once they picked one:
 // absent, the device reports what it detected about itself. hubName
 // and hubIcon are what the device hub last held for this device as far
 // as this device knows (enroll.ts syncHubDevice), absent until the

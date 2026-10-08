@@ -17,7 +17,7 @@ import {
   type PullRequestTone,
   sortReviewersWorstFirst,
 } from "@/lib/pullRequest";
-import type { PullRequestDetail } from "@shared/schemas";
+import type { PullRequestDetail } from "@shigomori/contracts/schemas";
 import { REVIEWER_STATE, TONE_TEXT } from "./pullRequestShared";
 
 const SUMMARY_ICON: Partial<Record<PullRequestTone, typeof UserRound>> = {

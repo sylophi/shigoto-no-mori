@@ -16,33 +16,33 @@
 // browser global read at module scope, so the headless bridge check
 // drives the whole factory under node with in-memory storage and a
 // recording fetch.
-import { logFailure } from "@shared/errors";
+import { logFailure } from "@shigomori/contracts/errors";
 import { singleFlight } from "@shared/util/singleFlight";
 import { createAccountService } from "@shared/account/service";
 import { buildApi } from "@shared/ipc/client";
 import {
   accountContract,
   type AccountStatus,
-} from "@shared/ipc/modules/account";
-import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
-import { withoutPeerState } from "@shared/schemas/config";
-import { hubContract } from "@shared/ipc/modules/hub";
-import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
-import { releasesContract } from "@shared/ipc/modules/releases";
-import { shellContract } from "@shared/ipc/modules/shell";
+} from "@shigomori/contracts/modules/account";
+import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
+import { withoutPeerState } from "@shigomori/contracts/schemas/config";
+import { hubContract } from "@shigomori/contracts/modules/hub";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
+import { releasesContract } from "@shigomori/contracts/modules/releases";
+import { shellContract } from "@shigomori/contracts/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
-import type { Handlers } from "@shared/ipc/types";
+import type { Handlers } from "@shigomori/contracts/types";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import { fetchReleases } from "@shared/releases";
 import {
   SharedSettingsDocSchema,
   StoredClientConfigSchema,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
-import { WEB_PLATFORM } from "@shared/account/platform";
+import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import {
   effectiveDeviceIcon,
   enrollDevice,

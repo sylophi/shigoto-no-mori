@@ -1,5 +1,5 @@
 // Keeps this device's copy of the shared settings
-// (shared/schemas/sharedSettings.ts) level with its peers', boot-scoped
+// (packages/contracts/src/schemas/sharedSettings.ts) level with its peers', boot-scoped
 // like the other remote subscriptions. No server holds the settings:
 // every device keeps a full copy, and the copies converge by merging
 // (shared/sharedSettings.ts), which is order-free and idempotent, so
@@ -27,7 +27,10 @@
 // picks travel only by being offered. (A desktop always has a window
 // to do its pulling: the app quits with its last one.)
 import type { QueryClient } from "@tanstack/react-query";
-import type { SharedSettingsDoc, SharedSettingValue } from "@shared/schemas";
+import type {
+  SharedSettingsDoc,
+  SharedSettingValue,
+} from "@shigomori/contracts/schemas";
 import {
   exchangeSharedSettings,
   mergeSharedSettings,
@@ -35,8 +38,8 @@ import {
 } from "@shared/sharedSettings";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
-import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
-import { safeDecode } from "@shared/ipc/schema";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
+import { safeDecode } from "@shigomori/contracts/codec";
 import { queryKeys } from "@/lib/queryKeys";
 import { deviceStatusView } from "./deviceStatus";
 import { remoteDeviceStore } from "./devices";

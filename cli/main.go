@@ -6,7 +6,7 @@ package main
 // through this binary (host/ipc/cliDelegate.ts) and reads rows,
 // identities, projects, launchers, scripts, config and usage through
 // its --json verbs; it keeps no engine of its own to keep in step.
-// Every document the app reads is validated against a shared/schemas
+// Every document the app reads is validated against a packages/contracts/src/schemas
 // zod schema on its side, so a field renamed here is a breaking change
 // there. The data dir follows
 // the compiled-in flavor (sm -> ~/.sm, smd -> ~/.smd, see flavor.go). A

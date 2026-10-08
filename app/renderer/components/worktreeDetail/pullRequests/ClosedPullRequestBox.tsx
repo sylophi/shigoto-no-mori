@@ -20,7 +20,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { notifyError } from "@/lib/toast";
 import type { PullRequestStack } from "@shared/pullRequestStack";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { cn } from "@/lib/utils";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 

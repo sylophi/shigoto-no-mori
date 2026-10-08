@@ -11,7 +11,7 @@
 // scope says which, and the list reads the same either way -- the scoped device's
 // own checkout is the project in hand, every other device's is its
 // identity match.
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";

@@ -20,7 +20,7 @@ import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEV_RELAUNCH_FILE_ENV } from "../shared/packaging/appName.mts";
-import { errorMessageOf } from "../shared/errors.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { appRoot } from "./lib/appRoot.mts";
 import { ensureDevBundle, superviseChild } from "./lib/devBundle.mts";
 import {

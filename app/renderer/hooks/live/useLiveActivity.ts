@@ -11,8 +11,8 @@ import type {
   MirrorListResult,
   MirrorServing,
   MirrorSession,
-} from "@shared/ipc/modules/mirror";
-import type { RunningScript } from "@shared/schemas";
+} from "@shigomori/contracts/modules/mirror";
+import type { RunningScript } from "@shigomori/contracts/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { useEveryHostMirrors } from "@/hooks/remote/useMirrors";
 import { usePortForwardCount } from "@/hooks/remote/usePortForwards";

@@ -5,7 +5,7 @@ import {
   useQueryClient,
   skipToken,
 } from "@tanstack/react-query";
-import { changeKey } from "@shared/schemas";
+import { changeKey } from "@shigomori/contracts/schemas";
 import type {
   ChangedFile,
   CommitChangesResult,
@@ -13,7 +13,7 @@ import type {
   DiscardChangesResult,
   ResetSoftResult,
   Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   useHostScope,
   type HostApi,

@@ -28,7 +28,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import { getBrowseLeafSegment } from "@shared/projectPaths";
-import { changeKey, type ChangedFile } from "@shared/schemas";
+import { changeKey, type ChangedFile } from "@shigomori/contracts/schemas";
 import {
   changedFilePaths,
   includedFiles,

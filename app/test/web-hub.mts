@@ -15,7 +15,10 @@
 //
 // Run: pnpm test web-hub.
 import assert from "node:assert/strict";
-import { CLOSE_DEVICE_REVOKED, CLOSE_SUPERSEDED } from "@shared/hub/protocol";
+import {
+  CLOSE_DEVICE_REVOKED,
+  CLOSE_SUPERSEDED,
+} from "@shigomori/contracts/hubProtocol";
 import {
   HubAskRefusedError,
   NO_LISTENER_CODE,

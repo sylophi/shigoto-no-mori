@@ -1,5 +1,5 @@
-import { branchesContract } from "@shared/ipc/modules/branches";
-import type { Handlers } from "@shared/ipc/types";
+import { branchesContract } from "@shigomori/contracts/modules/branches";
+import type { Handlers } from "@shigomori/contracts/types";
 import {
   createLocalBranch,
   deleteAnyLocalBranch,

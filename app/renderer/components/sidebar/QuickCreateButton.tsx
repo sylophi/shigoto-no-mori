@@ -1,7 +1,7 @@
 import { Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import {
   PROJECT_ACTION_HOOKS,
   PROJECT_MENU_TRIGGER_CLASS,

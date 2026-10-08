@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ClientConfig } from "@shared/schemas";
+import type { ClientConfig } from "@shigomori/contracts/schemas";
 import {
   DEFAULT_LIGHT_THEME,
   type LightTheme,

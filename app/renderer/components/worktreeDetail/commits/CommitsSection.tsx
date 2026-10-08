@@ -4,7 +4,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { pluralize } from "@/lib/pluralize";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { commitRewriteAt } from "@/lib/commitRewrite";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";

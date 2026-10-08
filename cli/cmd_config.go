@@ -7,7 +7,7 @@ package main
 // against the same shapes the app's zod schemas enforce, and writes
 // are read-modify-write under the file lock so nothing else in the
 // document is disturbed. Serialization follows the app's authority
-// (DEVICE_SETTINGS_DEFAULTS in app/shared/schemas/config.ts): a value
+// (DEVICE_SETTINGS_DEFAULTS in packages/contracts/src/schemas/config.ts): a value
 // equal to its default is stored by deleting the key, so config files
 // stay tidy no matter which surface wrote them.
 //
@@ -76,7 +76,7 @@ type configKey struct {
 	hint string
 }
 
-// Mirrors GlobalConfigSchema (shared/schemas/config.ts); defaults from
+// Mirrors GlobalConfigSchema (packages/contracts/src/schemas/config.ts); defaults from
 // DEVICE_SETTINGS_DEFAULTS beside it, the serialization authority.
 // Device fields only. Client config (theme, doubutsu, villageLife)
 // lives in the app's own clientConfig.json, which this CLI never

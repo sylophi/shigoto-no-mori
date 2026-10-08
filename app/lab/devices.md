@@ -58,7 +58,7 @@ the bridge's answers, the other device's window, and the disk.
   worktree page's footer: Transplant, Mirror) or through
   `window.api.sync` and `window.api.mirror`, then watch both windows
   and the disk. What each should do is in its contract
-  (`shared/ipc/modules/`) and in `bridge.md`. Two mirror cases
+  (`packages/contracts/src/modules/`) and in `bridge.md`. Two mirror cases
   no proof covers: relocate a mirrored original on the device running
   it (its session leaves `window.api.mirror.list()`, and the other
   device's page for the copy stops saying it is mirrored), and a

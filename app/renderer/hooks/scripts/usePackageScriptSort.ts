@@ -7,7 +7,7 @@ import {
 import type {
   PackageScriptSortMode,
   PackageScriptsResult,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   sortEntries,
   type SortableEntry,

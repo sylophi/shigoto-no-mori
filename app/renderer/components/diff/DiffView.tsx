@@ -24,7 +24,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import type { DiffChangesControls } from "./changesControls";
 import {
   CODE_GAP_BLOCK,

@@ -4,6 +4,7 @@
 // native popup tailored to what was clicked: spellcheck suggestions, edit
 // actions on inputs, copy/look-up/search on plain selections, link actions,
 // and Inspect Element in dev.
+import { isWebUrl } from "@shigomori/contracts/predicates/webUrl";
 import {
   app,
   BrowserWindow,
@@ -12,7 +13,6 @@ import {
   type MenuItemConstructorOptions,
   shell,
 } from "electron";
-import { isWebUrl } from "@shared/webUrl";
 
 // Cap inline label text so a paragraph-sized selection doesn't blow out the
 // menu. Matches what Safari/Chrome show.

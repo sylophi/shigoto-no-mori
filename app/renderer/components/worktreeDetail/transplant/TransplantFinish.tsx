@@ -15,9 +15,9 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import type {
   SyncPullWorktreeResult,
   SyncTeardownSourceResult,
-} from "@shared/ipc/modules/sync";
-import type { Project, Worktree } from "@shared/schemas";
-import { errorMessageOf } from "@shared/errors";
+} from "@shigomori/contracts/modules/sync";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";

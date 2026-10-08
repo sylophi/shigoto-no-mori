@@ -17,7 +17,7 @@ import type {
   PullRequestDetail,
   RepoMergeConfig,
   Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 interface UseMergeBoxArgs {
   worktree: Worktree;

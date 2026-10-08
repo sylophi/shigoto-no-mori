@@ -13,7 +13,7 @@ import (
 )
 
 // One project row: the app's ProjectSchema fields
-// (shared/schemas/project.ts) plus the resolved icon and accent hue.
+// (packages/contracts/src/schemas/project.ts) plus the resolved icon and accent hue.
 // The list is the pre-dispatch merge (main.go), so terrier-only repos
 // are here with source "terrier", in the manual order (orderProjects).
 type projectRowJSON struct {

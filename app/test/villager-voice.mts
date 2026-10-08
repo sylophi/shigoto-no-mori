@@ -22,7 +22,7 @@
 //
 // Run: pnpm test villager-voice.
 import assert from "node:assert/strict";
-import type { VillagerProfiles, Worktree } from "@shared/schemas";
+import type { VillagerProfiles, Worktree } from "@shigomori/contracts/schemas";
 import { villagerRarity } from "@shared/villagers/rarity";
 import {
   MOVE_TOAST_MS,

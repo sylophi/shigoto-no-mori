@@ -56,7 +56,7 @@ import {
   type SupervisorTimer,
 } from "@shared/remote/supervisor";
 import { isTerminalDialError } from "./directDial";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 type DirectKeeperDeps = {
   // One dial attempt for one peer: the bridge's dialPeer. Resolving

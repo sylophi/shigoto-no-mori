@@ -1,0 +1,63 @@
+import * as Schema from "effect/Schema";
+import { errorMessageOf } from "../errors.ts";
+import { defineContract, invoke } from "../contract.ts";
+import { HexId32Schema } from "../schemas/hexId.ts";
+import { PortNumberSchema, VoidSchema } from "../schemas/index.ts";
+import { strict } from "../schemas/strict.ts";
+
+// Port forwarding over byte channels: a
+// forwarded TCP connection crosses the direct websocket as raw binary
+// channel frames (shared/ipc/socket/channels.ts), multiplexed beside
+// the JSON invokes. This contract is only the OPEN: the caller mints a
+// channel id, attaches its end of the channel on its own transport
+// first, then invokes open, and the host dials the loopback port and
+// attaches the socket under that id before answering. From then on
+// bytes, ends and resets ride the channel itself, with credit-based
+// backpressure end to end. The mirror stream is the other byte-stream
+// open (mirror:openStream), on the same channel layer. This is the HOST
+// side a remote peer drives. The client half is
+// main/core/portForward/bridge.ts.
+//
+// {remote:true, gated:true}: the surface rides the host's command
+// grant, fail-closed. open dials 127.0.0.1 only, because the feature IS
+// reaching the remote machine's own loopback dev server, never a hop
+// beyond it. movesHostState:false: an open changes nothing a remote
+// viewer caches.
+
+// Channel ids are CLIENT-minted (schemas/hexId.ts pins the shape):
+// the caller attaches its endpoint under the id before the open, so
+// the host's first bytes always find it. The host refuses an id
+// already attached on that connection.
+const ChannelIdSchema = HexId32Schema;
+
+// The host's coded refusals, as the exact message texts the client
+// side matches on (the engine's start probe, the UI's inline wording).
+// Electron IPC and the device wires preserve only the message string,
+// so the marker IS the message: mint and match through these, never a
+// literal.
+// connect-failed is a prefix, the rest are the whole message.
+export const FORWARD_CONNECT_FAILED = "connect-failed";
+
+// The host dialed the port and nothing answered: the one refusal that
+// says something about the port rather than the peer or the grant.
+export function isForwardConnectFailedError(error: unknown): boolean {
+  return errorMessageOf(error).startsWith(FORWARD_CONNECT_FAILED);
+}
+// The channel layer's own refusals, under the names the forward UI
+// matches (renderer/hooks/remote/usePortForwards.ts).
+export const FORWARD_TOO_MANY_CONNS = "too-many-conns";
+
+const ForwardOpenPayloadSchema = strict(
+  Schema.Struct({
+    port: PortNumberSchema,
+    channelId: ChannelIdSchema,
+  }),
+);
+
+export const forwardContract = defineContract("host", {
+  open: invoke("forward:open", ForwardOpenPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    movesHostState: false,
+  }),
+});

@@ -15,8 +15,8 @@ import {
   pullBringsIgnoredFiles,
   type SyncPullWorktreeResult,
   type SyncTeardownSourceResult,
-} from "@shared/ipc/modules/sync";
-import type { Project, Worktree } from "@shared/schemas";
+} from "@shigomori/contracts/modules/sync";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import {
   type Move,

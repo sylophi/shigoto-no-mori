@@ -16,7 +16,7 @@ import {
   Loader2,
   Plus,
 } from "lucide-react";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { BranchLabel } from "@/components/ui/branch-label";

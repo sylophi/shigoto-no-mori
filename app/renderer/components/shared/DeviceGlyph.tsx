@@ -6,7 +6,7 @@
 // list, the account page, the pull flow's two ends) draws through
 // these, so a machine looks the same everywhere and a picked icon
 // lands everywhere at once. The icon comes from the device's own
-// answer (shared/account/deviceIcon.ts), never from guessing at the
+// answer (packages/contracts/src/deviceIcon.ts), never from guessing at the
 // name or the platform here.
 import {
   Apple,
@@ -46,7 +46,7 @@ import {
   type LucideProps,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import {
   StatusDot,
   TONE_PILL,

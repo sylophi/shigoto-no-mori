@@ -17,7 +17,7 @@ import {
   type HubSocketAdapter,
 } from "@shared/hub/connection";
 import type { HeartbeatOptions } from "@shared/ipc/socket/heartbeat";
-import { MAX_HUB_MESSAGE_BYTES } from "@shared/hub/protocol";
+import { MAX_HUB_MESSAGE_BYTES } from "@shigomori/contracts/hubProtocol";
 import type {
   HubConnectOpts,
   HubConnectionStatus,

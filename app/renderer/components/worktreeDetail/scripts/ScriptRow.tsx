@@ -3,7 +3,7 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
 import type { ScriptSlot } from "@/store/scriptRuns";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 

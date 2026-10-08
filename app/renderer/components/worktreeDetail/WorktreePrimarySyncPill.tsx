@@ -1,7 +1,7 @@
 import { ArrowDown } from "lucide-react";
 import { useSyncWithPrimaryWorktree } from "@/hooks/worktrees/useWorktreeSync";
 import { pluralize } from "@/lib/pluralize";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { SyncActionButton } from "./SyncActionButton";
 
 // Precondition: caller has verified the worktree is eligible

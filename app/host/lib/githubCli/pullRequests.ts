@@ -18,7 +18,7 @@ import {
   PullRequestStateSchema,
   pullRequestsEqual,
   summarizeChecks,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { execGh } from "./exec";
 import {
   checkedOutPullRequest,

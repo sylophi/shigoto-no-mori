@@ -1,6 +1,6 @@
-import type { ContractModule } from "@shared/ipc/contract";
+import type { ContractModule } from "@shigomori/contracts/contract";
 import type { ClientTransport } from "@shared/ipc/transport";
-import type { Client } from "@shared/ipc/types";
+import type { Client } from "@shigomori/contracts/types";
 
 export function buildClient<M extends ContractModule>(
   module: M,

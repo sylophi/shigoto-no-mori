@@ -20,12 +20,12 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import * as Schema from "effect/Schema";
-import type { OrphanScriptReport } from "@shared/schemas";
+import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
 import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { isENOENT, dataDir } from "../util/paths";
 import { signalTree } from "./process";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const execFileP = promisify(execFile);
 

@@ -1,9 +1,9 @@
-import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
-import type { Handlers } from "@shared/ipc/types";
+import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
+import type { Handlers } from "@shigomori/contracts/types";
 import {
   DEVICE_SETTINGS_DEFAULTS,
   type DeviceSettingsPatch,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   invalidateGlobalConfigCache,
   readGlobalConfig,

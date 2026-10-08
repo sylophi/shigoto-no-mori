@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import type { CommitSummary } from "@shared/schemas";
+import type { CommitSummary } from "@shigomori/contracts/schemas";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 

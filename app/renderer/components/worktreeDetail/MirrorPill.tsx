@@ -13,8 +13,8 @@
 // reconnects, rose for a halt or an error, slate for paused.
 import { RefreshCw } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import type { MirrorSession } from "@shared/ipc/modules/mirror";
-import type { Worktree } from "@shared/schemas";
+import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { Chip } from "@/components/ui/chip-button";
 import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";

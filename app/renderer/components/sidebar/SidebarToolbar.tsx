@@ -1,6 +1,9 @@
 import { type ReactNode, useState } from "react";
 import { ArrowUpDown, Check } from "lucide-react";
-import type { ProjectSortMode, WorktreeSortMode } from "@shared/schemas";
+import type {
+  ProjectSortMode,
+  WorktreeSortMode,
+} from "@shigomori/contracts/schemas";
 import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils";
 import {

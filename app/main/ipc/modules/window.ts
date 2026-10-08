@@ -1,5 +1,5 @@
-import { windowContract } from "@shared/ipc/modules/window";
-import type { Handlers } from "@shared/ipc/types";
+import { windowContract } from "@shigomori/contracts/modules/window";
+import type { Handlers } from "@shigomori/contracts/types";
 import { applyThemeSource } from "../../electron/clientConfig";
 import { relaunchApp } from "../../electron/relaunch";
 

@@ -1,5 +1,5 @@
 // The CLI's cross-device verbs, served on the control wire
-// (shared/ipc/modules/control.ts says why they live in the app). Each
+// (packages/contracts/src/modules/control.ts says why they live in the app). Each
 // op resolves what the caller named the way the dialogs do, then hands
 // the run to the SAME orchestrator a dialog calls (sync:sendWorktree,
 // sync:pullWorktree, mirror:startTo, mirror:startFrom, mirror:stop)
@@ -21,25 +21,25 @@ import {
   type ControlPeerWorktree,
   type ControlTransferResult,
   controlContract,
-} from "@shared/ipc/modules/control";
+} from "@shigomori/contracts/modules/control";
 import {
   type MirrorSession,
   isMirrorCopyStayed,
   isMirrorStopUnconfirmed,
   mirrorContract,
-} from "@shared/ipc/modules/mirror";
-import { projectsContract } from "@shared/ipc/modules/projects";
-import { runtimeContract } from "@shared/ipc/modules/runtime";
-import type { SyncCloneInto } from "@shared/ipc/modules/sync";
+} from "@shigomori/contracts/modules/mirror";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
+import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shared/projectPaths";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
-import { hostsProjects } from "@shared/account/platform";
+import type { Handlers } from "@shigomori/contracts/types";
+import { hostsProjects } from "@shigomori/contracts/platform";
 import { isHubRefusal } from "@shared/account/service";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { pullWorktreeName } from "@shared/git/branches";
-import type { DeviceInfo } from "@shared/hub/protocol";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import {
   type IgnoreSelection,
   type MirrorIgnoreChoice,
@@ -56,7 +56,7 @@ import {
   RuntimeInfoSchema,
   type Worktree,
   WorktreeSchema,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,

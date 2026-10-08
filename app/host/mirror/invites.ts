@@ -9,7 +9,7 @@
 // unasked. A mirror this device asked for is not unasked, so the ask
 // leaves an invitation behind: the one peer may run exactly the calls
 // a mirror into this device makes (the contracts tag them `invitable`,
-// shared/ipc/contract.ts), on the one worktree the mirror landed,
+// packages/contracts/src/contract.ts), on the one worktree the mirror landed,
 // whatever the switch says. The direct listener's gate consults it
 // (host/socket/server.ts isInvited), and nothing else reads it.
 //
@@ -27,21 +27,21 @@
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Types from "effect/Types";
-import { errorMessageOf } from "@shared/errors";
-import { DeviceIdSchema } from "@shared/hub/protocol";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
 import { allContractModules } from "@shared/ipc/client";
-import type { InvitableScope } from "@shared/ipc/contract";
+import type { InvitableScope } from "@shigomori/contracts/contract";
 import {
   type MirrorWorktreePayload,
   MirrorWorktreePayloadSchema,
-} from "@shared/ipc/modules/mirror";
-import { SyncCloneIntoSchema } from "@shared/ipc/modules/sync";
+} from "@shigomori/contracts/modules/mirror";
+import { SyncCloneIntoSchema } from "@shigomori/contracts/modules/sync";
 import {
   ProjectScopedPayloadSchema,
   WorktreeIdSchema,
   WorktreeScopedPayloadSchema,
-} from "@shared/schemas";
-import { strict } from "@shared/schemas/strict";
+} from "@shigomori/contracts/schemas";
+import { strict } from "@shigomori/contracts/schemas/strict";
 
 // What the ask named, which the landing must match.
 const MirrorInviteAskSchema = strict(

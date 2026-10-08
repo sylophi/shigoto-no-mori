@@ -6,7 +6,10 @@
 // the fetching.
 //
 // Type-only imports, so plain node can load this file from the script.
-import type { VillagerKind, VillagerProfile } from "../schemas/villagers";
+import type {
+  VillagerKind,
+  VillagerProfile,
+} from "@shigomori/contracts/schemas/villagers";
 
 export const WIKI_API = "https://nookipedia.com/w/api.php";
 const WIKI_PAGE = "https://nookipedia.com/wiki/";

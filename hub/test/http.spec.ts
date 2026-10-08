@@ -9,7 +9,7 @@ import {
   EnrollResponseSchema,
   HUB_ROUTES,
   MAX_ACCOUNT_DEVICES,
-} from "../../app/shared/hub/protocol.ts";
+} from "@shigomori/contracts/hubProtocol";
 import {
   DEVICE_CREDENTIAL_PREFIX,
   TICKET_PREFIX,

@@ -4,8 +4,8 @@
 // under the device holding the worktree, this machine first. A forward
 // switched on from the account page names no worktree, and gets its
 // device's card of loose ports.
-import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
-import type { RunningScript } from "@shared/schemas";
+import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
+import type { RunningScript } from "@shigomori/contracts/schemas";
 import type { HostScripts, LiveMirror } from "@/hooks/live/useLiveActivity";
 
 type LiveItem =

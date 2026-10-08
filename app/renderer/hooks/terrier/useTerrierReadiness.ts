@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { TerrierReadiness } from "@shared/schemas";
+import type { TerrierReadiness } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useTerrierReadiness() {

@@ -64,7 +64,7 @@ type releaseInfo struct {
 }
 
 // Describes the verified bundle sitting in updates/staged. Mirrors
-// StagedManifestSchema (shared/schemas/runtime.ts): the app reads this
+// StagedManifestSchema (packages/contracts/src/schemas/runtime.ts): the app reads this
 // file to seed its "ready" state and to decide whether "restart to
 // update" has anything to restart into.
 type stagedManifest struct {
@@ -604,7 +604,7 @@ func pruneUpdateLeftovers(targetBundle string) {
 // verified bundle in updates/staged. Returns (nil, nil) when already up
 // to date. progress is called with (phase, version) at each slow phase
 // boundary. Phases are the UpdateStageEventSchema enum
-// (shared/schemas/runtime.ts); installedBundle anchors signature
+// (packages/contracts/src/schemas/runtime.ts); installedBundle anchors signature
 // comparison.
 func stageUpdate(installedBundle string, progress func(phase, version string)) (*stagedManifest, error) {
 	// The lock comes first: every mutation below (pruning debris,

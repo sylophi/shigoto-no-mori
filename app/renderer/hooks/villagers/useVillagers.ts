@@ -1,5 +1,5 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import type { VillagerProfiles } from "@shared/schemas";
+import type { VillagerProfiles } from "@shigomori/contracts/schemas";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { queryKeys } from "@/lib/queryKeys";
 

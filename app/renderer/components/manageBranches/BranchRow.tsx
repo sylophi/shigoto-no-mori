@@ -9,8 +9,8 @@ import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
 import { sanitizeBranchName } from "@shared/git/branches";
-import { isBranchNotMergedError } from "@shared/errors";
-import type { Worktree } from "@shared/schemas";
+import { isBranchNotMergedError } from "@shigomori/contracts/errors";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { IconButton } from "@/components/ui/icon-button";
 
 export function BranchRow({

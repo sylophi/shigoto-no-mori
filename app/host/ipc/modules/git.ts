@@ -1,5 +1,5 @@
-import { gitContract } from "@shared/ipc/modules/git";
-import type { Handlers } from "@shared/ipc/types";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import type { Handlers } from "@shigomori/contracts/types";
 import { findProjectOrThrow } from "@host/lib/projects";
 import { implSlot } from "@host/lib/util/implSlot";
 

@@ -1,6 +1,6 @@
 import { FileDiff } from "lucide-react";
 import { worktreeSyncView } from "@/lib/syncState";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { StatusPill } from "./StatusPill";
 
 interface StatusIndicatorProps {

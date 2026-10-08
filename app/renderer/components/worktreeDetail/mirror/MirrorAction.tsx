@@ -12,8 +12,8 @@
 // the worktree is still mirrored.
 import { type ReactNode, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import type { MirrorSession } from "@shared/ipc/modules/mirror";
-import type { Worktree } from "@shared/schemas";
+import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import {
   type HostApi,
   HostScopeProvider,

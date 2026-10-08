@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { DoctorReport } from "@shared/ipc/modules/cli";
+import type { DoctorReport } from "@shigomori/contracts/modules/cli";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateHostDevice, type QueryKeyRegistry } from "@/lib/queryKeys";
 

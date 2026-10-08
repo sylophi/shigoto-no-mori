@@ -10,8 +10,8 @@
 // React's next effect flush is the run's first, not a casualty of the
 // reset.
 import { useEffect, useState } from "react";
-import type { SyncPullProgress } from "@shared/ipc/modules/sync";
-import type { CreatePhase } from "@shared/schemas";
+import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
+import type { CreatePhase } from "@shigomori/contracts/schemas";
 
 const NO_PHASES: ReadonlySet<CreatePhase> = new Set();
 

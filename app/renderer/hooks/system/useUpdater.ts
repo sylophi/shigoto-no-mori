@@ -5,9 +5,9 @@ import {
   useQueries,
   useQuery,
 } from "@tanstack/react-query";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { noHandlerMessage } from "@shared/ipc/socket/frames";
-import type { UpdaterState } from "@shared/schemas";
+import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";

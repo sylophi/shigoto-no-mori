@@ -4,7 +4,10 @@
 // path). The read never refetches, because the local copy's every move
 // arrives on its broadcast and is merged into the cache there.
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { SharedSettingsDoc, SharedSettingValue } from "@shared/schemas";
+import type {
+  SharedSettingsDoc,
+  SharedSettingValue,
+} from "@shigomori/contracts/schemas";
 import { sharedStringSetting } from "@shared/sharedSettings";
 import { queryKeys } from "@/lib/queryKeys";
 import { writeSharedSetting } from "@/lib/remote/sharedSettingsSync";

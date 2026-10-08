@@ -9,16 +9,11 @@ with its addresses and one-time tickets). Data never passes through
 here: it flows over the direct sockets those answers set up. No sm
 logic runs here either: the Worker verifies Clerk tokens, keeps a
 device registry in D1, mints short-lived connection tickets and
-forwards envelopes it never parses. The wire contract lives in
-`../app/shared/hub/protocol.ts`.
+forwards envelopes it never parses. The wire contract is
+`@shigomori/contracts/hubProtocol` (`packages/contracts/src/hubProtocol.ts`).
 
 This directory is a package of the repo's pnpm workspace: install from
-the repo root, and run its scripts from `hub/`. The shared contract it
-imports (`../app/shared/hub/protocol.ts` and the device icon catalog
-and port bound it reads) lives outside `hub/`, so its `effect` and
-`zod` imports resolve from `app/node_modules`, not `hub/node_modules`.
-Both packages take them from the workspace catalog, so they get the
-same versions.
+the repo root, and run its scripts from `hub/`.
 
 ## Domains (production)
 
@@ -132,7 +127,7 @@ each other's icon.
 
 Devices heartbeat their hub socket with a bare `ping` text that the
 Durable Object answers `pong` through the hibernation runtime's
-auto-response (`shared/hub/protocol.ts`), so a socket a NAT or a sleep
+auto-response (`packages/contracts/src/hubProtocol.ts`), so a socket a NAT or a sleep
 killed is found and redialed within seconds. Deploy the Worker BEFORE
 shipping devices that heartbeat: an old Worker drops the ping as a
 malformed envelope, so a new device sees no pong and redials it once a

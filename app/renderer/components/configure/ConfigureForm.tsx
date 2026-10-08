@@ -19,7 +19,7 @@ import {
   type LauncherCommand,
   PROJECT_CONFIG_DEFAULTS,
   type ShigomoriConfig,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { CarryOverSection } from "./CarryOverSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";

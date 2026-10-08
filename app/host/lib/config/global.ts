@@ -10,14 +10,14 @@
 import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { createLimiter } from "@shared/util/limit";
 import {
   type ClientConfig,
   ClientConfigSchema,
   type GlobalConfig,
   StoredGlobalConfigSchema,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { globalConfigReadViaCli } from "@host/ipc/cliDelegate";
 import {
   atomicWriteJsonSync,

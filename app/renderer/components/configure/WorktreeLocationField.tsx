@@ -5,7 +5,10 @@ import { LAYOUT_OPTIONS } from "@/components/worktreeLocation/layoutOptions";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { managedDriveBaseFor } from "@shared/git/worktreeLayout";
-import { PROJECT_CONFIG_DEFAULTS, type ShigomoriConfig } from "@shared/schemas";
+import {
+  PROJECT_CONFIG_DEFAULTS,
+  type ShigomoriConfig,
+} from "@shigomori/contracts/schemas";
 
 // Which layout the project's worktrees use, as the saved config has it.
 // The pick itself lives on a subpage: changing it can move worktrees,

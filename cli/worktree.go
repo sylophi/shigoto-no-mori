@@ -1,7 +1,7 @@
 package main
 
 // Full worktree status objects: the row the app's WorktreeSchema
-// (shared/schemas/worktree.ts) parses, plus projectName. The CLI owns
+// (packages/contracts/src/schemas/worktree.ts) parses, plus projectName. The CLI owns
 // this data model. The app reads rows through `sm worktrees list
 // --json` (all, -p/--project-id, or one --worktree-id) instead of
 // building its own, so a field added here is added for both surfaces.

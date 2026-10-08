@@ -1,4 +1,7 @@
-import type { GhUnavailableReason, GithubCliReadiness } from "@shared/schemas";
+import type {
+  GhUnavailableReason,
+  GithubCliReadiness,
+} from "@shigomori/contracts/schemas";
 import { readGlobalConfig } from "../config/global";
 import { binaryOnPath } from "../util/binaries";
 import { ttlValueCache } from "../util/ttlCache";

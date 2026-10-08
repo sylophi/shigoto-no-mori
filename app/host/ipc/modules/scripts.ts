@@ -2,9 +2,9 @@ import {
   lifecycleSlot,
   type ScriptName,
   type ShigomoriConfig,
-} from "@shared/schemas";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
-import type { Handlers } from "@shared/ipc/types";
+} from "@shigomori/contracts/schemas";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import type { Handlers } from "@shigomori/contracts/types";
 import { findProjectOrThrow } from "@host/lib/projects";
 import {
   attachScript,

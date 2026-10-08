@@ -1,5 +1,5 @@
-import { hygieneContract } from "@shared/ipc/modules/hygiene";
-import type { Handlers } from "@shared/ipc/types";
+import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
+import type { Handlers } from "@shigomori/contracts/types";
 import { findProjectOrThrow } from "@host/lib/projects";
 import {
   collectProjectHygiene,

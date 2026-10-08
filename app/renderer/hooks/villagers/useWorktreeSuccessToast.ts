@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { ExternalToast } from "sonner";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { toastVillagerSuccess } from "@/components/villagers/toasts";
 import { speakersFor } from "@/lib/villagers/speakers";
 

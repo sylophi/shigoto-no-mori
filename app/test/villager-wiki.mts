@@ -24,7 +24,7 @@ import {
   villagerProfile,
   wikiPageUrl,
 } from "@shared/villagers/wiki";
-import { VillagerProfileSchema } from "@shared/schemas";
+import { VillagerProfileSchema } from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 
 const ACE = `{{Villager Header

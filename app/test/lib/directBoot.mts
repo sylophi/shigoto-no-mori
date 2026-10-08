@@ -24,13 +24,13 @@ import {
   type DirectPlane,
   type DirectPlaneDeps,
 } from "@shared/hub/directPlane";
-import type { ContractModule } from "@shared/ipc/contract";
-import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
-import { accountContract } from "@shared/ipc/modules/account";
-import type { HubPeerPush } from "@shared/ipc/modules/hub";
+import type { ContractModule } from "@shigomori/contracts/contract";
+import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
+import { accountContract } from "@shigomori/contracts/modules/account";
+import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
+import type { Handlers } from "@shigomori/contracts/types";
 import { WebSocket as WsClient } from "ws";
 import { startStubHub, type StubHub } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";

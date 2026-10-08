@@ -69,7 +69,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, it } from "vitest";
 import { buildClient } from "@shared/ipc/buildClient";
-import { forwardContract } from "@shared/ipc/modules/forward";
+import { forwardContract } from "@shigomori/contracts/modules/forward";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_MIRROR_BRANCH,
@@ -79,9 +79,9 @@ import {
   mirrorContract,
   type MirrorGitStatus,
   type MirrorSession,
-} from "@shared/ipc/modules/mirror";
-import { syncContract } from "@shared/ipc/modules/sync";
-import { worktreesContract } from "@shared/ipc/modules/worktrees";
+} from "@shigomori/contracts/modules/mirror";
+import { syncContract } from "@shigomori/contracts/modules/sync";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import {
@@ -115,7 +115,7 @@ import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { createMirrorDaemon } from "../main/core/mirror/daemon.ts";
 import { createMirrorGateway } from "../main/core/mirror/gateway.ts";
 import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
-import { errorMessageOf } from "../shared/errors.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire, type DirectWire } from "./lib/directBoot.mts";
 import { delay, processAlive } from "./lib/checkKit.mts";

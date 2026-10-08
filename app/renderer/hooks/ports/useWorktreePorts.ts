@@ -1,4 +1,4 @@
-// The worktree's port list off the scoped host (shared/ipc/modules/
+// The worktree's port list off the scoped host (packages/contracts/src/modules/
 // ports.ts): port-pool's allocation plus the user-added entries, each
 // with a loopback liveness probe. Polled while mounted so a dev server
 // starting or stopping on the host shows up on its own. The interval is
@@ -11,7 +11,7 @@
 // that answers again. Adding a port refetches at once
 // (useWorktreeDataWrite).
 import { useQuery } from "@tanstack/react-query";
-import type { WorktreePortsResult } from "@shared/schemas";
+import type { WorktreePortsResult } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 const PORTS_POLL_MS = 5_000;

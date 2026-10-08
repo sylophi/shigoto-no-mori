@@ -1,5 +1,5 @@
-import { shigomoriContract } from "@shared/ipc/modules/shigomori";
-import type { Handlers } from "@shared/ipc/types";
+import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import type { Handlers } from "@shigomori/contracts/types";
 import {
   invalidateProjectConfigCache,
   readShigomoriConfig,

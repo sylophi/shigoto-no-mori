@@ -1,10 +1,10 @@
 // The local port a peer's port lands on when forwarded, remembered per
 // (device, remote port) in this app instance's client config (see the
-// forwardLocalPorts note in shared/schemas/config.ts). Client-scoped on
+// forwardLocalPorts note in packages/contracts/src/schemas/config.ts). Client-scoped on
 // purpose: which local ports are free is a fact about THIS machine, not
 // about the worktree being viewed. Absent means the default, the remote
 // port number itself, so a preference equal to it is stored as nothing.
-import type { ClientConfig } from "@shared/schemas";
+import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useClientConfigPatch } from "./useClientConfigPatch";
 

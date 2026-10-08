@@ -17,7 +17,7 @@ import {
   ClientConfigSchema,
   StoredClientConfigSchema,
   type Theme,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   atomicWriteJson,
   readJsonOrNull,

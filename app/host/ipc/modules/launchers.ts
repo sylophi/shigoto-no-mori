@@ -1,5 +1,5 @@
-import { launchersContract } from "@shared/ipc/modules/launchers";
-import type { Handlers } from "@shared/ipc/types";
+import { launchersContract } from "@shigomori/contracts/modules/launchers";
+import type { Handlers } from "@shigomori/contracts/types";
 import { findProjectOrThrow } from "@host/lib/projects";
 import {
   launcherCatalogViaCli,

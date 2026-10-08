@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { LauncherCommand } from "@shared/schemas";
+import type { LauncherCommand } from "@shigomori/contracts/schemas";
 import { IconButton } from "@/components/ui/icon-button";
 
 interface CustomLauncherInputProps {

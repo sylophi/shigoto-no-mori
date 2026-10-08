@@ -13,7 +13,7 @@ import {
   type ShigomoriConfig,
   type Worktree,
   type WorktreeLayout,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { pluralize } from "@/lib/pluralize";
 import { LayoutOptionItem } from "./LayoutOptionItem";

@@ -5,13 +5,13 @@
 // auto-pull sweep decides on right before it pulls, and the prune
 // after a data dir wipe.
 import { createHash } from "node:crypto";
-import { unknownWorktreeError } from "@shared/errors";
+import { unknownWorktreeError } from "@shigomori/contracts/errors";
 import {
   type CommitSummary,
   isCommitHash,
   type Worktree,
   type WorktreeIdentity,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 import {
   describeWorktreeViaCli,
   listWorktreeIdentitiesViaCli,

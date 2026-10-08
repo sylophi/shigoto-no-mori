@@ -10,7 +10,7 @@
 // Pure on purpose: it knows nothing about sockets or the wire. The
 // caller keys by whatever it likes, a bare channel on the LAN and hub
 // link paths or a composite deviceId plus channel on the renderer path.
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 
 type SubscriberRegistry = {
   // Register a handler under a key. The returned function removes it and

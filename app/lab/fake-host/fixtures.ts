@@ -3,7 +3,7 @@
 // with a direct session, Mini and Work PC offline. Pure data, served
 // over fixture transports by the bridge (bridge.ts).
 import type * as Types from "effect/Types";
-import type { DeviceInfo } from "@shared/hub/protocol";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type {
   CommitSummary,
   CustomPort,
@@ -12,7 +12,7 @@ import type {
   Release,
   RunningScript,
   Worktree,
-} from "@shared/schemas";
+} from "@shigomori/contracts/schemas";
 
 export const FAKE_ACCOUNT_ID = "user_2rin8xk3";
 export const FAKE_APP_VERSION = "2.0.3";

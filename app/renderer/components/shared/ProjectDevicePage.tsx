@@ -23,7 +23,7 @@ import {
 } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import {
   ALL_DEVICES_TAB_ID,
   DeviceTabBar,

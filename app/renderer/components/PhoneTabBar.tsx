@@ -17,7 +17,7 @@ import {
   TreeDeciduous,
   type LucideIcon,
 } from "lucide-react";
-import type { SidebarView } from "@shared/schemas";
+import type { SidebarView } from "@shigomori/contracts/schemas";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { cn } from "@/lib/utils";

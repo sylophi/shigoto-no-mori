@@ -1,5 +1,5 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import type { RuntimeInfo } from "@shared/schemas";
+import type { RuntimeInfo } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   type HostForestScope,

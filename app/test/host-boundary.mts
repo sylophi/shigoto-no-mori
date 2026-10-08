@@ -1,7 +1,8 @@
 // Enforces the host/client split at the source level, so the split
 // can't erode one convenient import at a time. host/ is the code that
-// will one day serve a remote client, shared/ is the contract layer
-// both sides compile, and neither may know Electron exists. Remoteness
+// will one day serve a remote client, shared/ and the contracts
+// package are what both sides compile, and none may know Electron
+// exists. Remoteness
 // itself lives in the transport a connection is built on -- feature
 // modules never branch on where they run.
 //
@@ -10,18 +11,19 @@
 // rules for its directory:
 //   1. No electron import (value, type, require, dynamic, bare side
 //      effect, export-from, and subpaths like "electron/main" or
-//      cousins like "electron-updater") anywhere under host/ or
-//      shared/.
-//   2. No import from main/ anywhere under host/ or shared/. main/ is
+//      cousins like "electron-updater") anywhere under host/, shared/
+//      or the contracts package.
+//   2. No import from main/ anywhere under host/, shared/ or the
+//      contracts package. main/ is
 //      the Electron binding layer, so depending on it drags Electron in
 //      transitively.
-//   3. Every file under shared/ipc/modules that exports a contract
+//   3. Every file under the contracts package's modules/ that exports a contract
 //      declares its side through defineContract with a literal "host"
 //      or "client" scope. Schema-only helpers pass free. Zero
 //      contract-exporting files found means the predicate rotted, and
 //      that fails too.
 //   4. Canary: the `isRemote` identifier must not appear under host/,
-//      shared/, or renderer/.
+//      shared/, renderer/ or the contracts package.
 //   5. ipcRenderer appears only in main/preloadTransport.ts, the one
 //      sanctioned ClientTransport binding.
 //   6. main/core is the Electron-free half of the desktop binding: the
@@ -34,7 +36,7 @@
 //      with each contract's defineContract scope), so the rule fails
 //      when either side drifts.
 //
-// covers: app/host/** app/main/** app/renderer/** app/shared/** app/web/**
+// covers: app/host/** app/main/** app/renderer/** app/shared/** app/web/** packages/contracts/src/**
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -56,7 +58,8 @@ const IPC_RENDERER = /\bipcRenderer\b/;
 
 const mainDir = join(appRoot, "main");
 const mainCoreDir = join(mainDir, "core");
-const modulesDir = join(appRoot, "shared", "ipc", "modules");
+const contractsDir = join(appRoot, "..", "packages", "contracts", "src");
+const modulesDir = join(contractsDir, "modules");
 const IPC_RENDERER_ALLOWLIST = new Set(["main/preloadTransport.ts"]);
 
 const isElectronSpecifier = (spec: string) =>
@@ -80,14 +83,19 @@ const isMainSpecifier = (spec: string, fileDir: string) =>
 const visitedAllowlisted = new Set<string>();
 let contractModuleCount = 0;
 
-for (const dir of ["host", "main", "renderer", "shared", "web"]) {
-  for (const file of walk(join(appRoot, dir), SOURCE_EXTENSIONS)) {
+for (const dir of ["host", "main", "renderer", "shared", "web", "contracts"]) {
+  const root = dir === "contracts" ? contractsDir : join(appRoot, dir);
+  for (const file of walk(root, SOURCE_EXTENSIONS)) {
     const rel = relative(appRoot, file);
     const src = stripComments(readFileSync(file, "utf8"));
     const fileDir = dirname(file);
     // web/ is the browser client platform: like host/ and shared/ it must
     // stay Electron free and must not reach into the main/ binding layer.
-    const contractLayer = dir === "host" || dir === "shared" || dir === "web";
+    const contractLayer =
+      dir === "host" ||
+      dir === "shared" ||
+      dir === "web" ||
+      dir === "contracts";
     if (IPC_RENDERER_ALLOWLIST.has(rel)) visitedAllowlisted.add(rel);
 
     const specifiers = [...src.matchAll(IMPORT_SPECIFIER)].flatMap(
@@ -162,7 +170,7 @@ for (const dir of ["host", "main", "renderer", "shared", "web"]) {
 // nothing.
 if (contractModuleCount === 0) {
   failures.push(
-    `no contract-exporting files (matching ${CONTRACT_EXPORT}) found under shared/ipc/modules -- the scope rule's predicate no longer matches anything`,
+    `no contract-exporting files (matching ${CONTRACT_EXPORT}) found under packages/contracts/src/modules -- the scope rule's predicate no longer matches anything`,
   );
 }
 

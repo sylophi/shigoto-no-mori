@@ -7,7 +7,7 @@
 // (shared/ipc/socket/wsClientTransport.ts) over its socket.
 //
 // A channel is opened by an ordinary invoke (forward:open or
-// mirror:openStream, shared/ipc/modules/forward.ts and mirror.ts)
+// mirror:openStream, packages/contracts/src/modules/forward.ts and mirror.ts)
 // that names a CLIENT-minted channel id, and the client attaches its
 // endpoint
 // BEFORE sending that invoke, so the host's first bytes can never
@@ -28,8 +28,10 @@
 // browser transport carries it unchanged (a browser never opens a
 // channel, but it must not choke on the code).
 
+import { FORWARD_TOO_MANY_CONNS } from "@shigomori/contracts/modules/forward";
+
 // Frame layout: 1 byte kind, 16 bytes channel id, then the payload.
-// The id is the 32-hex client-minted id (shared/ipc/hexId.ts) as raw
+// The id is the 32-hex client-minted id (packages/contracts/src/schemas/hexId.ts) as raw
 // bytes, so a channel frame is 17 bytes of header, whatever it says.
 const CHANNEL_ID_BYTES = 16;
 const CHANNEL_HEADER_BYTES = 1 + CHANNEL_ID_BYTES;
@@ -102,7 +104,7 @@ export const MAX_CHANNELS_PER_CONNECTION = 32;
 // the message), so the client side and the UI can match on them.
 export const CHANNEL_OPEN_NO_CHANNELS = "no-byte-channels";
 export const CHANNEL_OPEN_TAKEN = "channel-taken";
-export const CHANNEL_OPEN_TOO_MANY = "too-many-conns";
+export const CHANNEL_OPEN_TOO_MANY = FORWARD_TOO_MANY_CONNS;
 
 function decodeChannelFrame(bytes: Uint8Array): ChannelFrame | null {
   if (bytes.length < CHANNEL_HEADER_BYTES) return null;

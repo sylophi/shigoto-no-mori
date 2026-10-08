@@ -11,7 +11,7 @@ import { useWorktreeFile } from "@/hooks/worktrees/useWorktreeFile";
 import { formatBytes } from "@/lib/formatBytes";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
-import type { WorktreeFile } from "@shared/schemas";
+import type { WorktreeFile } from "@shigomori/contracts/schemas";
 
 // Past this many lines a file shows as plain text: highlighting it
 // would hold the window for seconds, all at once on the main thread.

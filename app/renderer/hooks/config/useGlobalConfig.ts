@@ -1,5 +1,5 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import type { GlobalConfig } from "@shared/schemas";
+import type { GlobalConfig } from "@shigomori/contracts/schemas";
 import { type HostReadScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { hasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";

@@ -13,10 +13,13 @@ import { platform } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
-import { accountContract } from "@shared/ipc/modules/account";
-import type { DeviceInfo, TunnelProvisionResponse } from "@shared/hub/protocol";
-import type { AccountStatus } from "@shared/ipc/modules/account";
-import type { Handlers } from "@shared/ipc/types";
+import { accountContract } from "@shigomori/contracts/modules/account";
+import type {
+  DeviceInfo,
+  TunnelProvisionResponse,
+} from "@shigomori/contracts/hubProtocol";
+import type { AccountStatus } from "@shigomori/contracts/modules/account";
+import type { Handlers } from "@shigomori/contracts/types";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import {
   createAccountStore,
@@ -40,7 +43,7 @@ import {
   updateDevice,
   type DeviceFields,
 } from "@shared/account/enroll";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { singleFlight } from "@shared/util/singleFlight";
 import {
   createAccountService,

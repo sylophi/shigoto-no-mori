@@ -1,4 +1,4 @@
-import type { VillagerProfile } from "@shared/schemas";
+import type { VillagerProfile } from "@shigomori/contracts/schemas";
 
 // Every doubutsu character has a rarity, like a card's, and the
 // villager extras scale their flair with it (DESIGN.md, "Village life:

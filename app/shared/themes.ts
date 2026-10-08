@@ -1,7 +1,7 @@
 // The doubutsu palette catalog behind Settings > Appearance: what each
 // pick is called, and how a stored client config decodes into the
 // switch and the two picks. The ids are the schema's
-// (shared/schemas/config.ts), and the colors the stylesheets' (DESIGN.md,
+// (packages/contracts/src/schemas/config.ts), and the colors the stylesheets' (DESIGN.md,
 // "Theming").
 import {
   type ClientConfig,
@@ -9,7 +9,7 @@ import {
   DARK_THEME_IDS,
   type LightTheme,
   LIGHT_THEME_IDS,
-} from "./schemas/config";
+} from "@shigomori/contracts/schemas/config";
 
 export { DARK_THEME_IDS, LIGHT_THEME_IDS };
 export type { DarkTheme, LightTheme };

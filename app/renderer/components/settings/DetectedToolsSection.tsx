@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { SectionIntro } from "@/components/ui/section-heading";
 import { cn } from "@/lib/utils";
-import type { DetectedLauncher } from "@shared/schemas";
+import type { DetectedLauncher } from "@shigomori/contracts/schemas";
 
 interface DetectedToolsSectionProps {
   // Detected AND available; the not-installed remainder is its own section.

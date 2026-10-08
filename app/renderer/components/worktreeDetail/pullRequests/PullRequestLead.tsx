@@ -1,7 +1,7 @@
 import { useRepoMergeConfig } from "@/hooks/githubCli/useRepoMergeConfig";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import type { Worktree } from "@shared/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { DescriptionSection } from "../DescriptionSection";
 import { PullRequestBody } from "./PullRequestBody";
 

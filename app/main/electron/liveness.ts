@@ -12,12 +12,12 @@
 // both crash guards is the pure module
 // main/core/liveness/rateLimit.ts, which test/liveness.mts drives
 // headlessly.
-import { keepReachableOn } from "@shared/schemas/config";
+import { keepReachableOn } from "@shigomori/contracts/schemas/config";
 import { app, type BrowserWindow } from "electron";
 import { platform } from "node:os";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { markShuttingDown } from "@host/lib/scripts";
 import {
   atomicWriteJsonSync,

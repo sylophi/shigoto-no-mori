@@ -5,7 +5,7 @@
 // on the web it stubs to [], so the controls structurally never render
 // there. The handlers re-verify the match. This is UX, not the wall.
 import { useQuery } from "@tanstack/react-query";
-import type { Project } from "@shared/schemas";
+import type { Project } from "@shigomori/contracts/schemas";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 
 // The first local project sharing this repo identity, if any. A null

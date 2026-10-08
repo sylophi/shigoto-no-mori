@@ -16,7 +16,7 @@ import {
   releaseVersionOf,
   updatedFrom,
 } from "@shared/releases";
-import type { Release } from "@shared/schemas";
+import type { Release } from "@shigomori/contracts/schemas";
 import { it } from "vitest";
 
 const release = (version: string, prerelease = false): Release => ({

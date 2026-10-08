@@ -71,8 +71,8 @@ import {
   type DirectCandidateKind,
   type DirectConnectInfoInput,
   DirectConnectInfoSchema,
-} from "@shared/ipc/modules/direct";
-import { errorMessageOf } from "@shared/errors";
+} from "@shigomori/contracts/modules/direct";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   openDevice,
   type OpenClientSocket,

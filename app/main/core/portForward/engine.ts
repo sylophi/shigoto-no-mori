@@ -3,7 +3,7 @@
 // bridges each accepted socket onto a channel of the peer's direct
 // session, opened with forward:open (the host side in
 // host/ipc/modules/forward.ts, the wire rules in
-// shared/ipc/modules/forward.ts). Electron-free on purpose, node:net
+// packages/contracts/src/modules/forward.ts). Electron-free on purpose, node:net
 // plus injected dependencies, so the e2e check drives the real engine
 // over a real device wire (test/port-forward.mts) while
 // main/ipc wires the peer reach over the bridge's shared direct
@@ -18,12 +18,12 @@ import { createServer, type Server, type Socket } from "node:net";
 import {
   type forwardContract,
   isForwardConnectFailedError,
-} from "@shared/ipc/modules/forward";
+} from "@shigomori/contracts/modules/forward";
 import type {
   PortForwardSummary,
   PortForwardWorktree,
-} from "@shared/ipc/modules/portForward";
-import type { Client } from "@shared/ipc/types";
+} from "@shigomori/contracts/modules/portForward";
+import type { Client } from "@shigomori/contracts/types";
 import { mintHexId } from "@host/lib/hexId";
 import {
   type BridgedConn,

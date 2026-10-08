@@ -11,8 +11,11 @@ import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
-import type { CarryOverCandidate, CarryOverStat } from "@shared/schemas";
-import type { SyncWorktreeFolderEntry } from "@shared/ipc/modules/sync";
+import type {
+  CarryOverCandidate,
+  CarryOverStat,
+} from "@shigomori/contracts/schemas";
+import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import { listIgnoredPaths } from "../git/branches";
 import { chunked, runLenient } from "../git/core";
 import {
@@ -205,7 +208,7 @@ async function ruleIgnoredFolders(
 }
 
 // One folder of one checkout, with git's ignore verdict per entry: the
-// mirror dialog's picker of what stays behind (shared/ipc/modules/
+// mirror dialog's picker of what stays behind (packages/contracts/src/modules/
 // sync.ts worktreeFolder). Folders first, then alphabetical, like the
 // carry-over listing, and .git left out for the same reason.
 export async function listWorktreeFolder(

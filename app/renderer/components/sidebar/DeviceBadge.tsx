@@ -5,7 +5,7 @@
 // tile its row wears on the account page, so a badge and a dot can
 // never disagree about a machine, and the name rides the tooltip.
 import { RefreshCw } from "lucide-react";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";

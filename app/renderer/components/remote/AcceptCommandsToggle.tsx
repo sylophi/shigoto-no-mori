@@ -13,7 +13,7 @@
 // spells out what the grant covers and tints while it is on.
 //
 // The GRANTS list is the `remote: true, mutating: true` host channels
-// in shared/ipc/modules, grouped the way a person weighs them. A new
+// in packages/contracts/src/modules, grouped the way a person weighs them. A new
 // gated channel that does not fit a line here needs a line.
 //
 // Written immediately through the host store, never staged in a form:

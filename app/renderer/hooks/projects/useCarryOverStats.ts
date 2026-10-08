@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import type { CarryOverStat } from "@shared/schemas";
+import type { CarryOverStat } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Where each configured carry-over path exists, across checkouts. One

@@ -1,7 +1,11 @@
-import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shared/ipc/types";
-import type { Project, Worktree, WorktreeRemoval } from "@shared/schemas";
+import type { Handlers } from "@shigomori/contracts/types";
+import type {
+  Project,
+  Worktree,
+  WorktreeRemoval,
+} from "@shigomori/contracts/schemas";
 import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
 import {
   commitStaged,
@@ -48,7 +52,7 @@ import {
   stackCleanupFor,
   trunkOf,
 } from "@shared/pullRequestStack";
-import { unknownWorktreeError } from "@shared/errors";
+import { unknownWorktreeError } from "@shigomori/contracts/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import {
   moveMirrorsOfWorktree,

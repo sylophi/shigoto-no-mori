@@ -2,7 +2,7 @@
 // keys agree on one shape: parsing `/scripts/:scriptKey` (paramToSlot)
 // and minting a sidebar/store key (scriptKey) both go through this file.
 
-import type { ScriptRunSlot } from "@shared/schemas";
+import type { ScriptRunSlot } from "@shigomori/contracts/schemas";
 import { assertNever } from "@/lib/utils";
 
 // The slot a run takes on its worktree, as the host lists it too.

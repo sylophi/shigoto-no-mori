@@ -8,9 +8,9 @@
 // on every call, and nothing learns a project id except from that list
 // or a CLI verb that just wrote it, so the snapshot is never behind a
 // caller that holds an id.
-import { unknownProjectError } from "@shared/errors";
+import { unknownProjectError } from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
-import type { Project, ProjectRow } from "@shared/schemas";
+import type { Project, ProjectRow } from "@shigomori/contracts/schemas";
 import {
   listProjectsViaCli,
   projectsAddViaCli,

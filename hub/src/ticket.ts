@@ -2,7 +2,7 @@
 // The app never builds or parses either: the credential rides in the
 // Authorization header and the ticket in the connect URL as opaque
 // strings, so this lives in hub/src and not in the shared contract
-// (shared/hub/protocol.ts).
+// (packages/contracts/src/hubProtocol.ts).
 import { base64urlOfBytes } from "./crypto.ts";
 
 // A device credential is `smdc_` + base64url(32 random bytes). The raw
