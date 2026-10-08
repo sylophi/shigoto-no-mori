@@ -27,7 +27,9 @@ import {
   type Styles,
 } from "../output.ts";
 import { divergenceCell, flagNames, truncate } from "./cells.ts";
+import { adopt, create, move, rekey, rm, setup } from "./changes.ts";
 import { describe } from "./describe.ts";
+import { cdCommand } from "./shell.ts";
 import { agentWorking, autopull, shelve, unshelve } from "./marks.ts";
 import { status } from "./status.ts";
 
@@ -319,5 +321,12 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     unshelve,
     autopull,
     agentWorking,
+    create,
+    rm,
+    move,
+    adopt,
+    setup,
+    rekey,
+    cdCommand,
   ]),
 );

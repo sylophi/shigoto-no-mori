@@ -2,7 +2,7 @@
 // under the data dir, the in-project folder, a custom base, and the
 // project's own external drive.
 import { createHash } from "node:crypto";
-import { basename, join } from "node:path";
+import { basename, join, normalize } from "node:path";
 
 // A worktree's id: a hash of its path, an on-disk format fixed for good
 // (marks and the per-worktree files are keyed by it).
@@ -63,6 +63,13 @@ export function projectDriveBase(
 }
 
 const trimTrailingSlashes = (path: string) => path.replace(/\/+$/, "");
+
+// A path as Go's filepath.Clean leaves it: normalized, and without a
+// trailing slash except on the root.
+export const cleanPath = (path: string) => {
+  const normalized = normalize(path);
+  return normalized === "/" ? normalized : trimTrailingSlashes(normalized);
+};
 
 // Every base whose direct children count as managed for a project, all
 // layouts included, so switching layouts doesn't turn worktrees external.

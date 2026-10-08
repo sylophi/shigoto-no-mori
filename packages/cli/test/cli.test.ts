@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -27,7 +28,12 @@ import {
   describe,
   it,
 } from "vitest";
-import { goSm, type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
+import {
+  goSm,
+  macfs,
+  type Sandbox,
+  sandbox,
+} from "../../engine/test/lib/sandbox.ts";
 
 let built: string;
 let buildDir: string;
@@ -39,6 +45,8 @@ beforeAll(() => {
     stdio: "ignore",
   });
   goSm();
+  // The darwin helper beside the binary, as the app ships it.
+  copyFileSync(macfs(), join(buildDir, "macfs"));
 }, 300_000);
 afterAll(() => rmSync(buildDir, { recursive: true, force: true }));
 
@@ -63,7 +71,8 @@ const withoutHue = (doc: unknown) =>
     ? doc.map((row: unknown) => Object.assign({}, row, { hue: null }))
     : doc;
 
-// What differs by side: a new project's id, random on each, and the
+// What differs by side: a new project's id and a script run's, random on
+// each, the times a worktree was made and changed, and the
 // side's own data dir, where managed worktrees go. Only the run's own
 // dir is masked, so one side using the other's still shows.
 const withoutSideDetails = (seen: object, side: string) =>
@@ -73,19 +82,25 @@ const withoutSideDetails = (seen: object, side: string) =>
       .replaceAll(
         /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/g,
         "<id>",
-      ),
+      )
+      // A script run's id, and when a worktree was made or last changed.
+      .replaceAll(/"runId":"[^"]*"/g, '"runId":"<run>"')
+      .replaceAll(/"(createdAt|lastChangeAt)":\d+/g, '"$1":0'),
   ) as unknown;
 
 // The same command through both binaries from `cwd`, each on its own
 // copy. Under --json the documents are compared, not their bytes (Go
 // sorts keys and escapes <, > and &); a person's output is compared as
 // text.
-const sameAt = async (cwd: string, ...args: string[]) => {
-  const [go, ours] = await Promise.all([
-    box.runAt(goSm(), "go", cwd, args),
-    box.runAt(built, "cli", cwd, args),
-  ]);
-  const seen = (run: typeof go, side: string) =>
+type Run = Awaited<ReturnType<Sandbox["runAt"]>>;
+
+const compare = (
+  args: ReadonlyArray<string>,
+  go: Run,
+  ours: Run,
+  steady: (run: Run) => Run = (run) => run,
+) => {
+  const seen = (run: Run, side: string) =>
     withoutSideDetails(
       args.includes("--json")
         ? {
@@ -96,8 +111,43 @@ const sameAt = async (cwd: string, ...args: string[]) => {
         : { code: run.code, stdout: run.stdout, stderr: run.stderr },
       side,
     );
-  assert.deepStrictEqual(seen(ours, "cli"), seen(go, "go"), args.join(" "));
+  assert.deepStrictEqual(
+    seen(steady(ours), "cli"),
+    seen(steady(go), "go"),
+    args.join(" "),
+  );
 };
+
+const sameAt = async (cwd: string, ...args: string[]) => {
+  const [go, ours] = await Promise.all([
+    box.runAt(goSm(), "go", cwd, args),
+    box.runAt(built, "cli", cwd, args),
+  ]);
+  compare(args, go, ours);
+};
+
+// How many files a new worktree cloned: ours runs on a restored copy of
+// the repo, whose new inodes git's index no longer vouches for, so git
+// writes what Go's side could clone. The line stays, in its place.
+const cloneCounts = (run: Run): Run => ({
+  ...run,
+  stderr: run.stderr.replaceAll(
+    /\[checkout\] \d+ files cloned from (.*?)(?: \(\d+ read back to verify\))?, \d+ written by git/g,
+    "[checkout] files cloned from $1",
+  ),
+});
+
+// A command that changes what both sides share (the repos, their
+// worktrees): Go's first, then ours on everything as it was before.
+const changeAt = async (cwd: string, ...args: string[]) => {
+  const [go, ours] = await box.changeBoth(
+    () => box.runAt(goSm(), "go", cwd, args),
+    () => box.runAt(built, "cli", cwd, args),
+  );
+  compare(args, go, ours, cloneCounts);
+};
+
+const change = (...args: string[]) => changeAt(box.home, ...args);
 
 const same = (...args: string[]) => sameAt(box.home, ...args);
 
@@ -576,6 +626,135 @@ describe("describe and the marks", () => {
     await same("--json", "agent-working", "on", "root");
     await same("agent-working", "fox");
     await same("agent-working", "off", "fox", "owl");
+  });
+});
+
+describe("making and removing worktrees", () => {
+  // A project whose managed worktrees go to a folder both sides see,
+  // with setup and teardown scripts that say they ran.
+  const project = (scripts = true) => {
+    const alpha = box.repo("alpha", { "a.txt": "a\n" });
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    box.write("projects/A/project.json", {
+      defaultBranch: "main",
+      worktreeLayout: "custom",
+      customWorktreePath: `${box.home}/wts`,
+      ...(scripts
+        ? {
+            scripts: {
+              setup: "echo setting up $SHIGOMORI_WORKTREE_NAME",
+              teardown: "echo tearing down",
+            },
+          }
+        : {}),
+    });
+    return { alpha };
+  };
+
+  it("creates a worktree and sets it up", async () => {
+    project();
+    await change("create", "fox", "-p", "alpha", "--no-cd");
+    await same("list", "-p", "alpha");
+    await change("--json", "new", "owl", "-p", "alpha", "--no-setup");
+    await change("create", "fox", "-p", "alpha", "--no-cd");
+    await change("create", "root", "-p", "alpha");
+    await change("create", "a/b", "-p", "alpha");
+    await change("create", "cat", "-p", "alpha", "--branch=-x");
+    await change("create", "root", "-p", "alpha", "--base=-y");
+    await change("create", "cat", "-p", "alpha", "--checkout");
+  });
+
+  it("says when a setup script fails, and exits 3", async () => {
+    const { alpha } = project(false);
+    box.write("projects/A/project.json", {
+      defaultBranch: "main",
+      worktreeLayout: "custom",
+      customWorktreePath: `${box.home}/wts`,
+      scripts: { setup: "echo nope; exit 4" },
+    });
+    await changeAt(alpha, "create", "fox", "--no-cd");
+    await change("setup", "fox");
+    await change("--json", "setup", "fox");
+  });
+
+  it("sets a worktree up again", async () => {
+    project();
+    await change("create", "fox", "-p", "alpha", "--no-cd");
+    await change("setup", "fox");
+    await change("--json", "setup", "root");
+  });
+
+  it("removes a worktree, its teardown first", async () => {
+    const { alpha } = project();
+    await change("create", "fox", "-p", "alpha", "--no-cd", "--no-setup");
+    await change("create", "owl", "-p", "alpha", "--no-cd", "--no-setup");
+    writeFileSync(`${box.home}/wts/owl/dirty.txt`, "x");
+    await change("rm", "owl");
+    await change("--json", "rm", "owl");
+    await change("remove", "owl", "--force", "--keep-branch");
+    await change("rm", "root");
+    await changeAt(`${box.home}/wts/fox`, "rm");
+    await same("list", "-p", "alpha");
+    await changeAt(alpha, "rm", "nope");
+  });
+
+  it("refuses a removal whose teardown fails", async () => {
+    project(false);
+    box.write("projects/A/project.json", {
+      defaultBranch: "main",
+      worktreeLayout: "custom",
+      customWorktreePath: `${box.home}/wts`,
+      scripts: { teardown: "exit 5" },
+    });
+    await change("create", "fox", "-p", "alpha", "--no-cd");
+    await change("rm", "fox");
+    await change("--json", "rm", "fox");
+    await change("rm", "fox", "--skip-cleanup");
+  });
+
+  it("moves a worktree, and adopts one from outside", async () => {
+    const { alpha } = project(false);
+    await change("create", "fox", "-p", "alpha", "--no-cd");
+    await change("move", "fox", `${box.home}/elsewhere/fox`);
+    await change("--json", "mv", "fox", `${box.home}/wts/fox`);
+    await change("move", "root", `${box.home}/x`);
+    await change("move");
+    box.git(alpha, "worktree", "add", "-q", "-b", "owl", `${box.home}/owl`);
+    await change("adopt", "owl");
+    await change("--json", "adopt", "fox");
+  });
+
+  it("carries a worktree's data to a new path, for the app", async () => {
+    project(false);
+    await change("create", "fox", "-p", "alpha", "--no-cd");
+    const id = (
+      (await box.runAt(goSm(), "go", box.home, ["--json", "path", "fox"]))
+        .doc as { id: string }
+    ).id;
+    await same(
+      "--json",
+      "wt",
+      "rekey",
+      "--project-id",
+      "A",
+      "--from-id",
+      id,
+      "--to-path",
+      `${box.home}/wts/lynx/`,
+    );
+    await same("wt", "rekey", "--project-id", "A", "--from-id", id);
+    await same(
+      "wt",
+      "rekey",
+      "--project-id",
+      "A",
+      "--from-id",
+      id,
+      "--to-path",
+      "rel",
+    );
   });
 });
 
