@@ -59,9 +59,9 @@ func TestTerminalToolTypesItsCommandIntoTheTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
-	if got, want := args[len(args)-1], "cd '"+strings.ReplaceAll(worktree, "'", `'\''`)+"'; nvim ."; got != want {
-		t.Errorf("typed %q, want %q", got, want)
+	// The typed line is the last argument, and spans two lines.
+	if want := "cd '" + strings.ReplaceAll(worktree, "'", `'\''`) + "'\nnvim .\n"; !strings.HasSuffix(string(raw), want) {
+		t.Errorf("typed\n%s\nwant it to end with\n%s", raw, want)
 	}
 	if !strings.Contains(string(raw), `tell application "Terminal"`) {
 		t.Errorf("script doesn't drive Terminal:\n%s", raw)
