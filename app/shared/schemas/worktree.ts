@@ -443,6 +443,11 @@ export const SetAutoPullPayloadSchema = WorktreeScopedPayloadSchema.extend({
   autoPull: z.boolean(),
 });
 
+export const UnbindAgentPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  harness: z.string().min(1),
+  session: z.string().min(1),
+});
+
 export const CheckoutBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
   branch: GitRefNameSchema,
 });

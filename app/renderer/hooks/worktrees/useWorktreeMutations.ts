@@ -18,6 +18,7 @@ import {
 } from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
+import { agentSessionsState } from "@/lib/agentSessions";
 import { scriptRunsFor } from "@/store/scriptRuns";
 import { useWorktreeRemoving } from "@/store/worktreeLifecycle";
 import type { QueryClient } from "@tanstack/react-query";
@@ -457,6 +458,24 @@ export function useIdleAgents() {
       })),
     }),
     "Couldn't mark the agents idle",
+  );
+}
+
+export function useUnbindAgent() {
+  return useWorktreeRowMutation(
+    (api, input: WorktreeVars & { harness: string; session: string }) =>
+      api.worktrees.unbindAgent(input),
+    (w, { harness, session }) => {
+      const agentSessions = (w.agentSessions ?? []).filter(
+        (s) => s.harness !== harness || s.session !== session,
+      );
+      return {
+        ...w,
+        agentSessions,
+        agentWorking: agentSessionsState(agentSessions) === "working",
+      };
+    },
+    "Couldn't unbind the agent session",
   );
 }
 
