@@ -46,6 +46,8 @@
     "plutil",
     "osascript",
     "pgrep",
+    "chflags",
+    "xattr",
     "port-pool",
     // app's, run by release.yml from app/ (knip reads it from the root).
     "electron-forge",
