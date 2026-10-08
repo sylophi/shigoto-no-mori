@@ -17,7 +17,6 @@ export type ConfigKey = {
   // The schema requires it: `set` refuses to clear it, and a whole
   // document must carry it.
   readonly required: boolean;
-  readonly description: string;
   // A list key's own verbs, which `set` points at.
   readonly verbs: string | undefined;
   readonly accepts: (value: unknown) => boolean;
@@ -28,61 +27,63 @@ export type ConfigKey = {
 const isObject = (value: unknown): value is ConfigDoc =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const expandHome = (home: string, raw: string) =>
-  raw === "~" ? home : raw.startsWith("~/") ? `${home}/${raw.slice(2)}` : raw;
+const literalsOf = (ast: SchemaAST.AST): ReadonlyArray<string> =>
+  SchemaAST.isLiteral(ast)
+    ? [String(ast.literal)]
+    : SchemaAST.isUnion(ast)
+      ? ast.types.flatMap(literalsOf)
+      : [];
+
+// The kind of value a field holds, which decides how `set` reads its
+// text. A field of any other shape fails at load, so a new kind of
+// setting can't slip through as text.
+function kindOf(
+  name: string,
+  members: ReadonlyArray<SchemaAST.AST>,
+): ConfigKey["kind"] {
+  const [only] = members;
+  if (members.every((member) => literalsOf(member).length > 0)) return "enum";
+  if (members.length === 1 && only !== undefined) {
+    if (SchemaAST.isBoolean(only)) return "boolean";
+    if (SchemaAST.isNumber(only)) return "int";
+    if (SchemaAST.isArrays(only)) return "list";
+    if (SchemaAST.isString(only)) return "string";
+  }
+  throw new Error(`The setting ${name} has a kind of value sm can't set.`);
+}
 
 // The keys a scope models: every field of its schema, in `order` first
-// (the order the CLI lists them, with their descriptions and verbs),
-// then any field `order` doesn't name. So a setting the schema gains
-// is listed, readable and clearable with nothing else to update.
+// (the order the CLI lists them), then any field `order` doesn't name.
+// So a setting the schema gains is listed, readable and clearable with
+// nothing else to update.
 export function settingKeys(
-  fields: { readonly [name: string]: SchemaAST.AST },
+  fields: ReadonlyArray<{
+    readonly path: ReadonlyArray<string>;
+    readonly ast: SchemaAST.AST;
+  }>,
   defaults: { readonly [name: string]: unknown },
-  order: ReadonlyArray<
-    readonly [name: string, description: string, verbs?: string]
-  >,
+  order: ReadonlyArray<string>,
+  verbs: { readonly [name: string]: string },
 ): ReadonlyArray<ConfigKey> {
-  const described = new Map(order.map(([name, ...rest]) => [name, rest]));
+  const byName = new Map(fields.map(({ path, ast }) => [path.join("."), ast]));
   const names = [
-    ...order.map(([name]) => name).filter((name) => name in fields),
-    ...Object.keys(fields).filter((name) => !described.has(name)),
+    ...order.filter((name) => byName.has(name)),
+    ...[...byName.keys()].filter((name) => !order.includes(name)),
   ];
   return names.map((name) => {
-    const ast = fields[name] as SchemaAST.AST;
+    const ast = byName.get(name) as SchemaAST.AST;
     const members = SchemaAST.isUnion(ast) ? ast.types : [ast];
     const present = members.filter((member) => !SchemaAST.isUndefined(member));
-    const [first] = present;
-    const literals = present.flatMap((member) =>
-      SchemaAST.isLiteral(member) ? [String(member.literal)] : [],
-    );
-    const literalUnion =
-      first && SchemaAST.isUnion(first)
-        ? first.types.flatMap((member) =>
-            SchemaAST.isLiteral(member) ? [String(member.literal)] : [],
-          )
-        : [];
-    const choices = literals.length > 0 ? literals : literalUnion;
-    const kind: ConfigKey["kind"] =
-      choices.length > 0
-        ? "enum"
-        : first && SchemaAST.isBoolean(first)
-          ? "boolean"
-          : first && SchemaAST.isNumber(first)
-            ? "int"
-            : first && SchemaAST.isArrays(first)
-              ? "list"
-              : "string";
-    const [description = "", verbs] = described.get(name) ?? [];
-    const schema = Schema.make<Schema.Top>(ast);
+    const kind = kindOf(name, present);
+    const choices = kind === "enum" ? literalsOf(ast) : [];
     return {
       name,
       kind,
       choices,
       default: defaults[name],
       required: present.length === members.length,
-      description,
-      verbs,
-      accepts: Schema.is(schema),
+      verbs: verbs[name],
+      accepts: Schema.is(Schema.make<Schema.Top>(ast)),
       expected: {
         boolean: "must be a boolean",
         string: "must be a string",

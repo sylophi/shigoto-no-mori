@@ -26,7 +26,7 @@ const withoutFileMarker = (doc: unknown) => {
 };
 
 const same = async (
-  go: string[],
+  go: ReadonlyArray<string>,
   engine: Effect.Effect<unknown, unknown, Engine>,
   normalize: (doc: unknown) => unknown = (doc) => doc,
 ) =>
@@ -42,43 +42,68 @@ const inTurn = (steps: ReadonlyArray<() => Promise<void>>) =>
     Promise.resolve(),
   );
 
-const device = { kind: "device" } as const;
-const config = Effect.service(Config.Config);
-
-const list = config.pipe(
-  Effect.flatMap((c) => c.list(device)),
-  Effect.map((settings) => ({ ok: true, settings })),
-);
-const get = (key: string) =>
-  config.pipe(
-    Effect.flatMap((c) => c.get(device, key)),
-    Effect.map((setting) => ({ ok: true, ...setting })),
-  );
-const read = config.pipe(
-  Effect.flatMap((c) => c.read(device)),
-  Effect.map((stored) => ({ ok: true, config: stored })),
-);
-const set = (key: string, raw: string) =>
-  config.pipe(
-    Effect.flatMap((c) => c.set(device, key, raw)),
-    Effect.map((value) => ({ ok: true, key, value })),
-  );
-const unset = (key: string) =>
-  config.pipe(
-    Effect.flatMap((c) => c.unset(device, key)),
-    Effect.as({ ok: true, key }),
-  );
-const write = (payload: Record<string, unknown>) =>
-  config.pipe(
-    Effect.flatMap((c) => c.write(device, payload)),
-    Effect.as({ ok: true }),
-  );
+// One scope's verbs, each as the engine's call and the Go command line.
+// A project's documents name the project; its errors don't.
+const verbs = (scope: Config.ConfigScope) => {
+  const [command, flags] =
+    scope.kind === "device"
+      ? [["config"], []]
+      : [
+          ["projects", "config"],
+          ["-p", "repo"],
+        ];
+  const answer = <A extends object>(
+    run: (config: Config.Config["Service"]) => Effect.Effect<A, unknown>,
+  ) =>
+    Effect.service(Config.Config).pipe(
+      Effect.flatMap(run),
+      Effect.map((doc) =>
+        scope.kind === "device"
+          ? { ok: true, ...doc }
+          : { ok: true, ...doc, project: "repo" },
+      ),
+    );
+  const verb = <A extends object>(
+    args: ReadonlyArray<string>,
+    run: (config: Config.Config["Service"]) => Effect.Effect<A, unknown>,
+    normalize?: (doc: unknown) => unknown,
+  ) => same([...command, ...args, ...flags], answer(run), normalize);
+  return {
+    list: () =>
+      verb(["list"], (c) =>
+        Effect.map(c.list(scope), (settings) => ({ settings })),
+      ),
+    get: (key: string) => verb(["get", key], (c) => c.get(scope, key)),
+    read: () =>
+      verb(
+        ["read"],
+        (c) => Effect.map(c.read(scope), (stored) => ({ config: stored })),
+        withoutFileMarker,
+      ),
+    set: (key: string, raw: string) =>
+      verb(["set", key, raw], (c) =>
+        Effect.map(c.set(scope, key, raw), (value) => ({ key, value })),
+      ),
+    unset: (key: string) =>
+      verb(["unset", key], (c) => Effect.as(c.unset(scope, key), { key })),
+    write: (payload: Record<string, unknown>) =>
+      same(
+        [...command, "write", "--data", JSON.stringify(payload), ...flags],
+        Effect.service(Config.Config).pipe(
+          Effect.flatMap((c) => c.write(scope, payload)),
+          Effect.as({ ok: true }),
+        ),
+      ),
+  };
+};
 
 describe("config", () => {
+  const device = verbs({ kind: "device" });
+
   it("lists, gets and reads a fresh install's settings", async () => {
-    await same(["config", "list"], list);
-    await same(["config", "get", "doubutsuNames"], get("doubutsuNames"));
-    await same(["config", "read"], read, withoutFileMarker);
+    await device.list();
+    await device.get("doubutsuNames");
+    await device.read();
   });
 
   it("lists, gets and reads stored settings, keys it doesn't model kept", async () => {
@@ -91,33 +116,27 @@ describe("config", () => {
       schemaVersion: 1,
     });
     box.write("registry.json", { projects: [] });
-    await same(["config", "list"], list);
-    await same(["config", "get", "launchers"], get("launchers"));
-    await same(["config", "get", "githubCli"], get("githubCli"));
-    await same(["config", "read"], read, withoutFileMarker);
+    await device.list();
+    await device.get("launchers");
+    await device.get("githubCli");
+    await device.read();
   });
 
   it("refuses a key it doesn't model, pointing appearance keys at the app", async () => {
-    await same(["config", "get", "nope"], get("nope"));
-    await same(["config", "get", "theme"], get("theme"));
+    await device.get("nope");
+    await device.get("theme");
   });
 
   it("sets from text forms, storing a default by removing the key", async () => {
     box.write("config.json", { deleteBranchOnRemove: false });
     box.write("registry.json", { projects: [] });
-    await inTurn(
-      [
-        ["portPool", "on"],
-        ["deleteBranchOnRemove", "YES"],
-        ["terrier", "0"],
-        ["autoPullNew", "maybe"],
-      ].map(
-        ([key = "", raw = ""]) =>
-          () =>
-            same(["config", "set", key, raw], set(key, raw)),
-      ),
-    );
-    await same(["config", "read"], read, withoutFileMarker);
+    await inTurn([
+      () => device.set("portPool", "on"),
+      () => device.set("deleteBranchOnRemove", "YES"),
+      () => device.set("terrier", "0"),
+      () => device.set("autoPullNew", "maybe"),
+      () => device.read(),
+    ]);
   });
 
   it("unsets, and writes a whole document the way the app saves", async () => {
@@ -127,34 +146,24 @@ describe("config", () => {
       fromNewerBuild: 1,
     });
     box.write("registry.json", { projects: [] });
-    await same(["config", "unset", "portPool"], unset("portPool"));
-    await same(["config", "unset", "nope"], unset("nope"));
-    const payload = {
-      launchScripts: false,
-      launchers: [{ id: "b", label: "B", command: "b" }],
-      directConnections: null,
-    };
-    await same(
-      ["config", "write", "--data", JSON.stringify(payload)],
-      write(payload),
-    );
-    await same(["config", "read"], read, withoutFileMarker);
-    const wrong = { launchScripts: "yes" };
-    await same(
-      ["config", "write", "--data", JSON.stringify(wrong)],
-      write(wrong),
-    );
+    await inTurn([
+      () => device.unset("portPool"),
+      () => device.unset("nope"),
+      () =>
+        device.write({
+          launchScripts: false,
+          launchers: [{ id: "b", label: "B", command: "b" }],
+          directConnections: null,
+        }),
+      () => device.read(),
+      () => device.write({ launchScripts: "yes" }),
+    ]);
   });
 });
 
-// A project-scoped verb's document names the project.
-const scoped = <A extends object>(
-  run: Effect.Effect<A, unknown, Config.Config>,
-) => Effect.map(run, (doc) => ({ ...doc, project: "repo" }));
-
 describe("projects config", () => {
-  const project = { kind: "project", projectId: "P1" } as const;
-  const register = (configured: unknown) => {
+  const project = verbs({ kind: "project", projectId: "P1" });
+  const register = (configured?: unknown) => {
     box.write("registry.json", {
       projects: [{ id: "P1", name: "repo", path: `${box.home}/repo` }],
     });
@@ -162,6 +171,7 @@ describe("projects config", () => {
       box.write("projects/P1/project.json", configured);
     }
   };
+
   it("lists, gets and reads a configured project, nested keys included", async () => {
     register({
       defaultBranch: "main",
@@ -170,59 +180,38 @@ describe("projects config", () => {
       fromNewerBuild: true,
       schemaVersion: 1,
     });
-    await same(
-      ["projects", "config", "list", "-p", "repo"],
-      scoped(
-        config.pipe(
-          Effect.flatMap((c) => c.list(project)),
-          Effect.map((settings) => ({ ok: true, settings })),
-        ),
-      ),
-    );
+    await project.list();
     await Promise.all(
       ["scripts.setup", "scripts.teardown", "carryOver"].map((key) =>
-        same(
-          ["projects", "config", "get", key, "-p", "repo"],
-          scoped(
-            config.pipe(
-              Effect.flatMap((c) => c.get(project, key)),
-              Effect.map((setting) => ({ ok: true, ...setting })),
-            ),
-          ),
-        ),
+        project.get(key),
       ),
     );
-    await same(
-      ["projects", "config", "read", "-p", "repo"],
-      scoped(
-        config.pipe(
-          Effect.flatMap((c) => c.read(project)),
-          Effect.map((stored) => ({ ok: true, config: stored })),
-        ),
-      ),
-      withoutFileMarker,
-    );
+    await project.read();
   });
 
   it("reads an unconfigured project as null and lists its defaults", async () => {
-    register(undefined);
-    await same(
-      ["projects", "config", "read", "-p", "repo"],
-      scoped(
-        config.pipe(
-          Effect.flatMap((c) => c.read(project)),
-          Effect.map((stored) => ({ ok: true, config: stored })),
-        ),
-      ),
-    );
-    await same(
-      ["projects", "config", "list", "-p", "repo"],
-      scoped(
-        config.pipe(
-          Effect.flatMap((c) => c.list(project)),
-          Effect.map((settings) => ({ ok: true, settings })),
-        ),
-      ),
-    );
+    register();
+    await project.read();
+    await project.list();
+  });
+
+  it("merges a whole document into nested objects, dropping one its nulls empty", async () => {
+    register({
+      defaultBranch: "main",
+      scripts: { setup: "pnpm i", teardown: "x", fromNewerBuild: 1 },
+      portBase: 4000,
+    });
+    await inTurn([
+      () =>
+        project.write({
+          defaultBranch: "main",
+          scripts: { setup: null, teardown: null },
+          portBase: null,
+        }),
+      () => project.read(),
+      () => project.set("scripts.setup", "bun i"),
+      () => project.unset("defaultBranch"),
+      () => project.read(),
+    ]);
   });
 });

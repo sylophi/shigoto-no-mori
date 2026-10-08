@@ -43,8 +43,16 @@ const scrubbedEnv = (): NodeJS.ProcessEnv => ({
 });
 
 // The Go sm as cli/ is now, built once per state of its sources (the
-// non-test Go files, the module files, the embedded data).
+// non-test Go files, the module files, the embedded data) and hashed
+// once per test process.
+let built: string | undefined;
+
 function goSm(): string {
+  built ??= buildGoSm();
+  return built;
+}
+
+function buildGoSm(): string {
   const hash = createHash("sha256");
   for (const rel of readdirSync(cliDir, { recursive: true })
     .map(String)
@@ -78,15 +86,13 @@ function goSm(): string {
   return binary;
 }
 
-type Json = unknown;
-
 export type Sandbox = {
   readonly home: string;
-  // Writes a file under the data dir, JSON unless it is a string.
+  // Writes a JSON file under the data dir.
   readonly write: (file: string, value: unknown) => void;
   // A copy of the data dir for each side, taken when first asked for.
-  readonly go: (...args: string[]) => Promise<Json>;
-  readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<Json>;
+  readonly go: (...args: string[]) => Promise<unknown>;
+  readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
   readonly remove: () => Promise<void>;
 };
 
@@ -125,7 +131,7 @@ export function sandbox(): Sandbox {
 
   // The verb's last document, as `sm --json` prints it.
   const go = (...args: string[]) =>
-    new Promise<Json>((resolve, reject) => {
+    new Promise<unknown>((resolve, reject) => {
       execFile(
         goSm(),
         ["--json", ...args],
@@ -137,7 +143,7 @@ export function sandbox(): Sandbox {
           const docs = stdout
             .split("\n")
             .filter((line) => line.startsWith("{"))
-            .map((line) => JSON.parse(line) as Json);
+            .map((line) => JSON.parse(line) as unknown);
           if (docs.length === 0) reject(error ?? new Error("no document"));
           else resolve(docs.at(-1));
         },
@@ -148,10 +154,7 @@ export function sandbox(): Sandbox {
     home: root,
     write: (file, value) => {
       mkdirSync(dirname(join(seed, file)), { recursive: true });
-      writeFileSync(
-        join(seed, file),
-        typeof value === "string" ? value : JSON.stringify(value),
-      );
+      writeFileSync(join(seed, file), JSON.stringify(value));
     },
     go,
     // The service call's answer, or its error as the terminal reports
@@ -160,7 +163,7 @@ export function sandbox(): Sandbox {
       engineRuntime().runPromise(
         run.pipe(
           Effect.match({
-            onSuccess: (value) => value as Json,
+            onSuccess: (value) => value as unknown,
             onFailure: (error) => ({
               ok: false,
               error: error instanceof Error ? error.message : String(error),

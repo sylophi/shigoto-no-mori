@@ -1,7 +1,7 @@
 import {
   DEVICE_SETTINGS_DEFAULTS,
   DeviceSettingsPatchSchema,
-  modeledKeyPaths,
+  modeledKeyFields,
   PROJECT_CONFIG_DEFAULTS,
   ShigomoriConfigSchema,
 } from "@shigomori/contracts/schemas/config";
@@ -9,12 +9,10 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as SchemaAST from "effect/SchemaAST";
 import * as SqlClient from "effect/sql/SqlClient";
 import {
   type ConfigDoc,
   type ConfigKey,
-  expandHome,
   docGet,
   docSet,
   docDelete,
@@ -143,104 +141,50 @@ export class Config extends Context.Service<
   }
 >()("sm/engine/Config") {}
 
-// The CLI's order and the words it shows for each key. A key the
-// schema models and this list misses is still listed, last.
+// The keys in the order the CLI lists them. A key the schema models and
+// this list misses is still listed, last.
 const deviceKeys = settingKeys(
-  Object.fromEntries(
-    Object.entries(DeviceSettingsPatchSchema.struct.fields).map(
-      ([name, field]) => [name, field.ast],
-    ),
-  ),
+  modeledKeyFields(DeviceSettingsPatchSchema.struct),
   DEVICE_SETTINGS_DEFAULTS,
   [
-    ["launchScripts", "Show package scripts in the Launch section"],
-    ["deleteBranchOnRemove", "Delete the branch when removing its worktree"],
-    [
-      "autoPopulateInstall",
-      "Seed new projects' setup script with `<pm> install`",
-    ],
-    [
-      "autoPullNew",
-      "Start new worktrees (and added projects' primaries) with auto-pull on",
-    ],
-    [
-      "autoPullPrimaryOnly",
-      "autoPullNew applies to added projects' primaries only",
-    ],
-    [
-      "doubutsuNames",
-      "Name new worktrees after Animal Crossing characters (on for new installs)",
-    ],
-    [
-      "codexWorktreeNames",
-      "Name Codex-style <name>/<repo> worktrees by their parent folder",
-    ],
-    [
-      "managedOnProjectDrive",
-      "Keep managed worktrees on the project's drive when it is an external one",
-    ],
-    ["portPool", "Provision/release port-pool ports with worktrees"],
-    ["terrier", "List terrier-registered repos as projects"],
-    ["githubCli", "GitHub CLI integration"],
-    [
-      "launchers",
-      "Global custom launchers (`config launcher`)",
-      "config launcher add/rm",
-    ],
-    ["hiddenLaunchers", "Hidden launcher ids (via edit or the app)"],
+    "launchScripts",
+    "deleteBranchOnRemove",
+    "autoPopulateInstall",
+    "autoPullNew",
+    "autoPullPrimaryOnly",
+    "doubutsuNames",
+    "codexWorktreeNames",
+    "managedOnProjectDrive",
+    "portPool",
+    "terrier",
+    "githubCli",
+    "launchers",
+    "hiddenLaunchers",
   ],
+  { launchers: "config launcher add/rm" },
 );
 
 const projectKeys = settingKeys(
-  Object.fromEntries(
-    modeledKeyPaths(ShigomoriConfigSchema).map((path) => [
-      path.join("."),
-      fieldAt(ShigomoriConfigSchema.ast, path),
-    ]),
-  ),
+  modeledKeyFields(ShigomoriConfigSchema),
   PROJECT_CONFIG_DEFAULTS,
   [
-    ["defaultBranch", "Branch new worktrees fork from (required)"],
-    ["scripts.setup", "Runs after creating a worktree"],
-    ["scripts.teardown", "Runs before removing a worktree"],
-    ["worktreeLayout", "Where managed worktrees live"],
-    ["customWorktreePath", "Absolute base dir for the custom layout"],
-    ["useWorktreeInclude", "Honor the repo's .worktreeinclude file"],
-    ["portBase", "port-pool base port"],
-    ["lastMergeMethod", "Preferred PR merge method"],
-    ["showPrimaryInInbox", "List the primary checkout in the inbox view"],
-    [
-      "carryOver",
-      "Files carried into new worktrees (`carryover` verbs)",
-      "projects config carryover add/rm",
-    ],
-    [
-      "launchers",
-      "Per-project launchers (`launcher` verbs)",
-      "projects config launcher add/rm",
-    ],
+    "defaultBranch",
+    "scripts.setup",
+    "scripts.teardown",
+    "worktreeLayout",
+    "customWorktreePath",
+    "useWorktreeInclude",
+    "portBase",
+    "lastMergeMethod",
+    "showPrimaryInInbox",
+    "carryOver",
+    "launchers",
   ],
+  {
+    carryOver: "projects config carryover add/rm",
+    launchers: "projects config launcher add/rm",
+  },
 );
-
-// The field a dotted key path names, through optional wrappers.
-function fieldAt(
-  ast: SchemaAST.AST,
-  path: ReadonlyArray<string>,
-): SchemaAST.AST {
-  let current = ast;
-  for (const name of path) {
-    const objects = SchemaAST.isUnion(current)
-      ? current.types.find(SchemaAST.isObjects)
-      : current;
-    const field =
-      objects && SchemaAST.isObjects(objects)
-        ? objects.propertySignatures.find((property) => property.name === name)
-        : undefined;
-    if (!field) throw new Error(`no field ${path.join(".")}`);
-    current = field.type;
-  }
-  return current;
-}
 
 const keysOf = (scope: ConfigScope) =>
   scope.kind === "device" ? deviceKeys : projectKeys;
@@ -254,6 +198,9 @@ const lookupKey = (scope: ConfigScope, name: string) => {
         new UnknownConfigKey({ key: name, keys: keys.map((k) => k.name) }),
       );
 };
+
+const expandHome = (home: string, raw: string) =>
+  raw === "~" ? home : raw.startsWith("~/") ? `${home}/${raw.slice(2)}` : raw;
 
 const listedValue = (key: ConfigKey, doc: ConfigDoc): Setting => {
   const [value, set] = docGet(doc, key.name);
@@ -315,6 +262,7 @@ const make = Effect.gen(function* () {
               rows.map(({ key, value }) => [key, JSON.parse(value) as unknown]),
             ),
       ),
+      Effect.orDie,
     );
 
   // Stores `next` over `before`, top-level key by key.
@@ -342,31 +290,33 @@ const make = Effect.gen(function* () {
 
   // A read-modify-write of the scope's document in one transaction.
   const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) =>
-    sql.withTransaction(
-      Effect.gen(function* () {
-        const before = (yield* load(scope)) ?? {};
-        const next = structuredClone(before);
-        change(next);
-        yield* store(scope, before, next);
-      }),
-    );
+    sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const before = (yield* load(scope)) ?? {};
+          const next = structuredClone(before);
+          change(next);
+          yield* store(scope, before, next);
+        }),
+      )
+      .pipe(Effect.orDie);
 
   const list = Effect.fn("Config.list")(function* (scope: ConfigScope) {
     const doc = (yield* load(scope)) ?? {};
     return keysOf(scope).map((key) => listedValue(key, doc));
-  }, Effect.orDie);
+  });
 
   const get = Effect.fn("Config.get")(function* (
     scope: ConfigScope,
     name: string,
   ) {
     const key = yield* lookupKey(scope, name);
-    return listedValue(key, (yield* Effect.orDie(load(scope))) ?? {});
+    return listedValue(key, (yield* load(scope)) ?? {});
   });
 
   const read = Effect.fn("Config.read")(function* (scope: ConfigScope) {
     return yield* load(scope);
-  }, Effect.orDie);
+  });
 
   const unset = Effect.fn("Config.unset")(function* (
     scope: ConfigScope,
@@ -380,7 +330,7 @@ const make = Effect.gen(function* () {
         choices: [],
       });
     }
-    yield* Effect.orDie(update(scope, (doc) => docDelete(doc, key.name)));
+    yield* update(scope, (doc) => docDelete(doc, key.name));
   });
 
   const set = Effect.fn("Config.set")(function* (
@@ -408,12 +358,10 @@ const make = Effect.gen(function* () {
       return null;
     }
     const value = yield* parseValue(key, raw, home);
-    yield* Effect.orDie(
-      update(scope, (doc) =>
-        JSON.stringify(value) === JSON.stringify(key.default)
-          ? docDelete(doc, key.name)
-          : docSet(doc, key.name, value),
-      ),
+    yield* update(scope, (doc) =>
+      JSON.stringify(value) === JSON.stringify(key.default)
+        ? docDelete(doc, key.name)
+        : docSet(doc, key.name, value),
     );
     return value;
   });
@@ -423,9 +371,7 @@ const make = Effect.gen(function* () {
     payload: ConfigDoc,
   ) {
     yield* validate(keysOf(scope), payload);
-    yield* Effect.orDie(
-      update(scope, (doc) => mergeConfigDoc(keysOf(scope), doc, payload)),
-    );
+    yield* update(scope, (doc) => mergeConfigDoc(keysOf(scope), doc, payload));
   });
 
   return Config.of({ list, get, read, set, unset, write });
