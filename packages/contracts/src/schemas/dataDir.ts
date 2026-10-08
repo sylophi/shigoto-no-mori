@@ -1,21 +1,21 @@
 import * as Schema from "effect/Schema";
-import { ProjectSchema } from "./project.ts";
-import { PackageScriptSortModeSchema } from "./scripts.ts";
 
 // The JSON documents a 2.x data dir keeps at its top level, which the
 // engine's store imports once (packages/engine/src/migrations). Each
 // key is decoded on its own, since a key one build can't read must not
-// cost the others.
+// cost the others. Each is as lenient as the Go sm's read of it.
 
 // registry.json: the projects, the manual order and the worktree marks.
 export const RegistryFileSchema = Schema.Struct({
-  // In registration order.
-  projects: Schema.Array(
-    Schema.Struct({
-      id: ProjectSchema.fields.id,
-      name: ProjectSchema.fields.name,
-      path: ProjectSchema.fields.path,
-    }),
+  // In registration order. A missing field reads as empty.
+  projects: Schema.NullOr(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.optionalKey(Schema.String),
+        name: Schema.optionalKey(Schema.String),
+        path: Schema.optionalKey(Schema.String),
+      }),
+    ),
   ),
   // The sidebar's manual order, as project paths.
   projectOrder: Schema.Array(Schema.String),
@@ -52,7 +52,8 @@ export const StateFileSchema = Schema.Struct({
     Schema.String,
     Schema.Record(Schema.String, UseLogSchema),
   ),
-  packageScriptSort: Schema.Record(Schema.String, PackageScriptSortModeSchema),
+  // A sort mode by project, kept whether or not this build knows it.
+  packageScriptSort: Schema.Record(Schema.String, Schema.String),
   packageScriptOrder: Schema.Record(Schema.String, Schema.Array(Schema.String)),
   packageScriptLaunchRow: Schema.Record(
     Schema.String,

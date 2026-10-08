@@ -69,14 +69,14 @@ it("opens the database in WAL mode", async () => {
   assert.equal(row?.journal_mode, "wal");
 });
 
-// One process holds one store, and node:sqlite waits for a lock by
-// blocking its thread, so the store's sharing is between processes:
-// the app and the terminal opening it at once, the first time included.
 it("leaves the settings alone in a data dir something has used", async () => {
   write("state.json", {});
   assert.deepEqual(await rows("device_config"), []);
 });
 
+// One process holds one store, and node:sqlite waits for a lock by
+// blocking its thread, so the store's sharing is between processes:
+// the app and the terminal opening it at once, the first time included.
 it("opens one store from several processes at once, importing once", async () => {
   write("registry.json", { projects: [{ id: "A", name: "a", path: "/a" }] });
   const opened = await Promise.all(
@@ -257,11 +257,57 @@ it("refuses a registry it can't read, naming the file, and imports nothing", asy
 it("refuses a project list that doesn't parse, and a project file", async () => {
   write("registry.json", { projects: [{ id: 1 }] });
   await assert.rejects(rows("projects"), StoreImportError);
-  write("registry.json", { projects: [] });
+  write("registry.json", { projects: [{ id: "A", name: "a", path: "/a" }] });
   write("projects/A/project.json", "[]");
   await assert.rejects(rows("projects"), (error) => {
     assert.ok(error instanceof StoreImportError);
     assert.equal(error.path, join(dataDir, "projects/A/project.json"));
     return true;
   });
+});
+
+it("imports a use log longer than one statement can bind", async () => {
+  write("state.json", {
+    launcherUseLog: { "app:zed": Array.from({ length: 20_000 }, (_, i) => i) },
+  });
+  const [row] = await query(
+    (sql) => sql<{ n: number }>`SELECT count(*) AS n FROM usage`,
+  );
+  assert.equal(row?.n, 20_000);
+});
+
+it("reads what the Go sm reads: missing fields, unknown modes, field by field", async () => {
+  write("registry.json", { projects: [{ id: "A", path: "/a" }] });
+  write("state.json", { packageScriptSort: { A: "fromNewerBuild" } });
+  write("projects/A/worktrees/aaaaaaaaaaaa.json", {
+    title: "kept",
+    ports: [{ port: 0 }],
+  });
+  assert.deepEqual(await rows("projects"), [
+    { id: "A", name: "", path: "/a", position: 0 },
+  ]);
+  assert.deepEqual(await rows("script_sort"), [
+    { project_id: "A", mode: "fromNewerBuild" },
+  ]);
+  assert.deepEqual(await rows("worktree_data"), [
+    {
+      project_id: "A",
+      worktree_id: "aaaaaaaaaaaa",
+      title: "kept",
+      description: null,
+      described_at: null,
+      ports: null,
+    },
+  ]);
+});
+
+it("reads a null project list as none", async () => {
+  write("registry.json", { projects: null });
+  assert.deepEqual(await rows("projects"), []);
+});
+
+it("skips a settings file no registered project owns", async () => {
+  write("registry.json", { projects: [] });
+  write("projects/GONE/project.json", "{ truncated");
+  assert.deepEqual(await rows("project_config"), []);
 });

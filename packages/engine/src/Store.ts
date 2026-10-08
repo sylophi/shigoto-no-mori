@@ -48,13 +48,16 @@ export const layer: Layer.Layer<
       return client;
     }).pipe(
       Effect.mapError((cause) => new StoreOpenError({ path: store, cause })),
-      // The migrator turns a migration's failure into a defect; an import
-      // that refused a file comes back out as its own error.
-      Effect.catchDefect((defect) =>
-        defect instanceof Migrator.MigrationError &&
-        defect.cause instanceof StoreImportError
-          ? Effect.fail(defect.cause)
-          : Effect.die(defect),
+      // The migrator turns a migration's failure into a defect. An import
+      // that refused a file comes back out as its own error, and any other
+      // failed migration as a store that can't open.
+      Effect.catchDefect(
+        (defect): Effect.Effect<never, StoreOpenError | StoreImportError> =>
+          !(defect instanceof Migrator.MigrationError)
+            ? Effect.die(defect)
+            : defect.cause instanceof StoreImportError
+              ? Effect.fail(defect.cause)
+              : Effect.fail(new StoreOpenError({ path: store, cause: defect })),
       ),
     );
     return Context.make(SqlClient.SqlClient, sql);

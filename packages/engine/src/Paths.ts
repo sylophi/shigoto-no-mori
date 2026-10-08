@@ -53,7 +53,8 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const names = flavorNames(flavor);
-  const home = yield* Config.String("HOME");
+  // Unset reads as the working directory, as it does for the Go sm.
+  const home = yield* Config.String("HOME").pipe(Config.withDefault("."));
   const expandHome = (target: string) =>
     target === "~"
       ? home

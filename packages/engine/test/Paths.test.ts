@@ -15,14 +15,16 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-const resolve = (env: Record<string, string> = {}) =>
+const resolve = (env: Record<string, string> = {}, withHome = true) =>
   Effect.service(Paths.Paths).pipe(
     Effect.provide(
       Paths.layer("prod").pipe(
         Layer.provide(NodeServices.layer),
         Layer.provide(
           ConfigProvider.layer(
-            ConfigProvider.fromEnv({ env: { HOME: home, ...env } }),
+            ConfigProvider.fromEnv({
+              env: withHome ? { HOME: home, ...env } : env,
+            }),
           ),
         ),
       ),
@@ -91,4 +93,8 @@ it("adopts a pre-2.0 data dir that holds state while the current is empty", asyn
 it("reads a pre-2.0 path that is a file as holding nothing", async () => {
   writeFileSync(join(home, "shigomori"), "");
   assert.equal((await resolve()).dataDirSource, "default");
+});
+
+it("reads an unset HOME as the working directory, as the Go sm does", async () => {
+  assert.equal((await resolve({}, false)).dataDir, ".sm");
 });

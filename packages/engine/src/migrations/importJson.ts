@@ -103,13 +103,17 @@ export const importJson = Effect.gen(function* () {
       }),
     );
 
+  // In statements of a few thousand values, under SQLite's limit on
+  // bound parameters (a long use log has tens of thousands of rows).
   const insertAll = <Row extends Record<string, unknown>>(
     table: string,
     rows: ReadonlyArray<Row>,
   ) =>
-    rows.length === 0
-      ? Effect.void
-      : sql`INSERT INTO ${sql(table)} ${sql.insert(rows)}`;
+    Effect.forEach(
+      Arr.chunksOf(rows, 1000),
+      (chunk) => sql`INSERT INTO ${sql(table)} ${sql.insert(chunk)}`,
+      { discard: true },
+    );
 
   const registryFile = path.join(dataDir, "registry.json");
   const stateFile = path.join(dataDir, "state.json");
@@ -146,18 +150,24 @@ export const importJson = Effect.gen(function* () {
       fallback,
     );
 
-  const projects = yield* Schema.decodeUnknownEffect(
-    Schema.UndefinedOr(RegistryFileSchema.fields.projects),
-  )(registryDoc.projects).pipe(
-    Effect.mapError(
-      (cause) => new StoreImportError({ path: registrySource, cause }),
-    ),
+  const projects = Arr.dedupeWith(
+    (yield* Schema.decodeUnknownEffect(
+      Schema.UndefinedOr(RegistryFileSchema.fields.projects),
+    )(registryDoc.projects).pipe(
+      Effect.mapError(
+        (cause) => new StoreImportError({ path: registrySource, cause }),
+      ),
+    )) ?? [],
+    (a, b) => a.id === b.id,
   );
   yield* insertAll(
     "projects",
-    Arr.dedupeWith(projects ?? [], (a, b) => a.id === b.id).map(
-      ({ id, name, path: at }, position) => ({ id, name, path: at, position }),
-    ),
+    projects.map((project, position) => ({
+      id: project.id ?? "",
+      name: project.name ?? "",
+      path: project.path ?? "",
+      position,
+    })),
   );
 
   for (const [key, mark] of [
@@ -254,12 +264,17 @@ export const importJson = Effect.gen(function* () {
       Effect.mapError((cause) => new StoreImportError({ path: dir, cause })),
     );
 
+  // A registered project's settings are read as strictly as the
+  // registry. Another folder (a terrier project's, or one a removal left
+  // behind) is read as a hint.
+  const registered = new Set(projects.map((project) => project.id ?? ""));
   const projectsDir = path.join(dataDir, "projects");
   for (const projectId of yield* listDirectory(projectsDir)) {
     const projectDir = path.join(projectsDir, projectId);
-    const projectConfig = yield* readDocument(
-      path.join(projectDir, "project.json"),
-    );
+    const configFile = path.join(projectDir, "project.json");
+    const projectConfig = registered.has(projectId)
+      ? yield* readDocument(configFile)
+      : yield* lenientDocument(configFile);
     yield* insertAll(
       "project_config",
       configRows(Option.getOrElse(projectConfig, () => ({}))).map(
@@ -273,21 +288,17 @@ export const importJson = Effect.gen(function* () {
       const filePath = path.join(worktreesDir, file);
       const doc = yield* lenientDocument(filePath);
       if (Option.isNone(doc)) continue;
-      const data = yield* lenientKey(
-        filePath,
-        "worktree data",
-        Schema.UndefinedOr(ShigomoriWorktreeDataSchema),
-        doc.value,
-        undefined,
-      );
-      if (data === undefined) continue;
+      const fields = ShigomoriWorktreeDataSchema.fields;
+      const dataKey = <K extends keyof typeof fields>(key: K) =>
+        lenientKey(filePath, key, fields[key], doc.value[key], undefined);
+      const ports = yield* dataKey("ports");
       yield* sql`INSERT INTO worktree_data ${sql.insert({
         project_id: projectId,
         worktree_id: file.slice(0, -".json".length),
-        title: data.title ?? null,
-        description: data.description ?? null,
-        described_at: data.describedAt ?? null,
-        ports: data.ports === undefined ? null : JSON.stringify(data.ports),
+        title: (yield* dataKey("title")) ?? null,
+        description: (yield* dataKey("description")) ?? null,
+        described_at: (yield* dataKey("describedAt")) ?? null,
+        ports: ports === undefined ? null : JSON.stringify(ports),
       })}`;
     }
   }

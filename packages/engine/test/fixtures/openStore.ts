@@ -1,5 +1,6 @@
-// Opens the store of the data dir in argv[2] and prints its project
-// count, for the proof that two processes can open one store at once.
+// Opens the store of the data dir SHIGOMORI_DATA_DIR names and prints
+// its project count, for the proof that processes can open one store
+// at once.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
