@@ -28,6 +28,7 @@ import * as Config from "../../src/Config.ts";
 import * as Darwin from "../../src/Darwin.ts";
 import * as Git from "../../src/Git.ts";
 import * as GitHub from "../../src/GitHub.ts";
+import * as Hygiene from "../../src/Hygiene.ts";
 import * as Icons from "../../src/Icons.ts";
 import * as Identity from "../../src/Identity.ts";
 import * as Launchers from "../../src/Launchers.ts";
@@ -52,7 +53,8 @@ export type Engine =
   | Scripts.Scripts
   | Terrier.Terrier
   | Usage.Usage
-  | Worktrees.Worktrees;
+  | Worktrees.Worktrees
+  | Hygiene.Hygiene;
 
 const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
 
@@ -248,7 +250,8 @@ export function sandbox(): Sandbox {
   const engineRuntime = () => {
     const dataDir = sideDir("engine");
     runtime ??= ManagedRuntime.make(
-      Worktrees.layer.pipe(
+      Hygiene.layer.pipe(
+        Layer.provideMerge(Worktrees.layer),
         Layer.provideMerge(
           Layer.mergeAll(
             Launchers.layer,

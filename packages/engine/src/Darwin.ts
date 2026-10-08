@@ -62,7 +62,7 @@ const PrivateSize = Schema.Struct({
 });
 
 // lstat(2), times to the nanosecond: what git's index records of a file,
-// and its flags.
+// its flags, and the blocks and links a disk usage count needs.
 const Lstat = Schema.Struct({
   path: Schema.String,
   dev: Schema.Int,
@@ -76,6 +76,8 @@ const Lstat = Schema.Struct({
   mtimeSec: Schema.Int,
   mtimeNsec: Schema.Int,
   flags: Schema.Int,
+  blocks: Schema.Int,
+  nlink: Schema.Int,
 });
 export type LstatEntry = typeof Lstat.Type;
 

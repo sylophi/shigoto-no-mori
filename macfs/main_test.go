@@ -263,7 +263,8 @@ func TestLstatReportsWhatTheIndexRecords(t *testing.T) {
 			"uid": float64(st.Uid), "gid": float64(st.Gid), "size": float64(st.Size),
 			"ctimeSec": float64(st.Ctim.Sec), "ctimeNsec": float64(st.Ctim.Nsec),
 			"mtimeSec": float64(st.Mtim.Sec), "mtimeNsec": float64(st.Mtim.Nsec),
-			"flags": float64(st.Flags),
+			"flags": float64(st.Flags), "blocks": float64(st.Blocks),
+			"nlink": float64(st.Nlink),
 		}
 		for key, value := range want {
 			if got[key] != value {
