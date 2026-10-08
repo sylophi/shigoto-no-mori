@@ -58,6 +58,7 @@
 // changed (or that finds a waiting session's files caught up), and a
 // slow periodic sweep as the backstop. Reconciles are coalesced per
 // session: one in flight, one queued.
+import * as Schema from "effect/Schema";
 import type { Project } from "@shared/schemas";
 import { errorMessageOf, isEntityGoneError } from "@shared/errors";
 import type { followDescription } from "@host/lib/sync/worktreeDescription";
@@ -90,6 +91,8 @@ import {
   readGitState,
   watchIndexFile,
 } from "./gitState";
+
+const decodeHasCommitsResult = Schema.decodeSync(SyncHasCommitsResultSchema);
 
 // The slice of a daemon session the follower reads. `status` is the
 // file-sync engine's own (watching is idle, everything else is a cycle
@@ -737,7 +740,7 @@ export function createGitFollower(deps: {
       local.tip,
       ...(local.indexCommit === null ? [] : [local.indexCommit]),
     ];
-    const { present } = SyncHasCommitsResultSchema.parse(
+    const { present } = decodeHasCommitsResult(
       await peerSync.hasCommits({
         projectId: session.projectId,
         commits: probe,

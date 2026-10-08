@@ -706,13 +706,13 @@ function hostHandlersFor(
     }: {
       session: string;
       ignoreMode: MirrorSession["ignoreMode"];
-      ignores: string[];
+      ignores: readonly string[];
     }) => {
       const entry = findFakeSession(session);
       if (entry === undefined) throw new Error("[fake-host] no such mirror");
       entry.session = `sync_${fakeSessionSerial++}`;
       entry.ignoreMode = ignoreMode;
-      entry.ignores = ignores;
+      entry.ignores = [...ignores];
       entry.createdAt = Date.now();
       entry.successfulCycles = 0;
       noteMirrorEvent(
@@ -1014,7 +1014,7 @@ async function fakeMirrorStartTo(
     worktreeId: string;
     runSetup?: boolean;
     ignoreMode: MirrorSession["ignoreMode"];
-    ignores: string[];
+    ignores: readonly string[];
   },
 ) {
   const target = forests[input.targetDeviceId];
@@ -1052,7 +1052,7 @@ async function fakeMirrorStartTo(
     worktreeId: landed.worktree.id,
     remoteRoot: landed.worktree.path,
     paused: false,
-    ignores: input.ignores,
+    ignores: [...input.ignores],
     ignoreMode: input.ignoreMode,
     createdAt: Date.now(),
     status: "connecting-remote",

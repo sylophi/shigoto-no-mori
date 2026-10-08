@@ -16,7 +16,6 @@ import {
   type UseMutationResult,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { z } from "zod";
 import type { MirrorStartToPayload } from "@shared/ipc/modules/mirror";
 import type {
   SyncCloneInto,
@@ -106,7 +105,7 @@ type Landed = Pick<SyncPullWorktreeResult, "worktree" | "cloned">;
 
 // A pull as the mutation hands it over: the source named in the peer's
 // terms, the dialog's choice riding along.
-export type PullPayload = z.infer<typeof SyncPullWorktreePayloadSchema> &
+export type PullPayload = typeof SyncPullWorktreePayloadSchema.Type &
   LandingChoice;
 
 // The move's mutation, with its cancel beside it: asked of the device
