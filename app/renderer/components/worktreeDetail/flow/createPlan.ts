@@ -65,7 +65,7 @@ function useProvisionsPorts(localProject: Project | undefined): boolean {
   return active === true;
 }
 
-type CreatePlan = {
+export type CreatePlan = {
   carryOverCount: number;
   // "" when the project has no setup script.
   setupCommand: string;

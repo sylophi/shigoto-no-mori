@@ -83,7 +83,7 @@ type ConflictNames = { runner: string; copy: string };
 
 // The conflict chip itself: the same shape as the read-only status
 // chips in MirrorPill, as a button, because there is a list behind it.
-export function MirrorConflictsChip({
+export function MirrorConflictsChipView({
   session,
   tone,
   label,

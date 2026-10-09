@@ -7,43 +7,21 @@
 // on top: a mutation that failed because the user cancelled it is the
 // cancelled stage, not a failure.
 import { useState, type ReactNode } from "react";
-import { Ban, Check, Loader2, X, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { isMoveCancelledError } from "@shigomori/contracts/modules/sync";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { TONE_PILL } from "@/components/ui/status-dot";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useLandingTarget } from "./cloneDestination";
-import { FlowHeaderView, StepRailView } from "./FlowChromeView";
 import { usePullChoice } from "./ignoreChoice";
-import { PullProgress, type PullProgressProps } from "./PullProgress";
-import type { DestinationPick } from "./PullReview";
-import { type Landing, useClock } from "./pullSteps";
-
-export type FlowStage = "review" | "running" | "failed" | "cancelled" | "done";
-
-const STAGE_STEP: Record<FlowStage, number> = {
-  review: 0,
-  running: 1,
-  failed: 1,
-  cancelled: 1,
-  done: 2,
-};
-
-// The tints are the flow's, so the two dialogs read as one family. A
-// dialog brings its own review icon and its five titles.
-const STAGE_LOOK: Record<
-  Exclude<FlowStage, "review">,
-  { tint: string; icon: LucideIcon; spin: boolean }
-> = {
-  running: { tint: TONE_PILL.sky, icon: Loader2, spin: true },
-  failed: { tint: TONE_PILL.rose, icon: X, spin: false },
-  cancelled: { tint: TONE_PILL.amber, icon: Ban, spin: false },
-  done: { tint: TONE_PILL.emerald, icon: Check, spin: false },
-};
+import { PullFlowFrameView, stageStep } from "./PullFlowFrameView";
+import { PullProgress } from "./PullProgress";
+import type { PullProgressProps } from "./PullProgressView";
+import type { DestinationPick } from "./PullReviewView";
+import { type FlowStage, type Landing, useClock } from "./pullSteps";
 
 type Landed = { worktree: { projectId: string; id: string } };
 
@@ -202,14 +180,6 @@ export function PullFlowFrame({
   children: ReactNode;
 }) {
   const { stage, elapsed, progress, target } = flow;
-  const look =
-    stage === "review"
-      ? {
-          tint: "bg-accent text-accent-foreground",
-          icon: reviewIcon,
-          spin: false,
-        }
-      : STAGE_LOOK[stage];
   const running = stage === "running";
   return (
     <ModalShell
@@ -221,45 +191,37 @@ export function PullFlowFrame({
       closeOnEscape={!running}
       popoverClassName="max-w-4xl"
     >
-      <FlowHeaderView
-        tint={look.tint}
-        icon={look.icon}
-        spin={look.spin}
+      <PullFlowFrameView
+        stage={stage}
+        reviewIcon={reviewIcon}
         title={`${titles[stage]}${running ? ` to ${thisDeviceLabel}` : ""}`}
-        elapsed={
-          stage === "review"
-            ? undefined
-            : { ms: elapsed, label: running ? "elapsed" : "total" }
-        }
+        elapsed={elapsed}
+        headline={headline}
+        steps={steps}
+        stepsLabel={stepsLabel}
         onClose={onClose}
       >
-        {headline}
-      </FlowHeaderView>
-      <StepRailView
-        current={STAGE_STEP[stage]}
-        steps={steps}
-        label={stepsLabel}
-      />
-      {children}
-      {STAGE_STEP[stage] === 1 && target && (
-        <PullProgress
-          frame={progress.frame}
-          phasesSeen={progress.phasesSeen}
-          sourceDeviceLabel={sourceDeviceLabel}
-          thisDeviceLabel={thisDeviceLabel}
-          worktree={worktree}
-          target={target}
-          runSetup={flow.pull.runSetup}
-          landing={landing}
-          error={stage === "failed" ? flow.error : undefined}
-          cancelled={stage === "cancelled"}
-          cancelling={flow.cancelling}
-          onCancel={flow.cancel}
-          onClose={onClose}
-          onRetry={flow.start}
-          {...progressExtras}
-        />
-      )}
+        {children}
+        {stageStep(stage) === 1 && target && (
+          <PullProgress
+            frame={progress.frame}
+            phasesSeen={progress.phasesSeen}
+            sourceDeviceLabel={sourceDeviceLabel}
+            thisDeviceLabel={thisDeviceLabel}
+            worktree={worktree}
+            target={target}
+            runSetup={flow.pull.runSetup}
+            landing={landing}
+            error={stage === "failed" ? flow.error : undefined}
+            cancelled={stage === "cancelled"}
+            cancelling={flow.cancelling}
+            onCancel={flow.cancel}
+            onClose={onClose}
+            onRetry={flow.start}
+            {...progressExtras}
+          />
+        )}
+      </PullFlowFrameView>
     </ModalShell>
   );
 }
