@@ -3,7 +3,6 @@ import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
   useCommitChanges,
@@ -87,7 +86,6 @@ function ChangesView({
   amendRequested: boolean;
   setAmending: (on: boolean) => void;
 }) {
-  const nav = useWorktreeNav();
   const { canCommand } = useCommandAccess();
   const { projectId, id: worktreeId } = worktree;
   const { data: files, error: statusError } = useWorktreeChanges(
@@ -159,8 +157,6 @@ function ChangesView({
   const onCommit = () => {
     const list = files ?? [];
     const included = includedFiles(list).length;
-    // Nothing ticked means all of it (see CommitComposer).
-    const count = included > 0 ? included : list.length;
     const wasAmend = amending;
     commit.mutate(
       {
@@ -172,21 +168,10 @@ function ChangesView({
         amend: wasAmend,
       },
       {
-        onSuccess: ({ hash }) => {
+        onSuccess: () => {
           resetAmendDraft();
           setDraft(EMPTY_DRAFT);
           if (wasAmend) setAmending(false);
-          say(
-            worktree,
-            wasAmend ? `Amended into ${hash}` : `Committed ${hash}`,
-            {
-              description: `${pluralize(count, "file")} to ${worktree.branch}`,
-              action: {
-                label: "View",
-                onClick: () => nav.toCommit(projectId, worktreeId, hash),
-              },
-            },
-          );
         },
       },
     );
