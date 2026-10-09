@@ -196,10 +196,14 @@ function withoutOpenState(child: TooltipChild) {
     cloneElement(child, { ...mergeProps(props, child.props), ref: props.ref });
 }
 
-// Whether the trigger, or anything in it, is cut off.
+// Whether the trigger, or anything in it, is cut off. Only a box that
+// clips can cut anything off: content spilling out of one that doesn't
+// (a rotated icon's corners) is still on screen.
 function overflows(trigger: Element | undefined): boolean {
   if (!trigger) return false;
-  return [trigger, ...trigger.querySelectorAll("*")].some(isTruncated);
+  return [trigger, ...trigger.querySelectorAll("*")].some(
+    (el) => getComputedStyle(el).overflow !== "visible" && isTruncated(el),
+  );
 }
 
 export type { WithoutTitle };
