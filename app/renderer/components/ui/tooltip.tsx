@@ -16,30 +16,19 @@ import { isTruncated } from "@/hooks/ui/useIsTruncated";
 
 import { cn } from "@/lib/utils";
 
-// 500ms before the first tooltip shows; once one is open, moving to a
-// neighboring trigger shows its tooltip immediately (Base UI provider
-// grouping), matching native-menu feel.
-function TooltipProvider({
-  delay = 500,
-  ...props
-}: TooltipPrimitive.Provider.Props) {
-  return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delay={delay}
-      {...props}
-    />
-  );
-}
-
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
 // No data-slot: it would replace the wrapped element's own (see
-// DropdownMenuTrigger).
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger {...props} />;
+// DropdownMenuTrigger). 500ms before each tooltip shows. There is no
+// Tooltip.Provider: its grouping opens the next tooltip at once, so
+// sweeping the pointer past one hint pops up every hint it crosses.
+function TooltipTrigger({
+  delay = 500,
+  ...props
+}: TooltipPrimitive.Trigger.Props) {
+  return <TooltipPrimitive.Trigger delay={delay} {...props} />;
 }
 
 function TooltipContent({
@@ -207,10 +196,4 @@ function overflows(trigger: Element | undefined): boolean {
 }
 
 export type { WithoutTitle };
-export {
-  SimpleTooltip,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider,
-};
+export { SimpleTooltip, Tooltip, TooltipTrigger, TooltipContent };
