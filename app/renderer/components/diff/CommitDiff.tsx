@@ -45,16 +45,15 @@ export function CommitDiff() {
       onBack={goBack}
       worktree={worktree}
       title={commit?.subject ?? "Commit"}
+      // A known commit's hash ends its details' row of buttons.
       subtitle={
-        <>
+        commit ? (
+          <>
+            By {commit.author}, <RelativeDate date={commit.date} />
+          </>
+        ) : (
           <span className="font-mono">{hash}</span>
-          {commit && (
-            <>
-              {" by "}
-              {commit.author}, <RelativeDate date={commit.date} />
-            </>
-          )}
-        </>
+        )
       }
       details={
         commit && (
