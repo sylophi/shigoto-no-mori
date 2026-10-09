@@ -5,15 +5,20 @@
 // so there is no account check on the forwarding path because there
 // is nothing to check against.
 //
+// The Worker calls the object's methods directly (mintTicket, online,
+// revoke). Its fetch takes one request only, the websocket upgrade the
+// Worker forwards for GET /connect, since an upgrade cannot ride a
+// method call.
+//
 // Sockets use the WebSocket Hibernation API: the deviceId rides as
 // the accept tag, which survives hibernation, so the message and
 // close handlers still know the device after the object was evicted
 // from memory.
-//
-// The worker reaches this object over stub fetches on /internal/*
-// paths. Those paths are unreachable from the public internet, the
-// worker only ever forwards /internal/connect (for GET /connect) and
-// calls the others itself.
+import * as SqliteClient from "@effect/sql-sqlite-do/SqliteClient";
+import { DurableObject } from "cloudflare:workers";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,
@@ -25,271 +30,127 @@ import {
   HUB_PONG,
   hubTextWithinLimit,
 } from "@shigomori/contracts/hubProtocol";
-import type { Env } from "./env.ts";
-import { deleteDevice, getDeviceById, touchLastSeen } from "./db.ts";
-import { randomBase64url } from "./crypto.ts";
+import { type Env, WorkerEnv } from "./env.ts";
+import * as Registry from "./Registry.ts";
+import * as Tickets from "./Tickets.ts";
 
-// Worker to DO paths, bodies and responses. These never cross a trust
-// boundary (the worker is the only caller), which is why they are
-// plain interfaces and casts instead of parsed schemas.
-export const INTERNAL_TICKET_PATH = "/internal/ticket";
-export const INTERNAL_PRESENCE_PATH = "/internal/presence";
-export const INTERNAL_REVOKE_PATH = "/internal/revoke";
-export const INTERNAL_CONNECT_PATH = "/internal/connect";
+// The query parameter the Worker hands the ticket's random half in.
+export const CONNECT_RANDOM_PARAM = "random";
 
-export interface MintTicketRequest {
-  deviceId: string;
-  ttlMs: number;
-}
-export interface MintTicketResponse {
-  random: string;
-}
-export interface PresenceResponse {
-  online: string[];
-}
-export interface RevokeRequest {
-  deviceId: string;
-  // The account the worker already authorized. The D1 delete is scoped
-  // to it so a row concurrently re-enrolled under another account
-  // cannot be deleted by a stale revoke.
-  accountId: string;
-}
-interface RevokeResponse {
-  ok: true;
-}
-
-// A minted, not yet consumed ticket, stored under `ticket:<random>`.
-// Only the random half lives here, the account half of the ticket
-// string is pure routing handled by the worker.
-interface TicketRecord {
-  deviceId: string;
-  expiresAt: number;
-}
-
-const TICKET_KEY_PREFIX = "ticket:";
-
-// storage.delete accepts at most 128 keys per call, so key arrays are
-// deleted in batches of this size.
-const STORAGE_DELETE_BATCH = 128;
-
-// Upper bound on a single account's unconsumed tickets. A device that
-// mints in a loop would otherwise grow DO storage without limit. At
-// the cap the oldest ticket is evicted to make room for the new one.
-// The ticket store is per-account (one Durable Object per account), so
-// this eviction is per-account too. A device minting in a loop can
-// evict another of the SAME account's not-yet-consumed tickets. That
-// peer would then get CLOSE_TICKET_REJECTED at connect and must
-// re-mint. This never crosses an account boundary, because a different
-// account's tickets live in a different object entirely.
-const MAX_UNCONSUMED_TICKETS = 64;
-
-export class DeviceHub implements DurableObject {
-  private readonly ctx: DurableObjectState;
-  private readonly env: Env;
+export class DeviceHub extends DurableObject<Env> {
+  private readonly runtime: ManagedRuntime.ManagedRuntime<
+    Registry.Registry | Tickets.Tickets,
+    unknown
+  >;
 
   constructor(ctx: DurableObjectState, env: Env) {
-    this.ctx = ctx;
-    this.env = env;
-    // The devices' liveness pings (packages/contracts/src/hubProtocol.ts) are answered
-    // by the runtime itself, without waking a hibernated object: a
-    // device heartbeating every few seconds must not cost a request or
-    // an eviction each time, and a ping that reaches webSocketMessage
-    // would only be dropped as a malformed envelope anyway.
+    super(ctx, env);
+    // The devices' liveness pings (packages/contracts/src/hubProtocol.ts)
+    // are answered by the runtime itself, without waking a hibernated
+    // object: a device heartbeating every few seconds must not cost a
+    // request or an eviction each time.
     ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair(HUB_PING, HUB_PONG),
     );
-  }
-
-  async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    switch (`${request.method} ${url.pathname}`) {
-      case `POST ${INTERNAL_TICKET_PATH}`:
-        return await this.mintTicket(request);
-      case `GET ${INTERNAL_PRESENCE_PATH}`:
-        return Response.json({
-          online: this.onlineIds(this.ctx.getWebSockets()),
-        } satisfies PresenceResponse);
-      case `POST ${INTERNAL_REVOKE_PATH}`:
-        return await this.revoke(request);
-      case `GET ${INTERNAL_CONNECT_PATH}`:
-        return await this.handleConnect(url);
-      default:
-        return Response.json({ error: "not found" }, { status: 404 });
-    }
-  }
-
-  private async mintTicket(request: Request): Promise<Response> {
-    const body = (await request.json()) as MintTicketRequest;
-    // Unconsumed tickets are garbage after their minute of validity.
-    // Minting is the natural low-frequency moment to sweep them.
-    // Unconsumed tickets are garbage after their minute of validity.
-    // Minting is the natural low-frequency moment to sweep them, and
-    // the same scan bounds the live set: if minting would exceed the
-    // cap, the oldest by expiresAt go too, so storage stays bounded
-    // even under a device that mints in a loop.
-    const now = Date.now();
-    const live = await this.deleteTicketsWhere(
-      (record) => record.expiresAt <= now,
+    this.runtime = ManagedRuntime.make(
+      Layer.mergeAll(
+        Tickets.layer.pipe(
+          Layer.provide(SqliteClient.layer({ storage: ctx.storage })),
+        ),
+        Registry.layer,
+      ).pipe(Layer.provide(Layer.succeed(WorkerEnv, env))),
     );
-    if (live.length >= MAX_UNCONSUMED_TICKETS) {
-      const overflow = live.length - MAX_UNCONSUMED_TICKETS + 1;
-      await this.deleteKeys(
-        live
-          .toSorted(([, a], [, b]) => a.expiresAt - b.expiresAt)
-          .slice(0, overflow)
-          .map(([key]) => key),
-      );
-    }
-    const random = randomBase64url(16);
-    const record: TicketRecord = {
-      deviceId: body.deviceId,
-      expiresAt: now + body.ttlMs,
-    };
-    await this.ctx.storage.put(TICKET_KEY_PREFIX + random, record);
-    return Response.json({ random } satisfies MintTicketResponse);
+    // The ticket table's migration runs before the object takes any
+    // call.
+    void ctx.blockConcurrencyWhile(() => this.runtime.runPromise(Effect.void));
   }
 
-  // Deletes the keys in batches, because storage.delete accepts at most
-  // STORAGE_DELETE_BATCH keys per call. The batches touch disjoint keys
-  // so they run concurrently.
-  private async deleteKeys(keys: string[]): Promise<void> {
-    const batches: Promise<unknown>[] = [];
-    for (let i = 0; i < keys.length; i += STORAGE_DELETE_BATCH) {
-      batches.push(
-        this.ctx.storage.delete(keys.slice(i, i + STORAGE_DELETE_BATCH)),
-      );
-    }
-    await Promise.all(batches);
+  async mintTicket(deviceId: string, ttlMs: number): Promise<string> {
+    return await this.runtime.runPromise(
+      Effect.flatMap(Tickets.Tickets, (tickets) =>
+        tickets.mint(deviceId, ttlMs),
+      ),
+    );
   }
 
-  // Lists the account's tickets once, deletes every record the match
-  // selects (chunked by deleteKeys) and returns the survivors. Both the
-  // mint-time expiry sweep and the revoke purge go through here, so
-  // the list-filter-chunk logic lives in exactly one place.
-  private async deleteTicketsWhere(
-    match: (record: TicketRecord) => boolean,
-  ): Promise<[string, TicketRecord][]> {
-    const stored = await this.ctx.storage.list<TicketRecord>({
-      prefix: TICKET_KEY_PREFIX,
-    });
-    const doomed: string[] = [];
-    const kept: [string, TicketRecord][] = [];
-    for (const entry of stored) {
-      if (match(entry[1])) doomed.push(entry[0]);
-      else kept.push(entry);
-    }
-    await this.deleteKeys(doomed);
-    return kept;
+  online(): string[] {
+    return this.onlineIds(this.ctx.getWebSockets());
   }
 
   // Revocation is one operation owned by this object: the D1 row, the
-  // device's live sockets AND its unconsumed tickets all die together.
-  // Ordering is security-critical. The credential kill (the D1 row
-  // delete) is awaited FIRST. If it throws we report failure without
-  // having claimed success and without force-closing sockets, so a
-  // failed delete never leaves a "revoked" device that reconnects with
-  // a still-valid credential while the user was told it failed. Only
-  // after the row is gone do we purge tickets (a pre-minted ticket must
-  // not let a revoked device reconnect within the TTL), close the live
-  // sockets and rebroadcast presence.
-  private async revoke(request: Request): Promise<Response> {
-    const body = (await request.json()) as RevokeRequest;
-    const revokedId = body.deviceId;
-    try {
-      await deleteDevice(this.env.DB, revokedId, body.accountId);
-    } catch {
-      return new Response(null, { status: 500 });
-    }
-    await this.deleteTicketsWhere((record) => record.deviceId === revokedId);
-    const closing = this.ctx.getWebSockets(revokedId);
+  // device's live sockets and its unconsumed tickets go together. The
+  // credential kill (the row delete) comes first, and a failure rejects
+  // before anything else happens, so a failed delete never leaves a
+  // "revoked" device that reconnects with a still-valid credential while
+  // the user was told it failed. Only after the row is gone are the
+  // tickets dropped (a pre-minted ticket must not let a revoked device
+  // back in within its TTL) and the sockets closed.
+  async revoke(deviceId: string, accountId: string): Promise<void> {
+    await this.runtime.runPromise(
+      Effect.gen(function* () {
+        const registry = yield* Registry.Registry;
+        const tickets = yield* Tickets.Tickets;
+        yield* registry.remove(deviceId, accountId);
+        yield* tickets.dropDevice(deviceId);
+      }),
+    );
+    const closing = this.ctx.getWebSockets(deviceId);
     if (closing.length > 0) {
       this.closeAndAnnounce(closing, CLOSE_DEVICE_REVOKED, "device revoked");
     }
-    // A JSON body, not a bare 204, so the worker's callObject helper can
-    // parse every internal response the same way.
-    return Response.json({ ok: true } satisfies RevokeResponse);
   }
 
-  // Named handleConnect because the DurableObject interface reserves
-  // `connect` for the TCP socket handler. The whole body is wrapped so
-  // ANY throw (storage, acceptWebSocket, D1) becomes a rejected socket,
-  // never a rejected fetch that would surface to the client as a 500.
-  // The client must always see CLOSE_TICKET_REJECTED. The worker only
-  // forwards tickets it signed itself (src/ticket.ts), so a caller
-  // cannot instantiate an object by forging the account half: what
-  // reaches here unknown is a real ticket that expired, was replayed
-  // or was purged by a revoke.
-  private async handleConnect(url: URL): Promise<Response> {
-    try {
-      const random = url.searchParams.get("random");
-      if (random === null) return this.rejectSocket();
-      const key = TICKET_KEY_PREFIX + random;
-      const record = await this.ctx.storage.get<TicketRecord>(key);
-      // Single use: the ticket is burned before any validity verdict,
-      // so a replay races nothing.
-      if (!record) return this.rejectSocket();
-      if (record.expiresAt <= Date.now()) {
-        await this.ctx.storage.delete(key);
-        return this.rejectSocket();
-      }
-      // The burn and the D1 re-check below are independent: the delete
-      // is issued before any accept either way.
-      const [, device] = await Promise.all([
-        this.ctx.storage.delete(key),
-        getDeviceById(this.env.DB, record.deviceId),
-      ]);
-      // Re-verify the device still exists in D1 before accepting the
-      // socket. This closes the race where a mint runs concurrently
-      // with a revoke. mintTicket authorizes the device with a D1 read
-      // on the worker and only later writes the ticket record into this
-      // object, so a ticket-put can land after revoke has already purged
-      // this device's tickets. revoke deletes the D1 row first, so any
-      // connect whose re-check runs after that delete is refused here,
-      // and any socket that connected before the delete is caught by
-      // revoke's socket-close. This read is once per connection, not a
-      // hot path, so the cost is fine. A missing row is treated exactly
-      // like an invalid ticket.
-      if (device === null) return this.rejectSocket();
-      // There is deliberately NO hard admission cap against
-      // MAX_ONLINE_DEVICES here: getWebSockets can still list sockets
-      // that just closed or are closing (see announcePresence), so a
-      // count-based refusal would burn a legitimate device's ticket
-      // for a slot that is actually free. At one-user scale the
-      // MAX_ONLINE_DEVICES bound stays real as the client's presence
-      // schema cap plus the arithmetic proof that a full roster
-      // envelope fits the message cap (hub/test/hub.spec.ts), and
-      // a correct stale-tolerant admission gate would cost more than
-      // that bound is worth.
-      // A newer socket for the same deviceId supersedes the old one, so
-      // a reconnecting device never fights its own half-dead socket.
-      const superseded = this.ctx.getWebSockets(record.deviceId);
-      const pair = new WebSocketPair();
-      this.ctx.acceptWebSocket(pair[1], [record.deviceId]);
-      // Full presence to everyone, including the fresh socket: joining
-      // devices learn the room, present devices learn about the join.
-      // The broadcast happens before the D1 write so a D1 round trip
-      // never gates what other devices see.
-      this.closeAndAnnounce(
-        superseded,
-        CLOSE_SUPERSEDED,
-        "superseded by a newer connection",
-      );
-      // last_seen_at is bookkeeping nothing in the handshake depends
-      // on, so it runs off the critical path and never gates the 101.
-      void touchLastSeen(this.env.DB, record.deviceId, Date.now()).catch(
-        () => {},
-      );
-      return new Response(null, { status: 101, webSocket: pair[0] });
-    } catch {
-      return this.rejectSocket();
+  // The upgrade for GET /connect. Every verdict is an accepted socket:
+  // a refused one closes at once with the ticket code, which a browser's
+  // websocket shows where it hides an HTTP status. The Worker only
+  // forwards tickets it signed itself (src/ticket.ts), so what reaches
+  // here unknown is a real ticket that expired, was replayed or was
+  // dropped by a revoke.
+  override async fetch(request: Request): Promise<Response> {
+    const random = new URL(request.url).searchParams.get(CONNECT_RANDOM_PARAM);
+    const admitted =
+      random === null
+        ? null
+        : await this.runtime.runPromise(
+            Effect.gen(function* () {
+              const tickets = yield* Tickets.Tickets;
+              const registry = yield* Registry.Registry;
+              const deviceId = yield* tickets.take(random);
+              if (deviceId === null) return null;
+              // The device must still be enrolled. A mint racing a
+              // revoke can store its ticket after the revoke dropped
+              // the device's tickets, and the row delete comes first,
+              // so this read catches what the drop missed.
+              const device = yield* registry.byId(deviceId);
+              return device === null ? null : deviceId;
+            }).pipe(Effect.orElseSucceed(() => null)),
+          );
+    if (admitted === null) {
+      return this.refuseSocket(CLOSE_TICKET_REJECTED, "ticket rejected");
     }
+    // There is deliberately NO admission cap against MAX_ONLINE_DEVICES:
+    // getWebSockets can still list sockets that just closed, so a
+    // count-based refusal would burn a legitimate device's ticket for a
+    // slot that is actually free. The bound holds as the client's
+    // presence schema cap and the proof that a full roster fits the
+    // message cap (hub/test/hub.spec.ts).
+    //
+    // A newer socket for the same device supersedes the old one, so a
+    // reconnecting device never fights its own half-dead socket.
+    const superseded = this.ctx.getWebSockets(admitted);
+    const pair = new WebSocketPair();
+    this.ctx.acceptWebSocket(pair[1], [admitted]);
+    // Full presence to everyone, including the fresh socket: joining
+    // devices learn the room, present devices learn about the join.
+    this.closeAndAnnounce(
+      superseded,
+      CLOSE_SUPERSEDED,
+      "superseded by a newer connection",
+    );
+    this.touchLastSeen(admitted);
+    return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  // The chosen refusal behavior for every admission verdict: complete
-  // the upgrade, then close immediately with the typed code. A
-  // websocket client sees a real close code this way, which an HTTP
-  // status before the upgrade would hide from the browser websocket
-  // API.
   private refuseSocket(code: number, reason: string): Response {
     const pair = new WebSocketPair();
     pair[1].accept();
@@ -297,19 +158,10 @@ export class DeviceHub implements DurableObject {
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  // Unknown, expired and replayed tickets all get the one ticket code.
-  private rejectSocket(): Response {
-    return this.refuseSocket(CLOSE_TICKET_REJECTED, "ticket rejected");
-  }
-
-  async webSocketMessage(
-    ws: WebSocket,
-    message: string | ArrayBuffer,
-  ): Promise<void> {
+  override webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
     // The protocol is JSON text. Binary frames are not part of it.
     if (typeof message !== "string") return;
-    // Malformed envelopes are dropped, never fatal, mirroring
-    // decodeFrame's philosophy on the direct socket: one bad message must
+    // Malformed envelopes are dropped, never fatal: one bad message must
     // not tear down a socket carrying live traffic.
     const envelope = decodeEnvelope(message, DeviceEnvelopeSchema);
     if (!envelope) return;
@@ -340,35 +192,38 @@ export class DeviceHub implements DurableObject {
     for (const target of targets) this.safeSend(target, outbound);
   }
 
-  // Client-initiated close. Runs the departure path for EVERY code,
-  // including the two the server also uses (revoked, superseded): the
-  // code here is the CLIENT's frame, so a client closing with one of
-  // those codes for its own reasons must not stay ghost-online in every
-  // peer's roster. Re-running after a server-initiated close is
-  // harmless anyway: presence is a full-roster rebroadcast and
-  // touchLastSeen on a deleted row updates nothing.
-  webSocketClose(ws: WebSocket): void {
+  // Runs the departure path for every close code, the two the server
+  // uses included: the code here is the client's, so a client closing
+  // with one of them for its own reasons must not stay online in every
+  // roster. Presence is a full list, so running after a server close
+  // too is harmless.
+  override webSocketClose(ws: WebSocket) {
     this.handleDeparture(ws);
   }
 
-  // The hibernation runtime calls webSocketError, not webSocketClose,
-  // on an abnormal termination (force-quit, dropped network). Without
-  // this handler presence is never rebroadcast and peers see a ghost
-  // device online forever, so it runs the same departure path.
-  webSocketError(ws: WebSocket): void {
+  // The hibernation runtime calls this, not webSocketClose, on an
+  // abnormal termination (force-quit, dropped network). Without it
+  // peers would see the device online forever.
+  override webSocketError(ws: WebSocket) {
     this.handleDeparture(ws);
   }
 
-  // The shared departure path for a socket that left on its own or
-  // died abnormally. Presence goes out before the D1 write so a D1
-  // round trip never gates what other devices see, and last_seen_at is
-  // best-effort off the critical path.
   private handleDeparture(ws: WebSocket): void {
     const deviceId = this.deviceIdOf(ws);
     this.announcePresence(new Set([ws]));
-    if (deviceId !== undefined) {
-      void touchLastSeen(this.env.DB, deviceId, Date.now()).catch(() => {});
-    }
+    if (deviceId !== undefined) this.touchLastSeen(deviceId);
+  }
+
+  // last_seen_at is bookkeeping nothing waits on, so it runs off the
+  // critical path, after what other devices see.
+  private touchLastSeen(deviceId: string): void {
+    this.runtime.runFork(
+      Effect.ignore(
+        Effect.flatMap(Registry.Registry, (registry) =>
+          registry.touchLastSeen(deviceId),
+        ),
+      ),
+    );
   }
 
   // The deviceId rides only as the accept tag, so it survives
@@ -389,8 +244,6 @@ export class DeviceHub implements DurableObject {
   // Closes the given sockets, then broadcasts the presence list
   // without them. A server-initiated close does not reliably run
   // webSocketClose, so the broadcast cannot be left to the handler.
-  // Presence is a full list, so a duplicate broadcast is harmless if
-  // the handler runs too.
   private closeAndAnnounce(
     sockets: WebSocket[],
     code: number,
@@ -400,13 +253,10 @@ export class DeviceHub implements DurableObject {
     this.announcePresence(new Set(sockets));
   }
 
-  // The membership primitive: everyone still standing gets the full
-  // roster. `exclude` is required, not optional, because it encodes the
-  // one stale-roster quirk, that getWebSockets can still list sockets
-  // that just closed or are closing right now. Callers name the corpses
-  // instead of trusting the listing, and a required parameter stops a
-  // future caller from reintroducing the stale-roster bug by omitting
-  // it. Pass an empty set when nothing is departing.
+  // Everyone still standing gets the full roster. `exclude` is
+  // required because getWebSockets can still list sockets that just
+  // closed or are closing: callers name the departing ones instead of
+  // trusting the listing.
   private announcePresence(exclude: ReadonlySet<WebSocket>): void {
     const sockets = this.ctx.getWebSockets().filter((ws) => !exclude.has(ws));
     const text = encodeEnvelope({
@@ -416,13 +266,10 @@ export class DeviceHub implements DurableObject {
     for (const ws of sockets) this.safeSend(ws, text);
   }
 
-  // Every ws.send in this object goes through here. A socket can die
-  // between listing and sending, and a dead-but-still-listed peer that
-  // throws on send must not tear down the caller's socket. On the
-  // device hub hot path an unguarded send would let a stale peer kill
-  // the sender's socket. A dropped send loses nothing durable. Presence
-  // is resent on every membership change and relayed frames are the
-  // app's retry concern.
+  // A socket can die between listing and sending, and a dead peer that
+  // throws on send must not tear down the caller's socket. A dropped
+  // send loses nothing durable: presence is resent on every change and
+  // relayed frames are the app's retry concern.
   private safeSend(ws: WebSocket, text: string): void {
     try {
       ws.send(text);

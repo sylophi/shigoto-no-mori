@@ -334,8 +334,8 @@ it('enroll: exchanges the Clerk session token for a credential with platform "we
     const url = String(input);
     requests.push({ url, init });
     if (url === `${HUB_URL}/devices/enroll`) {
-      assert(typeof init.body === "string");
-      const body = JSON.parse(init.body);
+      assert(init.body instanceof Uint8Array);
+      const body = JSON.parse(new TextDecoder().decode(init.body));
       assert.equal(body.platform, "web");
       assert.equal(body.icon, "browser");
       assert.equal(body.deviceId, deviceId);
@@ -489,7 +489,7 @@ it("refused: a hub 401 on the ticket mint (a credential it no longer honors) blo
     const url = String(input);
     if (url === `${HUB_URL}/tickets`) {
       mints += 1;
-      return jsonResponse(401, { error: "invalid device credential" });
+      return jsonResponse(401, { _tag: "HubCredentialRejectedError" });
     }
     throw new Error(`unexpected fetch in blocked check: ${url}`);
   };
@@ -503,7 +503,7 @@ it("refused: a hub 401 on the ticket mint (a credential it no longer honors) blo
   );
   const blocked = await socket();
   assert(blocked.phase === "blocked");
-  assert.match(blocked.message, /invalid device credential/);
+  assert.match(blocked.message, /no longer accepts this device's credential/);
   // Longer than the supervisor's first backoff rung: a retry loop
   // would have minted again by now.
   await delay(1_300);
@@ -513,16 +513,13 @@ it("refused: a hub 401 on the ticket mint (a credential it no longer honors) blo
   assert.equal(settled.reason, "refused");
 });
 
-it("revoked: the hub's typed device_revoked refusal on the mint blocks as REVOKED, the verdict the app signs out on, exactly as the socket close would have", async () => {
+it("revoked: the hub's typed revoked refusal on the mint blocks as REVOKED, the verdict the app signs out on, exactly as the socket close would have", async () => {
   const localStorage = memoryStorage();
   localStorage.setItem("sm.web.account", STORED_ENVELOPE);
   const fetchImpl: typeof fetch = async (input) => {
     const url = String(input);
     if (url === `${HUB_URL}/tickets`) {
-      return jsonResponse(403, {
-        error: "this device was removed from the account",
-        code: "device_revoked",
-      });
+      return jsonResponse(403, { _tag: "HubDeviceRevokedError" });
     }
     throw new Error(`unexpected fetch in revoked check: ${url}`);
   };

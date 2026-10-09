@@ -10,11 +10,9 @@ import {
 } from "cloudflare:test";
 import { expect } from "vitest";
 import {
-  CONNECT_TICKET_PARAM,
   type DeviceEnvelope,
   type EnrollResponse,
   EnrollResponseSchema,
-  HUB_ROUTES,
   type ServerEnvelope,
   ServerEnvelopeSchema,
   type TicketResponse,
@@ -65,23 +63,26 @@ export async function call(
 // from the shared route table. They make no status assertion, the
 // callers do.
 export function enrollRequest(token: string, body: unknown): Request {
-  return new Request(`${BASE}${HUB_ROUTES.enroll.path}`, {
-    method: HUB_ROUTES.enroll.method,
-    headers: { Authorization: `Bearer ${token}` },
+  return new Request(`${BASE}/devices/enroll`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(body),
   });
 }
 
 export function ticketRequest(credential: string): Request {
-  return new Request(`${BASE}${HUB_ROUTES.mintTicket.path}`, {
-    method: HUB_ROUTES.mintTicket.method,
+  return new Request(`${BASE}/tickets`, {
+    method: "POST",
     headers: { Authorization: `Bearer ${credential}` },
   });
 }
 
 export function revokeRequest(credential: string, deviceId: string): Request {
-  return new Request(`${BASE}${HUB_ROUTES.revokeDevice.path(deviceId)}`, {
-    method: HUB_ROUTES.revokeDevice.method,
+  return new Request(`${BASE}/devices/${encodeURIComponent(deviceId)}`, {
+    method: "DELETE",
     headers: { Authorization: `Bearer ${credential}` },
   });
 }
@@ -91,17 +92,23 @@ export function updateRequest(
   deviceId: string,
   body: unknown,
 ): Request {
-  return new Request(`${BASE}${HUB_ROUTES.updateDevice.path(deviceId)}`, {
-    method: HUB_ROUTES.updateDevice.method,
-    headers: { Authorization: `Bearer ${credential}` },
+  return new Request(`${BASE}/devices/${encodeURIComponent(deviceId)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${credential}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(body),
   });
 }
 
 export function provisionRequest(credential: string, port: number): Request {
-  return new Request(`${BASE}${HUB_ROUTES.provisionTunnel.path}`, {
-    method: HUB_ROUTES.provisionTunnel.method,
-    headers: { Authorization: `Bearer ${credential}` },
+  return new Request(`${BASE}/tunnel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${credential}`,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ port }),
   });
 }
@@ -245,9 +252,9 @@ export async function openSocket(
   ticket: string,
   testEnv: Env = env,
 ): Promise<TestSocket> {
-  const params = new URLSearchParams({ [CONNECT_TICKET_PARAM]: ticket });
+  const params = new URLSearchParams({ ticket: ticket });
   const response = await call(
-    new Request(`${BASE}${HUB_ROUTES.connect.path}?${params}`, {
+    new Request(`${BASE}/connect?${params}`, {
       headers: { Upgrade: "websocket" },
     }),
     testEnv,

@@ -11,7 +11,11 @@ import type {
   DeviceInfo,
   EnrollResponse,
 } from "@shigomori/contracts/hubProtocol";
-import { HubRequestError, isHubRefusal, type AccountService } from "./service";
+import {
+  HubDeviceEnrolledElsewhereError,
+  isHubRefusal,
+} from "@shigomori/contracts/hubApi";
+import type { AccountService } from "./service";
 import type { AccountStore, StoredAccount } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
 import { deriveAccountId } from "./token";
@@ -81,7 +85,7 @@ export async function enrollDevice(
     // worked. A re-enroll under the SAME account rotates the row, and
     // the parked credential is dead either way (write() drops it).
     if (
-      !(error instanceof HubRequestError && error.status === 409) ||
+      !(error instanceof HubDeviceEnrolledElsewhereError) ||
       !(await retryParkedRevoke(deps))
     ) {
       throw error;

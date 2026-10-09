@@ -1,8 +1,13 @@
-// The typed HTTP client for the hub Worker's device and ticket
-// endpoints. Pure: it takes a base URL and an injected fetch, uses the
-// shared route table and schemas from packages/contracts/src/hubProtocol.ts, and
-// imports no electron and no node builtins, so the account check script
-// can drive every method with a recording fetch stub.
+// The hub Worker's device and ticket routes, through the client derived
+// from the shared HubApi (packages/contracts/src/hubApi.ts), behind the
+// Promise face the account layer calls. Pure: it takes a base URL and
+// an injected fetch and imports no electron and no node builtins, so
+// the account proof drives every method with a recording fetch stub.
+//
+// A call rejects with the hub's refusal as its contract error
+// (HubDeviceRevokedError, HubUnknownDeviceError, ...), or with an
+// HttpClientError when the hub could not be reached or answered
+// something the API does not name (a 429, a bare 5xx).
 //
 // Auth-tier discipline lives here. enroll is the only call that carries
 // the short-lived Clerk session token proving the sign-in. listDevices,
@@ -10,91 +15,61 @@
 // enroll response returned. Mixing the two would either leak the login
 // token past its one use or try to enroll under a credential the
 // endpoint does not accept.
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import {
+  HubApi,
+  HubTunnelUnconfiguredError,
+  isHubRefusal,
+} from "@shigomori/contracts/hubApi";
 import {
   DeviceListResponseSchema,
-  EnrollRequestSchema,
-  DevicePatchRequestSchema,
   type DevicePatch,
   EnrollResponseSchema,
-  ErrorBodySchema,
-  HUB_ROUTES,
-  TicketResponseSchema,
-  TUNNEL_UNCONFIGURED_STATUS,
-  TunnelProvisionRequestSchema,
-  TunnelProvisionResponseSchema,
   type DeviceInfo,
-  DEVICE_REVOKED_CODE,
   type EnrollResponse,
   type TicketResponse,
   type TunnelProvisionResponse,
 } from "@shigomori/contracts/hubProtocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
-// A hub call answered non-2xx. Carries the HTTP status so callers that
-// classify outcomes (the tunnel provision path) can read it off the
-// error instead of re-fetching. The message is still the device hub's
-// own `{ error }` body when one parsed, so existing message matchers
-// keep working.
-export class HubRequestError extends Error {
-  readonly status: number;
-  // The hub's typed refusal code when it sent one (protocol.ts
-  // ErrorBodySchema), undefined otherwise.
-  readonly code: string | undefined;
-  constructor(message: string, status: number, code?: string) {
-    super(message);
-    this.name = "HubRequestError";
-    this.status = status;
-    this.code = code;
-  }
-}
-
-// The device hub said this device's credential was REVOKED: the
-// device was removed from the account. The one refusal the app acts
-// on by signing out (a plain refusal is not a verdict on the account
-// and only parks the caller), so it is matched on the typed code, not
-// on the status.
-export function isDeviceRevoked(error: unknown): boolean {
-  return error instanceof HubRequestError && error.code === DEVICE_REVOKED_CODE;
-}
-
-// True when the device hub refused the call outright: 401 for a
-// credential it no longer honors (revoked, rotated away), 403 for a
-// request it will not serve. Keyed on the status rather than the
-// message text: the refusal is terminal until the account changes
-// whatever the worker's wording, and retrying cannot turn it into a
-// success. A response the platform cannot read at all (an opaque fetch
-// TypeError) is NOT a refusal and keeps the honest backoff.
-export function isHubRefusal(error: unknown): boolean {
+// The hub could not be reached at all: offline, a DNS or TLS failure,
+// or a browser hiding a failed response behind CORS.
+export function isHubUnreachable(error: unknown): boolean {
   return (
-    error instanceof HubRequestError &&
-    (error.status === 401 || error.status === 403)
+    HttpClientError.isHttpClientError(error) &&
+    error.reason instanceof HttpClientError.TransportError
   );
 }
 
-// The Worker answered the typed "tunnel provisioning is not
-// configured" status. A deployment fact, not a failure: the caller
-// (the cloudflared runner) reads it as "tunnels off, do not retry"
-// rather than backing off into a loop that can never succeed.
-export class TunnelUnconfiguredError extends Error {
-  constructor() {
-    super("tunnel provisioning is not configured on the device hub");
-    this.name = "TunnelUnconfiguredError";
+// The Worker refused this device's provision outright: a refusal of its
+// credential, or a request it will not serve (an older Worker with no
+// tunnel route). Terminal until the runner's inputs change (the next
+// reconcile trigger): a timed retry re-presents the same refused
+// request, so the runner parks instead of retrying on a schedule.
+export class TunnelProvisionDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TunnelProvisionDeniedError";
   }
 }
 
-// The Worker refused this device's provision outright: a 401 from a
-// revoked credential, a 404 from an older Worker deploy with no tunnel
-// route. Terminal until the runner's inputs change (the next reconcile
-// trigger): a timed retry re-presents the same refused request, so the
-// runner parks instead of retrying on a schedule.
-export class TunnelProvisionDeniedError extends Error {
-  readonly status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "TunnelProvisionDeniedError";
-    this.status = status;
+// A status the API names no error for, from a client error that is not
+// the rate limiter's: the same request will be refused again.
+function isRefusedStatus(error: unknown): boolean {
+  if (
+    !HttpClientError.isHttpClientError(error) ||
+    !("response" in error.reason)
+  ) {
+    return false;
   }
+  const status = error.reason.response.status;
+  return status >= 400 && status < 500 && status !== 429;
 }
 
 type AccountServiceDeps = {
@@ -126,16 +101,15 @@ export type AccountService = {
     deviceId: string,
     patch: DevicePatch,
   ): Promise<void>;
-  // signal aborts the mint fetch on stop or on the caller's mint
-  // timeout, so a black-holed route cannot hang the connect (C6).
+  // signal aborts the mint on stop or on the caller's mint timeout, so
+  // a black-holed route cannot hang the connect.
   mintTicket(credential: string, signal?: AbortSignal): Promise<TicketResponse>;
   // Provision (or re-point) this device's named tunnel to front the
-  // given loopback port. Throws
-  // TunnelUnconfiguredError when the Worker has no tunnel env and
-  // TunnelProvisionDeniedError on any other 4xx (both terminal for the
-  // runner, in different ways). The returned connectorToken is a
-  // bearer secret: callers keep it in memory, pass it to cloudflared
-  // via env, and never log it.
+  // given loopback port. Rejects with HubTunnelUnconfiguredError when
+  // the Worker has no tunnel env and TunnelProvisionDeniedError when it
+  // refuses (both terminal for the runner, in different ways). The
+  // returned connectorToken is a bearer secret: callers keep it in
+  // memory, pass it to cloudflared via env, and never log it.
   provisionTunnel(
     credential: string,
     port: number,
@@ -143,155 +117,86 @@ export type AccountService = {
   ): Promise<TunnelProvisionResponse>;
 };
 
-// Turns a non-2xx response into a thrown HubRequestError carrying the
-// hub's own `{ error }` message when the body parses, else the status
-// code. The one place a failed hub call becomes an exception.
-async function fail(response: Response): Promise<never> {
-  let message = `hub request failed with status ${response.status}`;
-  let code: string | undefined;
-  try {
-    const body: unknown = await response.json();
-    if (Schema.is(ErrorBodySchema)(body)) {
-      message = body.error;
-      code = body.code;
-    }
-  } catch {
-    // Non-JSON or unreadable body. The status-code message stands.
-  }
-  throw new HubRequestError(message, response.status, code);
-}
+type HubClient = HttpApiClient.ForApi<typeof HubApi>;
 
 export function createAccountService(deps: AccountServiceDeps): AccountService {
-  const doFetch = deps.fetchImpl ?? fetch;
+  const baseUrl = deps.baseUrl.replace(/\/+$/, "");
+  const fetchImpl = deps.fetchImpl ?? fetch;
 
-  // Joins a hub path onto the base URL. new URL keeps a base with a
-  // path prefix intact by making the route absolute-rooted.
-  const urlFor = (path: string): string => {
-    const base = deps.baseUrl.endsWith("/")
-      ? deps.baseUrl.slice(0, -1)
-      : deps.baseUrl;
-    return `${base}${path}`;
-  };
-
-  // The one bearer-header/ok-check/parse dance every route shares:
-  // fetch under the given bearer (the Clerk session token for enroll,
-  // the device credential for everything else), throw the typed failure on
-  // non-2xx, and hand back the parsed JSON body (undefined for the
-  // 204s, which have no body to parse).
-  const credentialed = async (
-    route: { method: string },
-    path: string,
+  // One call under one bearer: the Clerk session token for enroll, the
+  // device credential for everything else.
+  const call = <A, E>(
     bearer: string,
-    init: { body?: unknown; signal?: AbortSignal } = {},
-  ): Promise<unknown> => {
-    const response = await doFetch(urlFor(path), {
-      method: route.method,
-      headers: {
-        authorization: `Bearer ${bearer}`,
-        ...(init.body === undefined
-          ? {}
-          : { "content-type": "application/json" }),
-      },
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      signal: init.signal,
-    });
-    if (!response.ok) return fail(response);
-    return response.status === 204 ? undefined : response.json();
-  };
+    run: (client: HubClient) => Effect.Effect<A, E>,
+    signal?: AbortSignal,
+  ): Promise<A> =>
+    Effect.runPromise(
+      Effect.flatMap(
+        HttpApiClient.make(HubApi, {
+          baseUrl,
+          transformClient: HttpClient.mapRequest(
+            HttpClientRequest.bearerToken(bearer),
+          ),
+        }),
+        run,
+      ).pipe(
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.Fetch, fetchImpl),
+      ),
+      { signal },
+    );
 
   return {
     async enroll(sessionToken, fields) {
-      // Validate the body before sending so a bad deviceId/name/platform
-      // fails here with a clear schema error, not as a hub 400.
-      const body = Schema.decodeUnknownSync(EnrollRequestSchema)(fields);
-      return Schema.decodeUnknownSync(EnrollResponseSchema)(
-        await credentialed(
-          HUB_ROUTES.enroll,
-          HUB_ROUTES.enroll.path,
-          sessionToken,
-          { body },
+      // The device as the hub stored it, mapped to this build's icon
+      // catalog.
+      return Schema.decodeSync(EnrollResponseSchema)(
+        await call(sessionToken, (client) =>
+          client.enroll({ payload: fields }),
         ),
       );
     },
 
     async listDevices(credential) {
-      const { devices } = Schema.decodeUnknownSync(DeviceListResponseSchema)(
-        await credentialed(
-          HUB_ROUTES.listDevices,
-          HUB_ROUTES.listDevices.path,
-          credential,
-        ),
+      const { devices } = Schema.decodeSync(DeviceListResponseSchema)(
+        await call(credential, (client) => client.listDevices()),
       );
       return [...devices];
     },
 
     async revoke(credential, deviceId, signal) {
-      // The device hub answers a successful revoke with 204 No Content.
-      // Any other non-2xx is a real failure.
-      await credentialed(
-        HUB_ROUTES.revokeDevice,
-        HUB_ROUTES.revokeDevice.path(deviceId),
+      await call(
         credential,
-        { signal },
+        (client) => client.revokeDevice({ params: { deviceId } }),
+        signal,
       );
     },
 
     async update(credential, deviceId, patch) {
-      const body = Schema.decodeUnknownSync(DevicePatchRequestSchema)(patch);
-      // 204 No Content on success, like revoke.
-      await credentialed(
-        HUB_ROUTES.updateDevice,
-        HUB_ROUTES.updateDevice.path(deviceId),
-        credential,
-        { body },
+      await call(credential, (client) =>
+        client.updateDevice({ params: { deviceId }, payload: patch }),
       );
     },
 
     async mintTicket(credential, signal) {
-      return Schema.decodeUnknownSync(TicketResponseSchema)(
-        await credentialed(
-          HUB_ROUTES.mintTicket,
-          HUB_ROUTES.mintTicket.path,
-          credential,
-          { signal },
-        ),
-      );
+      return await call(credential, (client) => client.mintTicket(), signal);
     },
 
     async provisionTunnel(credential, port, signal) {
-      // Validate before sending, like enroll, so a bad port fails here
-      // with a clear schema error instead of a hub 400.
-      const body = Schema.decodeUnknownSync(TunnelProvisionRequestSchema)({
-        port,
-      });
       try {
-        return Schema.decodeUnknownSync(TunnelProvisionResponseSchema)(
-          await credentialed(
-            HUB_ROUTES.provisionTunnel,
-            HUB_ROUTES.provisionTunnel.path,
-            credential,
-            { body, signal },
-          ),
+        return await call(
+          credential,
+          (client) => client.provisionTunnel({ payload: { port } }),
+          signal,
         );
       } catch (error) {
-        // The provision-specific failure classes, layered on the
-        // shared dance: 501 is the Worker's typed "no tunnel env",
-        // any other 4xx is a refusal that a timed retry cannot change
-        // (revoked credential, older Worker deploy). The one 4xx a
-        // retry does change is 429, the Worker's rate limiter, so it
-        // rethrows as-is with the 5xx and network failures and stays
-        // retryable.
-        if (error instanceof HubRequestError) {
-          if (error.status === TUNNEL_UNCONFIGURED_STATUS) {
-            throw new TunnelUnconfiguredError();
-          }
-          if (
-            error.status >= 400 &&
-            error.status < 500 &&
-            error.status !== 429
-          ) {
-            throw new TunnelProvisionDeniedError(error.message, error.status);
-          }
+        // The one 4xx a retry does change is the Worker's rate limiter,
+        // so it stays retryable with the 5xx and network failures.
+        if (error instanceof HubTunnelUnconfiguredError) throw error;
+        if (isHubRefusal(error) || isRefusedStatus(error)) {
+          throw new TunnelProvisionDeniedError(
+            error instanceof Error ? error.message : String(error),
+          );
         }
         throw error;
       }

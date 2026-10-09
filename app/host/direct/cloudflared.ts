@@ -32,10 +32,8 @@ import * as Semaphore from "effect/Semaphore";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import {
-  TunnelProvisionDeniedError,
-  TunnelUnconfiguredError,
-} from "@shared/account/service";
+import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
+import { TunnelProvisionDeniedError } from "@shared/account/service";
 import type { TunnelState } from "@shigomori/contracts/modules/hub";
 import {
   TUNNEL_PROBE_DEADLINE_FRESH_MS,
@@ -221,8 +219,8 @@ export type TunnelProvision = {
 };
 
 // The hub Worker's provision call failed. `cause` is its error:
-// TunnelUnconfiguredError when the Worker has no tunnel env,
-// TunnelProvisionDeniedError on any other 4xx refusal.
+// HubTunnelUnconfiguredError when the Worker has no tunnel env,
+// TunnelProvisionDeniedError when it refuses.
 export class TunnelProvisionError extends Schema.TaggedError<TunnelProvisionError>()(
   "TunnelProvisionError",
   { cause: Schema.Defect() },
@@ -516,7 +514,7 @@ const make = (options: Options) =>
           const provisioned = yield* Effect.result(options.provision(port));
           if (Result.isFailure(provisioned)) {
             const error = provisioned.failure.cause;
-            if (error instanceof TunnelUnconfiguredError) {
+            if (error instanceof HubTunnelUnconfiguredError) {
               // A deployment fact, not a failure: cached so no later
               // reconcile retries it either.
               yield* remember({ unconfigured: true });

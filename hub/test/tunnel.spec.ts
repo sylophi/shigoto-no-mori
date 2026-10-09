@@ -8,10 +8,7 @@
 import * as Schema from "effect/Schema";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import {
-  TUNNEL_UNCONFIGURED_STATUS,
-  TunnelProvisionResponseSchema,
-} from "@shigomori/contracts/hubProtocol";
+import { TunnelProvisionResponseSchema } from "@shigomori/contracts/hubProtocol";
 import { sha256Hex } from "../src/crypto.ts";
 import type { Env } from "../src/env.ts";
 import {
@@ -264,9 +261,9 @@ describe("POST /tunnel", () => {
       env,
       worker,
     );
-    expect(response.status).toBe(TUNNEL_UNCONFIGURED_STATUS);
+    expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
-      error: "tunnel provisioning is not configured",
+      _tag: "HubTunnelUnconfiguredError",
     });
     expect(stub.calls).toEqual([]);
   });

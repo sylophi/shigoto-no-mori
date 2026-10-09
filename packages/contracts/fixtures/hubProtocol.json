@@ -12,43 +12,6 @@
       null
     ]
   },
-  "ErrorBodySchema": {
-    "accepts": [
-      {
-        "error": "unauthorized"
-      },
-      {
-        "error": "device revoked",
-        "code": "device_revoked"
-      }
-    ],
-    "normalizes": [
-      {
-        "input": {
-          "error": "not found",
-          "status": 404
-        },
-        "output": {
-          "error": "not found"
-        }
-      }
-    ],
-    "rejects": [
-      {},
-      {
-        "error": 500
-      },
-      {
-        "error": "x",
-        "code": "other"
-      },
-      {
-        "error": "x",
-        "code": null
-      },
-      "unauthorized"
-    ]
-  },
   "EnrollRequestSchema": {
     "accepts": [
       {
@@ -832,6 +795,104 @@
       {
         "t": "relay",
         "from": "dev-a"
+      }
+    ]
+  },
+  "AskFrameSchema": {
+    "accepts": [
+      {
+        "ask": "connectInfo",
+        "id": 1
+      },
+      {
+        "ask": "connectInfo",
+        "id": 7,
+        "input": {
+          "wantsTunnel": true
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "ask": "connectInfo",
+          "id": 2,
+          "extra": "dropped"
+        },
+        "output": {
+          "ask": "connectInfo",
+          "id": 2
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "ask": "connectInfo"
+      },
+      {
+        "ask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "id": 1
+      },
+      {
+        "ask": "connectInfo",
+        "id": 1.5
+      },
+      {
+        "answer": "connectInfo",
+        "id": 1,
+        "ok": true
+      }
+    ]
+  },
+  "AnswerFrameSchema": {
+    "accepts": [
+      {
+        "answer": "connectInfo",
+        "id": 1,
+        "ok": true
+      },
+      {
+        "answer": "connectInfo",
+        "id": 2,
+        "ok": true,
+        "result": {
+          "candidates": []
+        }
+      },
+      {
+        "answer": "connectInfo",
+        "id": 3,
+        "ok": false,
+        "message": "no listener"
+      },
+      {
+        "answer": "connectInfo",
+        "id": 4,
+        "ok": false,
+        "message": "no listener",
+        "code": "no-listener"
+      }
+    ],
+    "rejects": [
+      {
+        "answer": "connectInfo",
+        "id": 1
+      },
+      {
+        "answer": "connectInfo",
+        "id": 1,
+        "ok": false
+      },
+      {
+        "answer": "connectInfo",
+        "id": 1,
+        "ok": false,
+        "message": "m",
+        "code": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      {
+        "ask": "connectInfo",
+        "id": 1
       }
     ]
   }

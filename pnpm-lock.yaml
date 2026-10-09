@@ -189,6 +189,9 @@ catalogs:
     '@effect/sql-sqlite-bun':
       specifier: 4.0.2
       version: 4.0.2
+    '@effect/sql-sqlite-do':
+      specifier: 4.0.2
+      version: 4.0.2
     '@effect/sql-sqlite-node':
       specifier: 4.0.2
       version: 4.0.2
@@ -222,9 +225,6 @@ catalogs:
     vitest:
       specifier: 5.0.3
       version: 5.0.3
-    zod:
-      specifier: ^4.4.3
-      version: 4.6.5
 
 overrides:
   tar@<7.5.10: ^7.5.10
@@ -362,9 +362,6 @@ importers:
       ws:
         specifier: ^8.21.3
         version: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.5
     devDependencies:
       '@babel/core':
         specifier: ^7.29.7
@@ -450,6 +447,9 @@ importers:
       '@clerk/backend':
         specifier: ^3.16.0
         version: 3.16.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@effect/sql-sqlite-do':
+        specifier: 'catalog:'
+        version: 4.0.2(effect@4.0.2)
       '@shigomori/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
@@ -595,7 +595,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
-        version: 5.0.3(@types/node@24.13.5)
+        version: 5.0.3(@types/node@24.13.5)(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1))
 
   packages/host: {}
 
@@ -1053,6 +1053,11 @@ packages:
 
   '@effect/sql-sqlite-bun@4.0.2':
     resolution: {integrity: sha512-rFtow3oA3VeoEvhG+/AjM9w00TFOWkG0AB7iwGBg69SGEs2sr16ffBAHCzDXCogktqGIhrWxJ/61UTZM9r1Lrw==}
+    peerDependencies:
+      effect: ^4.0.2
+
+  '@effect/sql-sqlite-do@4.0.2':
+    resolution: {integrity: sha512-dbKYFZSfdaIbbnYgvu432f9ISi/nSaXCYRfoK0HWKB8NwqI7hspaFvc4cW6ETDJyaoCDJzKzBQxrvCmA/T0XHw==}
     peerDependencies:
       effect: ^4.0.2
 
@@ -8754,6 +8759,10 @@ snapshots:
     dependencies:
       effect: 4.0.2
 
+  '@effect/sql-sqlite-do@4.0.2(effect@4.0.2)':
+    dependencies:
+      effect: 4.0.2
+
   '@effect/sql-sqlite-node@4.0.2(effect@4.0.2)':
     dependencies:
       effect: 4.0.2
@@ -11546,13 +11555,6 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 8.3.0(@types/node@24.13.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1)
-
-  '@vitest/mocker@5.0.3':
-    dependencies:
-      '@jridgewell/trace-mapping': 0.3.31
-      '@vitest/spy': 5.0.3
-      estree-walker: 3.0.3
-      magic-string: 1.4.1
 
   '@vitest/mocker@5.0.3(vite@8.3.0(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))':
     dependencies:
@@ -15709,26 +15711,6 @@ snapshots:
       tinyrainbow: 3.2.0
       vite: 8.3.0(@types/node@24.13.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.1)
       why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/node': 24.13.5
-    transitivePeerDependencies:
-      - msw
-
-  vitest@5.0.3(@types/node@24.13.5):
-    dependencies:
-      '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.3
-      chai: 6.2.2
-      es-module-lexer: 2.3.2
-      expect-type: 1.4.0
-      magic-string: 1.4.1
-      obug: 2.2.1
-      picomatch: 4.0.7
-      std-env: 4.3.0
-      tinybench: 6.2.0
-      tinyexec: 1.3.1
-      tinyglobby: 0.2.17
-      why-is-node-running: 3.2.1
     optionalDependencies:
       '@types/node': 24.13.5
     transitivePeerDependencies:

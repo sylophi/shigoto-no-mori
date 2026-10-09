@@ -1,15 +1,17 @@
-// Wire contract between the app and the hub Worker: the HTTP route table, HTTP body schemas for the
-// device/ticket endpoints, the hub socket envelopes, and the
-// constants both sides must agree on. Imported by the app and by hub/,
-// so it runs in the Worker too: Effect Schema only, no node builtins, no
-// electron.
+// Wire contract between the app and the hub Worker: the bodies the
+// HTTP API carries (hubApi.ts), the socket envelopes between a device
+// and its account's Durable Object, the connectInfo ask and answer the
+// devices relay through it, and the constants both sides must agree
+// on. Imported by the app and by hub/, so it runs in the Worker too:
+// Effect Schema only, no node builtins, no electron.
 //
 // The device hub never parses what devices say to each other. The
 // `frame` field of a hub envelope is opaque to the Worker. It carries
-// only the connectInfo ask and its answer (shared/hub/link.ts), but
-// nothing here may depend on that shape. Contract data never rides this
-// wire: the device hub is orchestration only, and
-// data flows over the direct sockets it brokers.
+// only the connectInfo ask and its answer (below, and
+// shared/hub/link.ts), but nothing the hub does may depend on that
+// shape. Contract data never rides this wire: the device hub is
+// orchestration only, and data flows over the direct sockets it
+// brokers.
 //
 // TRUST MODEL: the device hub is our own managed service, not an
 // adversary. Enrollment requires a Clerk-verified login, each device
@@ -19,10 +21,9 @@
 // the same account. That is why an ask carries no credential.
 // Authorization stays host-local: mutating calls ride the direct
 // sockets only, where dispatch gates them on the host's command-access
-// switch (host/socket/server.ts), and the hub wire itself answers
-// nothing but connectInfo (see shared/hub/link.ts). The size and count
-// bounds in this file are sanity bounds that keep a bug or a runaway
-// client from ballooning allocations.
+// switch, and the hub wire itself answers nothing but connectInfo. The
+// size and count bounds in this file are sanity bounds that keep a bug
+// or a runaway client from ballooning allocations.
 //
 // Ticket and credential string mechanics live in hub/src/ticket.ts.
 // To the app both are opaque strings: the credential rides in the
@@ -113,46 +114,6 @@ export const DeviceIdSchema = Schema.NonEmptyString.check(
   Schema.isMaxLength(200),
 );
 
-// ---- HTTP routes ----
-
-// The one route table both sides consume: the worker matches requests
-// against it and the app builds requests from it, so method and path
-// cannot drift apart. Auth is not a field here because it was
-// decorative, nothing read it. The worker enforces the tier at each
-// endpoint instead. The tiers are: a Clerk session token in the
-// Authorization header for POST /devices/enroll, the long-lived device
-// credential in the Authorization header for GET /devices,
-// DELETE /devices/:id and POST /tickets, and the single-use connect
-// ticket in the query string for GET /connect, because websocket
-// clients cannot set headers.
-export const HUB_ROUTES = {
-  enroll: { method: "POST", path: "/devices/enroll" },
-  listDevices: { method: "GET", path: "/devices" },
-  revokeDevice: {
-    method: "DELETE",
-    path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,
-  },
-  // Changes a device of the caller's account: its name, its icon, or
-  // both. The hub holds both, so any device of the account changes any
-  // other through it, and the changed device takes the new value from
-  // its next registry read (shared/account/enroll.ts).
-  updateDevice: {
-    method: "PATCH",
-    path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,
-  },
-  mintTicket: { method: "POST", path: "/tickets" },
-  connect: { method: "GET", path: "/connect" },
-  // Tunnel provisioning: the Worker creates or
-  // reuses this device's named Cloudflare tunnel, points its ingress
-  // at the given loopback port and answers with the public hostname
-  // plus the connector run token. Device-credential authed. Answers
-  // TUNNEL_UNCONFIGURED_STATUS when the Worker has no tunnel env.
-  provisionTunnel: { method: "POST", path: "/tunnel" },
-} as const;
-
-// The query parameter GET /connect reads the ticket from.
-export const CONNECT_TICKET_PARAM = "ticket";
-
 // The hub socket's liveness pair: the device sends the bare text
 // HUB_PING on the shared heartbeat cadence (HEARTBEAT_INTERVAL_MS in
 // shared/ipc/socket/frames.ts, the same rule the direct sockets
@@ -166,21 +127,7 @@ export const CONNECT_TICKET_PARAM = "ticket";
 export const HUB_PING = "ping";
 export const HUB_PONG = "pong";
 
-// ---- HTTP bodies ----
-
-// Every error response is `{ error }` with a meaningful status code.
-// `code` names the one refusal the app acts on rather than shows:
-// DEVICE_REVOKED_CODE rides a 403 from every credentialed route when
-// the credential is a revoked one (the hub tombstones them), and the
-// app signs itself out on it exactly as on the CLOSE_DEVICE_REVOKED
-// socket close, which only a device that was online at the revoke
-// ever sees.
-export const DEVICE_REVOKED_CODE = "device_revoked";
-export const ErrorBodySchema = Schema.Struct({
-  error: Schema.String,
-  code: Schema.optional(Schema.Literal(DEVICE_REVOKED_CODE)),
-});
-export type ErrorBody = typeof ErrorBodySchema.Type;
+// ---- HTTP bodies (hubApi.ts) ----
 
 // POST /devices/enroll request, under a Clerk session token. deviceId
 // is the app's per-data-dir UUID, so re-enrolling the same data dir rotates
@@ -273,13 +220,11 @@ export const EnrollResponseSchema = Schema.Struct({
   device: DeviceInfoSchema,
 });
 export type EnrollResponse = typeof EnrollResponseSchema.Type;
-export type EnrollResponseWire = typeof EnrollResponseSchema.Encoded;
 
 // GET /devices response, scoped to the calling credential's account.
 export const DeviceListResponseSchema = Schema.Struct({
   devices: Schema.Array(DeviceInfoSchema),
 });
-export type DeviceListResponseWire = typeof DeviceListResponseSchema.Encoded;
 
 // POST /tickets response. The ticket string is opaque to clients: the
 // app puts it in the connect URL unchanged, only the worker mints and
@@ -314,13 +259,6 @@ export const TunnelProvisionResponseSchema = Schema.Struct({
   dnsCreated: Schema.optional(Schema.Boolean),
 });
 export type TunnelProvisionResponse = typeof TunnelProvisionResponseSchema.Type;
-
-// The typed "not configured" answer for POST /tunnel: the Worker runs
-// without the Cloudflare tunnel env (see hub/src/tunnel.ts), so
-// tunnel provisioning is off while everything else works as before.
-// The status code is the type: the app's client maps it to a typed
-// error the tunnel runner treats as "unconfigured, do not retry".
-export const TUNNEL_UNCONFIGURED_STATUS = 501;
 
 // ---- Hub socket envelopes ----
 
@@ -409,3 +347,41 @@ export function decodeEnvelope<S extends Schema.Decoder<unknown>>(
   }
   return Option.getOrNull(Schema.decodeUnknownOption(schema)(raw));
 }
+
+// ---- The connectInfo ask and answer ----
+
+// What one device asks another through the relay, as the envelope's
+// opaque `frame`: the direct dialer's "how do I dial you?"
+// (shared/hub/link.ts), keyed by an id so the answer finds its ask.
+// An undefined input or result rides as an absent field.
+//
+//   ask:    { ask, id, input? }
+//   answer: { answer, id, ok: true, result? }
+//         | { answer, id, ok: false, message, code? }
+//
+// Bounded like every string a hostile hub could inflate.
+const AskNameSchema = Schema.String.check(Schema.isMaxLength(64));
+
+export const AskFrameSchema = Schema.Struct({
+  ask: AskNameSchema,
+  id: Schema.Int,
+  input: Schema.optional(Schema.Unknown),
+});
+export type AskFrame = typeof AskFrameSchema.Type;
+
+export const AnswerFrameSchema = Schema.Union([
+  Schema.Struct({
+    answer: AskNameSchema,
+    id: Schema.Int,
+    ok: Schema.Literal(true),
+    result: Schema.optional(Schema.Unknown),
+  }),
+  Schema.Struct({
+    answer: AskNameSchema,
+    id: Schema.Int,
+    ok: Schema.Literal(false),
+    message: Schema.String,
+    code: Schema.optional(Schema.String.check(Schema.isMaxLength(64))),
+  }),
+]);
+export type AnswerFrame = typeof AnswerFrameSchema.Type;

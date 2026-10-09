@@ -117,6 +117,7 @@ catalog:
   "@effect/platform-bun": 4.0.2
   "@effect/platform-node": 4.0.2
   "@effect/sql-sqlite-bun": 4.0.2
+  "@effect/sql-sqlite-do": 4.0.2
   "@effect/sql-sqlite-node": 4.0.2
   "@effect/tsgo": 0.51.1
   "@types/node": ^24.13.5
@@ -128,4 +129,3 @@ catalog:
   react-dom: ~19.2.7
   typescript: ~7.0.2
   vitest: 5.0.3
-  zod: ^4.4.3
