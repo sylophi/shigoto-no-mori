@@ -12,15 +12,19 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as EngineConfig from "@shigomori/engine/Config";
+import * as Bundle from "@shigomori/engine/Bundle";
+import * as Dirty from "@shigomori/engine/Dirty";
 import * as Doctor from "@shigomori/engine/Doctor";
 import { codeOf } from "@shigomori/engine/errorDocument";
 import type { MergeMethod } from "@shigomori/engine/GitHub";
 import * as Hygiene from "@shigomori/engine/Hygiene";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Landing from "@shigomori/engine/Landing";
+import * as Open from "@shigomori/engine/Open";
 import * as Launchers from "@shigomori/engine/Launchers";
 import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
@@ -247,7 +251,7 @@ function runStreamingCreate(
     change(Effect.result(start(reporter)), ids, { signal: kill.signal })
       .then(
         (result) => {
-          if (ended() || result._tag === "Success") return;
+          if (ended() || Result.isSuccess(result)) return;
           reject(
             guardRefusal(result.failure) ?? engineFailure(result.failure, ids),
           );
@@ -410,7 +414,9 @@ export async function deleteStack(
     };
   }
   throw new Error(
-    typeof doc["error"] === "string" ? doc["error"] : "removing the stack failed",
+    typeof doc["error"] === "string"
+      ? doc["error"]
+      : "removing the stack failed",
   );
 }
 
@@ -522,10 +528,7 @@ export async function setShelved(
   await change(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
-      yield* (yield* Worktrees.Worktrees).setShelved(
-        located.worktree,
-        shelved,
-      );
+      yield* (yield* Worktrees.Worktrees).setShelved(located.worktree, shelved);
     }),
     { projectId: project.id, worktreeId },
   );
@@ -672,10 +675,7 @@ export async function relocateProject(
   const row = await change(
     Effect.gen(function* () {
       const project = yield* projectById(projectId);
-      return yield* (yield* Worktrees.Worktrees).relocateProject(
-        project,
-        path,
-      );
+      return yield* (yield* Worktrees.Worktrees).relocateProject(project, path);
     }),
     { projectId },
   );
@@ -745,10 +745,7 @@ export async function moveWorktree(
   const moved = await change(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
-      return yield* (yield* Worktrees.Worktrees).move(
-        located,
-        destinationPath,
-      );
+      return yield* (yield* Worktrees.Worktrees).move(located, destinationPath);
     }),
     { projectId: project.id, worktreeId },
   );
@@ -1079,4 +1076,114 @@ export async function runDoctor(
   }).pipe(Effect.timeout(fix ? 2 * DOCTOR_TIMEOUT_MS : DOCTOR_TIMEOUT_MS));
   const report = await (fix ? change(run) : call(run));
   return decodeDoctorReport(report);
+}
+
+// ---- The device-sync plumbing ----
+
+// The worktree's uncommitted changes as a commit under
+// refs/shigomori/dirty/<id>, for a move to carry. A clean worktree
+// captures nothing.
+export async function dirtyCapture(
+  project: Project,
+  worktreeId: string,
+): Promise<{ captured: boolean; commit?: string }> {
+  const captured = await change(
+    Effect.gen(function* () {
+      const { worktree } = yield* locate(project.id, worktreeId);
+      return yield* (yield* Dirty.Dirty).capture({
+        projectPath: project.path,
+        worktreePath: worktree.path,
+        worktreeId: worktree.id,
+      });
+    }),
+    { projectId: project.id, worktreeId },
+  );
+  return captured.captured
+    ? { captured: true, commit: captured.commit }
+    : { captured: false };
+}
+
+// The capture replayed onto the worktree, which must be on the commit
+// it was taken on, and the ref consumed.
+export async function dirtyApply(
+  project: Project,
+  worktreeId: string,
+): Promise<{ applied: boolean; commit: string; changedFiles: number }> {
+  const applied = await change(
+    Effect.gen(function* () {
+      const { worktree } = yield* locate(project.id, worktreeId);
+      return yield* (yield* Dirty.Dirty).apply(
+        {
+          projectPath: project.path,
+          worktreePath: worktree.path,
+          worktreeId: worktree.id,
+        },
+        { force: false },
+      );
+    }),
+    { projectId: project.id, worktreeId },
+  );
+  return { applied: true, ...applied };
+}
+
+// The paths handed to bundle create and unpack are always app-chosen
+// temp paths (the source link, host/lib/sync/sourceLink.ts, owns them).
+export async function bundleCreate(
+  project: Project,
+  outPath: string,
+  refs: string[],
+  haves: string[],
+): Promise<{
+  bytes: number;
+  refs: readonly { ref: string; commit: string }[];
+}> {
+  const made = await call(
+    Effect.gen(function* () {
+      return yield* (yield* Bundle.Bundle).create(
+        project.path,
+        outPath,
+        refs,
+        haves,
+      );
+    }),
+    { projectId: project.id },
+  );
+  return { bytes: made.bytes, refs: made.refs };
+}
+
+// Into a registered project, or into a repository by path: the clone
+// from a peer (host/lib/sync/cloneFromPeer.ts) unpacks into a folder
+// it registers only once it is a checkout.
+export async function bundleUnpack(
+  target: Project | { path: string },
+  inPath: string,
+  refspecs: string[],
+): Promise<{ fetched: { ref: string; commit: string }[] }> {
+  const fetched = await change(
+    Effect.gen(function* () {
+      return yield* (yield* Bundle.Bundle).unpack(
+        target.path,
+        inPath,
+        refspecs,
+      );
+    }),
+    "id" in target ? { projectId: target.id } : {},
+  );
+  return { fetched: [...fetched] };
+}
+
+// Launches a launcher-row entry (`app:…`, `custom:…`, `web:github`) in
+// the worktree, which also counts the use.
+export async function openLauncher(
+  project: Project,
+  worktreeId: string,
+  launcherId: string,
+): Promise<void> {
+  await change(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* (yield* Open.Open).open(located, launcherId);
+    }),
+    { projectId: project.id, worktreeId },
+  );
 }

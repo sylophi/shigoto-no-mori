@@ -13,7 +13,7 @@ import { log } from "@shared/log";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
-} from "@host/lib/util/jsonFile";
+} from "@host/lib/util/atomicJson";
 
 const RestartVisibilitySchema = Schema.Struct({
   hidden: Schema.Boolean,
@@ -43,9 +43,7 @@ export function rememberVisibilityForRestart(): void {
       ),
     };
     if (!visibility.hidden && !visibility.minimized) return;
-    // selfWrite:false because userData sits outside the watched
-    // shigomori root (see liveness.ts).
-    atomicWriteJsonSync(markerPath(), visibility, { selfWrite: false });
+    atomicWriteJsonSync(markerPath(), visibility);
   } catch (error) {
     warn("could not write the marker", error);
   }

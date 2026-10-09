@@ -10,6 +10,7 @@ import {
 } from "@shared/packaging/appName.mts";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { readDeviceId } from "@host/lib/config/deviceId";
+import { loadSharedSettings } from "@host/lib/sharedSettings/store";
 import {
   createDesktopClerkBridge,
   rendererSchemeUrl,
@@ -179,8 +180,6 @@ if (platform() === "darwin") {
 // reclaims the bridge's IPC handlers wholesale anyway.
 createDesktopClerkBridge();
 
-initDataDir(app.isPackaged);
-
 // Electron-layer impls must be wired before registerIpcHandlers runs so
 // the first renderer call never lands on the throwing default.
 installMenuImpl();
@@ -229,6 +228,16 @@ let hasBooted = false;
 // the boot error dialog). createWindow only interpolates it. Never
 // empty by the time any window exists: getDeviceId mints or throws.
 let deviceId = "";
+
+// The data dir for the boot error, which may be that it couldn't be
+// found at all.
+function dataDirOrNone(): string {
+  try {
+    return dataDir();
+  } catch {
+    return "The data folder";
+  }
+}
 
 // The layer graph's build, started in the ready handler.
 let graph: Promise<unknown> = Promise.resolve();
@@ -458,12 +467,14 @@ app.on("ready", async () => {
   // The graph starts here: its bottom opens the store, which the
   // window's first paint needs the device id from. The rest comes up
   // behind the window.
-  graph = runtime.context();
   try {
+    await initDataDir(engineOptions.flavor);
+    graph = runtime.context();
     deviceId = await Promise.race([
       readDeviceId(),
       graph.then(() => new Promise<never>(() => {})),
     ]);
+    await loadSharedSettings();
   } catch (err) {
     // A store the 2.x files couldn't be imported into, or that can't be
     // read: the doctor's findings say which file and what to do.
@@ -492,7 +503,7 @@ app.on("ready", async () => {
         : "Check the folder's permissions, or move it aside to start fresh.";
     dialog.showErrorBox(
       "Shigoto no Mori can't access its data folder",
-      `${dataDir()} could not be created or accessed.\n\n${recovery}\n\n` +
+      `${dataDirOrNone()} could not be created or accessed.\n\n${recovery}\n\n` +
         `${errorMessageOf(err)}`,
     );
     app.exit(1);

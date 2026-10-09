@@ -31,19 +31,19 @@ export const packageScriptsHandlers: Handlers<
       ),
       packageManager: doc.packageManager,
       usage: doc.usage,
-      launchRow: readLaunchRow(projectId),
+      launchRow: await readLaunchRow(projectId),
     };
   },
 
   getSort: async ({ projectId, knowsManual }) => {
     const project = await findProjectOrThrow(projectId);
-    const mode = readScriptSort(project.id);
+    const mode = await readScriptSort(project.id);
     return mode === "manual" && !knowsManual ? "manifest" : mode;
   },
 
   setSort: async ({ projectId, mode }) => {
     const project = await findProjectOrThrow(projectId);
-    writeScriptSort(project.id, mode);
+    await writeScriptSort(project.id, mode);
   },
 
   getOrder: async ({ projectId }) => {
@@ -53,12 +53,12 @@ export const packageScriptsHandlers: Handlers<
 
   setOrder: async ({ projectId, arranged }) => {
     const project = await findProjectOrThrow(projectId);
-    writeScriptOrder(project.id, arranged);
+    await writeScriptOrder(project.id, arranged);
   },
 
   setLaunchRow: async ({ projectId, scriptName, onRow }) => {
     const project = await findProjectOrThrow(projectId);
-    writeLaunchRowScript(project.id, scriptName, onRow);
+    await writeLaunchRowScript(project.id, scriptName, onRow);
   },
 
   run: async ({ projectId, worktreeId, scriptName }, handlerCtx) => {

@@ -31,7 +31,12 @@ import {
 } from "@host/lib/scripts";
 import { terrierAdd } from "@host/lib/terrier";
 import { expandHome } from "@host/lib/util/paths";
-import { projectIcon, removeProject, storeProjectOrder, worktreeDestination } from "@host/lib/engineCalls";
+import {
+  projectIcon,
+  removeProject,
+  storeProjectOrder,
+  worktreeDestination,
+} from "@host/lib/engineCalls";
 
 // Moves run one at a time: each writes the whole order, so a second
 // drag computed before the first's refresh landed would put the first

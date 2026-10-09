@@ -1,7 +1,7 @@
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
 import type { Handlers } from "@shigomori/contracts/types";
 import { findProjectOrThrow } from "@host/lib/projects";
-import { openLauncherViaCli } from "../cliDelegate";
+import { openLauncher } from "@host/lib/engineCalls";
 import { launcherCatalog, launcherRow } from "@host/lib/engineCalls";
 
 // The launcher row is the CLI's: the tool catalog, what is installed,
@@ -25,9 +25,5 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
   // id, so an in-flight deep link or a stale menu accelerator keeps
   // working.
   launch: async ({ projectId, worktreeId, launcherId }) =>
-    openLauncherViaCli(
-      await findProjectOrThrow(projectId),
-      worktreeId,
-      launcherId,
-    ),
+    openLauncher(await findProjectOrThrow(projectId), worktreeId, launcherId),
 };

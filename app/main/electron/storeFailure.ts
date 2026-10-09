@@ -15,7 +15,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-const isStoreFailure = Schema.is(Schema.Union([StoreOpenError, StoreImportError]));
+const isStoreFailure = Schema.is(
+  Schema.Union([StoreOpenError, StoreImportError]),
+);
 
 // What the doctor found wrong, one line per check that warned or
 // failed, or null when `error` is not the store's.

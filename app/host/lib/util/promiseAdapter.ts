@@ -27,8 +27,7 @@ export const make = <I>(name: string) => {
   const layer = Layer.effectDiscard(
     Effect.gen(function* () {
       const ctx = yield* Effect.context<I>();
-      const runPromise: RunPromise<I> =
-        yield* FiberSet.makeRuntimePromise<I>();
+      const runPromise: RunPromise<I> = yield* FiberSet.makeRuntimePromise<I>();
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           current = undefined;

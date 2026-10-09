@@ -25,7 +25,7 @@ import {
 } from "@shared/packaging/cliDist.mts";
 import type { CliStatus } from "@shigomori/contracts/modules/cli";
 import { app } from "electron";
-import { cliBinaryPath } from "./cliRunner";
+import { cliBinaryPath } from "./cliBinary";
 import { uninstallShellIntegration } from "./cliShell";
 import { log } from "@shared/log";
 import { envSetting } from "@shared/config";

@@ -1,33 +1,16 @@
-// Tracks when the app itself last wrote inside the shigomori data dir, so
-// the state watcher can tell its own filesystem echo apart from a
-// genuinely external change (a CLI run in a terminal). Every app-side
-// writer that touches the data dir funnels through the chokepoints that
-// call noteSelfWrite (store.ts, jsonFile.ts, the CLI runner); the
-// watcher skips events landing within the echo window.
-let lastSelfWrite = 0;
-
-// How long after an app-side write its filesystem echo is still
-// attributed to the app. Shared by both watchers.
+// How long after an app-side git write its echo in the git directory
+// is still attributed to the app.
 export const SELF_ECHO_MS = 1000;
 
-export function noteSelfWrite(): void {
-  lastSelfWrite = Date.now();
-}
-
-export function selfWroteWithin(ms: number): boolean {
-  return Date.now() - lastSelfWrite < ms;
-}
-
-// The same idea for the app's own MUTATING git commands, scoped to the
-// repository the command ran in: the git runner (host/lib/git/core.ts)
-// marks a command in flight and then its completion, and the
+// The app's own MUTATING git commands, scoped to the repository the
+// command ran in: the git runners (host/lib/git/core.ts, and the
+// engine's Git through its GitWrites reference) mark a command in
+// flight and then its completion, and the
 // git-directory watcher asks whether any such command touched the
 // repository an event came from. A ref the app moved is already
 // invalidated by its caller, while a ref an agent moved must still
 // ping, which is why the scope is the repository and not the process:
 // a slow fetch in one project must not swallow a commit in another.
-// Kept apart from the data dir marker so an app git command cannot
-// swallow an external data dir write or the reverse.
 const inFlightGitWrites = new Map<string, number>();
 const completedGitWrites = new Map<string, number>();
 

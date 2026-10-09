@@ -32,7 +32,6 @@ import * as Processes from "@host/lib/util/processes";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import * as GitWatcher from "./core/gitWatcher";
 import { gitDirOf, reconcileGitWatchers } from "./core/gitWatcher";
-import { cliChildCount, killAllCli } from "./electron/cliRunner";
 import { startBackgroundFetch } from "./electron/fetch";
 import * as MirrorDaemon from "./core/mirror/daemon";
 import * as FileSyncRunner from "./electron/fileSyncRunner";
@@ -85,10 +84,6 @@ const scripts = (hurried: () => boolean) =>
       );
     }),
   );
-
-// The CLI's children run in their own process groups, and a lifecycle
-// script one spawned follows it down.
-const cliChildren = onQuit("the CLI children", Effect.sync(killAllCli));
 
 // The sweeps and watchers read the project list synchronously, from the
 // snapshot host/lib/projects keeps of the CLI's list.
@@ -166,17 +161,15 @@ const gitWatcher = logged(
       GitWatcher.layer({
         onChange: announceProjectChanged,
         // The app's own git commands move refs the same way an agent's
-        // do, and their callers already invalidate their targets, so a
-        // running sm child and an app-run mutating git command in flight
-        // or just done in that repository are skipped, as the state
-        // watcher skips the app's own data dir writes.
+        // do, and their callers already invalidate their targets, so an
+        // app-run mutating git command (the host's or the engine's) in
+        // flight or just done in that repository is skipped.
         suppressed: (gitDir) =>
-          cliChildCount() > 0 ||
           gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
       }),
     ),
-    // An app-side project add or remove runs as a CLI child whose
-    // registry write the state watcher drops as the app's own.
+    // An app-side project add or remove is the app's own store write,
+    // which the store watcher doesn't see.
     Layer.tap(() =>
       Effect.sync(() => onHostMutationSettled(reconcileGitWatchers)),
     ),
@@ -283,7 +276,6 @@ export const layer = (options: {
     Layer.provideMerge(storeWatcher),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),
     Layer.provideMerge(firstProjectList),
-    Layer.provideMerge(cliChildren),
     // Every file-sync child, the daemon and the serve children a peer's
     // streams opened.
     Layer.provideMerge(FileSyncRunner.layer),

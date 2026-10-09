@@ -21,7 +21,7 @@ import {
   atomicWriteJson,
   readJsonOrNull,
   unlinkIfExists,
-} from "@host/lib/util/jsonFile";
+} from "@host/lib/util/atomicJson";
 import { dataDir } from "@host/lib/util/paths";
 
 const REQUEST_STALE_MS = 2 * 60_000;
@@ -45,9 +45,7 @@ export function publishUpdaterState(state: UpdaterState): Promise<void> {
   };
   publishChain = publishChain.then(async () => {
     try {
-      // selfWrite: false because this is control-plane plumbing the
-      // state watcher ignores, not user state (see atomicWriteJson).
-      await atomicWriteJson(updaterStatePath(), status, { selfWrite: false });
+      await atomicWriteJson(updaterStatePath(), status);
     } catch {
       // The CLI treats a missing/stale file as "app not reachable".
     }

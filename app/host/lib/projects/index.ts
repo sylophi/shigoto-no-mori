@@ -28,7 +28,9 @@ let running: Promise<readonly ProjectRow[]> | null = null;
 let queued: Promise<readonly ProjectRow[]> | null = null;
 
 async function listOnce(): Promise<readonly ProjectRow[]> {
-  const rows = await EngineCalls.listProjects({ refreshIcons: !iconsRescanned });
+  const rows = await EngineCalls.listProjects({
+    refreshIcons: !iconsRescanned,
+  });
   iconsRescanned = true;
   snapshot = rows;
   return rows;

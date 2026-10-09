@@ -1,7 +1,7 @@
-// In-app updates, with the CLI as the engine. The app no longer embeds
-// an updater at all (Squirrel is gone): checking shells out to
-// `sm update --stage --json` (cli/updater.go), which queries the feed,
-// downloads, signature-verifies, and parks the new bundle in
+// In-app updates, on the engine's updater (packages/engine/src/Updater.ts),
+// which the terminal `sm update` shares. The app embeds no updater of
+// its own (Squirrel is gone): checking stages in-process, which queries
+// the feed, downloads, signature-verifies, and parks the new bundle in
 // <dataDir>/updates/staged. Installing spawns a detached
 // `sm update --finish-install --pid <ours>` and quits. The installer
 // waits for this process to exit, swaps the bundle, and relaunches.
@@ -17,9 +17,8 @@
 //
 // `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
 // testing of a signed build, and `SHIGOMORI_UPDATE_RELEASES_URL` the
-// release list a prerelease build ranks instead (cli/updater.go).
-// updateEndpoints.ts moves both out of our environment and into flags
-// on the check's own CLI child.
+// release list a prerelease build ranks instead. updateEndpoints.ts
+// moves both out of our environment and hands them to the check alone.
 import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -31,18 +30,22 @@ import type {
 } from "@shigomori/contracts/schemas";
 import {
   StagedManifestSchema,
-  UpdateStageEventSchema,
   UpdateStageResultSchema,
 } from "@shigomori/contracts/schemas";
 import { setUpdaterImpl } from "@host/ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
-import { readJsonOrNull } from "@host/lib/util/jsonFile";
+import { readJsonOrNull } from "@host/lib/util/atomicJson";
 import { pathExists, dataDir } from "@host/lib/util/paths";
 import { busyActionRemoteRefusal, confirmBusyAction } from "./busyPrompt";
-import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
+import { requireCliBinary } from "./cliBinary";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
-import { updateEndpointFlags } from "./updateEndpoints";
+import { updateEndpoints } from "./updateEndpoints";
+import * as Engine from "@host/lib/engine";
+import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
+import * as Updater from "@shigomori/engine/Updater";
+import * as Effect from "effect/Effect";
+import { spawn } from "node:child_process";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
@@ -53,10 +56,10 @@ const FIRST_CHECK_DELAY_MS = 60 * 1000;
 // capped at an hour): a repeatable failure re-runs the whole download
 // pipeline, which shouldn't burn bandwidth every 10 minutes forever.
 const MAX_BACKOFF_TICKS = 6;
-// Hard cap on one staging run (the Go side allows up to 20 min for the
-// download but puts no deadline on its codesign/ditto subprocesses). A
-// wedged child would otherwise pin checkInFlight forever and silently
-// disable checks for the app's lifetime.
+// Hard cap on one staging run (the download has its own deadline, its
+// codesign and ditto children don't). A wedged child would otherwise
+// pin checkInFlight forever and silently disable checks for the app's
+// lifetime.
 const STAGE_TIMEOUT_MS = 30 * 60 * 1000;
 
 let state: UpdaterState = { kind: "idle" };
@@ -93,7 +96,6 @@ function getUpdaterState(): UpdaterState {
   return state;
 }
 
-const decodeStageEvent = Schema.decodeUnknownOption(UpdateStageEventSchema);
 const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
 
 // Mirrors cli/updater.go stagedDir()/stagedManifestPath().
@@ -114,10 +116,42 @@ async function readStagedManifest(): Promise<StagedManifest | null> {
 // The staged update, if it's one this build can restart into. A
 // manifest matching our own version is debris from an install that
 // crashed between swap and cleanup. Offering it would restart-loop
-// into the same version. The CLI clears it on its next stage run.
+// into the same version. The next stage run clears it.
 async function readInstallableStaged(): Promise<StagedManifest | null> {
   const staged = await readStagedManifest();
   return staged !== null && staged.version !== app.getVersion() ? staged : null;
+}
+
+// The app as the updater sees it: the bundled `sm` sits in the bundle
+// it updates.
+function runningApp(): Updater.Running {
+  return {
+    version: app.getVersion(),
+    arch: process.arch,
+    executable: requireCliBinary(),
+    pid: process.pid,
+  };
+}
+
+// The installer, `sm update --finish-install`, which waits for this
+// process to exit, swaps the bundle and opens the new one, so it must
+// outlive the app: detached and never reaped. Settles only once the
+// child actually spawned (or failed to): spawn errors arrive
+// asynchronously, and the caller is about to quit on success.
+function spawnInstaller(): Promise<void> {
+  const binary = requireCliBinary();
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      binary,
+      ["update", "--finish-install", "--pid", String(process.pid)],
+      { detached: true, stdio: "ignore" },
+    );
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
 }
 
 function readyStateFrom(manifest: {
@@ -137,19 +171,19 @@ function checkForUpdates(): void {
   void runCheck();
 }
 
-// One check at a time. The CLI holds its own cross-process staging
-// lock, so a terminal `sm update` racing this check is also safe. The
+// One check at a time. The engine holds a cross-process staging lock,
+// so a terminal `sm update` racing this check is also safe. The
 // loser reports "update-in-progress" and is treated as a skip, not an
 // error.
 //
 // Checks keep running after an update is staged, or a release that
 // ships later would wait for a restart into the older one first.
 // These re-checks run behind the "ready" state they found and leave
-// its restart button up throughout: the CLI keeps the staged bundle
+// its restart button up throughout: the engine keeps the staged bundle
 // until a newer one is verified, so a restart mid-download still has
 // it to install (and quitting reaps the download). Only a newly staged
 // release or a confirmed up-to-date answer (the release was pulled,
-// and the CLI cleared it) replaces it. A failure keeps it while its
+// and the stage cleared it) replaces it. A failure keeps it while its
 // bundle is still on disk, and still backs off.
 async function runCheck(): Promise<void> {
   if (!started || checkInFlight) return;
@@ -161,45 +195,44 @@ async function runCheck(): Promise<void> {
   try {
     let next: UpdaterState;
     try {
-      const result = await runCli(
-        ["update", "--stage", ...updateEndpointFlags()],
-        (doc) => {
-          // "verifying" arrives too, and the renderer's machine
-          // collapses everything between "found one" and "staged" into
-          // downloading, which names the release from the first event.
-          const event = decodeStageEvent(doc);
-          if (
-            shown === null &&
-            Option.isSome(event) &&
-            state.kind !== "downloading"
-          ) {
-            setState({ kind: "downloading", version: event.value.version });
-          }
-        },
-        undefined,
-        { background: true, timeoutMs: STAGE_TIMEOUT_MS },
+      const result = await Engine.run(
+        Effect.gen(function* () {
+          return yield* (yield* Updater.Updater).stage({
+            running: runningApp(),
+            ...updateEndpoints(),
+            // "verifying" arrives too, and the renderer's machine
+            // collapses everything between "found one" and "staged"
+            // into downloading, which names the release from the first
+            // event.
+            progress: (progress) =>
+              Effect.sync(() => {
+                if (
+                  shown === null &&
+                  (progress.phase === "downloading" ||
+                    progress.phase === "verifying") &&
+                  state.kind !== "downloading"
+                ) {
+                  setState({ kind: "downloading", version: progress.version });
+                }
+              }),
+          });
+        }).pipe(Effect.timeout(STAGE_TIMEOUT_MS)),
+      ).then(
+        (staged) => ({ staged }),
+        (error: unknown) => ({ error }),
       );
-      const final = result.docs.findLast(
-        (doc) => typeof doc["ok"] === "boolean",
-      );
-      const parsed =
-        final?.["ok"] === true ? decodeStageResult(final) : Option.none();
-      if (Option.isSome(parsed) && parsed.value.status === "staged") {
-        next = readyStateFrom(parsed.value);
-      } else if (
-        Option.isSome(parsed) &&
-        parsed.value.status === "up-to-date"
-      ) {
-        next = { kind: "idle" };
-      } else if (final?.["code"] === "update-in-progress") {
+      if ("staged" in result) {
+        const parsed = decodeStageResult(result.staged);
+        next =
+          Option.isSome(parsed) && parsed.value.status === "staged"
+            ? readyStateFrom(parsed.value)
+            : { kind: "idle" };
+      } else if (codeOf(result.error) === "update-in-progress") {
         // A terminal `sm update` holding the staging lock is its turn,
         // not an error.
         next = shown ?? { kind: "idle" };
       } else {
-        next = {
-          kind: "error",
-          message: cliFailureMessage(result, "Update check failed"),
-        };
+        next = { kind: "error", message: messageOf(result.error) };
       }
     } catch (err) {
       next = { kind: "error", message: errorMessageOf(err) };
@@ -278,12 +311,7 @@ async function installUpdate(unattended: boolean): Promise<void> {
   try {
     // Resolves only once the installer actually spawned: quitting on a
     // child that failed to start would end the app without a relaunch.
-    await spawnCliDetached([
-      "update",
-      "--finish-install",
-      "--pid",
-      String(process.pid),
-    ]);
+    await spawnInstaller();
   } catch (err) {
     installing = false;
     setState({
@@ -359,7 +387,7 @@ export function startUpdater(): void {
   void (async () => {
     // Seed from disk before any network work: an update staged earlier
     // (a previous run, or `sm update --stage` in a terminal) is ready
-    // immediately, no CLI spawn needed. The first check still runs, in
+    // immediately, before any check. The first check still runs, in
     // case a newer release has shipped since.
     const staged = await readInstallableStaged();
     if (staged !== null) setState(readyStateFrom(staged));

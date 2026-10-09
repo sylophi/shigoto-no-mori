@@ -89,6 +89,12 @@ export class Scripts extends Context.Service<
       PackageScriptsList,
       NoPackageJson | UnreadablePackageJson
     >;
+    // The project's sort and manual order alone, which no worktree's
+    // package.json is needed for.
+    readonly arrangement: (projectId: string) => Effect.Effect<{
+      readonly sort: string;
+      readonly order: ReadonlyArray<string>;
+    }>;
     // The manager's command that runs the worktree's script `script` with
     // `extra` after it, the manager found on PATH.
     readonly command: (input: {
@@ -258,21 +264,35 @@ const make = Effect.gen(function* () {
       });
     });
 
+  // A mode a newer build stored is passed on, and an empty one is the
+  // default.
+  const arrangement = Effect.fn("Scripts.arrangement")(function* (
+    projectId: string,
+  ) {
+    const { sorted, order } = yield* Effect.all(
+      {
+        sorted: sql<{ mode: string }>`SELECT mode FROM script_sort
+          WHERE project_id = ${projectId}`,
+        order: storedList(projectId, "order"),
+      },
+      { concurrency: "unbounded" },
+    );
+    return { sort: sorted[0]?.mode || IMPLICIT_SORT, order };
+  }, Effect.orDie);
+
   const list = Effect.fn("Scripts.list")(function* (input: {
     readonly projectId: string;
     readonly worktreePath: string;
   }) {
     const scripts = yield* readScripts(input.worktreePath);
-    const { manager, stats, sorted, order } = yield* Effect.all(
+    const { manager, stats, arranged } = yield* Effect.all(
       {
         manager: packageManager(input.worktreePath),
         stats: usage.stats("script", input.projectId),
-        sorted: sql<{ mode: string }>`SELECT mode FROM script_sort
-          WHERE project_id = ${input.projectId}`,
-        order: storedList(input.projectId, "order"),
+        arranged: arrangement(input.projectId),
       },
       { concurrency: "unbounded" },
-    ).pipe(Effect.catchTags({ SqlError: Effect.die }));
+    );
     return {
       packageManager: manager,
       scripts,
@@ -282,10 +302,7 @@ const make = Effect.gen(function* () {
           stats.get(name) ?? { lastUsed: 0, recentCount: 0 },
         ]),
       ),
-      // A mode a newer build stored is passed on, and an empty one is
-      // the default.
-      sort: sorted[0]?.mode || IMPLICIT_SORT,
-      order,
+      ...arranged,
     };
   });
 
@@ -379,6 +396,7 @@ const make = Effect.gen(function* () {
 
   return Scripts.of({
     list,
+    arrangement,
     packageManager: (dir) =>
       present(path.join(dir, "package.json")).pipe(
         Effect.flatMap((found) =>

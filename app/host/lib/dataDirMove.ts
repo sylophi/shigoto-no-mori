@@ -28,7 +28,7 @@ import {
   killAllScripts,
   markDeleteInflight,
 } from "./scripts";
-import { tempPathFor, unlinkIfExists } from "./util/jsonFile";
+import { tempPathFor, unlinkIfExists } from "./util/atomicJson";
 import {
   canonicalDataDirName,
   dataDir,

@@ -11,10 +11,7 @@ import type { NukeProgress, Project } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { forceRemoveWorktree } from "@host/lib/engineCalls";
 import { listWorktreeIdentities, pruneStaleWorktrees } from "./git/worktrees";
-import {
-  findProjectInsideDataDir,
-  listProjects,
-} from "./projects";
+import { findProjectInsideDataDir, listProjects } from "./projects";
 import {
   clearDeleteInflight,
   killAllScripts,

@@ -18,6 +18,7 @@ export async function readDeviceId(): Promise<string> {
 }
 
 export function getDeviceId(): string {
-  if (cached === "") throw new Error("The device id was asked before launch read it.");
+  if (cached === "")
+    throw new Error("The device id was asked before launch read it.");
   return cached;
 }

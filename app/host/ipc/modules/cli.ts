@@ -4,7 +4,6 @@ import type {
 } from "@shigomori/contracts/modules/cli";
 import { cliContract } from "@shigomori/contracts/modules/cli";
 import type { Handlers } from "@shigomori/contracts/types";
-import { cliBinary } from "@host/ipc/cliDelegate";
 import { runDoctor } from "@host/lib/engineCalls";
 import { loadProjects, refreshProjects } from "@host/lib/projects";
 import { killScriptsForProject } from "@host/lib/scripts";
@@ -25,6 +24,8 @@ type CliImpl = {
   hookPathEnv: () => Promise<Record<string, string>>;
   // The app's version, which the doctor compares the bundle against.
   appVersion: () => string;
+  // The bundled `sm`.
+  binaryPath: () => string;
 };
 
 const { set: setCliImpl, get: cliImpl } = implSlot<CliImpl>(
@@ -45,7 +46,7 @@ async function doctorInput(): Promise<{
   const { ZDOTDIR } = await cliImpl().hookPathEnv();
   return {
     version: cliImpl().appVersion(),
-    executable: cliBinary(),
+    executable: cliImpl().binaryPath(),
     ...(ZDOTDIR === undefined ? {} : { zdotdir: ZDOTDIR }),
   };
 }

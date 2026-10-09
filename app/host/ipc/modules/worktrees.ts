@@ -59,7 +59,17 @@ import {
   stopMirrorsForWorktree,
 } from "@host/mirror/registry";
 import { scriptEventNotifier } from "../scriptRun";
-import { adoptWorktree, createWorktree, deleteStack, deleteWorktree, finishWorktree, moveWorktree, setAutoPull, setAgentWorking, setShelved } from "@host/lib/engineCalls";
+import {
+  adoptWorktree,
+  createWorktree,
+  deleteStack,
+  deleteWorktree,
+  finishWorktree,
+  moveWorktree,
+  setAutoPull,
+  setAgentWorking,
+  setShelved,
+} from "@host/lib/engineCalls";
 
 // Exported for the sync module's pull orchestration, whose createWorktree
 // call streams the same lifecycle events.
@@ -109,7 +119,12 @@ export const worktreesHandlers: Handlers<
   // it always got, so only an explicit false runs unforced.
   convertExternal: async ({ projectId, worktreeId, force }, ctx) => {
     const project = await findProjectOrThrow(projectId);
-    return adoptWorktree(project, worktreeId, force !== false, notifierFor(ctx));
+    return adoptWorktree(
+      project,
+      worktreeId,
+      force !== false,
+      notifierFor(ctx),
+    );
   },
 
   // `sm worktrees move` moves the checkout and carries what is keyed by
@@ -274,11 +289,7 @@ export const worktreesHandlers: Handlers<
   // git:refreshProject so the first pull happens right away, through
   // the same path as every later one.
   setAutoPull: async ({ projectId, worktreeId, autoPull }) =>
-    setAutoPull(
-      await findProjectOrThrow(projectId),
-      worktreeId,
-      autoPull,
-    ),
+    setAutoPull(await findProjectOrThrow(projectId), worktreeId, autoPull),
 
   setAgentWorking: async ({ projectId, worktreeId, agentWorking }) =>
     setAgentWorking(

@@ -19,8 +19,12 @@ import {
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { type Project, type Worktree } from "@shigomori/contracts/schemas";
-import { dirtyApplyViaCli } from "@host/ipc/cliDelegate";
-import { createWorktree, forceRemoveWorktree, worktreeDestination } from "@host/lib/engineCalls";
+import { dirtyApply } from "@host/lib/engineCalls";
+import {
+  createWorktree,
+  forceRemoveWorktree,
+  worktreeDestination,
+} from "@host/lib/engineCalls";
 import { deleteAnyLocalBranch, listBranches } from "@host/lib/git/branches";
 import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
@@ -100,10 +104,7 @@ async function refuseLandingCollision(
   // the create, after the bundle crossed. The CLI's destination read
   // makes the same two checks here, before a byte moves.
   if (worktreeName !== undefined) {
-    const { path, taken } = await worktreeDestination(
-      project.id,
-      worktreeName,
-    );
+    const { path, taken } = await worktreeDestination(project.id, worktreeName);
     if (taken) throw new Error(pullFolderCollision(worktreeName, path));
   }
 }
@@ -453,9 +454,7 @@ const landIncoming = (
       if (localDirtyRef !== sourceDirtyRef) {
         yield* step(() => deleteRef(project.path, sourceDirtyRef));
       }
-      dirtyApplied = yield* step(() =>
-        dirtyApplyViaCli(project, worktree.id),
-      ).pipe(
+      dirtyApplied = yield* step(() => dirtyApply(project, worktree.id)).pipe(
         Effect.withSpan("Landing.apply"),
         Effect.as(true),
         Effect.catchTags({
