@@ -1,6 +1,6 @@
-// The CLI's cross-device verbs, served on the control wire
+// The terminal's cross-device verbs, served on the loopback
 // (packages/contracts/src/modules/control.ts says why they live in the
-// app; host/ipc/modules/control.ts is the wire). Each op resolves what
+// app; host/ipc/modules/control.ts serves them). Each op resolves what
 // the caller named the way the dialogs do, then hands the run to the
 // SAME orchestrator a dialog calls (sync:sendWorktree,
 // sync:pullWorktree, mirror:startTo, mirror:startFrom, mirror:stop)
@@ -24,7 +24,7 @@ import {
   isMirrorStopUnconfirmed,
 } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { pullWorktreeName } from "@shared/git/branches";
 import {
@@ -87,6 +87,13 @@ import {
 } from "./peers";
 
 type Ops = Handlers<typeof controlContract, HandlerContext>;
+
+// A transfer, which the loopback serves as a stream of its progress
+// (the sync:pullProgress pushes `ctx` notifies) and then its answer.
+type TransferOp<K extends "send" | "bring"> = (
+  input: Parameters<ViewHandlers<typeof controlContract, never>[K]>[0],
+  ctx: HandlerContext,
+) => Promise<ControlTransferResult>;
 
 // The one device a send goes to, among the candidates (plan.ts
 // chooseTarget).
@@ -296,7 +303,7 @@ export const peerWorktrees: Ops["peerWorktrees"] = async ({
   };
 };
 
-export const send: Ops["send"] = async (
+export const send: TransferOp<"send"> = async (
   input,
   ctx,
 ): Promise<ControlTransferResult> => {
@@ -365,7 +372,7 @@ export const send: Ops["send"] = async (
   return { ...sent, device, copySide: "remote", source };
 };
 
-export const bring: Ops["bring"] = async (
+export const bring: TransferOp<"bring"> = async (
   input,
   ctx,
 ): Promise<ControlTransferResult> => {

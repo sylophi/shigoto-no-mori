@@ -13,10 +13,8 @@ import { Duplex } from "node:stream";
 import { it } from "vitest";
 import { mintHexId } from "@host/lib/hexId";
 import { attachFarEnd } from "@host/socket/channelStreams";
-import {
-  CHANNEL_WINDOW_BYTES,
-  type ChannelEndpoint,
-} from "@shared/remote/channels";
+import type { ChannelEndpoint } from "@shigomori/contracts/link";
+import { CHANNEL_WINDOW_BYTES } from "@shared/remote/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { type Track, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";

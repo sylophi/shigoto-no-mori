@@ -22,8 +22,8 @@ A device is made of two folders:
 
 - **Data dir.** Projects and worktrees: `registry.json` (projects
   and the device id), `state.json`, `config.json`, `projects/`,
-  `worktrees/`, and while the app runs `control.json` (how the CLI's
-  cross-device verbs find it). The device id is created per data dir,
+  `worktrees/`, and while the app runs `loopback.json` (how the
+  terminal's cross-device verbs find it). The device id is created per data dir,
   so one data dir is one device. A pre-2.0 `~/shigomori` (`~/shigomori-dev`) that still
   holds state is adopted in place until `~/.sm` (`~/.smd`) holds state;
   Settings > Data location offers to rename it, and `sm doctor` warns.

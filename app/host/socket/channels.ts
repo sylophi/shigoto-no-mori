@@ -15,12 +15,13 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
-import {
-  CHANNEL_WINDOW_BYTES,
-  type ChannelEndpoint,
-  type ChannelHandle,
-} from "@shared/remote/channels";
-import { type LinkChannels, MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
+import type {
+  ChannelEndpoint,
+  ChannelHandle,
+  LinkChannels,
+} from "@shigomori/contracts/link";
+import { CHANNEL_WINDOW_BYTES } from "@shared/remote/channels";
+import { MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
 import {
   CHANNEL_OPEN_NO_CHANNELS,
   CHANNEL_OPEN_TAKEN,

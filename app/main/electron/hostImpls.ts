@@ -12,12 +12,8 @@ import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
 import { setCliImpl } from "@host/ipc/modules/cli";
 import { setGitImpl } from "@host/ipc/modules/git";
 import { setRuntimeImpl } from "@host/ipc/modules/runtime";
-import {
-  broadcastAll,
-  refreshDirectHost,
-  republishControlHost,
-  stopControlHost,
-} from "../ipc/register";
+import { loopback } from "@host/socket/loopback";
+import { broadcastAll, refreshDirectHost } from "../ipc/register";
 import {
   cliLinkStatus,
   installCliLinks,
@@ -64,10 +60,10 @@ export function installHostImpls(): void {
     uninstallCliEverything,
     releaseStore,
     stopUpdaterBridge,
-    stopControlHost,
+    unpublishLoopback: loopback.unpublish,
     broadcastNukeProgress: (progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
-    afterDataWipe: republishControlHost,
+    afterDataWipe: () => void loopback.publish(),
     relaunchAppUnattended,
     unattendedMoveRefusal: () => busyActionRemoteRefusal("move"),
   });
