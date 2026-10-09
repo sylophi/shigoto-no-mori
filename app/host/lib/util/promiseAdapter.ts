@@ -1,6 +1,6 @@
 // The Promise face of a converted subsystem, for the callers that are
 // not Effect yet (EFFECT.md, runtime boundaries). Its layer sits beside
-// the subsystem's in the layer graph (main/hostLayer.ts): building it
+// the subsystem's in the layer graph (host/process/layer.ts): building it
 // captures the graph's context, so a call runs on the graph's own
 // services, logger and tracer included, and closing it turns every
 // later call away. A call made before the graph is up waits for it,

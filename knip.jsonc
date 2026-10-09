@@ -3,9 +3,11 @@
   "workspaces": {
     "app": {
       "entry": [
-        // forge.config.ts names main's entry to Vite as a string.
+        // forge.config.ts names main's and the host's entries to Vite as
+        // strings.
         "forge.config.ts",
         "main/index.ts",
+        "host/process/host.ts",
         "vite.*.config.ts",
         // The fake host (lab/fake-host/README.md): its pages load their
         // scripts by root-relative path, and clerkStub.tsx stands in for

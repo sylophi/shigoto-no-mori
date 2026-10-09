@@ -1,6 +1,6 @@
 // Spans for code that is not Effect yet: the Promise adapter of the
 // process's tracer (EFFECT.md, section 3). The observability layer fills
-// the context while the graph lives (main/observability.ts). With none
+// the context while the graph lives (host/lib/util/observability.ts). With none
 // (a proof, or before boot) a traced run just runs. A step names its
 // parent (the span handed to `run`). Otherwise the parent is the span a
 // caller ran the Promise code under (withParentSpan): a move's step, or

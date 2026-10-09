@@ -189,6 +189,11 @@ cloning exists.
   running on the old code: type `rs` in the `pnpm start` terminal to
   restart it. The peer keeps the code it booted with until it is
   relaunched.
+- **The host is a process of its own** (`main/hostProcess.ts` forks
+  `host/process/host.ts`), and its log lines come prefixed `[host]`.
+  Killing it is a crash the shell recovers from: it forks the host
+  again, on the bundle built last, and the window redials. That is
+  also the quick way to run a host change.
 - **Never press Sign out in a cloned window.** A cloned sign-in shares
   one Clerk client with the plain dev app, so signing out ends the
   session for both. End a cloned profile by revoking its device

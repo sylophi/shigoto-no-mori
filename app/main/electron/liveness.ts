@@ -18,7 +18,6 @@ import { platform } from "node:os";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { markShuttingDown } from "@host/lib/scripts";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
@@ -242,7 +241,6 @@ export function installFatalRecovery(deps: {
       // Mark relaunching first so a quit that somehow starts is a
       // hurried one, with no busy-action prompt.
       scheduleRelaunch();
-      markShuttingDown();
       rememberVisibilityForRestart();
     } catch (error) {
       log.error(

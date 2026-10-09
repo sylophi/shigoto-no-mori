@@ -2,7 +2,7 @@
 // terminal, so the console (where the app's logger writes, see
 // shared/log.ts) goes to ~/Library/Logs/<app name>/main.log as well,
 // rotated to main.old.log past 1 MB, and every span that ends goes to
-// trace.log beside it (main/observability.ts). A dev build's renamed
+// trace.log beside it (host/lib/util/observability.ts). A dev build's renamed
 // app (`Shigoto no Mori (Dev)`, plus its profile) keeps its own folder.
 // The terminal still gets each console line as it was written.
 import log from "electron-log/main";

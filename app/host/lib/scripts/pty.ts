@@ -212,7 +212,7 @@ const pty = Effect.fn("Pty.spawn")(function* (
 });
 
 // Every run the app spawned, each in a scope under the layer's, so the
-// quit ends whatever the quit's own policy (main/hostLayer.ts) left.
+// quit ends whatever the quit's own policy (host/process/layer.ts) left.
 export class ScriptRuns extends Context.Service<
   ScriptRuns,
   {

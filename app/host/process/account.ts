@@ -4,6 +4,7 @@
 // opens either). Null is signed out, or a build with no account
 // service, which the hub socket, the device link's listener and the
 // tunnel all read as "stop".
+import type { AccountFacts } from "@shigomori/contracts/modules/session";
 import {
   type AccountService,
   createAccountService,
@@ -13,18 +14,7 @@ import type {
   TunnelProvisionResponse,
 } from "@shigomori/contracts/hubProtocol";
 
-export type AccountFacts = {
-  readonly hubUrl: string;
-  readonly accountId: string;
-  // The device credential the hub mints tickets and provisions the
-  // tunnel against: a bearer secret, held in memory only.
-  readonly credential: string;
-  // The web client's origin, the one extra origin the device link's
-  // listener admits. Empty when none is configured.
-  readonly webOrigin: string;
-  // The command-access switch, which lives on the account's record.
-  readonly acceptsCommands: boolean;
-};
+export type { AccountFacts };
 
 let facts: AccountFacts | null = null;
 let service: AccountService | null = null;
