@@ -97,6 +97,9 @@ Poses ride the URL:
 - `?downloading=sm,tp,mini`: the devices downloading the update.
 - `?notSharing=tp,mini`: the devices with sharing off, by the same
   keys, which then serve this page nothing.
+- `?hubBlocked=update-required`: this device's hub socket blocked, for
+  `update-required`, `refused`, `revoked` or `superseded`, in the words
+  each gets.
 - `?crowd=<n>`: up to 20 more projects on Studio Mac, most holding
   their primary checkout alone, for the forest at the size where
   finding a project gets hard. Add `&crowdShared=1` to have terrier

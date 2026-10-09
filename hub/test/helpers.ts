@@ -20,6 +20,8 @@ import {
   decodeEnvelope,
   encodeEnvelope,
 } from "@shigomori/contracts/hubProtocol";
+import { PROTOCOL_HEADER } from "@shigomori/contracts/hubApi";
+import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import type { Env } from "../src/env.ts";
 import { createWorker, type HubDeps } from "../src/worker.ts";
 
@@ -45,7 +47,8 @@ const worker = makeTestWorker();
 export const BASE = "https://hub.test";
 
 // Drives a worker exactly like production would, against the real
-// bindings. Upgrade responses skip waitOnExecutionContext because the
+// bindings. A request names this build's protocol unless it names one
+// itself, as every app request does. Upgrade responses skip waitOnExecutionContext because the
 // socket outlives the request. Defaults to the shared stub worker, and
 // specs with their own deps pass a makeTestWorker instance.
 export async function call(
@@ -54,7 +57,15 @@ export async function call(
   testWorker: ReturnType<typeof createWorker> = worker,
 ): Promise<Response> {
   const ctx = createExecutionContext();
-  const response = await testWorker.fetch(request, testEnv, ctx);
+  const headers = new Headers(request.headers);
+  if (!headers.has(PROTOCOL_HEADER)) {
+    headers.set(PROTOCOL_HEADER, String(PROTOCOL_VERSION));
+  }
+  const response = await testWorker.fetch(
+    new Request(request, { headers }),
+    testEnv,
+    ctx,
+  );
   if (response.status !== 101) await waitOnExecutionContext(ctx);
   return response;
 }
