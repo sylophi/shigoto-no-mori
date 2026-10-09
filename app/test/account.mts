@@ -265,12 +265,18 @@ it("service: mintTicket POSTs the tickets route under the credential bearer", as
   const { service, calls } = stubService(() =>
     json({ ticket: "the-ticket", expiresInMs: 30_000 }),
   );
-  const ticket = await service.mintTicket("device-credential");
+  const ticket = await service.mintTicket(
+    "device-credential",
+    "0123456789abcdef0123456789abcdef",
+  );
   assert.equal(ticket.ticket, "the-ticket");
   const call = entryAt(calls, 0);
   assert.equal(call.url, "https://hub.test/tickets");
   assert.equal(call.init.method, "POST");
   assert.equal(call.init.headers.authorization, "Bearer device-credential");
+  assert.deepEqual(sentJson(call), {
+    connectionId: "0123456789abcdef0123456789abcdef",
+  });
 });
 
 it("service: the auth tier differs, enroll under the session token and the rest under the credential", async () => {
@@ -291,9 +297,17 @@ it("service: the auth tier differs, enroll under the session token and the rest 
   const enrollAuth = entryAt(calls, 0).init.headers.authorization;
   const listAuth = entryAt(calls, 1).init.headers.authorization;
   assert.equal(enrollAuth, "Bearer session-token");
-  // Every call names this build's protocol, which the hub's floor reads.
+  // Every call names this build's protocol, which the hub's floor reads,
+  // and sends nothing the hub's CORS allowlist would refuse a browser.
   for (const call of calls) {
     assert.equal(call.init.headers["sm-protocol"], String(PROTOCOL_VERSION));
+    assert.deepEqual(
+      Object.keys(call.init.headers).toSorted(),
+      ["authorization", "content-type", "sm-protocol"].filter(
+        (name) =>
+          name !== "content-type" || "content-type" in call.init.headers,
+      ),
+    );
   }
   assert.equal(listAuth, "Bearer device-credential");
   assert.notEqual(enrollAuth, listAuth, "enroll and list share a bearer");

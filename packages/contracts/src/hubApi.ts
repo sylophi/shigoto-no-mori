@@ -17,7 +17,9 @@ import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
 import * as HttpApiSecurity from "effect/http-api/HttpApiSecurity";
+import type { DeviceKind } from "./modules/link.ts";
 import { PROTOCOL_VERSION } from "./protocol.ts";
+import { HexId32Schema } from "./schemas/hexId.ts";
 import {
   DeviceIdSchema,
   DeviceListResponseSchema,
@@ -234,10 +236,16 @@ export class LoginAuth extends HttpApiMiddleware.Service<
   error: HubLoginRejectedError,
 }) {}
 
-// The enrolled device a credential belongs to, and its account.
+// The enrolled device a credential belongs to, its account, and its
+// kind: a browser profile is a web device, which holds a connection
+// per tab, and anything else a desktop, which holds one.
 export class HubDevice extends Context.Service<
   HubDevice,
-  { readonly deviceId: string; readonly accountId: string }
+  {
+    readonly deviceId: string;
+    readonly accountId: string;
+    readonly kind: DeviceKind;
+  }
 >()("sm/contracts/HubDevice") {}
 
 export class DeviceAuth extends HttpApiMiddleware.Service<
@@ -294,7 +302,11 @@ const devices = HttpApiGroup.make("devices", { topLevel: true })
       payload: DevicePatchRequestSchema,
       error: [HubUnknownDeviceError, HubUnavailableError],
     }),
+    // A ticket for one connection, named by the id its dialer minted
+    // once and keeps across redials, so a redial replaces its own stale
+    // socket and, on a web device, no other tab's.
     HttpApiEndpoint.post("mintTicket", "/tickets", {
+      payload: Schema.Struct({ connectionId: HexId32Schema }),
       success: TicketResponseSchema,
       error: [HubTicketSigningUnconfiguredError, HubUnavailableError],
     }),

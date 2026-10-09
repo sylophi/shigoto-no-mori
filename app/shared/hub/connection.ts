@@ -14,7 +14,7 @@
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { createHeartbeat, type HeartbeatOptions } from "@shared/hub/heartbeat";
-import { RemoteConnectError } from "@shared/remote/deviceLink";
+import { newConnectionId, RemoteConnectError } from "@shared/remote/deviceLink";
 import {
   createHubLink,
   type HubLink,
@@ -185,6 +185,9 @@ export function createHubConnectionCore(
   // Serializes refresh/stop so a fast account double-toggle cannot
   // interleave one refresh's stop with another's start.
   const lifecycle = createLimiter(1);
+  // This socket's name on the hub, kept across redials. A web device
+  // holds one per tab, and the hub relays to each.
+  const connectionId = newConnectionId();
 
   function notifyChange(): void {
     deps.onChange?.();
@@ -233,7 +236,7 @@ export function createHubConnectionCore(
       // dialAbort so stop() cancels the fetch too.
       const mintTimer = setTimeout(() => dialAbort.abort(), ACCEPT_TIMEOUT_MS);
       void opts
-        .mintTicket(dialAbort.signal)
+        .mintTicket(connectionId, dialAbort.signal)
         .then((ticket) => {
           clearTimeout(mintTimer);
           if (settled) return;
