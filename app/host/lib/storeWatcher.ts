@@ -22,7 +22,9 @@ export class StoreWatcher extends Context.Service<
   StoreWatcher,
   {
     // Stops watching, before the data-folder move renames the data dir
-    // out from under the store. The app relaunches right after.
+    // out from under the store, and folds the write-ahead log into the
+    // store file, so a move that copies across volumes copies it whole.
+    // The app relaunches right after.
     readonly release: Effect.Effect<void>;
   }
 >()("sm/host/StoreWatcher") {}
@@ -55,6 +57,10 @@ const make = (onChange: () => void) =>
     );
     return StoreWatcher.of({
       release: FiberHandle.clear(watching).pipe(
+        Effect.andThen(sql`PRAGMA wal_checkpoint(TRUNCATE)`),
+        // A checkpoint a reader holds back leaves the log beside the
+        // store, which the copy carries as well.
+        Effect.ignore,
         Effect.withSpan("StoreWatcher.release"),
       ),
     });
