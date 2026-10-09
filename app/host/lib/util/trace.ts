@@ -2,7 +2,7 @@
 // process's tracer (EFFECT.md, section 3). The observability layer fills
 // the context while the graph lives (main/observability.ts). With none
 // (a proof, or before boot) a traced run just runs. A step names its
-// parent (the span handed to `run`); otherwise the parent is the span a
+// parent (the span handed to `run`). Otherwise the parent is the span a
 // caller ran the Promise code under (withParentSpan): a move's step, or
 // the device link serving a peer's call, so one move is one trace on
 // every device it touches. The adapter goes once the last caller is an

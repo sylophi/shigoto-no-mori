@@ -34,6 +34,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Cause from "effect/Cause";
 import * as Layer from "effect/Layer";
 import * as RpcClient from "effect/rpc/RpcClient";
@@ -140,6 +141,8 @@ function serve(listener: DirectListener, seen: Seen): void {
   binding.handle("worktrees:list", (ctx) => hang(seen, ctx));
   // A view: what the projects list reads as, twice.
   binding.view("projects:watch", () => Stream.make([], []));
+  // A view that never ends, as a live one doesn't.
+  binding.view("ports:watch", () => Stream.never);
   binding.handle("forward:open", async (ctx, input) => {
     const { channelId } = input as { channelId: string };
     const record = {
@@ -481,6 +484,30 @@ it("in-flight cap: one call past the per-peer cap is refused rather than run", a
   assert.match(String(over), /too many in-flight requests/);
   for (const call of seen.hanging) call.resolve([]);
   await Promise.all(calls);
+});
+
+it("in-flight cap: streams a peer holds open take no place under it", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const raw = await rawLink(track, listener);
+  assert.ok(
+    Exit.isSuccess(await raw.hello(mintTicket(listener.tickets, CLIENT))),
+  );
+  const open = Array.from({ length: MAX_IN_FLIGHT_PER_PEER + 1 }, () =>
+    Effect.runFork(
+      Stream.runDrain(
+        raw.watch("ports:watch", { projectId: "p", worktreeId: "w" }),
+      ),
+    ),
+  );
+  track(() =>
+    Promise.all(open.map((fiber) => Effect.runPromise(Fiber.interrupt(fiber)))),
+  );
+  // Let every stream reach the host before the call.
+  await Effect.runPromise(raw.call("link:ping"));
+  assert.deepEqual(await Effect.runPromise(raw.call("git:sweep")), {
+    leaseMs: 5,
+  });
 });
 
 it("command gate: with commands off a command is refused with the typed error and never runs while a read is served, and turning them on needs no reconnect", async () => {

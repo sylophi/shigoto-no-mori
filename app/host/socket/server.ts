@@ -193,7 +193,7 @@ function clientIdentityOf(
 }
 
 // The Origin pre-filter for the upgrade, not the security boundary (the
-// hello's proof is). The desktop's dialer sends no Origin; the web
+// hello's proof is). The desktop's dialer sends no Origin. The web
 // client's browser always does, from a loopback http page or the one
 // configured web origin.
 function isAllowedOrigin(
@@ -347,7 +347,7 @@ export class DeviceLink extends Context.Service<
   {
     // Brings the listener to what `wanted` reads, serialized, so two
     // overlapping reconciles cannot apply a stale read last. Null stops
-    // it; the same options as the running listener change nothing.
+    // it, and the same options as the running listener change nothing.
     readonly reconcile: (
       wanted: Effect.Effect<WsServerStartOpts | null>,
     ) => Effect.Effect<void>;
@@ -652,7 +652,9 @@ const make = (options: {
               return Effect.fail(new LinkUnauthenticatedError());
             }
             const deviceId = connection.deviceId;
-            const streaming = isBroadcast(rpc as ContractCall);
+            // A stream (a push, a view, a channel's bytes) lives as
+            // long as its reader wants it, so it holds no place.
+            const streaming = !isInvoke(rpc as ContractCall);
             if (!streaming && connection.inFlight >= MAX_IN_FLIGHT_PER_PEER) {
               return Effect.fail(
                 new RemoteCallError({ text: "too many in-flight requests" }),
@@ -690,7 +692,7 @@ const make = (options: {
           (effect, { rpc, payload }) =>
             Effect.gen(function* () {
               const peer = yield* LinkPeer;
-              // Only an explicit gated:false is a read; a missing
+              // Only an explicit gated:false is a read. A missing
               // annotation is gated like a command.
               if (annotation(rpc as ContractCall, Gated) === false) {
                 return yield* effect;

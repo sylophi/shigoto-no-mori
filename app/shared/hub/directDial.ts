@@ -320,7 +320,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
                 deps.onAnyPush?.(deviceId, channel, payload);
               }
             },
-            // The open is bounded by what is left of the attempt; the
+            // The open is bounded by what is left of the attempt, and the
             // race's deadline abandons whatever is still waiting.
             deadlineMs: remainingMs,
           }),

@@ -8,7 +8,7 @@
 //
 // On the wire a channel is the link's own calls (modules/link.ts): the
 // host's bytes are one `read` stream, which the dialer pulls, so a slow
-// reader holds the host back; the dialer's bytes are `write` calls,
+// reader holds the host back. The dialer's bytes are `write` calls,
 // each answered once the host's sink took them, so a slow sink holds
 // the dialer back. The host's half is host/socket/channels.ts.
 import * as Cause from "effect/Cause";

@@ -1,5 +1,5 @@
 // The hub socket's liveness heartbeat (shared/hub/connection.ts). The
-// device link has its own in Effect RPC's pings (shared/remote/link.ts);
+// device link has its own in Effect RPC's pings (shared/remote/link.ts),
 // this one goes when step 5 moves the hub link onto it too.
 //
 // A ping goes out every interval. ANY inbound frame answers it (a res
