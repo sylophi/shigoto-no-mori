@@ -45,13 +45,14 @@ import { doctor, engine } from "./engine.ts";
 import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
 
-// --json and --verbose are global wherever they sit, up to a `--`,
-// past which everything is the command's, as in Go.
+// --json, --verbose and --version are global wherever they sit, up to
+// a `--`, past which everything is the command's, as in Go.
 // --verbose is accepted and has nothing to add yet.
 function globalFlags(args: ReadonlyArray<string>) {
   const end = args.indexOf("--");
   const before = end === -1 ? args : args.slice(0, end);
   return {
+    version: before.includes("--version") || before.includes("-V"),
     json: before.includes("--json"),
     rest: [
       ...before.filter((arg) => arg !== "--json" && arg !== "--verbose"),
@@ -102,7 +103,11 @@ function canonical(args: ReadonlyArray<string>) {
   return [command, ...more];
 }
 
-const { json, rest } = globalFlags(process.argv.slice(2));
+const {
+  version: askedVersion,
+  json,
+  rest,
+} = globalFlags(process.argv.slice(2));
 const plain =
   json || process.env.NO_COLOR !== undefined || process.env.TERM === "dumb";
 
@@ -190,4 +195,9 @@ const program = Command.runWith(sm, { version, renderErrors: false })(
   ),
 );
 
-BunRuntime.runMain(program);
+// The version alone, whatever else was asked.
+if (askedVersion) {
+  process.stdout.write(`${version}\n`);
+} else {
+  BunRuntime.runMain(program);
+}

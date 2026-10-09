@@ -191,6 +191,14 @@ export class Config extends Context.Service<
       scope: ConfigScope,
       payload: ConfigDoc,
     ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
+    // The document as stored, changed by `change` and written back in
+    // one transaction: the terminal's verbs over the list-valued
+    // settings. A project's default branch is filled in from git when
+    // the document has none.
+    readonly change: (
+      scope: ConfigScope,
+      change: (doc: ConfigDoc) => ConfigDoc,
+    ) => Effect.Effect<void, MissingDefaultBranch>;
     // The ids of the projects that have settings stored.
     readonly storedProjectIds: Effect.Effect<ReadonlyArray<string>>;
     // Drops a project's stored settings.
@@ -516,6 +524,17 @@ const make = Effect.gen(function* () {
     yield* update(scope, (doc) => mergeConfigDoc(keysOf(scope), doc, payload));
   });
 
+  const change = Effect.fn("Config.change")(function* (
+    scope: ConfigScope,
+    changed: (doc: ConfigDoc) => ConfigDoc,
+  ) {
+    yield* update(scope, (doc) => {
+      const next = changed(structuredClone(doc));
+      for (const key of Object.keys(doc)) delete doc[key];
+      Object.assign(doc, next);
+    });
+  });
+
   const storedProjectIds = sql<{ project_id: string }>`
     SELECT DISTINCT project_id FROM project_config`.pipe(
     Effect.map((rows) => rows.map(({ project_id }) => project_id)),
@@ -530,6 +549,7 @@ const make = Effect.gen(function* () {
     set,
     unset,
     write,
+    change,
     storedProjectIds,
     forgetProject: (projectId) =>
       sql`DELETE FROM project_config WHERE project_id = ${projectId}`.pipe(

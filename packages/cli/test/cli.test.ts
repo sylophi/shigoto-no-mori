@@ -171,6 +171,11 @@ const change = (...args: string[]) => changeAt(box.home, ...args);
 const same = (...args: string[]) => sameAt(box.home, ...args);
 
 describe("config", () => {
+  it("prints the version wherever --version sits", async () => {
+    await same("--version");
+    await same("--json", "config", "list", "-V");
+  });
+
   it("lists, gets and reads a fresh install's settings", async () => {
     await same("--json", "config", "list");
     await same("config", "list");
@@ -1300,13 +1305,14 @@ describe("at a terminal", () => {
   const inTerminal = async (
     args: ReadonlyArray<string>,
     keys: ReadonlyArray<readonly [shown: string, key: string]>,
+    env: NodeJS.ProcessEnv = {},
   ) => {
     // script takes no socket for its input, which node's pipes are, so
     // cat hands it a pipe.
     const command = 'cat | script -q /dev/null "$@"';
     const child = spawn("sh", ["-c", command, "sh", built, ...args], {
       cwd: box.home,
-      env: { ...box.env("cli"), TERM: "xterm-256color" },
+      env: { ...box.env("cli"), TERM: "xterm-256color", ...env },
       stdio: ["pipe", "pipe", "ignore"],
     });
     let shown = "";
@@ -1384,6 +1390,28 @@ describe("at a terminal", () => {
     );
   });
 
+  it("edits the settings in $EDITOR and saves what it left", async () => {
+    box.write("registry.json", { projects: [] });
+    box.fakeBin(
+      "fake-editor",
+      `grep -q '"launchScripts"' "$1" && exit 9; printf '{"launchScripts": false}' > "$1"`,
+    );
+    await inTerminal(["config", "edit"], [], { EDITOR: "fake-editor" });
+    const got = await box.runAt(built, "cli", box.home, [
+      "config",
+      "get",
+      "launchScripts",
+    ]);
+    assert.equal(got.stdout, "false\n");
+    // Without a terminal there is no editor to wait on.
+    const refused = await box.runAt(built, "cli", box.home, [
+      "--json",
+      "config",
+      "edit",
+    ]);
+    assert.equal(refused.code, 2);
+  });
+
   it("filters by name, and esc cancels", async () => {
     projects();
     const shown = await inTerminal(
@@ -1396,6 +1424,169 @@ describe("at a terminal", () => {
       ],
     );
     assert.match(shown, /Cancelled\./);
+  });
+});
+
+// Go's bare form prints the file, whose schemaVersion marks its
+// format. The store has no file to mark.
+const unmarked = (run: Run): Run => ({
+  ...run,
+  stdout: run.stdout.replace(/\n {2}"schemaVersion": 1,?/, ""),
+  doc:
+    typeof run.doc === "object" && run.doc !== null
+      ? Object.fromEntries(
+          Object.entries(run.doc).filter(([key]) => key !== "schemaVersion"),
+        )
+      : run.doc,
+});
+describe("config lists, the bare form and its flags", () => {
+  // A launcher's id is minted on each side.
+  const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+  const ids = (run: Run): Run => ({
+    ...run,
+    stdout: run.stdout.replaceAll(UUID, "<id>"),
+    stderr: run.stderr.replaceAll(UUID, "<id>"),
+    doc: JSON.parse(JSON.stringify(run.doc ?? null).replaceAll(UUID, "<id>")),
+  });
+  const sameIds = async (...args: string[]) => {
+    const [go, ours] = await Promise.all([
+      box.runAt(goSm(), "go", box.home, args),
+      box.runAt(built, "cli", box.home, args),
+    ]);
+    compare(args, go, ours, ids);
+  };
+
+  it("adds, lists and removes the device's launchers", async () => {
+    box.write("registry.json", { projects: [] });
+    await same("config", "launcher");
+    await sameIds("--json", "config", "launcher", "add", "Shell", "zsh");
+    await sameIds("config", "launchers", "add", "Shell", "bash");
+    await sameIds("config", "launcher", "list");
+    await sameIds("config", "launcher", "rm", "shell");
+    await same("config", "launcher", "add", " ", "x");
+    await same("config", "launcher", "add", "Only");
+    await same("--json", "config", "launcher", "rm", "nope");
+    await same("config", "launcher", "frob");
+    await sameIds("config", "launcher", "add", "Term", "open -a Terminal");
+    await sameIds("config", "launcher", "remove", "term");
+    await sameIds("--json", "config", "launcher");
+  });
+
+  const bare = async (...args: string[]) => {
+    const [go, ours] = await Promise.all([
+      box.runAt(goSm(), "go", box.home, args),
+      box.runAt(built, "cli", box.home, args),
+    ]);
+    compare(args, go, ours, unmarked);
+  };
+
+  it("prints and sets a project's settings by the old flags", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await bare("projects", "config", "-p", "alpha");
+    await bare("--json", "projects", "config", "-p", "alpha");
+    await same("projects", "config", "-p", "alpha", "--setup", "pnpm i");
+    await bare("--json", "projects", "config", "-p", "alpha");
+    await same(
+      "--json",
+      "projects",
+      "config",
+      "--teardown",
+      "rm -rf tmp",
+      "--default-branch",
+      "main",
+      "-p",
+      "alpha",
+    );
+    await same("projects", "config", "-p", "alpha", "--setup", "");
+    await bare("--json", "projects", "config", "-p", "alpha");
+    await same("projects", "config", "-p", "alpha", "--default-branch", " ");
+  });
+
+  it("adds, lists and removes a project's carry-over entries", async () => {
+    const alpha = box.repo("alpha");
+    writeFileSync(`${alpha}/.env`, "A=1\n");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await same("projects", "config", "carryover", "-p", "alpha");
+    await same(
+      "projects",
+      "config",
+      "carryover",
+      "add",
+      "./.env",
+      "-p",
+      "alpha",
+    );
+    await same(
+      "--json",
+      "projects",
+      "config",
+      "carry-over",
+      "add",
+      `${alpha}/.env`,
+      "--copy",
+      "-p",
+      "alpha",
+    );
+    await same(
+      "projects",
+      "config",
+      "carryover",
+      "add",
+      "node_modules/",
+      "-p",
+      "alpha",
+    );
+    await same("projects", "config", "carryover", "list", "-p", "alpha");
+    await same("--json", "projects", "config", "carryover", "-p", "alpha");
+    await same("projects", "config", "carryover", "add", "../x", "-p", "alpha");
+    await same(
+      "projects",
+      "config",
+      "carryover",
+      "add",
+      "/etc/hosts",
+      "-p",
+      "alpha",
+    );
+    await same(
+      "projects",
+      "config",
+      "carryover",
+      "add",
+      "x",
+      "--copy",
+      "--symlink",
+      "-p",
+      "alpha",
+    );
+    await same("projects", "config", "carryover", "rm", ".env", "-p", "alpha");
+    await same(
+      "--json",
+      "projects",
+      "config",
+      "carryover",
+      "remove",
+      "nope",
+      "-p",
+      "alpha",
+    );
+    await same("projects", "config", "carryover", "frob", "-p", "alpha");
+    await sameIds(
+      "projects",
+      "config",
+      "launcher",
+      "add",
+      "Zed",
+      "zed .",
+      "-p",
+      "alpha",
+    );
+    await sameIds("--json", "projects", "config", "read", "-p", "alpha");
   });
 });
 
