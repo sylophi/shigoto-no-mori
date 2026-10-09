@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as EngineConfig from "@shigomori/engine/Config";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
@@ -32,6 +33,7 @@ import { setAutoPull, writeGlobalConfig } from "../host/lib/engineCalls.ts";
 import { writeWorktreeData } from "../host/lib/config/project.ts";
 import { readDeviceId } from "../host/lib/config/deviceId.ts";
 import * as HostPushes from "../host/lib/hostPushes.ts";
+import * as Sharing from "../host/lib/sharing.ts";
 import { listWorktrees } from "../host/lib/git/worktrees.ts";
 import { registerProject } from "../host/lib/projects/index.ts";
 import { killAllScripts, startScript } from "../host/lib/scripts/index.ts";
@@ -220,6 +222,43 @@ it("settings: a device setting written through the engine", async () => {
       yield* tick();
       assert.deepEqual((yield* next).hiddenLaunchers, ["app:zed"]);
     }),
+  );
+});
+
+it("sharing: set from the account page, then by a terminal's write, the switch moves and says so once per change, stored only while off", async () => {
+  const announced: boolean[] = [];
+  await Engine.run(
+    Effect.gen(function* () {
+      const sharing = yield* Sharing.Sharing;
+      const config = yield* EngineConfig.Config;
+      const changes = yield* Stream.toQueue(sharing.changes, {
+        capacity: "unbounded",
+      });
+      const next = Queue.take(changes).pipe(Effect.orDie);
+      assert.equal(yield* next, true, "on until switched off");
+      yield* sharing.set(false);
+      assert.equal(yield* next, false);
+      const stored = yield* config.read({ kind: "device" });
+      assert.equal(stored?.["shareWithDevices"], false);
+      yield* sharing.set(false);
+      // `sm config unset shareWithDevices`, as a terminal runs it.
+      yield* config.change({ kind: "device" }, (doc) => {
+        const { shareWithDevices: _, ...rest } = doc;
+        return rest;
+      });
+      yield* TestClock.adjust("500 millis");
+      assert.equal(yield* next, true);
+      assert.equal(yield* sharing.current, true);
+      assert.deepEqual(announced, [false, true]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Sharing.layer({ announce: (on) => announced.push(on) }).pipe(
+          Layer.provideMerge(StoreChanges.layer),
+          Layer.provideMerge(TestClock.layer()),
+        ),
+      ),
+    ),
   );
 });
 

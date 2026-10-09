@@ -32,6 +32,8 @@ export const BLOCK_REASON: Record<
   string
 > = {
   offline: "not connected",
+  "not-sharing":
+    "doesn't share with other devices (turn it on from its account page, in Settings)",
   "no-project": "has no checkout of this repo",
   "no-grant":
     "doesn't accept commands (turn it on from its account page, in Settings)",

@@ -138,6 +138,19 @@ export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>
 
 export const isCommandRefusedError = Schema.is(CommandRefusedError);
 
+// A peer's sharing switch is off: that machine serves this device
+// nothing, reads included (the device link's SharingGate).
+export class NotSharingError extends Schema.TaggedError<NotSharingError>()(
+  "NotSharingError",
+  {},
+) {
+  override get message(): string {
+    return "the remote machine does not share with other devices";
+  }
+}
+
+export const isNotSharingError = Schema.is(NotSharingError);
+
 // The far side failed the call with something no class above names.
 // Its message is the far side's own words (a refusal marker some
 // callers match, see channelRefusals.ts), and its code the errno or
@@ -201,6 +214,7 @@ export const ContractErrorSchema = Schema.Union([
   BranchNotMergedError,
   SyncConflictsError,
   CommandRefusedError,
+  NotSharingError,
   ProtocolVersionMismatchError,
   LinkRefusedError,
   LinkUnauthenticatedError,

@@ -15,6 +15,7 @@ import {
   hubContract,
   type HubPeerPush,
 } from "@shigomori/contracts/modules/hub";
+import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import type {
   BroadcastKeys,
@@ -44,7 +45,8 @@ import { publishPush } from "@host/lib/hostPushes";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@host/lib/util/paths";
 import type * as Views from "@host/lib/views";
-import { mirrorInviteAdmits } from "@host/mirror/invites";
+import * as Sharing from "@host/lib/sharing";
+import { mirrorInviteAdmits, mirrorInviteSees } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/loopback";
 import * as DeviceLink from "@host/socket/server";
 import {
@@ -56,11 +58,14 @@ import {
 import { hostBinaryPath, hostFacts } from "./facts";
 
 // The device link's listener. Its hello consumes the single-use connect
-// tickets connectInfo mints over the device hub, and its gate runs
-// every call not annotated gated:false only under the live command
-// switch (every ticketed peer is a device of this account, so the
-// switch is the whole verdict). The registrar records the handlers at
-// start, while listening follows enrollment in refreshDirectHost below.
+// tickets connectInfo mints over the device hub, and its gates serve a
+// peer nothing while the sharing switch is off (Sharing) and run every
+// call not annotated gated:false only under the command switch
+// (acceptsPeerCommands): every ticketed peer is a device of this
+// account, so the switches are the whole verdict. The gates are the
+// only enforcement; everything else that shows the switches is a
+// reading of them. The registrar records the handlers at start, while
+// listening follows enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
 const linkRegistrar = DeviceLink.createLinkRegistrar();
 export const deviceLinkLayer = () =>
@@ -72,12 +77,24 @@ export const deviceLinkLayer = () =>
           matchTicket: (deviceId, arrivedAs, matches) =>
             directTickets.consumeProven(deviceId, arrivedAs, matches),
           isCommandGranted: acceptsPeerCommands,
-          // The switch's one exception: the mirrors this device asked for.
+          // The switches' one exception: the mirrors this device asked for.
           isInvited: mirrorInviteAdmits,
         },
+        // Not sharing, a mirror it asked for still follows its copy here.
+        seesPush: mirrorInviteSees,
       }),
     ),
   );
+
+// The sharing switch the link's gate reads. Its changes go to this
+// device's windows and, the push being remote, to every peer.
+export const sharingLayer = Sharing.adapter.pipe(
+  Layer.provideMerge(
+    Sharing.layer({
+      announce: (on) => broadcastAll(sharingContract, "changed", on),
+    }),
+  ),
+);
 const directLink = DeviceLink.deviceLink;
 
 // The tunnel endpoint: a supervised cloudflared child fronting the
@@ -182,7 +199,8 @@ const directPlane = () =>
 export const hubHandlers = () => directPlane().handlers;
 
 // The answer to a peer's connectInfo ask (host/direct/connectInfo.ts),
-// the one question the device hub carries.
+// the one question the device hub carries, with the switches the
+// listener's gates read.
 const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
     const current = directLink.status();
@@ -193,6 +211,7 @@ const serveConnectInfo = makeConnectInfo({
   // is healthy (probed routable).
   tunnelUrl: () => TunnelService.tunnel.tunnelUrl(),
   acceptsCommands: acceptsPeerCommands,
+  sharesData: Sharing.sharing.current,
 });
 
 // The hub connection: connecting itself is gated in

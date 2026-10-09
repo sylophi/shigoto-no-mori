@@ -51,6 +51,7 @@ import {
   broadcastAll,
   deviceLinkLayer,
   loopbackLayer,
+  sharingLayer,
   stopDirectHost,
   stopHubConnection,
   tunnelLayer,
@@ -252,6 +253,30 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     Layer.provideMerge(Processes.adapter),
   );
 
+// The lower half of the graph below: the file-sync children, the
+// scripts and the foundation, closed last.
+const scriptsAndFoundation = (options: {
+  readonly hurried: () => boolean;
+  readonly engine: Parameters<typeof Engine.layer>[0];
+}) =>
+  // Every file-sync child, the daemon and the serve children a peer's
+  // streams opened.
+  FileSyncRunner.layer.pipe(
+    Layer.provideMerge(scripts(options.hurried)),
+    // A crash, a force quit or an OOM skips the quit's reap, so what the
+    // last run left running is reaped here. It claims the record file
+    // synchronously, before any script can spawn, and kills in the
+    // background.
+    Layer.provideMerge(
+      starts("the orphan script sweep", startOrphanScriptSweep),
+    ),
+    // Every script run, each in a scope the quit's policy above has
+    // already closed or shortened.
+    Layer.provideMerge(ScriptRuns.adapter),
+    Layer.provideMerge(ScriptRuns.layer),
+    Layer.provideMerge(foundation(options.engine)),
+  );
+
 // Built from the bottom up, so the scope closes from the top down: read
 // downward, this is the quit sequence.
 export const layer = (options: {
@@ -273,6 +298,8 @@ export const layer = (options: {
     // The listener peers dial, which connected peers see go away
     // cleanly.
     Layer.provideMerge(deviceLinkLayer()),
+    // The switch the listener's gate reads.
+    Layer.provideMerge(sharingLayer),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(storeChanges),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),
@@ -284,20 +311,5 @@ export const layer = (options: {
     ),
     Layer.provideMerge(firstProjectList),
     Layer.provideMerge(firstSharedSettings),
-    // Every file-sync child, the daemon and the serve children a peer's
-    // streams opened.
-    Layer.provideMerge(FileSyncRunner.layer),
-    Layer.provideMerge(scripts(options.hurried)),
-    // A crash, a force quit or an OOM skips the quit's reap, so what the
-    // last run left running is reaped here. It claims the record file
-    // synchronously, before any script can spawn, and kills in the
-    // background.
-    Layer.provideMerge(
-      starts("the orphan script sweep", startOrphanScriptSweep),
-    ),
-    // Every script run, each in a scope the quit's policy above has
-    // already closed or shortened.
-    Layer.provideMerge(ScriptRuns.adapter),
-    Layer.provideMerge(ScriptRuns.layer),
-    Layer.provideMerge(foundation(options.engine)),
+    Layer.provideMerge(scriptsAndFoundation(options)),
   );

@@ -73,6 +73,11 @@ const HubStatusSchema = Schema.Struct({
   // read it here instead of asking the peer. The peer's dispatch gate
   // is still what enforces it.
   peerAcceptsCommands: Schema.Record(Schema.String, Schema.Boolean),
+  // Whether each of those peers shares with THIS device at all (its
+  // sharing switch), keyed and kept the same way, from its
+  // sharing:changed push. Off, the peer serves nothing, so the renderer
+  // shows it as not sharing and the CLI as not-sharing.
+  peerSharesData: Schema.Record(Schema.String, Schema.Boolean),
   // The tunnel endpoint state, for the account page. Optional because
   // only a serving side with a host half sets it (the web bridge runs
   // no cloudflared). Not a skew concern: hub:status is
