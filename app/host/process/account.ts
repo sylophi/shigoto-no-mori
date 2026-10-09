@@ -60,7 +60,7 @@ function signedIn(): { facts: AccountFacts; service: AccountService } {
 export function hubConnectInputs(): {
   hubUrl: string;
   accountId: string;
-  mintTicket: (signal: AbortSignal) => Promise<string>;
+  mintTicket: (connectionId: string, signal: AbortSignal) => Promise<string>;
 } | null {
   if (facts === null) return null;
   return {
@@ -68,10 +68,14 @@ export function hubConnectInputs(): {
     // A different account forces the hub socket onto the new account's
     // object instead of leaving the old socket live.
     accountId: facts.accountId,
-    mintTicket: async (signal) => {
+    mintTicket: async (connectionId, signal) => {
       const current = signedIn();
       return (
-        await current.service.mintTicket(current.facts.credential, signal)
+        await current.service.mintTicket(
+          current.facts.credential,
+          connectionId,
+          signal,
+        )
       ).ticket;
     },
   };

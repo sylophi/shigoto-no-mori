@@ -142,6 +142,9 @@ const deviceAuth = Layer.effect(
           return yield* Effect.provideService(effect, HubDevice, {
             deviceId: device.device_id,
             accountId: device.account_id,
+            // The web client enrolls every browser profile as platform
+            // "web", which is what makes it a web device.
+            kind: device.platform === "web" ? "web" : "desktop",
           });
         }).pipe(Effect.catchTags({ RegistryError: Effect.die })),
     });
@@ -372,7 +375,7 @@ const handlers = Effect.gen(function* () {
           }
         }).pipe(Effect.catchTags({ RegistryError: unavailable("update") })),
       )
-      .handle("mintTicket", () =>
+      .handle("mintTicket", ({ payload }) =>
         Effect.gen(function* () {
           const device = yield* HubDevice;
           const signingKey = env.TICKET_SIGNING_KEY ?? "";
@@ -382,7 +385,11 @@ const handlers = Effect.gen(function* () {
           const ttlMs = ticketTtlMs(env);
           const random = yield* Effect.tryPromise(() =>
             accountHub(env, device.accountId).mintTicket(
-              device.deviceId,
+              {
+                deviceId: device.deviceId,
+                kind: device.kind,
+                connectionId: payload.connectionId,
+              },
               ttlMs,
             ),
           ).pipe(Effect.catchTags({ UnknownError: unavailable("ticket") }));

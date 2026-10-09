@@ -18,7 +18,9 @@ export type HubConnectOpts = {
   // touches the credential store: the owner composes it from the account
   // layer, and a fresh ticket is minted per connect attempt. The signal
   // aborts the mint on stop or on the mint timeout.
-  mintTicket(signal: AbortSignal): Promise<string>;
+  // The connection id names this socket to the hub, the same on every
+  // redial, so a redial replaces its own stale socket and no other tab's.
+  mintTicket(connectionId: string, signal: AbortSignal): Promise<string>;
   // This device's id, the `from` every peer sees on its asks.
   deviceId: string;
 };

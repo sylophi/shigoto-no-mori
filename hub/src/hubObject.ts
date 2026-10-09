@@ -10,10 +10,11 @@
 // Worker forwards for GET /connect, since an upgrade cannot ride a
 // method call.
 //
-// Sockets use the WebSocket Hibernation API: the deviceId rides as
-// the accept tag, which survives hibernation, so the message and
-// close handlers still know the device after the object was evicted
-// from memory.
+// Sockets use the WebSocket Hibernation API: each is tagged with its
+// device id and its connection (connectionTag), and tags survive
+// hibernation, so the handlers still know the socket after the object
+// was evicted from memory. A web device holds a connection per tab and
+// the object relays to each. A desktop device holds one.
 import * as SqliteClient from "@effect/sql-sqlite-do/SqliteClient";
 import { DurableObject } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
@@ -36,6 +37,10 @@ import * as Tickets from "./Tickets.ts";
 
 // The query parameter the Worker hands the ticket's random half in.
 export const CONNECT_RANDOM_PARAM = "random";
+
+// The tag naming one connection of a device.
+const connectionTag = (deviceId: string, connectionId: string) =>
+  `${deviceId}#${connectionId}`;
 
 export class DeviceHub extends DurableObject<Env> {
   private readonly runtime: ManagedRuntime.ManagedRuntime<
@@ -65,11 +70,12 @@ export class DeviceHub extends DurableObject<Env> {
     void ctx.blockConcurrencyWhile(() => this.runtime.runPromise(Effect.void));
   }
 
-  async mintTicket(deviceId: string, ttlMs: number): Promise<string> {
+  async mintTicket(
+    holder: Tickets.TicketHolder,
+    ttlMs: number,
+  ): Promise<string> {
     return await this.runtime.runPromise(
-      Effect.flatMap(Tickets.Tickets, (tickets) =>
-        tickets.mint(deviceId, ttlMs),
-      ),
+      Effect.flatMap(Tickets.Tickets, (tickets) => tickets.mint(holder, ttlMs)),
     );
   }
 
@@ -115,14 +121,14 @@ export class DeviceHub extends DurableObject<Env> {
             Effect.gen(function* () {
               const tickets = yield* Tickets.Tickets;
               const registry = yield* Registry.Registry;
-              const deviceId = yield* tickets.take(random);
-              if (deviceId === null) return null;
+              const holder = yield* tickets.take(random);
+              if (holder === null) return null;
               // The device must still be enrolled. A mint racing a
               // revoke can store its ticket after the revoke dropped
               // the device's tickets, and the row delete comes first,
               // so this read catches what the drop missed.
-              const device = yield* registry.byId(deviceId);
-              return device === null ? null : deviceId;
+              const device = yield* registry.byId(holder.deviceId);
+              return device === null ? null : holder;
             }).pipe(Effect.orElseSucceed(() => null)),
           );
     if (admitted === null) {
@@ -135,11 +141,18 @@ export class DeviceHub extends DurableObject<Env> {
     // presence schema cap and the proof that a full roster fits the
     // message cap (hub/test/hub.spec.ts).
     //
-    // A newer socket for the same device supersedes the old one, so a
-    // reconnecting device never fights its own half-dead socket.
-    const superseded = this.ctx.getWebSockets(admitted);
+    // A connection dialing again supersedes its own older socket, so a
+    // reconnect never fights its own half-dead one. On a desktop device
+    // a second connection supersedes the first too, since there it
+    // means two app instances on one root. A web device's tabs stand
+    // side by side.
+    const { deviceId, kind, connectionId } = admitted;
+    const tag = connectionTag(deviceId, connectionId);
+    const superseded = this.ctx.getWebSockets(
+      kind === "desktop" ? deviceId : tag,
+    );
     const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1], [admitted]);
+    this.ctx.acceptWebSocket(pair[1], [deviceId, tag]);
     // Full presence to everyone, including the fresh socket: joining
     // devices learn the room, present devices learn about the join.
     this.closeAndAnnounce(
@@ -147,7 +160,7 @@ export class DeviceHub extends DurableObject<Env> {
       CLOSE_SUPERSEDED,
       "superseded by a newer connection",
     );
-    this.touchLastSeen(admitted);
+    this.touchLastSeen(deviceId);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
@@ -226,8 +239,8 @@ export class DeviceHub extends DurableObject<Env> {
     );
   }
 
-  // The deviceId rides only as the accept tag, so it survives
-  // hibernation without a serialized attachment.
+  // The device id is the first accept tag, so it survives hibernation
+  // without a serialized attachment.
   private deviceIdOf(ws: WebSocket): string | undefined {
     return this.ctx.getTags(ws)[0];
   }

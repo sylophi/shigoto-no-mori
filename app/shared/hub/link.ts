@@ -170,8 +170,10 @@ function refusal(frame: AskFrame, message: string, code?: string): AnswerFrame {
 export function createHubLink(deps: HubLinkDeps): HubLink {
   const pending = new Map<number, PendingAsk>();
   // Unique per link across every peer, so an answer is matched by id
-  // alone and then checked against the device it was asked of.
-  let nextId = 1;
+  // alone and then checked against the device it was asked of. It
+  // starts at random because an answer reaches every tab of a web
+  // device, and a sibling tab's ask must not share its id.
+  let nextId = Math.floor(Math.random() * 2 ** 40);
   let online = new Set<string>();
   let closed = false;
   let droppedInbound = 0;
