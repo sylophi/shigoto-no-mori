@@ -3,6 +3,7 @@
 // terminal, never under --json, NO_COLOR or TERM=dumb.
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
 
 export class Output extends Context.Service<
   Output,
@@ -22,7 +23,11 @@ export const emit = (doc: unknown) => Console.log(JSON.stringify(doc));
 
 export const out = (line: string) => Console.log(line);
 
-export const note = (line: string) => Console.error(line);
+// Written as it is: Bun's console.error paints a terminal's lines red.
+export const note = (line: string) =>
+  Effect.sync(() => {
+    process.stderr.write(`${line}\n`);
+  });
 
 const paint = (text: string, code: string, enabled: boolean) =>
   enabled && text !== "" ? `\u001b[${code}m${text}\u001b[0m` : text;
