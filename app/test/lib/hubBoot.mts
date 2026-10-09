@@ -15,6 +15,9 @@ export type BootDeviceOpts = HubConnectionOpts & {
   createConnection?: (opts: HubConnectionOpts) => HubConnectionBinding;
   accountId?: string;
   label?: string;
+  // What the stub hub admits the device as: a desktop (the default)
+  // holds one socket, a web device one per connection.
+  kind?: "desktop" | "web";
 };
 
 export type BootedDevice = {
@@ -50,9 +53,9 @@ export async function bootDevice(
   await connection.refresh(async () => ({
     hubUrl: stub.hubUrl,
     accountId: opts.accountId ?? "acct",
-    mintTicket: async () => {
+    mintTicket: async (connectionId) => {
       mints += 1;
-      return `t:${deviceId}:${mints}`;
+      return `t:${deviceId}:${opts.kind ?? "desktop"}:${connectionId}`;
     },
     deviceId,
   }));

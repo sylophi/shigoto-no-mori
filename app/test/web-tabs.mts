@@ -7,9 +7,9 @@
 // bridge gone, a new one over the same storage) leaves its sibling
 // linked.
 //
-// The stub hub supersedes a device's older socket as the Durable Object
-// does today: keeping every tab's hub socket is step 5's. A tab whose
-// hub socket was superseded keeps its link to the host all the same.
+// The stub hub keys a web device's sockets by connection, as the
+// Durable Object does: every tab keeps its hub socket, the hub relays to
+// each, and a sibling's answers never settle a tab's own asks.
 //
 // Run: pnpm test web-tabs.
 import assert from "node:assert/strict";
@@ -83,8 +83,12 @@ async function boot() {
         const url = new URL(String(input));
         if (init?.method === "POST" && url.pathname === "/tickets") {
           mints += 1;
+          const body = init.body instanceof Uint8Array ? init.body : undefined;
+          const { connectionId } = JSON.parse(
+            new TextDecoder().decode(body),
+          ) as { connectionId: string };
           return Response.json({
-            ticket: `t:${bridge.api.deviceId}:${mints}`,
+            ticket: `t:${bridge.api.deviceId}:web:${connectionId}`,
             expiresInMs: 60_000,
           });
         }
@@ -119,6 +123,11 @@ it("two tabs of one profile each link to the host, call it and hear its pushes",
   const second = tab();
   await linked(second);
   assert.equal(first.api.deviceId, second.api.deviceId);
+  // Neither tab's hub socket ended the other's.
+  for (const each of [first, second]) {
+    // oxlint-disable-next-line no-await-in-loop -- two tabs, order does not matter
+    assert.equal((await each.api.hub.status()).socket.phase, "connected");
+  }
   assert.equal(await echo(first, "first"), "first");
   assert.equal(await echo(second, "second"), "second");
   const heard = { first: 0, second: 0 };
@@ -134,6 +143,7 @@ it("two tabs of one profile each link to the host, call it and hear its pushes",
   }, "both tabs to hear the host's push");
   // The first tab's link outlived the second's arrival.
   assert.equal(await echo(first, "still"), "still");
+  assert.equal((await first.api.hub.status()).socket.phase, "connected");
 });
 
 it("a tab reloading leaves its sibling linked", async () => {

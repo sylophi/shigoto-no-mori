@@ -25,6 +25,7 @@ import {
   openSocket,
   revoke,
   sleep,
+  newConnectionId,
   ticketRequest,
 } from "./helpers.ts";
 
@@ -132,7 +133,7 @@ describe("GET /connect", () => {
     expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
   });
 
-  it("supersedes an older socket for the same deviceId", async () => {
+  it("supersedes a desktop device's older socket, whatever its connection", async () => {
     const { credential, socket: oldSocket } = await enrollAndConnect(
       "acct-supersede",
       "dev-supersede",
@@ -143,6 +144,57 @@ describe("GET /connect", () => {
     expect((await oldSocket.closed).code).toBe(CLOSE_SUPERSEDED);
     // The new socket owns the deviceId now and works normally.
     await newSocket.untilPresence(["dev-supersede"]);
+  });
+});
+
+describe("a web device's tabs", () => {
+  it("holds a socket per tab, relays to each, and names the device once in presence", async () => {
+    const { credential } = await enroll(
+      "acct-tabs",
+      "dev-tabs-web",
+      "Chrome on macOS",
+      "web",
+      "browser",
+    );
+    const tabA = await openSocket((await mintTicket(credential)).ticket);
+    const tabB = await openSocket((await mintTicket(credential)).ticket);
+    await tabA.untilPresence(["dev-tabs-web"]);
+    await tabB.untilPresence(["dev-tabs-web"]);
+    const peer = await enrollAndConnect("acct-tabs", "dev-tabs-peer");
+    await peer.socket.untilPresence(["dev-tabs-peer", "dev-tabs-web"]);
+    peer.socket.send({ t: "relay", to: "dev-tabs-web", frame: { n: 1 } });
+    for (const tab of [tabA, tabB]) {
+      // oxlint-disable-next-line no-await-in-loop -- two tabs, each reads its own queue
+      await tab.untilRelay({ n: 1 });
+    }
+    // One tab closing leaves the device online through the other.
+    tabA.close();
+    await peer.socket.untilPresence(["dev-tabs-peer", "dev-tabs-web"]);
+    tabB.close();
+    await peer.socket.untilPresence(["dev-tabs-peer"]);
+  });
+
+  it("lets a tab's redial supersede its own socket and no other tab's", async () => {
+    const { credential } = await enroll(
+      "acct-redial",
+      "dev-redial-web",
+      "Chrome on macOS",
+      "web",
+      "browser",
+    );
+    const connection = newConnectionId();
+    const stale = await openSocket(
+      (await mintTicket(credential, env, connection)).ticket,
+    );
+    const other = await openSocket((await mintTicket(credential)).ticket);
+    await other.untilPresence(["dev-redial-web"]);
+    const redial = await openSocket(
+      (await mintTicket(credential, env, connection)).ticket,
+    );
+    expect((await stale.closed).code).toBe(CLOSE_SUPERSEDED);
+    await redial.untilPresence(["dev-redial-web"]);
+    other.send({ t: "relay", to: "dev-redial-web", frame: { still: "here" } });
+    await redial.untilRelay({ still: "here" });
   });
 });
 

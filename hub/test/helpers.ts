@@ -84,10 +84,25 @@ export function enrollRequest(token: string, body: unknown): Request {
   });
 }
 
-export function ticketRequest(credential: string): Request {
+// A connection id as a dialer mints one: 16 random bytes as hex.
+export function newConnectionId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+export function ticketRequest(
+  credential: string,
+  connectionId = newConnectionId(),
+): Request {
   return new Request(`${BASE}/tickets`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${credential}` },
+    headers: {
+      Authorization: `Bearer ${credential}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ connectionId }),
   });
 }
 
@@ -153,8 +168,9 @@ export async function enroll(
 export async function mintTicket(
   credential: string,
   testEnv: Env = env,
+  connectionId?: string,
 ): Promise<TicketResponse> {
-  const response = await call(ticketRequest(credential), testEnv);
+  const response = await call(ticketRequest(credential, connectionId), testEnv);
   expect(response.status).toBe(200);
   return Schema.decodeUnknownSync(TicketResponseSchema)(await response.json());
 }
@@ -236,6 +252,20 @@ export class TestSocket {
         envelope.t === "presence" &&
         JSON.stringify(envelope.online) === want
       ) {
+        return;
+      }
+    }
+  }
+
+  // Consumes envelopes until a relayed frame equals `frame`, under one
+  // overall deadline.
+  async untilRelay(frame: unknown, timeoutMs = 2000): Promise<void> {
+    const want = JSON.stringify(frame);
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      // oxlint-disable-next-line no-await-in-loop -- envelopes arrive one at a time, waiting is the point
+      const envelope = await this.next(Math.max(1, deadline - Date.now()));
+      if (envelope.t === "relay" && JSON.stringify(envelope.frame) === want) {
         return;
       }
     }

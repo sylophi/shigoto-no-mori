@@ -105,7 +105,11 @@ export type AccountService = {
   ): Promise<void>;
   // signal aborts the mint on stop or on the caller's mint timeout, so
   // a black-holed route cannot hang the connect.
-  mintTicket(credential: string, signal?: AbortSignal): Promise<TicketResponse>;
+  mintTicket(
+    credential: string,
+    connectionId: string,
+    signal?: AbortSignal,
+  ): Promise<TicketResponse>;
   // Provision (or re-point) this device's named tunnel to front the
   // given loopback port. Rejects with HubTunnelUnconfiguredError when
   // the Worker has no tunnel env and TunnelProvisionDeniedError when it
@@ -151,6 +155,9 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       ).pipe(
         Effect.provide(FetchHttpClient.layer),
         Effect.provideService(FetchHttpClient.Fetch, fetchImpl),
+        // No trace headers: the hub reads none, and a browser could not
+        // send them past its CORS allowlist.
+        Effect.provideService(HttpClient.TracerPropagationEnabled, false),
       ),
       { signal },
     );
@@ -187,8 +194,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       );
     },
 
-    async mintTicket(credential, signal) {
-      return await call(credential, (client) => client.mintTicket(), signal);
+    async mintTicket(credential, connectionId, signal) {
+      return await call(
+        credential,
+        (client) => client.mintTicket({ payload: { connectionId } }),
+        signal,
+      );
     },
 
     async provisionTunnel(credential, port, signal) {

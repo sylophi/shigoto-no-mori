@@ -1,7 +1,8 @@
 // The stub Durable Object shared by the hub-transport checks: a node
 // ws server implementing hubObject.ts's envelope behavior (deliver
-// forwarding, full-roster presence on join and leave, offline and
-// too-large nacks, supersede on a duplicate deviceId). Extracted from
+// forwarding to every socket of a device, full-roster presence on join
+// and leave, offline and too-large nacks, and supersede: a desktop
+// device's second socket, or a connection dialing again). Extracted from
 // hub-link.mts so sync-transfer.mts drives the same stub
 // instead of a second copy.
 import { WebSocket, WebSocketServer } from "ws";
@@ -18,12 +19,17 @@ import {
 import { toText } from "@host/hub/rawData";
 import { boundPort, type Track } from "./checkKit.mts";
 
-// Tickets are "t:<deviceId>:<n>". The real DO burns single-use tickets,
-// but the app side never depends on that, so the stub just parses the
-// deviceId out and accepts.
-function deviceIdOfTicket(ticket: string): string | null {
-  const parts = ticket.split(":");
-  return parts[0] === "t" && parts[1] ? parts[1] : null;
+// Tickets are "t:<deviceId>:<kind>:<connectionId>", or "t:<deviceId>:<n>"
+// for a desktop device whose every dial is a new connection. The real DO
+// burns single-use tickets, but the app side never depends on that, so
+// the stub just reads who the ticket admits and accepts.
+type Holder = { deviceId: string; kind: "desktop" | "web"; connection: string };
+function holderOfTicket(ticket: string): Holder | null {
+  const [prefix, deviceId, second, third] = ticket.split(":");
+  if (prefix !== "t" || !deviceId) return null;
+  return second === "web" || second === "desktop"
+    ? { deviceId, kind: second, connection: third ?? "" }
+    : { deviceId, kind: "desktop", connection: second ?? "" };
 }
 
 type StubSend = { from: string; to: string; frame: unknown };
@@ -48,7 +54,13 @@ export type StubHub = {
 export function startStubHub(track?: Track): Promise<StubHub> {
   return new Promise((resolve) => {
     const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
-    const sockets = new Map<string, WebSocket>();
+    // Each device's sockets by connection id.
+    const sockets = new Map<string, Map<string, WebSocket>>();
+    const socketsOf = (deviceId: string) => [
+      ...(sockets.get(deviceId)?.values() ?? []),
+    ];
+    const openSocketsOf = (deviceId: string) =>
+      socketsOf(deviceId).filter((ws) => ws.readyState === WebSocket.OPEN);
     // Every device envelope the stub received, parsed, plus counters so
     // a test can assert a frame never hit the wire.
     const received: StubSend[] = [];
@@ -62,23 +74,28 @@ export function startStubHub(track?: Track): Promise<StubHub> {
     function broadcastPresence() {
       const online = [...sockets.keys()].toSorted();
       const text = encodeEnvelope({ t: "presence", online });
-      for (const ws of sockets.values()) {
-        if (ws.readyState === WebSocket.OPEN) ws.send(text);
+      for (const deviceId of online) {
+        for (const ws of openSocketsOf(deviceId)) ws.send(text);
       }
     }
 
     wss.on("connection", (ws, req) => {
       const url = new URL(req.url ?? "/", "http://localhost");
-      const deviceId = deviceIdOfTicket(url.searchParams.get("ticket") ?? "");
-      if (deviceId === null) {
+      const holder = holderOfTicket(url.searchParams.get("ticket") ?? "");
+      if (holder === null) {
         ws.close(4101, "ticket rejected");
         return;
       }
-      const superseded = sockets.get(deviceId);
-      sockets.set(deviceId, ws);
-      if (superseded) {
-        superseded.close(CLOSE_SUPERSEDED, "superseded");
+      const { deviceId, kind, connection } = holder;
+      const held = sockets.get(deviceId) ?? new Map<string, WebSocket>();
+      sockets.set(deviceId, held);
+      for (const [id, other] of held) {
+        if (kind === "desktop" || id === connection) {
+          held.delete(id);
+          other.close(CLOSE_SUPERSEDED, "superseded");
+        }
       }
+      held.set(connection, ws);
       broadcastPresence();
       ws.on("message", (data) => {
         const text = toText(data);
@@ -96,8 +113,8 @@ export function startStubHub(track?: Track): Promise<StubHub> {
           to: envelope.to,
           frame: envelope.frame,
         });
-        const target = sockets.get(envelope.to);
-        if (target === undefined || target.readyState !== WebSocket.OPEN) {
+        const targets = openSocketsOf(envelope.to);
+        if (targets.length === 0) {
           ws.send(
             encodeEnvelope({ t: "nack", to: envelope.to, reason: "offline" }),
           );
@@ -115,13 +132,13 @@ export function startStubHub(track?: Track): Promise<StubHub> {
           return;
         }
         forwarded += 1;
-        target.send(outbound);
+        for (const target of targets) target.send(outbound);
       });
       ws.on("close", () => {
-        if (sockets.get(deviceId) === ws) {
-          sockets.delete(deviceId);
-          broadcastPresence();
-        }
+        if (held.get(connection) !== ws) return;
+        held.delete(connection);
+        if (held.size === 0) sockets.delete(deviceId);
+        broadcastPresence();
       });
     });
 
@@ -129,7 +146,9 @@ export function startStubHub(track?: Track): Promise<StubHub> {
       const port = boundPort(wss);
       const close = () =>
         new Promise<void>((done) => {
-          for (const ws of sockets.values()) ws.terminate();
+          for (const deviceId of sockets.keys()) {
+            for (const ws of socketsOf(deviceId)) ws.terminate();
+          }
           wss.close(() => done());
         });
       track?.(close);
@@ -150,13 +169,11 @@ export function startStubHub(track?: Track): Promise<StubHub> {
         // text) straight to a connected device, the seam a hostile-hub
         // test drives.
         injectTo(deviceId, envelopeOrText) {
-          const ws = sockets.get(deviceId);
-          if (ws === undefined || ws.readyState !== WebSocket.OPEN) return;
-          ws.send(
+          const text =
             typeof envelopeOrText === "string"
               ? envelopeOrText
-              : encodeEnvelope(envelopeOrText),
-          );
+              : encodeEnvelope(envelopeOrText);
+          for (const ws of openSocketsOf(deviceId)) ws.send(text);
         },
         // The liveness seams: how many pings a device sent, and whether
         // the stub answers them (off plays a silently dead hub).
@@ -167,8 +184,7 @@ export function startStubHub(track?: Track): Promise<StubHub> {
         // Server-initiated close for one device's socket, the seam the
         // revoked/superseded/reconnect tests drive.
         dropSocket(deviceId, code, reason = "") {
-          const ws = sockets.get(deviceId);
-          if (ws) ws.close(code, reason);
+          for (const ws of socketsOf(deviceId)) ws.close(code, reason);
         },
         close,
       });

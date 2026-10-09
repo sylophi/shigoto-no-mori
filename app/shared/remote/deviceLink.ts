@@ -368,7 +368,7 @@ export function openDevice(
 
 // This connection's id, which the host tells it apart by: 16 random
 // bytes as hex.
-function newConnectionId(): string {
+export function newConnectionId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
