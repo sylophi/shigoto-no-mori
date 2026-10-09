@@ -35,7 +35,7 @@
 //
 // Run: pnpm test socket-host.
 //
-// covers: app/test/read-surface.golden.json app/main/ipc/register.ts
+// covers: app/test/read-surface.golden.json app/host/process/wires.ts
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

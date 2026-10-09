@@ -1,15 +1,15 @@
 // Durable proof for continuous worktree mirroring (file-sync/,
-// main/core/mirror/*, mirror:openStream): two REAL directories converge in
+// host/mirror/*, mirror:openStream): two REAL directories converge in
 // both directions through the whole production chain, with nothing on
 // the sync path doubled. Device B runs the REAL mirror daemon (a
 // freshly built file-sync engine, Mutagen inside) behind the REAL
-// gateway (main/core/mirror/gateway.ts). The gateway dials device A's REAL
+// gateway (host/mirror/gateway.ts). The gateway dials device A's REAL
 // mirror:openStream over a REAL direct websocket (brokered by the stub
 // device hub exactly as production does, test/lib/directBoot.mts),
 // A's handler spawns a REAL `file-sync serve` for a REAL registered
 // worktree. Bytes cross as binary channel frames on the direct socket
 // (shared/remote/channels.ts, bridged by
-// main/core/portForward/bridge.ts). The sm CLI is built too, only to
+// host/portForward/bridge.ts). The sm CLI is built too, only to
 // register the fixture project the way the app would. Asserts:
 //   - an ungranted peer: the gateway's open is refused, the daemon's
 //     create fails with the refusal, and A spawned no serve child,
@@ -117,8 +117,8 @@ import {
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import * as MirrorDaemon from "../main/core/mirror/daemon.ts";
-import { createMirrorGateway } from "../main/core/mirror/gateway.ts";
+import * as MirrorDaemon from "../host/mirror/daemon.ts";
+import { createMirrorGateway } from "../host/mirror/gateway.ts";
 import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { cliSandbox } from "./lib/cliSandbox.mts";
@@ -144,8 +144,8 @@ const fileSyncDataDir = join(sandbox, "file-sync-data");
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-// The gateway's facts the daemon is handed, once it has them, as main
-// hands them over (main/ipc/handlers.ts).
+// The gateway's facts the daemon is handed, once it has them, as the host
+// hands them over (host/process/handlers.ts).
 function listening<T>(value: T | null): T {
   if (value === null) throw new Error("mirror gateway is not listening");
   return value;
@@ -190,7 +190,7 @@ const fakeSession = (
 // "child gone" are facts about real processes.
 const serveChildren = new Set<number>();
 
-// B's daemon, the way main/ipc/handlers.ts reads it.
+// B's daemon, the way host/process/handlers.ts reads it.
 const daemon = {
   status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
   sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
@@ -236,7 +236,7 @@ const { track, teardown } = makeTracker();
 
 let changes = 0;
 // Every daemon snapshot reaches the git follower while it runs, as
-// main/ipc/handlers.ts wires it.
+// host/process/handlers.ts wires it.
 let onSnapshot: (() => void) | null = null;
 
 // The engine status the follower sees, overridable so a mid-cycle

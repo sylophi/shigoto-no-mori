@@ -23,7 +23,7 @@ import { strict } from "../schemas/strict.ts";
 // remote work"): a worktree kept identical on two devices, every file,
 // both directions, live. The engine is the file-sync engine (file-sync/engine.go, on
 // Mutagen). The app supervises this device's daemon
-// (main/core/mirror/daemon.ts), bridges its streams to peers as byte
+// (host/mirror/daemon.ts), bridges its streams to peers as byte
 // channels on the direct socket (openStream below, the channel layer in
 // shared/ipc/socket/channels.ts), and serves `file-sync serve` for
 // peers mirroring FROM here.
@@ -597,7 +597,7 @@ const MirrorSetIgnoresPayloadSchema = strict(
 
 // What happened to a mirror over time, kept by the device that runs
 // it, keyed by its local worktree so a re-opened session (an ignore
-// change) keeps the thread. Bounded per worktree (main/core/mirror/
+// change) keeps the thread. Bounded per worktree (host/mirror/
 // history.ts), so the list is a recent window, not an archive.
 const MirrorEventKindSchema = Schema.Literals([
   "started",

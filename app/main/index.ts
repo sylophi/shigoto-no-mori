@@ -10,7 +10,6 @@ import {
 } from "@shared/packaging/appName.mts";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { readDeviceId } from "@host/lib/config/deviceId";
-import { loadSharedSettings } from "@host/lib/sharedSettings/store";
 import {
   createDesktopClerkBridge,
   rendererSchemeUrl,
@@ -33,21 +32,20 @@ import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
-import { sweepProjects } from "./electron/fetch";
 import {
   applyThemeSource,
   readClientConfigSync,
 } from "./electron/clientConfig";
-import { registerIpcHandlers } from "./ipc/handlers";
+import { registerShellHandlers } from "./ipc/handlers";
 import { clerkPublishableKey } from "./ipc/modules/account";
-import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
+import { host, startHostProcess } from "./hostProcess";
 import { broadcast, installShellPorts } from "./ipc/register";
-import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
-import { applyUserShellEnv } from "./core/shellEnv";
-import * as HostLayer from "./hostLayer";
-import { bundledBinaryPath } from "./electron/bundledBinary";
+import { applyUserShellEnv } from "@host/lib/util/shellEnv";
+import * as HostLayer from "@host/process/layer";
+import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
+import { appPlace } from "./electron/appPlace";
 import { storeFailureReport } from "./electron/storeFailure";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import {
@@ -59,7 +57,7 @@ import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { log } from "@shared/log";
 import * as ShellLayer from "./shellLayer";
-import { confirmBusyActionSync } from "./electron/busyPrompt";
+import { confirmBusyAction } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
   applyRestartVisibility,
@@ -75,7 +73,7 @@ import {
   reconcileLaunchAtLogin,
 } from "./electron/liveness";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { installUpdaterImpl, isInstallingUpdate } from "./electron/updater";
+import { isInstallingUpdate } from "./electron/updater";
 import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
 
 enableDevCdpPort();
@@ -186,20 +184,20 @@ if (platform() === "darwin") {
 // reclaims the bridge's IPC handlers wholesale anyway.
 createDesktopClerkBridge();
 
-// Electron-layer impls must be wired before registerIpcHandlers runs so
-// the first renderer call never lands on the throwing default.
+// Every handler is registered before the window can call one: the
+// host's as it starts, the shell's after.
 installMenuImpl();
-installUpdaterImpl();
-installHostImpls();
-registerIpcHandlers();
+startHostProcess();
+registerShellHandlers();
 installShellPorts();
 
 // The engine's build flavor and its darwin helper, for the graph and
 // for the doctor a store that won't open gets.
 const engineOptions = {
   flavor: app.isPackaged ? ("prod" as const) : ("dev" as const),
-  macfs: bundledBinaryPath(MACFS_DIST_DIR, MACFS_BINARY_NAME),
+  macfs: bundledBinaryPath(appPlace(), MACFS_DIST_DIR, MACFS_BINARY_NAME),
   sm: bundledBinaryPath(
+    appPlace(),
     CLI_DIST_DIR,
     cliBinaryName(app.isPackaged ? "prod" : "dev"),
   ),
@@ -328,11 +326,13 @@ const createWindow = (restart: RestartVisibility | null = null) => {
   const sendFocus = () => {
     const wc = mainWindow?.webContents;
     if (wc) broadcast(windowContract, "focused", undefined, wc);
-    sweepProjects();
+    // The host's background fetch ticks while someone is looking.
+    void host().windowFocused(true);
   };
   const sendBlur = () => {
     const wc = mainWindow?.webContents;
     if (wc) broadcast(windowContract, "blurred", undefined, wc);
+    void host().windowFocused(false);
   };
   mainWindow.on("focus", sendFocus);
   mainWindow.on("blur", sendBlur);
@@ -488,7 +488,6 @@ app.on("ready", async () => {
       readDeviceId(),
       graph.then(() => new Promise<never>(() => {})),
     ]);
-    await loadSharedSettings();
   } catch (err) {
     // A store the 2.x files couldn't be imported into, or that can't be
     // read: the doctor's findings say which file and what to do.
@@ -523,11 +522,6 @@ app.on("ready", async () => {
     app.exit(1);
     return;
   }
-  // A crash, a force quit, or an OOM skips the quit's reap, so
-  // anything the last session left running is reaped here. Claims the
-  // record file synchronously (before any script can spawn) and does
-  // the killing in the background.
-  startOrphanScriptSweep();
   buildAppMenu();
   // Host liveness. Install the crash guards before
   // the window exists so an early fatal error is still caught, then
@@ -560,21 +554,43 @@ let quitting = false;
 app.on("before-quit", (event) => {
   if (quitting) return;
   event.preventDefault();
+  if (askingToQuit) return;
   // An update install was already confirmed by the renderer's
   // installUpdate dialog, and a relaunch's cancelled quit would leave a
   // live app on a data dir that has moved.
-  if (!isHurriedQuit() && !confirmBusyActionSync("quit")) {
-    // When the user got here by closing the last window (close-X →
-    // window-all-closed → app.quit()), the BrowserWindow is already
-    // destroyed by the time before-quit fires. Restore it so the
-    // canceled quit doesn't leave the app running headless with the
-    // busy work still in progress. Cmd-Q / menu Quit reach before-quit
-    // before any window is closed, so the recreate is a no-op there.
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      createWindow();
-    }
+  if (isHurriedQuit()) {
+    quit();
     return;
   }
+  askingToQuit = true;
+  void host()
+    .busy()
+    .then((busy) => confirmBusyAction("quit", busy))
+    .catch((error: unknown) => {
+      // A host that cannot answer has nothing to lose to the quit.
+      log.warn(`[quit] the host's busy check failed: ${errorMessageOf(error)}`);
+      return true;
+    })
+    .then((proceed) => {
+      askingToQuit = false;
+      if (proceed) {
+        quit();
+        return;
+      }
+      // When the user got here by closing the last window (close-X →
+      // window-all-closed → app.quit()), the BrowserWindow is already
+      // destroyed. Restore it so the cancelled quit doesn't leave the
+      // app running headless with the busy work still in progress.
+      // Cmd-Q / menu Quit reach before-quit before any window is closed,
+      // so the recreate is a no-op there.
+      if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+    });
+});
+
+// While the busy prompt is up, a second quit waits for its answer.
+let askingToQuit = false;
+
+function quit(): void {
   quitting = true;
   if (isHurriedQuit()) rememberVisibilityForRestart();
   void runtime
@@ -583,4 +599,4 @@ app.on("before-quit", (event) => {
       log.error("[quit] a finalizer failed:", error);
     })
     .finally(() => app.exit(0));
-});
+}

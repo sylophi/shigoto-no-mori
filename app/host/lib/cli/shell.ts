@@ -11,7 +11,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
-import { CAPTURE_TIMEOUT_MS, loginShell } from "../core/shellEnv";
+import { CAPTURE_TIMEOUT_MS, loginShell } from "@host/lib/util/shellEnv";
 import * as Engine from "@host/lib/engine";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Effect from "effect/Effect";
@@ -27,7 +27,7 @@ const execFileP = promisify(execFile);
 // the user's login shell once and overlay them onto every
 // shell-subcommand spawn, so the app targets the same file a
 // terminal-run `sm shell install` would. Its own probe rather than the
-// startup rebuild's (main/core/shellEnv.ts): that one sees exports
+// startup rebuild's (host/lib/util/shellEnv.ts): that one sees exports
 // only, and a ZDOTDIR a .zshenv sets without exporting still names
 // the rc file.
 const SENTINEL = "__SHIGOMORI_HOOK_ENV__";

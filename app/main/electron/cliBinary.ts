@@ -1,13 +1,12 @@
-// The bundled terminal binary: Resources/sm when packaged, dist-cli/smd
-// in dev (built by `pnpm dev`). The app links it onto PATH
-// (cliInstall.ts), the doctor checks it, and the updater hands it the
-// install that has to outlive the app.
+// The bundled terminal binary, as the shell finds it: the updater hands
+// it the install that has to outlive the app. The host finds its own
+// (host/lib/cli/binary.ts).
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
+import { bundledBinaryResolver } from "@shared/packaging/bundledBinary.mts";
 import { app } from "electron";
-import { bundledBinaryResolver } from "./bundledBinary";
+import { appPlace } from "./appPlace";
 
-export const cliBinaryPath = bundledBinaryResolver(
-  CLI_DIST_DIR,
+const cliBinaryPath = bundledBinaryResolver(appPlace, CLI_DIST_DIR, () =>
   cliBinaryName(app.isPackaged ? "prod" : "dev"),
 );
 
