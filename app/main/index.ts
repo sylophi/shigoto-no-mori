@@ -9,18 +9,12 @@ import {
   devProfileUserData,
 } from "@shared/packaging/appName.mts";
 import { windowContract } from "@shigomori/contracts/modules/window";
-import { readDeviceId } from "@host/lib/config/deviceId";
 import {
   createDesktopClerkBridge,
   rendererSchemeUrl,
   serveRendererOverScheme,
 } from "./electron/clerk";
-import {
-  APP_VERSION_FLAG,
-  CLERK_PK_FLAG,
-  DEV_BUILD_FLAG,
-  DEVICE_ID_FLAG,
-} from "./argFlags";
+import { APP_VERSION_FLAG, CLERK_PK_FLAG, DEV_BUILD_FLAG } from "./argFlags";
 import { attachContextMenu } from "./electron/contextMenu";
 import {
   deepLinkRoute,
@@ -39,20 +33,21 @@ import {
 import { registerShellHandlers } from "./ipc/handlers";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { host, startHostProcess } from "./hostProcess";
+import {
+  type HostFailure,
+  host,
+  noteWindowFocused,
+  startHostProcess,
+  stopHostProcess,
+} from "./hostProcess";
 import { broadcast, installShellPorts } from "./ipc/register";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { applyUserShellEnv } from "@host/lib/util/shellEnv";
-import * as HostLayer from "@host/process/layer";
-import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
-import { appPlace } from "./electron/appPlace";
-import { storeFailureReport } from "./electron/storeFailure";
-import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
-import {
-  MACFS_BINARY_NAME,
-  MACFS_DIST_DIR,
-} from "@shared/packaging/macfsDist.mts";
-import * as Observability from "./observability";
+import { cliBinaryName } from "@shared/packaging/cliDist.mts";
+import * as Observability from "@host/lib/util/observability";
+import * as Processes from "@host/lib/util/processes";
+import * as UpdaterEngine from "./electron/updaterEngine";
+import { writeTraceLine } from "./electron/logFile";
 import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { log } from "@shared/log";
@@ -187,37 +182,25 @@ createDesktopClerkBridge();
 // Every handler is registered before the window can call one: the
 // host's as it starts, the shell's after.
 installMenuImpl();
-startHostProcess();
 registerShellHandlers();
 installShellPorts();
 
-// The engine's build flavor and its darwin helper, for the graph and
-// for the doctor a store that won't open gets.
-const engineOptions = {
-  flavor: app.isPackaged ? ("prod" as const) : ("dev" as const),
-  macfs: bundledBinaryPath(appPlace(), MACFS_DIST_DIR, MACFS_BINARY_NAME),
-  sm: bundledBinaryPath(
-    appPlace(),
-    CLI_DIST_DIR,
-    cliBinaryName(app.isPackaged ? "prod" : "dev"),
-  ),
-};
+// The build flavor, which names the data dir and the terminal `sm`.
+const flavor = app.isPackaged ? ("prod" as const) : ("dev" as const);
 
-// The process's one layer graph, built in the ready handler once the
-// window is up and closed by the quit below. Every subsystem with a
-// lifetime is in it, so its shutdown is the quit sequence.
+// The shell's layer graph, built in the ready handler and closed by the
+// quit below, after the host's process has gone.
 const runtime = ManagedRuntime.make(
   ShellLayer.layer.pipe(
-    Layer.provideMerge(
-      HostLayer.layer({
-        hurried: isHurriedQuit,
-        engine: engineOptions,
-      }),
-    ),
-    // The shell's, but below the host: the renderer asks for its Clerk
-    // session as soon as it loads.
+    // The renderer asks for its Clerk session as soon as it loads.
     Layer.provideMerge(ClerkTokenStorage.layer(app.getPath("userData"))),
-    Layer.provideMerge(Observability.layer),
+    Layer.provideMerge(UpdaterEngine.adapter),
+    Layer.provideMerge(UpdaterEngine.layer(flavor)),
+    // The account's probes (the device's default name and icon).
+    Layer.provideMerge(Processes.adapter),
+    Layer.provideMerge(
+      Observability.layer({ packaged: app.isPackaged, writeTraceLine }),
+    ),
     Layer.provideMerge(NodeServices.layer),
   ),
 );
@@ -232,11 +215,6 @@ let mainWindow: BrowserWindow | null = null;
 // window itself, and then get a second one from the ready handler
 // finishing right after.
 let hasBooted = false;
-
-// Read once in the ready handler (a corrupt registry throws there, into
-// the boot error dialog). createWindow only interpolates it. Never
-// empty by the time any window exists: getDeviceId mints or throws.
-let deviceId = "";
 
 // The data dir for the boot error, which may be that it couldn't be
 // found at all.
@@ -279,20 +257,13 @@ const createWindow = (restart: RestartVisibility | null = null) => {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      // Synchronous delivery of the device id: the preload reads this
-      // flag off process.argv and exposes it on the bridge, so the
-      // renderer never has to gate key building behind an IPC call.
-      // The id itself is read in the ready handler, whose try/catch
-      // turns a corrupt registry into the error dialog instead of a
-      // throw out of createWindow with no window.
-      // The dev flag rides the same channel: isDev is a fact about this
-      // client build, not the host, so it must not travel via
+      // Facts about this client build, read synchronously by the
+      // preload off process.argv. isDev is the build showing the
+      // window, never the host's, so it must not travel via
       // runtime.info.
       additionalArguments: [
-        `${DEVICE_ID_FLAG}${deviceId}`,
-        // This build's version, delivered the same way as the device id
-        // and the dev flag: the renderer sends it in the socket hello
-        // and compares it against a remote host's welcome for skew.
+        // This build's version: the renderer sends it in the link's
+        // hello and compares it against a remote host's for skew.
         `${APP_VERSION_FLAG}${app.getVersion()}`,
         // The resolved Clerk publishable key (empty when the build is
         // unconfigured), so the renderer can mount or skip the
@@ -327,12 +298,12 @@ const createWindow = (restart: RestartVisibility | null = null) => {
     const wc = mainWindow?.webContents;
     if (wc) broadcast(windowContract, "focused", undefined, wc);
     // The host's background fetch ticks while someone is looking.
-    void host().windowFocused(true);
+    noteWindowFocused(true);
   };
   const sendBlur = () => {
     const wc = mainWindow?.webContents;
     if (wc) broadcast(windowContract, "blurred", undefined, wc);
-    void host().windowFocused(false);
+    noteWindowFocused(false);
   };
   mainWindow.on("focus", sendFocus);
   mainWindow.on("blur", sendBlur);
@@ -478,31 +449,11 @@ app.on("ready", async () => {
   );
   // The rebuilt environment (module top), before the first spawn.
   await shellEnvReady;
-  // The graph starts here: its bottom opens the store, which the
-  // window's first paint needs the device id from. The rest comes up
-  // behind the window.
+  // The data folder, which the updater reads and the host is forked
+  // onto. The host comes up while the window loads.
   try {
-    await initDataDir(engineOptions.flavor);
-    graph = runtime.context();
-    deviceId = await Promise.race([
-      readDeviceId(),
-      graph.then(() => new Promise<never>(() => {})),
-    ]);
+    await initDataDir(flavor);
   } catch (err) {
-    // A store the 2.x files couldn't be imported into, or that can't be
-    // read: the doctor's findings say which file and what to do.
-    const storeReport = await storeFailureReport(err, {
-      ...engineOptions,
-      version: app.getVersion(),
-    });
-    if (storeReport !== null) {
-      dialog.showErrorBox(
-        "Shigoto no Mori can't open its data",
-        `${storeReport}\n\nRun \`${cliBinaryName(engineOptions.flavor)} doctor\` in a terminal for the repairs it offers.`,
-      );
-      app.exit(1);
-      return;
-    }
     // A pointer file can aim the data dir somewhere that isn't reachable
     // right now (external drive unplugged, permissions changed). A
     // silent unhandled rejection here would leave the app running with
@@ -522,6 +473,8 @@ app.on("ready", async () => {
     app.exit(1);
     return;
   }
+  startHostProcess({ failed: showHostFailure });
+  graph = runtime.context();
   buildAppMenu();
   // Host liveness. Install the crash guards before
   // the window exists so an early fatal error is still caught, then
@@ -544,6 +497,23 @@ app.on("ready", async () => {
 app.on("window-all-closed", () => {
   app.quit();
 });
+
+// A host that could not start: the store it could not open, with what
+// the engine's doctor found, or why it kept stopping.
+function showHostFailure(failure: HostFailure): void {
+  if (failure.storeReport !== null) {
+    dialog.showErrorBox(
+      "Shigoto no Mori can't open its data",
+      `${failure.storeReport}\n\nRun \`${cliBinaryName(flavor)} doctor\` in a terminal for the repairs it offers.`,
+    );
+  } else {
+    dialog.showErrorBox(
+      "Shigoto no Mori can't start",
+      `${failure.message}\n\nQuit and relaunch the app. If it keeps happening, restart your machine or reinstall.`,
+    );
+  }
+  app.exit(1);
+}
 
 // Every quit path lands here: the graph's shutdown runs its finalizers
 // (hostLayer.ts), then `app.exit` ends the process without coming back
@@ -592,9 +562,12 @@ let askingToQuit = false;
 
 function quit(): void {
   quitting = true;
-  if (isHurriedQuit()) rememberVisibilityForRestart();
-  void runtime
-    .dispose()
+  const hurried = isHurriedQuit();
+  if (hurried) rememberVisibilityForRestart();
+  // The host first, whose quit sequence (host/process/layer.ts) may
+  // still ask the shell for its updater bridge.
+  void stopHostProcess(hurried)
+    .then(() => runtime.dispose())
     .catch((error: unknown) => {
       log.error("[quit] a finalizer failed:", error);
     })

@@ -35,13 +35,13 @@ import {
 import { readJsonOrNull } from "@host/lib/util/atomicJson";
 import { pathExists, dataDir } from "@host/lib/util/paths";
 import { busyRemoteRefusal } from "@shared/busy";
-import { host } from "../hostProcess";
+import { host, noteUpdaterState } from "../hostProcess";
 import { confirmBusyAction } from "./busyPrompt";
 import { requireCliBinary } from "./cliBinary";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 import { updateEndpoints } from "./updateEndpoints";
-import * as Engine from "@host/lib/engine";
+import * as UpdaterEngine from "./updaterEngine";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Updater from "@shigomori/engine/Updater";
 import * as Effect from "effect/Effect";
@@ -86,7 +86,7 @@ export function isInstallingUpdate(): boolean {
 function setState(next: UpdaterState): void {
   state = next;
   // The host answers the windows' and the peers' reads, and pushes it.
-  void host().updaterState(state);
+  noteUpdaterState(state);
   // Mirror every state to disk so `sm update` can follow along
   // (updaterBridge.ts). Fire-and-forget: transitions are seconds apart,
   // and a lost write only stales the CLI's view until the next one.
@@ -192,7 +192,7 @@ async function runCheck(): Promise<void> {
   try {
     let next: UpdaterState;
     try {
-      const result = await Engine.run(
+      const result = await UpdaterEngine.run(
         Effect.gen(function* () {
           return yield* (yield* Updater.Updater).stage({
             running: runningApp(),
@@ -358,6 +358,11 @@ async function updateNow(unattended: boolean): Promise<void> {
   installWhenStaged = unattended;
   if (checkInFlight) armedMidCheck = true;
   else void runCheck();
+}
+
+// The state as it stands, for a host that starts after it moved.
+export function currentUpdaterState(): UpdaterState {
+  return state;
 }
 
 // The updater's half of the host's calls to its shell

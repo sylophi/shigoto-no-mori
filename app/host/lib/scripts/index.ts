@@ -8,7 +8,7 @@
 // The PTY and its kill chain live in ./pty.ts, each run in a scope of
 // its own: stopping a run is closing that scope.
 //
-// On app quit (main/hostLayer.ts) we kill every running script the same way
+// On app quit (host/process/layer.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
 import type { BusyOperations } from "@shared/busy";
 import { randomUUID } from "node:crypto";

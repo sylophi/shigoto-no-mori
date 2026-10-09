@@ -17,6 +17,12 @@ export async function readDeviceId(): Promise<string> {
   return cached;
 }
 
+// The shell learns it from its host (main/hostProcess.ts), whose store
+// holds it.
+export function setDeviceId(deviceId: string): void {
+  cached = deviceId;
+}
+
 export function getDeviceId(): string {
   if (cached === "")
     throw new Error("The device id was asked before launch read it.");
