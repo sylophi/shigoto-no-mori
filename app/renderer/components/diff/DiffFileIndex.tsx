@@ -476,12 +476,9 @@ function IndexRow({
   // gives way when the row runs out of room.
   const name = getBrowseLeafSegment(entry.path);
   const folder = entry.path.slice(0, -name.length - 1);
-  const { mark, label, className } = entry.mark;
+  const { mark, className } = entry.mark;
   const { row } = entry;
   const select = () => onSelect(entry.key);
-  // The context menu is a gesture nothing on the row shows, so the
-  // row's hint names it.
-  const tip = `${label}: ${entry.prevPath ? `${entry.prevPath} → ` : ""}${entry.path}${row ? "\nRight-click to discard or copy the path" : ""}`;
 
   return (
     // A row is two controls side by side (tick, jump), so it can't be
@@ -538,49 +535,47 @@ function IndexRow({
             </SimpleTooltip>
           </span>
         )}
-      <SimpleTooltip tip={tip}>
-        <button
-          type="button"
-          data-slot="diff-index-jump"
-          onClick={select}
-          className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+      <button
+        type="button"
+        data-slot="diff-index-jump"
+        onClick={select}
+        className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "w-2.5 shrink-0 text-center font-mono text-2xs font-semibold",
+            className,
+          )}
         >
-          <span
-            aria-hidden
-            className={cn(
-              "w-2.5 shrink-0 text-center font-mono text-2xs font-semibold",
-              className,
-            )}
-          >
-            {mark}
-          </span>
-          {/* One line tall, clipped, and allowed to wrap: a folder with
+          {mark}
+        </span>
+        {/* One line tall, clipped, and allowed to wrap: a folder with
               less than 3em left beside the name wraps onto a second
               line nobody sees, rather than showing as a sliver. */}
-          <span className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 overflow-hidden text-xs">
-            <span className="max-w-full shrink-0 truncate">{name}</span>
-            {/* Cut from its start, so what stays is the folder nearest
+        <span className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 overflow-hidden text-xs">
+          <span className="max-w-full shrink-0 truncate">{name}</span>
+          {/* Cut from its start, so what stays is the folder nearest
                 the file ("…/sidebar"), the part that tells two files of
                 one name apart. rtl moves the ellipsis to the left, and
                 the bdi keeps the path itself reading left to right. */}
-            {folder && (
-              <span
-                dir="rtl"
-                className="min-w-[3em] flex-1 basis-0 truncate text-left text-2xs text-muted-foreground"
-              >
-                <bdi>{folder}</bdi>
-              </span>
-            )}
-          </span>
-          {entry.stats && (
-            <DiffStats
-              additions={entry.stats.additions}
-              deletions={entry.stats.deletions}
-              compact
-            />
+          {folder && (
+            <span
+              dir="rtl"
+              className="min-w-[3em] flex-1 basis-0 truncate text-left text-2xs text-muted-foreground"
+            >
+              <bdi>{folder}</bdi>
+            </span>
           )}
-        </button>
-      </SimpleTooltip>
+        </span>
+        {entry.stats && (
+          <DiffStats
+            additions={entry.stats.additions}
+            deletions={entry.stats.deletions}
+            compact
+          />
+        )}
+      </button>
       {/* A phone's list is the full width, and a long press is a gesture
           nobody finds, so there the discard is also a button. */}
       {row && onDiscard && (
