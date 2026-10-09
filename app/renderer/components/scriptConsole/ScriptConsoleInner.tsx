@@ -6,6 +6,8 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import { CenteredMessage } from "@/components/ui/centered-message";
+import { peerOutputHiddenNote } from "@/lib/commandAccessCopy";
 import { assertNever } from "@/lib/utils";
 import { slotLabel, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
@@ -61,16 +63,20 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
             )}
           </div>
           <div className="shrink-0">
+            {/* A peer that takes no commands from here neither stops
+                its runs nor shows their output (useScriptRunner). */}
             {busy ? (
-              <Button
-                variant="outline-destructive"
-                size="sm"
-                onClick={stop}
-                disabled={state.cancelling}
-              >
-                <Square />
-                {state.cancelling ? "Stopping…" : "Stop"}
-              </Button>
+              canRun && (
+                <Button
+                  variant="outline-destructive"
+                  size="sm"
+                  onClick={stop}
+                  disabled={state.cancelling}
+                >
+                  <Square />
+                  {state.cancelling ? "Stopping…" : "Stop"}
+                </Button>
+              )
             ) : (
               <SimpleTooltip tip={disabledReason}>
                 <Button size="sm" onClick={start} disabled={!canRun}>
@@ -83,11 +89,17 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
         </div>
       </header>
 
-      <ConsoleBody
-        runKey={key}
-        state={state}
-        onClear={canClear ? clear : null}
-      />
+      {canRun ? (
+        <ConsoleBody
+          runKey={key}
+          state={state}
+          onClear={canClear ? clear : null}
+        />
+      ) : (
+        <CenteredMessage className="h-auto flex-1 px-6 text-center">
+          {peerOutputHiddenNote()}
+        </CenteredMessage>
+      )}
     </div>
   );
 }

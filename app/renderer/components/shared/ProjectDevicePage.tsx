@@ -22,6 +22,7 @@ import {
   type ProjectPage,
 } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import type { Project } from "@shared/schemas";
 import {
@@ -65,6 +66,7 @@ export function ProjectDevicePage({
   // change remounts the page (remountDeps), so this never goes stale.
   const [picked, pick] = usePickedDevice(holders, scope.deviceId);
   const [allDevicesPicked, setAllDevicesPicked] = useState(false);
+  const { canCommand } = useCommandAccess();
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
@@ -75,7 +77,8 @@ export function ProjectDevicePage({
   // the body is the routed project under the routed device, so a
   // missing local checkout can never swap the page to a peer's copy
   // unannounced. The scoped device is what the first holder resolves
-  // to anyway, so the panel keeps its key when the bar appears.
+  // to anyway, so the panel keeps its key when the bar appears, and it
+  // is blocked the way its tab would be.
   const tabbed = holders.length > 1 && picked !== undefined;
   const showAllDevices =
     tabbed && renderAllDevices !== undefined && allDevicesPicked;
@@ -88,7 +91,7 @@ export function ProjectDevicePage({
         isThisDevice: !scope.remote,
         status: null,
         api: scope.api,
-        block: undefined,
+        block: canCommand ? undefined : "no-grant",
       };
 
   return (

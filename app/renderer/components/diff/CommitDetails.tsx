@@ -24,7 +24,7 @@ import {
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import type { CommitRewrite } from "@/lib/commitRewrite";
+import { NO_REWRITE, type CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActions";
@@ -32,7 +32,8 @@ import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActio
 // Under a commit's title on its page: the rest of its message, and what
 // can be done with it, as buttons rather than a menu to find. The moves
 // that rewrite it only show while no remote has it. A commit only the
-// remote has (its side of a split) says so, and only copies.
+// remote has (its side of a split) says so, and only copies, as does
+// every commit on a peer that takes no commands from here.
 export function CommitDetails({
   worktree,
   commit,
@@ -66,7 +67,8 @@ export function CommitDetails({
       rewritten.recentCommits[index]?.hash ?? rewritten.recentCommits[0]?.hash;
     if (next) nav.toCommit(worktree.projectId, worktree.id, next, true);
   });
-  const { canAmend, undo, reword, squash } = rewrite;
+  const { canCommand } = actions;
+  const { canAmend, undo, reword, squash } = canCommand ? rewrite : NO_REWRITE;
   const busy = actions.pending;
 
   return (
@@ -131,7 +133,7 @@ export function CommitDetails({
               : `Undo the ${pluralize(undo.count, "commit")} after it`}
           </Button>
         )}
-        {!onlyOn && actions.canRevert && (
+        {canCommand && !onlyOn && actions.canRevert && (
           <Button
             variant="outline"
             size="xs"
@@ -142,7 +144,7 @@ export function CommitDetails({
             Revert
           </Button>
         )}
-        {actions.pickTargets.length > 0 && (
+        {canCommand && actions.pickTargets.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -174,13 +176,15 @@ export function CommitDetails({
             }
           />
           <DropdownMenuContent align="start" sideOffset={4}>
-            <DropdownMenuItem
-              disabled={busy}
-              onClick={() => actions.newWorktreeFrom(commit)}
-            >
-              <FolderGit2 />
-              New worktree from here
-            </DropdownMenuItem>
+            {canCommand && (
+              <DropdownMenuItem
+                disabled={busy}
+                onClick={() => actions.newWorktreeFrom(commit)}
+              >
+                <FolderGit2 />
+                New worktree from here
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => void navigator.clipboard.writeText(commit.hash)}
             >

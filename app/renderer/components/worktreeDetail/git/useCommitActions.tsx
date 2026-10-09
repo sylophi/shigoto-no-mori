@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { Textarea } from "@/components/ui/textarea";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import {
@@ -23,7 +24,8 @@ import type { CommitSummary, Worktree } from "@shared/schemas";
 // surface (the Git timeline, a commit's page) rather than a
 // subscription per row. `dialog` is the reword dialog, rendered by the
 // surface. `onRewritten` hears a reword or squash land, after which the
-// commits from there up have new hashes.
+// commits from there up have new hashes. `canCommand` is false on a
+// peer that takes no commands from here, where only copying is left.
 export function useCommitActions(
   worktree: Worktree,
   onRewritten?: (worktree: Worktree) => void,
@@ -37,12 +39,14 @@ export function useCommitActions(
   const say = useWorktreeSuccessToast();
   const { data: siblings } = useWorktrees(projectId);
   const { data: operation } = useWorktreeOperation(worktree);
+  const { canCommand } = useCommandAccess();
   const [rewording, setRewording] = useState<{
     hash: string;
     head: string;
   } | null>(null);
 
   return {
+    canCommand,
     undoTo: undo.undoTo,
     // A revert is a commit of its own, which waits while a merge,
     // rebase or squash does.
