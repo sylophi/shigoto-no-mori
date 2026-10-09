@@ -20,10 +20,10 @@ import { useCarryOverRows } from "../flow/createPlan";
 import { type PullReviewProps, PullReviewStep } from "../flow/PullReview";
 import {
   CARD_NOTE,
-  CardList,
-  CardSkeleton,
+  CardListView,
+  CardSkeletonView,
   MAX_LIST_ROWS as MAX_ROWS,
-} from "../flow/FlowChrome";
+} from "../flow/FlowChromeView";
 
 export function TransplantReview(props: PullReviewProps) {
   const { worktree, project, target, sourceDeviceLabel, thisDeviceLabel } =
@@ -83,7 +83,7 @@ function ChangedFiles({
   } = useWorktreeChanges(project.id, worktree.id, {
     refetchOnWindowFocus: false,
   });
-  if (isPending) return <CardSkeleton rows={2} />;
+  if (isPending) return <CardSkeletonView rows={2} />;
   if (isError) {
     return (
       <p className={CARD_NOTE}>
@@ -96,7 +96,7 @@ function ChangedFiles({
     return <p className={CARD_NOTE}>No uncommitted changes to list.</p>;
   }
   return (
-    <CardList total={files.length}>
+    <CardListView total={files.length}>
       {files.slice(0, MAX_ROWS).map((entry) => {
         const { mark, stats } = entry;
         return (
@@ -121,7 +121,7 @@ function ChangedFiles({
           </li>
         );
       })}
-    </CardList>
+    </CardListView>
   );
 }
 
@@ -144,11 +144,11 @@ function CarryOverList({
         </span>
       </SectionHeading>
       {isPending ? (
-        <CardSkeleton />
+        <CardSkeletonView />
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">None configured.</p>
       ) : (
-        <CardList total={rows.length}>
+        <CardListView total={rows.length}>
           {rows.slice(0, MAX_ROWS).map((row) => (
             <li key={row.path} className="flex items-center gap-2">
               <Check
@@ -161,7 +161,7 @@ function CarryOverList({
               <RowTag>{row.tag}</RowTag>
             </li>
           ))}
-        </CardList>
+        </CardListView>
       )}
     </section>
   );

@@ -1,5 +1,3 @@
-import { ArchiveRestore, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   useApplyStash,
   useDropStash,
@@ -9,11 +7,9 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { StashEntry, Worktree } from "@shigomori/contracts/schemas";
+import { StashMovesView } from "./StashMovesView";
 
-// Under a stash's title on the Stashes tab: put it back (and drop it,
-// or keep it), or drop it. A restore lands on the changes it went back
-// into. A drop moves on to the next stash, or to the tab's empty state
-// once none is left. None on a peer that takes no commands from here.
+// A stash's moves (StashMovesView): restore, keep or drop it.
 export function StashMoves({
   worktree,
   stash,
@@ -35,70 +31,47 @@ export function StashMoves({
   const toChanges = () =>
     nav.toDiff(worktree.projectId, worktree.id, { replace: true });
   return (
-    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-      <Button
-        variant="outline"
-        size="xs"
-        disabled={busy}
-        onClick={() =>
-          apply.mutate(
-            { ...scope, hash: stash.hash, drop: true },
-            { onSuccess: toChanges },
-          )
-        }
-      >
-        <ArchiveRestore />
-        Restore
-      </Button>
-      <Button
-        variant="outline"
-        size="xs"
-        disabled={busy}
-        onClick={() =>
-          apply.mutate(
-            { ...scope, hash: stash.hash, drop: false },
-            { onSuccess: toChanges },
-          )
-        }
-      >
-        <ArchiveRestore />
-        Restore and keep it
-      </Button>
-      <Button
-        variant="outline-destructive"
-        size="xs"
-        disabled={busy}
-        onClick={() =>
-          drop.mutate(
-            { ...scope, hash: stash.hash },
-            {
-              onSuccess: () => {
-                if (next) {
-                  nav.toStash(worktree.projectId, worktree.id, next, true);
-                } else {
-                  nav.toStashes(worktree.projectId, worktree.id, true);
-                }
-                toast("Dropped the stash", {
-                  duration: UNDO_TOAST_MS,
-                  action: {
-                    label: "Undo",
-                    onClick: () =>
-                      restore.mutate({
-                        ...scope,
-                        hash: stash.hash,
-                        message: stash.message,
-                        named: stash.named,
-                      }),
-                  },
-                });
-              },
+    <StashMovesView
+      busy={busy}
+      onRestore={() =>
+        apply.mutate(
+          { ...scope, hash: stash.hash, drop: true },
+          { onSuccess: toChanges },
+        )
+      }
+      onRestoreAndKeep={() =>
+        apply.mutate(
+          { ...scope, hash: stash.hash, drop: false },
+          { onSuccess: toChanges },
+        )
+      }
+      onDrop={() =>
+        drop.mutate(
+          { ...scope, hash: stash.hash },
+          {
+            onSuccess: () => {
+              if (next) {
+                nav.toStash(worktree.projectId, worktree.id, next, true);
+              } else {
+                nav.toStashes(worktree.projectId, worktree.id, true);
+              }
+              toast("Dropped the stash", {
+                duration: UNDO_TOAST_MS,
+                action: {
+                  label: "Undo",
+                  onClick: () =>
+                    restore.mutate({
+                      ...scope,
+                      hash: stash.hash,
+                      message: stash.message,
+                      named: stash.named,
+                    }),
+                },
+              });
             },
-          )
-        }
-      >
-        <Trash2 />
-        Drop
-      </Button>
-    </div>
+          },
+        )
+      }
+    />
   );
 }

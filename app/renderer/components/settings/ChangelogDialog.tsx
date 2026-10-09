@@ -20,10 +20,10 @@ import { useReleases } from "@/hooks/system/useReleases";
 import { openExternalUrl } from "@/lib/openExternal";
 import { pluralize } from "@/lib/pluralize";
 import {
-  FlowBody,
-  FlowFooter,
-  FlowHeader,
-} from "../worktreeDetail/flow/FlowChrome";
+  FlowBodyView,
+  FlowFooterView,
+  FlowHeaderView,
+} from "../worktreeDetail/flow/FlowChromeView";
 
 // The update the preview is of: the version it brings, and the notes
 // the update feed sent with it when there are any (the stand-in when
@@ -93,7 +93,7 @@ export function ChangelogDialog({
 
   return (
     <ModalShell onClose={onClose} popoverClassName="max-w-2xl">
-      <FlowHeader
+      <FlowHeaderView
         tint={TONE_PILL[news === null ? "slate" : "sky"]}
         icon={news === null ? ScrollText : Sparkles}
         title={news === null ? "Changelog" : "What's new"}
@@ -110,8 +110,8 @@ export function ChangelogDialog({
         onClose={onClose}
       >
         <p>{subtitle(version, news, list?.length)}</p>
-      </FlowHeader>
-      <FlowBody>
+      </FlowHeaderView>
+      <FlowBodyView>
         {list !== undefined ? (
           list.length === 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -136,8 +136,8 @@ export function ChangelogDialog({
         ) : (
           <LoadingEntries />
         )}
-      </FlowBody>
-      {restartButton && <FlowFooter>{restartButton}</FlowFooter>}
+      </FlowBodyView>
+      {restartButton && <FlowFooterView>{restartButton}</FlowFooterView>}
     </ModalShell>
   );
 }

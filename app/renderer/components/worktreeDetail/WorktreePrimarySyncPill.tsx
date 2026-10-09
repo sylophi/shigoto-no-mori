@@ -9,7 +9,7 @@ import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { isSyncConflictsError } from "@shigomori/contracts/errors";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { SyncActionButton } from "./SyncActionButton";
+import { SyncActionButtonView } from "./SyncActionButtonView";
 
 // Precondition: caller has verified the worktree is eligible
 // (non-primary, non-detached, behindPrimary > 0). The label still falls
@@ -39,7 +39,7 @@ export function WorktreePrimarySyncPill({
   const branchName = worktree.primaryRef ?? "primary";
   const scope = { projectId: worktree.projectId, worktreeId: worktree.id };
   return (
-    <SyncActionButton
+    <SyncActionButtonView
       tone="sky"
       icon={ArrowDown}
       label={

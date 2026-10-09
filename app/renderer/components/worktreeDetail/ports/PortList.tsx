@@ -14,15 +14,11 @@
 // so each frame places the actions its own way, and share one read and
 // one add form (usePortList).
 import { useState } from "react";
-import { Plus } from "lucide-react";
 import {
   hasWorktreeData,
   MAX_CUSTOM_PORTS,
   type Worktree,
 } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useCustomPortsWrite } from "@/hooks/ports/useCustomPorts";
 import { useWorktreePorts } from "@/hooks/ports/useWorktreePorts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -30,9 +26,8 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeData } from "@/hooks/worktrees/useWorktreeData";
-import { cn } from "@/lib/utils";
 import { ForwardAllButton } from "./ForwardAllButton";
-import { PortForm } from "./PortForm";
+import { PortActionsView, PortListView } from "./PortListView";
 import { PortRow } from "./PortRow";
 
 export type PortListState = ReturnType<typeof usePortList>;
@@ -77,8 +72,6 @@ export function usePortList(worktree: Worktree) {
   };
 }
 
-// `plain`: rows without the cards' borders and fills (PortRow), and an
-// add form without its fill, set out as far as the rows.
 export function PortList({
   state,
   plain = false,
@@ -101,59 +94,44 @@ export function PortList({
     setAdding,
   } = state;
   return (
-    <div className="space-y-3">
-      {isPending ? (
-        <Skeleton className="h-10 w-full rounded-lg" />
-      ) : ports.length > 0 ? (
-        <ul className="flex flex-col gap-1.5">
-          {ports.map((entry) => (
-            <PortRow
-              key={entry.port}
-              entry={entry}
-              taken={ports}
-              deviceId={deviceId}
-              worktree={forwardFrom}
-              remote={remote}
-              granted={granted}
-              onUpdate={
-                entry.source === "custom" && canEdit
-                  ? (next) => customPorts.update(entry.port, next)
-                  : undefined
-              }
-              onRemove={
-                entry.source === "custom" && canEdit
-                  ? () => customPorts.remove(entry.port)
-                  : undefined
-              }
-              plain={plain}
-            />
-          ))}
-        </ul>
-      ) : (
-        !adding && (
-          <p className="text-sm text-muted-foreground">
-            {isError
-              ? `Couldn't read this worktree's ports${remote ? ` from ${deviceLabel}` : ""}.`
-              : "No ports yet."}
-          </p>
-        )
-      )}
-      {adding && (
-        <PortForm
+    <PortListView
+      pending={isPending}
+      failed={
+        isError
+          ? `Couldn't read this worktree's ports${remote ? ` from ${deviceLabel}` : ""}.`
+          : undefined
+      }
+      rows={ports.map((entry) => (
+        <PortRow
+          key={entry.port}
+          entry={entry}
           taken={ports}
-          onSubmit={(entry) => customPorts.add(entry)}
-          onDone={() => setAdding(false)}
-          className={cn(
-            "rounded-lg border border-dashed border-border px-3 py-2",
-            plain ? "-mx-3" : "bg-card",
-          )}
+          deviceId={deviceId}
+          worktree={forwardFrom}
+          remote={remote}
+          granted={granted}
+          onUpdate={
+            entry.source === "custom" && canEdit
+              ? (next) => customPorts.update(entry.port, next)
+              : undefined
+          }
+          onRemove={
+            entry.source === "custom" && canEdit
+              ? () => customPorts.remove(entry.port)
+              : undefined
+          }
+          plain={plain}
         />
-      )}
-    </div>
+      ))}
+      adding={adding}
+      taken={ports}
+      onAdd={(entry) => customPorts.add(entry)}
+      onAddDone={() => setAdding(false)}
+      plain={plain}
+    />
   );
 }
 
-// Forward all (on a peer) and Add port, whichever apply.
 export function PortActions({ state }: { state: PortListState }) {
   const {
     deviceId,
@@ -168,34 +146,23 @@ export function PortActions({ state }: { state: PortListState }) {
     canAdd,
   } = state;
   return (
-    <>
-      {remote && canForwardPorts && (
-        <ForwardAllButton
-          deviceId={deviceId}
-          worktree={forwardFrom}
-          ports={ports}
-          granted={granted}
-        />
-      )}
-      {canEdit && !adding && (
-        <SimpleTooltip
-          tip={
-            atCap
-              ? `Up to ${MAX_CUSTOM_PORTS} custom ports per worktree`
-              : undefined
-          }
-        >
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!canAdd}
-            onClick={() => setAdding(true)}
-          >
-            <Plus />
-            Add port
-          </Button>
-        </SimpleTooltip>
-      )}
-    </>
+    <PortActionsView
+      forwardAll={
+        remote &&
+        canForwardPorts && (
+          <ForwardAllButton
+            deviceId={deviceId}
+            worktree={forwardFrom}
+            ports={ports}
+            granted={granted}
+          />
+        )
+      }
+      canEdit={canEdit}
+      adding={adding}
+      atCap={atCap}
+      canAdd={canAdd}
+      onAdd={() => setAdding(true)}
+    />
   );
 }

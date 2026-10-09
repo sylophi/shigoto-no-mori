@@ -32,7 +32,8 @@ import {
 import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
-import { CARD, FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
+import { CARD, FlowBodyView, FlowFooterView } from "../flow/FlowChromeView";
+import { LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
 import type { DestinationPick } from "../flow/PullReview";
 import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
@@ -327,7 +328,7 @@ function MirrorLive({
   const summary = live === undefined ? null : sessionSummary(live);
   return (
     <>
-      <FlowBody>
+      <FlowBodyView>
         <section className="space-y-2">
           <SectionHeading>Copy on {thisDeviceLabel}</SectionHeading>
           <div className={cn(CARD, "space-y-1.5")}>
@@ -353,13 +354,13 @@ function MirrorLive({
             </div>
           </div>
         </section>
-      </FlowBody>
+      </FlowBodyView>
       {/* One way out, to this device's half of the pair (finish). */}
-      <FlowFooter>
+      <FlowFooterView>
         <Button size="sm" onClick={onDone}>
           Done
         </Button>
-      </FlowFooter>
+      </FlowFooterView>
     </>
   );
 }
