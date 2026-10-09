@@ -1,5 +1,5 @@
 // Durable proof for the per-project git-directory watcher
-// (main/core/gitWatcher.ts) against a REAL git repository with a
+// (host/lib/gitWatcher.ts) against a REAL git repository with a
 // linked worktree: a commit made in the worktree, a checkout there and
 // a branch deleted from the main checkout each surface as exactly one
 // project-scoped change, while the churn the allowlist exists to
@@ -24,7 +24,7 @@ import {
   isRelevantGitPath,
   GitWatcher,
   layer as gitWatcherLayer,
-} from "../main/core/gitWatcher.ts";
+} from "../host/lib/gitWatcher.ts";
 import {
   delay,
   sandboxGit,

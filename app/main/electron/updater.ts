@@ -24,7 +24,6 @@ import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { app } from "electron";
-import { updaterContract } from "@shigomori/contracts/modules/updater";
 import type {
   StagedManifest,
   UpdaterState,
@@ -33,11 +32,11 @@ import {
   StagedManifestSchema,
   UpdateStageResultSchema,
 } from "@shigomori/contracts/schemas";
-import { setUpdaterImpl } from "@host/ipc/modules/updater";
-import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "@host/lib/util/atomicJson";
 import { pathExists, dataDir } from "@host/lib/util/paths";
-import { busyActionRemoteRefusal, confirmBusyAction } from "./busyPrompt";
+import { busyRemoteRefusal } from "@shared/busy";
+import { host } from "../hostProcess";
+import { confirmBusyAction } from "./busyPrompt";
 import { requireCliBinary } from "./cliBinary";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
@@ -86,15 +85,12 @@ export function isInstallingUpdate(): boolean {
 
 function setState(next: UpdaterState): void {
   state = next;
-  broadcastAll(updaterContract, "state", state);
+  // The host answers the windows' and the peers' reads, and pushes it.
+  void host().updaterState(state);
   // Mirror every state to disk so `sm update` can follow along
   // (updaterBridge.ts). Fire-and-forget: transitions are seconds apart,
   // and a lost write only stales the CLI's view until the next one.
   void publishUpdaterState(state);
-}
-
-function getUpdaterState(): UpdaterState {
-  return state;
 }
 
 const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
@@ -296,10 +292,10 @@ async function installUpdate(unattended: boolean): Promise<void> {
   if (installing) return;
   if (!(await hasInstallableStaged())) return;
   if (unattended) {
-    const refusal = busyActionRemoteRefusal("restart");
+    const refusal = busyRemoteRefusal(await host().busy(), "restart");
     if (refusal !== null) throw new Error(refusal);
   } else {
-    if (!(await confirmBusyAction("restart"))) return;
+    if (!(await confirmBusyAction("restart", await host().busy()))) return;
     // The dialog can sit open arbitrarily long. Re-check that another
     // path didn't start the install during it, and that the staged
     // update still exists -- a terminal run whose feed answered 204
@@ -356,7 +352,7 @@ async function updateNow(unattended: boolean): Promise<void> {
   }
   if (!started) throw new Error("This build doesn't update itself.");
   if (unattended) {
-    const refusal = busyActionRemoteRefusal("restart");
+    const refusal = busyRemoteRefusal(await host().busy(), "restart");
     if (refusal !== null) throw new Error(refusal);
   }
   installWhenStaged = unattended;
@@ -364,14 +360,14 @@ async function updateNow(unattended: boolean): Promise<void> {
   else void runCheck();
 }
 
-export function installUpdaterImpl(): void {
-  setUpdaterImpl({
-    getState: getUpdaterState,
-    check: checkForUpdates,
-    install: installUpdate,
-    update: updateNow,
-  });
-}
+// The updater's half of the host's calls to its shell
+// (host/process/shell.ts): a peer's Settings page drives it through the
+// host.
+export const updaterCalls = {
+  check: async () => checkForUpdates(),
+  install: installUpdate,
+  update: updateNow,
+};
 
 export function startUpdater(): void {
   if (started) return;

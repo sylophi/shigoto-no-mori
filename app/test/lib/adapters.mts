@@ -1,5 +1,5 @@
 // Every proof's file runs with the Promise adapters of the converted
-// subsystems up, the way the app's graph (main/hostLayer.ts) brings
+// subsystems up, the way the app's graph (host/process/layer.ts) brings
 // them up, so host code a proof reaches answers instead of waiting
 // for a graph that never comes (EFFECT.md, runtime boundaries).
 import { execFileSync } from "node:child_process";

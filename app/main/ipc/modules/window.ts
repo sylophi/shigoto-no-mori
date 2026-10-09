@@ -3,7 +3,7 @@ import type { Handlers } from "@shigomori/contracts/types";
 import { applyThemeSource } from "../../electron/clientConfig";
 import { showNotification } from "../../electron/notifications";
 import { relaunchApp } from "../../electron/relaunch";
-import { loopback } from "@host/socket/loopback";
+import { host } from "../../hostProcess";
 
 export const windowHandlers: Handlers<typeof windowContract> = {
   // Track the renderer's applied theme (including unsaved previews) so
@@ -22,5 +22,7 @@ export const windowHandlers: Handlers<typeof windowContract> = {
     showNotification(input);
   },
 
-  hostAddress: () => loopback.address(),
+  // Where the window reaches its host, asked again on every redial
+  // (renderer/hostLink.ts), so a host that came back elsewhere is found.
+  hostAddress: () => host().address(),
 };

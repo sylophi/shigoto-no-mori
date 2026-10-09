@@ -1,49 +1,14 @@
 // Native confirmation when the user tries to quit or restart-to-update
-// while scripts or worktree removals are in flight. Centralizing the
-// copy here keeps the two paths' wording in lock-step.
+// while scripts or worktree removals are in flight on the host. The
+// counts come from the host (its session's `busy`), the words from
+// shared/busy.ts.
 import { BrowserWindow, dialog } from "electron";
-// getBusyOperations already includes CLI-engine lifecycle work: the
-// CLI runner registers its child count as an inflight contributor at
-// module load (it is imported by the IPC modules during bootstrap,
-// well before any busy check can run).
-import { type BusyOperations, getBusyOperations } from "@host/lib/scripts";
-
-type BusyAction = "quit" | "restart";
-
-const COPY: Record<
-  BusyAction,
-  { message: string; proceed: string; gerund: string }
-> = {
-  quit: {
-    message: "Stop running tasks and quit?",
-    proceed: "Quit anyway",
-    gerund: "Quitting",
-  },
-  restart: {
-    message: "Stop running tasks and restart to update?",
-    proceed: "Restart anyway",
-    gerund: "Restarting",
-  },
-};
-
-function pluralize(n: number, singular: string, plural: string): string {
-  return n === 1 ? singular : plural;
-}
-
-function formatBusyDetail(busy: BusyOperations, gerund: string): string {
-  // Lifecycle deletes spawn a teardown script that lands in
-  // runningScripts, so prefer the script count to avoid double-counting
-  // the same operation when both are non-zero.
-  if (busy.runningScripts > 0) {
-    const n = busy.runningScripts;
-    const subject = pluralize(n, `${n} script is`, `${n} scripts are`);
-    const obj = pluralize(n, "it", "them");
-    return `${subject} still running. ${gerund} now will stop ${obj}.`;
-  }
-  const n = busy.inflightDeletes;
-  const subject = pluralize(n, `${n} worktree is`, `${n} worktrees are`);
-  return `${subject} being removed. ${gerund} now will interrupt cleanup and may leave files behind.`;
-}
+import {
+  BUSY_COPY,
+  type BusyAction,
+  type BusyOperations,
+  busyDetail,
+} from "@shared/busy";
 
 function parentWindow(): BrowserWindow | undefined {
   const focused = BrowserWindow.getFocusedWindow();
@@ -54,46 +19,16 @@ function parentWindow(): BrowserWindow | undefined {
   return undefined;
 }
 
-function isBusy(busy: BusyOperations): boolean {
-  return busy.runningScripts > 0 || busy.inflightDeletes > 0;
-}
-
-// The busy verdict every entry point starts from: null when nothing is
-// running and the action may proceed, else the sentence the dialog
-// would show. An action requested by ANOTHER device (a peer's Settings
-// page restarting this app into an update) has nobody here to answer a
-// dialog, so it takes this refusal as its error instead of prompting.
-function busyActionRefusal(action: BusyAction): string | null {
-  const busy = getBusyOperations();
-  if (!isBusy(busy)) return null;
-  return formatBusyDetail(busy, COPY[action].gerund);
-}
-
-// The same verdict worded for the OTHER device's screen: the dialog's
-// detail describes what proceeding would do, which read as if the
-// restart had happened once it crossed the wire as an error. This says
-// what was refused and what to do about it.
-export function busyActionRemoteRefusal(
-  action: BusyAction | "move",
-): string | null {
-  const busy = getBusyOperations();
-  if (!isBusy(busy)) return null;
-  const verb = {
-    restart: "restarting to update",
-    quit: "quitting",
-    move: "moving the data folder",
-  }[action];
-  if (busy.runningScripts > 0) {
-    const n = busy.runningScripts;
-    return `${pluralize(n, `${n} script is`, `${n} scripts are`)} still running there. Stop ${pluralize(n, "it", "them")} before ${verb}.`;
-  }
-  const n = busy.inflightDeletes;
-  return `${pluralize(n, `${n} worktree is`, `${n} worktrees are`)} still being removed there. Wait for that to finish before ${verb}.`;
-}
-
-function dialogOptions(action: BusyAction, detail: string) {
-  const copy = COPY[action];
-  return {
+// Whether to go ahead: at once when nothing is running, else as the
+// user answers.
+export async function confirmBusyAction(
+  action: BusyAction,
+  busy: BusyOperations,
+): Promise<boolean> {
+  const detail = busyDetail(busy, action);
+  if (detail === null) return true;
+  const copy = BUSY_COPY[action];
+  const opts = {
     type: "warning" as const,
     buttons: ["Cancel", copy.proceed],
     defaultId: 0,
@@ -101,24 +36,7 @@ function dialogOptions(action: BusyAction, detail: string) {
     message: copy.message,
     detail,
   };
-}
-
-export function confirmBusyActionSync(action: BusyAction): boolean {
-  const refusal = busyActionRefusal(action);
-  if (refusal === null) return true;
   const parent = parentWindow();
-  const opts = dialogOptions(action, refusal);
-  const choice = parent
-    ? dialog.showMessageBoxSync(parent, opts)
-    : dialog.showMessageBoxSync(opts);
-  return choice === 1;
-}
-
-export async function confirmBusyAction(action: BusyAction): Promise<boolean> {
-  const refusal = busyActionRefusal(action);
-  if (refusal === null) return true;
-  const parent = parentWindow();
-  const opts = dialogOptions(action, refusal);
   const result = parent
     ? await dialog.showMessageBox(parent, opts)
     : await dialog.showMessageBox(opts);

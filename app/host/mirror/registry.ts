@@ -157,7 +157,7 @@ export type MirrorImpl = {
   // The verdict looked at again now, for a decision that must not
   // read a cached one (the stop's safety check).
   refreshGit: (session: string) => Promise<MirrorGitStatus | undefined>;
-  // The mirror's thread of events, by local worktree (main/core/mirror/
+  // The mirror's thread of events, by local worktree (host/mirror/
   // history.ts), and the way a control op adds to it.
   history: (localWorktreeId: string) => readonly MirrorEvent[];
   noteEvent: (

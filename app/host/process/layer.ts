@@ -1,9 +1,8 @@
 // The host's layer graph: what this machine serves, from the scripts it
-// runs to the wires its peers and the terminal reach it on. Step 4 of
-// V3.md moves it into a process of its own, so it depends on nothing in
-// the shell's graph (shellLayer.ts). Its subsystems are wired in
-// main/ipc and host/ today, and each one here is a lifetime: acquiring
-// it starts the subsystem, and the scope closing stops it.
+// runs to the wires its peers, its windows and the terminal reach it
+// on. It depends on nothing of the shell's (main/shellLayer.ts), which
+// starts it. Each subsystem here is a lifetime: acquiring it starts the
+// subsystem, and the scope closing stops it.
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -12,6 +11,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { refreshProjects } from "@host/lib/projects";
+import { loadSharedSettings } from "@host/lib/sharedSettings/store";
 import {
   getInflightDeleteIds,
   killAllScripts,
@@ -31,11 +31,13 @@ import * as ScriptRuns from "@host/lib/scripts/pty";
 import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/villagers";
 import * as Processes from "@host/lib/util/processes";
-import * as GitWatcher from "./core/gitWatcher";
-import { reconcileGitWatchers } from "./core/gitWatcher";
-import { startBackgroundFetch } from "./electron/fetch";
-import * as MirrorDaemon from "./core/mirror/daemon";
-import * as FileSyncRunner from "./electron/fileSyncRunner";
+import * as GitWatcher from "@host/lib/gitWatcher";
+import { reconcileGitWatchers } from "@host/lib/gitWatcher";
+import { startBackgroundFetch } from "@host/lib/git/backgroundFetch";
+import { repairCliLinks } from "@host/lib/cli/install";
+import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
+import * as MirrorDaemon from "@host/mirror/daemon";
+import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
   mirrorDaemonLayer,
@@ -43,19 +45,18 @@ import {
   startMirrorGateway,
   stopGitFollower,
   stopMirrorGateway,
-} from "./ipc/handlers";
-import { stopAllPortForwards } from "./ipc/modules/portForward";
+} from "./handlers";
+import { stopAllPortForwards } from "@host/ipc/modules/portForward";
 import {
   broadcastAll,
   deviceLinkLayer,
   loopbackLayer,
-  refreshHubConnection,
   sharingLayer,
   stopDirectHost,
   stopHubConnection,
   tunnelLayer,
-} from "./ipc/register";
-import { lifetime, onQuit, starts } from "./lifetimes";
+} from "./wires";
+import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
 
 // What the user started through a script must not outlive the app,
 // orphaned to launchd. A delete in flight loses its cleanup scripts
@@ -91,6 +92,14 @@ const scripts = (hurried: () => boolean) =>
 const firstProjectList = Layer.effectDiscard(
   Effect.promise(() =>
     logFailure("[projects] first list failed", refreshProjects),
+  ),
+);
+
+// The handlers read this device's copy of the shared settings
+// synchronously.
+const firstSharedSettings = Layer.effectDiscard(
+  Effect.promise(() =>
+    logFailure("[sharedSettings] first read failed", loadSharedSettings),
   ),
 );
 
@@ -168,18 +177,17 @@ const gitWatcher = logged(
 );
 
 // The hub socket and the device link's listener, which follows the
-// same enrollment condition. Both reconcile again on every account
-// change (main/ipc/handlers.ts). The closes are fire and forget: the
-// hub close frame flushes or the Durable Object notices the dead
-// socket, and the outbound links close. The listener closes with its
-// own layer, below.
-const remotePlanes = lifetime(
+// same enrollment condition. Both come up on the account's first report
+// from the shell and reconcile on every one after (handlers.ts
+// applyAccount). The closes are fire and forget: the hub close frame
+// flushes or the Durable Object notices the dead socket, and the
+// outbound links close. The listener closes with its own layer, below.
+const remotePlanes = onQuit(
   "the hub connection",
-  Effect.sync(() => void refreshHubConnection()),
-  () => {
+  Effect.sync(() => {
     void stopHubConnection();
     stopDirectHost();
-  },
+  }),
 );
 
 // The mirror engine: the git follower, the daemon, and the gateway the
@@ -245,6 +253,30 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     Layer.provideMerge(Processes.adapter),
   );
 
+// The lower half of the graph below: the file-sync children, the
+// scripts and the foundation, closed last.
+const scriptsAndFoundation = (options: {
+  readonly hurried: () => boolean;
+  readonly engine: Parameters<typeof Engine.layer>[0];
+}) =>
+  // Every file-sync child, the daemon and the serve children a peer's
+  // streams opened.
+  FileSyncRunner.layer.pipe(
+    Layer.provideMerge(scripts(options.hurried)),
+    // A crash, a force quit or an OOM skips the quit's reap, so what the
+    // last run left running is reaped here. It claims the record file
+    // synchronously, before any script can spawn, and kills in the
+    // background.
+    Layer.provideMerge(
+      starts("the orphan script sweep", startOrphanScriptSweep),
+    ),
+    // Every script run, each in a scope the quit's policy above has
+    // already closed or shortened.
+    Layer.provideMerge(ScriptRuns.adapter),
+    Layer.provideMerge(ScriptRuns.layer),
+    Layer.provideMerge(foundation(options.engine)),
+  );
+
 // Built from the bottom up, so the scope closes from the top down: read
 // downward, this is the quit sequence.
 export const layer = (options: {
@@ -256,29 +288,28 @@ export const layer = (options: {
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit
     // reads "not running" instead of dialing a closing listener.
-    Layer.provideMerge(loopbackLayer),
+    Layer.provideMerge(loopbackLayer()),
     Layer.provideMerge(mirrorFollower),
     Layer.provideMerge(mirrorDaemon),
     Layer.provideMerge(mirrorGateway),
     Layer.provideMerge(remotePlanes),
     // The cloudflared child, fronting the device link's listener.
-    Layer.provideMerge(tunnelLayer),
+    Layer.provideMerge(tunnelLayer()),
     // The listener peers dial, which connected peers see go away
     // cleanly.
-    Layer.provideMerge(deviceLinkLayer),
+    Layer.provideMerge(deviceLinkLayer()),
     // The switch the listener's gate reads.
     Layer.provideMerge(sharingLayer),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(storeChanges),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),
+    // Installing the CLI link is a Settings action. A start only
+    // repairs an installed link whose target moved (an app update,
+    // another checkout).
+    Layer.provideMerge(
+      starts("the CLI link repair", () => void repairCliLinks()),
+    ),
     Layer.provideMerge(firstProjectList),
-    // Every file-sync child, the daemon and the serve children a peer's
-    // streams opened.
-    Layer.provideMerge(FileSyncRunner.layer),
-    Layer.provideMerge(scripts(options.hurried)),
-    // Every script run, each in a scope the quit's policy above has
-    // already closed or shortened.
-    Layer.provideMerge(ScriptRuns.adapter),
-    Layer.provideMerge(ScriptRuns.layer),
-    Layer.provideMerge(foundation(options.engine)),
+    Layer.provideMerge(firstSharedSettings),
+    Layer.provideMerge(scriptsAndFoundation(options)),
   );

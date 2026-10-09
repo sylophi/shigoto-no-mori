@@ -32,6 +32,6 @@ export const MAX_IN_FLIGHT_PER_PEER = 64;
 
 // Byte channels one link may hold at once. A sanity bound against a
 // runaway client, carved up on the dialing side between the forwards
-// (main/core/portForward/engine.ts) and the mirror streams
-// (main/core/mirror/gateway.ts).
+// (host/portForward/engine.ts) and the mirror streams
+// (host/mirror/gateway.ts).
 export const MAX_CHANNELS_PER_LINK = 32;

@@ -1,7 +1,7 @@
 // The mirror sessions this device runs, the executor behind the mirror
 // handlers (host/ipc/modules/mirror.ts): starting one, stopping it with
 // its copy, pausing, re-opening it on a new rule, and the list. The
-// daemon that owns the sessions lives in main (main/core/mirror/
+// daemon that owns the sessions lives in main (host/mirror/
 // daemon.ts) and arrives through the registry's slot.
 //
 // start = send, then mirror. The send (sync's, reused verbatim) lands

@@ -10,6 +10,7 @@
 //
 // On app quit (main/hostLayer.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
+import type { BusyOperations } from "@shared/busy";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
@@ -442,10 +443,7 @@ export function clearProjectDeleteInflight(projectId: string): void {
   inflightProjectDeleteIds.delete(projectId);
 }
 
-export interface BusyOperations {
-  runningScripts: number;
-  inflightDeletes: number;
-}
+export type { BusyOperations } from "@shared/busy";
 
 // Extra sources of in-flight lifecycle work that live outside this
 // module (the CLI runner registers its child count). Aggregating here

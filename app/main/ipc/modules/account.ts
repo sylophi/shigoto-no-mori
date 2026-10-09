@@ -15,13 +15,11 @@ import { parseEnv } from "node:util";
 import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
 import { accountContract } from "@shigomori/contracts/modules/account";
-import type {
-  DeviceInfo,
-  TunnelProvisionResponse,
-} from "@shigomori/contracts/hubProtocol";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import type { Handlers } from "@shigomori/contracts/types";
 import { getDeviceId } from "@host/lib/config/deviceId";
+import type { AccountFacts } from "@host/process/account";
 import {
   createAccountStore,
   type AccountStore,
@@ -327,72 +325,18 @@ function signedInService(): {
   };
 }
 
-// The configured web client origin (SM_ACCOUNT_WEB_ORIGIN), for the
-// direct listener's Origin gate: a browser dial
-// arriving over the wss tunnel carries the web client's Origin, and
-// this is the one extra origin the listener admits. Undefined means
-// none is configured.
-export function allowedWebOrigin(): string | undefined {
-  const origin = serviceConfig().webOrigin;
-  return origin === "" ? undefined : origin;
-}
-
-// The tunnel provision call for the cloudflared runner: asks the Worker to point this device's named tunnel at the
-// direct listener's current loopback port. Re-reads the stored
-// credential per call like mintTicket, so a rotated credential is
-// picked up without refresh plumbing. The returned connectorToken is a
-// bearer secret the caller must keep in memory only. Throws
-// TunnelUnconfiguredError (shared/account/service.ts) when the Worker
-// has no tunnel env, which the runner reads as a typed
-// "unconfigured", never a retry loop.
-export function provisionDeviceTunnel(
-  port: number,
-): Promise<TunnelProvisionResponse> {
-  const signedIn = signedInService();
-  if (signedIn === null) {
-    return Promise.reject(
-      new Error("signed out or the account service is not configured"),
-    );
-  }
-  // Bounded so a black-holed route cannot wedge the runner's
-  // serialized lifecycle behind a fetch that never settles.
-  return signedIn.service.provisionTunnel(
-    signedIn.record.credential,
-    port,
-    AbortSignal.timeout(15_000),
-  );
-}
-
-// What the hub socket needs from the account layer, kept here so the
-// store and config stay module private. Null when unconfigured or
-// signed out, which the hub refresh reads as "stop". mintTicket is a
-// closure that re-reads the stored credential on every call, so a
-// rotated credential is picked up per connect attempt without any
-// refresh plumbing.
-export function hubConnectInputs(): {
-  hubUrl: string;
-  accountId: string;
-  mintTicket: (signal: AbortSignal) => Promise<string>;
-} | null {
+// The account as the host is to know it (host/process/account.ts),
+// reported after every change: null when signed out or unconfigured.
+export function accountFactsForHost(): AccountFacts | null {
   const signedIn = signedInService();
   if (signedIn === null) return null;
-  const { service, record } = signedIn;
+  const config = serviceConfig();
   return {
-    hubUrl: serviceConfig().hubUrl,
-    // Identifies the signed-in account so a re-enroll onto a different
-    // account forces the hub socket to reconnect (C7). A Clerk
-    // session token is always a JWT with a sub, so the stored record
-    // always carries a real account id.
-    accountId: record.accountId,
-    mintTicket: async (signal) => {
-      const fresh = store().read();
-      if (fresh === null) {
-        throw new Error("signed out, no hub credential");
-      }
-      // The signal aborts the mint on stop and on the dial's mint
-      // timeout, so a black-holed route cannot strand the connect (C6).
-      return (await service.mintTicket(fresh.credential, signal)).ticket;
-    },
+    hubUrl: config.hubUrl,
+    accountId: signedIn.record.accountId,
+    credential: signedIn.record.credential,
+    webOrigin: config.webOrigin,
+    acceptsCommands: acceptsPeerCommands(),
   };
 }
 

@@ -30,7 +30,7 @@ export const layer = (options: {
     store: Store.layer((filename) => SqliteClient.make({ filename })),
   }).pipe(
     // The environment as it is when the graph is built: after the
-    // launch has rebuilt it from the login shell (main/core/shellEnv.ts).
+    // launch has rebuilt it from the login shell (host/lib/util/shellEnv.ts).
     // Effect's default reads it once, whenever first asked, which may
     // be before.
     Layer.provide(

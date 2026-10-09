@@ -2,7 +2,7 @@
 // (shared/remote/channels.ts). Every byte stream on the device link is
 // bridged through here on both ends: the host's loopback socket or
 // serve child's stdio (host/ipc/modules/forward.ts) and the client's
-// accepted local socket (main/core/portForward/bridge.ts, the mirror
+// accepted local socket (host/portForward/bridge.ts, the mirror
 // gateway).
 //
 // Backpressure is the whole point of the shape:

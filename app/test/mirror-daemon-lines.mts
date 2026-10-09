@@ -1,5 +1,5 @@
 // Durable proof for how the mirror daemon's supervisor
-// (main/core/mirror/daemon.ts) reads the engine's NDJSON lines
+// (host/mirror/daemon.ts) reads the engine's NDJSON lines
 // (file-sync/engine.go, the daemon control protocol) and restarts it.
 // The child is a fake the proof writes the daemon's side of and ends
 // when it likes, so each line is exactly the one under test, no engine
@@ -36,7 +36,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as TestClock from "effect/testing/TestClock";
 import * as FileSync from "@host/fileSync/FileSync";
-import * as MirrorDaemon from "../main/core/mirror/daemon.ts";
+import * as MirrorDaemon from "../host/mirror/daemon.ts";
 import { it } from "vitest";
 import { trackTest } from "./lib/vitestKit.mts";
 

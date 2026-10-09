@@ -160,7 +160,7 @@ export const exec = Effect.fn("exec")(function* (
 });
 
 // The resolved path of a binary on PATH, or null. The packaged app's
-// PATH is the login shell's (main/core/shellEnv.ts), so anything
+// PATH is the login shell's (host/lib/util/shellEnv.ts), so anything
 // installed for the user's terminal is found here too.
 export const resolveOnPath = (name: string) =>
   exec("which", [name]).pipe(

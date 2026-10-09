@@ -42,7 +42,7 @@ export const gitContract = defineContract(
   broadcast("externalChange", VoidSchema, { remote: true }),
   // One project's git state moved (a commit, checkout, branch or ref
   // change made by any tool, observed by the host's git-directory
-  // watcher, main/core/gitWatcher.ts). Narrower than
+  // watcher, host/lib/gitWatcher.ts). Narrower than
   // externalChange on purpose: the viewer invalidates that project's
   // rows only, on every device, so the ping stays cheap enough to be
   // redundant beside an app-driven mutation's own invalidation.

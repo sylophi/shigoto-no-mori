@@ -24,14 +24,14 @@ import {
   cliUserBinDir,
 } from "@shared/packaging/cliDist.mts";
 import type { CliStatus } from "@shigomori/contracts/modules/cli";
-import { app } from "electron";
-import { cliBinaryPath } from "./cliBinary";
-import { uninstallShellIntegration } from "./cliShell";
+import { cliBinaryPath } from "./binary";
+import { uninstallShellIntegration } from "./shell";
+import { hostFacts } from "@host/process/facts";
 import { log } from "@shared/log";
 import { envSetting } from "@shared/config";
 
 function cliFlavor(): "prod" | "dev" {
-  return app.isPackaged ? "prod" : "dev";
+  return hostFacts().packaged ? "prod" : "dev";
 }
 
 function cliName(): string {
@@ -82,7 +82,7 @@ async function linkOwnership(link: string): Promise<LinkOwnership> {
   const name = cliName();
   const bundleTarget = target.endsWith(`/Contents/Resources/${name}`);
   const distTarget = target.endsWith(`/${CLI_DIST_DIR}/${name}`);
-  if (app.isPackaged ? bundleTarget : distTarget) return "this-flavor";
+  if (hostFacts().packaged ? bundleTarget : distTarget) return "this-flavor";
   if (bundleTarget || distTarget) return "our-family";
   return "foreign";
 }
@@ -97,7 +97,8 @@ function isOnPath(dir: string): boolean {
 // mounts the bundle at a randomized read-only path that dies with the
 // process. A link to it would dangle immediately.
 function isTranslocated(): boolean {
-  return app.isPackaged && process.resourcesPath.includes("/AppTranslocation/");
+  const { packaged, resourcesPath } = hostFacts();
+  return packaged && resourcesPath.includes("/AppTranslocation/");
 }
 
 export async function cliLinkStatus(): Promise<CliStatus> {
