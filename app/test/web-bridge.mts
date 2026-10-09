@@ -278,7 +278,7 @@ it("fail-closed: mutation-shaped and unclassified channels reject on the web ins
   );
   // The step-6 flips (v2 slice B): these were unclassified-rejects
   // before (remote:false, no mutating tag) and are mutating-rejects
-  // now (remote:true, mutating:true). Either way the loopback wire
+  // now (remote:true, mutating:true). Either way the tab's registrar
   // must refuse them: the fs reads because they are gated on the
   // command-access switch, the preference/registry writes and the device-settings
   // write because they are commands.
@@ -304,7 +304,7 @@ it("fail-closed: mutation-shaped and unclassified channels reject on the web ins
   );
   // Peers' command access is reported only from what their dials
   // answered, so with no session there is none to report. A web
-  // loopback must never manufacture a verdict.
+  // registrar must never manufacture a verdict.
   assert.deepEqual((await bridge.api.hub.status()).peerAcceptsCommands, {});
   // The real refuse-all handler names its refusal precisely.
   await assert.rejects(

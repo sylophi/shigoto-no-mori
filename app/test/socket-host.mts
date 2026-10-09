@@ -5,7 +5,8 @@
 // the errors crossing as their classes, and the hardening: a refused
 // ticket and the lockout behind it, the protocol version, calls before
 // a hello, the hello timeout, the Origin gate, the frame cap, the
-// in-flight cap, supersede, liveness and the listener stopping.
+// in-flight cap, supersede (a desktop's second link) and a web device's
+// several (one per tab), liveness and the listener stopping.
 //
 // The command gate (CommandGate): a call annotated gated:false runs for
 // every linked peer, and any other only while the host accepts
@@ -213,6 +214,7 @@ type DialOpts = {
   headers?: Record<string, string>;
   onClose?: () => void;
   protocolVersion?: number;
+  deviceKind?: "desktop" | "web";
 };
 
 function dialing(listener: DirectListener, opts: DialOpts = {}) {
@@ -226,6 +228,7 @@ function dialing(listener: DirectListener, opts: DialOpts = {}) {
     onClose: opts.onClose ?? (() => {}),
     openSocket: (url) => new WebSocket(url, { headers: opts.headers }),
     deadlineMs: 3000,
+    ...(opts.deviceKind === undefined ? {} : { deviceKind: opts.deviceKind }),
     ...(opts.protocolVersion === undefined
       ? {}
       : { protocolVersion: opts.protocolVersion }),
@@ -307,7 +310,14 @@ async function rawLink(
   const watch = (tag: string, payload?: unknown) =>
     // oxlint-disable-next-line shigomori/no-double-cast -- a streaming call answers a Stream, which the flat type above does not say
     flat(tag, payload) as unknown as Stream.Stream<unknown, unknown>;
-  const hello = async (ticket: string, protocolVersion = PROTOCOL_VERSION) => {
+  const hello = async (
+    ticket: string,
+    protocolVersion = PROTOCOL_VERSION,
+    as: { deviceKind: "desktop" | "web"; connectionId: string } = {
+      deviceKind: "desktop",
+      connectionId: newHandshakeNonce().slice(0, 32),
+    },
+  ) => {
     const { nonce: hostNonce } = (await Effect.runPromise(
       call("link:challenge"),
     )) as { nonce: string };
@@ -315,6 +325,7 @@ async function rawLink(
     return Effect.runPromiseExit(
       call("link:hello", {
         deviceId: CLIENT,
+        ...as,
         appVersion: "1.0.0",
         protocolVersion,
         nonce,
@@ -783,6 +794,68 @@ it("supersede: a second link from the same device ends the first", async () => {
   const second = await dial(track, listener);
   await waitFor(() => firstClosed, "the first link to end");
   assert.deepEqual(await invoke(second, "git:sweep"), { leaseMs: 5 });
+});
+
+it("tabs: a web device holds a link per tab, each hears its own pushes, and one closing leaves the other", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  let firstClosed = false;
+  const first = await dial(track, listener, {
+    deviceKind: "web",
+    onClose: () => (firstClosed = true),
+  });
+  const second = await dial(track, listener, { deviceKind: "web" });
+  const heard = { first: [] as unknown[], second: [] as unknown[] };
+  first.transport.subscribe("git:projectChanged", (p) => heard.first.push(p));
+  second.transport.subscribe("git:projectChanged", (p) => heard.second.push(p));
+  await waitFor(() => {
+    listener.binding.broadcastAll("git:projectChanged", { projectId: "all" });
+    return heard.first.length > 0 && heard.second.length > 0;
+  }, "both tabs to hear the broadcast");
+  assert.equal(firstClosed, false);
+  // A handler's notifier reaches the tab that called, not its sibling.
+  await invoke(second, "git:refreshProject", { projectId: "notify" });
+  await waitFor(() => has(heard.second, "mine"), "the caller to hear it");
+  listener.binding.broadcastAll("git:projectChanged", { projectId: "fence" });
+  await waitFor(() => has(heard.first, "fence"), "the sibling the fence");
+  assert.equal(has(heard.first, "mine"), false);
+  // A tab that goes leaves its sibling linked.
+  first.close();
+  assert.deepEqual(await invoke(second, "git:sweep"), { leaseMs: 5 });
+});
+
+it("tabs: a hello with a connection id already held replaces that link alone", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const tab = { deviceKind: "web" as const, connectionId: "a".repeat(32) };
+  const stale = await rawLink(track, listener);
+  assert.ok(
+    Exit.isSuccess(
+      await stale.hello(
+        mintTicket(listener.tickets, CLIENT),
+        PROTOCOL_VERSION,
+        tab,
+      ),
+    ),
+  );
+  let siblingClosed = false;
+  await dial(track, listener, {
+    deviceKind: "web",
+    onClose: () => (siblingClosed = true),
+  });
+  const redial = await rawLink(track, listener);
+  assert.ok(
+    Exit.isSuccess(
+      await redial.hello(
+        mintTicket(listener.tickets, CLIENT),
+        PROTOCOL_VERSION,
+        tab,
+      ),
+    ),
+  );
+  assert.equal(await stale.closed, 1001);
+  assert.equal(siblingClosed, false);
 });
 
 it("liveness: the host cuts a linked peer that falls silent past the timeout", async () => {
