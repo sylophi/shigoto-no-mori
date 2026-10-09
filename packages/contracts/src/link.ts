@@ -21,6 +21,7 @@ import {
   type ContractModule,
   isBroadcast,
   Remote,
+  nameOf,
   scopeOf,
 } from "./contract.ts";
 import {
@@ -131,6 +132,16 @@ export class SharingGate extends RpcMiddleware.Service<
   { requires: LinkPeer }
 >()("sm/remote/SharingGate", { error: NotSharingError }) {}
 
+// What this machine's host process serves its own windows: every
+// host-scoped module, and the two client-scoped ones whose state lives
+// with the host, the device link's sessions (hub) and the port
+// forwards. The rest of the client modules (dialogs, the window, the
+// account) stay with the shell.
+const hostSideClientModules = new Set(["hub", "portForward"]);
+
+export const isHostSide = (module: ContractModule): boolean =>
+  scopeOf(module) === "host" || hostSideClientModules.has(nameOf(module));
+
 const handshake = new Set(["link:challenge", "link:hello"]);
 
 type Calls = ReturnType<typeof callsOf>;
@@ -168,7 +179,7 @@ export const LinkGroup = handshakeOf(remoteCalls).merge(
 const loopbackCalls = [
   ...callsOf(linkContract),
   ...allContractModules
-    .filter((module) => scopeOf(module) === "host")
+    .filter((module) => isHostSide(module))
     .flatMap((module) => callsOf(module)),
   ...callsOf(controlContract),
 ];

@@ -10,13 +10,13 @@ import { devDialKinds } from "../electron/devDialKinds";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { join } from "node:path";
-import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
+import { app, ipcMain, MessageChannelMain, type WebContents } from "electron";
+import { isHostSide } from "@shigomori/contracts/link";
+import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
+import { SHELL_PORT_CHANNEL } from "@shared/ipc/shell";
+import * as ShellLink from "./shellLink";
 import { WebSocket as WsWebSocket } from "ws";
-import {
-  type ContractModule,
-  nameOf,
-  scopeOf,
-} from "@shigomori/contracts/contract";
+import { type ContractModule, nameOf } from "@shigomori/contracts/contract";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
@@ -29,7 +29,6 @@ import {
 import {
   type HandlerContext,
   type ServerTransport,
-  settle,
 } from "@shared/ipc/transport";
 import type {
   BroadcastKeys,
@@ -63,7 +62,7 @@ import {
   provisionDeviceTunnel,
   hubConnectInputs,
 } from "./modules/account";
-import { log, logFailure } from "@shared/log";
+import { logFailure } from "@shared/log";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -74,73 +73,24 @@ import { log, logFailure } from "@shared/log";
 // parse to keep IPC latency at the per-handler return cost.
 const VALIDATE_OUTPUTS = !app.isPackaged;
 
-// One context per page generation, not per WebContents. A WebContents
-// survives reload, so caching on it alone would carry the old page's
-// signal and notifiers into the new document and accumulate listeners
-// across reloads. Rotation aborts the old controller and drops the
-// entry, so the next call from the new page mints a fresh generation.
-const generations = new WeakMap<
-  WebContents,
-  { controller: AbortController; ctx: HandlerContext }
->();
+// The shell's half of every window's calls (main/ipc/shellLink.ts): the
+// client modules this process owns, registered here and served on the
+// port each window's preload asks for (installShellPorts).
+const shellRegistrar = ShellLink.createShellRegistrar();
+export const shellLinkLayer = ShellLink.adapter.pipe(
+  Layer.provideMerge(ShellLink.layer(shellRegistrar)),
+);
 
-// Senders whose lifecycle listeners are already attached. The listeners
-// are per WebContents rather than per generation, so they must attach
-// exactly once at first sighting.
-const watched = new WeakSet<WebContents>();
-
-function rotate(sender: WebContents): void {
-  const generation = generations.get(sender);
-  if (!generation) return;
-  generation.controller.abort();
-  generations.delete(sender);
+// Hands each page that loads a port of its own to the shell: the
+// preload asks once its window's document runs, and the page takes the
+// port with it when it goes.
+export function installShellPorts(): void {
+  ipcMain.on(SHELL_PORT_CHANNEL, (event) => {
+    const { port1, port2 } = new MessageChannelMain();
+    void ShellLink.shellLink.attach(port1, event.sender);
+    event.sender.postMessage(SHELL_PORT_CHANNEL, null, [port2]);
+  });
 }
-
-function contextFor(sender: WebContents): HandlerContext {
-  const cached = generations.get(sender);
-  if (cached) return cached.ctx;
-  if (!watched.has(sender)) {
-    watched.add(sender);
-    // 'did-navigate' fires only on cross-document main-frame
-    // navigation, which is what reload is. Same-document changes fire
-    // 'did-navigate-in-page' instead and must not abort in-flight work.
-    sender.on("did-navigate", () => rotate(sender));
-    sender.once("destroyed", () => rotate(sender));
-  }
-  const controller = new AbortController();
-  const ctx: HandlerContext = {
-    signal: controller.signal,
-    connection: controller.signal,
-    notifier: (module, key) => (payload) => {
-      if (sender.isDestroyed()) return;
-      broadcast(module, key, payload, sender);
-    },
-  };
-  generations.set(sender, { controller, ctx });
-  return ctx;
-}
-
-const electronServer: ServerTransport = {
-  handle(channel, fn) {
-    ipcMain.handle(channel, (event, raw) =>
-      settle(
-        fn(contextFor(event.sender), raw).catch((error: unknown) => {
-          // What Electron logged for a rejected handler before the
-          // failure became a settled value.
-          log.error(`Error occurred in handler for '${channel}':`, error);
-          throw error;
-        }),
-      ),
-    );
-  },
-  // Payloads arrive already parsed from the shared fan-out path.
-  broadcastAll(channel, payload) {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.webContents.isDestroyed()) continue;
-      win.webContents.send(channel, payload);
-    }
-  },
-};
 
 // The device link's listener (host/socket/server.ts). Its hello
 // consumes the single-use connect tickets connectInfo mints over the
@@ -236,6 +186,8 @@ export const loopbackLayer = Loopback.adapter.pipe(
       deviceId: () => getDeviceId(),
       appVersion: app.getVersion(),
       file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
+      // The window's own page dials it, from the renderer scheme.
+      allowedOrigin: rendererSchemeOrigin(app.isPackaged ? "prod" : "dev"),
     }),
   ),
 );
@@ -322,7 +274,7 @@ const hubServer = createHubConnection({
 // so a remote req gets a no-handler res instead of a native dialog or
 // an app-menu mutation.
 const hostServer: ServerTransport = {
-  // The Electron wire always serves host calls. The direct listener,
+  // The loopback always serves host calls. The direct listener,
   // the one remote wire, serves a call ONLY when it opted into
   // remote exposure, so a host-scoped-but-not-remote channel
   // (runtime:nuke, launchers:launch) is never even registered on it. A
@@ -332,21 +284,31 @@ const hostServer: ServerTransport = {
   // host broadcasts and viewer pings reach remote peers over their
   // direct sessions alone.
   handle(channel, fn, opts) {
-    electronServer.handle(channel, fn);
     loopbackRegistrar.handle(channel, fn);
     // The link's gate reads each call's own annotations
     // (host/socket/server.ts, CommandGate).
     if (opts?.remote === true) linkRegistrar.handle(channel, fn);
   },
   broadcastAll(channel, payload, opts) {
-    electronServer.broadcastAll(channel, payload);
-    // The device link serves the remote ones off the host's pushes.
+    // The loopback serves every one off the host's pushes, and the
+    // device link the remote ones.
     publishPush({ channel, payload, remote: opts?.remote === true });
   },
 };
 
+// The shell's modules, served on every window's shell port. A push of
+// theirs annotated `remote` is this host's answer to its peers
+// (account:commandAccessChanged), so the device link carries it too.
+const shellServer: ServerTransport = {
+  handle: (channel, fn) => shellRegistrar.handle(channel, fn),
+  broadcastAll(channel, payload, opts) {
+    shellRegistrar.broadcastAll(channel, payload);
+    if (opts?.remote === true) publishPush({ channel, payload, remote: true });
+  },
+};
+
 const serverFor = (module: ContractModule): ServerTransport =>
-  scopeOf(module) === "host" ? hostServer : electronServer;
+  isHostSide(module) ? hostServer : shellServer;
 
 export function registerContract<M extends ContractModule>(
   module: M,
@@ -405,9 +367,8 @@ export function registerControlContract<M extends ContractModule>(
   }
 }
 
-// Single-window broadcast for client-scoped window and menu events. A
-// specific window is an Electron concept, so this stays in the binding
-// rather than on the transport seam.
+// A push to one window alone (its menu's events, its focus), on its
+// shell port.
 export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
   module: M,
   key: K,
@@ -415,23 +376,17 @@ export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
   webContents: WebContents,
 ): void {
   const { channel, parsed } = resolveBroadcast(module, key, payload);
-  webContents.send(channel, parsed);
+  void ShellLink.shellLink.pushTo(webContents, { channel, payload: parsed });
 }
 
-// Fan-out broadcast for state every window cares about (updater,
-// background refreshes). Every broadcast reaches every window, and one
-// tagged remote reaches every authenticated direct peer too. That tag
-// is the whole rule, whatever the module's scope: host-scoped fan-outs
-// (git refresh, script events, updater state) carry it where a peer
-// caches the state, and a client-scoped one carries it only when it is
-// this host's answer to its peers (account:commandAccessChanged). The
-// rest of the client-scoped ones (port forwards, account changes) are
-// about THIS install and stay on the Electron wire.
+// A push to every window: the host's over the loopback, the shell's on
+// every window's shell port, and either, when annotated `remote`, to
+// the device link's peers too.
 export function broadcastAll<
   M extends ContractModule,
   K extends BroadcastKeys<M>,
 >(module: M, key: K, payload: BroadcastProducerPayload<M, K>): void {
-  broadcastAllCore(module, key, payload, hostServer);
+  broadcastAllCore(module, key, payload, serverFor(module));
 }
 
 // Reconciles the hub socket with the account state. Runs at boot and

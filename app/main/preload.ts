@@ -1,6 +1,7 @@
 // Preload script. Runs in an isolated context with access to Node + Electron APIs.
-// Exposes the window's facts and its wire as `window.electronBridge`,
-// which the renderer builds `window.api` over (renderer/electronApi.ts).
+// Exposes the window's facts as `window.electronBridge`, and asks for
+// the port the window's calls to its shell ride, which the renderer
+// builds `window.api` over (renderer/electronApi.ts).
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
 import { exposeClerkBridge } from "@clerk/electron/preload";
@@ -12,7 +13,7 @@ import {
   optionalArgFlag,
   requireArgFlag,
 } from "./argFlags";
-import { electronBridgeTransport } from "./preloadTransport";
+import { requestShellPort } from "./preloadPort";
 
 // The narrow bridge @clerk/electron/react rides for token storage and
 // the system-browser OAuth transport, published beside window.api.
@@ -26,7 +27,7 @@ exposeClerkBridge();
 const deviceId = requireArgFlag(DEVICE_ID_FLAG, "--sm-device-id");
 
 // This build's version, on argv beside the device id. The renderer
-// sends it in the socket hello and compares it against a remote host's
+// sends it in the link's hello and compares it against a remote host's
 // welcome to flag a version skew.
 const appVersion = requireArgFlag(APP_VERSION_FLAG, "--sm-app-version");
 
@@ -48,7 +49,9 @@ const bridge = {
   // Widened past the `as const` below so RendererApi says boolean and
   // the web bridge's false assigns.
   isElectron: true as boolean,
-  ...electronBridgeTransport,
+  // Asks for the page's shell port, which arrives as a window message
+  // (SHELL_PORT_CHANNEL): the renderer listens first, then asks.
+  requestShellPort,
 } as const;
 
 export type ElectronBridge = typeof bridge;

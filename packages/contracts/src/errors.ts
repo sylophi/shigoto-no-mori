@@ -1,9 +1,8 @@
 // The failures a caller branches on, as tagged error classes. Each one
-// crosses every wire as its tag and fields (errorToWire, errorFromWire)
-// and decodes back into the same class on the other side, so the
+// crosses every wire as its tag and fields (CallFailureSchema) and
+// decodes back into the same class on the other side, so the
 // renderer tells them apart with the predicates below, never by their
 // text. The messages are the user-facing words, built from the fields.
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 export function errorMessageOf(error: unknown): string {
@@ -232,28 +231,3 @@ export const CallFailureSchema = Schema.Union([
 ]);
 
 export const isRemoteCallError = Schema.is(RemoteCallError);
-
-const encodeContractError = Schema.encodeUnknownOption(ContractErrorSchema);
-const decodeContractError = Schema.decodeUnknownOption(ContractErrorSchema);
-
-// A failure as a wire carries it: the message every side can show, and
-// the encoded error when it is one of the classes above.
-export type ErrorWire = { message: string; error?: unknown };
-
-export function errorToWire(error: unknown): ErrorWire {
-  const message = errorMessageOf(error);
-  return Option.match(encodeContractError(error), {
-    onNone: () => ({ message }),
-    onSome: (encoded) => ({ message, error: encoded }),
-  });
-}
-
-// The failure back from its wire form: the class it was sent as, or a
-// plain Error with its message for anything else (or an error this
-// build does not know).
-export function errorFromWire(wire: ErrorWire): Error {
-  return Option.getOrElse(
-    decodeContractError(wire.error),
-    () => new Error(wire.message),
-  );
-}
