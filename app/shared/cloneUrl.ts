@@ -18,6 +18,35 @@ export function repoNameFromUrl(url: string): string | null {
   return normalizeRemoteUrl(url)?.split("/").at(-1) ?? null;
 }
 
+// `owner/repo`, the way gh names a GitHub repository. Neither part
+// can start with a dash, so it never reads as an option either.
+const GITHUB_SHORTHAND = /^[A-Za-z0-9][A-Za-z0-9-]*\/([A-Za-z0-9._-]+)$/;
+
+export function isGithubShorthand(source: string): boolean {
+  const repo = source.trim().match(GITHUB_SHORTHAND)?.[1];
+  return repo !== undefined && repo !== "." && repo !== "..";
+}
+
+// The remote `source` names: a GitHub `owner/repo` as its https URL,
+// anything else as it is.
+export function cloneUrlOf(source: string): string {
+  return isGithubShorthand(source)
+    ? `https://github.com/${source.trim()}`
+    : source;
+}
+
+// What the clone takes: a remote, or a GitHub repository by its
+// `owner/repo`. Only the clone dialog reads the shorthand: everywhere
+// else a string like it is a relative path.
+export function isCloneSource(source: string): boolean {
+  return isCloneableRemote(cloneUrlOf(source));
+}
+
+// The folder a clone of `source` makes, or null when it is not one.
+export function cloneFolderName(source: string): string | null {
+  return repoNameFromUrl(cloneUrlOf(source));
+}
+
 // The URL another device should clone to get this repo, out of `git
 // remote -v`'s fetch rows. `origin` first: it is what this checkout was
 // cloned from and pushes to, where identity prefers `upstream` because

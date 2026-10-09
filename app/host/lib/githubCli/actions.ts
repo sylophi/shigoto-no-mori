@@ -174,6 +174,44 @@ export async function listGithubOwners(): Promise<string[]> {
   return stdout.split("\n").filter((line) => line.length > 0);
 }
 
+// The repositories the clone dialog offers: the signed-in user's own,
+// their organizations' and the ones they collaborate on, most recently
+// pushed first. The first hundred: one further back can still be typed
+// in as `owner/repo`.
+export async function listGithubRepos(): Promise<string[]> {
+  const stdout = await runGh(
+    [
+      "api",
+      "graphql",
+      "-f",
+      "query=query { viewer { repositories(first: 100, ownerAffiliations: [OWNER, ORGANIZATION_MEMBER, COLLABORATOR], orderBy: {field: PUSHED_AT, direction: DESC}) { nodes { nameWithOwner } } } }",
+      "--jq",
+      ".data.viewer.repositories.nodes[].nameWithOwner",
+    ],
+    { fallback: "Couldn't list your GitHub repositories" },
+  );
+  return stdout.split("\n").filter((line) => line.length > 0);
+}
+
+// Clones a GitHub repository (a remote URL or `owner/repo`) to `dest`
+// with gh, which signs git in with its own login, so a private
+// repository clones over https with no credential helper set up. A URL
+// keeps its protocol, and the shorthand takes gh's git_protocol. A fork
+// gains its parent as `upstream`. `dest` is absolute, so it can't read
+// as an option, and the source never starts with a dash
+// (shared/cloneUrl.ts).
+export async function cloneGithubRepo(
+  source: string,
+  dest: string,
+): Promise<void> {
+  await runGh(["repo", "clone", source, dest], {
+    fallback: "gh repo clone failed",
+    // As long as the transfer takes, like the git clone it stands in
+    // for (host/lib/git/clone.ts).
+    timeout: 0,
+  });
+}
+
 // Creates `owner/<folder name>` on GitHub from the repo at `cwd` (no
 // owner is the signed-in user), adds it as origin and pushes the
 // current branch there. GitHub swaps the

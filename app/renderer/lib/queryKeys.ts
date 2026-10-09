@@ -217,6 +217,7 @@ function buildQueryKeys(deviceId: string) {
     githubCliAll: () => host("githubCli"),
     githubCliReadiness: () => host("githubCli", "readiness"),
     githubOwners: () => host("githubCli", "owners"),
+    githubRepos: () => host("githubCli", "repos"),
     repoMergeConfig: (projectId: string) =>
       host("githubCli", "repoMergeConfig", projectId),
     repoDescription: (projectId: string) =>

@@ -1,4 +1,10 @@
-import type { ComponentProps, ReactNode, RefObject } from "react";
+import type {
+  ComponentProps,
+  KeyboardEvent,
+  ReactNode,
+  RefObject,
+} from "react";
+import { Command } from "cmdk";
 import { FolderInput, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup, KbdHint } from "@/components/ui/kbd";
@@ -6,7 +12,9 @@ import { PathSpan } from "@/components/ui/path-span";
 import { SimpleTooltip, type WithoutTitle } from "@/components/ui/tooltip";
 
 // The clone's and the new repository's top row: what to make, and the
-// button that makes it, the way the folder browser's row reads.
+// button that makes it, the way the folder browser's row reads. Inside
+// a cmdk Command (`combobox`), the input is the list's, and ↑↓ move
+// through it.
 export function ActionInputRow({
   value,
   onChange,
@@ -16,6 +24,7 @@ export function ActionInputRow({
   label,
   canSubmit,
   onSubmit,
+  combobox = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -25,27 +34,42 @@ export function ActionInputRow({
   label: string;
   canSubmit: boolean;
   onSubmit: () => void;
+  combobox?: boolean;
 }) {
+  const inputProps = {
+    ref: inputRef,
+    value,
+    // ↩ is the button's, never a highlighted row's.
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+      e.preventDefault();
+      if (canSubmit) onSubmit();
+    },
+    placeholder,
+    "aria-label": placeholder,
+    className:
+      "min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground",
+  };
   return (
     <div
       data-slot="search-row"
       className="relative flex items-center gap-2 border-b border-border px-3 py-2"
     >
-      <input
-        ref={inputRef}
-        // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of this flow
-        autoFocus
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
-          e.preventDefault();
-          if (canSubmit) onSubmit();
-        }}
-        placeholder={placeholder}
-        aria-label={placeholder}
-        className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
-      />
+      {combobox ? (
+        <Command.Input
+          {...inputProps}
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of this flow
+          autoFocus
+          onValueChange={onChange}
+        />
+      ) : (
+        <input
+          {...inputProps}
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of this flow
+          autoFocus
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
       <KeyedButton
         icon={icon}
         label={label}

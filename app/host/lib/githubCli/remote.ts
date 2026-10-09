@@ -103,6 +103,12 @@ function parseRemoteUrl(url: string): GithubRepoInfo | null {
   };
 }
 
+// Whether `url` is a repository on a GitHub host gh knows.
+export async function isGithubRemoteUrl(url: string): Promise<boolean> {
+  const parsed = parseRemoteUrl(url.trim());
+  return parsed !== null && (await knownHostsCache.get()).has(parsed.host);
+}
+
 // First remote URL whose host matches a known GitHub host. One probe
 // covers both the "is this a GitHub repo?" gate (ghReadyForRepo) and
 // the web URL builder, since both fire on every worktree open.
