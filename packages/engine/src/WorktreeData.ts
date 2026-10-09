@@ -2,10 +2,17 @@
 // description `sm describe` set, and the ports the user added. Keyed by
 // the project and the worktree's path-derived id, so a move re-keys it
 // and a removal drops it.
+import {
+  type CustomPort,
+  CustomPortSchema,
+  MAX_CUSTOM_PORTS,
+} from "@shigomori/contracts/schemas/ports";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
 // A worktree's title and description, empty when unset. `describedAt`
@@ -32,6 +39,19 @@ export class WorktreeData extends Context.Service<
       worktreeId: string,
       change: { readonly title?: string; readonly description?: string },
     ) => Effect.Effect<Description>;
+    // The ports the user added beside port-pool's, empty when none.
+    readonly ports: (
+      projectId: string,
+      worktreeId: string,
+    ) => Effect.Effect<ReadonlyArray<CustomPort>>;
+    // Replaces them, the title and description kept. Labels are stored
+    // trimmed. Ports the schema refuses are a defect, the transport
+    // having decoded them already.
+    readonly setPorts: (
+      projectId: string,
+      worktreeId: string,
+      ports: ReadonlyArray<CustomPort>,
+    ) => Effect.Effect<void>;
     // Carries what is kept under one id to another, the checkout having
     // moved. Whatever the new id held is replaced.
     readonly move: (
@@ -76,6 +96,11 @@ const descriptionOf = (row: Row | undefined): Description =>
 
 const orNull = (value: string) => (value === "" ? null : value);
 
+const PortsSchema = Schema.Array(CustomPortSchema).check(
+  Schema.isMaxLength(MAX_CUSTOM_PORTS),
+);
+const PortsText = Schema.fromJsonString(PortsSchema);
+
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
@@ -118,6 +143,36 @@ const make = Effect.gen(function* () {
         return next;
       }),
     );
+  }, Effect.orDie);
+
+  // A column that doesn't parse reads as none, as a data file that
+  // didn't did.
+  const ports = Effect.fn("WorktreeData.ports")(function* (
+    projectId: string,
+    worktreeId: string,
+  ) {
+    const [row] = yield* sql<{ ports: string | null }>`SELECT ports
+      FROM worktree_data
+      WHERE project_id = ${projectId} AND worktree_id = ${worktreeId}`;
+    if (row === undefined || row.ports === null) return [];
+    return Option.getOrElse(
+      Schema.decodeOption(PortsText)(row.ports),
+      () => [],
+    );
+  }, Effect.orDie);
+
+  const setPorts = Effect.fn("WorktreeData.setPorts")(function* (
+    projectId: string,
+    worktreeId: string,
+    added: ReadonlyArray<CustomPort>,
+  ) {
+    const decoded = yield* Schema.decodeEffect(PortsSchema)(added);
+    yield* sql`INSERT INTO worktree_data ${sql.insert({
+      project_id: projectId,
+      worktree_id: worktreeId,
+      ports: decoded.length === 0 ? null : JSON.stringify(decoded),
+    })} ON CONFLICT (project_id, worktree_id) DO UPDATE SET
+      ports = excluded.ports`;
   }, Effect.orDie);
 
   const move = Effect.fn("WorktreeData.move")(function* (
@@ -164,6 +219,8 @@ const make = Effect.gen(function* () {
   return WorktreeData.of({
     description,
     describe,
+    ports,
+    setPorts,
     move,
     forget,
     forgetProject,
