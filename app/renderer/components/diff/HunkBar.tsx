@@ -1,13 +1,16 @@
 import type { DiffLineAnnotation, FileDiffMetadata } from "@pierre/diffs";
 import { Undo2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { HunkStates, LineChange, StagedState } from "@shared/schemas";
+import type { LineChange } from "@shared/schemas";
+import type { Ticked } from "./changesPicks";
 
 // What the changes page hands the pane for the picked file when it
-// ticks by hunk (a modified file): its changes, and the two moves.
+// ticks by hunk (a modified file): its changes, which of them are
+// ticked, and the two moves.
 export interface HunkControls {
-  states: HunkStates;
-  onSetStaged: (changes: LineChange[], staged: boolean) => void;
+  changes: readonly LineChange[];
+  picked: readonly LineChange[];
+  onSetTicked: (changes: LineChange[], ticked: boolean) => void;
   onDiscard: (changes: LineChange[]) => void;
 }
 
@@ -16,7 +19,7 @@ export interface HunkControls {
 // changes the host ticks, each placed by its range in HEAD.
 export interface HunkGroup {
   changes: LineChange[];
-  staged: StagedState;
+  ticked: Ticked;
 }
 
 const changeFrom = (c: LineChange) =>
@@ -24,7 +27,7 @@ const changeFrom = (c: LineChange) =>
 
 export function hunkAnnotations(
   fileDiff: FileDiffMetadata,
-  states: HunkStates,
+  controls: HunkControls,
 ): DiffLineAnnotation<HunkGroup>[] {
   return fileDiff.hunks.flatMap((hunk): DiffLineAnnotation<HunkGroup>[] => {
     // Where it starts in HEAD, as changeFrom counts it: a hunk with no
@@ -32,15 +35,15 @@ export function hunkAnnotations(
     const from =
       hunk.deletionCount === 0 ? hunk.deletionStart : hunk.deletionStart - 1;
     const to = from + hunk.deletionCount;
-    const held = states.changes.filter(
+    const held = controls.changes.filter(
       (c) => changeFrom(c) >= from && changeFrom(c) + c.oldCount <= to,
     );
     if (held.length === 0) return [];
-    const ticked = held.filter((c) => c.staged).length;
-    const staged: StagedState =
-      ticked === 0 ? "none" : ticked === held.length ? "all" : "partial";
+    const count = held.filter((c) => controls.picked.includes(c)).length;
+    const ticked: Ticked =
+      count === 0 ? "none" : count === held.length ? "all" : "partial";
     // Under the hunk's last row, on whichever side it has rows.
-    const metadata = { changes: held, staged };
+    const metadata = { changes: held, ticked };
     return [
       hunk.additionCount > 0
         ? {
@@ -66,21 +69,16 @@ export function HunkBar({
   controls: HunkControls;
   busy: boolean;
 }) {
-  const { editable } = controls.states;
   return (
     <div className="flex items-center gap-3 border-y border-border/60 bg-muted/40 px-3 py-1 font-sans text-xs">
       <label className="flex items-center gap-1.5">
         <Checkbox
-          checked={group.staged === "all"}
-          indeterminate={group.staged === "partial"}
-          disabled={busy || !editable}
-          onCheckedChange={(next) => controls.onSetStaged(group.changes, next)}
+          checked={group.ticked === "all"}
+          indeterminate={group.ticked === "partial"}
+          disabled={busy}
+          onCheckedChange={(next) => controls.onSetTicked(group.changes, next)}
         />
-        <span className={editable ? undefined : "text-muted-foreground"}>
-          {editable
-            ? "Include in commit"
-            : "Tick the whole file to include it by hunk"}
-        </span>
+        <span>Include in commit</span>
       </label>
       <button
         type="button"

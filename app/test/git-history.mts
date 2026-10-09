@@ -562,6 +562,18 @@ async function main() {
     },
   );
 
+  await check(
+    "a conflict settled in an editor is taken as it stands",
+    async (track) => {
+      const repo = seedConflict(track);
+      await mergePrimaryKeepingConflicts(repo, repo, "main");
+      writeFileSync(join(repo, "a.txt"), "both\n");
+      await resolveConflict(repo, "a.txt", "as-is");
+      assert.equal((await readOperation(repo)).conflicted, 0);
+      assert.equal(git(repo, "show", ":a.txt"), "both\n");
+    },
+  );
+
   done();
 }
 
