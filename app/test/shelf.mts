@@ -11,7 +11,9 @@
 // unshelves it. A listing that read a snapshot before a reshelve
 // doesn't undo the reshelve, and a snapshot whose head couldn't be
 // read (the app's own, from before the CLI took the listing over)
-// doesn't count every later head as work.
+// doesn't count every later head as work. With autoShelveDays set, a
+// worktree untouched for longer goes on the shelf by itself, and one
+// unshelved by hand stays off it.
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test shelf.
 import assert from "node:assert/strict";
@@ -20,6 +22,7 @@ import {
   mkdirSync,
   rmSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
@@ -31,7 +34,7 @@ import { cliSandbox, readRegistry } from "./lib/cliSandbox.mts";
 const fixture = cliSandbox("sm-shelf-");
 await fixture.buildSm();
 fixture.useCli();
-const { dataDir, git, gitOut, commitFile, sandbox } = fixture;
+const { dataDir, git, gitOut, commitFile, sandbox, sm } = fixture;
 
 const {
   listWorktreeIdentitiesViaCli,
@@ -279,6 +282,55 @@ async function main() {
       assert.equal(await listedShelved(box), true);
       assert.equal(markedShelved(box.id), true);
       assert.deepEqual(snapshotOf(box.id), snapshot);
+    },
+  );
+
+  await check(
+    "with autoShelveDays set, an untouched worktree goes on the shelf, and an unshelve or a move of HEAD counts as a touch",
+    async (track) => {
+      const box = await makeSandbox(track);
+      await sm("config", "set", "autoShelveDays", "1");
+      track(() => sm("config", "unset", "autoShelveDays"));
+      assert.equal(await listedShelved(box), false, "a new worktree is fresh");
+      // Its newest commit, HEAD's last move and its creation two days
+      // back.
+      const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      await git(box.worktree, [
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "old",
+        `--date=${old.toISOString()}`,
+      ]);
+      const adminDir = await gitOut(box.worktree, "rev-parse", "--git-dir");
+      const age = () => {
+        utimesSync(join(adminDir, "commondir"), old, old);
+        utimesSync(join(adminDir, "logs", "HEAD"), old, old);
+      };
+      age();
+      assert.equal(await listedShelved(box), true, "idle goes on the shelf");
+      assert.equal(markedShelved(box.id), true);
+      assert.ok(snapshotOf(box.id), "with its snapshot");
+      await setShelvedViaCli(box.projectRef, box.id, false);
+      assert.equal(await listedShelved(box), false, "the unshelve is a touch");
+      await shelve(box);
+      writeFileSync(join(box.worktree, "a.txt"), "edited\n");
+      assert.equal(await listedShelved(box), false, "work still unshelves it");
+      // Clean and old again, as if that work were long past, then a
+      // switch to a new branch on the same old commit: the move of HEAD
+      // is the touch.
+      await git(box.worktree, ["checkout", "-q", "--", "a.txt"]);
+      const registry = readRegistry(dataDir);
+      delete registry.unshelvedAt?.[box.id];
+      writeFileSync(registryPath, JSON.stringify(registry));
+      age();
+      await git(box.worktree, ["checkout", "-q", "-b", "old"]);
+      assert.equal(
+        await listedShelved(box),
+        false,
+        "a branch switch is a touch",
+      );
     },
   );
 
