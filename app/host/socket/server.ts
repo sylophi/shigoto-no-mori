@@ -137,8 +137,8 @@ const MAX_CONNECTIONS = 64;
 // Sockets before their hello, a tighter cap so a flood that never says
 // hello cannot crowd out real peers.
 const MAX_PREAUTH_CONNECTIONS = 16;
-// The largest inbound frame: a channel write is at most 256 KiB, which
-// is about 342 KiB as base64 in its JSON.
+// The largest inbound frame: a channel write is at most 256 KiB of
+// bytes and a few more of frame around them.
 const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 // Lets a refusal's answer flush before the socket is cut.
 const REJECT_TERMINATE_DELAY_MS = 250;
@@ -414,7 +414,11 @@ const make = (options: {
         let nextClientId = 0;
         let preAuth = 0;
         let originRejectLoggedAt = 0;
-        const serialization = RpcSerialization.json;
+        // Effect's binary layout (shared/remote/link.ts), so a channel's
+        // bytes cross as bytes.
+        const serialization = yield* RpcSerialization.RpcSerialization.pipe(
+          Effect.provide(RpcSerialization.layerSchemaBinary()),
+        );
         const disconnects = yield* Queue.unbounded<number>();
         let writeRequest!: (
           clientId: number,
