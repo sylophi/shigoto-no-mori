@@ -208,8 +208,7 @@ export const layer = Layer.effect(Registry, make);
 - The per-call classification travels as annotations on the
   definition, read by middleware: `remote` (reaches a peer), `gated`
   (served to a peer only with the command switch on), `invitable` (the
-  mirror invitation's exception, with its scope), `movesHostState` (a
-  resolved gated call changed what a viewer caches),
+  mirror invitation's exception, with its scope),
   `tracksProjectUsage`, and `grant` (the consent text that covers the
   call). A host-scoped call classifies itself; middleware fails closed
   on a missing annotation, and a proof checks every group.

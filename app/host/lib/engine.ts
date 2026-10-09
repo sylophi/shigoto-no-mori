@@ -6,7 +6,6 @@ import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { engineLayer } from "@shigomori/engine/layer";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
-import * as Git from "@shigomori/engine/Git";
 import * as Store from "@shigomori/engine/Store";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
@@ -18,7 +17,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { registerInflightContributor } from "./scripts";
 import * as PromiseAdapter from "./util/promiseAdapter";
-import { beginGitSelfWrite } from "./util/selfWrite";
 
 export const layer = (options: {
   readonly flavor: Flavor;
@@ -31,9 +29,6 @@ export const layer = (options: {
     ...options,
     store: Store.layer((filename) => SqliteClient.make({ filename })),
   }).pipe(
-    // The engine's git writes mark their repository, so the git
-    // watcher skips their echo as it does the host's own.
-    Layer.provide(Layer.succeed(Git.GitWrites, beginGitSelfWrite)),
     // The environment as it is when the graph is built: after the
     // launch has rebuilt it from the login shell (main/core/shellEnv.ts).
     // Effect's default reads it once, whenever first asked, which may

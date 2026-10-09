@@ -78,14 +78,11 @@ export type DoctorReport = typeof DoctorReportSchema.Type;
 // way it may already run scripts on it. Every call rides the grant,
 // the two status reads included (tagged gated like runtime:info and
 // the fs reads), because they name the host's home, bin dir and rc
-// files. None of them pings viewers: links and rc hooks are no part of
-// the forest state a ping re-reads, and the caller seeds its own cache
-// from each reply.
+// files.
 const gated = {
   remote: true,
   gated: true,
   grant: "changeApp",
-  movesHostState: false,
 } as const;
 
 export const cliContract = defineContract(
@@ -103,8 +100,7 @@ export const cliContract = defineContract(
   invoke("shellInstall", VoidSchema, ShellIntegrationStatusSchema, gated),
   invoke("shellUninstall", VoidSchema, ShellIntegrationStatusSchema, gated),
   // The checklist names the host's paths, so it rides the grant like
-  // the status reads. The repair run can unregister a project, which
-  // is forest state, so unlike the rest it pings viewers.
+  // the status reads.
   invoke("doctor", VoidSchema, DoctorReportSchema, gated),
   invoke("doctorFix", VoidSchema, DoctorReportSchema, {
     remote: true,

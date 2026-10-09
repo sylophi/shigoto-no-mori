@@ -3,7 +3,7 @@
 // ANY tool (an agent in a terminal, an editor, plain git) shows up in
 // the app within a debounce, on this machine and on every device
 // viewing it, instead of on the next focus or the minute sweep. The
-// store watcher (host/lib/storeWatcher.ts) covers sm's own bookkeeping.
+// store's changes (engine StoreChanges) cover sm's own bookkeeping.
 // The git facts a worktree row shows
 // (branch, tip, ahead/behind) live in the PROJECT's git directory, and
 // a linked worktree's metadata lives under its `worktrees/<name>/`
@@ -24,11 +24,8 @@
 //
 // The signal is project scoped (git:projectChanged) rather than the
 // broad externalChange sweep: a commit in one repo says nothing about
-// another project's rows. The app's own git operations move refs the
-// same way, so the owner injects a suppression (a running sm CLI
-// child, the echo window after an app-run mutating git command) and
-// those are skipped exactly like the state watcher skips the app's
-// own root writes: their callers already invalidate their targets.
+// another project's rows. The app's own git operations ping like any
+// other tool's, so every view of the project follows them too.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FiberMap from "effect/FiberMap";
@@ -100,11 +97,6 @@ export function gitDirOf(projectPath: string): string | null {
 
 export type GitWatcherDeps = {
   onChange: (projectId: string) => void;
-  // Whether events from the named git directory should be dropped
-  // right now: the app's own git activity there (a running sm CLI
-  // child, an app-run mutating git command in flight or just done),
-  // already invalidated by its caller.
-  suppressed: (gitDir: string) => boolean;
   // The projects to follow. Defaults to the registry. The git-watcher
   // check injects its own list against a sandbox repository.
   projects?: () => Project[];
@@ -143,10 +135,7 @@ const make = (deps: GitWatcherDeps) =>
     // commit deserves.
     const watch = (projectId: string, entry: { readonly gitDir: string }) =>
       fs.watch(entry.gitDir, { recursive: true }).pipe(
-        Stream.filter(
-          (event) =>
-            isRelevantGitPath(event.path) && !deps.suppressed(entry.gitDir),
-        ),
+        Stream.filter((event) => isRelevantGitPath(event.path)),
         Stream.debounce(DEBOUNCE_MS),
         Stream.runForEach(() => Effect.sync(() => deps.onChange(projectId))),
         // The repository went away (deleted, unmounted), or is not

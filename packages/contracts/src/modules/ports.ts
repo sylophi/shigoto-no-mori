@@ -1,4 +1,4 @@
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, view } from "../contract.ts";
 import {
   WorktreeScopedPayloadSchema,
   WorktreePortsResultSchema,
@@ -18,6 +18,10 @@ export const portsContract = defineContract(
   "ports",
   "host",
   invoke("list", WorktreeScopedPayloadSchema, WorktreePortsResultSchema, {
+    remote: true,
+    gated: false,
+  }),
+  view("watch", WorktreeScopedPayloadSchema, WorktreePortsResultSchema, {
     remote: true,
     gated: false,
   }),

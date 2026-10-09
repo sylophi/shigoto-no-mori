@@ -60,18 +60,14 @@ import {
   CommandRefusedError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
-import { VoidSchema } from "@shigomori/contracts/schemas";
 import {
   annotation,
   callOf,
   callsOf,
   channelOf,
-  defineContract,
   Gated,
   Grant,
-  invoke,
   isBroadcast,
-  MovesHostState,
   payloadOf,
   Remote,
   scopeOf,
@@ -79,11 +75,7 @@ import {
 import { GRANTS } from "@shigomori/contracts/grants";
 import { controlContract } from "@shigomori/contracts/modules/control";
 import { safeDecode } from "@shigomori/contracts/codec";
-import {
-  classificationGap,
-  registerContract,
-} from "@shared/ipc/registerContract";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import { classificationGap } from "@shared/ipc/registerContract";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import type { WsServerBinding, WsServerStartOpts } from "@host/socket/server";
 import { accountContract } from "@shigomori/contracts/modules/account";
@@ -106,13 +98,7 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import {
-  boundPort,
-  delay,
-  handlerCtx,
-  type Track,
-  waitFor,
-} from "./lib/checkKit.mts";
+import { boundPort, delay, type Track, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import {
   type DirectListenerOpts,
@@ -946,80 +932,6 @@ it("liveness: the client transport heartbeats, declares a silent host dead withi
   live.close();
 });
 
-it("registrar: onMutationResolved fires after a mutating invoke resolves, never for reads or failures", async () => {
-  // The remote-viewer externalChange ping (main/ipc/register.ts)
-  // hangs off this registrar hook, so pin its semantics at the seam
-  // with an in-memory transport: the Electron+direct composite that
-  // actually emits the ping imports electron, out of reach here.
-  const handlers = new Map<string, Parameters<ServerTransport["handle"]>[1]>();
-  const served = (channel: string) => {
-    const handler = handlers.get(channel);
-    assert(handler, `${channel} was never registered`);
-    return handler;
-  };
-  const server: ServerTransport = {
-    handle: (channel, fn) => handlers.set(channel, fn),
-    broadcastAll: () => {},
-  };
-  const command = { remote: true, gated: true, grant: "changeCode" } as const;
-  const pingContract = defineContract(
-    "pingtest",
-    "host",
-    invoke("mutate", VoidSchema, VoidSchema, command),
-    invoke("read", VoidSchema, VoidSchema, { remote: true, gated: false }),
-    invoke("failMutate", VoidSchema, VoidSchema, command),
-    // A command whose effects are invisible to remote viewers, the
-    // forward-verb shape: still grant-gated, never pinged.
-    invoke("shuttle", VoidSchema, VoidSchema, {
-      ...command,
-      movesHostState: false,
-    }),
-  );
-  let resolved = 0;
-  let resolvedCtx: HandlerContext | null = null;
-  registerContract(
-    pingContract,
-    {
-      mutate: async () => {},
-      read: async () => {},
-      failMutate: async () => {
-        throw new Error("boom");
-      },
-      shuttle: async () => {},
-    },
-    server,
-    {
-      validateOutputs: true,
-      onMutationResolved: (ctx) => {
-        resolved += 1;
-        resolvedCtx = ctx;
-      },
-    },
-  );
-  const ctx = handlerCtx({ callerDeviceId: "peer-1" });
-  await served("pingtest:read")(ctx, undefined);
-  assert.equal(resolved, 0, "a read must not trip the mutation hook");
-  await served("pingtest:mutate")(ctx, undefined);
-  assert.equal(resolved, 1, "a resolved mutation must trip the hook");
-  // The Electron binding reads the caller off this to decide
-  // whether a remote peer drove the mutation (and so whether its
-  // own windows need the ping too), so the hook must see the
-  // calling peer's context, not a copy.
-  assert.equal(
-    resolvedCtx,
-    ctx,
-    "the hook must receive the calling peer's context",
-  );
-  await assert.rejects(() => served("pingtest:failMutate")(ctx, undefined));
-  assert.equal(resolved, 1, "a failed mutation must not trip the hook");
-  await served("pingtest:shuttle")(ctx, undefined);
-  assert.equal(
-    resolved,
-    1,
-    "a movesHostState:false mutation must not trip the hook",
-  );
-});
-
 it("contract invariant: every host invoke classifies itself, and every remote gated one names its consent line, as grants.ts lists", async () => {
   // Derive the host modules from the authoritative registry rather
   // than a hand-maintained list, so a newly added host contract module
@@ -1047,16 +959,6 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       if (grant !== undefined) {
         granted.set(grant, [...(granted.get(grant) ?? []), channelOf(call)]);
       }
-      // movesHostState opts a gated call out of the remote-viewer
-      // cache ping. On an ungated call it is meaningless, so its
-      // presence there is a tagging mistake.
-      if (annotation(call, MovesHostState) !== undefined) {
-        assert.equal(
-          annotation(call, Gated),
-          true,
-          `${channelOf(call)} tags movesHostState without gated:true`,
-        );
-      }
     }
   }
   // The consent table (grants.ts) lists exactly the calls that name
@@ -1082,10 +984,6 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
   // host's paths.
   assert.equal(annotation(callOf(runtimeContract, "info"), Remote), true);
   assert.equal(annotation(callOf(runtimeContract, "info"), Gated), true);
-  assert.equal(
-    annotation(callOf(runtimeContract, "info"), MovesHostState),
-    false,
-  );
   assert.equal(annotation(callOf(launchersContract, "launch"), Remote), false);
   // The cli module rides the wire wholly behind the grant: even
   // its status reads name host paths, so none of it is ungated.
@@ -1174,35 +1072,9 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       `sync.${key} must require the command grant`,
     );
   }
-  // The reads, the link open and the cancel opt out of the viewer
-  // cache ping: they move no state a remote viewer caches (a
-  // capture taken over a link writes a ref the git watcher
-  // announces, and a cancel's rollback resolves under the cancelled
-  // call). The two receives land refs and a worktree, and keep it.
-  for (const key of [
-    "ignoredPaths",
-    "worktreeFolder",
-    "hasCommits",
-    "openSource",
-    "cancelMove",
-  ] as const) {
-    assert.equal(
-      annotation(callOf(syncContract, key), MovesHostState),
-      false,
-      `sync.${key} must opt out of the viewer cache ping`,
-    );
-  }
-  for (const key of ["receiveWorktree", "receiveBundle"] as const) {
-    assert.notEqual(
-      annotation(callOf(syncContract, key), MovesHostState),
-      false,
-      `sync.${key} lands refs and must keep the viewer cache ping`,
-    );
-  }
   // The byte-stream opens (step 8, reworked onto channels): both
-  // are grant-gated commands, but neither moves state a remote
-  // viewer caches, so both opt out of the mutation cache ping. The
-  // bytes themselves ride binary channel frames, never invokes.
+  // are grant-gated commands. The bytes themselves ride binary
+  // channel frames, never invokes.
   for (const [name, call] of [
     ["forward.open", callOf(forwardContract, "open")],
     ["mirror.openStream", callOf(mirrorContract, "openStream")],
@@ -1212,11 +1084,6 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       annotation(call, Gated),
       true,
       `${name} must require the command grant`,
-    );
-    assert.equal(
-      annotation(call, MovesHostState),
-      false,
-      `${name} must opt out of the viewer cache ping`,
     );
   }
   // The move orchestrators and the teardown are LOCAL-only: a
