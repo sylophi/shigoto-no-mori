@@ -12,6 +12,12 @@ export function harnessLabel(harness: string): string {
   return HARNESS_LABELS[harness] ?? harness;
 }
 
+// The harnesses with built-in support are the ones `sm agents resume`
+// knows how to resume.
+export function canResume(harness: string): boolean {
+  return Object.hasOwn(HARNESS_LABELS, harness);
+}
+
 export const AGENT_STATE_VIEW: Record<
   AgentSession["state"],
   { label: string; tone: StatusTone }

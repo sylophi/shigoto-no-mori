@@ -453,7 +453,7 @@ export const SetAutoPullPayloadSchema = WorktreeScopedPayloadSchema.extend({
   autoPull: z.boolean(),
 });
 
-export const UnbindAgentPayloadSchema = WorktreeScopedPayloadSchema.extend({
+export const AgentSessionPayloadSchema = WorktreeScopedPayloadSchema.extend({
   harness: z.string().min(1),
   session: z.string().min(1),
 });

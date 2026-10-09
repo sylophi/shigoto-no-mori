@@ -159,6 +159,32 @@ func TestAgentBindRefusesPrimaryAndRmDrops(t *testing.T) {
 	}
 }
 
+// resume types the harness's own resume into the terminal, in the
+// worktree, and refuses a harness it can't resume.
+func TestAgentResumeTypesTheHarnessResume(t *testing.T) {
+	if !launcherAvailable(catalogEntry(t, "terminal")) {
+		t.Skip("no Terminal.app here")
+	}
+	proj := autoPullSandbox(t)
+	fox := createViaCmd(t, proj, "fox")
+	ctx := resolveContext(proj.Path, []project{proj})
+	bin := fakeBin(t, "osascript")
+
+	if code, err := cmdAgentsResume(ctx, []string{"fox", "--harness", "codex", "--session", "s4"}); code != 0 || err != nil {
+		t.Fatalf("resume: %d, %v", code, err)
+	}
+	raw, err := os.ReadFile(filepath.Join(bin, "osascript.args"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "cd '" + fox.Path + "'\ncodex resume 's4'\n"; !strings.HasSuffix(string(raw), want) {
+		t.Errorf("typed\n%s\nwant it to end with\n%s", raw, want)
+	}
+	if code, _ := cmdAgentsResume(ctx, []string{"fox", "--harness", "pi", "--session", "s5"}); code == 0 {
+		t.Error("resuming a harness with no resume succeeded")
+	}
+}
+
 func TestAgentsInstallKeepsTheRestOfTheFile(t *testing.T) {
 	fakeHookBinary(t)
 	dir := t.TempDir()
