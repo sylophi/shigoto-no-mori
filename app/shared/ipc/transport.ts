@@ -5,7 +5,7 @@ import {
   errorToWire,
 } from "@shigomori/contracts/errors";
 import type * as Tracer from "effect/Tracer";
-import type { LinkChannels } from "@shared/remote/link";
+import type { LinkChannels } from "@shigomori/contracts/link";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,

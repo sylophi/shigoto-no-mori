@@ -18,7 +18,7 @@
 // a close WITHOUT a prior end (a destroy, an error) resets whatever is
 // left. A peer end ends the duplex. A peer reset destroys it.
 import type { Duplex } from "node:stream";
-import type { ChannelEndpoint, ChannelHandle } from "@shared/remote/channels";
+import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
 import { MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {

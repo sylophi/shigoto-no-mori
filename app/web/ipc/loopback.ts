@@ -38,7 +38,7 @@ import {
   outputOf,
   scopeOf,
 } from "@shigomori/contracts/contract";
-import { allContractModules } from "@shared/ipc/client";
+import { allContractModules } from "@shigomori/contracts/allModules";
 import { createSubscriberRegistry } from "@shared/remote/subscriberRegistry";
 import type {
   ClientTransport,

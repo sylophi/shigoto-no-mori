@@ -41,7 +41,7 @@ import { strict } from "../schemas/strict.ts";
 // the link needs no gate of its own.
 //
 // pullWorktree and sendWorktree are the LOCAL orchestrators a device's
-// own renderer (or the CLI's control wire) invokes: bring a peer's
+// own renderer (or the terminal's control ops) invokes: bring a peer's
 // worktree here, or send one of this device's to a peer. Tagged
 // {remote:false}, so they are never registered on any remote wire
 // (main/ipc/register.ts only forwards remote:true) and the web

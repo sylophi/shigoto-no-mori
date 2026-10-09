@@ -62,18 +62,21 @@ import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import {
   CommandGate,
-  HELLO_TIMEOUT_MS,
-  HOST_LIVENESS_TIMEOUT_MS,
   LinkGroup,
   LinkPeer,
-  MAX_IN_FLIGHT_PER_PEER,
+  type LoopbackGroup,
   PeerAuth,
-} from "@shared/remote/link";
+} from "@shigomori/contracts/link";
 import {
   handshakeProof,
   newHandshakeNonce,
   proofsMatch,
-} from "@shared/remote/proof";
+} from "@shigomori/contracts/proof";
+import {
+  HELLO_TIMEOUT_MS,
+  HOST_LIVENESS_TIMEOUT_MS,
+  MAX_IN_FLIGHT_PER_PEER,
+} from "@shared/remote/link";
 import * as HostPushes from "@host/lib/hostPushes";
 import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 import { withParentSpan } from "@host/lib/util/trace";
@@ -360,12 +363,20 @@ export class DeviceLink extends Context.Service<
   }
 >()("sm/host/DeviceLink") {}
 
-const make = (options: {
+// A link listener. The device link's serves LinkGroup to the peers
+// the hub vouched for. `local` is the loopback's (loopback.ts): the
+// processes on this machine the app's own credential admits, each its
+// own caller with no device of its own, hearing every host push.
+export const make = (options: {
   readonly registrar: LinkRegistrar;
   readonly auth: WsServerTicketAuth;
+  readonly group?: typeof LinkGroup | typeof LoopbackGroup;
+  readonly local?: boolean;
 }) =>
   Effect.gen(function* () {
     const { registrar, auth } = options;
+    const group = (options.group ?? LinkGroup) as typeof LinkGroup;
+    const local = options.local === true;
     // What the views read, and the pushes every peer hears.
     const services = yield* Effect.context<Views.Services>();
     const hostPushes = yield* HostPushes.HostPushes;
@@ -526,10 +537,14 @@ const make = (options: {
             preAuth -= 1;
             // One link per device: the older one ends now, so nothing it
             // still delivers runs.
-            byDevice
-              .get(payload.deviceId)
-              ?.kill(CLOSE_GOING_AWAY, "superseded");
-            byDevice.set(payload.deviceId, connection);
+            // On the loopback every caller is its own, and none is a
+            // device the hub vouched for.
+            if (!local) {
+              byDevice
+                .get(payload.deviceId)
+                ?.kill(CLOSE_GOING_AWAY, "superseded");
+              byDevice.set(payload.deviceId, connection);
+            }
             connection.deviceId = payload.deviceId;
             return {
               deviceId: opts.deviceId,
@@ -617,21 +632,30 @@ const make = (options: {
               ),
             );
 
-        // A view, failing as RemoteCallError when its reads fail.
+        // A view, failing as an invoke does: the contract error it is,
+        // or RemoteCallError with its message and code.
         const watch = (view: View) => (payload: unknown) =>
           view(payload).pipe(
             Stream.provideContext(services),
-            Stream.mapError(
-              (error) => new RemoteCallError({ text: errorMessageOf(error) }),
+            Stream.mapError((error) =>
+              isContractError(error)
+                ? error
+                : new RemoteCallError({
+                    text: errorMessageOf(error),
+                    code: errorCodeOf(error),
+                  }),
             ),
           );
 
         const handlers: Record<string, unknown> = { ...linkHandlers };
-        for (const call of LinkGroup.requests.values()) {
+        for (const call of group.requests.values()) {
           const tag = channelOf(call);
           if (tag in handlers) continue;
           if (isBroadcast(call)) {
-            handlers[tag] = push(tag, annotation(call, Remote) === true);
+            handlers[tag] = push(
+              tag,
+              local || annotation(call, Remote) === true,
+            );
             continue;
           }
           if (!isInvoke(call)) {
@@ -667,7 +691,7 @@ const make = (options: {
             if (!streaming) connection.inFlight += 1;
             return effect.pipe(
               Effect.provideService(LinkPeer, {
-                deviceId,
+                deviceId: local ? undefined : deviceId,
                 closed: connection.closed.signal,
                 channels: connection.channels,
                 notify: (module, key, payload) => {
@@ -702,8 +726,9 @@ const make = (options: {
                 return yield* effect;
               }
               if (
+                peer.deviceId !== undefined &&
                 auth.isInvited?.(peer.deviceId, channelOf(rpc), payload) ===
-                true
+                  true
               ) {
                 return yield* effect.pipe(
                   Effect.provideService(LinkPeer, {
@@ -725,7 +750,7 @@ const make = (options: {
             }),
         );
 
-        yield* RpcServer.make(LinkGroup, {
+        yield* RpcServer.make(group, {
           spanPrefix: "DeviceLink",
           // A handler's defect fails its own call, not every call on
           // the link.
@@ -733,7 +758,7 @@ const make = (options: {
         }).pipe(
           Effect.provide(
             Layer.mergeAll(
-              LinkGroup.toLayer(Effect.succeed(handlers as never)),
+              group.toLayer(Effect.succeed(handlers as never)),
               peerAuth,
               commandGate,
               Layer.succeed(RpcServer.Protocol, protocol),

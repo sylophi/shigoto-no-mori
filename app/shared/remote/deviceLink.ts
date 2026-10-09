@@ -39,13 +39,13 @@ import * as Stream from "effect/Stream";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { type ChannelMux, createChannelMux } from "./channels";
+import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
+import { LinkGroup } from "@shigomori/contracts/link";
 import {
-  LinkGroup,
-  PING_INTERVAL_MS,
-  PING_TIMEOUT_MS,
-  PROBE_TIMEOUT_MS,
-} from "./link";
-import { handshakeProof, newHandshakeNonce, proofsMatch } from "./proof";
+  handshakeProof,
+  newHandshakeNonce,
+  proofsMatch,
+} from "@shigomori/contracts/proof";
 
 // A dial that failed before the welcome. `blocked` is the verdict the
 // keeper and the hub supervisor key on: a refused ticket, the wrong

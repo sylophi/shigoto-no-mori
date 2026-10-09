@@ -17,40 +17,8 @@ import * as Fiber from "effect/Fiber";
 import * as Queue from "effect/Queue";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
 import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
-
-// The local side of a channel, supplied by whoever attaches it.
-export type ChannelEndpoint = {
-  // Bytes from the far end. Call `consumed` once the sink has taken
-  // them (a stream's write callback): that is what lets the far end
-  // send more, so calling it early defeats backpressure.
-  onData(data: Uint8Array, consumed: () => void): void;
-  // The far end ended its direction. Nothing more arrives. This side
-  // may still write until it ends too.
-  onEnd(): void;
-  // The far end reset the channel, or the link died. Both directions
-  // are over and the channel is gone.
-  onReset(): void;
-  // Both directions ended cleanly and the channel is gone.
-  onComplete?(): void;
-  // Everything written has gone out, so a paused source may resume.
-  onWritable(): void;
-};
-
-// What the attaching side drives.
-export type ChannelHandle = {
-  readonly channelId: string;
-  // Queues the bytes. False once more is queued than the window: pause
-  // the source until onWritable.
-  write(data: Uint8Array): boolean;
-  // Ends this direction once the queue drains.
-  end(): void;
-  // Tears the channel down now, both directions, dropping any queue.
-  // A no-op once the channel is gone.
-  reset(): void;
-  // Whether the channel is still there (neither reset nor fully ended).
-  readonly open: boolean;
-};
 
 // The dialing side's channels on one link.
 export type ChannelMux = {

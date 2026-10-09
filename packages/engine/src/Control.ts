@@ -1,32 +1,53 @@
-// The control wire's client: how the cross-device verbs reach the
-// running app. Another device is reached through the account, the hub
-// socket and the one direct session per peer, which the running app
-// holds and a second process must not dial beside it, so these verbs
-// ask the app.
+// How the cross-device verbs reach the running app. Another device is
+// reached through the account, the hub socket and the one direct
+// session per peer, which the running app holds and a second process
+// must not dial beside it, so these verbs ask the app.
 //
-// The app publishes its listener in <dataDir>/control.json: a loopback
-// port and a token minted at bind, in an owner-only file. The wire is
-// newline-delimited JSON: hello with the token, then one `req`, answered
-// by `push` lines (progress) and one `res`. Step 4 replaces it with the
-// contracts' RPC client.
-import { createConnection, type Socket } from "node:net";
+// The app serves the device link a second time on loopback for the
+// processes on this machine, and publishes it in <dataDir>/loopback.json:
+// the port, and a token minted as the app starts, in an owner-only
+// file. The token stands in for a peer's connect ticket in the link's
+// handshake (@shigomori/contracts/proof), so it never travels either.
+import {
+  CommandRefusedError,
+  errorMessageOf,
+  isProtocolVersionMismatchError,
+  LinkRefusedError,
+  RemoteCallError,
+} from "@shigomori/contracts/errors";
+import { LoopbackGroup } from "@shigomori/contracts/link";
+import { isInvoke } from "@shigomori/contracts/contract";
 import {
   CONTROL_ERROR_CODES,
+  type ControlTransferEvent,
   isControlErrorCode,
 } from "@shigomori/contracts/modules/control";
+import {
+  handshakeProof,
+  newHandshakeNonce,
+  proofsMatch,
+} from "@shigomori/contracts/proof";
+import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Queue from "effect/Queue";
+import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Socket from "effect/socket/Socket";
 import type { Flavor } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { pidAlive } from "./processes.ts";
+import * as Registry from "./Registry.ts";
 
-// Nothing answers at the address control.json names, or what answers
+// Nothing answers at the address loopback.json names, or what answers
 // isn't the app.
 export class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
   "AppNotRunning",
@@ -55,18 +76,6 @@ export class AppBusy extends Schema.TaggedError<AppBusy>()("AppBusy", {
 
   get documentCode(): string {
     return "app-busy";
-  }
-}
-
-// The request couldn't be written, so nothing began.
-export class RequestUnsent extends Schema.TaggedError<RequestUnsent>()(
-  "RequestUnsent",
-  { cause: Schema.Defect() },
-) {
-  override get message(): string {
-    const said =
-      this.cause instanceof Error ? this.cause.message : String(this.cause);
-    return `Lost the connection to the app: ${said}`;
   }
 }
 
@@ -101,16 +110,15 @@ export class ControlRefused extends Schema.TaggedError<ControlRefused>()(
 export type ControlError =
   | AppNotRunning
   | AppBusy
-  | RequestUnsent
   | ConnectionLost
   | ControlRefused;
 
 export class Control extends Context.Service<
   Control,
   {
-    // One request over a fresh connection, answered with the result as
-    // the app sent it. `onPush` sees each push the handler streams
-    // before its answer. An undefined input sends none.
+    // One call over a fresh connection, answered with the result as the
+    // app sent it. `onPush` sees each progress push the call streams to
+    // its caller before its answer. An undefined input sends none.
     readonly call: (
       channel: string,
       input: unknown,
@@ -119,13 +127,20 @@ export class Control extends Context.Service<
   }
 >()("sm/engine/Control") {}
 
-const CONTROL_FILE = "control.json";
+export const LOOPBACK_FILE = "loopback.json";
 
 // The app answers a hello at once, so a dial or a welcome that takes
 // this long is not the app.
 const HANDSHAKE_TIMEOUT = "5 seconds";
 
-const ControlFileSchema = Schema.fromJsonString(
+// The close code the link's listener turns a connection away with when
+// it holds as many as it takes.
+const CLOSE_OVER_CAPACITY = 1013;
+
+// What a transfer's progress is, to the verbs that show it.
+const PROGRESS = "sync:pullProgress";
+
+const LoopbackFileSchema = Schema.fromJsonString(
   Schema.Struct({
     pid: Schema.optional(Schema.Int),
     port: Schema.optional(Schema.Int),
@@ -134,44 +149,27 @@ const ControlFileSchema = Schema.fromJsonString(
   }),
 );
 
-const FrameSchema = Schema.fromJsonString(
-  Schema.Struct({
-    t: Schema.optional(Schema.String),
-    id: Schema.optional(Schema.Int),
-    ok: Schema.optional(Schema.Boolean),
-    result: Schema.optional(Schema.Unknown),
-    message: Schema.optional(Schema.String),
-    code: Schema.optional(Schema.String),
-    channel: Schema.optional(Schema.String),
-    payload: Schema.optional(Schema.Unknown),
-  }),
-);
-type Frame = typeof FrameSchema.Type;
-
-// The lines a socket delivers, each whole, then undefined once it closed.
-const splitLines = (socket: Socket, lines: Queue.Queue<string | undefined>) => {
-  let partial = "";
-  socket.setEncoding("utf8");
-  socket.on("data", (chunk: string) => {
-    const parts = `${partial}${chunk}`.split("\n");
-    partial = parts.pop() ?? "";
-    for (const line of parts) Queue.offerUnsafe(lines, line);
-  });
-  socket.on("close", () => Queue.offerUnsafe(lines, undefined));
-};
+// The group's calls, each known only as some call: a tag and a payload,
+// and an Effect or a Stream back.
+type Flat = (
+  tag: string,
+  payload: unknown,
+) => Effect.Effect<unknown, unknown> | Stream.Stream<unknown, unknown>;
 
 const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const paths = yield* Paths.Paths;
+  const registry = yield* Registry.Registry;
+  const makeWebSocket = yield* Socket.WebSocketConstructor;
   const notRunning = new AppNotRunning({ flavor });
 
   // The listener the app published, none when the file is missing,
   // unreadable or names nothing.
   const published = fs
-    .readFileString(path.join(paths.dataDir, CONTROL_FILE))
+    .readFileString(path.join(paths.dataDir, LOOPBACK_FILE))
     .pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(ControlFileSchema)),
+      Effect.flatMap(Schema.decodeUnknownEffect(LoopbackFileSchema)),
       Effect.option,
       Effect.map(
         Option.flatMap(({ pid = 0, port = 0, token = "", appVersion = "" }) =>
@@ -182,66 +180,106 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
       ),
     );
 
-  // A connection to the loopback port, closed with the scope: each
-  // frame it reads (none when the line isn't one, or once it closed),
-  // and a write that fails with `error` when the frame can't be written.
-  const connect = Effect.fn(function* (port: number) {
-    const lines = yield* Queue.unbounded<string | undefined>();
-    const socket = yield* Effect.acquireRelease(
-      Effect.callback<Socket, AppNotRunning>((resume) => {
-        const dialed = createConnection({ host: "127.0.0.1", port });
-        // 'close' follows an error, which ends the lines.
-        dialed.on("error", () => resume(Effect.fail(notRunning)));
-        dialed.once("connect", () => resume(Effect.succeed(dialed)));
-        splitLines(dialed, lines);
-        return Effect.sync(() => dialed.destroy());
-      }),
-      (open) => Effect.sync(() => open.destroy()),
-    );
-    const next: Effect.Effect<Option.Option<Frame>> = Queue.take(lines).pipe(
-      Effect.map((line) =>
-        line === undefined
-          ? Option.none()
-          : Schema.decodeOption(FrameSchema)(line),
-      ),
-    );
-    const send = <E>(
-      frame: Readonly<Record<string, unknown>>,
-      error: (cause: Error) => E,
-    ) =>
-      Effect.callback<void, E>((resume) => {
-        socket.write(`${JSON.stringify(frame)}\n`, (failed) =>
-          resume(
-            failed === undefined || failed === null
-              ? Effect.void
-              : Effect.fail(error(failed)),
-          ),
-        );
-      });
-    return { next, send };
-  });
-
-  const handshake = Effect.fn(function* (file: {
+  // A connection to the listener, closed with the scope, and the link's
+  // client over it once the handshake proved both ends hold the token.
+  const connect = Effect.fn(function* (file: {
     readonly port: number;
     readonly token: string;
   }) {
-    const connection = yield* connect(file.port);
-    yield* connection.send({ t: "hello", token: file.token }, () => notRunning);
-    const welcome = yield* connection.next;
-    // The app is there and said so. Any other refusal is a control.json
-    // this listener didn't write.
-    if (
-      Option.isSome(welcome) &&
-      welcome.value.t === "refused" &&
-      welcome.value.code === "busy"
-    ) {
-      return yield* new AppBusy({ binary: paths.binaryName });
-    }
-    if (Option.isNone(welcome) || welcome.value.t !== "welcome") {
-      return yield* notRunning;
-    }
-    return connection;
+    let closeCode: number | undefined;
+    const socket = yield* Socket.fromWebSocket(
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const ws = makeWebSocket(`ws://127.0.0.1:${file.port}`);
+          ws.addEventListener("close", (event) => {
+            closeCode = (event as { code?: number }).code;
+          });
+          return ws;
+        }),
+        (ws) => Effect.sync(() => ws.close(1000)),
+      ),
+      { openTimeout: HANDSHAKE_TIMEOUT },
+    );
+    // One connection per call: a drop fails the call, as the answer.
+    const protocol = yield* RpcClient.makeProtocolSocket({
+      retryPolicy: Schedule.recurs(0),
+    }).pipe(
+      Effect.provideService(Socket.Socket, socket),
+      Effect.provide(RpcSerialization.layerSchemaBinary()),
+    );
+    // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
+    const client = (yield* RpcClient.make(LoopbackGroup, {
+      flatten: true,
+    }).pipe(
+      Effect.provideService(RpcClient.Protocol, protocol),
+    )) as unknown as Flat;
+    const call = (tag: string, payload: unknown) =>
+      client(tag, payload) as Effect.Effect<unknown, unknown>;
+    // A refusal before the welcome: a listener at its cap says so, and
+    // anything else is a loopback.json this listener didn't write.
+    const turnedAway = () =>
+      closeCode === CLOSE_OVER_CAPACITY
+        ? new AppBusy({ binary: paths.binaryName })
+        : notRunning;
+
+    const { nonce: hostNonce } = (yield* call("link:challenge", undefined).pipe(
+      Effect.mapError(turnedAway),
+    )) as { readonly nonce: string };
+    const clientNonce = newHandshakeNonce();
+    const deviceId = yield* registry.deviceId;
+    const welcome = (yield* Effect.flatMap(
+      Effect.promise(() =>
+        handshakeProof(file.token, "client", hostNonce, clientNonce),
+      ),
+      (proof) =>
+        call("link:hello", {
+          deviceId,
+          appVersion: paths.binaryName,
+          protocolVersion: PROTOCOL_VERSION,
+          nonce: clientNonce,
+          proof,
+        }),
+    ).pipe(
+      Effect.mapError((error) =>
+        isProtocolVersionMismatchError(error)
+          ? new ControlRefused({ channel: "link:hello", said: error.message })
+          : turnedAway(),
+      ),
+    )) as { readonly proof: string };
+    const expected = yield* Effect.promise(() =>
+      handshakeProof(file.token, "host", hostNonce, clientNonce),
+    );
+    if (!proofsMatch(welcome.proof, expected)) return yield* notRunning;
+    return { client, call };
   });
+
+  // A call's failure as the verbs read it.
+  const refusal = (channel: string, error: unknown): ControlError => {
+    if (
+      error instanceof AppNotRunning ||
+      error instanceof AppBusy ||
+      error instanceof ConnectionLost ||
+      error instanceof ControlRefused
+    ) {
+      return error;
+    }
+    if (error instanceof RemoteCallError) {
+      return new ControlRefused({
+        channel,
+        ...(isControlErrorCode(error.code) ? { code: error.code } : {}),
+        said: error.text,
+      });
+    }
+    if (
+      error instanceof LinkRefusedError ||
+      error instanceof CommandRefusedError
+    ) {
+      return notRunning;
+    }
+    if (Predicate.isTagged(error, "RpcClientError"))
+      return new ConnectionLost();
+    return new ControlRefused({ channel, said: errorMessageOf(error) });
+  };
 
   const call = Effect.fn("Control.call")(function* (
     channel: string,
@@ -251,16 +289,14 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     const found = yield* published;
     // A file left by a crash names a dead pid, or a port nothing (or
     // something else) listens on: both read as not running, the second
-    // through the dial or the hello.
+    // through the dial or the handshake.
     if (Option.isNone(found) || !(yield* pidAlive(found.value.pid))) {
       return yield* notRunning;
     }
     const file = found.value;
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        // A transfer takes as long as it takes, so nothing past the hello
-        // is on a clock.
-        const connection = yield* handshake(file).pipe(
+        const link = yield* connect(file).pipe(
           Effect.timeoutOrElse({
             duration: HANDSHAKE_TIMEOUT,
             orElse: () => Effect.fail(notRunning),
@@ -269,38 +305,47 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         yield* Effect.logDebug(
           `control: connected to the app (v${file.appVersion}, pid ${file.pid})`,
         );
-        yield* connection.send(
-          input === undefined
-            ? { t: "req", id: 1, channel }
-            : { t: "req", id: 1, channel, input },
-          (cause) => new RequestUnsent({ cause }),
-        );
-        for (;;) {
-          const frame = yield* connection.next;
-          if (Option.isNone(frame)) {
-            return yield* new ConnectionLost();
-          }
-          const { t, id, ok, result, message, code, payload } = frame.value;
-          if (t === "push" && onPush !== undefined) {
-            yield* onPush(frame.value.channel ?? "", payload);
-          }
-          // Another call's answer is not ours.
-          if (t !== "res" || id !== 1) continue;
-          if (ok !== true) {
-            return yield* new ControlRefused({
-              channel,
-              // Only the codes this wire owns, as the app sends no other.
-              ...(isControlErrorCode(code) ? { code } : {}),
-              said: message ?? "",
-            });
-          }
-          return result;
+        // A transfer takes as long as it takes, so the call is on no
+        // clock.
+        const rpc = LoopbackGroup.requests.get(channel);
+        if (rpc === undefined || isInvoke(rpc)) {
+          return yield* link.call(channel, input);
         }
-      }),
+        // A transfer streams its progress, then its answer.
+        let answer: unknown;
+        yield* Stream.runForEach(
+          link.client(channel, input) as Stream.Stream<
+            ControlTransferEvent,
+            unknown
+          >,
+          (event) =>
+            "progress" in event
+              ? (onPush?.(PROGRESS, event.progress) ?? Effect.void)
+              : Effect.sync(() => {
+                  answer = event.result;
+                }),
+        );
+        if (answer === undefined) return yield* new ConnectionLost();
+        return answer;
+      }).pipe(
+        // A call the app interrupted (it is quitting) is the app gone.
+        // This fiber's own interruption, a Ctrl-C, still ends it.
+        Effect.catchCause((cause) =>
+          Effect.fail(
+            Cause.hasInterruptsOnly(cause)
+              ? new ConnectionLost()
+              : refusal(channel, Cause.squash(cause)),
+          ),
+        ),
+      ),
     );
   });
 
   return Control.of({ call });
 });
 
-export const layer = (flavor: Flavor) => Layer.effect(Control, make(flavor));
+export const layer = (flavor: Flavor) =>
+  Layer.effect(Control, make(flavor)).pipe(
+    // Node's and Bun's own WebSocket, the one client both have.
+    Layer.provide(Socket.layerWebSocketConstructorGlobal),
+  );

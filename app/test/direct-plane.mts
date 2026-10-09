@@ -212,7 +212,7 @@ import {
   CONNECT_INFO_ASK,
   HubAskRefusedError,
 } from "@shared/hub/link";
-import { newHandshakeNonce } from "@shared/remote/proof";
+import { newHandshakeNonce } from "@shigomori/contracts/proof";
 import {
   TunnelProvisionDeniedError,
   TunnelUnconfiguredError,

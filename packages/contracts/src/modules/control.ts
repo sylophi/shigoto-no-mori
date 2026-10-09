@@ -1,7 +1,11 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke, Remote } from "../contract.ts";
+import { defineContract, invoke, Remote, view } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
-import { SyncCloneIntoSchema, SyncPullWorktreeResultSchema } from "./sync.ts";
+import {
+  SyncCloneIntoSchema,
+  SyncPullProgressSchema,
+  SyncPullWorktreeResultSchema,
+} from "./sync.ts";
 import {
   VoidSchema,
   WorktreeIdSchema,
@@ -13,13 +17,13 @@ import { strict } from "../schemas/strict.ts";
 // worktrees send|bring|mirror|unmirror|mirrors`, `sm devices`). Reaching
 // another device takes the account and the one cached direct session
 // per peer, which only the running app holds, so these verbs ride the
-// control wire (main/core/control/server.ts) into the app. It runs the
-// orchestrators its own dialogs do, which shell the CLI back for each
-// git step.
+// device link's loopback (contracts' link.ts) into the app. It runs the
+// orchestrators its own dialogs do.
 //
-// Served on the control wire ONLY (main/ipc/handlers.ts), so the module
-// annotates every call remote: false. Its caller is a local process of
-// this user and commands this machine without a grant.
+// Served on the loopback ONLY, so the module annotates every call
+// remote: false. Its caller is a local process of this user, which the
+// app's own credential admits, and commands this machine without a
+// grant.
 //
 // Each op takes what a person would say (a device by name, a worktree
 // by name or branch) and resolves it the way the dialogs do.
@@ -121,7 +125,7 @@ const ControlDeviceRefSchema = strict(
 );
 const CopySideSchema = Schema.Literals(["local", "remote"]);
 
-const ControlTransferResultSchema = strict(
+export const ControlTransferResultSchema = strict(
   Schema.Struct({
     ...SyncPullWorktreeResultSchema.struct.fields,
     device: ControlDeviceRefSchema,
@@ -137,6 +141,14 @@ const ControlTransferResultSchema = strict(
   }),
 );
 export type ControlTransferResult = typeof ControlTransferResultSchema.Type;
+
+// A transfer as its caller follows it: each step of its progress, then
+// its answer, in order on the call's one stream.
+const ControlTransferEventSchema = Schema.Union([
+  Schema.TaggedStruct("progress", { progress: SyncPullProgressSchema }),
+  Schema.TaggedStruct("result", { result: ControlTransferResultSchema }),
+]);
+export type ControlTransferEvent = typeof ControlTransferEventSchema.Type;
 
 export const ControlPeerWorktreeSchema = strict(
   Schema.Struct({
@@ -221,14 +233,14 @@ export const controlContract = defineContract(
   ),
   // One of this device's worktrees to a peer: a transplant, or with
   // `mirror` a mirror whose copy is there. A peer with no checkout of
-  // the repo clones it first. Progress streams to the caller as
-  // sync:pullProgress frames, keyed by the local worktree.
-  invoke("send", ControlSendPayloadSchema, ControlTransferResultSchema, {
+  // the repo clones it first. Streams its progress, keyed by the local
+  // worktree, then its answer.
+  view("send", ControlSendPayloadSchema, ControlTransferEventSchema, {
     gated: true,
   }),
   // A peer's worktree to this device, the same two ways. Progress is
   // keyed by the peer's worktree id.
-  invoke("bring", ControlBringPayloadSchema, ControlTransferResultSchema, {
+  view("bring", ControlBringPayloadSchema, ControlTransferEventSchema, {
     gated: true,
   }),
   invoke(
