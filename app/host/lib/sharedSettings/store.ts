@@ -31,6 +31,11 @@ export async function loadSharedSettings(): Promise<void> {
   );
 }
 
+// Settles once every change made so far is in the store.
+export function sharedSettingsStored(): Promise<unknown> {
+  return written;
+}
+
 function persist(doc: SharedSettingsDoc): void {
   written = written
     .then(() =>

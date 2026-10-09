@@ -54,7 +54,6 @@
 // Run: pnpm test control.
 import { callOf } from "@shigomori/contracts/contract";
 import assert from "node:assert/strict";
-import { AsyncLocalStorage } from "node:async_hooks";
 import {
   existsSync,
   mkdirSync,
@@ -106,7 +105,6 @@ import {
   type MirrorImpl,
   type MirrorSessionRaw,
 } from "@host/mirror/registry";
-import { setCliRunnerImpl, type CliResult } from "@host/ipc/cliDelegate";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
@@ -126,9 +124,12 @@ import {
 } from "../main/core/control/server.ts";
 import {
   cliFailureMessage,
+  type CliResult,
   createCliRunner,
   makeTracker,
 } from "./lib/checkKit.mts";
+import * as Engine from "@host/lib/engine";
+import { secondEngine } from "./lib/smBinary.mts";
 import { afterAll, beforeAll, it } from "vitest";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire } from "./lib/directBoot.mts";
@@ -337,7 +338,7 @@ function fakeMirrorEngine() {
 const { track, teardown } = makeTracker();
 afterAll(async () => {
   await teardown();
-  fixture.remove();
+  await fixture.remove();
 });
 
 let sourceRepo: string;
@@ -391,7 +392,7 @@ beforeAll(async () => {
   // What `mirror --from` copies here.
   inPath = await addWorktree(sourceRepo, "wt-in", "feat-in", "i.txt");
 
-  fixture.useCli();
+  await fixture.useCli();
   // Target first: the peer's identity scan takes the first registry
   // match, which must be the peer's own checkout.
   targetProjectId = await projectIdOf(targetRepo);
@@ -1122,18 +1123,7 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
     ...fixture.smEnv,
     SHIGOMORI_DATA_DIR: otherDataDir,
   });
-  const asOtherDevice = new AsyncLocalStorage<boolean>();
-  setCliRunnerImpl({
-    runCli: (args, onDoc, extraEnv, opts) =>
-      (asOtherDevice.getStore() === true ? otherCli : fixture).runCli(
-        args,
-        onDoc,
-        extraEnv,
-        opts,
-      ),
-    requireCliBinary: () => fixture.smBinary,
-    cliFailureMessage,
-  });
+  const otherEngine = await secondEngine(otherDataDir);
   const otherControl = createControlServer({
     appVersion: () => "9.9.9",
     filePath: () => join(otherDataDir, CONTROL_FILE_NAME),
@@ -1142,7 +1132,7 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
   const asOther =
     <I, O>(run: (input: I, ctx: HandlerContext) => O) =>
     (input: I, ctx: HandlerContext) =>
-      asOtherDevice.run(true, () => run(input, ctx));
+      Engine.runAside(otherEngine.runPromise, () => run(input, ctx));
   registerContract(
     controlContract,
     {
@@ -1229,11 +1219,7 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
     progressOf(cloneRun).some((doc) => doc.step === "clone"),
     "the clone step was never reported",
   );
-  setCliRunnerImpl({
-    runCli: fixture.runCli,
-    requireCliBinary: () => fixture.smBinary,
-    cliFailureMessage,
-  });
+  await otherEngine.close();
 });
 
 it("a peer with no session is reported offline", async () => {

@@ -15,7 +15,6 @@
 import assert from "node:assert/strict";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { FRESH_CONFIG_SEED } from "@host/lib/bootstrap";
 import {
   ClientConfigSchema,
   DeviceSettingsPatchSchema,
@@ -40,7 +39,7 @@ it("unset, each setting reads off", () => {
   assert.equal(doubutsuNamesEnabled({}), false);
   assert.equal(doubutsuNamesEnabled({ doubutsuNames: false }), false);
   assert.equal(doubutsuNamesEnabled({ doubutsuNames: true }), true);
-  assert.equal(doubutsuNamesEnabled(FRESH_CONFIG_SEED), true);
+  assert.equal(doubutsuNamesEnabled({ doubutsuNames: true }), true);
   assert.equal(villageLifeEnabled({}), false);
   assert.equal(villageLifeEnabled({ villageLife: false }), false);
   assert.equal(villageLifeEnabled({ villageLife: true }), true);
@@ -65,7 +64,7 @@ it("the form shows each stored value", () => {
   const unset = fromConfig({}, {});
   assert.equal(unset.doubutsuNames, false);
   assert.equal(unset.villageLife, false);
-  const seeded = fromConfig(FRESH_CONFIG_SEED, {});
+  const seeded = fromConfig({ doubutsuNames: true }, {});
   assert.equal(seeded.doubutsuNames, true);
   assert.equal(fromConfig({}, { villageLife: true }).villageLife, true);
 });

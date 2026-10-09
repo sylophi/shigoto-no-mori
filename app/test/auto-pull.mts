@@ -6,12 +6,14 @@
 // file, a detached HEAD, a missing upstream, an app-started script.
 // The sweep is checked to pull only the marked worktree of a project,
 // and the mark (the CLI's, `sm worktrees autopull`) to round-trip
-// through a sandbox registry.json and back out on the identities the
+// through a sandbox store and back out on the identities the
 // sweep reads.
 //
-// Runs against the sm binary built from cli/ (test/lib/smBinary.mts).
+// Runs on the engine in-process, beside the terminal sm on the same
+// store (test/lib/smBinary.mts).
 // Run: pnpm test auto-pull.
 import assert from "node:assert/strict";
+import * as Schema from "effect/Schema";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,28 +30,37 @@ const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
 
 let dataDir: string;
-let sm: Awaited<ReturnType<typeof wireHostCli>>["sm"];
+let wired: Awaited<ReturnType<typeof wireHostCli>>;
+const sm: typeof wired.sm = (...args) => wired.sm(...args);
 beforeAll(async () => {
   dataDir = realpathSync(mkdtempSync(join(tmpdir(), "sm-auto-pull-data-")));
-  ({ sm } = await wireHostCli(dataDir));
+  wired = await wireHostCli(dataDir);
 });
-afterAll(() => {
+afterAll(async () => {
+  await wired.close();
   rmSync(dataDir, { recursive: true, force: true });
 });
 
 const { autoPullWorktree, sweepAutoPull } =
   await import("../host/lib/worktrees/autoPullSweep.ts");
-const { listWorktreeIdentitiesViaCli, setAutoPullViaCli } =
-  await import("../host/ipc/cliDelegate.ts");
-// Loads host modules too, so it waits for the scrub like they do.
-const { readRegistry } = await import("./lib/cliSandbox.mts");
+const { listWorktreeIdentities, setAutoPull } =
+  await import("../host/lib/engineCalls.ts");
 
 const git = sandboxGit(gitEnv);
 
-// The marked ids registry.json holds under the CLI's key.
-function markedInRegistry() {
-  const registry = readRegistry(dataDir);
-  return Object.keys(registry.autoPullWorktrees ?? {}).toSorted();
+const decodeMarks = Schema.decodeUnknownSync(
+  Schema.Array(Schema.Struct({ id: Schema.String, autoPull: Schema.Boolean })),
+);
+
+// The marked ids as the terminal sm reads them from the store, another
+// process than the app's.
+async function markedInStore(): Promise<string[]> {
+  const { docs } = await sm("worktrees", "list", "--identities", "--all");
+  const rows = decodeMarks(docs.at(-1));
+  return rows
+    .filter((row) => row.autoPull)
+    .map((row) => row.id)
+    .toSorted();
 }
 
 // A bare origin, a "project" clone whose main follows origin/main, and
@@ -177,14 +188,14 @@ it("a worktree with an app-started script is skipped", async () => {
   assert.equal(head(project), before);
 });
 
-it("the mark round-trips through registry.json and drops cleanly", async () => {
+it("the mark round-trips through the store and drops cleanly", async () => {
   const { project, root } = makeSandbox(trackTest);
   const linked = join(root, "linked");
   git(project, "worktree", "add", "-q", "-b", "feature", linked);
   const registered = await addProject(sm, project);
   const ids = async () =>
     Object.fromEntries(
-      (await listWorktreeIdentitiesViaCli({ projectId: registered.id })).map(
+      (await listWorktreeIdentities({ projectId: registered.id })).map(
         (identity) => [identity.path, identity],
       ),
     );
@@ -196,16 +207,16 @@ it("the mark round-trips through registry.json and drops cleanly", async () => {
   assert.equal(primaryBefore.autoPull, false);
   const primaryId = primaryBefore.id;
   const linkedId = linkedBefore.id;
-  const row = await setAutoPullViaCli(registered, primaryId, true);
+  const row = await setAutoPull(registered, primaryId, true);
   assert.equal(row.autoPull, true, "the answered row carries the mark");
-  await setAutoPullViaCli(registered, linkedId, true);
-  assert.deepEqual(markedInRegistry(), [linkedId, primaryId].toSorted());
+  await setAutoPull(registered, linkedId, true);
+  assert.deepEqual(await markedInStore(), [linkedId, primaryId].toSorted());
   assert.equal((await ids())[project]?.autoPull, true);
-  await setAutoPullViaCli(registered, primaryId, false);
-  await setAutoPullViaCli(registered, primaryId, false);
-  assert.deepEqual(markedInRegistry(), [linkedId]);
-  await setAutoPullViaCli(registered, linkedId, false);
-  assert.deepEqual(markedInRegistry(), []);
+  await setAutoPull(registered, primaryId, false);
+  await setAutoPull(registered, primaryId, false);
+  assert.deepEqual(await markedInStore(), [linkedId]);
+  await setAutoPull(registered, linkedId, false);
+  assert.deepEqual(await markedInStore(), []);
 });
 
 it("the sweep pulls only the marked worktree of a project and reports the rest untouched", async () => {
@@ -225,12 +236,12 @@ it("the sweep pulls only the marked worktree of a project and reports the rest u
   // Nothing marked: nothing happens.
   let result = await sweepAutoPull(registered.id, new Set());
   assert.deepEqual(result, { pulled: [], failed: [] });
-  const [primary] = await listWorktreeIdentitiesViaCli({
+  const [primary] = await listWorktreeIdentities({
     projectId: registered.id,
   });
   assert.ok(primary !== undefined, "the project lists its primary worktree");
   assert.equal(primary.path, project);
-  await setAutoPullViaCli(registered, primary.id, true);
+  await setAutoPull(registered, primary.id, true);
   result = await sweepAutoPull(registered.id, new Set());
   assert.equal(result.failed.length, 0);
   assert.deepEqual(

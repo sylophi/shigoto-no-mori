@@ -13,15 +13,14 @@
 // left out without costing the rest, a project's leave-out preset is
 // one entry that reads back as picked and falls back when unreadable,
 // a full copy refuses a new key out
-// loud, the host copy persists in
-// registry.json beside the keys the CLI owns and announces only real
+// loud, the host copy persists in the store and announces only real
 // changes, the browser copy does the same off localStorage, and three
 // copies that were never all online together converge through pairwise
 // exchanges alone.
 //
 // Run: pnpm test shared-settings.
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import {
@@ -47,15 +46,21 @@ import {
   SharedSettingsDocSchema,
   type SharedSettingsDoc,
 } from "@shigomori/contracts/schemas/sharedSettings";
-import { initDataDirAt } from "@host/lib/util/paths";
+import * as Engine from "@host/lib/engine";
+import { readDeviceId } from "@host/lib/config/deviceId";
 import {
+  loadSharedSettings,
   onSharedSettingsChange,
   sharedSettingsCopy,
+  sharedSettingsStored,
 } from "@host/lib/sharedSettings/store";
+import * as SharedSettings from "@shigomori/engine/SharedSettings";
+import * as Effect from "effect/Effect";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
 import { it } from "vitest";
 import { memoryStorage, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
+import { hostEngine } from "./lib/smBinary.mts";
 
 const KEY = sharedSettingKeys.quickCreateDevice("github.com/acme/widgets");
 const KIWI = "00000000-0000-4000-8000-00000000000a";
@@ -292,13 +297,27 @@ it("full copy: a new key is refused out loud, while held keys still take writes"
   );
 });
 
-it("host copy: lives in registry.json beside the CLI's keys, stamps with this device, announces only real changes", () => {
+// The host copy as the store holds it, once its writes have landed.
+const stored = async () => {
+  await sharedSettingsStored();
+  return Engine.run(
+    Effect.gen(function* () {
+      return yield* (yield* SharedSettings.SharedSettings).read;
+    }),
+  );
+};
+
+it("host copy: kept in the store, stamps with this device, announces only real changes", async () => {
   const dir = tempDir("sm-shared-settings-", trackTest);
+  // The device id the store imports on its first open.
   writeFileSync(
     join(dir, "registry.json"),
-    JSON.stringify({ projects: [{ id: "p1" }], deviceId: KIWI }),
+    JSON.stringify({ projects: [], deviceId: KIWI }),
   );
-  initDataDirAt(dir);
+  const engine = await hostEngine(dir);
+  trackTest(engine.close);
+  await readDeviceId();
+  await loadSharedSettings();
   const announced: SharedSettingsDoc[] = [];
   onSharedSettingsChange((doc) => announced.push(doc));
 
@@ -322,11 +341,7 @@ it("host copy: lives in registry.json beside the CLI's keys, stamps with this de
   };
   assert.equal(sharedStringSetting(sharedSettingsCopy.merge(newer), KEY), KIWI);
   assert.equal(announced.length, 2);
-
-  const onDisk = JSON.parse(readFileSync(join(dir, "registry.json"), "utf8"));
-  assert.deepEqual(onDisk.projects, [{ id: "p1" }]);
-  assert.equal(onDisk.deviceId, KIWI);
-  assert.deepEqual(onDisk.sharedSettings, newer);
+  assert.deepEqual(await stored(), newer);
 
   // A device leaving the account drops its copy, announced like
   // a change, and an already empty copy clears silently.
@@ -335,19 +350,12 @@ it("host copy: lives in registry.json beside the CLI's keys, stamps with this de
   assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
   sharedSettingsCopy.clear();
   assert.equal(announced.length, 3);
+  assert.deepEqual(await stored(), EMPTY_SHARED_SETTINGS);
   // What comes back from a peer is taken whole again: the clear
   // wrote no tombstones to outrank it.
   assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
   assert.equal(announced.length, 4);
-
-  // Hand-mangled storage reads as empty instead of throwing, and
-  // the next merge fills it back in.
-  writeFileSync(
-    join(dir, "registry.json"),
-    JSON.stringify({ ...onDisk, sharedSettings: { entries: 5 } }),
-  );
-  assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
-  assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
+  assert.deepEqual(await stored(), newer);
 });
 
 it("browser copy: served off localStorage through the same contract, announcing only real changes", async () => {

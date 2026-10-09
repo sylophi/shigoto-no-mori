@@ -13,6 +13,7 @@ import {
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { registerInflightContributor } from "./scripts";
@@ -31,6 +32,13 @@ export const layer = (options: {
     // The engine's git writes mark their repository, so the git
     // watcher skips their echo as it does the host's own.
     Layer.provide(Layer.succeed(Git.GitWrites, beginGitSelfWrite)),
+    // The environment as it is when the graph is built: after the
+    // launch has rebuilt it from the login shell (main/core/shellEnv.ts).
+    // Effect's default reads it once, whenever first asked, which may
+    // be before.
+    Layer.provide(
+      ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv())),
+    ),
   );
 
 export type Services = Layer.Success<ReturnType<typeof layer>>;
@@ -40,6 +48,7 @@ export const {
   layer: adapter,
   run,
   runSyncOr,
+  runAside,
 } = PromiseAdapter.make<Services>("The engine");
 
 type Ids = { readonly projectId?: string; readonly worktreeId?: string };

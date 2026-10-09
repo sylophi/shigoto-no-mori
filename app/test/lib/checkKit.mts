@@ -20,11 +20,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type {
-  CliDoc,
-  CliResult,
-  CliRunnerImpl,
-} from "../../host/ipc/cliDelegate.ts";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -367,10 +362,22 @@ export function fileEquals(path: string, want: string | null): boolean {
   return readOrNull(path) === want;
 }
 
-// The document-run seam the checks drive the sm CLI through: the same
-// NDJSON protocol as the Electron runner (main/electron/cliRunner.ts),
-// collecting every doc, the exit code and a stderr tail. `sm` throws
-// on a non-zero exit with the CLI's own error doc as the message.
+// One NDJSON document the terminal sm printed with --json, and a run's
+// documents, exit code and stderr tail.
+export interface CliDoc {
+  event?: string;
+  [key: string]: unknown;
+}
+
+export interface CliResult {
+  code: number;
+  docs: CliDoc[];
+  stderrTail: string;
+}
+
+// How the checks drive the terminal sm: its --json documents, the exit
+// code and a stderr tail. `sm` throws on a non-zero exit with the
+// binary's own error doc as the message.
 export function cliFailureMessage(result: CliResult, fallback: string): string {
   const error = result.docs.find(
     (doc) => doc.ok === false && typeof doc.error === "string",
@@ -399,17 +406,20 @@ function lineSplitter(onLine: (line: string) => void): (chunk: Buffer) => void {
   };
 }
 
-type RunCli = CliRunnerImpl["runCli"];
+type RunCli = (
+  args: string[],
+  onDoc?: (doc: CliDoc) => void,
+  extraEnv?: Record<string, string>,
+  opts?: { readonly signal?: AbortSignal },
+) => Promise<CliResult>;
 
 export type CliRunner = {
   runCli: RunCli;
   sm(...args: string[]): Promise<CliResult>;
 };
 
-// The runner as the app's runs it (main/electron/cliRunner.ts): its
-// own process group, and a cancel (opts.signal) that kills the group,
-// so a proof can cut an `sm create` short mid-script the way a
-// cancelled move does.
+// The binary in its own process group, and a cancel (opts.signal) that
+// kills the group, so a proof can cut an `sm create` short mid-script.
 export function createCliRunner(
   binary: string,
   env: NodeJS.ProcessEnv,

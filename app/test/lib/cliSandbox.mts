@@ -1,51 +1,23 @@
 // The fixture the CLI-driving proofs (control.mts, mirror.mts,
 // sync-transfer.mts) share: one sandbox holding the data dir and the
-// repos, the sm binary built from cli/ (shared across proofs, see
-// smBinary.mts), git wrappers over the scrubbed environment, and the
-// real CLI runner seam.
+// repos, the terminal sm on it (built once across proofs, see
+// smBinary.mts) beside the engine the host runs on, and git wrappers
+// over the scrubbed environment.
 import { execFile } from "node:child_process";
-import {
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
-import { initDataDirAt, REGISTRY_FILE } from "@host/lib/util/paths";
+import { createCliRunner, scrubProcessGitEnv } from "./checkKit.mts";
 import {
-  cliFailureMessage,
-  createCliRunner,
-  scrubProcessGitEnv,
-} from "./checkKit.mts";
-import { addProject, builtSm, smBinaryPath } from "./smBinary.mts";
+  addProject,
+  builtSm,
+  smBinaryPath,
+  type WiredHostCli,
+  wireHostCli,
+} from "./smBinary.mts";
 
 const execFileP = promisify(execFile);
-
-// What a shelved worktree looked like when it went on the shelf, as the
-// CLI's listing records it (cli/shelf.go).
-type ShelfSnapshot = {
-  at: number;
-  head: string | null;
-  changed: number;
-};
-
-// The parts of registry.json the proofs read back.
-export type RegistryFile = {
-  projects: { id: string; path: string }[];
-  projectOrder?: string[];
-  shelvedWorktrees?: Record<string, boolean>;
-  autoPullWorktrees?: Record<string, boolean>;
-  shelfSnapshots?: Record<string, ShelfSnapshot>;
-};
-
-// The data dir's registry.json as the CLI last wrote it.
-export function readRegistry(dataDir: string): RegistryFile {
-  return JSON.parse(readFileSync(join(dataDir, REGISTRY_FILE), "utf8"));
-}
 
 // execFile's message is just "Command failed". The reason is on
 // stderr.
@@ -161,10 +133,9 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
     await git(repo, ["config", "maintenance.auto", "false"]);
   }
 
-  // The real CLI runner seam (test/lib/checkKit.mts): the same
-  // NDJSON-per-line protocol as the Electron implementation, minus the
-  // child bookkeeping the app needs.
+  // The terminal binary, on the same data dir.
   const { runCli, sm } = createCliRunner(smBinary, smEnv);
+  let wired: WiredHostCli | undefined;
 
   return {
     sandbox,
@@ -180,24 +151,23 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
     disableAutoGc,
     runCli,
     sm,
-    // Builds the sm binary from cli/, unless an earlier proof has.
+    // Builds the terminal binary, unless an earlier proof has.
     buildSm: async () => {
       builtSm();
     },
-    // Seeds the data dir and points the host's CLI delegate at the
-    // built binary through the runner seam.
-    useCli() {
-      initDataDirAt(dataDir);
-      setCliRunnerImpl({
-        runCli,
-        requireCliBinary: () => smBinary,
-        cliFailureMessage,
-      });
+    // Points the host at the sandbox's data dir and brings the engine
+    // up on it, which `remove` closes.
+    async useCli(): Promise<void> {
+      wired = await wireHostCli(dataDir, extraSmEnv);
     },
-    // Registers a repo as a project through the CLI, returning its id.
+    // Registers a repo as a project through the terminal binary,
+    // returning its id.
     async projectIdOf(path: string): Promise<string> {
       return (await addProject(sm, path)).id;
     },
-    remove: () => rmSync(sandbox, { recursive: true, force: true }),
+    remove: async () => {
+      await wired?.close();
+      rmSync(sandbox, { recursive: true, force: true });
+    },
   };
 }
