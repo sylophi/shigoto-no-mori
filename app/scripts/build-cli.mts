@@ -4,8 +4,8 @@
 //   default -> dist-cli/sm   targets ~/.sm  (bundled with the app)
 //   --dev   -> dist-cli/smd  targets ~/.smd (built by `pnpm dev`)
 // The binary finds the darwin helper beside itself, as the app's
-// Resources ship them, so a dev build gets a copy of the one in
-// dist-macfs/ (build it first, as dev-cli.mts does).
+// Resources ship them, so the build gets a copy of the one in
+// dist-macfs/ (build it first, as dev-cli.mts and install-cli.mts do).
 //
 // Run: pnpm cli:build [--dev]
 import { execFileSync } from "node:child_process";
@@ -39,10 +39,6 @@ execFileSync(
   { cwd: join(repoRoot, "packages", "cli"), stdio: "inherit" },
 );
 
-if (flavor === "dev") {
-  const macfs = join(appRoot, MACFS_DIST_DIR, MACFS_BINARY_NAME);
-  if (existsSync(macfs)) {
-    copyFileSync(macfs, join(outdir, MACFS_BINARY_NAME));
-  }
-}
+const macfs = join(appRoot, MACFS_DIST_DIR, MACFS_BINARY_NAME);
+if (existsSync(macfs)) copyFileSync(macfs, join(outdir, MACFS_BINARY_NAME));
 console.log(`built ${outfile} (version ${version})`);

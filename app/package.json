@@ -33,7 +33,6 @@
     "licenses:check": "node scripts/generate-third-party-licenses.mts --check",
     "extract-icon": "scripts/extract-app-icon.sh",
     "dmg:background": "electron scripts/build-dmg-background.cts",
-    "cli": "go run -C ../cli .",
     "cli:build": "node scripts/build-cli.mts",
     "file-sync:build": "node scripts/build-file-sync.mts",
     "macfs:build": "node scripts/build-macfs.mts",

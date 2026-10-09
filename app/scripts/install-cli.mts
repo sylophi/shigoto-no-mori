@@ -1,4 +1,5 @@
-// Builds the prod-flavor CLI and symlinks it into the user's bin dir,
+// Builds the prod-flavor sm (with the darwin helper beside it) and
+// symlinks it into the user's bin dir,
 // the repo-checkout equivalent of the app's Settings install (which
 // links the binary bundled in its Resources). Both command names (sm
 // and shigomori) point at dist-cli/sm in this checkout, so rebuilding
@@ -19,10 +20,12 @@ import { appRoot } from "./lib/appRoot.mts";
 
 const binary = join(appRoot, CLI_DIST_DIR, cliBinaryName("prod"));
 
-execFileSync("node", [join(appRoot, "scripts", "build-cli.mts")], {
-  cwd: appRoot,
-  stdio: "inherit",
-});
+for (const script of ["build-macfs.mts", "build-cli.mts"]) {
+  execFileSync("node", [join(appRoot, "scripts", script)], {
+    cwd: appRoot,
+    stdio: "inherit",
+  });
+}
 
 for (const name of [cliBinaryName("prod"), cliAliasName("prod")]) {
   const link = join(cliUserBinDir(), name);
