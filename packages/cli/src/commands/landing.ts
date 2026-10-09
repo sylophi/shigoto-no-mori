@@ -148,6 +148,8 @@ const landingReporter = (title: { current: string }) =>
             ),
       waiting: (line) =>
         json ? Effect.void : note(styles(stderrColor).dim(line)),
+      note: (line) =>
+        json ? Effect.void : note(styles(stderrColor).dim(line)),
       merged: (event: Doc, pr: { readonly title: string }) =>
         json
           ? emit(event)
