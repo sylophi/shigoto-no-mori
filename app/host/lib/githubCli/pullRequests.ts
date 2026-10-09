@@ -424,8 +424,9 @@ function toReviews(pr: GqlExtrasPullRequest): PullRequestReviews {
   return { decision: pr.reviewDecision, reviewers };
 }
 
-// An attachment (github.com/user-attachments/assets/<id>) in a private
-// repo loads only for a browser signed in to GitHub, which the app's
+// An attachment (github.com/user-attachments/assets/<id>, or the older
+// github.com/<owner>/<repo>/assets/<n>/<id>) in a private repo loads
+// only for a browser signed in to GitHub, which the app's
 // windows aren't, so the markdown body's images stay blank. The body
 // GitHub renders points each at a signed URL anyone can load for five
 // minutes, and an image in the markdown (![](…) or src=…) takes its
@@ -437,7 +438,7 @@ const signedUrls = new Map<string, { url: string; until: number }>();
 const SIGNED_URL =
   /https:\/\/private-user-images\.githubusercontent\.com\/\d+\/\d+-([0-9a-f-]{36})\.[^"]+/g;
 const ATTACHED_IMAGE =
-  /(!\[[^\]]*\]\(\s*<?|\bsrc\s*=\s*["']?)https:\/\/github\.com\/user-attachments\/assets\/([0-9a-f-]{36})/g;
+  /(!\[[^\]]*\]\(\s*<?|\bsrc\s*=\s*["']?)https:\/\/github\.com\/(?:user-attachments\/assets|[\w.-]+\/[\w.-]+\/assets\/\d+)\/([0-9a-f-]{36})/g;
 
 function withSignedImages(body: string, bodyHTML: string): string {
   const now = Date.now();

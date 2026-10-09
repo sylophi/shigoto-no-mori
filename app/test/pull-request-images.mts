@@ -30,6 +30,7 @@ const PNG = "11111111-1111-4111-8111-111111111111";
 const TAG = "22222222-2222-4222-8222-222222222222";
 const VIDEO = "33333333-3333-4333-8333-333333333333";
 const UNSIGNED = "44444444-4444-4444-8444-444444444444";
+const LEGACY = "55555555-5555-4555-8555-555555555555";
 const attachment = (id: string) =>
   `https://github.com/user-attachments/assets/${id}`;
 const signed = (id: string, ext: string, jwt: string) =>
@@ -41,6 +42,7 @@ const body = [
   `<img src=${attachment(PNG)}>`,
   attachment(VIDEO),
   `![gone](${attachment(UNSIGNED)})`,
+  `![old](https://github.com/o/r/assets/7/${LEGACY})`,
 ].join("\n\n");
 
 const row = {
@@ -77,6 +79,7 @@ const graphql = (jwt: string) =>
                 `<a href="${signed(PNG, "png", jwt)}"><img src="${signed(PNG, "png", jwt)}" alt="screenshot"></a>`,
                 `<img src="${signed(TAG, "png", `${jwt}&amp;v=1`)}" alt="tag">`,
                 `<video src="${signed(VIDEO, "mp4", jwt)}"></video>`,
+                `<img src="${signed(LEGACY, "png", jwt)}" alt="old">`,
               ].join("\n"),
               author: { login: "me" },
               reviewDecision: null,
@@ -139,23 +142,43 @@ esac
       git(repo, "init", "-q");
       git(repo, "remote", "add", "origin", "https://github.com/o/r.git");
 
-      writeFileSync(answer, graphql("first"));
-      const first = await getWorktreePullRequest(repo, "pics");
-      assert.equal(
-        first?.body,
+      const signedBody = (jwt: string) =>
         [
-          `[![screenshot](${signed(PNG, "png", "first")})](${attachment(PNG)})`,
-          `<img width="300" alt="tag" src="${signed(TAG, "png", "first&v=1")}" />`,
-          `<img src=${signed(PNG, "png", "first")}>`,
+          `[![screenshot](${signed(PNG, "png", jwt)})](${attachment(PNG)})`,
+          `<img width="300" alt="tag" src="${signed(TAG, "png", `${jwt}&v=1`)}" />`,
+          `<img src=${signed(PNG, "png", jwt)}>`,
           attachment(VIDEO),
           `![gone](${attachment(UNSIGNED)})`,
-        ].join("\n\n"),
+          `![old](${signed(LEGACY, "png", jwt)})`,
+        ].join("\n\n");
+
+      writeFileSync(answer, graphql("first"));
+      assert.equal(
+        (await getWorktreePullRequest(repo, "pics"))?.body,
+        signedBody("first"),
         "images signed, links and an unsigned image as written",
       );
 
       writeFileSync(answer, graphql("second"));
-      const again = await getWorktreePullRequest(repo, "pics");
-      assert.equal(again?.body, first.body, "a refetch keeps the signed URLs");
+      assert.equal(
+        (await getWorktreePullRequest(repo, "pics"))?.body,
+        signedBody("first"),
+        "a refetch keeps the signed URLs",
+      );
+
+      // Four minutes on, a URL has a minute left, and the next read
+      // takes the newly signed one.
+      const now = Date.now;
+      Date.now = () => now() + 4 * 60_000;
+      track(() => {
+        Date.now = now;
+      });
+      writeFileSync(answer, graphql("third"));
+      assert.equal(
+        (await getWorktreePullRequest(repo, "pics"))?.body,
+        signedBody("third"),
+        "a URL near its expiry is signed anew",
+      );
     },
   );
 
