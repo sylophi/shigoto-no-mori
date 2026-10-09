@@ -15,7 +15,7 @@
 // ways with credit-based backpressure, so a slow local consumer pauses
 // the peer's source and the reverse.
 import type { Server, Socket } from "node:net";
-import type { ChannelHandle, ChannelMux } from "@shared/ipc/socket/channels";
+import type { ChannelHandle, ChannelMux } from "@shared/remote/channels";
 import { mintHexId } from "@host/lib/hexId";
 import { bridgeDuplexToChannel } from "@host/socket/channelStreams";
 

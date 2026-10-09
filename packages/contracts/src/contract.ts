@@ -9,6 +9,7 @@ import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import type { ContractSchema } from "./codec.ts";
+import { CallFailureSchema } from "./errors.ts";
 import type { GrantId } from "./grants.ts";
 
 // Every contract module tags its calls with the side that serves them.
@@ -138,18 +139,27 @@ export const invoke = <
   input: I,
   output: O,
   options: InvokeOptions = {},
-): Rpc.Rpc<Key, I, O> =>
-  Rpc.make(key, { payload: input, success: output }).annotateMerge(
-    annotationsOf(options),
-  ) as Rpc.Rpc<Key, I, O>;
+): Rpc.Rpc<Key, I, O, typeof CallFailureSchema> =>
+  Rpc.make(key, {
+    payload: input,
+    success: output,
+    error: CallFailureSchema,
+  }).annotateMerge(annotationsOf(options)) as Rpc.Rpc<
+    Key,
+    I,
+    O,
+    typeof CallFailureSchema
+  >;
 
 export const broadcast = <const Key extends string, P extends ContractSchema>(
   key: Key,
   payload: P,
   options: { readonly remote?: boolean } = {},
 ): Rpc.Rpc<Key, typeof Schema.Void, RpcSchema.Stream<P, typeof Schema.Never>> =>
+  // A push is a read: whoever may hear it hears it, so it is ungated
+  // by its own say rather than by a default.
   Rpc.make(key, { success: payload, stream: true }).annotateMerge(
-    annotationsOf(options),
+    annotationsOf({ ...options, gated: false }),
   );
 
 // A contract module: the group of its calls, each tagged with its

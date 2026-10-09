@@ -48,11 +48,8 @@ import {
   SyncPullProgressSchema,
   SyncPullWorktreePayloadSchema,
 } from "@shigomori/contracts/modules/sync";
-import {
-  CHANNEL_MAX_FRAME_BYTES,
-  type ChannelEndpoint,
-  type ChannelHandle,
-} from "@shared/ipc/socket/channels";
+import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
+import type { ChannelEndpoint, ChannelHandle } from "@shared/remote/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
   CommitHashSchema,
@@ -436,7 +433,7 @@ async function sendBundle(
         // A buffer per piece: the channel holds on to what it could not
         // send yet.
         const piece = Buffer.allocUnsafe(
-          Math.min(CHANNEL_MAX_FRAME_BYTES, bytes - offset),
+          Math.min(CHANNEL_MAX_WRITE_BYTES, bytes - offset),
         );
         // oxlint-disable-next-line no-await-in-loop -- pieces go in order
         const { bytesRead } = await file.read(piece, 0, piece.length, offset);

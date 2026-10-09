@@ -8,7 +8,7 @@
 // the session every remote-forest query is riding on.
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
-import type { ChannelMux } from "@shared/ipc/socket/channels";
+import type { ChannelMux } from "@shared/remote/channels";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";

@@ -20,11 +20,8 @@
 // error) resets whatever is left. A peer end ends the duplex. A peer
 // reset destroys it.
 import type { Duplex } from "node:stream";
-import {
-  type ChannelEndpoint,
-  type ChannelHandle,
-  MAX_CHANNELS_PER_CONNECTION,
-} from "@shared/ipc/socket/channels";
+import type { ChannelEndpoint, ChannelHandle } from "@shared/remote/channels";
+import { MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
   CHANNEL_OPEN_NO_CHANNELS,
@@ -114,10 +111,10 @@ export function requireChannels(
 ): NonNullable<HandlerContext["channels"]> {
   const channels = ctx.channels;
   if (channels === undefined) throw new Error(CHANNEL_OPEN_NO_CHANNELS);
-  if (channels.has(channelId) || ctx.signal.aborted) {
+  if (channels.has(channelId) || ctx.connection.aborted) {
     throw new Error(CHANNEL_OPEN_TAKEN);
   }
-  if (channels.size() >= MAX_CHANNELS_PER_CONNECTION) {
+  if (channels.size() >= MAX_CHANNELS_PER_LINK) {
     throw new Error(CHANNEL_OPEN_TOO_MANY);
   }
   return channels;

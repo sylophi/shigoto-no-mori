@@ -31,7 +31,7 @@
 // keeper's last failure so the renderer surfaces the honest cause
 // rather than a bare "not connected".
 import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
-import type { ChannelMux } from "@shared/ipc/socket/channels";
+import type { ChannelMux } from "@shared/remote/channels";
 import type { Handlers } from "@shigomori/contracts/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
 import { NoDirectConnectionError } from "@shigomori/contracts/errors";

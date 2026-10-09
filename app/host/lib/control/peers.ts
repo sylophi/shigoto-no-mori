@@ -19,7 +19,7 @@ import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shared/projectPaths";
 import { isHubRefusal } from "@shared/account/service";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import { PROBE_TIMEOUT_MS } from "@shared/ipc/socket/frames";
+import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import {
   peerClient,

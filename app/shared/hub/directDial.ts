@@ -79,8 +79,8 @@ import {
   RemoteConnectError,
   type DeviceConnection,
   type PendingDeviceConnection,
-} from "@shared/ipc/socket/wsClientTransport";
-import { HELLO_TIMEOUT_MS } from "@shared/ipc/socket/frames";
+} from "@shared/remote/deviceLink";
+import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 
 // The DeviceConnection shape, so everything downstream of a direct
@@ -158,7 +158,7 @@ export type DirectDialerDeps = {
   // The candidate sockets' constructor, defaulting to the platform
   // global WebSocket. The Electron main process injects the `ws`
   // package so a failed candidate names its errno instead of a bare
-  // 1006 (see ClientSocket in wsClientTransport.ts).
+  // 1006 (see OpenClientSocket in shared/remote/deviceLink.ts).
   openSocket?: OpenClientSocket;
   // Test seams. Real callers take the defaults and real time.
   deadlineMs?: number;
@@ -173,6 +173,8 @@ export type DirectDialer = {
 };
 
 type CandidateFailure = { candidate: DirectCandidate; error: unknown };
+
+const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
 
 // The exhaustion reject: every candidate retired and none refused its
 // ticket. Its message names EVERY candidate and how it
@@ -297,11 +299,11 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
         (candidate, index) =>
           openDevice({
             url: candidate.url,
-            openSocket: deps.openSocket,
+            openSocket: deps.openSocket ?? openGlobalSocket,
             // This candidate's own single-use ticket. It never reaches
             // the wire: a candidate address is answered by whoever
             // holds it on the network we happen to be on, so both ends
-            // prove possession instead (shared/ipc/socket/proof.ts).
+            // prove possession instead (shared/remote/proof.ts).
             ticket: candidate.ticket,
             appVersion: deps.localAppVersion,
             localDeviceId: deps.localDeviceId,
@@ -314,15 +316,14 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             onClose: () => {
               if (winnerIndex === index) opts?.onClose?.();
             },
-            onAnyPush: (channel, payload) => {
+            onPush: (channel, payload) => {
               if (winnerIndex === index) {
                 deps.onAnyPush?.(deviceId, channel, payload);
               }
             },
-            // The hello timer starts at open and covers the TCP open
-            // and any time spent queued behind another hello, so every
-            // candidate self-settles within the overall deadline.
-            helloTimeoutMs: remainingMs,
+            // The open is bounded by what is left of the attempt; the
+            // race's deadline abandons whatever is still waiting.
+            deadlineMs: remainingMs,
           }),
       );
 

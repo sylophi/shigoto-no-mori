@@ -13,15 +13,9 @@
 // credential-backed ticket mint) arrives through HubConnectOpts.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isDeviceRevoked, isHubRefusal } from "@shared/account/service";
-import {
-  HELLO_TIMEOUT_MS,
-  TERMINATE_GRACE_MS,
-} from "@shared/ipc/socket/frames";
-import {
-  createHeartbeat,
-  type HeartbeatOptions,
-} from "@shared/ipc/socket/heartbeat";
-import { RemoteConnectError } from "@shared/ipc/socket/wsClientTransport";
+import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
+import { createHeartbeat, type HeartbeatOptions } from "@shared/hub/heartbeat";
+import { RemoteConnectError } from "@shared/remote/deviceLink";
 import {
   createHubLink,
   type HubLink,
@@ -56,6 +50,10 @@ import { log } from "@shared/log";
 // knob because the device hub has one honest value here,
 // HELLO_TIMEOUT_MS.
 const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
+
+// After an owner close, how long a stalled device hub has before its
+// socket is cut, so it cannot hold the close for ws's ~30s window.
+const TERMINATE_GRACE_MS = 1_500;
 
 // One dialed hub socket as the platform adapter exposes it to the
 // core. The adapter owns the platform WebSocket and its event wiring,

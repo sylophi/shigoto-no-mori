@@ -1,29 +1,23 @@
-// Durable proof for the direct listener (host/socket/server.ts).
-// Starts a real listener on an ephemeral loopback port (the shared
-// fixture in test/lib/directBoot.mts) and drives real ws clients
-// against it through the ticket-proof handshake, asserting the
-// dispatch, broadcast and framing paths PLUS the hardening:
-// terminate-on-bad-proof (a hello with no proof, the retired
-// token-only shape, included), post-timeout hello rejection,
-// oversized-frame rejection, the Origin gate (origin-less, loopback
-// and the configured web origin pass, the renderer scheme and a
-// foreign web origin are refused), the no-handler answer a non-remote
-// channel gets, the per-socket in-flight cap, the stopped-listener
-// generation guard, liveness on both ends, deflated frames, and the
-// contract invariant that every host invoke is explicitly tagged
-// remote true or false.
+// Durable proof for the device link's listener (host/socket/server.ts)
+// and its dialer (shared/remote/deviceLink.ts): a real listener on an
+// ephemeral loopback port (test/lib/directBoot.mts), dialed through the
+// ticket handshake by the real client, asserting the calls, the pushes,
+// the errors crossing as their classes, and the hardening: a refused
+// ticket and the lockout behind it, the protocol version, calls before
+// a hello, the hello timeout, the Origin gate, the frame cap, the
+// in-flight cap, supersede, liveness and the listener stopping.
 //
-// The command gate: the listener serves a channel registered
-// gated:false to every authed peer, and anything else (a mutating
-// or untagged channel) only while the host accepts commands, refusing
-// it with the contract's CommandRefusedError BEFORE its handler runs,
-// which the client transport decodes back into its class.
-// The switch's one exception, a call the host itself invited
+// The command gate (CommandGate): a call annotated gated:false runs for
+// every linked peer, and any other only while the host accepts
+// commands, refused with CommandRefusedError before its handler runs.
+// The switch's one exception, a call the host invited
 // (WsServerTicketAuth.isInvited), runs with the switch off, and the
-// byte channel it attaches outlives the drop the switch-off deals
-// every other channel.
-// The grant flipping live on one session, the ticket rules and the
-// brokering are direct-plane.mts's.
+// byte channel it attaches outlives the drop the switch-off deals every
+// other channel.
+//
+// Interruption: a call its caller cancels, or whose link drops, is
+// interrupted on the host, its handler's signal aborted. Tracing: the
+// host's span for a call continues the caller's trace.
 //
 // The golden read surface: every channel servable ungated (remote:true,
 // gated:false) is pinned in read-surface.golden.json, so flipping a
@@ -35,41 +29,35 @@
 //
 // covers: app/test/read-surface.golden.json app/main/ipc/register.ts
 import assert from "node:assert/strict";
-import { deflateRawSync } from "node:zlib";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { WebSocket, WebSocketServer } from "ws";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Cause from "effect/Cause";
+import * as Layer from "effect/Layer";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
+import * as Tracer from "effect/Tracer";
+import { WebSocket } from "ws";
 import { expect, it } from "vitest";
 import {
-  CLOSE_AUTH_FAILED,
-  CLOSE_GOING_AWAY,
-  CLOSE_HELLO_FAILED,
-  encodeFrame,
-  MAX_IN_FLIGHT_PER_PEER,
-  type ClientFrame,
-  type ServerFrame,
-} from "@shared/ipc/socket/frames";
-import { DEFLATED_FRAME_KIND } from "@shared/ipc/socket/deflatedFrame";
-import { handshakeProof, newHandshakeNonce } from "@shared/ipc/socket/proof";
-import {
-  openDevice,
-  type ConnectDeviceOptions,
-} from "@shared/ipc/socket/wsClientTransport";
-import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
-import {
   CommandRefusedError,
-  UnknownWorktreeError,
+  LinkRefusedError,
+  LinkUnauthenticatedError,
+  ProtocolVersionMismatchError,
+  RemoteCallError,
+  UnknownProjectError,
 } from "@shigomori/contracts/errors";
-import { VoidSchema } from "@shigomori/contracts/schemas";
 import {
   annotation,
   callOf,
   callsOf,
   channelOf,
-  defineContract,
   Gated,
   Grant,
-  invoke,
   isBroadcast,
   MovesHostState,
   payloadOf,
@@ -79,20 +67,10 @@ import {
 import { GRANTS } from "@shigomori/contracts/grants";
 import { controlContract } from "@shigomori/contracts/modules/control";
 import { safeDecode } from "@shigomori/contracts/codec";
-import {
-  classificationGap,
-  registerContract,
-} from "@shared/ipc/registerContract";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
-import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
-import type { WsServerBinding, WsServerStartOpts } from "@host/socket/server";
+import { classificationGap } from "@shared/ipc/registerContract";
+import type { HandlerContext } from "@shared/ipc/transport";
 import { accountContract } from "@shigomori/contracts/modules/account";
-// The authoritative contract registry (the same source check-host-boundary
-// rule 6 derives from), so the explicit-remote-tag invariant covers every
-// host module automatically instead of a hand-maintained list a new module
-// could silently skip.
 import { allContractModules } from "@shared/ipc/client";
-// Contract modules referenced by the explicit spot-checks below.
 import { cliContract } from "@shigomori/contracts/modules/cli";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
@@ -106,918 +84,596 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import {
-  boundPort,
-  delay,
-  handlerCtx,
-  type Track,
-  waitFor,
-} from "./lib/checkKit.mts";
+  type DeviceConnection,
+  openDevice,
+  RemoteConnectError,
+} from "@shared/remote/deviceLink";
+import { LinkGroup, MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
+import { handshakeProof, newHandshakeNonce } from "@shared/remote/proof";
+import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
+import type { ChannelHandle } from "@shared/remote/channels";
+import { type Track, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import {
+  type DirectListener,
   type DirectListenerOpts,
   mintTicket,
   startDirectListener,
 } from "./lib/directBoot.mts";
-import type { ChannelHandle, ChannelMux } from "@shared/ipc/socket/channels";
 
-const WS_CLOSE_TOO_BIG = 1009;
 // The dialing peer every ticket below is minted for.
 const CLIENT = "client";
-// A ticket the listener never minted: its proof answers nothing.
-const UNMINTED = "smpt_never_minted";
-// What the local cloudflared connector adds to a tunnel-borne
-// connection, which the listener reads as the "tunnel" candidate kind.
-const TUNNEL_HEADERS = { "cf-connecting-ip": "203.0.113.7" };
+const HOST = "B";
 
-// Shared handler state referenced by registerTestHandlers. Reset by the
-// tests that use it.
-let hangResolvers: ((value: unknown) => void)[] = [];
-let countExecutions = 0;
-let mutateExecutions = 0;
-let untaggedExecutions = 0;
-// The byte channels test:open attached, by id: what arrived on each
-// and whether the peer (or the switch-off drop) reset it.
-const openedChannels = new Map<string, { data: string[]; reset: boolean }>();
-// Two client-minted channel ids (32 hex chars, channels.ts).
-const GRANTED_CHANNEL = "0123456789abcdef0123456789abcdef";
-const INVITED_CHANNEL = "fedcba9876543210fedcba9876543210";
+// What the test handlers saw.
+type Seen = {
+  refreshes: number;
+  hanging: { signal: AbortSignal; resolve: (value: unknown) => void }[];
+  channels: Map<
+    string,
+    { data: string[]; reset: boolean; handle: ChannelHandle | null }
+  >;
+};
 
-// The client's end of a byte channel, attached ahead of the open that
-// names it, as a real caller does. `reset` records the host's RESET.
-function openChannel(
-  connection: { channels: ChannelMux },
-  channelId: string,
-): { handle: ChannelHandle; reset: boolean } {
-  const state = { reset: false } as { handle: ChannelHandle; reset: boolean };
-  state.handle = connection.channels.attach(channelId, {
-    onData: (_data, consumed) => consumed(),
-    onEnd: () => {},
-    onReset: () => {
-      state.reset = true;
-    },
-    onWritable: () => {},
+// Stand-ins for real handlers, on real contract calls: a read
+// (git:sweep), a command (git:refreshProject, which also fails on cue
+// and notifies its caller), a call that waits to be released
+// (worktrees:list, a read) and a byte-stream open (forward:open, a
+// command).
+function serve(listener: DirectListener, seen: Seen): void {
+  const { binding } = listener;
+  binding.handle("git:sweep", async () => ({ leaseMs: 5 }));
+  binding.handle("git:refreshProject", async (ctx, input) => {
+    seen.refreshes += 1;
+    const { projectId } = input as { projectId: string };
+    if (projectId === "gone") throw new UnknownProjectError({ projectId });
+    if (projectId === "plain") {
+      throw Object.assign(new Error("boom"), { code: "EBOOM" });
+    }
+    if (projectId === "notify") {
+      ctx.notifier(gitContract, "projectChanged")({ projectId: "mine" });
+    }
   });
-  return state;
-}
-
-function registerTestHandlers(binding: WsServerBinding) {
-  // The generic-path handlers are EXPLICIT reads (gated:false): the
-  // command gate is fail-closed and serves only channels proven
-  // read-only while commands are off (the fixture's default), so
-  // tagging them keeps the dispatch/framing/broadcast tests serving.
-  binding.handle("test:echo", async (_ctx, raw) => raw, { gated: false });
-  binding.handle(
-    "test:hang",
-    () => new Promise((resolve) => hangResolvers.push(resolve)),
-    { gated: false },
-  );
-  binding.handle(
-    "test:count",
-    async () => {
-      countExecutions += 1;
-    },
-    { gated: false },
-  );
-  // A read-classified handler that throws, so the typed-error test can
-  // prove a REAL failure stays a plain Error rather than the refusal
-  // type.
-  binding.handle(
-    "test:fail",
-    async () => {
-      throw new Error("boom");
-    },
-    { gated: false },
-  );
-  // A handler failing with a contract error, which the client must get
-  // back as its class with its fields.
-  binding.handle(
-    "test:gone",
-    async () => {
-      throw new UnknownWorktreeError({ worktreeId: "wt-gone" });
-    },
-    { gated: false },
-  );
-  // A mutating handler and an untagged one, each with an execution
-  // counter, so the gate tests can prove the handler body never ran on
-  // a refusal.
-  binding.handle(
-    "test:mutate",
-    async () => {
-      mutateExecutions += 1;
-      return "mutated";
-    },
-    { gated: true },
-  );
-  binding.handle("test:untagged", async () => {
-    untaggedExecutions += 1;
-    return "ran";
-  });
-  // A byte-channel open (gated, like every real one): attaches the far
-  // end under the caller's id and records what arrives on it, for the
-  // invitation test.
-  binding.handle("test:open", async (ctx, raw) => {
-    const { channelId } = raw as { channelId: string };
-    assert.ok(ctx.channels, "the direct listener supplies byte channels");
-    const record = { data: [] as string[], reset: false };
-    openedChannels.set(channelId, record);
-    ctx.channels.attach(channelId, {
-      onData: (bytes, consumed) => {
-        record.data.push(Buffer.from(bytes).toString("utf8"));
+  binding.handle("worktrees:list", (ctx) => hang(seen, ctx));
+  binding.handle("forward:open", async (ctx, input) => {
+    const { channelId } = input as { channelId: string };
+    const record = {
+      data: [] as string[],
+      reset: false,
+      handle: null as ChannelHandle | null,
+    };
+    const channels = ctx.channels;
+    assert.ok(channels !== undefined, "the link carries no channels");
+    record.handle = channels.attach(channelId, {
+      onData: (data, consumed) => {
+        record.data.push(Buffer.from(data).toString());
+        // Echoed back, so the dialer reads what it wrote.
+        record.handle?.write(data);
         consumed();
       },
-      onEnd: () => {},
+      onEnd: () => record.handle?.end(),
       onReset: () => {
         record.reset = true;
       },
       onWritable: () => {},
     });
-    return "opened";
+    seen.channels.set(channelId, record);
   });
 }
 
-// The shared listener fixture with this check's test handlers, a short
-// hello timeout, and a mint for the one peer every dial here claims to
-// be. `kind` is the candidate kind the connection will arrive as:
-// "tunnel" for one carrying TUNNEL_HEADERS, "lan" otherwise.
-async function startListener(
+function hang(seen: Seen, ctx: HandlerContext): Promise<unknown> {
+  return new Promise((resolve) => {
+    seen.hanging.push({ signal: ctx.signal, resolve });
+  });
+}
+
+async function listen(
   track: Track,
-  start: Partial<WsServerStartOpts> = {},
-  isInvited?: DirectListenerOpts["isInvited"],
-) {
+  opts: DirectListenerOpts = {},
+): Promise<{ listener: DirectListener; seen: Seen }> {
+  const seen: Seen = { refreshes: 0, hanging: [], channels: new Map() };
   const listener = await startDirectListener(track, {
-    deviceId: "host-device",
-    registerHandlers: registerTestHandlers,
-    start: { helloTimeoutMs: 300, ...start },
-    ...(isInvited === undefined ? {} : { isInvited }),
-  });
-  return {
-    ...listener,
-    url: `ws://127.0.0.1:${listener.port}`,
-    mint: (kind: DirectCandidateKind = "lan", deviceId = CLIENT) =>
-      mintTicket(listener.tickets, deviceId, kind),
-  };
-}
-type Listener = Awaited<ReturnType<typeof startListener>>;
-
-type Closed = { code: number; reason: string };
-
-function connect(url: string, headers?: Record<string, string>) {
-  const ws = new WebSocket(url, headers ? { headers } : undefined);
-  const frames: ServerFrame[] = [];
-  const frameWaiters: ((frame: ServerFrame) => void)[] = [];
-  let closed: Closed | null = null;
-  const closeWaiters: ((closed: Closed) => void)[] = [];
-  ws.on("message", (data) => {
-    const frame: ServerFrame = JSON.parse(data.toString("utf8"));
-    const waiter = frameWaiters.shift();
-    if (waiter) waiter(frame);
-    else frames.push(frame);
-  });
-  ws.on("close", (code, reason) => {
-    closed = { code, reason: reason.toString("utf8") };
-    for (const waiter of closeWaiters.splice(0)) waiter(closed);
-  });
-  const nextFrame = () =>
-    new Promise<ServerFrame>((resolve) => {
-      const frame = frames.shift();
-      if (frame) resolve(frame);
-      else frameWaiters.push(resolve);
-    });
-  return {
-    ws,
-    opened: new Promise<void>((resolve, reject) => {
-      ws.once("open", () => resolve());
-      ws.once("error", (error) => reject(error));
-    }),
-    send: (frame: ClientFrame) => ws.send(encodeFrame(frame)),
-    pending: () => frames.length,
-    nextFrame,
-    // The next frame, which must be a res.
-    nextRes: async () => {
-      const frame = await nextFrame();
-      assert.equal(frame.t, "res");
-      return frame;
+    deviceId: HOST,
+    ...opts,
+    registerHandlers: (binding) => {
+      serve({ binding } as DirectListener, seen);
+      opts.registerHandlers?.(binding);
     },
-    waitClose: () =>
-      new Promise<Closed>((resolve) => {
-        if (closed) resolve(closed);
-        else closeWaiters.push(resolve);
-      }),
-    close: () => ws.close(),
-  };
-}
-type RawClient = ReturnType<typeof connect>;
-
-// The result of an ok res frame.
-function resultOf(frame: ServerFrame): unknown {
-  assert(frame.t === "res" && frame.ok, "expected an ok res frame");
-  return frame.result;
-}
-
-// The client half of the handshake on a raw socket: read the host's
-// challenge, then hello with a proof of `ticket` over both nonces.
-// Resolves with what the host's welcome proof must be. `extra` rides
-// the hello (a deflate ask).
-async function sendProvenHello(
-  client: RawClient,
-  ticket: string,
-  extra: Partial<Extract<ClientFrame, { t: "hello" }>> = {},
-) {
-  const challenge = await client.nextFrame();
-  assert.equal(challenge.t, "challenge", "the host must open with a nonce");
-  const nonce = newHandshakeNonce();
-  client.send({
-    t: "hello",
-    deviceId: CLIENT,
-    appVersion: "1",
-    nonce,
-    proof: await handshakeProof(ticket, "client", challenge.nonce, nonce),
-    deflate: false,
-    ...extra,
   });
-  return handshakeProof(ticket, "host", challenge.nonce, nonce);
+  return { listener, seen };
 }
 
-// `extra` rides on the hello, and a deviceId in it gets its own ticket.
-async function authenticate(
-  listener: Listener,
-  {
-    headers,
-    kind,
-    extra,
-  }: {
-    headers?: Record<string, string>;
-    kind?: DirectCandidateKind;
-    extra?: Partial<Extract<ClientFrame, { t: "hello" }>>;
-  } = {},
-) {
-  const client = connect(listener.url, headers);
-  await client.opened;
-  const hostProof = await sendProvenHello(
-    client,
-    listener.mint(
-      kind ?? (headers === undefined ? "lan" : "tunnel"),
-      extra?.deviceId,
-    ),
-    extra,
-  );
-  const welcome = await client.nextFrame();
-  assert.equal(
-    welcome.t,
-    "welcome",
-    "expected a welcome frame after a proven hello",
-  );
-  return { client, welcome, hostProof };
-}
+type DialOpts = {
+  deviceId?: string;
+  ticket?: string;
+  headers?: Record<string, string>;
+  onClose?: () => void;
+  protocolVersion?: number;
+};
 
-// The real client transport against a URL, holding `ticket`.
-function dial(
-  url: string,
-  ticket: string,
-  overrides: Partial<ConnectDeviceOptions> = {},
-) {
+function dialing(listener: DirectListener, opts: DialOpts = {}) {
+  const deviceId = opts.deviceId ?? CLIENT;
   return openDevice({
-    url,
-    ticket,
-    appVersion: "1",
-    localDeviceId: CLIENT,
-    onClose: () => {},
-    ...overrides,
-  }).authenticate();
+    url: `ws://127.0.0.1:${listener.port}`,
+    ticket: opts.ticket ?? mintTicket(listener.tickets, deviceId),
+    appVersion: "1.0.0",
+    localDeviceId: deviceId,
+    expectedDeviceId: HOST,
+    onClose: opts.onClose ?? (() => {}),
+    openSocket: (url) => new WebSocket(url, { headers: opts.headers }),
+    deadlineMs: 3000,
+    ...(opts.protocolVersion === undefined
+      ? {}
+      : { protocolVersion: opts.protocolVersion }),
+  });
 }
 
-// A stand-in host, to put exact bytes on the wire: runs the proof
-// handshake for FAKE_TICKET, then hands the socket to the check.
-// `onFrame` sees every client frame after the welcome.
-const FAKE_TICKET = "smpt_fake_host_ticket";
-async function fakeHost(
+async function dial(
   track: Track,
-  {
-    afterWelcome,
-    onFrame,
-  }: {
-    afterWelcome?: (ws: WebSocket) => void;
-    onFrame?: (ws: WebSocket, frame: ClientFrame) => void;
-  } = {},
+  listener: DirectListener,
+  opts: DialOpts = {},
+): Promise<DeviceConnection> {
+  const connection = await dialing(listener, opts).authenticate();
+  track(() => connection.close());
+  return connection;
+}
+
+async function dialFails(
+  listener: DirectListener,
+  opts: DialOpts = {},
+): Promise<RemoteConnectError> {
+  const error = await dialing(listener, opts)
+    .authenticate()
+    .then(
+      () => assert.fail("the dial linked"),
+      (failure: unknown) => failure,
+    );
+  assert.ok(error instanceof RemoteConnectError, String(error));
+  return error;
+}
+
+const invoke = (
+  connection: DeviceConnection,
+  channel: string,
+  input?: unknown,
+  signal?: AbortSignal,
+) => connection.transport.invoke(channel, input, { signal });
+
+const rejection = (promise: Promise<unknown>) =>
+  promise.then(
+    () => assert.fail("the call resolved"),
+    (error: unknown) => error,
+  );
+
+// The link's RPC without the dialer: for what the dialer never does
+// (a call before its hello, a hello on another version, a peer that
+// never pings).
+async function rawLink(
+  track: Track,
+  listener: DirectListener,
+  opts: { pingInterval?: number } = {},
 ) {
-  const wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
-  await new Promise((resolve) => wss.once("listening", resolve));
-  track(
-    () =>
-      new Promise<void>((resolve) => {
-        for (const ws of wss.clients) ws.terminate();
-        wss.close(() => resolve());
-      }),
+  const scope = Scope.makeUnsafe();
+  track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const ws = new WebSocket(`ws://127.0.0.1:${listener.port}`);
+  const closed = new Promise<number>((resolve) =>
+    ws.on("close", (code) => resolve(code)),
   );
-  wss.on("connection", (ws) => {
-    const hostNonce = newHandshakeNonce();
-    ws.send(encodeFrame({ t: "challenge", nonce: hostNonce }));
-    let welcomed = false;
-    ws.on("message", async (data) => {
-      const frame: ClientFrame = JSON.parse(data.toString("utf8"));
-      if (welcomed) {
-        onFrame?.(ws, frame);
-        return;
-      }
-      welcomed = true;
-      assert(frame.t === "hello" && frame.nonce !== undefined);
-      const proof = await handshakeProof(
-        FAKE_TICKET,
-        "host",
-        hostNonce,
-        frame.nonce,
+  const client = await Effect.runPromise(
+    Effect.gen(function* () {
+      const socket = yield* Socket.fromWebSocket(Effect.succeed(ws));
+      const protocol = yield* RpcClient.makeProtocolSocket({
+        pingInterval: opts.pingInterval ?? 5_000,
+        retryPolicy: Schedule.recurs(0),
+      }).pipe(
+        Effect.provideService(Socket.Socket, socket),
+        Effect.provide(RpcSerialization.layerJson),
       );
-      ws.send(
-        encodeFrame({
-          t: "welcome",
-          deviceId: "fake-host",
-          appVersion: "1",
-          proof,
-        }),
+      return yield* RpcClient.make(LinkGroup, { flatten: true }).pipe(
+        Effect.provideService(RpcClient.Protocol, protocol),
       );
-      afterWelcome?.(ws);
-    });
-  });
-  return `ws://127.0.0.1:${boundPort(wss)}`;
-}
-const deflatedFrame = (frame: ServerFrame) =>
-  Buffer.concat([
-    Buffer.from([DEFLATED_FRAME_KIND]),
-    deflateRawSync(Buffer.from(encodeFrame(frame))),
-  ]);
-
-// The raw messages a socket receives, binary or text, in order.
-function rawMessages(ws: WebSocket) {
-  const seen: { data: Buffer; isBinary: boolean }[] = [];
-  ws.on("message", (data, isBinary) => {
-    assert(Buffer.isBuffer(data), "ws hands over Buffers by default");
-    seen.push({ data, isBinary });
-  });
-  return seen;
-}
-
-it("auth handshake: a proven ticket gets a welcome carrying host identity and the host's half of the proof", async () => {
-  const listener = await startListener(trackTest);
-  const { client, welcome, hostProof } = await authenticate(listener);
-  assert.equal(welcome.deviceId, "host-device");
-  assert.equal(welcome.appVersion, "2.0.0");
-  assert.equal(welcome.proof, hostProof);
-  client.close();
-});
-
-it("dispatch: a req gets a matching res echoing the handler result", async () => {
-  const { client } = await authenticate(await startListener(trackTest));
-  client.send({
-    t: "req",
-    id: 7,
-    channel: "test:echo",
-    input: { hi: 1 },
-  });
-  const res = await client.nextRes();
-  assert.equal(res.id, 7);
-  assert.equal(res.ok, true);
-  assert.deepEqual(res.result, { hi: 1 });
-  client.close();
-});
-
-it("framing: a void input round-trips as an absent field", async () => {
-  const { client } = await authenticate(await startListener(trackTest));
-  client.send({ t: "req", id: 1, channel: "test:echo" });
-  const res = await client.nextRes();
-  assert.equal(res.ok, true);
-  assert.equal(res.result, undefined);
-  assert.equal("result" in res, false);
-  client.close();
-});
-
-it("broadcast: broadcastAll pushes a frame to an authed socket", async () => {
-  const listener = await startListener(trackTest);
-  const { client } = await authenticate(listener);
-  listener.binding.broadcastAll("test:ping", { n: 5 });
-  const push = await client.nextFrame();
-  assert.equal(push.t, "push");
-  assert.equal(push.channel, "test:ping");
-  assert.deepEqual(push.payload, { n: 5 });
-  client.close();
-});
-
-it("terminate on bad proof: a proof of no pending ticket, and a hello with no proof at all, close CLOSE_AUTH_FAILED with nothing answered", async () => {
-  const listener = await startListener(trackTest);
-  const hellos = [
-    (client: RawClient) => sendProvenHello(client, UNMINTED),
-    // The retired token-only hello: a credential in the clear
-    // proves nothing here.
-    async (client: RawClient) => {
-      assert.equal((await client.nextFrame()).t, "challenge");
-      client.send({
-        t: "hello",
-        // @ts-expect-error the retired shape carries a field no current hello has
-        token: listener.mint(),
+    }).pipe(Scope.provide(scope)),
+  );
+  // oxlint-disable-next-line shigomori/no-double-cast -- the link's group types its calls only as Rpc.AnyWithProps
+  const flat = client as unknown as (
+    tag: string,
+    payload: unknown,
+  ) => Effect.Effect<unknown, unknown>;
+  const call = (tag: string, payload?: unknown) => flat(tag, payload);
+  const hello = async (ticket: string, protocolVersion = PROTOCOL_VERSION) => {
+    const { nonce: hostNonce } = (await Effect.runPromise(
+      call("link:challenge"),
+    )) as { nonce: string };
+    const nonce = newHandshakeNonce();
+    return Effect.runPromiseExit(
+      call("link:hello", {
         deviceId: CLIENT,
-        appVersion: "1",
-        deflate: false,
-      });
-    },
-  ];
-  for (const hello of hellos) {
-    const client = connect(listener.url);
-    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
-    await client.opened;
-    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
-    await hello(client);
-    // Nothing is pipelined behind the hello: the proof check is
-    // async, and a req landing before the verdict is itself a
-    // malformed hello, a different refusal.
-    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
-    const close = await client.waitClose();
-    assert.equal(close.code, CLOSE_AUTH_FAILED, close.reason);
-    assert.equal(client.pending(), 0, "the rejected hello was answered");
-  }
+        appVersion: "1.0.0",
+        protocolVersion,
+        nonce,
+        proof: await handshakeProof(ticket, "client", hostNonce, nonce),
+      }),
+    );
+  };
+  return { call, hello, closed };
+}
+
+const failureOf = (exit: Exit.Exit<unknown, unknown>) => {
+  assert.ok(Exit.isFailure(exit), "the call succeeded");
+  return Cause.squash(exit.cause);
+};
+
+it("handshake: a proven ticket links, and the welcome names the host and proves the ticket", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const connection = await dial(track, listener);
+  assert.equal(connection.remoteDeviceId, HOST);
+  assert.equal(connection.remoteAppVersion, "2.0.0");
 });
 
-it("post-timeout hello: a hello after the hello timeout cannot authenticate", async () => {
-  const listener = await startListener(trackTest, { helloTimeoutMs: 100 });
-  const client = connect(listener.url);
-  await client.opened;
-  const challenge = await client.nextFrame();
-  assert.equal(challenge.t, "challenge");
-  await delay(250);
-  // The timeout already fired. A late (correctly proven) hello must
-  // not auth.
-  const nonce = newHandshakeNonce();
-  client.send({
-    t: "hello",
-    deviceId: CLIENT,
-    appVersion: "1",
-    deflate: false,
-    nonce,
-    proof: await handshakeProof(
-      listener.mint(),
-      "client",
-      challenge.nonce,
-      nonce,
-    ),
-  });
-  const close = await client.waitClose();
-  assert.equal(close.code, CLOSE_HELLO_FAILED);
-  assert.equal(
-    client.pending(),
-    0,
-    "a welcome was sent after the hello timeout",
+it("calls: a read answers with its result, and a failure crosses as its contract error, or as RemoteCallError with its message and code", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  const connection = await dial(track, listener);
+  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  const gone = await rejection(
+    invoke(connection, "git:refreshProject", { projectId: "gone" }),
   );
+  assert.ok(gone instanceof UnknownProjectError);
+  assert.equal(gone.projectId, "gone");
+  const plain = await rejection(
+    invoke(connection, "git:refreshProject", { projectId: "plain" }),
+  );
+  assert.ok(plain instanceof RemoteCallError);
+  assert.equal(plain.message, "boom");
+  assert.equal(plain.code, "EBOOM");
 });
 
-it("non-remote channel: a host channel the listener never registered gets a no-handler res", async () => {
-  const { client } = await authenticate(await startListener(trackTest));
-  // runtime:nuke is a real host channel tagged remote:false, so it
-  // is never registered on this binding and can never execute.
-  client.send({ t: "req", id: 3, channel: "runtime:nuke", input: {} });
-  const res = await client.nextRes();
-  assert.equal(res.ok, false);
-  assert.match(res.message, /No handler registered/);
-  client.close();
+const has = (pushes: unknown[], projectId: string) =>
+  pushes.some(
+    (push) => (push as { projectId: string }).projectId === projectId,
+  );
+
+it("pushes: a broadcast reaches every linked peer, and a handler's notifier only its caller", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  const heard = { one: [] as unknown[], two: [] as unknown[] };
+  const one = await dial(track, listener, {
+    deviceId: "one",
+  });
+  const two = await dial(track, listener, { deviceId: "two" });
+  one.transport.subscribe("git:projectChanged", (p) => heard.one.push(p));
+  two.transport.subscribe("git:projectChanged", (p) => heard.two.push(p));
+  // Each link subscribes as it opens: broadcast until both hear it.
+  await waitFor(() => {
+    listener.binding.broadcastAll("git:projectChanged", { projectId: "all" });
+    return heard.one.length > 0 && heard.two.length > 0;
+  }, "both peers to hear the broadcast");
+  await invoke(one, "git:refreshProject", { projectId: "notify" });
+  await waitFor(() => has(heard.one, "mine"), "the caller to hear its push");
+  // A broadcast after it, as a fence: the other peer hears that, and
+  // never the caller's push.
+  listener.binding.broadcastAll("git:projectChanged", { projectId: "fence" });
+  await waitFor(
+    () => has(heard.two, "fence"),
+    "the other peer to hear the fence",
+  );
+  assert.equal(has(heard.two, "mine"), false);
 });
 
-it("oversized frame: an inbound frame over the 1 MiB cap closes the socket", async () => {
-  const { client } = await authenticate(await startListener(trackTest));
-  const huge = "x".repeat((1 << 20) + 1024);
-  client.send({ t: "req", id: 9, channel: "test:echo", input: huge });
-  const close = await client.waitClose();
-  assert.equal(close.code, WS_CLOSE_TOO_BIG);
+it("refusal: a ticket the host never minted is a blocked verdict, and five of them lock the address out, which a dialer backs off through", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    // oxlint-disable-next-line no-await-in-loop -- one refusal at a time
+    const refused = await dialFails(listener, { ticket: "smpt_never_minted" });
+    assert.equal(refused.blocked, true);
+    assert.ok(refused.refusal instanceof LinkRefusedError);
+  }
+  const locked = await dialFails(listener);
+  assert.equal(locked.blocked, false);
+  assert.equal(locked.code, 4003);
 });
 
-it("Origin gate: origin-less, loopback and the configured web origin complete the handshake, while the renderer scheme and a foreign origin are refused", async () => {
-  // Browser-global WebSocket clients (the web client's direct dials)
-  // ALWAYS send an Origin: the deployed web client's own, admitted
-  // only when this device names it, or a loopback http origin from
-  // a locally served one. The desktop's dialer sends none.
-  const WEB_ORIGIN = "https://web.example.test";
-  const listener = await startListener(trackTest, {
-    allowedOrigin: WEB_ORIGIN,
+it("version: a hello on another protocol version is refused with ProtocolVersionMismatchError, a blocked verdict the dialer hands on", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const mismatched = await dialFails(listener, {
+    protocolVersion: PROTOCOL_VERSION + 1,
+  });
+  assert.equal(mismatched.blocked, true);
+  assert.ok(mismatched.refusal instanceof ProtocolVersionMismatchError);
+  assert.equal(mismatched.refusal.hostVersion, PROTOCOL_VERSION);
+  assert.equal(mismatched.refusal.clientVersion, PROTOCOL_VERSION + 1);
+  // The ticket was not spent: the same one links on this version.
+  const ticket = mintTicket(listener.tickets, CLIENT);
+  const raw = await rawLink(track, listener);
+  const exit = await raw.hello(ticket, PROTOCOL_VERSION + 1);
+  assert.ok(failureOf(exit) instanceof ProtocolVersionMismatchError);
+  await dial(track, listener, { ticket });
+});
+
+it("before the hello: a call is refused, and a hello after the timeout cannot link", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track, { start: { helloTimeoutMs: 200 } });
+  const raw = await rawLink(track, listener);
+  const early = failureOf(await Effect.runPromiseExit(raw.call("git:sweep")));
+  assert.ok(early instanceof LinkUnauthenticatedError);
+  assert.equal(await raw.closed, 4002);
+});
+
+it("reach: a call no peer may make never leaves the dialer, and a remote call nothing serves answers no handler", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const connection = await dial(track, listener);
+  const local = await rejection(invoke(connection, "runtime:nuke"));
+  assert.match(
+    String(local),
+    /No handler registered for channel "runtime:nuke"/,
+  );
+  const unserved = await rejection(invoke(connection, "projects:list"));
+  assert.ok(unserved instanceof RemoteCallError);
+  assert.match(unserved.message, /No handler registered/);
+});
+
+it("Origin gate: origin-less, loopback and the configured web origin link, while the renderer scheme and a foreign origin are refused", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track, {
+    start: { allowedOrigin: "https://web.example" },
   });
   for (const origin of [
     undefined,
-    "http://localhost:5190",
-    "http://127.0.0.1:5190",
-    WEB_ORIGIN,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://web.example",
   ]) {
-    // oxlint-disable-next-line no-await-in-loop -- one shared listener, sequential hellos
-    const { client } = await authenticate(listener, {
-      headers: origin === undefined ? undefined : { origin },
-      kind: "lan",
+    // oxlint-disable-next-line no-await-in-loop -- one dial at a time
+    await dial(track, listener, {
+      headers: origin === undefined ? {} : { origin },
     });
-    client.close();
   }
-  // Nothing in the app dials from a renderer page, so its scheme
-  // has no business here.
   for (const origin of [
-    "https://evil.example",
     rendererSchemeOrigin("prod"),
     rendererSchemeOrigin("dev"),
+    "https://evil.example",
   ]) {
-    const client = connect(listener.url, { origin });
-    // oxlint-disable-next-line no-await-in-loop -- sequential refusals
-    await assert.rejects(client.opened, `origin ${origin} was admitted`);
+    // oxlint-disable-next-line no-await-in-loop -- one dial at a time
+    const refused = await dialFails(listener, { headers: { origin } });
+    assert.equal(refused.blocked, false);
   }
-  // The web origin is admitted only where it is configured.
-  const unconfigured = await startListener(trackTest);
-  const client = connect(unconfigured.url, { origin: WEB_ORIGIN });
-  await assert.rejects(client.opened);
 });
 
-it("in-flight cap: one request past the shared per-peer cap is refused rather than dispatched", async () => {
-  hangResolvers = [];
-  const { client } = await authenticate(await startListener(trackTest));
-  // Fill the shared per-socket cap with requests that never
-  // resolve, then send one more.
-  for (let id = 1; id <= MAX_IN_FLIGHT_PER_PEER; id += 1) {
-    client.send({ t: "req", id, channel: "test:hang", input: undefined });
-  }
-  client.send({
-    t: "req",
-    id: MAX_IN_FLIGHT_PER_PEER + 1,
-    channel: "test:hang",
-    input: undefined,
-  });
-  const res = await client.nextRes();
-  assert.equal(res.id, MAX_IN_FLIGHT_PER_PEER + 1);
-  assert.equal(res.ok, false);
-  assert.match(res.message, /too many in-flight/);
-  // Release the held requests so shutdown is quick.
-  for (const resolve of hangResolvers) resolve("done");
-  client.close();
+it("frame cap: an inbound frame over 1 MiB closes the socket", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const ws = new WebSocket(`ws://127.0.0.1:${listener.port}`);
+  track(() => ws.terminate());
+  await new Promise((resolve) => ws.once("open", resolve));
+  const closed = new Promise<number>((resolve) => ws.on("close", resolve));
+  ws.send("x".repeat((1 << 20) + 1));
+  assert.equal(await closed, 1009);
 });
 
-it("generation guard: no handler executes under a stopped listener", async () => {
-  countExecutions = 0;
-  const listener = await startListener(trackTest, { helloTimeoutMs: 2000 });
-  const { client } = await authenticate(listener);
-  // stopNow drops the listener synchronously, so requests arriving
-  // during the terminate grace window fail the generation guard.
-  const stopping = listener.binding.stop();
-  for (let id = 0; id < 3; id += 1) {
-    client.send({ t: "req", id, channel: "test:count", input: undefined });
-  }
-  await delay(300);
-  assert.equal(
-    countExecutions,
-    0,
-    "a handler executed under a stopped listener",
+it("in-flight cap: one call past the per-peer cap is refused rather than run", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track);
+  const connection = await dial(track, listener);
+  const calls = Array.from({ length: MAX_IN_FLIGHT_PER_PEER }, () =>
+    invoke(connection, "worktrees:list", { projectId: "p" }),
   );
-  client.close();
-  await stopping;
+  await waitFor(
+    () => seen.hanging.length === MAX_IN_FLIGHT_PER_PEER,
+    "every call under the cap to run",
+  );
+  const over = await rejection(
+    invoke(connection, "worktrees:list", { projectId: "p" }),
+  );
+  assert.match(String(over), /too many in-flight requests/);
+  for (const call of seen.hanging) call.resolve([]);
+  await Promise.all(calls);
 });
 
-it("command gate: with commands off a mutating and an untagged channel are refused with the typed error and their handlers never run, a read-only channel is still served, and with commands on both run", async () => {
-  mutateExecutions = 0;
-  untaggedExecutions = 0;
-  const listener = await startListener(trackTest);
-  const { client } = await authenticate(listener);
-  // (a) gated:true is refused with the contract error
-  // and the handler body never runs.
-  client.send({ t: "req", id: 1, channel: "test:mutate" });
-  const mutateRes = await client.nextRes();
-  assert.equal(mutateRes.ok, false);
-  assert.deepEqual(mutateRes.error, { _tag: "CommandRefusedError" });
-  assert.match(mutateRes.message, /not permitted to run commands/);
-  assert.equal(mutateExecutions, 0, "a mutating handler ran ungranted");
-  // (b) an UNTAGGED channel is refused too: only channels proven
-  // read-only are served ungated, so unclassified defaults closed.
-  client.send({ t: "req", id: 2, channel: "test:untagged" });
-  const untaggedRes = await client.nextRes();
-  assert.equal(untaggedRes.ok, false);
-  assert.deepEqual(untaggedRes.error, { _tag: "CommandRefusedError" });
-  assert.equal(untaggedExecutions, 0, "an untagged handler ran ungranted");
-  // (c) an explicit read on the same socket is served as before.
-  client.send({ t: "req", id: 3, channel: "test:echo", input: "read" });
-  const echoRes = await client.nextRes();
-  assert.equal(echoRes.ok, true);
-  assert.equal(echoRes.result, "read");
-  // (d) the switch on, read live: both run on the same socket. The
-  // flip itself reaches the peer first, as the push that carries
-  // the switch (what its bridge records for its UI and CLI).
+it("command gate: with commands off a command is refused with the typed error and never runs while a read is served, and turning them on needs no reconnect", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track);
+  const connection = await dial(track, listener);
+  const refused = await rejection(
+    invoke(connection, "git:refreshProject", { projectId: "p" }),
+  );
+  assert.ok(refused instanceof CommandRefusedError);
+  assert.equal(seen.refreshes, 0);
+  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
   listener.setAccepts(true);
-  assert.deepEqual(await client.nextFrame(), {
-    t: "push",
-    channel: "account:commandAccessChanged",
-    payload: true,
-  });
-  client.send({ t: "req", id: 4, channel: "test:mutate" });
-  assert.equal(resultOf(await client.nextFrame()), "mutated");
-  client.send({ t: "req", id: 5, channel: "test:untagged" });
-  assert.equal(resultOf(await client.nextFrame()), "ran");
-  client.close();
+  await invoke(connection, "git:refreshProject", { projectId: "p" });
+  assert.equal(seen.refreshes, 1);
 });
 
-it("invited calls: with commands off a call the host asked for (isInvited, by the caller, the channel and the input) runs while the rest stay refused, and a byte channel it attached survives the switch-off drop that resets every other", async () => {
-  mutateExecutions = 0;
-  openedChannels.clear();
-  const asked: [string, string, unknown][] = [];
-  const listener = await startListener(
-    trackTest,
-    {},
-    (peer, channel, input) => {
-      asked.push([peer, channel, input]);
-      return (
-        channel === "test:open" &&
-        (input as { invited?: boolean }).invited === true
-      );
-    },
-  );
-  const connection = await dial(listener.url, listener.mint());
-  // (a) a gated call the invitation does not cover is refused as
-  // before, the predicate having been asked with the caller's id.
-  await assert.rejects(
-    connection.transport.invoke("test:mutate", undefined),
-    (error: unknown) => error instanceof CommandRefusedError,
-  );
-  assert.equal(mutateExecutions, 0, "a refused handler ran");
-  assert.deepEqual(asked, [[CLIENT, "test:mutate", undefined]]);
-  // (b) a channel opened under the switch: the invitation is asked
-  // first (a call it covers is spared whatever the switch says),
-  // declines this one, and the switch admits it.
+it("invited calls: with commands off a call the host asked for runs while the rest stay refused, and the byte channel it attached survives the switch-off drop that resets every other", async () => {
+  const track = trackTest;
+  const invitedPort = 1;
+  const { listener, seen } = await listen(track, {
+    isInvited: (peer, channel, input) =>
+      peer === CLIENT &&
+      channel === "forward:open" &&
+      (input as { port: number }).port === invitedPort,
+  });
   listener.setAccepts(true);
-  const granted = openChannel(connection, GRANTED_CHANNEL);
-  assert.equal(
-    await connection.transport.invoke("test:open", {
-      channelId: GRANTED_CHANNEL,
-    }),
-    "opened",
-  );
-  assert.deepEqual(asked.at(-1), [
-    CLIENT,
-    "test:open",
-    { channelId: GRANTED_CHANNEL },
-  ]);
-  // (c) the switch off: an invited open attaches a second one.
+  const connection = await dial(track, listener);
+  const read = (id: string) => {
+    const got: string[] = [];
+    let reset = false;
+    const handle = connection.channels.attach(id, {
+      onData: (data, consumed) => {
+        got.push(Buffer.from(data).toString());
+        consumed();
+      },
+      onEnd: () => {},
+      onReset: () => {
+        reset = true;
+      },
+      onWritable: () => {},
+    });
+    return { handle, got, reset: () => reset };
+  };
+  const granted = read("0123456789abcdef0123456789abcdef");
+  await invoke(connection, "forward:open", {
+    port: 2,
+    channelId: "0123456789abcdef0123456789abcdef",
+  });
   listener.setAccepts(false);
-  const invited = openChannel(connection, INVITED_CHANNEL);
-  assert.equal(
-    await connection.transport.invoke("test:open", {
-      channelId: INVITED_CHANNEL,
-      invited: true,
-    }),
-    "opened",
-  );
-  assert.deepEqual(asked.at(-1), [
-    CLIENT,
-    "test:open",
-    { channelId: INVITED_CHANNEL, invited: true },
-  ]);
-  // (d) bytes on the invited channel land, and their arrival is
-  // what drops the granted one: the switch is re-read on every
-  // binary frame, and the drop spares only what an invitation
-  // attached.
-  invited.handle.write(Buffer.from("under the invitation"));
-  await waitFor(
-    () =>
-      openedChannels.get(INVITED_CHANNEL)?.data.join("") ===
-      "under the invitation",
-    "the invited channel's bytes to land",
-  );
-  await waitFor(
-    () => granted.reset,
-    "the granted channel to be reset by the switch-off drop",
-  );
-  assert.equal(openedChannels.get(GRANTED_CHANNEL)?.reset, true);
-  assert.equal(
-    openedChannels.get(INVITED_CHANNEL)?.reset,
-    false,
-    "the invited channel was dropped",
-  );
-  assert.equal(invited.reset, false);
-  // (e) and a gated call on the same socket is still refused.
-  await assert.rejects(
-    connection.transport.invoke("test:mutate", undefined),
-    (error: unknown) => error instanceof CommandRefusedError,
-  );
-  assert.equal(mutateExecutions, 0);
-  connection.close();
-});
-
-it("typed refusal client-side: the client transport decodes CommandRefusedError while a real handler failure stays a plain Error", async () => {
-  const listener = await startListener(trackTest);
-  const connection = await dial(listener.url, listener.mint());
-  await assert.rejects(
-    () => connection.transport.invoke("test:mutate", undefined),
-    (error) =>
-      error instanceof CommandRefusedError &&
-      /not permitted to run commands/.test(error.message),
-  );
-  // A throwing read-only handler is a REAL failure: same wire,
-  // plain Error, so the typed refusal stays distinguishable.
-  await assert.rejects(
-    () => connection.transport.invoke("test:fail", undefined),
-    (error) =>
-      error instanceof Error &&
-      !(error instanceof CommandRefusedError) &&
-      error.message === "boom",
-  );
-  // A contract error crosses as its tag and fields and decodes back
-  // into its class, message and all.
-  await assert.rejects(
-    () => connection.transport.invoke("test:gone", undefined),
-    (error) =>
-      error instanceof UnknownWorktreeError &&
-      error.worktreeId === "wt-gone" &&
-      error.message === "Unknown worktree: wt-gone",
-  );
-  connection.close();
-});
-
-it("liveness: the host answers pings, keeps a pinging peer, and kills any peer that falls silent past the timeout", async () => {
-  const listener = await startListener(trackTest, { livenessTimeoutMs: 400 });
-  // Three peers under their own deviceIds (a duplicate id would
-  // supersede): one pings, one only sends requests, one is silent.
-  const { client } = await authenticate(listener);
-  const busy = await authenticate(listener, {
-    extra: { deviceId: "busy-device" },
+  const invited = read("fedcba9876543210fedcba9876543210");
+  await invoke(connection, "forward:open", {
+    port: invitedPort,
+    channelId: "fedcba9876543210fedcba9876543210",
   });
-  // The silent one dies while the other two are paced along: every
-  // client heartbeats (wsClientTransport), so silence is death.
-  const quiet = await authenticate(listener, {
-    extra: { deviceId: "quiet-device" },
-  });
-  // Any inbound frame counts as life, not only a ping: five of
-  // each, paced at a quarter of the timeout (room for a stalled
-  // tick), carry both peers well past it.
-  for (let i = 0; i < 5; i++) {
-    // oxlint-disable-next-line no-await-in-loop -- frames are paced under the timeout on purpose
-    if (i > 0) await delay(100);
-    client.send({ t: "ping" });
-    busy.client.send({ t: "req", id: i, channel: "test:echo", input: i });
-    // oxlint-disable-next-line no-await-in-loop -- one answer per frame
-    const [pong, res] = await Promise.all([
-      client.nextFrame(),
-      busy.client.nextFrame(),
-    ]);
-    assert.equal(pong.t, "pong", "a ping must be answered with a pong");
-    assert.equal(resultOf(res), i);
-  }
-  // Going silent past the timeout then ends each socket.
-  for (const peer of [client, busy.client, quiet.client]) {
-    // oxlint-disable-next-line no-await-in-loop -- one close at a time keeps the failure named
-    const closed = await peer.waitClose();
-    assert.equal(
-      closed.code,
-      CLOSE_GOING_AWAY,
-      "a silent peer must be killed on the going-away code",
-    );
-  }
-});
-
-it("liveness: the client transport heartbeats, declares a silent host dead within its timeout, and a probe reaches the verdict in its own shorter window", async () => {
-  // A host that welcomes and then answers nothing: pings arrive,
-  // pongs never leave. The real binding always answers, so the
-  // dead-host path needs a host of its own.
-  const pingsSeen: number[] = [];
-  const silentUrl = await fakeHost(trackTest, {
-    onFrame: (_ws, frame) => {
-      if (frame.t === "ping") pingsSeen.push(Date.now());
-    },
-  });
-  let closedWith: number | null | "unset" = "unset";
-  const startedAt = Date.now();
-  const connection = await dial(silentUrl, FAKE_TICKET, {
-    onClose: (code) => {
-      closedWith = code;
-    },
-    heartbeat: { intervalMs: 40, timeoutMs: 150 },
-  });
-  await waitFor(() => closedWith !== "unset", "the heartbeat death", 2_000);
-  assert.equal(
-    closedWith,
-    null,
-    "a heartbeat death must report through onClose with a null code",
-  );
-  const elapsed = Date.now() - startedAt;
-  assert.ok(
-    elapsed >= 150 && elapsed < 1_000,
-    `the death must land after the timeout and well before a socket-level verdict (took ${elapsed}ms)`,
-  );
-  assert.ok(pingsSeen.length >= 1, "the client must have pinged");
-  await assert.rejects(
-    () => connection.transport.invoke("test:echo", 1),
-    /disconnected/,
-    "the dead connection must reject invokes",
-  );
-
-  // The probe: a fresh connection whose heartbeat cadence is far
-  // away, probed at once, reaches the verdict inside the probe
-  // window instead.
-  let probedClose: number | null | "unset" = "unset";
-  const probed = await dial(silentUrl, FAKE_TICKET, {
-    onClose: (code) => {
-      probedClose = code;
-    },
-    heartbeat: {
-      intervalMs: 10_000,
-      timeoutMs: 20_000,
-      probeTimeoutMs: 100,
-    },
-  });
-  const probedAt = Date.now();
-  probed.probe();
-  await waitFor(() => probedClose !== "unset", "the probe verdict", 2_000);
-  const probeElapsed = Date.now() - probedAt;
-  assert.ok(
-    probeElapsed >= 100 && probeElapsed < 1_000,
-    `the probe verdict must land in its own window (took ${probeElapsed}ms)`,
-  );
-
-  // Against the REAL binding the same cadence stays connected: pongs
-  // keep answering, so a live host is never misjudged.
-  const listener = await startListener(trackTest);
-  let liveClose: number | null | "unset" = "unset";
-  const live = await dial(listener.url, listener.mint(), {
-    onClose: (code) => {
-      liveClose = code;
-    },
-    heartbeat: { intervalMs: 20, timeoutMs: 60 },
-  });
-  await delay(300);
-  assert.equal(
-    liveClose,
-    "unset",
-    "a host that answers pings must never be declared dead",
-  );
-  assert.equal(await live.transport.invoke("test:echo", "ok"), "ok");
-  live.close();
-});
-
-it("registrar: onMutationResolved fires after a mutating invoke resolves, never for reads or failures", async () => {
-  // The remote-viewer externalChange ping (main/ipc/register.ts)
-  // hangs off this registrar hook, so pin its semantics at the seam
-  // with an in-memory transport: the Electron+direct composite that
-  // actually emits the ping imports electron, out of reach here.
-  const handlers = new Map<string, Parameters<ServerTransport["handle"]>[1]>();
-  const served = (channel: string) => {
-    const handler = handlers.get(channel);
-    assert(handler, `${channel} was never registered`);
-    return handler;
-  };
-  const server: ServerTransport = {
-    handle: (channel, fn) => handlers.set(channel, fn),
-    broadcastAll: () => {},
-  };
-  const command = { remote: true, gated: true, grant: "changeCode" } as const;
-  const pingContract = defineContract(
-    "pingtest",
-    "host",
-    invoke("mutate", VoidSchema, VoidSchema, command),
-    invoke("read", VoidSchema, VoidSchema, { remote: true, gated: false }),
-    invoke("failMutate", VoidSchema, VoidSchema, command),
-    // A command whose effects are invisible to remote viewers, the
-    // forward-verb shape: still grant-gated, never pinged.
-    invoke("shuttle", VoidSchema, VoidSchema, {
-      ...command,
-      movesHostState: false,
+  const refused = await rejection(
+    invoke(connection, "forward:open", {
+      port: 3,
+      channelId: "00000000000000000000000000000000",
     }),
   );
-  let resolved = 0;
-  let resolvedCtx: HandlerContext | null = null;
-  registerContract(
-    pingContract,
-    {
-      mutate: async () => {},
-      read: async () => {},
-      failMutate: async () => {
-        throw new Error("boom");
-      },
-      shuttle: async () => {},
+  assert.ok(refused instanceof CommandRefusedError);
+  // The next bytes find the switch off: the granted channel goes, the
+  // invited one carries on.
+  invited.handle.write(Buffer.from("hello"));
+  await waitFor(() => invited.got.join("") === "hello", "the echo");
+  await waitFor(
+    () => seen.channels.get("0123456789abcdef0123456789abcdef")?.reset === true,
+    "the granted channel to drop",
+  );
+  await waitFor(() => granted.reset(), "the dialer to hear the drop");
+  assert.equal(invited.reset(), false);
+});
+
+it("byte channels: bytes cross both ways in order, and an end on each side completes the channel", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track);
+  listener.setAccepts(true);
+  const connection = await dial(track, listener);
+  const id = "abcdefabcdefabcdefabcdefabcdef12";
+  const got: string[] = [];
+  let ended = false;
+  let completed = false;
+  const handle = connection.channels.attach(id, {
+    onData: (data, consumed) => {
+      got.push(Buffer.from(data).toString());
+      consumed();
     },
-    server,
-    {
-      validateOutputs: true,
-      onMutationResolved: (ctx) => {
-        resolved += 1;
-        resolvedCtx = ctx;
-      },
+    onEnd: () => {
+      ended = true;
     },
+    onReset: () => assert.fail("the channel reset"),
+    onComplete: () => {
+      completed = true;
+    },
+    onWritable: () => {},
+  });
+  // Bytes written before the open attached the far end wait for it.
+  for (let n = 0; n < 50; n++) handle.write(Buffer.from(`${n},`));
+  await invoke(connection, "forward:open", { port: 2, channelId: id });
+  const want = Array.from({ length: 50 }, (_, n) => `${n},`).join("");
+  await waitFor(() => got.join("") === want, "the echo, in order");
+  assert.equal(seen.channels.get(id)?.data.join(""), want);
+  handle.end();
+  await waitFor(() => ended && completed, "both ends to finish");
+  assert.equal(connection.channels.has(id), false);
+});
+
+it("interruption: a call its caller cancels is interrupted on the host, its handler's signal aborted", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track);
+  const connection = await dial(track, listener);
+  const cancel = new AbortController();
+  const call = rejection(
+    invoke(connection, "worktrees:list", { projectId: "p" }, cancel.signal),
   );
-  const ctx = handlerCtx({ callerDeviceId: "peer-1" });
-  await served("pingtest:read")(ctx, undefined);
-  assert.equal(resolved, 0, "a read must not trip the mutation hook");
-  await served("pingtest:mutate")(ctx, undefined);
-  assert.equal(resolved, 1, "a resolved mutation must trip the hook");
-  // The Electron binding reads the caller off this to decide
-  // whether a remote peer drove the mutation (and so whether its
-  // own windows need the ping too), so the hook must see the
-  // calling peer's context, not a copy.
-  assert.equal(
-    resolvedCtx,
-    ctx,
-    "the hook must receive the calling peer's context",
+  await waitFor(() => seen.hanging.length === 1, "the call to run");
+  cancel.abort();
+  await call;
+  await waitFor(
+    () => seen.hanging[0]?.signal.aborted === true,
+    "the handler's signal to abort",
   );
-  await assert.rejects(() => served("pingtest:failMutate")(ctx, undefined));
-  assert.equal(resolved, 1, "a failed mutation must not trip the hook");
-  await served("pingtest:shuttle")(ctx, undefined);
-  assert.equal(
-    resolved,
-    1,
-    "a movesHostState:false mutation must not trip the hook",
+});
+
+it("drop: a link the host cuts aborts its calls, rejects them as a disconnect, and tells the dialer once", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track);
+  let closes = 0;
+  const connection = await dial(track, listener, { onClose: () => closes++ });
+  const call = rejection(
+    invoke(connection, "worktrees:list", { projectId: "p" }),
   );
+  await waitFor(() => seen.hanging.length === 1, "the call to run");
+  await listener.binding.closePeersNotIn([]);
+  assert.match(String(await call), /remote device disconnected/);
+  await waitFor(() => seen.hanging[0]?.signal.aborted === true, "the abort");
+  await waitFor(() => closes === 1, "the dialer to hear the drop");
+});
+
+it("supersede: a second link from the same device ends the first", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  let firstClosed = false;
+  await dial(track, listener, { onClose: () => (firstClosed = true) });
+  const second = await dial(track, listener);
+  await waitFor(() => firstClosed, "the first link to end");
+  assert.deepEqual(await invoke(second, "git:sweep"), { leaseMs: 5 });
+});
+
+it("liveness: the host cuts a linked peer that falls silent past the timeout", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track, {
+    start: { livenessTimeoutMs: 300 },
+  });
+  const raw = await rawLink(track, listener, { pingInterval: 60_000 });
+  const exit = await raw.hello(mintTicket(listener.tickets, CLIENT));
+  assert.ok(Exit.isSuccess(exit));
+  assert.equal(await raw.closed, 1001);
+});
+
+it("stop: the listener stopping closes every link, and nothing answers after", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  let closed = false;
+  await dial(track, listener, { onClose: () => (closed = true) });
+  await listener.binding.reconcile(null);
+  await waitFor(() => closed, "the link to close");
+  const after = await dialFails(listener);
+  assert.equal(after.blocked, false);
+});
+
+it("tracing: the host's span for a call continues the caller's trace", async () => {
+  const track = trackTest;
+  const spans: Tracer.NativeSpan[] = [];
+  const tracer = Tracer.make({
+    span: (options) => {
+      const span = new Tracer.NativeSpan(options);
+      spans.push(span);
+      return span;
+    },
+  });
+  const { listener } = await listen(track, {
+    provide: Layer.succeed(Tracer.Tracer, tracer),
+  });
+  const raw = await rawLink(track, listener);
+  assert.ok(
+    Exit.isSuccess(await raw.hello(mintTicket(listener.tickets, CLIENT))),
+  );
+  const traceId = await Effect.runPromise(
+    raw.call("git:sweep").pipe(
+      Effect.andThen(Effect.currentSpan),
+      Effect.map((span) => span.traceId),
+      Effect.withSpan("caller"),
+    ),
+  );
+  const served = spans.find((span) => span.name === "DeviceLink.git:sweep");
+  assert.ok(served !== undefined, "the host traced the call");
+  assert.equal(served.traceId, traceId);
 });
 
 it("contract invariant: every host invoke classifies itself, and every remote gated one names its consent line, as grants.ts lists", async () => {
@@ -1326,129 +982,3 @@ it("golden read surface: the ungated read channels match read-surface.golden.jso
 // Deflated frames (shared/ipc/socket/deflatedFrame.ts). The host
 // deflates a large text frame only for a tunnel-borne connection
 // (loopback plus the connector's CF-Connecting-IP) whose hello asked.
-const bigValue = { patch: "a line of a diff that repeats\n".repeat(4_000) };
-
-it("deflate: a tunnel-borne client that asks gets a large res deflated, and reads it", async () => {
-  const listener = await startListener(trackTest);
-  let socket: WebSocket | undefined;
-  const connection = await dial(listener.url, listener.mint("tunnel"), {
-    openSocket: (target) => {
-      socket = new WebSocket(target, { headers: TUNNEL_HEADERS });
-      return socket;
-    },
-  });
-  assert(socket, "the transport never opened its socket");
-  const seen = rawMessages(socket);
-  const result = await connection.transport.invoke("test:echo", bigValue);
-  assert.deepEqual(result, bigValue, "the inflated result is intact");
-  assert.equal(seen.length, 1);
-  const [res] = seen;
-  assert.ok(res !== undefined, "the res never arrived");
-  assert.equal(res.isBinary, true, "the res crossed as a binary frame");
-  assert.equal(res.data[0], DEFLATED_FRAME_KIND);
-  assert.ok(
-    res.data.length < JSON.stringify(bigValue).length / 10,
-    "and as a fraction of its text",
-  );
-  // A small answer is not worth deflating and stays text.
-  await connection.transport.invoke("test:echo", { hi: 1 });
-  assert.equal(seen[1]?.isBinary, false);
-  connection.close();
-});
-
-it("deflate: frames behind a deflating one keep their order", async () => {
-  const listener = await startListener(trackTest);
-  const connection = await dial(listener.url, listener.mint("tunnel"), {
-    openSocket: (target) => new WebSocket(target, { headers: TUNNEL_HEADERS }),
-  });
-  const order: number[] = [];
-  connection.transport.subscribe("test:ping", (payload) =>
-    order.push((payload as { n: number }).n),
-  );
-  // A big push (deflated, async on both ends) chased by small
-  // ones (text, sync on both ends).
-  listener.binding.broadcastAll("test:ping", { n: 1, pad: bigValue });
-  listener.binding.broadcastAll("test:ping", { n: 2 });
-  listener.binding.broadcastAll("test:ping", { n: 3, pad: bigValue });
-  listener.binding.broadcastAll("test:ping", { n: 4 });
-  await waitFor(() => order.length === 4, "four pushes");
-  assert.deepEqual(order, [1, 2, 3, 4]);
-  connection.close();
-});
-
-it("deflate: a LAN-borne client, and one that never asked, get plain text", async () => {
-  const listener = await startListener(trackTest);
-  // Asks (the client transport always does where it can inflate),
-  // but arrives without the connector's header: a LAN peer.
-  let lanSocket: WebSocket | undefined;
-  const lan = await dial(listener.url, listener.mint("lan"), {
-    openSocket: (target) => {
-      lanSocket = new WebSocket(target);
-      return lanSocket;
-    },
-  });
-  assert(lanSocket, "the transport never opened its socket");
-  const lanSeen = rawMessages(lanSocket);
-  assert.deepEqual(await lan.transport.invoke("test:echo", bigValue), bigValue);
-  assert.equal(lanSeen[0]?.isBinary, false, "a LAN peer is never deflated for");
-  lan.close();
-
-  // Tunnel-borne, but an old client whose hello carries no ask.
-  const { client: old } = await authenticate(listener, {
-    headers: TUNNEL_HEADERS,
-  });
-  old.send({ t: "req", id: 1, channel: "test:echo", input: bigValue });
-  // The helper JSON-parses every message, so a binary frame
-  // would have thrown there.
-  assert.deepEqual(resultOf(await old.nextFrame()), bigValue);
-  old.close();
-});
-
-it("deflate: a deflated frame sent in the same tick as the welcome is read, not lost", async () => {
-  const url = await fakeHost(trackTest, {
-    afterWelcome: (ws) => {
-      ws.send(
-        deflatedFrame({
-          t: "push",
-          channel: "test:ping",
-          payload: bigValue,
-        }),
-      );
-      ws.send(encodeFrame({ t: "push", channel: "test:ping", payload: 2 }));
-    },
-  });
-  const pushes: unknown[] = [];
-  const connection = await dial(url, FAKE_TICKET, {
-    onAnyPush: (_channel, payload) => pushes.push(payload),
-    openSocket: (target) => new WebSocket(target),
-  });
-  trackTest(() => connection.close());
-  await waitFor(() => pushes.length === 2, "both pushes");
-  assert.deepEqual(pushes, [bigValue, 2], "in the order they were sent");
-});
-
-it("deflate: a frame that fails to inflate closes the connection, so the invoke it answered rejects instead of hanging", async () => {
-  const url = await fakeHost(trackTest, {
-    onFrame: (ws) => {
-      ws.send(
-        Buffer.concat([
-          Buffer.from([DEFLATED_FRAME_KIND]),
-          Buffer.from("not a deflate stream at all"),
-        ]),
-      );
-    },
-  });
-  let closedWith: number | null | undefined;
-  const connection = await dial(url, FAKE_TICKET, {
-    onClose: (code) => {
-      closedWith = code;
-    },
-    openSocket: (target) => new WebSocket(target),
-  });
-  trackTest(() => connection.close());
-  await assert.rejects(
-    () => connection.transport.invoke("test:echo", { hi: 1 }),
-    /remote device disconnected/,
-  );
-  assert.equal(closedWith, null, "the owner was told, like a heartbeat death");
-});

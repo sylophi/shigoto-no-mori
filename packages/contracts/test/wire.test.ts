@@ -145,7 +145,8 @@ describe.each([...calls])("%s", (channel, parts) => {
       "the parts sampled are not the parts the call sends",
     );
     for (const [part, schema] of parts) {
-      for (const form of wireForms(schema, sample[part])) {
+      const bridged = !channel.startsWith("link:");
+      for (const form of wireForms(schema, sample[part], { bridged })) {
         assert.equal(form, json(sample[part]), part);
       }
     }

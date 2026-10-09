@@ -1,5 +1,5 @@
-// Wire benchmark: the real direct listener (host/socket/server.ts) and
-// the real client transport (shared/ipc/socket/wsClientTransport.ts)
+// Wire benchmark: the device link's real listener (host/socket/server.ts)
+// and its real dialer (shared/remote/deviceLink.ts)
 // talking through a link shaped like an internet path
 // (lib/shapedLink.mts), so a change to the wire shows up as time and
 // bytes instead of an argument. Not a proof: it asserts nothing and
@@ -24,8 +24,6 @@ import type { LookupFunction } from "node:net";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import { WebSocket } from "ws";
-import { createConnectTicketStore } from "@host/direct/tickets";
-import { createWsServerBinding } from "@host/socket/server";
 import { mintHexId } from "@host/lib/hexId";
 import {
   attachLink,
@@ -33,15 +31,14 @@ import {
   BundleAnswerSchema,
   type Link,
 } from "@host/lib/sync/sourceLink";
-import { HexId32Schema } from "@shigomori/contracts/schemas/hexId";
-import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
+import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
 } from "@shared/packaging/cloudflaredDist.mts";
-import { openDevice } from "@shared/ipc/socket/wsClientTransport";
-import { delay, appRoot } from "../lib/checkKit.mts";
-import { mintTicket } from "../lib/directBoot.mts";
+import { openDevice } from "@shared/remote/deviceLink";
+import { appRoot, delay, makeTracker } from "../lib/checkKit.mts";
+import { mintTicket, startDirectListener } from "../lib/directBoot.mts";
 import { startShapedLink, type ShapedLink } from "./lib/shapedLink.mts";
 
 function flag(name: string, fallback: number): number {
@@ -53,11 +50,8 @@ const downMbit = flag("down", 20);
 const upMbit = flag("up", 20);
 const asJson = process.argv.includes("--json");
 const viaTunnel = process.argv.includes("--tunnel");
-// The A/B switch: a client that cannot inflate never asks for deflated
-// frames (shared/ipc/socket/deflatedFrame.ts), which is the wire as it
-// was before them.
+// The A/B switch: a dialer that does not offer permessage-deflate.
 const noDeflate = process.argv.includes("--no-deflate");
-if (noDeflate) Reflect.deleteProperty(globalThis, "DecompressionStream");
 
 // A quick tunnel onto the binding: no account, a throwaway
 // trycloudflare.com hostname that dies with the process. The binding
@@ -167,76 +161,67 @@ async function sendPieces(link: Link): Promise<void> {
   for (
     let offset = 0;
     offset < BUNDLE_BYTES;
-    offset += CHANNEL_MAX_FRAME_BYTES
+    offset += CHANNEL_MAX_WRITE_BYTES
   ) {
     // oxlint-disable-next-line no-await-in-loop -- the channel's credit
     await link.writeBytes(
-      bundle.subarray(offset, offset + CHANNEL_MAX_FRAME_BYTES),
+      bundle.subarray(offset, offset + CHANNEL_MAX_WRITE_BYTES),
     );
   }
 }
 
 const decodeBundleAnswer = Schema.decodeUnknownSync(BundleAnswerSchema);
 
-// A bench channel's invoke input.
-const decodeChannelPayload = Schema.decodeUnknownSync(
-  Schema.Struct({ channelId: HexId32Schema }),
-);
-
+// What each size of read answers, as the one string the read returns.
 const payloads = {
-  small: { ok: true, branch: "main", ahead: 0, behind: 0 },
-  list: listPayload(300),
-  diff: { patch: realDiff(1_500_000) },
+  small: "main",
+  list: JSON.stringify(listPayload(300)),
+  diff: realDiff(1_500_000),
 };
 
+// The bench's calls, on real ones the link serves: a read answering a
+// payload of each size, and the two ends of a byte channel.
+const READ = "projects:defaultBranch";
+const BUNDLE_DOWN = { port: 1 };
+const BUNDLE_UP = { port: 2 };
+
 async function main() {
-  // A connect ticket per dial, as the broker mints them. Every dial
-  // arrives tunnel-borne (the shaped link carries the connector's
-  // header, see connect below), so every ticket is the tunnel kind.
-  const tickets = createConnectTicketStore();
-  const binding = createWsServerBinding({
-    matchTicket: (deviceId, arrivedAs, matches) =>
-      tickets.consumeProven(deviceId, arrivedAs, matches),
-    // Byte channels ride the command grant (a peer without it has its
-    // channel frames dropped), so the bench's client holds it.
-    isCommandGranted: () => true,
-  });
-  for (const [name, value] of Object.entries(payloads)) {
-    binding.handle(`bench:${name}`, async () => value, { gated: false });
-  }
-  // The source's end of a pull's link: the bundle down, then done.
-  binding.handle(
-    "bench:bundle",
-    async (ctx, raw) => {
-      const { channelId } = decodeChannelPayload(raw);
-      const link = attachLinkFarEnd(ctx, channelId);
-      void (async () => {
-        await link.write({ bundle: { bytes: BUNDLE_BYTES } });
-        await sendPieces(link);
-        await link.read();
-        link.end();
-      })().catch(() => link.reset());
-    },
-    { gated: false },
-  );
-  // The destination's end of a push: it asks, the bytes come up.
-  binding.handle(
-    "bench:receive",
-    async (ctx, raw) => {
-      const { channelId } = decodeChannelPayload(raw);
-      const link = attachLinkFarEnd(ctx, channelId);
-      await link.write({ ask: "bundle" });
-      await link.readBytes(BUNDLE_BYTES, async () => {});
-      link.end();
-    },
-    { gated: false },
-  );
-  const port = await binding.start({
-    port: 0,
-    bindAddress: "127.0.0.1",
+  const tracker = makeTracker();
+  // Every dial arrives tunnel-borne (the shaped link carries the
+  // connector's header, see connect below), so every ticket is the
+  // tunnel kind.
+  const listener = await startDirectListener(tracker.track, {
     deviceId: "bench-host",
-    appVersion: "0.0.0",
+    registerHandlers: (binding) => {
+      binding.handle(
+        READ,
+        async (_ctx, raw) =>
+          payloads[(raw as { projectId: keyof typeof payloads }).projectId],
+      );
+      binding.handle("forward:open", async (ctx, raw) => {
+        const { channelId, port } = raw as { channelId: string; port: number };
+        const link = attachLinkFarEnd(ctx, channelId);
+        if (port === BUNDLE_DOWN.port) {
+          // The source's end of a pull's link: the bundle down, then
+          // done.
+          void (async () => {
+            await link.write({ bundle: { bytes: BUNDLE_BYTES } });
+            await sendPieces(link);
+            await link.read();
+            link.end();
+          })().catch(() => link.reset());
+          return;
+        }
+        // The destination's end of a push: it asks, the bytes come up.
+        await link.write({ ask: "bundle" });
+        await link.readBytes(BUNDLE_BYTES, async () => {});
+        link.end();
+      });
+    },
   });
+  // Byte channels ride the command grant, so the bench's client holds it.
+  listener.setAccepts(true);
+  const { tickets, port } = listener;
   const link = viaTunnel
     ? await startQuickTunnel(port)
     : await startShapedLink({
@@ -272,13 +257,15 @@ async function main() {
       ticket,
       appVersion: "0.0.0",
       localDeviceId: "bench-client",
+      expectedDeviceId: "bench-host",
       onClose: () => {},
-      // The host deflates for tunnel-borne connections only, which it
-      // tells by the header the local cloudflared adds. The shaped
-      // link stands in for the tunnel, so it carries the header too.
+      deadlineMs: 30_000,
+      // The ticket is held to the path a connection arrives on, which
+      // the host tells by the header the local cloudflared adds. The
+      // shaped link stands in for the tunnel, so it carries it too.
       openSocket: (url) =>
         new WebSocket(url, {
-          perMessageDeflate: false,
+          perMessageDeflate: !noDeflate,
           ...(viaTunnel
             ? { lookup: publicLookup }
             : { headers: { "cf-connecting-ip": "203.0.113.7" } }),
@@ -310,31 +297,31 @@ async function main() {
   const { transport } = connection;
 
   await measure("1 small invoke", () =>
-    transport.invoke("bench:small", undefined),
+    transport.invoke(READ, { projectId: "small" }),
   );
   await measure("20 small invokes, sequential", async () => {
     for (let i = 0; i < 20; i++) {
       // oxlint-disable-next-line no-await-in-loop -- the waterfall is the point
-      await transport.invoke("bench:small", undefined);
+      await transport.invoke(READ, { projectId: "small" });
     }
   });
   await measure("20 small invokes, concurrent", () =>
     Promise.all(
       Array.from({ length: 20 }, () =>
-        transport.invoke("bench:small", undefined),
+        transport.invoke(READ, { projectId: "small" }),
       ),
     ),
   );
   await measure("list response (300 rows)", () =>
-    transport.invoke("bench:list", undefined),
+    transport.invoke(READ, { projectId: "list" }),
   );
   await measure("diff response (1.5 MB patch)", () =>
-    transport.invoke("bench:diff", undefined),
+    transport.invoke(READ, { projectId: "diff" }),
   );
   await measure("small invoke queued behind a diff", async () => {
-    const big = transport.invoke("bench:diff", undefined);
+    const big = transport.invoke(READ, { projectId: "diff" });
     const started = performance.now();
-    await transport.invoke("bench:small", undefined);
+    await transport.invoke(READ, { projectId: "small" });
     results.push({
       name: "  (the small one alone)",
       ms: Math.round(performance.now() - started),
@@ -355,14 +342,17 @@ async function main() {
   const megabytes = (BUNDLE_BYTES / 1e6).toFixed(1);
   await measure(`${megabytes} MB bundle down a link`, async () => {
     const { channelId, bundleLink } = openLink();
-    await transport.invoke("bench:bundle", { channelId });
+    await transport.invoke("forward:open", { ...BUNDLE_DOWN, channelId });
     const header = decodeBundleAnswer(await bundleLink.read());
     await bundleLink.readBytes(header.bundle.bytes, async () => {});
     bundleLink.end();
   });
   await measure(`${megabytes} MB bundle up a link`, async () => {
     const { channelId, bundleLink } = openLink();
-    const received = transport.invoke("bench:receive", { channelId });
+    const received = transport.invoke("forward:open", {
+      ...BUNDLE_UP,
+      channelId,
+    });
     await bundleLink.read();
     await sendPieces(bundleLink);
     bundleLink.end();
@@ -371,7 +361,7 @@ async function main() {
 
   connection.close();
   await link.close();
-  await binding.stop();
+  await tracker.teardown();
 
   if (asJson) {
     console.log(

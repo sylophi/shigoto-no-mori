@@ -4,7 +4,7 @@ import {
   errorFromWire,
   errorToWire,
 } from "@shigomori/contracts/errors";
-import type { ChannelMux } from "./socket/channels";
+import type { LinkChannels } from "@shared/remote/link";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
@@ -16,7 +16,13 @@ import type {
 // remote binding would wrap a socket, and nothing above this type knows
 // which.
 export type ClientTransport = {
-  invoke(channel: string, input: unknown): Promise<unknown>;
+  // `signal` cancels the call: on the device link, the host's handler
+  // is interrupted.
+  invoke(
+    channel: string,
+    input: unknown,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<unknown>;
   subscribe(channel: string, handler: (payload: unknown) => void): () => void;
   // True when the far end is this machine's own serving side, the same
   // build: the client hands its results through as they are. Any other
@@ -55,27 +61,31 @@ export type HandlerContext = {
     module: M,
     key: K,
   ): (payload: BroadcastProducerPayload<M, K>) => void;
-  // Aborts when the calling peer is gone. The granularity follows the
-  // wire: on the Electron transport that is the page generation, so a
-  // cross-document navigation (reload included) or window close; on
-  // the websocket transport it is the connection, aborting when the
-  // socket closes. It is shared by every call from the same peer, not
-  // a per-call cancellation. Consumers that attach listeners should
-  // remove them when the call completes.
+  // Aborts when the call is cancelled. On the device link that is the
+  // call itself: the peer interrupting it, or its link dropping. On the
+  // Electron transport it is the page generation, so a cross-document
+  // navigation (reload included) or window close, shared by every call
+  // from that page. Consumers that attach listeners should remove them
+  // when the call completes.
   signal: AbortSignal;
+  // Aborts when the caller's connection is gone: the page generation on
+  // the Electron transport, the link on the device link. One per
+  // connection, so a stream a caller joins can tell a connection that
+  // already hears it from a new one.
+  connection: AbortSignal;
   // The AUTHENTICATED deviceId of the calling peer, supplied only by a
-  // wire that verified one: the direct data-plane listener (the connect
-  // ticket bound the hello to a deviceId). The Electron wire and
+  // wire that verified one: the device link (the connect ticket bound
+  // the hello to a deviceId). The Electron wire and
   // in-page loopbacks leave it undefined, so a
   // handler that needs a peer identity fails closed on absence.
   callerDeviceId?: string;
-  // Byte channels on the calling connection (shared/ipc/socket/
-  // channels.ts), supplied only by the websocket binding: a handler
+  // Byte channels on the calling link (shared/remote/channels.ts),
+  // supplied only by the device link: a handler
   // that opens a byte stream for its caller (forward:open) attaches
   // the far end here under the client-minted channel id. Absent on
   // wires without a binary lane (Electron, loopbacks), where such a
   // handler refuses.
-  channels?: Pick<ChannelMux, "attach" | "has" | "size">;
+  channels?: LinkChannels;
 };
 
 // Whether the calling peer is another device rather than this
