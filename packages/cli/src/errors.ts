@@ -59,7 +59,7 @@ export class Cancelled extends Schema.TaggedError<Cancelled>()(
 
 // The subcommands a namespace takes, which an unknown one is told.
 const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
-  projects: "projects <list|add|remove|reorder|config|icon> [args]",
+  projects: "projects <list|add|remove|relocate|reorder|config|icon> [args]",
   "projects config":
     "projects config <list|get|set|unset|edit|launcher|carryover> [args]",
   config: "config <list|get|set|unset|edit|launcher> [args]",

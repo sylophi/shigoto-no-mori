@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -753,5 +754,63 @@ describe("run", () => {
     } else {
       assert.equal(ended.signal, signal);
     }
+  });
+});
+
+describe("projects relocate", () => {
+  it("points a project at its moved repo, as the Go sm did", async () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    const usage = await runAt(box.home, "projects", "relocate");
+    assert.equal(usage.code, 2);
+    assert.equal(
+      usage.stderr,
+      "smd: Usage: smd projects relocate [<name-or-path>] <new-path>\n",
+    );
+    const stillThere = await runAt(
+      box.home,
+      "projects",
+      "relocate",
+      "alpha",
+      beta,
+    );
+    assert.equal(stillThere.code, 1);
+    assert.equal(
+      stillThere.stderr,
+      `smd: ${alpha} is still there. Relocate is for a repo that was moved or renamed by hand.\n`,
+    );
+    const moved = join(box.home, "gamma");
+    renameSync(alpha, moved);
+    const relocated = await runAt(
+      box.home,
+      "projects",
+      "relocate",
+      "alpha",
+      moved,
+    );
+    assert.equal(relocated.code, 0, relocated.stderr);
+    assert.equal(relocated.stdout, `relocated gamma to ${moved}\n`);
+    const again = await runAt(
+      box.home,
+      "--json",
+      "projects",
+      "relocate",
+      "--project-id",
+      "A",
+      moved,
+    );
+    const doc = again.doc as {
+      ok: boolean;
+      project: { id: string; path: string };
+    };
+    assert.equal(doc.ok, true);
+    assert.equal(doc.project.id, "A");
+    assert.equal(doc.project.path, moved);
   });
 });

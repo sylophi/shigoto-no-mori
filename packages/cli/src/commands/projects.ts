@@ -1,4 +1,4 @@
-// sm projects <list|add|remove|reorder|icon|config>: the registered
+// sm projects <list|add|remove|relocate|reorder|icon|config>: the registered
 // projects, terrier's included, and each one's settings.
 import { basename } from "node:path";
 import * as Config from "@shigomori/engine/Config";
@@ -318,6 +318,41 @@ const remove = Command.make(
     }),
 ).pipe(Command.withDescription("Remove a project. Its checkouts stay on disk"));
 
+// For a repo moved or renamed by hand: the last positional is where it
+// is now, the project before it.
+const relocate = Command.make(
+  "relocate",
+  {
+    projectId: projectFlags.projectId,
+    args: Argument.String("args").pipe(Argument.variadic()),
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const { json, binaryName, stdoutColor } = yield* Effect.service(Output);
+      const most = Option.isSome(given(input.projectId)) ? 0 : 1;
+      const count = input.args.length;
+      if (count === 0 || count - 1 > most) {
+        return yield* new UsageError({
+          problem: `Usage: ${binaryName} projects relocate [<name-or-path>] <new-path>`,
+        });
+      }
+      const destination = yield* absolute(input.args[count - 1] ?? "");
+      const project = yield* resolveProject({
+        projectId: input.projectId,
+        project: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
+      });
+      const row = yield* (yield* Worktrees.Worktrees).relocateProject(
+        project,
+        destination,
+      );
+      yield* json
+        ? emit({ ok: true, project: row })
+        : out(
+            styles(stdoutColor).green(`relocated ${row.name} to ${row.path}`),
+          );
+    }),
+).pipe(Command.withDescription("Point a project at its moved repo"));
+
 const reorder = Command.make(
   "reorder",
   { ids: Flag.String("ids").pipe(Flag.optional) },
@@ -344,5 +379,13 @@ const reorder = Command.make(
 
 export const projectsCommand = Command.make("projects").pipe(
   Command.withDescription("Project commands"),
-  Command.withSubcommands([list, add, remove, reorder, icon, projectConfig]),
+  Command.withSubcommands([
+    list,
+    add,
+    remove,
+    relocate,
+    reorder,
+    icon,
+    projectConfig,
+  ]),
 );
