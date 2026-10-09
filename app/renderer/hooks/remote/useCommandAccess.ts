@@ -69,18 +69,25 @@ export function useCommandAccess(): CommandAccess {
   return commandAccessOf(deviceId, { acceptsCommands: accepts });
 }
 
-// The api to command a peer through from here, by device id: its
-// session's, while that peer lets this device command it (a verdict
-// not in yet counts, as canCommand has it), else undefined. The lookup
-// the group actions and the inbox's create button share.
+// A device's api while this device may command it (a verdict not in
+// yet counts, as canCommand has it), else undefined.
+function commandableApiOf(
+  deviceId: string,
+  device: RemoteDevice | undefined,
+): RemoteDeviceApi | undefined {
+  return commandAccessOf(deviceId, device).canCommand ? device?.api : undefined;
+}
+
+// The api to command a peer through from here, by device id
+// (commandableApiOf). The lookup the group actions and the inbox's
+// create button share.
 export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
   const registry = useRemoteDevices();
-  return (deviceId) => {
-    const device = registry.find((entry) => entry.deviceId === deviceId);
-    return commandAccessOf(deviceId, device).canCommand
-      ? device?.api
-      : undefined;
-  };
+  return (deviceId) =>
+    commandableApiOf(
+      deviceId,
+      registry.find((entry) => entry.deviceId === deviceId),
+    );
 }
 
 // The same for one peer, as a selector (useRemoteDeviceApi's), so a row
@@ -91,12 +98,12 @@ export function useCommandableDeviceApi(
 ): RemoteDeviceApi | undefined {
   const select = () => {
     if (deviceId === undefined) return undefined;
-    const device = remoteDeviceStore
-      .getSnapshot()
-      .find((entry) => entry.deviceId === deviceId);
-    return commandAccessOf(deviceId, device).canCommand
-      ? device?.api
-      : undefined;
+    return commandableApiOf(
+      deviceId,
+      remoteDeviceStore
+        .getSnapshot()
+        .find((entry) => entry.deviceId === deviceId),
+    );
   };
   return useSyncExternalStore(remoteDeviceStore.subscribe, select, select);
 }

@@ -276,14 +276,14 @@ export function DiffFileIndex({
       )}
 
       {changes &&
-        (pendingDiscard ? (
+        (editable && pendingDiscard ? (
           <DiscardConfirmStrip
             label={`Discard ${describeDiscard(pendingDiscard, changes.files)}?`}
             busy={changes.busy}
             onCancel={() => setPendingDiscard(null)}
             onConfirm={() => {
               const paths = discardPaths(pendingDiscard, changes.files);
-              if (paths.length > 0) changes.onDiscard(paths);
+              if (paths.length > 0) editable.onDiscard(paths);
               setPendingDiscard(null);
             }}
           />

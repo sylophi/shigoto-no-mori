@@ -24,6 +24,7 @@ import {
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import type { Project } from "@shared/schemas";
 import {
   ALL_DEVICES_TAB_ID,
@@ -67,6 +68,7 @@ export function ProjectDevicePage({
   const [picked, pick] = usePickedDevice(holders, scope.deviceId);
   const [allDevicesPicked, setAllDevicesPicked] = useState(false);
   const { canCommand } = useCommandAccess();
+  const scopedLabel = useRemoteDeviceLabel(scope.deviceId);
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
@@ -86,7 +88,7 @@ export function ProjectDevicePage({
     ? picked
     : {
         deviceId: scope.deviceId,
-        label: "",
+        label: scopedLabel,
         icon: "desktop",
         isThisDevice: !scope.remote,
         status: null,

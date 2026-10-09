@@ -56,7 +56,7 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   // shows it: a refused or failed switch to "manual" (or another device
   // switching away) drops out of it instead of dragging a list whose
   // order won't follow.
-  const arranging = arrangeRequested && sortMode === "manual";
+  const arranging = canCommand && arrangeRequested && sortMode === "manual";
   const filtered = rankByScore(query, sorted, (e) => e.name);
 
   // distance: 5 lets a quick click focus a cell without picking it up.
