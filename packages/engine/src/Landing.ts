@@ -214,6 +214,9 @@ export type Reporter = Worktrees.Reporter & {
     outcome: MergeOutcome,
   ) => Effect.Effect<void>;
   readonly waiting?: (line: string) => Effect.Effect<void>;
+  // A word for a person beside the document: a stack land that leaves
+  // the primary checkout on a landed branch says how it gets back.
+  readonly note?: (line: string) => Effect.Effect<void>;
 };
 
 // What each verb can fail with. A stack land is the cleanup of
@@ -1083,7 +1086,12 @@ const make = Effect.gen(function* () {
           );
         }
       }
-      return { landing, others };
+      // The primary checkout is never removed. It stays where `done`
+      // can land it back on the trunk.
+      const primary = located.worktree.isPrimary
+        ? undefined
+        : listed.find((other) => other.isPrimary && landing.has(other.branch));
+      return { landing, others, primary };
     });
 
   // The removals: the other landed worktrees, then this one through the
@@ -1117,6 +1125,12 @@ const make = Effect.gen(function* () {
       const removed: Worktrees.Removed[] = [];
       const stack = { landed, removed };
       const withStack = { ...extra, stack };
+      const base = (chain[0] as PullRequestSummary).baseRefName;
+      if (plan.primary !== undefined && reporter.note !== undefined) {
+        yield* reporter.note(
+          `the primary checkout is on landed branch ${plan.primary.branch}. \`${binary} done\` lands it back on ${base}`,
+        );
+      }
       for (const other of plan.others) {
         const outcome = yield* worktrees
           .remove(
@@ -1130,7 +1144,6 @@ const make = Effect.gen(function* () {
         }
         removed.push(outcome.success);
       }
-      const base = (chain[0] as PullRequestSummary).baseRefName;
       return yield* landCleanup(
         located,
         base,
