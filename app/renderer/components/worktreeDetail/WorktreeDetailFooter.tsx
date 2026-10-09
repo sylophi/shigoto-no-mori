@@ -259,10 +259,7 @@ function NormalRow({
           aria-pressed={confirmDelete}
           disabled={busy || deleteBlockedReason !== undefined}
           onClick={onDelete}
-          tip={
-            deleteBlockedReason ??
-            (confirmDelete ? "Click again to confirm" : undefined)
-          }
+          tip={deleteBlockedReason}
         />
       )}
     </div>
