@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { broadcast, defineContract, invoke, view } from "../contract.ts";
 import {
   AddProjectPayloadSchema,
   BranchListSchema,
@@ -23,6 +23,10 @@ export const projectsContract = defineContract(
   "projects",
   "host",
   invoke("list", VoidSchema, Schema.Array(ProjectSchema), {
+    remote: true,
+    gated: false,
+  }),
+  view("watch", VoidSchema, Schema.Array(ProjectSchema), {
     remote: true,
     gated: false,
   }),

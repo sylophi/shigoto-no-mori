@@ -4,6 +4,7 @@ import {
   callsOf,
   channelOf,
   isBroadcast,
+  isInvoke,
   keyOf,
   outputOf,
   payloadOf,
@@ -25,7 +26,7 @@ export function buildClient<M extends ContractModule>(
         call,
         transport,
       );
-    } else {
+    } else if (isInvoke(call)) {
       out[key] = invoker(call, transport);
     }
   }

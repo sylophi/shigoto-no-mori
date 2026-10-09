@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { broadcast, defineContract, invoke, view } from "../contract.ts";
 import {
   CancelScriptPayloadSchema,
   OrphanScriptReportSchema,
@@ -35,25 +35,26 @@ export const scriptsContract = defineContract(
   // Console input and viewport size for a run the app spawned. Both are
   // no-ops for a run with no PTY here (already exited, or a lifecycle
   // script the CLI ran on the app's behalf). The renderer already
-  // treats those runs as output-only. Keystrokes change nothing a
-  // remote viewer caches (the output comes back over `event`), so
-  // they don't ping the viewer cache.
+  // treats those runs as output-only. The output comes back over
+  // `event`.
   invoke("write", WriteScriptPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "runCommands",
-    movesHostState: false,
   }),
   invoke("resize", ResizeScriptPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "runCommands",
-    movesHostState: false,
   }),
   // Every script running on the host now, for a window that did not
   // see them start (the Live page, a console opened after a reload).
   // A read, so it rides no grant, like mirror:list.
   invoke("list", VoidSchema, RunningScriptsSchema, {
+    remote: true,
+    gated: false,
+  }),
+  view("watch", VoidSchema, RunningScriptsSchema, {
     remote: true,
     gated: false,
   }),
@@ -76,7 +77,7 @@ export const scriptsContract = defineContract(
     Schema.NullOr(
       Schema.Struct({ output: Schema.String, streaming: Schema.Boolean }),
     ),
-    { remote: true, gated: true, grant: "runCommands", movesHostState: false },
+    { remote: true, gated: true, grant: "runCommands" },
   ),
   broadcast("event", ScriptEventSchema, { remote: true }),
   // The worktree these scripts ran in was removed outside the app, so
