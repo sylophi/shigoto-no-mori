@@ -1,78 +1,66 @@
-// The hub Worker's HTTP surface. All routing and endpoint logic
-// lives in createWorker(deps) so tests can inject a stub Clerk
-// verifier, index.ts wires the real one. Routes are matched against
-// the shared HUB_ROUTES table, so the app-side client cannot drift
-// from what is served here.
+// The hub Worker's HTTP surface: the shared HubApi
+// (packages/contracts/src/hubApi.ts) served with its handlers, its two
+// auth tiers, the rate limiter and open CORS. createWorker(deps) is the
+// seam the tests stub Clerk and the Cloudflare API through, and
+// index.ts wires the real ones.
 //
-// Auth is two-tier. POST /devices/enroll takes the Clerk session token
-// the app's embedded sign-in minted, verified through deps.verifyLogin.
-// Everything else takes the long-lived device credential, resolved by
-// hashing it and looking up the unique hash in D1. The credential only
-// ever rides in the Authorization header. The only secret allowed in a
-// URL is the single-use connection ticket on GET /connect, because
-// websocket clients cannot set headers.
-//
-// Every route sits behind a per-IP rate limiter (see rateLimited).
-// It bounds what one caller can make the Worker do downstream (D1,
-// the Durable Objects, Clerk). It cannot stop the Worker invocation
-// itself from being billed, only a WAF rule at the zone can, see
-// README.md (Abuse limits).
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+// Every route sits behind a per-IP rate limiter (rateLimit below). It
+// bounds what one caller can make the Worker do downstream (D1, the
+// Durable Objects, Clerk). It cannot stop the Worker invocation itself
+// from being billed, only a WAF rule at the zone can, see README.md
+// (Abuse limits).
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpMiddleware from "effect/http/HttpMiddleware";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServer from "effect/http/HttpServer";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import {
-  CONNECT_TICKET_PARAM,
-  DEVICE_REVOKED_CODE,
+  DeviceAuth,
+  HubAccountFullError,
+  HubApi,
+  HubCredentialRejectedError,
+  HubDevice,
+  HubDeviceEnrolledElsewhereError,
+  HubDeviceRevokedError,
+  HubLogin,
+  HubLoginRejectedError,
+  HubTicketMalformedError,
+  HubTicketSigningUnconfiguredError,
+  HubTunnelUnconfiguredError,
+  HubUnavailableError,
+  HubUnknownDeviceError,
+  HubUpgradeRequiredError,
+  LoginAuth,
+} from "@shigomori/contracts/hubApi";
+import {
   type DeviceInfoWire,
-  type DeviceListResponseWire,
-  type EnrollResponseWire,
-  EnrollRequestSchema,
-  DevicePatchRequestSchema,
-  type ErrorBody,
-  HUB_ROUTES,
   MAX_ACCOUNT_DEVICES,
-  type TicketResponse,
-  TUNNEL_UNCONFIGURED_STATUS,
-  type TunnelProvisionResponse,
-  TunnelProvisionRequestSchema,
 } from "@shigomori/contracts/hubProtocol";
-import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
+import { randomBase64url, sha256Hex } from "./crypto.ts";
+import { type Env, WaitUntil, WorkerEnv } from "./env.ts";
+import { CONNECT_RANDOM_PARAM } from "./hubObject.ts";
+import * as Registry from "./Registry.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
   TICKET_TTL_MS,
   buildTicket,
   parseTicket,
 } from "./ticket.ts";
-import type { Env } from "./env.ts";
-import {
-  type DeviceRow,
-  listAccountDeviceIds,
-  getDeviceByCredentialHash,
-  isRevokedCredentialHash,
-  getDeviceById,
-  updateDevice,
-  listDevicesByCredentialHash,
-  upsertDevice,
-} from "./db.ts";
-import { randomBase64url, sha256Hex } from "./crypto.ts";
-import {
-  INTERNAL_CONNECT_PATH,
-  INTERNAL_PRESENCE_PATH,
-  INTERNAL_REVOKE_PATH,
-  INTERNAL_TICKET_PATH,
-  type MintTicketRequest,
-  type MintTicketResponse,
-  type PresenceResponse,
-  type RevokeRequest,
-} from "./hubObject.ts";
+import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 
 export interface HubDeps {
   // Resolves the enroll bearer (a Clerk session token) to the owning
   // account, or null when it does not verify. Injected so the test
   // suite never talks to real Clerk.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
-  // The fetch the Cloudflare tunnel API is called through. Injected like verifyLogin so the vitest suite stubs the
-  // CF API inside workerd with no network. Defaults to the global
-  // fetch in production (index.ts passes nothing).
+  // The fetch the Cloudflare tunnel API is called through, injected
+  // like verifyLogin so the suite stubs the CF API inside workerd.
+  // Defaults to the global fetch.
   cfFetch?: typeof fetch;
 }
 
@@ -82,165 +70,93 @@ export interface HubWorker {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
 }
 
-// Derived from the shared route so the matcher and the client's URL
-// builder cannot drift. HUB_ROUTES.revokeDevice.path(id) returns
-// `/devices/${encodeURIComponent(id)}`. The placeholder is in the
-// unreserved set, so encodeURIComponent leaves it untouched, marking
-// exactly where the id sits. We swap it for a single-segment capture
-// group. HUB_ROUTES is the single source of truth for the path.
-const DEVICE_ID_PLACEHOLDER = "__deviceId__";
-const DEVICE_PATH = new RegExp(
-  `^${HUB_ROUTES.revokeDevice
-    .path(DEVICE_ID_PLACEHOLDER)
-    .replace(DEVICE_ID_PLACEHOLDER, "([^/]+)")}$`,
+// ---- Services ----
+
+class LoginVerifier extends Context.Service<
+  LoginVerifier,
+  (token: string) => Promise<{ accountId: string } | null>
+>()("sm/hub/LoginVerifier") {}
+
+class CfFetch extends Context.Service<CfFetch, typeof fetch>()(
+  "sm/hub/CfFetch",
+) {}
+
+// The account's Durable Object.
+const accountHub = (env: Env, accountId: string) =>
+  env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName(accountId));
+
+// ---- Auth tiers ----
+
+const loginAuth = Layer.effect(
+  LoginAuth,
+  Effect.gen(function* () {
+    const verify = yield* LoginVerifier;
+    return LoginAuth.of({
+      bearer: (effect, { credential }) =>
+        Effect.gen(function* () {
+          const token = Redacted.value(credential);
+          // Any verification failure (expired, foreign instance,
+          // malformed) reads as no login.
+          const login =
+            token === ""
+              ? null
+              : yield* Effect.promise(() => verify(token)).pipe(
+                  Effect.orElseSucceed(() => null),
+                );
+          if (login === null) return yield* new HubLoginRejectedError();
+          return yield* Effect.provideService(effect, HubLogin, login);
+        }),
+    });
+  }),
 );
 
-// The DO stub needs an absolute URL. The host is never routable, only
-// the path matters.
-const DO_ORIGIN = "https://device-hub.internal";
-
-// Error responses are compiler-checked against ErrorBody, so the
-// `{ error }` contract in protocol.ts is load-bearing, not a
-// convention.
-function jsonError(status: number, body: ErrorBody): Response {
-  return Response.json(body, { status });
-}
-
-// Whether a request is a fixed-path route's method on its exact path.
-function isRoute(
-  request: Request,
-  url: URL,
-  route: { method: string; path: string },
-): boolean {
-  return request.method === route.method && url.pathname === route.path;
-}
-
-// The 409 an enroll answers when the deviceId belongs to another
-// account, from the fast-path pre-read and the SQL guard alike.
-const ENROLLED_ELSEWHERE =
-  "deviceId is enrolled under a different account, revoke it there first";
-
-function bearerToken(request: Request): string | null {
-  const header = request.headers.get("Authorization");
-  if (header === null || !header.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length).trim();
-  return token.length > 0 ? token : null;
-}
-
-async function readJson(request: Request): Promise<unknown> {
-  try {
-    return await request.json();
-  } catch {
-    return null;
-  }
-}
-
-function accountStub(env: Env, accountId: string): DurableObjectStub {
-  return env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName(accountId));
-}
-
-// The one path every internal DO call goes through. It checks
-// response.ok and throws otherwise, so a DO 404 or 500 can never be
-// mistaken for a valid body (a dead ticket, or `new Set(undefined)`).
-// Every internal handler returns a JSON body, including revoke, so the
-// parse is uniform. Callers either map the throw to a 502 at the two
-// device-facing endpoints or let the top-level catch turn it into a
-// 500.
-async function callObject<T>(
-  stub: DurableObjectStub,
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const response = await stub.fetch(`${DO_ORIGIN}${path}`, init);
-  if (!response.ok) {
-    throw new Error(`durable object ${path} returned ${response.status}`);
-  }
-  return (await response.json()) as T;
-}
-
-// Resolves the presented device credential to its D1 row, null on any
-// miss. The prefix check is a cheap way to keep Clerk tokens and
-// credentials from ever hitting the wrong tier.
-// The presented device credential's hash, or null when the header
-// carries none. The one place the token is read off a request.
-async function credentialHashOf(request: Request): Promise<string | null> {
-  const token = bearerToken(request);
-  if (token === null || !token.startsWith(DEVICE_CREDENTIAL_PREFIX))
-    return null;
-  return await sha256Hex(token);
-}
-
-// The caller's device row and the hash it presented (for the refusal
-// when the row is null).
-async function authDevice(
-  request: Request,
-  env: Env,
-): Promise<{ device: DeviceRow | null; hash: string | null }> {
-  const hash = await credentialHashOf(request);
-  const device =
-    hash === null ? null : await getDeviceByCredentialHash(env.DB, hash);
-  return { device, hash };
-}
-
-// The refusal for a credential that matched no device. A revoked one
-// (its hash tombstoned by the revoke, db.ts deleteDevice) gets the
-// typed 403 the app signs out on, which is how a device that was
-// offline at the revoke learns of it. Anything else (a garbage token,
-// a credential rotated away by a re-enroll, a tombstone past
-// retention) is the plain 401.
-async function refuseCredential(
-  env: Env,
-  credentialHash: string | null,
-): Promise<Response> {
-  if (
-    credentialHash !== null &&
-    (await isRevokedCredentialHash(env.DB, credentialHash))
-  ) {
-    return jsonError(403, {
-      error: "this device was removed from the account",
-      code: DEVICE_REVOKED_CODE,
+const deviceAuth = Layer.effect(
+  DeviceAuth,
+  Effect.gen(function* () {
+    const registry = yield* Registry.Registry;
+    return DeviceAuth.of({
+      bearer: (effect, { credential }) =>
+        Effect.gen(function* () {
+          const token = Redacted.value(credential);
+          // The prefix keeps Clerk tokens and credentials from ever
+          // reaching the wrong tier.
+          if (!token.startsWith(DEVICE_CREDENTIAL_PREFIX)) {
+            return yield* new HubCredentialRejectedError();
+          }
+          const hash = yield* Effect.promise(() => sha256Hex(token));
+          const device = yield* registry.byCredentialHash(hash);
+          if (device === null) {
+            // A revoked credential (tombstoned by the revoke) gets the
+            // refusal the app signs out on, which is how a device that
+            // was offline at the revoke learns of it. Anything else is
+            // the plain refusal.
+            return yield* (yield* registry.isRevoked(hash))
+              ? new HubDeviceRevokedError()
+              : new HubCredentialRejectedError();
+          }
+          return yield* Effect.provideService(effect, HubDevice, {
+            deviceId: device.device_id,
+            accountId: device.account_id,
+          });
+        }).pipe(Effect.catchTags({ RegistryError: Effect.die })),
     });
-  }
-  return jsonError(401, { error: "invalid device credential" });
-}
+  }),
+);
 
-// Presence is advisory at enroll and at the device list, so a hub
-// object hiccup must never block enrollment or the device list: any
-// DO failure reads as an empty online set (every device offline)
-// rather than throwing. The enroll case matters most: the upsert has
-// already committed the new credential, so a throw would strand the
-// client without the raw credential that now guards its row.
-async function accountPresence(
-  env: Env,
-  accountId: string,
-): Promise<Set<string>> {
-  const body = await callObject<PresenceResponse>(
-    accountStub(env, accountId),
-    INTERNAL_PRESENCE_PATH,
-  );
-  return new Set(body.online);
-}
-
-async function accountPresenceSafe(
-  env: Env,
-  accountId: string,
-): Promise<Set<string>> {
-  return accountPresence(env, accountId).catch(() => new Set<string>());
-}
+// ---- Handlers ----
 
 // One row as the API reports it, for the list and the enroll response
 // alike, so the two cannot disagree about a device.
 function toDeviceInfo(
-  row: Omit<DeviceRow, "account_id" | "credential_hash">,
-  online: Set<string>,
+  row: Omit<Registry.DeviceRow, "account_id" | "credential_hash">,
+  online: ReadonlySet<string>,
 ): DeviceInfoWire {
   return {
     deviceId: row.device_id,
     name: row.name,
     platform: row.platform,
-    // The column holds whatever the device sent (a newer device's icon
-    // lands as is) and goes out as is: each reader maps it to the
-    // catalog it knows (DeviceInfoSchema).
+    // The column holds whatever the device sent and goes out as is:
+    // each reader maps it to the catalog it knows (DeviceInfoSchema).
     icon: row.icon,
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
@@ -248,433 +164,375 @@ function toDeviceInfo(
   };
 }
 
-// How long a limited caller is told to wait, the limiters' period in
-// wrangler.jsonc.
-const RATE_LIMIT_PERIOD_SECONDS = 60;
-
-// True when this caller is over its budget. Keyed on the client IP
-// because most callers here have no verified identity yet, and the
-// work worth bounding happens before one could be established.
-// Cloudflare sets CF-Connecting-IP on every request that arrives
-// through the edge and a client cannot strip it, so its absence means
-// the request did not come through the edge at all (the vitest suite,
-// a bare `wrangler dev`), where there is nothing to protect. A
-// limiter failure fails open: throttling is a cost guard, and it must
-// never be the reason a device cannot reach its hub.
-async function rateLimited(
-  request: Request,
-  limiter: RateLimit,
-): Promise<boolean> {
-  const ip = request.headers.get("CF-Connecting-IP");
-  if (ip === null) return false;
-  try {
-    const { success } = await limiter.limit({ key: ip });
-    return !success;
-  } catch {
-    return false;
-  }
-}
-
-function tooManyRequests(): Response {
-  const response = jsonError(429, { error: "too many requests" });
-  response.headers.set("Retry-After", String(RATE_LIMIT_PERIOD_SECONDS));
-  return response;
-}
-
 function ticketTtlMs(env: Env): number {
   const override = Number(env.TICKET_TTL_MS);
   return Number.isInteger(override) && override > 0 ? override : TICKET_TTL_MS;
 }
 
-export function createWorker(deps: HubDeps): HubWorker {
-  const cfFetch = deps.cfFetch ?? fetch;
-  return {
-    async fetch(request, env, ctx) {
-      try {
-        const url = new URL(request.url);
+// The refusal for a failed step behind a route, as a catchTags handler.
+const unavailable = (operation: HubUnavailableError["operation"]) => () =>
+  new HubUnavailableError({ operation });
 
-        // GET /connect is routed before the CORS append: a successful
-        // upgrade is a 101 with immutable headers, and websocket
-        // clients ignore CORS anyway.
-        if (isRoute(request, url, HUB_ROUTES.connect)) {
-          if (await rateLimited(request, env.RATE_LIMIT_OPEN)) {
-            return tooManyRequests();
-          }
-          return await connect(request, env, url);
-        }
+const handlers = Effect.gen(function* () {
+  const env = yield* WorkerEnv;
+  const registry = yield* Registry.Registry;
+  const cfFetch = yield* CfFetch;
 
-        const response = await route(request, env, url, ctx);
-        // Open CORS, the standard shape for a bearer-token API. Every
-        // route authenticates from an explicit Authorization header, so
-        // no ambient credential exists for a hostile page to ride: it
-        // cannot read the token out of another origin's localStorage,
-        // and cookies are never sent (no Allow-Credentials, which "*"
-        // forbids anyway). A cross-origin caller therefore gets exactly
-        // what curl already gets unauthenticated -- a 401 -- so an
-        // origin allowlist here bought no security while breaking every
-        // client not served from one hardcoded origin.
-        response.headers.set("Access-Control-Allow-Origin", "*");
-        response.headers.set(
-          "Access-Control-Allow-Methods",
-          "GET,POST,PATCH,DELETE,OPTIONS",
-        );
-        response.headers.set(
-          "Access-Control-Allow-Headers",
-          "Authorization,Content-Type",
-        );
-        // Cache the preflight for a day so the extra round trip is not
-        // paid per request.
-        response.headers.set("Access-Control-Max-Age", "86400");
-        return response;
-      } catch {
-        // Backstop for any unexpected throw. protocol.ts promises every
-        // error response is the { error } shape, so a raw throw must
-        // not escape as workerd's text 500 that ErrorBodySchema cannot
-        // parse.
-        return jsonError(500, { error: "internal error" });
-      }
-    },
-  };
-
-  async function route(
-    request: Request,
-    env: Env,
-    url: URL,
-    ctx: ExecutionContext,
-  ): Promise<Response> {
-    // A preflight does no work worth limiting, and a 429 on one would
-    // only surface in the browser as an opaque CORS failure.
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204 });
-    }
-    const isEnroll = isRoute(request, url, HUB_ROUTES.enroll);
-    const limiter = isEnroll ? env.RATE_LIMIT_OPEN : env.RATE_LIMIT;
-    if (await rateLimited(request, limiter)) return tooManyRequests();
-    if (isEnroll) {
-      return await enroll(request, env, ctx);
-    }
-    if (isRoute(request, url, HUB_ROUTES.listDevices)) {
-      return await listAccountDevices(request, env);
-    }
-    const deviceMatch =
-      request.method === HUB_ROUTES.revokeDevice.method ||
-      request.method === HUB_ROUTES.updateDevice.method
-        ? DEVICE_PATH.exec(url.pathname)
-        : null;
-    const encodedId = deviceMatch?.[1];
-    if (encodedId !== undefined) {
-      let targetId: string;
-      try {
-        targetId = decodeURIComponent(encodedId);
-      } catch {
-        // A malformed percent-escape (for example DELETE /devices/%,
-        // reachable with no auth) throws URIError. Answer with the
-        // { error } shape and a 400, never a 500.
-        return jsonError(400, { error: "malformed device id" });
-      }
-      if (request.method === HUB_ROUTES.revokeDevice.method) {
-        return await revokeDevice(request, env, targetId, ctx);
-      }
-      if (request.method === HUB_ROUTES.updateDevice.method) {
-        return await updateAccountDevice(request, env, targetId);
-      }
-    }
-    if (isRoute(request, url, HUB_ROUTES.mintTicket)) {
-      return await mintTicket(request, env);
-    }
-    if (isRoute(request, url, HUB_ROUTES.provisionTunnel)) {
-      return await provisionDeviceTunnel(request, env);
-    }
-    return jsonError(404, { error: "not found" });
-  }
-
-  async function enroll(request: Request, env: Env, ctx: ExecutionContext) {
-    const token = bearerToken(request);
-    const login = token === null ? null : await deps.verifyLogin(token, env);
-    if (login === null) return jsonError(401, { error: "invalid login token" });
-    const body = Schema.decodeUnknownOption(EnrollRequestSchema)(
-      await readJson(request),
+  // Who is online in the account, from its hub object.
+  const presence = (accountId: string) =>
+    Effect.tryPromise(() => accountHub(env, accountId).online()).pipe(
+      Effect.map((online) => new Set(online)),
     );
-    if (Option.isNone(body))
-      return jsonError(400, { error: "invalid enroll request" });
-    const { deviceId, name, platform, icon } = body.value;
-    const existing = await getDeviceById(env.DB, deviceId);
-    if (existing !== null && existing.account_id !== login.accountId) {
-      return jsonError(409, { error: ENROLLED_ELSEWHERE });
-    }
-    // The cap counts NEW devices only, so a full account can still
-    // re-enroll the devices it has. A pre-read rather than a SQL guard:
-    // two racing enrolls can land one over, which a quota shrugs off.
-    //
-    // A full account makes room by dropping its stalest offline device
-    // rather than refusing. Removing a device takes a device credential,
-    // and a browser profile that cleared its storage has lost its own,
-    // so a refusal could lock an account out with nothing left to
-    // remove devices from. The login authorizing this enroll is the
-    // account owner's, and the evicted device only has to sign in again.
-    if (existing === null) {
-      const stalestFirst = await listAccountDeviceIds(env.DB, login.accountId);
-      if (stalestFirst.length >= MAX_ACCOUNT_DEVICES) {
-        // NOT the advisory presence read: there it fails open to "all
-        // offline", which here would evict the stalest device whether
-        // or not it is online. A presence the hub object cannot answer
-        // is a reason to refuse the enroll, not to revoke a device.
-        let online: Set<string>;
-        try {
-          online = await accountPresence(env, login.accountId);
-        } catch {
-          return jsonError(502, {
-            error: "could not make room for the device",
-          });
-        }
-        const evict = stalestFirst.find((id) => !online.has(id));
-        if (evict === undefined) {
-          return jsonError(409, {
-            error: `this account already has ${MAX_ACCOUNT_DEVICES} devices online, remove one from the account page first`,
-          });
-        }
-        try {
-          await revokeAccountDevice(env, ctx, login.accountId, evict);
-        } catch {
-          return jsonError(502, {
-            error: "could not make room for the device",
-          });
-        }
-      }
-    }
-    // Enrolling again rotates the credential: exactly one credential
-    // per device is valid at any time, because only one hash is
-    // stored.
-    const credential = DEVICE_CREDENTIAL_PREFIX + randomBase64url(32);
-    const createdAt = existing?.created_at ?? Date.now();
-    // The presence lookup is independent of the upsert, so the DO
-    // round trip runs while D1 writes. It is best-effort here: a
-    // presence failure must not drop the credential the upsert just
-    // committed.
-    const presence = accountPresenceSafe(env, login.accountId);
-    const wrote = await upsertDevice(env.DB, {
-      deviceId,
-      accountId: login.accountId,
-      name,
-      platform,
-      icon,
-      credentialHash: await sha256Hex(credential),
-      createdAt,
-    });
-    // The SQL account guard is the real enforcement against a
-    // cross-account collision that races the pre-read above. A fresh
-    // insert and a same-account re-enroll each write exactly one row,
-    // so zero changes uniquely means the guard suppressed a
-    // cross-account bind. Same verdict as the fast-path 409.
-    if (!wrote) {
-      // The abandoned presence promise needs no guard: accountPresenceSafe
-      // never rejects.
-      return jsonError(409, { error: ENROLLED_ELSEWHERE });
-    }
-    const online = await presence;
-    const response = {
-      credential,
-      device: toDeviceInfo(
-        {
-          device_id: deviceId,
-          name,
-          platform,
-          icon,
-          created_at: createdAt,
-          last_seen_at: existing?.last_seen_at ?? null,
-        },
-        online,
-      ),
-    } satisfies EnrollResponseWire;
-    return Response.json(response);
-  }
 
-  async function listAccountDevices(request: Request, env: Env) {
-    const hash = await credentialHashOf(request);
-    if (hash === null) return await refuseCredential(env, null);
-    // Auth and list fold into one query: the subquery resolves the
-    // account from the credential hash and the outer query returns that
-    // account's devices. An empty result means the credential matched
-    // nothing.
-    const rows = await listDevicesByCredentialHash(env.DB, hash);
-    const [firstRow] = rows;
-    if (firstRow === undefined) return await refuseCredential(env, hash);
-    // Every row shares the account, so the first row names the DO for
-    // presence. Presence is advisory here, so a hub object hiccup
-    // never blocks the device list. A failure defaults to all offline.
-    const online = await accountPresenceSafe(env, firstRow.account_id);
-    const response = {
-      devices: rows.map((row) => toDeviceInfo(row, online)),
-    } satisfies DeviceListResponseWire;
-    return Response.json(response);
-  }
+  // Presence is advisory in a device list, so a hub object hiccup reads
+  // as every device offline rather than failing the list. At enroll it
+  // matters most: the upsert has already committed the new credential,
+  // and a failure would strand the client without it.
+  const presenceOrNone = (accountId: string) =>
+    presence(accountId).pipe(
+      Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
+    );
 
   // The revocation itself, shared by the revoke route and the enroll
-  // cap's eviction. The account is threaded in so the DO's D1 delete is
-  // scoped to it and cannot delete a row concurrently re-enrolled under
-  // another account. Throws when the DO fails. The tunnel teardown is
-  // best-effort: teardownTunnel swallows every CF failure, and it rides
-  // waitUntil so the response never waits on the CF API.
-  async function revokeAccountDevice(
-    env: Env,
-    ctx: ExecutionContext,
+  // cap's eviction. The object deletes the row scoped to the account,
+  // so a row concurrently re-enrolled under another account survives
+  // a stale revoke. The tunnel teardown is best-effort and finishes
+  // after the response.
+  const revokeAccountDevice = Effect.fn("revokeAccountDevice")(function* (
     accountId: string,
     deviceId: string,
-  ): Promise<void> {
-    await callObject(accountStub(env, accountId), INTERNAL_REVOKE_PATH, {
-      method: "POST",
-      body: JSON.stringify({ deviceId, accountId } satisfies RevokeRequest),
-    });
+  ) {
+    yield* Effect.tryPromise(() =>
+      accountHub(env, accountId).revoke(deviceId, accountId),
+    );
     const cf = tunnelEnvOf(env);
     if (cf !== null) {
-      ctx.waitUntil(teardownTunnel(cf, cfFetch, accountId, deviceId));
+      const waitUntil = yield* WaitUntil;
+      waitUntil(teardownTunnel(cf, cfFetch, accountId, deviceId));
     }
-  }
+  });
 
-  // Any device of the account may revoke any device of the account,
-  // including itself. A device of another account gets the same 404 as
-  // a nonexistent one, so the endpoint leaks nothing about foreign
-  // deviceIds. The revocation itself (D1 row, live sockets, unconsumed
-  // tickets) is one operation owned by the Durable Object.
-  async function revokeDevice(
-    request: Request,
-    env: Env,
-    targetId: string,
-    ctx: ExecutionContext,
-  ) {
-    // The caller auth and the target lookup are independent reads, so
-    // they run together.
-    const [{ device, hash }, target] = await Promise.all([
-      authDevice(request, env),
-      getDeviceById(env.DB, targetId),
-    ]);
-    if (device === null) return await refuseCredential(env, hash);
-    if (target === null || target.account_id !== device.account_id) {
-      return jsonError(404, { error: "unknown device" });
-    }
-    try {
-      await revokeAccountDevice(env, ctx, device.account_id, targetId);
-    } catch {
-      return jsonError(502, { error: "revocation failed" });
-    }
-    return new Response(null, { status: 204 });
-  }
+  const enrollment = HttpApiBuilder.group(HubApi, "enrollment", (handle) =>
+    handle.handle("enroll", ({ payload }) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* HubLogin;
+        const { deviceId, name, platform, icon } = payload;
+        const existing = yield* registry.byId(deviceId);
+        if (existing !== null && existing.account_id !== accountId) {
+          return yield* new HubDeviceEnrolledElsewhereError();
+        }
+        // The cap counts new devices only, so a full account can still
+        // re-enroll the devices it has. A pre-read rather than a SQL
+        // guard: two racing enrolls can land one over, which a quota
+        // shrugs off.
+        //
+        // A full account makes room by dropping its stalest offline
+        // device rather than refusing. Removing a device takes a device
+        // credential, and a browser profile that cleared its storage has
+        // lost its own, so a refusal could lock an account out with
+        // nothing left to remove devices from. The login authorizing
+        // this enroll is the account owner's, and the evicted device
+        // only has to sign in again.
+        if (existing === null) {
+          const stalestFirst = yield* registry.stalestFirst(accountId);
+          if (stalestFirst.length >= MAX_ACCOUNT_DEVICES) {
+            // Not the advisory presence: failing open to "all offline"
+            // would evict the stalest device whether or not it is
+            // online. A presence the object cannot answer refuses the
+            // enroll instead.
+            const online = yield* presence(accountId);
+            const evict = stalestFirst.find((id) => !online.has(id));
+            if (evict === undefined) {
+              return yield* new HubAccountFullError({
+                limit: MAX_ACCOUNT_DEVICES,
+              });
+            }
+            yield* revokeAccountDevice(accountId, evict);
+          }
+        }
+        // Enrolling again rotates the credential: exactly one credential
+        // per device is valid at any time, because only one hash is
+        // stored.
+        const credential = DEVICE_CREDENTIAL_PREFIX + randomBase64url(32);
+        const createdAt =
+          existing?.created_at ??
+          (yield* Effect.clockWith((clock) => clock.currentTimeMillis));
+        const [wrote, online] = yield* Effect.all(
+          [
+            Effect.flatMap(
+              Effect.promise(() => sha256Hex(credential)),
+              (credentialHash) =>
+                registry.upsert({
+                  deviceId,
+                  accountId,
+                  name,
+                  platform,
+                  icon,
+                  credentialHash,
+                  createdAt,
+                }),
+            ),
+            presenceOrNone(accountId),
+          ],
+          { concurrency: 2 },
+        );
+        // The statement's account guard is the real enforcement against
+        // a cross-account enroll racing the pre-read above: zero changes
+        // means it suppressed one.
+        if (!wrote) return yield* new HubDeviceEnrolledElsewhereError();
+        return {
+          credential,
+          device: toDeviceInfo(
+            {
+              device_id: deviceId,
+              name,
+              platform,
+              icon,
+              created_at: createdAt,
+              last_seen_at: existing?.last_seen_at ?? null,
+            },
+            online,
+          ),
+        };
+      }).pipe(
+        Effect.catchTags({
+          RegistryError: unavailable("enroll"),
+          UnknownError: unavailable("enroll"),
+        }),
+      ),
+    ),
+  );
 
-  // Changes a device of the caller's account (name, icon, or both).
-  // Scoped like revoke: the D1 update carries the account guard, so a
-  // device outside the account (or gone meanwhile) matches no row and
-  // reads as unknown.
-  async function updateAccountDevice(
-    request: Request,
-    env: Env,
-    targetId: string,
-  ) {
-    const { device, hash } = await authDevice(request, env);
-    if (device === null) return await refuseCredential(env, hash);
-    const parsed = Schema.decodeUnknownOption(DevicePatchRequestSchema)(
-      await readJson(request),
-    );
-    if (Option.isNone(parsed))
-      return jsonError(400, { error: "invalid device update" });
-    const updated = await updateDevice(
-      env.DB,
-      targetId,
-      device.account_id,
-      parsed.value,
-    );
-    if (!updated) return jsonError(404, { error: "unknown device" });
-    return new Response(null, { status: 204 });
-  }
+  const devices = HttpApiBuilder.group(HubApi, "devices", (handle) =>
+    handle
+      .handle("listDevices", () =>
+        Effect.gen(function* () {
+          const { accountId } = yield* HubDevice;
+          const [rows, online] = yield* Effect.all(
+            [registry.listAccount(accountId), presenceOrNone(accountId)],
+            { concurrency: 2 },
+          );
+          return { devices: rows.map((row) => toDeviceInfo(row, online)) };
+        }).pipe(Effect.catchTags({ RegistryError: unavailable("list") })),
+      )
+      // A device of another account gets the same refusal as a
+      // nonexistent one, so the route leaks nothing about foreign ids.
+      .handle("revokeDevice", ({ params }) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* HubDevice;
+          const target = yield* registry.byId(params.deviceId);
+          if (target === null || target.account_id !== accountId) {
+            return yield* new HubUnknownDeviceError({
+              deviceId: params.deviceId,
+            });
+          }
+          yield* revokeAccountDevice(accountId, params.deviceId);
+        }).pipe(
+          Effect.catchTags({
+            RegistryError: unavailable("revoke"),
+            UnknownError: unavailable("revoke"),
+          }),
+        ),
+      )
+      .handle("updateDevice", ({ params, payload }) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* HubDevice;
+          const updated = yield* registry.update(
+            params.deviceId,
+            accountId,
+            payload,
+          );
+          if (!updated) {
+            return yield* new HubUnknownDeviceError({
+              deviceId: params.deviceId,
+            });
+          }
+        }).pipe(Effect.catchTags({ RegistryError: unavailable("update") })),
+      )
+      .handle("mintTicket", () =>
+        Effect.gen(function* () {
+          const device = yield* HubDevice;
+          const signingKey = env.TICKET_SIGNING_KEY ?? "";
+          if (signingKey === "") {
+            return yield* new HubTicketSigningUnconfiguredError();
+          }
+          const ttlMs = ticketTtlMs(env);
+          const random = yield* Effect.tryPromise(() =>
+            accountHub(env, device.accountId).mintTicket(
+              device.deviceId,
+              ttlMs,
+            ),
+          ).pipe(Effect.catchTags({ UnknownError: unavailable("ticket") }));
+          const ticket = yield* Effect.promise(() =>
+            buildTicket(signingKey, device.accountId, random),
+          );
+          return { ticket, expiresInMs: ttlMs };
+        }),
+      )
+      // Creates or reuses this device's named tunnel, points its ingress
+      // at the presented loopback port, and answers the hostname and
+      // the connector run token.
+      .handle("provisionTunnel", ({ payload }) =>
+        Effect.gen(function* () {
+          const device = yield* HubDevice;
+          const cf = tunnelEnvOf(env);
+          if (cf === null) return yield* new HubTunnelUnconfiguredError();
+          return yield* Effect.tryPromise(() =>
+            provisionTunnel(
+              cf,
+              cfFetch,
+              device.accountId,
+              device.deviceId,
+              payload.port,
+            ),
+          ).pipe(Effect.catchTags({ UnknownError: unavailable("tunnel") }));
+        }),
+      ),
+  );
 
-  // Tunnel provisioning: create-or-reuse this
-  // device's named tunnel, point its ingress at the presented loopback
-  // port, ensure the DNS CNAME and answer the hostname plus the
-  // connector run token. Device-credential authed like mintTicket.
-  // Unconfigured env answers the typed status so the app can gate
-  // tunnels off without treating it as a failure.
-  async function provisionDeviceTunnel(request: Request, env: Env) {
-    const { device, hash } = await authDevice(request, env);
-    if (device === null) return await refuseCredential(env, hash);
-    const cf = tunnelEnvOf(env);
-    if (cf === null) {
-      return jsonError(TUNNEL_UNCONFIGURED_STATUS, {
-        error: "tunnel provisioning is not configured",
+  // The ticket's account half routes to the object without a database
+  // read. A ticket that is malformed or not signed by this Worker
+  // cannot even name an object, which keeps this unauthenticated route
+  // from instantiating objects of a caller's choosing. Everything past
+  // that (unknown, expired, replayed) is the object's call, a close
+  // code after the upgrade.
+  const socket = HttpApiBuilder.group(HubApi, "socket", (handle) =>
+    handle.handle("connect", ({ request, query }) =>
+      Effect.gen(function* () {
+        if (request.headers["upgrade"]?.toLowerCase() !== "websocket") {
+          return yield* new HubUpgradeRequiredError();
+        }
+        const signingKey = env.TICKET_SIGNING_KEY ?? "";
+        const ticket = query.ticket;
+        const parsed =
+          signingKey === "" || ticket === undefined
+            ? null
+            : yield* Effect.promise(() => parseTicket(signingKey, ticket));
+        if (parsed === null) return yield* new HubTicketMalformedError();
+        const source = request.source;
+        if (!(source instanceof Request)) {
+          return yield* Effect.die("the connect route serves web requests");
+        }
+        const url = new URL("https://device-hub.internal/");
+        url.searchParams.set(CONNECT_RANDOM_PARAM, parsed.random);
+        const upgraded = yield* Effect.promise(() =>
+          accountHub(env, parsed.accountId).fetch(new Request(url, source)),
+        );
+        // A fresh Response: the object's has immutable headers, and the
+        // CORS middleware writes into it on the way out.
+        return HttpServerResponse.raw(
+          new Response(null, { status: 101, webSocket: upgraded.webSocket }),
+        );
+      }),
+    ),
+  );
+
+  return Layer.mergeAll(enrollment, devices, socket);
+});
+
+// ---- Rate limiting and CORS ----
+
+// How long a limited caller is told to wait, the limiters' period in
+// wrangler.jsonc.
+const RATE_LIMIT_PERIOD_SECONDS = 60;
+
+// Keyed on the client IP because most callers here have no verified
+// identity yet, and the work worth bounding happens before one could be
+// established. Cloudflare sets CF-Connecting-IP on every request that
+// arrives through the edge and a client cannot strip it, so its absence
+// means the request did not come through the edge at all (the suite, a
+// bare `wrangler dev`), where there is nothing to protect. A limiter
+// failure fails open: throttling is a cost guard, and it must never be
+// the reason a device cannot reach its hub. A preflight does no work
+// worth limiting, and a 429 on one would only surface in the browser as
+// an opaque CORS failure.
+const rateLimit = HttpRouter.middleware(
+  Effect.gen(function* () {
+    const env = yield* WorkerEnv;
+    return (httpEffect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const ip = request.headers["cf-connecting-ip"];
+        if (ip === undefined || request.method === "OPTIONS") {
+          return yield* httpEffect;
+        }
+        // Enroll and connect, the two routes where a caller with no
+        // credential still makes the Worker do real work, draw on the
+        // tighter budget.
+        const path = new URL(request.originalUrl, "http://hub").pathname;
+        const open =
+          (request.method === "POST" && path === "/devices/enroll") ||
+          (request.method === "GET" && path === "/connect");
+        const limiter = open ? env.RATE_LIMIT_OPEN : env.RATE_LIMIT;
+        const { success } = yield* Effect.tryPromise(() =>
+          limiter.limit({ key: ip }),
+        ).pipe(Effect.orElseSucceed(() => ({ success: true })));
+        if (success) return yield* httpEffect;
+        return HttpServerResponse.empty({
+          status: 429,
+          headers: { "retry-after": String(RATE_LIMIT_PERIOD_SECONDS) },
+        });
       });
-    }
-    const body = Schema.decodeUnknownOption(TunnelProvisionRequestSchema)(
-      await readJson(request),
+  }),
+  { global: true },
+);
+
+// Open CORS, the standard shape for a bearer-token API. Every route
+// authenticates from an explicit Authorization header, so no ambient
+// credential exists for a hostile page to ride: it cannot read the
+// token out of another origin's localStorage, and cookies are never
+// sent (no Allow-Credentials, which "*" forbids anyway). A cross-origin
+// caller gets exactly what curl gets unauthenticated, so an origin
+// allowlist would buy no security while breaking every client not
+// served from one origin. The preflight is cached for a day.
+const cors = HttpRouter.middleware(
+  HttpMiddleware.cors({
+    allowedMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Authorization", "Content-Type"],
+    maxAge: 86400,
+  }),
+  { global: true },
+);
+
+// ---- The Worker ----
+
+export function createWorker(deps: HubDeps): HubWorker {
+  // The handler for each environment, built on its first request. One
+  // deployment has one, and the suite stands in a few of its own.
+  const built = new WeakMap<
+    Env,
+    (request: Request, context: Context.Context<WaitUntil>) => Promise<Response>
+  >();
+
+  function handlerFor(env: Env) {
+    const existing = built.get(env);
+    if (existing !== undefined) return existing;
+    const services = Layer.mergeAll(
+      Registry.layer,
+      Layer.succeed(LoginVerifier, (token: string) =>
+        deps.verifyLogin(token, env),
+      ),
+      Layer.succeed(CfFetch, deps.cfFetch ?? fetch),
+    ).pipe(Layer.provideMerge(Layer.succeed(WorkerEnv, env)));
+    const api = HttpApiBuilder.layer(HubApi).pipe(
+      Layer.provide(Layer.unwrap(handlers)),
+      Layer.provide([loginAuth, deviceAuth]),
+      Layer.provide(rateLimit),
+      Layer.provide(cors),
+      Layer.provide(services),
+      Layer.provide(HttpServer.layerServices),
     );
-    if (Option.isNone(body))
-      return jsonError(400, { error: "invalid tunnel request" });
-    try {
-      const provisioned = await provisionTunnel(
-        cf,
-        cfFetch,
-        device.account_id,
-        device.device_id,
-        body.value.port,
-      );
-      return Response.json(provisioned satisfies TunnelProvisionResponse);
-    } catch {
-      // The CF API refused or misbehaved. A 502 keeps the { error }
-      // contract and the app's runner backs off and retries later.
-      return jsonError(502, { error: "tunnel provisioning failed" });
-    }
+    const { handler } = HttpRouter.toWebHandler(api, { disableLogger: true });
+    built.set(env, handler);
+    return handler;
   }
 
-  async function mintTicket(request: Request, env: Env) {
-    const { device, hash } = await authDevice(request, env);
-    if (device === null) return await refuseCredential(env, hash);
-    const signingKey = env.TICKET_SIGNING_KEY ?? "";
-    if (signingKey === "") {
-      return jsonError(500, { error: "ticket signing is not configured" });
-    }
-    const ttlMs = ticketTtlMs(env);
-    let minted: MintTicketResponse;
-    try {
-      minted = await callObject<MintTicketResponse>(
-        accountStub(env, device.account_id),
-        INTERNAL_TICKET_PATH,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            deviceId: device.device_id,
-            ttlMs,
-          } satisfies MintTicketRequest),
-        },
+  return {
+    async fetch(request, env, ctx) {
+      return await handlerFor(env)(
+        request,
+        Context.make(WaitUntil, (promise) => ctx.waitUntil(promise)),
       );
-    } catch {
-      return jsonError(502, { error: "ticket service unavailable" });
-    }
-    const body = {
-      ticket: await buildTicket(signingKey, device.account_id, minted.random),
-      expiresInMs: ttlMs,
-    } satisfies TicketResponse;
-    return Response.json(body);
-  }
-
-  // The ticket's account half routes to the DO without a D1 hit. A
-  // ticket that is structurally malformed or not signed by this Worker
-  // cannot even name a DO and is rejected here with plain HTTP, which
-  // is what keeps this unauthenticated route from instantiating
-  // objects of a caller's choosing. Everything past parsing (unknown,
-  // expired, replayed) is the DO's call and surfaces as a close code
-  // after the upgrade, see DeviceHub.rejectSocket.
-  async function connect(request: Request, env: Env, url: URL) {
-    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
-      return jsonError(426, { error: "websocket upgrade required" });
-    }
-    const ticket = url.searchParams.get(CONNECT_TICKET_PARAM);
-    const signingKey = env.TICKET_SIGNING_KEY ?? "";
-    const parsed =
-      ticket === null || signingKey === ""
-        ? null
-        : await parseTicket(signingKey, ticket);
-    if (parsed === null) return jsonError(403, { error: "malformed ticket" });
-    const doUrl = new URL(`${DO_ORIGIN}${INTERNAL_CONNECT_PATH}`);
-    doUrl.searchParams.set("random", parsed.random);
-    return await accountStub(env, parsed.accountId).fetch(
-      new Request(doUrl, request),
-    );
-  }
+    },
+  };
 }

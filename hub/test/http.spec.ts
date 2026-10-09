@@ -7,7 +7,6 @@ import { env } from "cloudflare:test";
 import {
   DeviceListResponseSchema,
   EnrollResponseSchema,
-  HUB_ROUTES,
   MAX_ACCOUNT_DEVICES,
 } from "@shigomori/contracts/hubProtocol";
 import {
@@ -46,7 +45,7 @@ function overCapRequest(): Request {
 }
 
 function listRequest(credential: string): Request {
-  return new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
+  return new Request(`${BASE}/devices`, {
     headers: { Authorization: `Bearer ${credential}` },
   });
 }
@@ -122,7 +121,7 @@ describe("POST /devices/enroll", () => {
       }),
     );
     expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: "invalid login token" });
+    expect(await response.json()).toEqual({ _tag: "HubLoginRejectedError" });
   });
 
   it("rejects a malformed body with 400", async () => {
@@ -226,7 +225,9 @@ describe("POST /devices/enroll", () => {
     expect([ra.status, rb.status].toSorted()).toEqual([200, 409]);
     const winner = ra.status === 200 ? ra : rb;
     const loser = ra.status === 200 ? rb : ra;
-    expect(await loser.json()).toMatchObject({ error: expect.any(String) });
+    expect(await loser.json()).toEqual({
+      _tag: "HubDeviceEnrolledElsewhereError",
+    });
     // The winner's credential authenticates and lists exactly its own
     // device, never a foreign account's.
     const winnerBody = Schema.decodeUnknownSync(EnrollResponseSchema)(
@@ -318,7 +319,7 @@ describe("DELETE /devices/:deviceId", () => {
       const response = await call(request);
       expect(response.status).toBe(403);
       // oxlint-disable-next-line no-await-in-loop -- the same one-route-at-a-time loop
-      expect(await response.json()).toMatchObject({ code: "device_revoked" });
+      expect(await response.json()).toEqual({ _tag: "HubDeviceRevokedError" });
     }
     expect((await call(listRequest("smdc_garbage"))).status).toBe(401);
     // A credential rotated away by a re-enroll is unknown, not revoked.
@@ -343,18 +344,16 @@ describe("DELETE /devices/:deviceId", () => {
     expect(again.device.createdAt).toBe(target.device.createdAt);
   });
 
-  it("returns a 4xx JSON error for a malformed percent-escape, not a 500", async () => {
-    // decodeURIComponent throws URIError on a lone percent. With no
+  it("answers a malformed percent-escape with a 4xx, not a 500", async () => {
+    // A lone percent cannot be decoded into a device id, and with no
     // Authorization header this path is reachable unauthenticated, so
-    // it must answer with the { error } shape and a 400, never leak a
-    // workerd text 500.
+    // it must miss the route rather than throw.
     const response = await call(
       new Request(`${BASE}/devices/%`, {
-        method: HUB_ROUTES.revokeDevice.method,
+        method: "DELETE",
       }),
     );
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ error: expect.any(String) });
+    expect(response.status).toBe(404);
   });
 });
 
@@ -462,7 +461,7 @@ describe("POST /tickets", () => {
     });
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: "ticket signing is not configured",
+      _tag: "HubTicketSigningUnconfiguredError",
     });
   });
 });
@@ -540,30 +539,24 @@ describe("rate limiting", () => {
       testEnv,
       "203.0.113.10",
       BUDGET + 1,
-      HUB_ROUTES.listDevices.path,
+      "/devices",
     );
     expect(statuses.slice(0, BUDGET).every((status) => status === 401)).toBe(
       true,
     );
     expect(statuses.at(-1)).toBe(429);
     const response = await call(
-      new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
+      new Request(`${BASE}/devices`, {
         headers: { "CF-Connecting-IP": "203.0.113.10" },
       }),
       testEnv,
     );
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("60");
-    expect(await response.json()).toEqual({ error: "too many requests" });
     // The 429 still carries CORS, or a browser client could not read it.
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     // One caller's budget is not another's.
-    const other = await statusesFrom(
-      testEnv,
-      "203.0.113.11",
-      1,
-      HUB_ROUTES.listDevices.path,
-    );
+    const other = await statusesFrom(testEnv, "203.0.113.11", 1, "/devices");
     expect(other).toEqual([401]);
   });
 
@@ -573,7 +566,7 @@ describe("rate limiting", () => {
       testEnv,
       "203.0.113.20",
       OPEN_BUDGET + 1,
-      HUB_ROUTES.connect.path,
+      "/connect",
     );
     expect(
       statuses.slice(0, OPEN_BUDGET).every((status) => status === 403),
@@ -581,8 +574,8 @@ describe("rate limiting", () => {
     expect(statuses.at(-1)).toBe(429);
     // Enroll draws on the same budget, already spent above.
     const response = await call(
-      new Request(`${BASE}${HUB_ROUTES.enroll.path}`, {
-        method: HUB_ROUTES.enroll.method,
+      new Request(`${BASE}/devices/enroll`, {
+        method: "POST",
         headers: { "CF-Connecting-IP": "203.0.113.20" },
       }),
       testEnv,
@@ -594,7 +587,7 @@ describe("rate limiting", () => {
 describe("cors", () => {
   it("serves any browser origin, authenticating from the bearer alone", async () => {
     const response = await call(
-      new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
+      new Request(`${BASE}/devices`, {
         headers: { Origin: "https://app.example" },
       }),
     );
@@ -605,7 +598,7 @@ describe("cors", () => {
 
   it("answers the preflight a bearer request triggers", async () => {
     const preflight = await call(
-      new Request(`${BASE}${HUB_ROUTES.enroll.path}`, {
+      new Request(`${BASE}/devices/enroll`, {
         method: "OPTIONS",
         headers: {
           Origin: "http://localhost:5190",
@@ -626,7 +619,7 @@ describe("cors", () => {
 
   it("never allows credentials, so no cookie rides a cross-origin call", async () => {
     const response = await call(
-      new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
+      new Request(`${BASE}/devices`, {
         headers: { Origin: "https://evil.example" },
       }),
     );

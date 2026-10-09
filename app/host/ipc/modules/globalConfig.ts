@@ -38,7 +38,7 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
   // config.json as stored, read through the CLI (`sm config read`) and
   // cached for a few seconds (host/lib/config/global.ts).
   read: async () => readGlobalConfig(),
-  // The zod boundary already rejected any key outside the managed set
+  // The schema boundary already rejected any key outside the managed set
   // (the patch schema is strict), so by the time this runs the patch can
   // only carry settings the Settings form manages. Patch semantics:
   // read the stored managed settings as the base, apply only the

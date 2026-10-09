@@ -24,16 +24,17 @@
 // Run: pnpm test hub-link.
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
-import { z } from "zod";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,
+  AnswerFrameSchema,
+  AskFrameSchema,
   encodeEnvelope,
   type ServerEnvelope,
 } from "@shigomori/contracts/hubProtocol";
 import {
-  AnswerFrameSchema,
-  AskFrameSchema,
   CONNECT_INFO_ASK,
   HubAskRefusedError,
   HubAskTimeoutError,
@@ -61,7 +62,7 @@ const ASK_MS = 5_000;
 // and for the raw key set of one (the frame schemas strip unknown
 // keys).
 const fields = (value: unknown) =>
-  z.record(z.string(), z.unknown()).parse(value);
+  Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(value);
 
 // The connectInfo server B answers with. The link is contract-free, so
 // the scenarios multiplex through the input: echo it (undefined
@@ -172,8 +173,10 @@ it("ask/answer: one ask is one exchange, ids correlate concurrent asks, and the 
     askEntry !== undefined && answerEntry !== undefined,
     "the ask and its answer were not both received",
   );
-  const askSent = AskFrameSchema.parse(askEntry.frame);
-  const answerSent = AnswerFrameSchema.parse(answerEntry.frame);
+  const askSent = Schema.decodeUnknownSync(AskFrameSchema)(askEntry.frame);
+  const answerSent = Schema.decodeUnknownSync(AnswerFrameSchema)(
+    answerEntry.frame,
+  );
   assert.equal(askSent.ask, CONNECT_INFO_ASK);
   assert.equal(answerSent.answer, CONNECT_INFO_ASK);
   assert.equal(answerSent.id, askSent.id);
@@ -201,8 +204,11 @@ it("framing: a void input and a void result ride as absent fields", async () => 
     ask !== undefined && answer !== undefined,
     "the ask and its answer were not both received",
   );
-  const answerFrame = AnswerFrameSchema.parse(answer.frame);
-  assert.equal("input" in AskFrameSchema.parse(ask.frame), false);
+  const answerFrame = Schema.decodeUnknownSync(AnswerFrameSchema)(answer.frame);
+  assert.equal(
+    "input" in Schema.decodeUnknownSync(AskFrameSchema)(ask.frame),
+    false,
+  );
   assert.equal(answerFrame.ok, true);
   assert.equal("result" in answerFrame, false);
 });
@@ -217,12 +223,12 @@ it("error path: a throwing server answers ok:false with the message only", async
       error.code === undefined,
   );
   const answer = stub.received.find((entry) => {
-    const frame = AnswerFrameSchema.safeParse(entry.frame);
+    const frame = Schema.decodeUnknownOption(AnswerFrameSchema)(entry.frame);
     return (
       entry.from === "B" &&
-      frame.success &&
-      !frame.data.ok &&
-      frame.data.message === "boom"
+      Option.isSome(frame) &&
+      !frame.value.ok &&
+      frame.value.message === "boom"
     );
   });
   assert.ok(answer, "the refusal never reached the stub");
@@ -242,11 +248,15 @@ it("one ask only: an unknown ask is refused while connectInfo is answered for th
   await raw.opened;
   await delay(50);
   raw.send("B", { ...askFrame(1), ask: "invokeAnything", input: "x" });
-  const refused = AnswerFrameSchema.parse((await raw.nextHub()).frame);
+  const refused = Schema.decodeUnknownSync(AnswerFrameSchema)(
+    (await raw.nextHub()).frame,
+  );
   assert.equal(refused.ok, false);
   assert.match(refused.message, /unknown ask/);
   raw.send("B", askFrame(2, "served"));
-  const served = AnswerFrameSchema.parse((await raw.nextHub()).frame);
+  const served = Schema.decodeUnknownSync(AnswerFrameSchema)(
+    (await raw.nextHub()).frame,
+  );
   assert.equal(served.ok, true);
   assert.equal(served.result, "served");
 });
@@ -301,7 +311,9 @@ it("offline nack: asking a deviceId with no socket rejects with the offline erro
 it("timeout: a peer that never answers fails the ask typed at its timeout, and the late answer is dropped", async () => {
   const { a, rawB } = await bootWithRawPeer(trackTest);
   const pending = a.connection.askConnectInfo("B", "hello?", 200);
-  const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  const ask = Schema.decodeUnknownSync(AskFrameSchema)(
+    (await rawB.nextHub()).frame,
+  );
   await assert.rejects(
     () => pending,
     (error) => error instanceof HubAskTimeoutError,
@@ -316,7 +328,9 @@ it("timeout: a peer that never answers fails the ask typed at its timeout, and t
   });
   await delay(50);
   const again = a.connection.askConnectInfo("B", "again", ASK_MS);
-  const second = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  const second = Schema.decodeUnknownSync(AskFrameSchema)(
+    (await rawB.nextHub()).frame,
+  );
   rawB.send("A", {
     answer: CONNECT_INFO_ASK,
     id: second.id,
@@ -358,7 +372,9 @@ it("misrouted answer: an answer from a device other than the one asked is droppe
   trackTest(() => rawC.close());
   await rawC.opened;
   const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
-  const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  const ask = Schema.decodeUnknownSync(AskFrameSchema)(
+    (await rawB.nextHub()).frame,
+  );
   const answer = (result: unknown) => ({
     answer: CONNECT_INFO_ASK,
     id: ask.id,
@@ -388,7 +404,9 @@ it("off-roster ask: an ask whose from is not in the presence roster gets no answ
 it("unknown wire shape: a frame this link does not speak is dropped, so an ask to such a peer times out like any unreachable one and the link keeps serving", async () => {
   const { a, rawB } = await bootWithRawPeer(trackTest);
   const pending = a.connection.askConnectInfo("B", "x", 200);
-  const ask = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  const ask = Schema.decodeUnknownSync(AskFrameSchema)(
+    (await rawB.nextHub()).frame,
+  );
   // What a build speaking another wire would say: neither an ask
   // nor an answer, so nothing routes it to the pending ask.
   rawB.send("A", { epoch: 0, sm: { t: "welcome", deviceId: "B" } });
@@ -397,7 +415,9 @@ it("unknown wire shape: a frame this link does not speak is dropped, so an ask t
     (error) => error instanceof HubAskTimeoutError,
   );
   const again = a.connection.askConnectInfo("B", "again", ASK_MS);
-  const second = AskFrameSchema.parse((await rawB.nextHub()).frame);
+  const second = Schema.decodeUnknownSync(AskFrameSchema)(
+    (await rawB.nextHub()).frame,
+  );
   assert.notEqual(second.id, ask.id);
   rawB.send("A", {
     answer: CONNECT_INFO_ASK,

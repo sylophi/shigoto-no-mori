@@ -207,17 +207,14 @@ import {
   DIRECT_TICKET_PREFIX,
 } from "@host/direct/tickets";
 import { makeConnectInfo } from "@host/direct/connectInfo";
+import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
+import { newHandshakeNonce } from "@shigomori/contracts/proof";
 import {
   AnswerFrameSchema,
   AskFrameSchema,
-  CONNECT_INFO_ASK,
-  HubAskRefusedError,
-} from "@shared/hub/link";
-import { newHandshakeNonce } from "@shigomori/contracts/proof";
-import {
-  TunnelProvisionDeniedError,
-  TunnelUnconfiguredError,
-} from "@shared/account/service";
+} from "@shigomori/contracts/hubProtocol";
+import { TunnelProvisionDeniedError } from "@shared/account/service";
+import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
 import {
   boundPort,
@@ -1307,8 +1304,14 @@ it("one round trip: a winning dial costs the device hub exactly one ask and one 
     ask !== undefined && answer !== undefined,
     "the ask and its answer were not both received",
   );
-  assert.equal(AskFrameSchema.parse(ask.frame).ask, CONNECT_INFO_ASK);
-  assert.equal(AnswerFrameSchema.parse(answer.frame).ok, true);
+  assert.equal(
+    Schema.decodeUnknownSync(AskFrameSchema)(ask.frame).ask,
+    CONNECT_INFO_ASK,
+  );
+  assert.equal(
+    Schema.decodeUnknownSync(AnswerFrameSchema)(answer.frame).ok,
+    true,
+  );
   const baseline = stub.forwardedCount();
   assert.equal(await invokeB(bridge, ECHO, echoOf("direct")), "direct");
   await delay(150);
@@ -2301,7 +2304,7 @@ it("cloudflared runner: no-binary and unconfigured are typed terminal states, an
   const unconfigured = await tunnelHarness({
     provision: async () => {
       unconfiguredCalls += 1;
-      throw new TunnelUnconfiguredError();
+      throw new HubTunnelUnconfiguredError();
     },
   });
   await unconfigured.reconcile({ port: 40100 });
@@ -2573,7 +2576,7 @@ it("cloudflared runner: a denied provision (401/404) parks with NO scheduled ret
     provision: async () => {
       provisions += 1;
       if (denied) {
-        throw new TunnelProvisionDeniedError("device revoked", 401);
+        throw new TunnelProvisionDeniedError("device revoked");
       }
       return { hostname: "h.example.test", connectorToken: "t" };
     },
