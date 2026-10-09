@@ -637,6 +637,27 @@ describe("cd", () => {
     assert.equal((await start(repo, ["cd", "w"]).ended).code, 2);
   });
 
+  it("switches within the project, by name or as `worktrees <name>`", async () => {
+    const { repo, worktree } = scripted();
+    for (const args of [
+      ["worktrees", "switch", "w"],
+      ["wt", "w"],
+    ]) {
+      const cdFile = join(box.home, "cd");
+      writeFileSync(cdFile, "");
+      // oxlint-disable-next-line no-await-in-loop -- one directive file, one run at a time
+      const ended = await start(repo, args, {
+        SHIGOMORI_CD_FILE: cdFile,
+      }).ended;
+      assert.equal(ended.code, 0, args.join(" "));
+      assert.equal(readFileSync(cdFile, "utf8"), `${worktree}\n`);
+    }
+    // Bare, it asks which worktree, which takes a terminal.
+    const bare = await start(repo, ["worktrees", "switch"]).ended;
+    assert.equal(bare.code, 2);
+    assert.match(bare.stderr, /needs an interactive terminal/);
+  });
+
   // The wrapper as a shell evals it, around this build.
   it.each(["zsh", "bash"])("moves %s through the wrapper", async (shell) => {
     const { repo, worktree } = scripted();

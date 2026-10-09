@@ -28,6 +28,39 @@ const NAMESPACES: Readonly<Record<string, string>> = {
   agent: "agents",
 };
 
+// The worktrees namespace's verbs. Any other word after it is a
+// worktree's name, which `switch` enters.
+const WORKTREE_VERBS = new Set([
+  "list",
+  "path",
+  "link",
+  "destination",
+  "status",
+  "describe",
+  "shelve",
+  "unshelve",
+  "autopull",
+  "create",
+  "rm",
+  "move",
+  "adopt",
+  "setup",
+  "rekey",
+  "cd",
+  "switch",
+  "pr",
+  "merge",
+  "land",
+  "done",
+  "open",
+  "dirty",
+  "send",
+  "bring",
+  "mirror",
+  "unmirror",
+  "mirrors",
+]);
+
 // A command's own name, whichever alias it was called by.
 export const commandName = (name: string) =>
   NAMESPACES[name] ?? VERBS[name] ?? name;
@@ -41,7 +74,12 @@ export function canonical(args: ReadonlyArray<string>) {
   const command = commandName(first);
   const [verb, ...after] = more;
   if (verb === undefined) return [command];
-  if (command === "worktrees") return [command, VERBS[verb] ?? verb, ...after];
+  if (command === "worktrees") {
+    const named = VERBS[verb] ?? verb;
+    return WORKTREE_VERBS.has(named) || named.startsWith("-")
+      ? [command, named, ...after]
+      : [command, "switch", verb, ...after];
+  }
   if (command === "projects") return [command, projectVerb(verb), ...after];
   return [command, ...more];
 }
