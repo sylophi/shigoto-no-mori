@@ -17,7 +17,7 @@ import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shared/projectPaths";
-import { isHubRefusal } from "@shared/account/service";
+import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";

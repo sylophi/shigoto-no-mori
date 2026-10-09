@@ -14,7 +14,6 @@
 // Run: pnpm test web-tabs.
 import assert from "node:assert/strict";
 import { it } from "vitest";
-import { HUB_ROUTES } from "@shigomori/contracts/hubProtocol";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
 import { startDirectListener } from "./lib/directBoot.mts";
@@ -82,10 +81,7 @@ async function boot() {
       // The hub's ticket mint, in the stub hub's ticket form.
       fetchImpl: async (input, init) => {
         const url = new URL(String(input));
-        if (
-          init?.method === HUB_ROUTES.mintTicket.method &&
-          url.pathname === HUB_ROUTES.mintTicket.path
-        ) {
+        if (init?.method === "POST" && url.pathname === "/tickets") {
           mints += 1;
           return Response.json({
             ticket: `t:${bridge.api.deviceId}:${mints}`,

@@ -12,7 +12,8 @@
 import { credentialRevoked } from "@shared/remote/supervisor";
 import { useIsMutating } from "@tanstack/react-query";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { isHubRefusal } from "@shared/account/service";
+import { isHubRefusal } from "@shigomori/contracts/hubApi";
+import { isHubUnreachable } from "@shared/account/service";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import {
@@ -191,7 +192,7 @@ function describeListError(error: unknown): string {
   if (isHubRefusal(error)) {
     return "The device hub refused this request, so the device list is unavailable.";
   }
-  if (error instanceof TypeError) {
+  if (isHubUnreachable(error)) {
     return (
       "Couldn't reach the device hub. Either you are offline, or this " +
       "build's hub URL does not point at a reachable Worker."

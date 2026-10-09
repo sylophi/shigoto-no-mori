@@ -9,8 +9,18 @@ with its addresses and one-time tickets). Data never passes through
 here: it flows over the direct sockets those answers set up. No sm
 logic runs here either: the Worker verifies Clerk tokens, keeps a
 device registry in D1, mints short-lived connection tickets and
-forwards envelopes it never parses. The wire contract is
-`@shigomori/contracts/hubProtocol` (`packages/contracts/src/hubProtocol.ts`).
+forwards envelopes it never parses. The HTTP routes are the shared
+`HubApi` (`packages/contracts/src/hubApi.ts`), served on Effect's
+`http-api` and called by the app through the client derived from it,
+and the socket's envelopes are `packages/contracts/src/hubProtocol.ts`.
+
+Inside, the Worker (`src/worker.ts`) authenticates each route by its
+bearer tier, reads and writes the registry through the `Registry`
+service (`src/Registry.ts`), and calls the account's object's methods
+directly. The object (`src/hubObject.ts`) keeps its unconsumed tickets
+in its own SQLite storage through `@effect/sql-sqlite-do`
+(`src/Tickets.ts`, which migrates its table as the object starts), and
+takes a fetch only for the websocket upgrade.
 
 This directory is a package of the repo's pnpm workspace: install from
 the repo root, and run its scripts from `hub/`.
@@ -92,8 +102,8 @@ Prerequisites: a Cloudflare account, a Clerk application, and
    openssl rand -base64 32 | pnpm exec wrangler secret put TICKET_SIGNING_KEY --env dev
    ```
 
-   Without it the Worker answers ticket mints with a 500 that names
-   the missing secret, and no device can connect. Rotating it only
+   Without it the Worker answers ticket mints with a 500
+   (`HubTicketSigningUnconfiguredError`), and no device can connect. Rotating it only
    voids the tickets in flight, which live for a minute anyway.
 
 5. Deploy:

@@ -40,11 +40,15 @@ import {
   syncHubDevice,
   updateDevice,
 } from "../shared/account/enroll.ts";
+import * as HttpClientError from "effect/http/HttpClientError";
 import {
-  HubRequestError,
+  HubDeviceRevokedError,
+  isHubRefusal,
+} from "@shigomori/contracts/hubApi";
+import {
   TunnelProvisionDeniedError,
   createAccountService,
-  isHubRefusal,
+  isHubUnreachable,
 } from "../shared/account/service.ts";
 import { deriveAccountId } from "../shared/account/token.ts";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
@@ -68,7 +72,6 @@ import {
 import { safeDecode } from "@shigomori/contracts/codec";
 import {
   DeviceInfoSchema,
-  HUB_ROUTES,
   type DeviceInfo,
 } from "@shigomori/contracts/hubProtocol";
 import { entryAt, fakeSessionJwt, notYetSet } from "./lib/checkKit.mts";
@@ -105,7 +108,12 @@ function recordingFetch(responder: Responder) {
       init: {
         method,
         headers: Object.fromEntries(new Headers(headers)),
-        body: typeof body === "string" ? body : undefined,
+        body:
+          body instanceof Uint8Array
+            ? new TextDecoder().decode(body)
+            : typeof body === "string"
+              ? body
+              : undefined,
       },
     });
     return responder(String(url), init ?? {});
@@ -190,7 +198,7 @@ it("service: enroll hits the enroll route with the session-token bearer and an E
   assert.equal(result.credential, "device-credential");
   assert.deepEqual(result.device, DEVICE);
   const call = entryAt(calls, 0);
-  assert.equal(call.url, "https://hub.test" + HUB_ROUTES.enroll.path);
+  assert.equal(call.url, "https://hub.test/devices/enroll");
   assert.equal(call.init.method, "POST");
   assert.equal(call.init.headers.authorization, "Bearer session-token");
   const body = sentJson(call);
@@ -207,7 +215,7 @@ it("service: listDevices GETs the devices route under the credential bearer", as
   const devices = await service.listDevices("device-credential");
   assert.deepEqual(devices, [DEVICE]);
   const call = entryAt(calls, 0);
-  assert.equal(call.url, "https://hub.test" + HUB_ROUTES.listDevices.path);
+  assert.equal(call.url, "https://hub.test/devices");
   assert.equal(call.init.method, "GET");
   assert.equal(call.init.headers.authorization, "Bearer device-credential");
 });
@@ -220,10 +228,7 @@ it("service: update PATCHes the per-device route with the name and/or icon and t
     name: "Studio",
   });
   const call = entryAt(calls, 0);
-  assert.equal(
-    call.url,
-    "https://hub.test" + HUB_ROUTES.updateDevice.path("this device/id"),
-  );
+  assert.equal(call.url, "https://hub.test/devices/this%20device%2Fid");
   assert.equal(call.init.method, "PATCH");
   assert.deepEqual(sentJson(call), { name: "Studio" });
   assert.equal(call.init.headers.authorization, "Bearer device-credential");
@@ -249,10 +254,7 @@ it("service: revoke DELETEs the per-device route and tolerates a 204", async () 
   );
   await service.revoke("device-credential", "other device/id");
   const call = entryAt(calls, 0);
-  assert.equal(
-    call.url,
-    "https://hub.test" + HUB_ROUTES.revokeDevice.path("other device/id"),
-  );
+  assert.equal(call.url, "https://hub.test/devices/other%20device%2Fid");
   assert.match(call.url, /other%20device%2Fid$/, "deviceId not encoded");
   assert.equal(call.init.method, "DELETE");
   assert.equal(call.init.headers.authorization, "Bearer device-credential");
@@ -265,14 +267,14 @@ it("service: mintTicket POSTs the tickets route under the credential bearer", as
   const ticket = await service.mintTicket("device-credential");
   assert.equal(ticket.ticket, "the-ticket");
   const call = entryAt(calls, 0);
-  assert.equal(call.url, "https://hub.test" + HUB_ROUTES.mintTicket.path);
+  assert.equal(call.url, "https://hub.test/tickets");
   assert.equal(call.init.method, "POST");
   assert.equal(call.init.headers.authorization, "Bearer device-credential");
 });
 
 it("service: the auth tier differs, enroll under the session token and the rest under the credential", async () => {
   const responder = (url: string) => {
-    if (url.endsWith(HUB_ROUTES.enroll.path)) {
+    if (url.endsWith("/devices/enroll")) {
       return json({ credential: "device-credential", device: DEVICE });
     }
     return json({ devices: [DEVICE] });
@@ -292,17 +294,23 @@ it("service: the auth tier differs, enroll under the session token and the rest 
   assert.notEqual(enrollAuth, listAuth, "enroll and list share a bearer");
 });
 
-it("service: a non-2xx with an ErrorBody throws the device hub's error message", async () => {
-  const { service } = stubService(() => json({ error: "device revoked" }, 403));
+it("service: a refusal rejects with the hub's contract error", async () => {
+  const { service } = stubService(() =>
+    json({ _tag: "HubDeviceRevokedError" }, 403),
+  );
   await assert.rejects(
     () => service.listDevices("device-credential"),
-    /device revoked/,
+    (error) => error instanceof HubDeviceRevokedError && isHubRefusal(error),
   );
 });
 
 it("service: a rate-limited tunnel provision stays retryable, any other 4xx is a denial", async () => {
   const provisionWith = (status: number) => {
-    const { service } = stubService(() => json({ error: "refused" }, status));
+    const { service } = stubService(() =>
+      status === 429
+        ? new Response(null, { status })
+        : json({ _tag: "HubCredentialRejectedError" }, status),
+    );
     return service.provisionTunnel("device-credential", 4000);
   };
   await assert.rejects(
@@ -315,8 +323,9 @@ it("service: a rate-limited tunnel provision stays retryable, any other 4xx is a
   await assert.rejects(
     () => provisionWith(429),
     (error) =>
-      error instanceof HubRequestError &&
-      error.status === 429 &&
+      HttpClientError.isHttpClientError(error) &&
+      "response" in error.reason &&
+      error.reason.response.status === 429 &&
       !isHubRefusal(error),
   );
 });
@@ -408,7 +417,7 @@ it("enroll flow: enrollDevice stores the credential with the derived accountId u
       if (init.method === "DELETE") return new Response(null, { status: 204 });
       refusals += 1;
       return refusals === 1
-        ? json({ error: "enrolled under a different account" }, 409)
+        ? json({ _tag: "HubDeviceEnrolledElsewhereError" }, 409)
         : json({ credential: "cred-2", device: DEVICE });
     },
   );
@@ -544,12 +553,7 @@ it("device sync: a hub copy that did not move but went stale (a default name mig
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(
     calls.map((c) => [c.url, sentJson(c)]),
-    [
-      [
-        CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid"),
-        { name: "Mini", icon: "mini" },
-      ],
-    ],
+    [[CONFIG.hubUrl + "/devices/device-uuid", { name: "Mini", icon: "mini" }]],
   );
   assert.equal(readRecord(store).deviceName, "Mini");
   assert.equal(readRecord(store).deviceIcon, undefined);
@@ -658,8 +662,8 @@ it("device update: updateDevice writes the hub first and keeps the change for th
   });
   assert.equal(readRecord(store).deviceIcon, undefined);
   assert.equal(readRecord(store).deviceName, "Studio");
-  const self = CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid");
-  const peer = CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("peer-uuid");
+  const self = CONFIG.hubUrl + "/devices/device-uuid";
+  const peer = CONFIG.hubUrl + "/devices/peer-uuid";
   assert.deepEqual(
     calls.map((c) => [c.url, sentJson(c)]),
     [
@@ -779,7 +783,7 @@ it("sign-out flow: signOutDevice revokes THIS device then clears, and still clea
     },
   });
   assert.equal(store.read(), null, "a failed revoke blocked the clear");
-  assert.match(String(reported), /offline/);
+  assert.ok(isHubUnreachable(reported), String(reported));
   // The undelivered revoke is parked with the credential it needs,
   // and delivered by the retry: a 204 clears it, and so does a
   // refusal (the hub already does not honor it), while an outage
@@ -817,11 +821,7 @@ it("sign-out flow: signOutDevice revokes THIS device then clears, and still clea
   const refusing = createAccountService({
     baseUrl: CONFIG.hubUrl,
     fetchImpl: () =>
-      Promise.resolve(
-        new Response(JSON.stringify({ error: "invalid device credential" }), {
-          status: 401,
-        }),
-      ),
+      Promise.resolve(json({ _tag: "HubCredentialRejectedError" }, 401)),
   });
   store.write({ credential: "cred-3", accountId: "a", deviceName: "d" });
   await signOutDevice({

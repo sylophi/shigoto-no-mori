@@ -7,16 +7,13 @@ import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,
   CLOSE_TICKET_REJECTED,
-  CONNECT_TICKET_PARAM,
   encodeEnvelope,
   MAX_ONLINE_DEVICES,
   MAX_HUB_MESSAGE_BYTES,
-  HUB_ROUTES,
   hubTextWithinLimit,
   HUB_PING,
   HUB_PONG,
 } from "@shigomori/contracts/hubProtocol";
-import { deleteDevice } from "../src/db.ts";
 import { buildTicket } from "../src/ticket.ts";
 import {
   BASE,
@@ -47,10 +44,9 @@ describe("GET /connect", () => {
 
   it("rejects a structurally malformed ticket before the upgrade", async () => {
     const response = await call(
-      new Request(
-        `${BASE}${HUB_ROUTES.connect.path}?${CONNECT_TICKET_PARAM}=garbage`,
-        { headers: { Upgrade: "websocket" } },
-      ),
+      new Request(`${BASE}/connect?ticket=garbage`, {
+        headers: { Upgrade: "websocket" },
+      }),
     );
     expect(response.status).toBe(403);
   });
@@ -60,9 +56,9 @@ describe("GET /connect", () => {
     // check, so it is rejected as plain HTTP before naming a DO and can
     // never become an oversized storage key that crashes the object.
     const ticket = await signedTicket("acct-huge", "x".repeat(3000));
-    const params = new URLSearchParams({ [CONNECT_TICKET_PARAM]: ticket });
+    const params = new URLSearchParams({ ticket: ticket });
     const response = await call(
-      new Request(`${BASE}${HUB_ROUTES.connect.path}?${params}`, {
+      new Request(`${BASE}/connect?${params}`, {
         headers: { Upgrade: "websocket" },
       }),
     );
@@ -96,10 +92,10 @@ describe("GET /connect", () => {
       "A".repeat(22),
     );
     for (const ticket of [swapped, wrongKey]) {
-      const params = new URLSearchParams({ [CONNECT_TICKET_PARAM]: ticket });
+      const params = new URLSearchParams({ ticket: ticket });
       // oxlint-disable-next-line no-await-in-loop -- two requests, and a failure should name which forgery got through
       const response = await call(
-        new Request(`${BASE}${HUB_ROUTES.connect.path}?${params}`, {
+        new Request(`${BASE}/connect?${params}`, {
           headers: { Upgrade: "websocket" },
         }),
       );
@@ -409,10 +405,10 @@ describe("revocation", () => {
   });
 
   it("rejects a pre-minted ticket once the device row is gone, even when the ticket record survives", async () => {
-    // This exercises the D1 existence gate in handleConnect, not the
-    // ticket purge. Mint a ticket, then delete the device row directly,
+    // This exercises the D1 existence gate at connect, not the ticket
+    // purge. Mint a ticket, then delete the device row directly,
     // bypassing revoke's ticket purge, so the ticket record is still
-    // present and unexpired at connect time. handleConnect re-reads D1,
+    // present and unexpired at connect time. The object re-reads D1,
     // finds no device and rejects. This is the mint-concurrent-with-
     // revoke race: a ticket whose put landed after revoke's purge must
     // still not open a socket for a device whose D1 row is already gone.
@@ -420,7 +416,9 @@ describe("revocation", () => {
     const { ticket } = await mintTicket(credential);
     // Delete the row out of band so the DO's ticket record survives and
     // only the D1 existence check can catch this.
-    await deleteDevice(env.DB, "dev-rev-d1", "acct-rev-d1");
+    await env.DB.prepare("DELETE FROM devices WHERE device_id = ?")
+      .bind("dev-rev-d1")
+      .run();
     const socket = await openSocket(ticket);
     expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
   });

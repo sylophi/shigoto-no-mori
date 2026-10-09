@@ -12,7 +12,6 @@
 // adapter, and everything account flavored (deviceId, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts.
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { isDeviceRevoked, isHubRefusal } from "@shared/account/service";
 import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { createHeartbeat, type HeartbeatOptions } from "@shared/hub/heartbeat";
 import { RemoteConnectError } from "@shared/remote/deviceLink";
@@ -26,13 +25,17 @@ import type {
   HubConnectOpts,
   HubConnectionStatus,
 } from "@shared/hub/connectionTypes";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import {
+  HubApi,
+  isHubDeviceRevoked,
+  isHubRefusal,
+} from "@shigomori/contracts/hubApi";
 import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,
-  CONNECT_TICKET_PARAM,
   HUB_PING,
   HUB_PONG,
-  HUB_ROUTES,
 } from "@shigomori/contracts/hubProtocol";
 import {
   type CloseClassifier,
@@ -135,13 +138,16 @@ const hubCloseClassifier: CloseClassifier = (code) => {
   return null;
 };
 
-// The connect URL: ws(s) scheme, the shared connect route, the ticket
-// in the query string.
+// The connect URL: the shared connect route with the ticket in the
+// query string, on the ws(s) scheme.
 function connectUrlFor(hubUrl: string, ticket: string): string {
-  const base = hubUrl.endsWith("/") ? hubUrl.slice(0, -1) : hubUrl;
-  const wsBase = base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
-  const param = `${CONNECT_TICKET_PARAM}=${encodeURIComponent(ticket)}`;
-  return `${wsBase}${HUB_ROUTES.connect.path}?${param}`;
+  const baseUrl = hubUrl
+    .replace(/\/+$/, "")
+    .replace(/^https:/, "wss:")
+    .replace(/^http:/, "ws:");
+  return HttpApiClient.urlBuilder(HubApi, { baseUrl }).connect({
+    query: { ticket },
+  });
 }
 
 function sameOpts(a: HubConnectOpts, b: HubConnectOpts): boolean {
@@ -253,7 +259,7 @@ export function createHubConnectionCore(
           reject(
             new RemoteConnectError(
               `ticket mint failed: ${errorMessageOf(error)}`,
-              isDeviceRevoked(error) ? CLOSE_DEVICE_REVOKED : null,
+              isHubDeviceRevoked(error) ? CLOSE_DEVICE_REVOKED : null,
               isHubRefusal(error),
             ),
           );

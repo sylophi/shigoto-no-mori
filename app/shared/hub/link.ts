@@ -5,11 +5,8 @@
 // sockets the answer brokers (shared/hub/directDial.ts).
 //
 // The question is a single ask/answer pair keyed by an id, riding the
-// hub's relay envelope as its opaque `frame`:
-//
-//   ask:    { ask, id, input? }
-//   answer: { answer, id, ok: true, result? }
-//         | { answer, id, ok: false, message, code? }
+// hub's relay envelope as its opaque `frame` (AskFrameSchema and
+// AnswerFrameSchema in packages/contracts/src/hubProtocol.ts).
 //
 // There is no session: no handshake before the ask, nothing to close
 // after the answer, so a dial costs one round trip. An undefined input
@@ -26,13 +23,18 @@
 // a sender in the latest presence roster, which keeps a misrouted
 // `from` from minting tickets. The size guard is a sanity bound.
 //
-// Pure on purpose: zod, the shared frame and envelope schemas, and an
+// Pure on purpose: the shared frame and envelope schemas and an
 // injected send function. No node builtins, no ws, no electron, so the
 // hub-link check drives it headlessly and main wraps it around a
 // real socket.
-import { z } from "zod";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
+  type AnswerFrame,
+  AnswerFrameSchema,
+  type AskFrame,
+  AskFrameSchema,
   decodeEnvelope,
   encodeEnvelope,
   MAX_HUB_MESSAGE_BYTES,
@@ -50,32 +52,8 @@ export const CONNECT_INFO_ASK = "connectInfo";
 // device, not a failed call, so the dialer parks instead of retrying.
 export const NO_LISTENER_CODE = "no-listener";
 
-// Bounded like every string a hostile hub could inflate.
-const AskNameSchema = z.string().max(64);
-
-export const AskFrameSchema = z.object({
-  ask: AskNameSchema,
-  id: z.number().int(),
-  input: z.unknown().optional(),
-});
-type AskFrame = z.infer<typeof AskFrameSchema>;
-
-export const AnswerFrameSchema = z.discriminatedUnion("ok", [
-  z.object({
-    answer: AskNameSchema,
-    id: z.number().int(),
-    ok: z.literal(true),
-    result: z.unknown().optional(),
-  }),
-  z.object({
-    answer: AskNameSchema,
-    id: z.number().int(),
-    ok: z.literal(false),
-    message: z.string(),
-    code: z.string().max(64).optional(),
-  }),
-]);
-type AnswerFrame = z.infer<typeof AnswerFrameSchema>;
+const decodeAsk = Schema.decodeUnknownOption(AskFrameSchema);
+const decodeAnswer = Schema.decodeUnknownOption(AnswerFrameSchema);
 
 // The addressed peer has no socket on the device hub (an offline nack,
 // or a presence list it vanished from). A pending ask to it rejects
@@ -370,14 +348,14 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
   }
 
   function handleFrame(from: string, frame: unknown): void {
-    const ask = AskFrameSchema.safeParse(frame);
-    if (ask.success) {
-      handleAsk(from, ask.data);
+    const ask = decodeAsk(frame);
+    if (Option.isSome(ask)) {
+      handleAsk(from, ask.value);
       return;
     }
-    const answer = AnswerFrameSchema.safeParse(frame);
-    if (answer.success) {
-      handleAnswer(from, answer.data);
+    const answer = decodeAnswer(frame);
+    if (Option.isSome(answer)) {
+      handleAnswer(from, answer.value);
       return;
     }
     warnDrop(() => `dropping unparseable frame from ${truncateId(from)}`);
