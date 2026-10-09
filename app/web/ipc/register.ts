@@ -175,12 +175,14 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
           hubUrl: config.hubUrl,
           accountId: record.accountId,
           deviceId,
-          mintTicket: async (signal) => {
+          mintTicket: async (connectionId, signal) => {
             const fresh = store.read();
             if (fresh === null) {
               throw new Error("signed out, no hub credential");
             }
-            return (await service.mintTicket(fresh.credential, signal)).ticket;
+            return (
+              await service.mintTicket(fresh.credential, connectionId, signal)
+            ).ticket;
           },
         };
       }),

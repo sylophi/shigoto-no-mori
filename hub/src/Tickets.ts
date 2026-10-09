@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
+import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import { randomBase64url } from "./crypto.ts";
 
 // Upper bound on a single account's unconsumed tickets. A device that
@@ -18,17 +19,27 @@ import { randomBase64url } from "./crypto.ts";
 // connect and mints again.
 const MAX_UNCONSUMED_TICKETS = 64;
 
+// Who a ticket admits: the device, its kind, and the connection its
+// dialer named.
+export interface TicketHolder {
+  readonly deviceId: string;
+  readonly kind: DeviceKind;
+  readonly connectionId: string;
+}
+
 export class Tickets extends Context.Service<
   Tickets,
   {
-    // Stores a fresh ticket for the device and answers its random half.
+    // Stores a fresh ticket for the holder and answers its random half.
     readonly mint: (
-      deviceId: string,
+      holder: TicketHolder,
       ttlMs: number,
     ) => Effect.Effect<string, SqlError>;
-    // Burns the ticket, answering the device it was minted for while it
-    // is unexpired, so a replay or a late dial gets null.
-    readonly take: (random: string) => Effect.Effect<string | null, SqlError>;
+    // Burns the ticket, answering who it was minted for while it is
+    // unexpired, so a replay or a late dial gets null.
+    readonly take: (
+      random: string,
+    ) => Effect.Effect<TicketHolder | null, SqlError>;
     // Drops the device's unconsumed tickets, at its revoke.
     readonly dropDevice: (deviceId: string) => Effect.Effect<void, SqlError>;
   }
@@ -43,6 +54,12 @@ const migrations = SqliteMigrator.fromRecord({
       expires_at INTEGER NOT NULL
     )`,
   ),
+  "0002_ticket_connection": Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    Effect.andThen(
+      sql`ALTER TABLE tickets ADD COLUMN kind TEXT NOT NULL DEFAULT 'desktop'`,
+      sql`ALTER TABLE tickets ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''`,
+    ),
+  ),
 });
 
 const make = Effect.gen(function* () {
@@ -50,7 +67,7 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   const mint = Effect.fn("Tickets.mint")(function* (
-    deviceId: string,
+    holder: TicketHolder,
     ttlMs: number,
   ) {
     const now = yield* Clock.currentTimeMillis;
@@ -64,7 +81,9 @@ const make = Effect.gen(function* () {
     const random = randomBase64url(16);
     yield* sql`INSERT INTO tickets ${sql.insert({
       random,
-      device_id: deviceId,
+      device_id: holder.deviceId,
+      kind: holder.kind,
+      connection_id: holder.connectionId,
       expires_at: now + ttlMs,
     })}`;
     return random;
@@ -76,10 +95,18 @@ const make = Effect.gen(function* () {
     // a replay races nothing.
     const rows = yield* sql<{
       device_id: string;
+      kind: DeviceKind;
+      connection_id: string;
       expires_at: number;
-    }>`DELETE FROM tickets WHERE random = ${random} RETURNING device_id, expires_at`;
+    }>`DELETE FROM tickets WHERE random = ${random}
+       RETURNING device_id, kind, connection_id, expires_at`;
     const [row] = rows;
-    return row !== undefined && row.expires_at > now ? row.device_id : null;
+    if (row === undefined || row.expires_at <= now) return null;
+    return {
+      deviceId: row.device_id,
+      kind: row.kind,
+      connectionId: row.connection_id,
+    };
   });
 
   const dropDevice = Effect.fn("Tickets.dropDevice")(function* (
