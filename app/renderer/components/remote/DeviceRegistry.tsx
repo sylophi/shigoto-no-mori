@@ -129,7 +129,10 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
           the way back sits in it because that is where the bad news
           is. Blocked outranks a missing session: a device removed
           from the account has nothing left to keep. */}
-      {blockedMessage !== null ? (
+      {block?.reason === "update-required" ? (
+        // Signing in again changes nothing here: only an update does.
+        <ErrorBanner>{block.message}</ErrorBanner>
+      ) : blockedMessage !== null ? (
         // The button re-enrolls this machine (the Clerk session
         // outlives a revoked device credential), which is the way back
         // if the automatic sign-out did not land.

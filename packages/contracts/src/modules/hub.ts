@@ -30,7 +30,12 @@ const HubSocketStatusSchema = Schema.Union([
   }),
   Schema.Struct({
     phase: Schema.Literal("blocked"),
-    reason: Schema.Literals(["revoked", "superseded", "refused"]),
+    reason: Schema.Literals([
+      "revoked",
+      "superseded",
+      "refused",
+      "update-required",
+    ]),
     message: Schema.String,
   }),
   Schema.Struct({ phase: Schema.Literal("stopped") }),

@@ -154,6 +154,16 @@ localStorage to forge the header. The desktop's `SM_ACCOUNT_WEB_ORIGIN`
 (below) is a separate gate on a separate process and is NOT paired with
 anything here.
 
+### The version floor
+
+Every app request names its protocol in an `sm-protocol` header, and
+the Worker refuses a build naming none, or one below
+`HUB_PROTOCOL_FLOOR` (`packages/contracts/src/hubApi.ts`), with a 403
+`HubUpdateRequiredError` whose `error` field is the sentence a v2 build
+shows. The floor is `PROTOCOL_VERSION`, so a protocol bump raises it at
+the hub's next deploy and turns away every build below it at once:
+deploy the hub only once that release has reached the devices.
+
 ### Abuse limits
 
 The hub is on the public internet and most of its routes answer

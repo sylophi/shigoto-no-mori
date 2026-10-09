@@ -35,8 +35,12 @@ import {
   HubTunnelUnconfiguredError,
   HubUnavailableError,
   HubUnknownDeviceError,
+  HubUpdateRequiredError,
   HubUpgradeRequiredError,
+  HUB_PROTOCOL_FLOOR,
   LoginAuth,
+  PROTOCOL_HEADER,
+  ProtocolFloor,
 } from "@shigomori/contracts/hubApi";
 import {
   type DeviceInfoWire,
@@ -141,6 +145,25 @@ const deviceAuth = Layer.effect(
           });
         }).pipe(Effect.catchTags({ RegistryError: Effect.die })),
     });
+  }),
+);
+
+// ---- The version floor ----
+
+// A build that names no protocol, or one below the floor, gets the
+// refusal before any credential is looked at.
+const protocolFloor = Layer.succeed(ProtocolFloor, (effect) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const version = Number(request.headers[PROTOCOL_HEADER]);
+    if (!Number.isInteger(version) || version < HUB_PROTOCOL_FLOOR) {
+      return yield* new HubUpdateRequiredError({
+        floor: HUB_PROTOCOL_FLOOR,
+        error:
+          "This version of Shigoto no Mori is too old for the device hub. Update it to connect.",
+      });
+    }
+    return yield* effect;
   }),
 );
 
@@ -488,7 +511,7 @@ const rateLimit = HttpRouter.middleware(
 const cors = HttpRouter.middleware(
   HttpMiddleware.cors({
     allowedMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Authorization", "Content-Type"],
+    allowedHeaders: ["Authorization", "Content-Type", PROTOCOL_HEADER],
     maxAge: 86400,
   }),
   { global: true },
@@ -516,7 +539,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     ).pipe(Layer.provideMerge(Layer.succeed(WorkerEnv, env)));
     const api = HttpApiBuilder.layer(HubApi).pipe(
       Layer.provide(Layer.unwrap(handlers)),
-      Layer.provide([loginAuth, deviceAuth]),
+      Layer.provide([loginAuth, deviceAuth, protocolFloor]),
       Layer.provide(rateLimit),
       Layer.provide(cors),
       Layer.provide(services),

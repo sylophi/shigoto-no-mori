@@ -5,6 +5,10 @@ import * as Schema from "effect/Schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import {
+  HUB_PROTOCOL_FLOOR,
+  PROTOCOL_HEADER,
+} from "@shigomori/contracts/hubApi";
+import {
   DeviceListResponseSchema,
   EnrollResponseSchema,
   MAX_ACCOUNT_DEVICES,
@@ -521,6 +525,55 @@ async function statusesFrom(
   return statuses;
 }
 
+describe("the version floor", () => {
+  it("turns away a build below the floor, or one naming none, with the sentence a v2 build shows", async () => {
+    const { credential } = await enroll("acct-floor", "dev-floor");
+    for (const version of ["", "3", "not a number"]) {
+      const request = new Request(`${BASE}/devices`, {
+        headers: {
+          Authorization: `Bearer ${credential}`,
+          [PROTOCOL_HEADER]: version,
+        },
+      });
+      // oxlint-disable-next-line no-await-in-loop -- three cases, order does not matter
+      const response = await call(request);
+      expect(response.status).toBe(403);
+      // oxlint-disable-next-line no-await-in-loop -- as above
+      expect(await response.json()).toMatchObject({
+        _tag: "HubUpdateRequiredError",
+        floor: HUB_PROTOCOL_FLOOR,
+        error: expect.stringContaining("Update it"),
+      });
+    }
+  });
+
+  it("refuses an old build's enroll before its login is checked", async () => {
+    const response = await call(
+      new Request(`${BASE}/devices/enroll`, {
+        method: "POST",
+        headers: { [PROTOCOL_HEADER]: "" },
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      _tag: "HubUpdateRequiredError",
+    });
+  });
+
+  it("serves a build at or above the floor", async () => {
+    const { credential } = await enroll("acct-floor-ok", "dev-floor-ok");
+    const response = await call(
+      new Request(`${BASE}/devices`, {
+        headers: {
+          Authorization: `Bearer ${credential}`,
+          [PROTOCOL_HEADER]: String(HUB_PROTOCOL_FLOOR + 1),
+        },
+      }),
+    );
+    expect(response.status).toBe(200);
+  });
+});
+
 describe("rate limiting", () => {
   // A missing binding would fail open in rateLimited, so the cases below,
   // which stand in their own limiters, would never notice it.
@@ -611,6 +664,10 @@ describe("cors", () => {
     expect(preflight.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(preflight.headers.get("Access-Control-Allow-Headers")).toContain(
       "Authorization",
+    );
+    // The web client names its protocol in a header of its own.
+    expect(preflight.headers.get("Access-Control-Allow-Headers")).toContain(
+      PROTOCOL_HEADER,
     );
     expect(preflight.headers.get("Access-Control-Allow-Methods")).toContain(
       "POST",

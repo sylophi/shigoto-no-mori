@@ -27,6 +27,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { HubUpdateRequiredError } from "@shigomori/contracts/hubApi";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
   type DeviceConnection,
@@ -83,7 +84,8 @@ export type ConnectFn = (
 // ticket mint the hub would not serve, any 401/403, which a misdeployed
 // hub produces for every device at once and which recovers on its own.
 // "superseded" is another instance of this device taking the socket
-// over.
+// over. "update-required" is the hub's version floor turning this build
+// away, which only an update ends.
 type BlockReason = Extract<SupervisorStatus, { phase: "blocked" }>["reason"];
 
 // The one block a device acts on by leaving the account.
@@ -211,11 +213,16 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
         if (error instanceof RemoteConnectError && error.blocked) {
           // A blocking close names itself through the classifier. A
           // blocking failure with no close code (a refused ticket
-          // mint) names itself in the error.
-          const verdict = classifyClose(error.code) ?? {
-            reason: "refused" as const,
-            message: error.message,
-          };
+          // mint) names itself in the error, and a hub that turned
+          // this build away for its age says so in its own words.
+          const verdict =
+            classifyClose(error.code) ??
+            (error.refusal instanceof HubUpdateRequiredError
+              ? {
+                  reason: "update-required" as const,
+                  message: error.refusal.message,
+                }
+              : { reason: "refused" as const, message: error.message });
           return yield* restore(block(verdict.reason, verdict.message));
         }
         return 0;

@@ -26,7 +26,9 @@ import {
   HubApi,
   HubTunnelUnconfiguredError,
   isHubRefusal,
+  PROTOCOL_HEADER,
 } from "@shigomori/contracts/hubApi";
+import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import {
   DeviceListResponseSchema,
   type DevicePatch,
@@ -124,7 +126,8 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
   const fetchImpl = deps.fetchImpl ?? fetch;
 
   // One call under one bearer: the Clerk session token for enroll, the
-  // device credential for everything else.
+  // device credential for everything else. Every call names this build's
+  // protocol, which the hub holds to its floor.
   const call = <A, E>(
     bearer: string,
     run: (client: HubClient) => Effect.Effect<A, E>,
@@ -134,8 +137,14 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       Effect.flatMap(
         HttpApiClient.make(HubApi, {
           baseUrl,
-          transformClient: HttpClient.mapRequest(
-            HttpClientRequest.bearerToken(bearer),
+          transformClient: HttpClient.mapRequest((request) =>
+            request.pipe(
+              HttpClientRequest.bearerToken(bearer),
+              HttpClientRequest.setHeader(
+                PROTOCOL_HEADER,
+                String(PROTOCOL_VERSION),
+              ),
+            ),
           ),
         }),
         run,
