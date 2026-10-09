@@ -75,7 +75,9 @@ function builtMacfs(): string {
 }
 
 const engine = Engine.adapter.pipe(
-  Layer.provideMerge(Engine.layer({ flavor: "dev", macfs: builtMacfs() })),
+  Layer.provideMerge(
+    Engine.layer({ flavor: "dev", macfs: builtMacfs(), sm: "smd" }),
+  ),
   Layer.provide(
     ConfigProvider.layerAdd(
       ConfigProvider.fromEnv({ env: { SHIGOMORI_DATA_DIR: engineDataDir } }),

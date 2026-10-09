@@ -15,6 +15,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Config from "./Config.ts";
+import { mergeProblem, mergeWaitingOn } from "./mergeProgress.ts";
 import { errorDocument } from "./errorDocument.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
@@ -131,12 +132,68 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
   }
 }
 
+// A PR merge and land waited on that GitHub won't merge without a
+// person: `problem` says why.
+export class MergeNeedsAttention extends Schema.TaggedError<MergeNeedsAttention>()(
+  "MergeNeedsAttention",
+  {
+    number: Schema.Int,
+    problem: Schema.String,
+    url: Schema.String,
+    command: Schema.String,
+  },
+) {
+  get documentCode(): string {
+    return "needs-attention";
+  }
+
+  override get message(): string {
+    return `PR #${this.number} needs attention: ${this.problem} (${this.url}). Run \`${this.command}\` again once it's dealt with`;
+  }
+}
+
+// The wait couldn't read the PR, several times in a row.
+export class MergeLostTrack extends Schema.TaggedError<MergeLostTrack>()(
+  "MergeLostTrack",
+  {
+    number: Schema.Int,
+    command: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Lost track of PR #${this.number}: ${errorDocument(this.cause).error}. Run \`${this.command}\` again to keep waiting`;
+  }
+}
+
 // How a merge ended, in the app's spelling: it landed, a merge queue took
 // it, or auto-merge is armed and GitHub lands it once its requirements
-// are met. The last two leave the PR open.
+// are met. The last two leave the PR open, and merge and land wait on
+// them (awaitMerge).
 type Outcome = "merged" | "queued" | "auto-merge";
 
-type MergeOutcome = { readonly method: MergeMethod; readonly outcome: Outcome };
+export type MergeOutcome = {
+  readonly method: MergeMethod;
+  readonly outcome: Outcome;
+  // An auto-merge armed before this merge, which it left as it was.
+  readonly alreadyArmed?: boolean;
+};
+
+// How long the wait for GitHub to merge sleeps between reads.
+export const MergePollInterval = Context.Reference<Duration.Duration>(
+  "sm/engine/Landing/MergePollInterval",
+  { defaultValue: () => Duration.seconds(10) },
+);
+
+// A read that fails this many times in a row ends the wait. One that
+// fails now and then (a network blip) is waited out.
+const MERGE_READ_ATTEMPTS = 5;
+
+// How many polls in a row (about five minutes) a PR may sit BLOCKED
+// with nothing the wait can see to wait on before it counts as stuck: a
+// required check that never reports, say, or a rule the reads don't
+// cover.
+const MERGE_STALL_POLLS = 30;
 
 // Where a land's steps go: the merged layers of a stack, the scripts of
 // a removal.
@@ -150,6 +207,13 @@ export type Reporter = Worktrees.Reporter & {
   // The PR a merge by number is about to merge, whose title the
   // document leaves out and a person's line names.
   readonly target?: (pr: PullRequestSummary) => Effect.Effect<void>;
+  // A PR that didn't merge on the spot, which the command now waits on
+  // until GitHub merges it, and each change in what it waits on.
+  readonly pending?: (
+    pr: PullRequestSummary,
+    outcome: MergeOutcome,
+  ) => Effect.Effect<void>;
+  readonly waiting?: (line: string) => Effect.Effect<void>;
 };
 
 // What each verb can fail with. A stack land is the cleanup of
@@ -158,7 +222,9 @@ type MergeError =
   | LandingRefused
   | GitHub.GitHubCliError
   | GitHub.GitHubOutputError
-  | GitHub.StackMergeFailed;
+  | GitHub.StackMergeFailed
+  | MergeNeedsAttention
+  | MergeLostTrack;
 type DoneError = LandingRefused | Git.GitError | Git.BranchNotMergedError;
 type RemoveStackError =
   | DoneError
@@ -166,7 +232,11 @@ type RemoveStackError =
   | GitHub.GitHubOutputError
   | Worktrees.WorktreeRefused
   | Worktrees.DirtyWorktree;
-type LandError = RemoveStackError | GitHub.StackMergeFailed;
+type LandError =
+  | RemoveStackError
+  | GitHub.StackMergeFailed
+  | MergeNeedsAttention
+  | MergeLostTrack;
 
 type RemoveOptions = {
   readonly force: boolean;
@@ -185,8 +255,11 @@ export class Landing extends Context.Service<
       LandingRefused | GitHub.GitHubCliError | GitHub.GitHubOutputError
     >;
     // `sm merge`: the worktree's open PR, or with `number` that PR of the
-    // project, merged (or queued, or auto-merge armed). `stack` merges
-    // every open PR under it too, bottom first, each reported.
+    // project, merged (or queued, or auto-merge armed). A PR that didn't
+    // merge on the spot is waited on until GitHub merges it, except by
+    // `number` (the app's merge, which shows the armed or queued PR
+    // itself). `stack` merges every open PR under it too, bottom first,
+    // each reported.
     readonly merge: (
       target:
         | { readonly located: Worktrees.Located }
@@ -424,6 +497,106 @@ const make = Effect.gen(function* () {
       );
     });
 
+  // A merge gh accepted doesn't always end the way it was asked to:
+  // --auto merges at once when the verdict has moved since the lookup,
+  // and on a base branch with a merge queue either merge queues the PR.
+  // So the outcome is read back off the PR rather than assumed. A read
+  // that fails leaves the one asked for, since it only shapes the report
+  // and the wait.
+  const readBack = (repo: string, number: number, asked: MergeOutcome) =>
+    github.mergeProgress(repo, number).pipe(
+      Effect.map(
+        (after): MergeOutcome =>
+          after.state === "MERGED"
+            ? { ...asked, outcome: "merged" }
+            : after.isInMergeQueue
+              ? { ...asked, outcome: "queued" }
+              : after.autoMergeMethod !== undefined
+                ? { ...asked, outcome: "auto-merge" }
+                : asked,
+      ),
+      Effect.orElseSucceed(() => asked),
+    );
+
+  // Waits for a PR that didn't merge on the spot (auto-merge armed, or a
+  // merge queue took it) until GitHub merges it. Every other way out is
+  // an error naming what the PR needs, and the command to run again once
+  // it's dealt with.
+  const awaitMerge = (
+    repo: string,
+    pr: PullRequestSummary,
+    o: MergeOutcome,
+    verb: "merge" | "land",
+    reporter: Reporter,
+  ) =>
+    Effect.gen(function* () {
+      if (o.outcome === "merged") return;
+      if (reporter.pending !== undefined) yield* reporter.pending(pr, o);
+      const interval = yield* MergePollInterval;
+      const command = `${binary} ${verb}`;
+      let queued = o.outcome === "queued";
+      let lastNote = "";
+      let lastProblem = "";
+      let failedReads = 0;
+      let stalledPolls = 0;
+      for (let first = true; ; first = false) {
+        if (!first) yield* Effect.sleep(interval);
+        const read = yield* Effect.result(
+          github.mergeProgress(repo, pr.number),
+        );
+        if (Result.isFailure(read)) {
+          failedReads++;
+          if (failedReads === MERGE_READ_ATTEMPTS) {
+            return yield* new MergeLostTrack({
+              number: pr.number,
+              command,
+              cause: read.failure,
+            });
+          }
+          continue;
+        }
+        failedReads = 0;
+        const progress = read.success;
+        if (progress.state === "MERGED") return;
+        queued ||= progress.isInMergeQueue;
+        let problem = mergeProblem(progress, pr.baseRefName, queued);
+        const waitingOn = mergeWaitingOn(progress);
+        if (
+          problem === "" &&
+          waitingOn === "" &&
+          progress.mergeStateStatus === "BLOCKED"
+        ) {
+          stalledPolls++;
+          if (stalledPolls >= MERGE_STALL_POLLS) {
+            problem = "GitHub is holding it back for a reason sm can't see";
+          }
+        } else {
+          stalledPolls = 0;
+        }
+        // A problem counts once two reads in a row see it: one read can
+        // fall between two of GitHub's steps, like auto-merge handing the
+        // PR to a merge queue, or the queue landing it.
+        if (problem !== "" && problem === lastProblem) {
+          return yield* new MergeNeedsAttention({
+            number: pr.number,
+            problem,
+            url: pr.url,
+            command,
+          });
+        }
+        lastProblem = problem;
+        if (problem !== "") continue;
+        const line =
+          waitingOn === ""
+            ? "waiting for GitHub to merge it"
+            : `waiting for GitHub to merge it: ${waitingOn}`;
+        if (line !== lastNote) {
+          lastNote = line;
+          if (reporter.waiting !== undefined) yield* reporter.waiting(line);
+        }
+      }
+    });
+
   // `gh pr merge`, with the stacked-PR fallback.
   const mergeNow = (
     repo: string,
@@ -432,7 +605,7 @@ const make = Effect.gen(function* () {
     verb: LandingRefused["verb"],
   ) =>
     github.run(repo, ["pr", "merge", String(number), `--${method}`]).pipe(
-      Effect.as<MergeOutcome>({ method, outcome: "merged" }),
+      Effect.andThen(readBack(repo, number, { method, outcome: "merged" })),
       Effect.catchTags({
         GitHubCliError: (failure) =>
           mergeStackedAlone(repo, number, method, failure, verb).pipe(
@@ -472,6 +645,7 @@ const make = Effect.gen(function* () {
             method:
               (armed.mergeMethod.toLowerCase() as MergeMethod | "") || method,
             outcome: "auto-merge",
+            alreadyArmed: true,
           };
         } else {
           yield* github.run(project.path, [
@@ -481,10 +655,10 @@ const make = Effect.gen(function* () {
             "--auto",
             `--${method}`,
           ]);
-          outcome = {
+          outcome = yield* readBack(project.path, pr.number, {
             method,
-            outcome: yield* github.autoMergeOutcome(project.path, pr.number),
-          };
+            outcome: "auto-merge",
+          });
         }
       } else {
         outcome = yield* mergeNow(project.path, pr.number, method, verb);
@@ -1122,7 +1296,8 @@ const make = Effect.gen(function* () {
       settings,
       "merge",
     );
-    return mergeDocument(pr, branch, outcome);
+    yield* awaitMerge(located.project.path, pr, outcome, "merge", reporter);
+    return mergeDocument(pr, branch, { ...outcome, outcome: "merged" });
   });
 
   const land = Effect.fn("Landing.land")(function* (
@@ -1240,10 +1415,11 @@ const make = Effect.gen(function* () {
         settings,
         "land",
       );
-      // A PR that hasn't landed (queued, or auto-merge armed) keeps its
-      // worktree: running land again once it merges does the rest.
-      if (outcome.outcome !== "merged") {
-        return mergeDocument(pr, branch, outcome);
+      yield* awaitMerge(project.path, pr, outcome, "land", reporter);
+      // The wait can take as long as the checks do, time enough for new
+      // work in the worktree, so the guards run again.
+      if (outcome.outcome !== "merged" && !worktree.isPrimary) {
+        yield* worktrees.checkRemovable(located, options.force);
       }
       method = outcome.method;
     }

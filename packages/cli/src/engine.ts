@@ -8,9 +8,12 @@ import type { Flavor } from "@shigomori/engine/flavor";
 
 const open: Store.OpenDatabase = (filename) => SqliteClient.make({ filename });
 const macfs = join(dirname(process.execPath), "macfs");
+// What the agent hooks run: this binary (Agents names it by its real
+// path).
+const sm = process.execPath;
 
 export const engine = (flavor: Flavor) =>
-  engineLayer({ flavor, store: Store.layer(open), macfs });
+  engineLayer({ flavor, store: Store.layer(open), macfs, sm });
 
 // `sm doctor`'s, which opens the store inside each run, so a store that
 // won't open still gets its checklist.

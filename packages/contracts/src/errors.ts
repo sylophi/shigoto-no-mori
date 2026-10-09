@@ -110,6 +110,21 @@ export class BranchNotMergedError extends Schema.TaggedError<BranchNotMergedErro
 
 export const isBranchNotMergedError = Schema.is(BranchNotMergedError);
 
+// "Sync from primary" refused because the primary branch conflicts with
+// this one: the rebase and the merge both stopped and were aborted, so
+// the worktree is as it was. The pill offers to merge anyway and leave
+// the conflicts to resolve.
+export class SyncConflictsError extends Schema.TaggedError<SyncConflictsError>()(
+  "SyncConflictsError",
+  { ref: Schema.String },
+) {
+  override get message(): string {
+    return `${this.ref} conflicts with this branch, so nothing changed.`;
+  }
+}
+
+export const isSyncConflictsError = Schema.is(SyncConflictsError);
+
 // A peer's command-access gate refused the call: that machine does not
 // run commands from here (host/socket/server.ts's dispatch gate), as
 // distinct from a real handler failure.
@@ -132,6 +147,7 @@ export const ContractErrorSchema = Schema.Union([
   ConvertRefusedError,
   WorktreeSettingUpError,
   BranchNotMergedError,
+  SyncConflictsError,
   CommandRefusedError,
 ]);
 

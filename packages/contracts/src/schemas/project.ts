@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { isCloneableRemote } from "../predicates/remoteUrl.ts";
+import { isCloneSource } from "../predicates/remoteUrl.ts";
 import { PathPayloadSchema, ProjectScopedPayloadSchema } from "./payloads.ts";
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
@@ -119,16 +119,17 @@ export const AddProjectPayloadSchema = Schema.Struct({
 
 export type AddProjectPayload = typeof AddProjectPayloadSchema.Type;
 
-// Clone a remote into `parentDir` and register the checkout. What
-// counts as a remote is isCloneableRemote's call (a plain path or
-// file:// names this machine's disk, which means nothing on the device
-// doing the clone, and a leading dash would read as a git option).
-// `name` is the new folder, one segment, defaulting to the repo's own
-// name.
+// Clone a remote, or a GitHub repository by its `owner/repo`, into
+// `parentDir` and register the checkout. What counts is isCloneSource's
+// call (a plain path or file:// names this machine's disk, which means
+// nothing on the device doing the clone, and a leading dash would read
+// as an option). `name` is the new folder, one segment, defaulting to
+// the repo's own name.
 export const CloneProjectPayloadSchema = Schema.Struct({
   url: Schema.Trim.check(
     Schema.makeFilter(
-      (url: string) => isCloneableRemote(url) || "Not a git remote URL",
+      (url: string) =>
+        isCloneSource(url) || "Not a git remote URL or a GitHub owner/repo",
     ),
   ),
   parentDir: Schema.NonEmptyString,

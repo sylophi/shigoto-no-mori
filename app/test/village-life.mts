@@ -7,6 +7,7 @@
 // Asserts:
 // - unset, Village life and Doubutsu names read as off, and a fresh
 //   install seeds names alone
+// - unset, Village news reads as on, and only off is stored
 // - Village life shows only with the villager data downloaded
 // - the Settings form shows each one's stored value
 // - the device patch never carries Village life
@@ -24,6 +25,7 @@ import {
   doubutsuNamesEnabled,
   villageLifeEnabled,
   villageLifeShows,
+  villageNewsEnabled,
 } from "@shared/villageLife";
 import { it } from "vitest";
 
@@ -32,7 +34,7 @@ import { it } from "vitest";
 // bare stand-in is enough to load them under node.
 // @ts-expect-error a bare stand-in, not the whole preload api
 globalThis.window = { api: { deviceId: "village-life-check" } };
-const { fromConfig, toDeviceSettingsPatch } =
+const { fromConfig, toClientConfig, toDeviceSettingsPatch } =
   await import("@/hooks/config/useSettingsSave");
 
 it("unset, each setting reads off", () => {
@@ -43,6 +45,12 @@ it("unset, each setting reads off", () => {
   assert.equal(villageLifeEnabled({}), false);
   assert.equal(villageLifeEnabled({ villageLife: false }), false);
   assert.equal(villageLifeEnabled({ villageLife: true }), true);
+});
+
+it("unset, Village news reads on", () => {
+  assert.equal(villageNewsEnabled({}), true);
+  assert.equal(villageNewsEnabled({ villageNews: true }), true);
+  assert.equal(villageNewsEnabled({ villageNews: false }), false);
 });
 
 it("Village life shows only with the villager data", () => {
@@ -67,6 +75,16 @@ it("the form shows each stored value", () => {
   const seeded = fromConfig({ doubutsuNames: true }, {});
   assert.equal(seeded.doubutsuNames, true);
   assert.equal(fromConfig({}, { villageLife: true }).villageLife, true);
+  assert.equal(unset.villageNews, true);
+  assert.equal(fromConfig({}, { villageNews: false }).villageNews, false);
+});
+
+it("Village news is stored only when off", () => {
+  const on = fromConfig({}, {});
+  assert.equal(toClientConfig(on).villageNews, undefined);
+  const off = toClientConfig({ ...on, villageNews: false });
+  assert.equal(off.villageNews, false);
+  assert.equal(fromConfig({}, off).villageNews, false);
 });
 
 it("the device patch never carries Village life", () => {

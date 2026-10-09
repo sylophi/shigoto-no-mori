@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -13,8 +13,9 @@ interface ProjectHeaderProps {
   // project only peers hold reads it off one of them.
   iconFrom?: { projectId: string; deviceId: string };
   // The merged tree's device badge cluster, rendered after the name of
-  // the open project only: the list's rows are names alone, since every
-  // row wearing them made the list a wall of icons.
+  // the open (or inline, an unfolded) project only: the list's rows are
+  // names alone, since every row wearing them made the list a wall of
+  // icons.
   badges?: React.ReactNode;
   // Some checkout in the header's group is terrier-sourced, which puts
   // the paw after the open project's name while Mark terrier projects
@@ -25,6 +26,9 @@ interface ProjectHeaderProps {
   // The open project, heading the tree on its own: a title, with
   // nothing left for it to open.
   expanded?: boolean;
+  // On the inline list, whether the project is folded to its header,
+  // which picking flips in place.
+  folded?: boolean;
   // On the list: the page on screen belongs to this project.
   current?: boolean;
   // Picked off the list.
@@ -56,6 +60,7 @@ export function ProjectHeader({
   terrier = false,
   pinned = false,
   expanded,
+  folded,
   current,
   onToggle,
   missing,
@@ -141,9 +146,9 @@ export function ProjectHeader({
       {badges}
     </div>
   ) : (
-    // No disclosure arrow: picking a project goes into it, and an
-    // arrow here would promise it opens in place. The row's fill
-    // (ProjectRow) is what says it can be picked.
+    // A disclosure arrow only inline: elsewhere picking a project goes
+    // into it, and an arrow would promise it opens in place. The row's
+    // fill (ProjectRow) is what says it can be picked.
     <button
       type="button"
       onClick={onToggle}
@@ -151,17 +156,38 @@ export function ProjectHeader({
       // doubutsu stripes the row as one pill and has this sit it out.
       data-slot="sidebar-project-pick"
       aria-current={current ? "true" : undefined}
+      aria-expanded={folded === undefined ? undefined : !folded}
       className={cn(
         baseClass,
         "transition-colors",
-        current
+        current && folded !== false
           ? "text-accent-foreground"
-          : "text-muted-foreground group-hover/project:text-foreground",
+          : folded === undefined
+            ? "text-muted-foreground group-hover/project:text-foreground"
+            : "text-foreground",
+        // Inline, a project heads its rows like the open project's
+        // title, under its owner's quieter label.
+        folded !== undefined && "font-semibold",
       )}
     >
+      {folded !== undefined && (
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            !folded && "rotate-90",
+          )}
+        />
+      )}
       {lead}
       {name}
       {pinned && <PinnedMark />}
+      {folded === false && (
+        <>
+          <TerrierMark terrier={terrier} />
+          {badges}
+        </>
+      )}
     </button>
   );
 

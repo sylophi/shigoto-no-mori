@@ -1,27 +1,9 @@
-import {
-  Archive,
-  ArchiveRestore,
-  Hammer,
-  RefreshCw,
-  RefreshCwOff,
-  Trash2,
-} from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { type ReactNode, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/ui/inline-error";
-import {
-  useSetAutoPull,
-  useSetShelved,
-  useSetAgentWorking,
-} from "@/hooks/worktrees/useWorktreeMutations";
-import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { assertNever } from "@/lib/utils";
-import {
-  isAgentWorking,
-  isManagedWorktree,
-  type CleanupError,
-  type Worktree,
-} from "@shigomori/contracts/schemas";
+import { type CleanupError, type Worktree } from "@shigomori/contracts/schemas";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import {
   CollapsedThroughProvider,
@@ -29,6 +11,8 @@ import {
   LABEL_RANK,
   useFittedLabels,
 } from "./footerFit";
+import { AgentSessionsMenu } from "./AgentSessionsMenu";
+import { WorktreeOptions } from "./WorktreeOptions";
 
 // The footer is a four-state machine. The parent owns the transitions and
 // hands us a discriminated state plus the actions each state can fire, so
@@ -60,10 +44,13 @@ interface WorktreeDetailFooterProps {
   worktree: Worktree;
   state: WorktreeFooterState;
   actions: WorktreeFooterActions;
-  // The scope's own verbs (ports, mirror, transplant), rendered as a
-  // leading row in the quiet state only: the deletion state machine
-  // keeps the whole footer once it engages.
+  // The scope's own verbs (files, mirror), rendered as a leading row
+  // in the quiet state only: the deletion state machine keeps the
+  // whole footer once it engages.
   leading?: ReactNode;
+  // Rows for the Options popover past the worktree's own switches (a
+  // transfer used too rarely for a footer button of its own).
+  options?: ReactNode;
   // False when a remote host has not granted this client command
   // access: the mutating affordances (shelve, delete) stay off, the
   // rest of the page is the read-only mirror.
@@ -75,6 +62,7 @@ export function WorktreeDetailFooter({
   state,
   actions,
   leading,
+  options,
   canMutate = true,
 }: WorktreeDetailFooterProps) {
   // On a narrow pane the verbs give up their labels one at a time
@@ -94,7 +82,7 @@ export function WorktreeDetailFooter({
           </div>
         )}
         {canMutate ? (
-          renderFooterContent(worktree, state, actions)
+          renderFooterContent(worktree, state, actions, options)
         ) : (
           <span className="ml-auto text-xs text-muted-foreground">
             {peerReadOnlyNote()}
@@ -109,6 +97,7 @@ function renderFooterContent(
   worktree: Worktree,
   state: WorktreeFooterState,
   actions: WorktreeFooterActions,
+  options: ReactNode,
 ): ReactNode {
   switch (state.kind) {
     case "cleanupError":
@@ -124,7 +113,12 @@ function renderFooterContent(
       );
     case "normal":
       return (
-        <NormalRow worktree={worktree} {...state} onDelete={actions.onDelete} />
+        <NormalRow
+          worktree={worktree}
+          {...state}
+          options={options}
+          onDelete={actions.onDelete}
+        />
       );
     default:
       return assertNever(state);
@@ -231,89 +225,28 @@ function NormalRow({
   confirmDelete,
   busy,
   deleteBlockedReason,
+  options,
   onDelete,
 }: {
   worktree: Worktree;
   confirmDelete: boolean;
   busy: boolean;
   deleteBlockedReason: string | undefined;
+  options: ReactNode;
   onDelete: () => void;
 }) {
-  const setShelved = useSetShelved();
-  const setAutoPull = useSetAutoPull();
-  const setAgentWorking = useSetAgentWorking();
-  // Offered wherever a fast-forward could ever happen. Once on, it
-  // stays visible even if the upstream vanishes, so it can be turned
-  // off again.
-  const canAutoPull =
-    worktree.autoPull || (worktree.hasUpstream && !worktree.detached);
-  const autoPullUi = AUTO_PULL_UI[worktree.autoPull ? "on" : "off"];
-  const allowAgentWorking = useAllowAgentWorking();
-
   return (
     <div className="ml-auto flex items-center gap-3">
-      {canAutoPull && (
-        <FooterVerb
-          rank={LABEL_RANK.autoPull}
-          icon={<autoPullUi.Icon />}
-          label={autoPullUi.label}
-          variant="ghost"
-          className={autoPullUi.className}
-          aria-pressed={worktree.autoPull}
-          disabled={setAutoPull.isPending || busy}
-          onClick={() =>
-            setAutoPull.mutate({
-              projectId: worktree.projectId,
-              worktreeId: worktree.id,
-              autoPull: !worktree.autoPull,
-            })
-          }
-          tip={autoPullUi.tip}
+      {worktree.agentSessions?.length ? (
+        <AgentSessionsMenu
+          worktree={worktree}
+          sessions={worktree.agentSessions}
+          busy={busy}
         />
-      )}
-      {/* Agents set the mark (`sm agent-working`). Here it can only be
-          cleared, for an agent that stopped without clearing it. */}
-      {isAgentWorking(worktree, allowAgentWorking) && (
-        <FooterVerb
-          rank={LABEL_RANK.agentWorking}
-          icon={<Hammer />}
-          label="Agent working"
-          variant="ghost"
-          className="shrink-0 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
-          aria-pressed
-          disabled={setAgentWorking.isPending || busy}
-          onClick={() =>
-            setAgentWorking.mutate({
-              projectId: worktree.projectId,
-              worktreeId: worktree.id,
-              agentWorking: false,
-            })
-          }
-          tip="An agent marked this worktree as working, so the sidebar keeps it on the Agent working shelf. Click to clear the mark."
-        />
-      )}
-      {isManagedWorktree(worktree) && (
-        <FooterVerb
-          rank={LABEL_RANK.shelve}
-          icon={worktree.shelved ? <ArchiveRestore /> : <Archive />}
-          label={worktree.shelved ? "Unshelve" : "Shelve"}
-          variant="ghost"
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-          disabled={setShelved.isPending || busy}
-          onClick={() =>
-            setShelved.mutate({
-              projectId: worktree.projectId,
-              worktreeId: worktree.id,
-              shelved: !worktree.shelved,
-            })
-          }
-          tip={
-            worktree.shelved
-              ? "Unshelve (bring back to the main list)"
-              : "Shelve (hide from the main list)"
-          }
-        />
-      )}
+      ) : null}
+      <WorktreeOptions worktree={worktree} busy={busy}>
+        {options}
+      </WorktreeOptions>
       {!worktree.isPrimary && (
         <FooterVerb
           // Armed or deleting, the label stays: an icon alone can't ask
@@ -326,33 +259,12 @@ function NormalRow({
           aria-pressed={confirmDelete}
           disabled={busy || deleteBlockedReason !== undefined}
           onClick={onDelete}
-          tip={
-            deleteBlockedReason ??
-            (confirmDelete ? "Click again to confirm" : undefined)
-          }
+          tip={deleteBlockedReason}
         />
       )}
     </div>
   );
 }
-
-// The auto-pull toggle's two faces. On is sky like the header's pull
-// pill, since that is the action it automates.
-const AUTO_PULL_UI = {
-  on: {
-    Icon: RefreshCw,
-    label: "Auto-pull on",
-    className:
-      "shrink-0 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300",
-    tip: "Auto-pull is on: this worktree fast-forwards from its upstream after each fetch while it has no local commits, changes or running scripts. Click to turn off.",
-  },
-  off: {
-    Icon: RefreshCwOff,
-    label: "Auto-pull",
-    className: "shrink-0 text-muted-foreground hover:text-foreground",
-    tip: "Auto-pull: fast-forward from the upstream automatically while this worktree has no local commits, changes or running scripts",
-  },
-};
 
 function deleteButtonLabel(busy: boolean, armed: boolean): string {
   if (busy) return "Deleting…";

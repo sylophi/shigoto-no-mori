@@ -1,6 +1,7 @@
 // Everything running right now, across the account, on one page: the
-// scripts each device runs, the ports this machine forwards from its
-// peers, and the mirrors keeping worktrees in step between devices.
+// agents waiting on you, the scripts each device runs, the ports this
+// machine forwards from its peers, and the mirrors keeping worktrees in
+// step between devices.
 // What a worktree page shows one worktree at a time, gathered so a dev
 // server left running or a forgotten forward can be found (and
 // stopped) without walking the forest. Each worktree with something
@@ -16,6 +17,8 @@ import {
   useLiveMirrors,
   useRunningScripts,
 } from "@/hooks/live/useLiveActivity";
+import { agentsNeedYou } from "@/lib/agentNeeds";
+import { useWaitingAgents } from "@/lib/agentWatch";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
@@ -26,23 +29,31 @@ import { notifyError, toast } from "@/lib/toast";
 import { DeviceHeading, LiveCard } from "./LiveCard";
 import { buildLive, countLive, type LiveDevice } from "./liveModel";
 
-// "2 scripts, 1 port forward and 1 mirror", leaving out what is none.
+// "1 agent needs you, with 2 scripts, 1 port forward and 1 mirror
+// running", leaving out what is none.
 function summarize(devices: readonly LiveDevice[]): string {
-  const { scripts, forwards, mirrors } = countLive(devices);
+  const { agents, scripts, forwards, mirrors } = countLive(devices);
   const parts = [
     scripts > 0 && pluralize(scripts, "script"),
     forwards > 0 && pluralize(forwards, "port forward"),
     mirrors > 0 && pluralize(mirrors, "mirror"),
   ].filter((part) => part !== false);
-  if (parts.length < 2) return parts[0] ?? "";
-  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  const running =
+    parts.length < 2
+      ? parts[0]
+      : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  const needYou = agents > 0 && agentsNeedYou(agents);
+  if (needYou && running) return `${needYou}, with ${running} running`;
+  if (needYou) return needYou;
+  return running ? `${running} running` : "";
 }
 
 export function LivePage() {
   const hosts = useRunningScripts();
   const mirrors = useLiveMirrors();
   const forwards = useAllPortForwards();
-  const devices = buildLive({ scripts: hosts, mirrors, forwards });
+  const agents = useWaitingAgents();
+  const devices = buildLive({ agents, scripts: hosts, mirrors, forwards });
   // Which device a card is on only says something once there is more
   // than one.
   const multiDevice = hosts.length > 1;
@@ -56,7 +67,7 @@ export function LivePage() {
       <PageHeader
         eyebrow={
           summary !== ""
-            ? `${summary} running`
+            ? summary
             : loading
               ? "Asking your devices…"
               : "Nothing running"
@@ -169,8 +180,8 @@ function Quiet() {
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium">All quiet in the forest</p>
         <p className="max-w-sm text-xs text-muted-foreground">
-          Dev servers and other scripts, forwarded ports and mirrors show up
-          here while they run, on any of your devices.
+          Agents waiting on you, dev servers and other scripts, forwarded ports
+          and mirrors show up here, on any of your devices.
         </p>
       </div>
     </div>

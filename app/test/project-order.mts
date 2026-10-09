@@ -130,7 +130,8 @@ function treeRows({
       error: null,
     })),
     openKey,
-    worktreeSort: "name",
+    inline: null,
+    worktreeSort: () => "name",
     order: projectGroupOrder({
       projects: ordered,
       remote: peers,

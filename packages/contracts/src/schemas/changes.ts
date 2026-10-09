@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { isSafeRelPath } from "../predicates/relPath.ts";
 import { WorktreeScopedPayloadSchema } from "./payloads.ts";
+import { GitRefNameSchema } from "./project.ts";
 import { CommitHashSchema, WorktreeSchema } from "./worktree.ts";
 
 // How much of a changed file is in the index, i.e. what a commit right
@@ -156,4 +157,166 @@ export type DiscardChangesResult = typeof DiscardChangesResultSchema.Type;
 export const RestoreDiscardPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   snapshot: CommitHashSchema,
+});
+
+// Rewrite a local commit's message, or fold it into the one before it.
+// `expectHead` is the commit the list showed on top: the rewrite is
+// refused once HEAD has moved past it.
+export const RewordCommitPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  hash: CommitHashSchema,
+  summary: Schema.Trim.check(Schema.isMinLength(1)),
+  description: Schema.optional(Schema.String),
+  expectHead: CommitHashSchema,
+});
+
+export const SquashCommitPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  hash: CommitHashSchema,
+  expectHead: CommitHashSchema,
+});
+
+// One stash made on the worktree's branch: its commit, the message it
+// was given (`named`) or else the subject of the commit it was made on
+// top of, and when.
+export const StashEntrySchema = Schema.Struct({
+  hash: CommitHashSchema,
+  message: Schema.String,
+  named: Schema.Boolean,
+  date: Schema.String,
+});
+export type StashEntry = typeof StashEntrySchema.Type;
+
+export const StashChangesPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  message: Schema.optional(Schema.String),
+});
+
+// `drop` makes it a pop.
+export const ApplyStashPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  hash: CommitHashSchema,
+  drop: Schema.Boolean,
+});
+
+export const DropStashPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  hash: CommitHashSchema,
+});
+
+export const RestoreStashPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  hash: CommitHashSchema,
+  message: Schema.String,
+  named: Schema.Boolean,
+});
+
+// A git operation the worktree is stopped in (host/lib/git/operation.ts
+// names them: "merge", "rebase", "cherry-pick", "revert", "squash",
+// "git am", "bisect"), whether the app can continue it, and how many files still
+// conflict. Conflicts can stand without an operation too, after a stash
+// applied with them.
+export const GitOperationStateSchema = Schema.Struct({
+  operation: Schema.NullOr(Schema.String),
+  continuable: Schema.Boolean,
+  conflicted: Schema.Natural,
+  // The branch a rebase is replaying, while git holds HEAD detached
+  // for it. Null otherwise.
+  rebasing: Schema.NullOr(Schema.String),
+});
+export type GitOperationState = typeof GitOperationStateSchema.Type;
+
+export const ResolveConflictPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  path: RepoRelPathSchema,
+  side: Schema.Literals(["mine", "theirs"]),
+});
+
+// The ways another branch's work comes into the worktree's branch
+// (host/lib/git/merge.ts): a merge commit, a fast-forward, one new
+// commit holding it all, or the branch's own commits replayed on top.
+const IntegrateMethodSchema = Schema.Literals([
+  "merge",
+  "fastForward",
+  "squash",
+  "rebase",
+]);
+export type IntegrateMethod = typeof IntegrateMethodSchema.Type;
+
+export const MergePreviewPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  ref: GitRefNameSchema,
+});
+
+// How the branch and the one to bring in stand: the commits each has
+// that the other lacks, how many of the branch's own a remote has and
+// how many are merges (a rebase rewrites the one and flattens the
+// other), the files a merge of the two would leave conflicted, and the
+// one commit coming in's subject, when one is (a squash's message to
+// start from).
+export const MergePreviewSchema = Schema.Struct({
+  incoming: Schema.Natural,
+  own: Schema.Natural,
+  pushed: Schema.Natural,
+  ownMerges: Schema.Natural,
+  // Null where git can't merge the two at all.
+  conflicts: Schema.NullOr(Schema.Array(Schema.String)),
+  incomingSubject: Schema.NullOr(Schema.String),
+});
+export type MergePreview = typeof MergePreviewSchema.Type;
+
+export const MergeBranchPayloadSchema = Schema.Struct({
+  ...MergePreviewPayloadSchema.fields,
+  method: IntegrateMethodSchema,
+  // The squash's commit message.
+  message: Schema.optional(Schema.Trim.check(Schema.isMinLength(1))),
+});
+
+// `stopped` when it waits on conflicts, for the Changes tab to settle.
+export const MergeBranchResultSchema = Schema.Struct({
+  worktree: WorktreeSchema,
+  stopped: Schema.Boolean,
+});
+export type MergeBranchResult = typeof MergeBranchResultSchema.Type;
+
+// One change of a zero-context diff of HEAD against the working tree,
+// by its line ranges (hunk-header numbers). Identifies a hunk of a
+// modified file for ticking and discarding it.
+const LineChangeSchema = Schema.Struct({
+  oldStart: Schema.Natural,
+  oldCount: Schema.Natural,
+  newStart: Schema.Natural,
+  newCount: Schema.Natural,
+});
+export type LineChange = typeof LineChangeSchema.Type;
+
+// A modified file's changes and which the next commit takes. Not
+// `editable` when the index holds something the working tree doesn't,
+// which no pick of these changes describes.
+export const HunkStatesSchema = Schema.Struct({
+  changes: Schema.Array(
+    Schema.Struct({ ...LineChangeSchema.fields, staged: Schema.Boolean }),
+  ),
+  editable: Schema.Boolean,
+});
+export type HunkStates = typeof HunkStatesSchema.Type;
+
+export const FileHunksPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  path: RepoRelPathSchema,
+});
+
+const LineChangeListSchema = Schema.Array(LineChangeSchema).check(
+  Schema.isMinLength(1),
+);
+
+export const SetHunksStagedPayloadSchema = Schema.Struct({
+  ...FileHunksPayloadSchema.fields,
+  changes: LineChangeListSchema,
+  staged: Schema.Boolean,
+});
+
+export const DiscardHunksPayloadSchema = Schema.Struct({
+  ...FileHunksPayloadSchema.fields,
+  changes: LineChangeListSchema,
 });

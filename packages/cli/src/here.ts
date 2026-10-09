@@ -2,6 +2,7 @@
 // names a project starts from. Terrier's trouble is a warning here, as
 // the listing it explains is about to be used.
 import { isAbsolute, resolve } from "node:path";
+import * as Agents from "@shigomori/engine/Agents";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Terrier from "@shigomori/engine/Terrier";
 import { isSameOrInside } from "@shigomori/engine/worktreeLayout";
@@ -23,14 +24,24 @@ export const warnTerrier = Effect.gen(function* () {
   );
 });
 
-export const here = Effect.gen(function* () {
+// A folder removed under the shell has no cwd, which reads as Go's ".".
+export const cwd = Effect.try(() => process.cwd()).pipe(
+  Effect.orElseSucceed(() => "."),
+);
+
+const where = Effect.gen(function* () {
   yield* warnTerrier;
-  // A folder removed under the shell has no cwd, which reads as Go's ".".
-  const cwd = yield* Effect.try(() => process.cwd()).pipe(
-    Effect.orElseSucceed(() => "."),
-  );
-  return yield* (yield* Worktrees.Worktrees).here(cwd);
+  return yield* (yield* Worktrees.Worktrees).here(yield* cwd);
 });
+
+// Where the command runs. An agent session's shell running sm inside a
+// managed worktree binds the session there first (Agents.autoBind),
+// except for the `agents` verbs, which change bindings themselves.
+export const here = Effect.tap(where, (at) =>
+  Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
+    agents.autoBind(at),
+  ),
+);
 
 // How a command names its project, beside or instead of a positional.
 export const projectFlags = {
@@ -100,9 +111,10 @@ export const resolveWorktree = (
     readonly worktreeId: Option.Option<string>;
   },
   primaryOk = true,
+  autoBind = true,
 ) =>
   Effect.gen(function* () {
-    const at = yield* here;
+    const at = yield* autoBind ? here : where;
     const worktrees = yield* Worktrees.Worktrees;
     const target = {
       ref: Option.getOrUndefined(given(ref.ref ?? Option.none())),

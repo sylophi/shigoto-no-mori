@@ -11,6 +11,7 @@ import type {
   HostApiOf,
 } from "@shigomori/contracts/types";
 import { accountContract } from "@shigomori/contracts/modules/account";
+import { agentsContract } from "@shigomori/contracts/modules/agents";
 import { branchesContract } from "@shigomori/contracts/modules/branches";
 import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
 import { dialogContract } from "@shigomori/contracts/modules/dialog";
@@ -52,6 +53,7 @@ import type { ClientTransport } from "@shared/ipc/transport";
 // default) reads too.
 export const allContractModules = [
   accountContract,
+  agentsContract,
   branchesContract,
   clientConfigContract,
   dialogContract,

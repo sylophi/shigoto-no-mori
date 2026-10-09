@@ -1,7 +1,9 @@
 // The engine's layer graph, which each process that runs the engine
 // builds once: its store over the process's SQLite driver, its flavor,
-// and where the darwin helper (macfs) is. The updater talks HTTP through
+// where the darwin helper (macfs) is, and the terminal `sm` the agent
+// hooks run. The updater talks HTTP through
 // fetch, the one client Node and Bun both have.
+import * as Agents from "./Agents.ts";
 import * as Bundle from "./Bundle.ts";
 import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
@@ -42,19 +44,23 @@ type EngineOptions = {
   readonly flavor: Flavor;
   readonly store: ReturnType<typeof Store.layer>;
   readonly macfs: string;
+  readonly sm: string;
 };
 
 // Every service but Paths, which is built once beside them.
 const services = (options: EngineOptions) =>
-  Layer.mergeAll(
-    Landing.layer,
-    Projects.layer,
-    Doctor.layer,
-    Transfer.layer,
-    Dirty.layer,
-    Bundle.layer,
-    Open.layer,
-  ).pipe(
+  Agents.layer(options.sm).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Landing.layer,
+        Projects.layer,
+        Doctor.layer,
+        Transfer.layer,
+        Dirty.layer,
+        Bundle.layer,
+        Open.layer,
+      ),
+    ),
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(Control.layer(options.flavor)),

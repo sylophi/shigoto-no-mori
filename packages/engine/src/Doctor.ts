@@ -1259,7 +1259,7 @@ const make = Effect.gen(function* () {
       const sets: ReadonlyArray<ReadonlySet<string>> = [
         yield* registry.marked("shelved"),
         yield* registry.marked("autoPull"),
-        yield* registry.marked("agentWorking"),
+        new Set((yield* registry.agentSessions).keys()),
         yield* worktrees.snapshotted,
       ];
       const marked = new Set<string>();

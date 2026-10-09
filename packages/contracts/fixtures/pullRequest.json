@@ -1069,5 +1069,9 @@
         "projectId": "p_sm"
       }
     ]
+  },
+  "GithubRepoListSchema": {
+    "accepts": [["sylophi/shigoto-no-mori", "acme/tools"], []],
+    "rejects": [[1], "sylophi/shigoto-no-mori"]
   }
 }

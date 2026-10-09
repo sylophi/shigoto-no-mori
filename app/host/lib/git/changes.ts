@@ -15,6 +15,7 @@ import type {
 import { isUntracked } from "@shigomori/contracts/schemas";
 import { createLimiter } from "@shared/util/limit";
 import { chunked, run, runLenient, splitZ, type RunOptions } from "./core";
+import { refuseMidOperation } from "./operation";
 import { verifyRev } from "./refs";
 import { log } from "@shared/log";
 
@@ -83,7 +84,10 @@ function kindOf(x: string, y: string): ChangeKind {
 // doesn't block the queue.
 const indexQueues = new Map<string, ReturnType<typeof createLimiter>>();
 
-function onIndex<T>(worktreePath: string, task: () => Promise<T>): Promise<T> {
+export function onIndex<T>(
+  worktreePath: string,
+  task: () => Promise<T>,
+): Promise<T> {
   const queue = indexQueues.get(worktreePath) ?? createLimiter(1);
   indexQueues.set(worktreePath, queue);
   return queue(task);
@@ -367,7 +371,10 @@ function isAncestor(
 // caller to pin where HEAD must still be. Anything committed since
 // makes it a different branch and the redo is refused. Refused across a
 // merge too, since soft-resetting past one stages the whole other side
-// as edits, which is nothing anyone means by "undo".
+// as edits, which is nothing anyone means by "undo". A merge on top,
+// undone to its first parent, comes off whole instead (`reset --keep`,
+// which refuses rather than lose a local edit), and its redo puts it
+// back.
 //
 // Returns where HEAD was, for the redo.
 export function resetSoft(
@@ -376,6 +383,7 @@ export function resetSoft(
   expectHead: string | undefined,
 ): Promise<string> {
   return onIndex(worktreePath, async () => {
+    await refuseMidOperation(worktreePath);
     const [head, expected] = await Promise.all([
       verifyRev(worktreePath, "HEAD"),
       expectHead ? verifyRev(worktreePath, expectHead) : undefined,
@@ -394,6 +402,22 @@ export function resetSoft(
       throw new Error("That commit isn't on this branch's history.");
     }
     const [older, newer] = backwards ? [target, head] : [head, target];
+    // One merge, stepped over to its first parent and back: the merge
+    // comes off (or goes back on) whole.
+    const firstParent = await verifyRev(worktreePath, `${newer}^1`).catch(
+      () => undefined,
+    );
+    const wholeMerge =
+      firstParent !== undefined &&
+      (await verifyRev(worktreePath, older)) === firstParent &&
+      (await verifyRev(worktreePath, `${newer}^2`).then(
+        () => true,
+        () => false,
+      ));
+    if (wholeMerge) {
+      await run(worktreePath, ["reset", "--keep", "--end-of-options", target]);
+      return head;
+    }
     const merges = (
       await run(worktreePath, [
         "rev-list",
@@ -420,7 +444,7 @@ export function resetSoft(
 // and wrap it in a commit. The ref keeps the objects alive through gc
 // and shows up in `git for-each-ref` for anyone recovering by hand.
 // restoreDiscard is the app's own way back.
-async function snapshotPaths(
+export async function snapshotPaths(
   worktreePath: string,
   paths: readonly string[],
 ): Promise<string> {

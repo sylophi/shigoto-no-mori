@@ -1,14 +1,17 @@
 // What the Live page draws, gathered around the worktrees things run
 // in: a dev server, the port forwarded to it and the mirror keeping it
-// in step are one worktree's news, so they share its card. Cards file
-// under the device holding the worktree, this machine first. A forward
-// switched on from the account page names no worktree, and gets its
-// device's card of loose ports.
+// in step are one worktree's news, so they share its card, and so does
+// an agent there waiting on you, which leads it. Cards file under the
+// device holding the worktree, this machine first, the ones with an
+// agent waiting on you first. A forward switched on from the account
+// page names no worktree, and gets its device's card of loose ports.
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
-import type { RunningScript } from "@shigomori/contracts/schemas";
+import type { AgentSession, RunningScript } from "@shigomori/contracts/schemas";
 import type { HostScripts, LiveMirror } from "@/hooks/live/useLiveActivity";
+import type { WaitingAgent } from "@/lib/agentWatch";
 
 type LiveItem =
+  | { kind: "agent"; session: AgentSession }
   | { kind: "script"; run: RunningScript }
   | { kind: "mirror"; mirror: LiveMirror }
   | { kind: "forward"; forward: PortForwardSummary };
@@ -24,10 +27,13 @@ export type LiveCard = {
 export type LiveDevice = { deviceId: string; cards: LiveCard[] };
 
 export function buildLive({
+  agents,
   scripts,
   mirrors,
   forwards,
 }: {
+  // Longest wait first, the order their cards take.
+  agents: readonly WaitingAgent[];
   // In device order, this machine first: the order the sections take.
   scripts: readonly HostScripts[];
   mirrors: readonly LiveMirror[];
@@ -57,9 +63,12 @@ export function buildLive({
     card.items.push(item);
   };
 
-  // Added scripts first, then mirrors, then forwards, which is the
-  // order a card lists them: what runs in the worktree before how it
-  // is reached.
+  // Added agents first, then scripts, then mirrors, then forwards,
+  // which is the order a card lists them: what waits on you, then what
+  // runs in the worktree before how it is reached.
+  for (const { deviceId, projectId, worktreeId, session } of agents) {
+    add(deviceId, { projectId, worktreeId }, { kind: "agent", session });
+  }
   for (const { deviceId, runs } of scripts) {
     for (const run of runs) {
       add(
@@ -98,7 +107,8 @@ export function buildLive({
   const result: LiveDevice[] = [];
   for (const [deviceId, cards] of devices) {
     if (cards.size === 0) continue;
-    // The loose ports close the device's cards.
+    // The cards keep the order they were added in, so the agents
+    // waiting on you lead, and the loose ports close the device's cards.
     result.push({
       deviceId,
       cards: [...cards.values()].toSorted(
@@ -110,15 +120,17 @@ export function buildLive({
 }
 
 export function countLive(devices: readonly LiveDevice[]): {
+  agents: number;
   scripts: number;
   mirrors: number;
   forwards: number;
 } {
-  const counts = { scripts: 0, mirrors: 0, forwards: 0 };
+  const counts = { agents: 0, scripts: 0, mirrors: 0, forwards: 0 };
   for (const device of devices) {
     for (const card of device.cards) {
       for (const item of card.items) {
-        if (item.kind === "script") counts.scripts++;
+        if (item.kind === "agent") counts.agents++;
+        else if (item.kind === "script") counts.scripts++;
         else if (item.kind === "mirror") counts.mirrors++;
         else counts.forwards++;
       }

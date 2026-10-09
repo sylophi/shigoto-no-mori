@@ -11,7 +11,9 @@
 // and an open project the build lacks reads as the list. A worktree reveals nothing from the list or from inside another
 // project, and its own row once its project is open. Inside a project
 // the worktrees follow its sort, every device's together, primaries
-// first.
+// first. Inline, the list draws every project's rows under its header,
+// each in its own sort, and a folded project's header stands in for
+// its rows.
 //
 // Run: pnpm test project-fold.
 import assert from "node:assert/strict";
@@ -103,6 +105,7 @@ const build = (
   worktreeSort: WorktreeSortMode = "name",
   byPrefix: Parameters<typeof buildSidebarRows>[0]["byPrefix"] = null,
   pullRequests: Record<string, PullRequest> = {},
+  args: Partial<Parameters<typeof buildSidebarRows>[0]> = {},
 ) =>
   buildSidebarRows({
     projects,
@@ -128,13 +131,14 @@ const build = (
       error: null,
     })),
     openKey: open && projectGroupKey(open, undefined),
+    inline: null,
     order: projectGroupOrder({
       projects,
       remote,
       sortMode: "manual",
       pinned: new Set(),
     }),
-    worktreeSort,
+    worktreeSort: () => worktreeSort,
     openShelves: {
       agentWorking: new Set(),
       shelved: new Set(),
@@ -154,11 +158,21 @@ const build = (
       },
     ],
     deviceBadges: new Map(),
+    ...args,
   });
+
+const pinnedEnd = (rows: SidebarRow[]) =>
+  rows.some((row) => row.kind === "project" && row.pinnedEnd === true);
+
+const withRemote = (p: Project, owner: string): Project => ({
+  ...p,
+  remote: `github.com/${owner}/${p.name}`,
+});
 
 const line = (row: SidebarRow) => {
   if (row.kind === "project") {
-    return `${row.expanded ? "v" : ">"} ${row.project.name} ${row.branches ?? "-"}`;
+    const open = row.expanded || row.folded === false;
+    return `${open ? "v" : ">"} ${row.project.name} ${row.branches ?? "-"}`;
   }
   if (row.kind === "worktree" || row.kind === "remote-worktree") {
     return row.worktree.name;
@@ -269,7 +283,7 @@ it("inside a project: a prefix's rows under its header", () => {
     shut: () => false,
   }).rows.map(line);
   assert.equal(lichenRows.includes("v exp/ 1"), false);
-  assert.equal(lichenRows.at(-1), "shelved-toggle");
+  assert.equal(lichenRows.at(-1), "group-shelf");
 });
 
 it("a stack goes whole where its lowest layer files", () => {
@@ -296,5 +310,157 @@ it("a stack goes whole where its lowest layer files", () => {
     "zebra",
     "lease-ttl",
     "quiet-quail",
+  ]);
+});
+
+it("inline: every project's rows under its header", () => {
+  const inline = (collapsed: Project[] = []) =>
+    build(
+      lichen,
+      "name",
+      null,
+      {},
+      {
+        inline: {
+          collapsed: { has: (id) => collapsed.some((p) => p.id === id) },
+        },
+        // port-pool by creation, the rest by name.
+        worktreeSort: (groupKey) =>
+          groupKey === projectGroupKey(portPool, undefined)
+            ? "created"
+            : "name",
+      },
+    );
+  // The open project goes unread: there is no level to be inside.
+  const { rows, pinned, level } = inline();
+  assert.equal(pinned, undefined);
+  assert.equal(level, undefined);
+  assert.deepEqual(rows.map(line), [
+    "v lichen -",
+    "main",
+    "brave-badger",
+    "group-shelf",
+    "group-shelf",
+    "v port-pool -",
+    "main",
+    "main",
+    "quiet-quail",
+    "lease-ttl",
+    "zebra",
+    "v terrier -",
+    "worktree-skeleton",
+  ]);
+  // Folded, a project is its header, counted, which stands in for
+  // every one of its rows, a peer's too.
+  const folded = inline([portPool]);
+  assert.deepEqual(folded.rows.map(line).slice(5, 7), [
+    "> port-pool 3",
+    "v terrier -",
+  ]);
+  const header = `p:${portPool.id}`;
+  assert.equal(folded.revealKey(portPool.id, "port-pool-lease-ttl"), header);
+  assert.equal(
+    folded.revealKey(portPool.id, "port-pool-quiet-quail", PEER),
+    header,
+  );
+  assert.equal(
+    inline().revealKey(portPool.id, "port-pool-lease-ttl"),
+    worktreeRowKey(undefined, "port-pool-lease-ttl"),
+  );
+});
+
+it("inline: a project's rows go with it", () => {
+  const inline = (collapsed: Project[]) =>
+    build(
+      lichen,
+      "name",
+      null,
+      {},
+      {
+        inline: {
+          collapsed: { has: (id) => collapsed.some((p) => p.id === id) },
+        },
+        order: projectGroupOrder({
+          projects,
+          remote,
+          sortMode: "manual",
+          pinned: new Set([projectGroupKey(portPool, undefined)]),
+        }),
+      },
+    ).rows;
+  // Pinned, port-pool leads with its rows, and the gap under the
+  // pinned run waits for a header alone.
+  const open = inline([]);
+  assert.deepEqual(open.map(line).slice(0, 7), [
+    "v port-pool -",
+    "main",
+    "main",
+    "lease-ttl",
+    "quiet-quail",
+    "zebra",
+    "v lichen -",
+  ]);
+  assert.equal(pinnedEnd(open), false);
+  assert.equal(pinnedEnd(inline([portPool])), true);
+});
+
+it("inline: split by owner, rows stay with their project", () => {
+  // lichen and terrier are one owner's, port-pool another's.
+  const owned = [
+    withRemote(lichen, "a"),
+    withRemote(portPool, "b"),
+    withRemote(terrier, "a"),
+  ];
+  const split = (shut: string[], collapsed: Project[] = []) =>
+    build(
+      lichen,
+      "name",
+      null,
+      {},
+      {
+        projects: owned,
+        inline: {
+          collapsed: { has: (id) => collapsed.some((p) => p.id === id) },
+        },
+        order: projectGroupOrder({
+          projects: owned,
+          remote: [],
+          sortMode: "manual",
+          pinned: new Set(),
+        }),
+        byOwner: { shut: new Set(shut) },
+        remote: [],
+        mirrors: [],
+      },
+    );
+  const rows = split([]).rows.map((row) =>
+    row.kind === "owner-header" ? row.label : line(row),
+  );
+  // A shut owner's header stands in for its projects' rows, a
+  // folded project's too.
+  const ownerB = "o:github.com/b";
+  for (const collapsed of [[], [portPool]]) {
+    assert.equal(
+      split(["github.com/b"], collapsed).revealKey(
+        portPool.id,
+        "port-pool-lease-ttl",
+      ),
+      ownerB,
+    );
+  }
+  assert.deepEqual(rows, [
+    "a",
+    "v lichen -",
+    "main",
+    "brave-badger",
+    "group-shelf",
+    "group-shelf",
+    "v terrier -",
+    "worktree-skeleton",
+    "b",
+    "v port-pool -",
+    "main",
+    "lease-ttl",
+    "zebra",
   ]);
 });

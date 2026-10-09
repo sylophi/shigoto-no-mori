@@ -35,6 +35,8 @@ interface AppearanceSectionProps {
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   villageLife: boolean;
   onVillageLifeChange: (next: boolean) => void;
+  villageNews: boolean;
+  onVillageNewsChange: (next: boolean) => void;
   // "Appearance" where the section stands alone (the web page). The
   // desktop's Appearance section already says that and names it "Theme".
   heading?: string;
@@ -53,6 +55,8 @@ export function AppearanceSection({
   onPauseAnimationsOnBatteryChange,
   villageLife,
   onVillageLifeChange,
+  villageNews,
+  onVillageNewsChange,
   heading = "Appearance",
 }: AppearanceSectionProps) {
   // A three-way pick, so it wears the house segmented control: the
@@ -122,7 +126,9 @@ export function AppearanceSection({
       {hasLocalHost && (
         <VillageLifeSetting
           villageLife={villageLife}
-          onChange={onVillageLifeChange}
+          onVillageLifeChange={onVillageLifeChange}
+          villageNews={villageNews}
+          onVillageNewsChange={onVillageNewsChange}
         />
       )}
     </section>

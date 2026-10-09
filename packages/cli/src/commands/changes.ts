@@ -4,6 +4,7 @@ import { isAbsolute } from "node:path";
 import { envVar } from "@shigomori/engine/environment";
 import type * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
+import * as Agents from "@shigomori/engine/Agents";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -108,13 +109,18 @@ export const create = Command.make(
     noCd: flag("no-cd", "Stay where you are"),
     noSetup: flag("no-setup", "Skip the project's setup script"),
     noClone: flag("no-clone", "Have git write every file"),
-    agentWorking: flag("agent-working", "Mark it as an agent's from the start"),
   },
   (input) =>
     Effect.gen(function* () {
       const project = yield* resolveProject(input);
       const { json, stderrColor } = yield* Effect.service(Output);
       const { cyan } = styles(stderrColor);
+      // An agent session that creates a worktree works in it.
+      const agents = yield* Agents.Agents;
+      const caller = yield* agents.caller;
+      const agentSession = Option.isSome(caller)
+        ? yield* agents.starting(caller.value)
+        : undefined;
       const created = yield* (yield* Worktrees.Worktrees).create(
         project,
         {
@@ -123,7 +129,7 @@ export const create = Command.make(
           base: Option.getOrUndefined(given(input.base)),
           checkout: input.checkout,
           skipSetup: input.noSetup,
-          agentWorking: input.agentWorking,
+          agentSession,
           clone: !input.noClone,
         },
         yield* reporter(

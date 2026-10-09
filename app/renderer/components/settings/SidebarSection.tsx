@@ -31,14 +31,20 @@ export function SidebarSection({
     <section className="space-y-3">
       <SectionHeading className="mb-1">Sidebar</SectionHeading>
       <ToggleRow
+        checked={form.inlineWorktrees}
+        onCheckedChange={setField("inlineWorktrees")}
+        label="Show worktrees inline"
+        description="Lists every project's worktrees under it, instead of one project at a time."
+      />
+      <ToggleRow
         checked={signedIn && form.showDeviceBadges}
         onCheckedChange={setField("showDeviceBadges")}
         disabled={!signedIn}
         label="Show device icons"
         description={
           signedIn
-            ? "Badges the open project and each worktree with the devices they live on. Turn off for quieter rows. The device filter still narrows the list."
-            : "Sign in to bring in your other devices. The open project and each worktree are then badged with the devices they live on."
+            ? "Badges open projects and each worktree with the devices they live on. Turn off for quieter rows. The device filter still narrows the list."
+            : "Sign in to bring in your other devices. Open projects and each worktree are then badged with the devices they live on."
         }
       />
       <ToggleRow
@@ -48,15 +54,21 @@ export function SidebarSection({
         label="Mark terrier projects"
         description={
           terrierOn
-            ? "Shows a paw beside the open project's name when it comes from the terrier registry, so it stands apart from the ones added here."
+            ? "Shows a paw beside an open project's name when it comes from the terrier registry, so it stands apart from the ones added here."
             : "Turn on Automatically use terrier in this device's settings to list terrier's projects, then mark them here."
         }
       />
       <ToggleRow
         checked={form.allowAgentWorking}
         onCheckedChange={setField("allowAgentWorking")}
-        label="Allow agents to mark worktrees as working"
-        description="A worktree an agent is working in waits on its own folded shelf until the agent hands it back."
+        label="Shelve worktrees agents are working in"
+        description="A worktree waits on its own folded shelf while an agent's turn runs in it. Agents report their turns through the hooks in Integrations."
+      />
+      <ToggleRow
+        checked={form.markAgentsWaiting}
+        onCheckedChange={setField("markAgentsWaiting")}
+        label="Mark worktrees whose agent needs you"
+        description="While an agent waits on a permission prompt or a question, with what it asks in its tooltip."
       />
     </section>
   );

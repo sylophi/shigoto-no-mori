@@ -9,6 +9,31 @@ export function isCloneableRemote(url: string): boolean {
   return !url.trim().startsWith("-") && normalizeRemoteUrl(url) !== null;
 }
 
+// `owner/repo`, the way gh names a GitHub repository (an Enterprise
+// Managed User's handle carries an underscore). The owner can't start
+// with a dash, so it never reads as an option.
+const GITHUB_SHORTHAND = /^[A-Za-z0-9][A-Za-z0-9_-]*\/([A-Za-z0-9._-]+)$/;
+
+export function isGithubShorthand(source: string): boolean {
+  const repo = source.trim().match(GITHUB_SHORTHAND)?.[1];
+  return repo !== undefined && repo !== "." && repo !== "..";
+}
+
+// The remote `source` names: a GitHub `owner/repo` as its https URL,
+// anything else as it is.
+export function cloneUrlOf(source: string): string {
+  return isGithubShorthand(source)
+    ? `https://github.com/${source.trim()}`
+    : source;
+}
+
+// What the clone takes: a remote, or a GitHub repository by its
+// `owner/repo`. Only the clone dialog reads the shorthand: everywhere
+// else a string like it is a relative path.
+export function isCloneSource(source: string): boolean {
+  return isCloneableRemote(cloneUrlOf(source));
+}
+
 // Reduces a remote URL to `host/owner/repo`: credentials and port
 // stripped, ASCII letters of the host lowercased, a leading `ssh.`
 // alias folded off the host, path case preserved, trailing `.git` and

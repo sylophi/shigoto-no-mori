@@ -66,3 +66,26 @@ it("a crafted subject in a real repo stays one commit", async () => {
     [crafted, "first"],
   );
 });
+
+it("a search keeps the commits whose message holds it, literally and case blind", async () => {
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: repo, env: process.env });
+  git("commit", "-q", "--allow-empty", "-m", "Fix the [sidebar] badge");
+  git(
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "Unrelated\n\nTouches the sidebar too.",
+  );
+  const subjects = async (query: string) =>
+    (await listCommits(repo, { skip: 0, count: 10, query })).map(
+      (c) => c.subject,
+    );
+  assert.deepEqual(await subjects("SIDEBAR"), [
+    "Unrelated",
+    "Fix the [sidebar] badge",
+  ]);
+  assert.deepEqual(await subjects("[sidebar]"), ["Fix the [sidebar] badge"]);
+  assert.deepEqual(await subjects("nowhere"), []);
+});

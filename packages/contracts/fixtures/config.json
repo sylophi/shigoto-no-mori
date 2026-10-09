@@ -1277,5 +1277,20 @@
         "theme": "sepia"
       }
     ]
+  },
+  "NotifyPayloadSchema": {
+    "accepts": [
+      {
+        "title": "lichen: fox",
+        "body": "Claude Code needs you: pnpm test",
+        "route": "/project/id-lichen/worktree/lichen-fox"
+      }
+    ],
+    "rejects": [
+      {
+        "title": "x",
+        "body": "y"
+      }
+    ]
   }
 }

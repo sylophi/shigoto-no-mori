@@ -20,12 +20,13 @@ import {
   resolveDoubutsuPicks,
 } from "@shared/themes";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { villageNewsEnabled } from "@shared/villageLife";
 import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first eight fields are client config (appearance), the rest are
-// device config.
+// the first thirteen fields are client config (appearance), the rest
+// are device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
@@ -35,9 +36,14 @@ export interface SettingsFormState {
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
   villageLife: boolean;
+  villageNews: boolean;
   markTerrierProjects: boolean;
   showDeviceBadges: boolean;
   allowAgentWorking: boolean;
+  markAgentsWaiting: boolean;
+  notifyAgentWaiting: boolean;
+  notifyAgentDone: boolean;
+  inlineWorktrees: boolean;
   launchers: readonly LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
@@ -69,9 +75,14 @@ export function fromConfig(
     darkTheme: picks.dark,
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
     villageLife: clientConfig.villageLife ?? false,
+    villageNews: villageNewsEnabled(clientConfig),
     markTerrierProjects: clientConfig.markTerrierProjects ?? false,
     showDeviceBadges: clientConfig.showDeviceBadges ?? true,
     allowAgentWorking: clientConfig.allowAgentWorking ?? false,
+    markAgentsWaiting: clientConfig.markAgentsWaiting ?? true,
+    notifyAgentWaiting: clientConfig.notifyAgentWaiting ?? true,
+    notifyAgentDone: clientConfig.notifyAgentDone ?? false,
+    inlineWorktrees: clientConfig.inlineWorktrees ?? false,
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
@@ -151,7 +162,7 @@ function toLocalDeviceSettingsPatch(
 
 // Appearance saves through the client-scoped store, not the device
 // config, omitting a key at its default to keep the file tidy.
-function toClientConfig(state: SettingsFormState): ClientConfig {
+export function toClientConfig(state: SettingsFormState): ClientConfig {
   return {
     // Default is "system"; omit when on the default to keep the file tidy.
     theme: state.theme === "system" ? undefined : state.theme,
@@ -170,12 +181,21 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
       : false,
     // Default is off, so off is omitted and the opt-in stored as `true`.
     villageLife: state.villageLife ? true : undefined,
+    // Default is on, with the same opt-out serialization as doubutsu.
+    villageNews: state.villageNews ? undefined : false,
     // Default is off, the same opt-in serialization as villageLife.
     markTerrierProjects: state.markTerrierProjects ? true : undefined,
     // Default is on, with the same opt-out serialization as doubutsu.
     showDeviceBadges: state.showDeviceBadges ? undefined : false,
     // Default is off, the same opt-in serialization as villageLife.
     allowAgentWorking: state.allowAgentWorking ? true : undefined,
+    // Default is on, with the same opt-out serialization as doubutsu.
+    markAgentsWaiting: state.markAgentsWaiting ? undefined : false,
+    notifyAgentWaiting: state.notifyAgentWaiting ? undefined : false,
+    // Default is off, the same opt-in serialization as villageLife.
+    notifyAgentDone: state.notifyAgentDone ? true : undefined,
+    // Default is off, the same opt-in serialization as villageLife.
+    inlineWorktrees: state.inlineWorktrees ? true : undefined,
   };
 }
 

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { DeviceChip } from "@/components/shared/DeviceChip";
 import {
   PAGE_HEADER_PADDING,
@@ -44,7 +45,10 @@ import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
 import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorCopyTabs, useMirrorCopies } from "./mirror/MirrorCopyTabs";
-import { PeerTransferActions } from "./PeerTransferActions";
+import {
+  PeerTransferActions,
+  type TransferDialog,
+} from "./PeerTransferActions";
 import { FilesButton } from "./FilesButton";
 import { PortsSection } from "./ports/PortsSection";
 import { RemoteTransferActions } from "./RemoteWorktreeActions";
@@ -58,7 +62,7 @@ import {
 } from "./WorktreeDetailFooter";
 import { WorktreeHeader } from "./WorktreeHeader";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
-import { CommitsSection } from "./commits/CommitsSection";
+import { GitSection } from "./git/GitSection";
 import { DescriptionSection } from "./DescriptionSection";
 
 // A cleanup script still in flight.
@@ -89,6 +93,17 @@ export function WorktreeDetailInner({
   // itself) and adds the cross-device ones (mirror, transplant, the
   // device chip).
   const { remote } = useHostScope();
+  // This device's worktree sends to a peer, a peer's brings here, and
+  // either renders in two parts (the footer below) that share which
+  // dialog is open.
+  const Transfers = remote ? RemoteTransferActions : PeerTransferActions;
+  const [transferDialog, setTransferDialog] = useState<TransferDialog>(null);
+  const transfers = {
+    worktree,
+    project,
+    open: transferDialog,
+    setOpen: setTransferDialog,
+  };
   const scriptRuns = useScriptRuns();
   // Always true locally (the local device is granted by contract), so
   // this alone carries the read-only mirror.
@@ -310,7 +325,7 @@ export function WorktreeDetailInner({
 
           {!pullRequest && <PullRequestSection worktree={worktree} />}
 
-          <CommitsSection worktree={worktree} />
+          <GitSection worktree={worktree} />
 
           {/* Keyed so an open add or edit form stays with its worktree. */}
           <PortsSection key={worktree.id} worktree={worktree} />
@@ -327,22 +342,17 @@ export function WorktreeDetailInner({
         state={footerState}
         actions={footerActions}
         canMutate={granted}
+        // The same verbs on either page: Files and the running mirror's
+        // button, then the transfers. Transplant, used far less, is a
+        // row of the footer's Options popover.
         leading={
           <>
-            {/* The same leading verbs on either page: Files and the
-                running mirror's button, then the transfers. This
-                device's own worktree footer verbs (PeerTransferActions)
-                sit in the spots the remote footer gives its Mirror and
-                Transplant buttons. */}
             <FilesButton worktree={worktree} />
             <MirrorAction worktree={worktree} />
-            {remote ? (
-              <RemoteTransferActions worktree={worktree} project={project} />
-            ) : (
-              <PeerTransferActions worktree={worktree} project={project} />
-            )}
+            <Transfers part="footer" {...transfers} />
           </>
         }
+        options={<Transfers part="option" {...transfers} />}
       />
     </div>
   );

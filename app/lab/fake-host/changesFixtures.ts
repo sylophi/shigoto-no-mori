@@ -167,6 +167,30 @@ export function createFakeChanges(
       return { snapshot: "5eed5ab", worktree };
     },
 
+    // The picked file's one change, as patchFor draws it: past three
+    // lines of context, its deletions then its additions. Nothing is
+    // ticked by hunk here, so it reads as unstaged.
+    hunks: (worktreeId: string, path: string) => {
+      const file = filesOf(worktreeId).find((f) => f.path === path);
+      const adds = file?.counts?.additions ?? 0;
+      const dels = file?.counts?.deletions ?? 0;
+      if (!file || file.kind !== "modified" || adds + dels === 0) {
+        return { changes: [], editable: true };
+      }
+      return {
+        changes: [
+          {
+            oldStart: dels === 0 ? 3 : 4,
+            oldCount: dels,
+            newStart: adds === 0 ? 3 : 4,
+            newCount: adds,
+            staged: false,
+          },
+        ],
+        editable: true,
+      };
+    },
+
     // The patch for one picked file: a hunk the size of its counts.
     fileDiff: (worktreeId: string, paths: readonly string[]) => {
       const path = paths.at(-1) ?? "";

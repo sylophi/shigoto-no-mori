@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  Archive,
+  ArrowLeftToLine,
+  ArrowRightToLine,
   Check,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -36,10 +39,9 @@ import {
 } from "./changesControls";
 import type { IndexEntry } from "@/lib/patchFiles";
 
-// Below this many files the changes list is short enough to scan, and
-// a filter field would only be one more row between the header and
-// the files. A read-only patch keeps its filter: that row also holds
-// the fold-all control.
+// Below this many files a list is short enough to scan, and a filter
+// field (with a patch's fold-all beside it) would only be one more row
+// between the selected row of the Git page's timeline and its files.
 const FILTER_MIN_FILES = 8;
 
 // The file list for a diff: every file in scroll order with its
@@ -100,10 +102,18 @@ export function DiffFileIndex({
   // marker at all. `nearest` is the minimum scroll that reveals the row,
   // so a row already in view doesn't move and reading down a patch
   // doesn't jitter.
+  //
+  // The list's own scroll only, never its ancestors': nested in the Git
+  // page's timeline the list doesn't scroll at all, and the timeline
+  // keeps the place the reader left it at.
   useEffect(() => {
-    listRef.current
-      ?.querySelector("[data-active]")
-      ?.scrollIntoView({ block: "nearest" });
+    const list = listRef.current;
+    const row = list?.querySelector("[data-active]");
+    if (!list || !row) return;
+    const box = list.getBoundingClientRect();
+    const at = row.getBoundingClientRect();
+    if (at.top < box.top) list.scrollTop -= box.top - at.top;
+    else if (at.bottom > box.bottom) list.scrollTop += at.bottom - box.bottom;
   }, [activeKey]);
 
   // Which discard is up for confirmation. The paths are worked out
@@ -143,7 +153,7 @@ export function DiffFileIndex({
 
   return (
     <div data-slot="diff-index" className={cn("flex flex-col", className)}>
-      {(!changes || entries.length >= FILTER_MIN_FILES || query) && (
+      {(entries.length >= FILTER_MIN_FILES || query) && (
         <div
           data-slot="search-row"
           className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5"
@@ -370,7 +380,7 @@ function DiscardMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label="Discard changes"
+        aria-label="Change actions"
         disabled={total === 0}
         data-icon-button
         className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 data-popup-open:bg-accent data-popup-open:text-foreground"
@@ -378,6 +388,11 @@ function DiscardMenu({
         <Ellipsis aria-hidden className="size-3.5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={4} className="min-w-48">
+        <DropdownMenuItem disabled={changes.busy} onClick={changes.onStash}>
+          <Archive />
+          Stash all changes
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
           disabled={!canDiscardUnticked}
@@ -461,12 +476,9 @@ function IndexRow({
   // gives way when the row runs out of room.
   const name = getBrowseLeafSegment(entry.path);
   const folder = entry.path.slice(0, -name.length - 1);
-  const { mark, label, className } = entry.mark;
+  const { mark, className } = entry.mark;
   const { row } = entry;
   const select = () => onSelect(entry.key);
-  // The context menu is a gesture nothing on the row shows, so the
-  // row's hint names it.
-  const tip = `${label}: ${entry.prevPath ? `${entry.prevPath} → ` : ""}${entry.path}${row ? "\nRight-click to discard or copy the path" : ""}`;
 
   return (
     // A row is two controls side by side (tick, jump), so it can't be
@@ -523,49 +535,47 @@ function IndexRow({
             </SimpleTooltip>
           </span>
         )}
-      <SimpleTooltip tip={tip}>
-        <button
-          type="button"
-          data-slot="diff-index-jump"
-          onClick={select}
-          className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+      <button
+        type="button"
+        data-slot="diff-index-jump"
+        onClick={select}
+        className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "w-2.5 shrink-0 text-center font-mono text-2xs font-semibold",
+            className,
+          )}
         >
-          <span
-            aria-hidden
-            className={cn(
-              "w-2.5 shrink-0 text-center font-mono text-2xs font-semibold",
-              className,
-            )}
-          >
-            {mark}
-          </span>
-          {/* One line tall, clipped, and allowed to wrap: a folder with
+          {mark}
+        </span>
+        {/* One line tall, clipped, and allowed to wrap: a folder with
               less than 3em left beside the name wraps onto a second
               line nobody sees, rather than showing as a sliver. */}
-          <span className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 overflow-hidden text-xs">
-            <span className="max-w-full shrink-0 truncate">{name}</span>
-            {/* Cut from its start, so what stays is the folder nearest
+        <span className="flex h-[1lh] min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 overflow-hidden text-xs">
+          <span className="max-w-full shrink-0 truncate">{name}</span>
+          {/* Cut from its start, so what stays is the folder nearest
                 the file ("…/sidebar"), the part that tells two files of
                 one name apart. rtl moves the ellipsis to the left, and
                 the bdi keeps the path itself reading left to right. */}
-            {folder && (
-              <span
-                dir="rtl"
-                className="min-w-[3em] flex-1 basis-0 truncate text-left text-2xs text-muted-foreground"
-              >
-                <bdi>{folder}</bdi>
-              </span>
-            )}
-          </span>
-          {entry.stats && (
-            <DiffStats
-              additions={entry.stats.additions}
-              deletions={entry.stats.deletions}
-              compact
-            />
+          {folder && (
+            <span
+              dir="rtl"
+              className="min-w-[3em] flex-1 basis-0 truncate text-left text-2xs text-muted-foreground"
+            >
+              <bdi>{folder}</bdi>
+            </span>
           )}
-        </button>
-      </SimpleTooltip>
+        </span>
+        {entry.stats && (
+          <DiffStats
+            additions={entry.stats.additions}
+            deletions={entry.stats.deletions}
+            compact
+          />
+        )}
+      </button>
       {/* A phone's list is the full width, and a long press is a gesture
           nobody finds, so there the discard is also a button. */}
       {row && onDiscard && (
@@ -602,7 +612,33 @@ function FileMenu({
   const staged = row?.staged;
   return (
     <ContextMenuContent className="min-w-48">
-      {row && changes && (
+      {row?.conflicted && changes && (
+        <>
+          <DropdownMenuItem
+            disabled={changes.busy}
+            onClick={() => changes.onResolve(row.path, "mine")}
+          >
+            <ArrowLeftToLine />
+            Keep mine
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={changes.busy}
+            onClick={() => changes.onResolve(row.path, "theirs")}
+          >
+            <ArrowRightToLine />
+            Take theirs
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={changes.busy}
+            onClick={() => changes.onSetStaged(changedFilePaths(row), true)}
+          >
+            <Check />
+            Mark as resolved
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+        </>
+      )}
+      {row && changes && !row.conflicted && (
         <DropdownMenuItem
           disabled={changes.busy}
           onClick={() =>

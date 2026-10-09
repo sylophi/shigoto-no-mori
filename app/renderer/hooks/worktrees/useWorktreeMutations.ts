@@ -395,43 +395,32 @@ export function useIsDeletingWorktree(
   return useIsMutating(deleteFilters(onDevice, worktreeId)) > 0 || removing;
 }
 
-// The two per-worktree flags (shelf, auto-pull) share one mutation
-// shape: an optimistic flip so the row and the sidebar group update
+// The per-worktree row changes (shelf, auto-pull, idle agents) share
+// one mutation shape: an optimistic flip so the row and the sidebar group update
 // before the IPC round-trip lands, then a splice of the server's row
 // instead of a refetch of the whole project's list (the handler
 // already returns the refreshed Worktree, so cache state stays
 // accurate without an N-git-call round trip), and a rollback to truth
 // on error. Optimistic writes change a row and never add or drop one:
 // the villager news reads those as moves (lib/villagers/moves.ts).
-function useSetWorktreeFlag<K extends "shelved" | "autoPull" | "agentWorking">(
-  field: K,
-  call: (
-    api: HostApi,
-    input: { projectId: string; worktreeId: string } & Record<K, boolean>,
-  ) => Promise<Worktree>,
+type WorktreeVars = { projectId: string; worktreeId: string };
+type AgentSessionVars = WorktreeVars & { harness: string; session: string };
+
+function useWorktreeRowMutation<V extends WorktreeVars>(
+  call: (api: HostApi, input: V) => Promise<Worktree>,
+  patch: (worktree: Worktree, input: V) => Worktree,
   errorTitle: string,
-  onSettled?: (
-    api: HostApi,
-    input: { projectId: string; worktreeId: string } & Record<K, boolean>,
-  ) => void,
+  onSettled?: (api: HostApi, input: V) => void,
 ) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  return useMutation<
-    Worktree,
-    Error,
-    { projectId: string; worktreeId: string } & Record<K, boolean>
-  >({
+  return useMutation<Worktree, Error, V>({
     mutationFn: (input) => call(api, input),
     onMutate: (vars) => {
       queryClient.setQueryData<readonly Worktree[]>(
         keys.worktrees(vars.projectId),
         (current) =>
-          current
-            ? current.map((w) =>
-                w.id === vars.worktreeId ? { ...w, [field]: vars[field] } : w,
-              )
-            : current,
+          current?.map((w) => (w.id === vars.worktreeId ? patch(w, vars) : w)),
       );
     },
     onSuccess: (data, vars) => {
@@ -451,19 +440,55 @@ function useSetWorktreeFlag<K extends "shelved" | "autoPull" | "agentWorking">(
 }
 
 export function useSetShelved() {
-  return useSetWorktreeFlag(
-    "shelved",
-    (api, input) => api.worktrees.setShelved(input),
+  return useWorktreeRowMutation(
+    (api, input: WorktreeVars & { shelved: boolean }) =>
+      api.worktrees.setShelved(input),
+    (w, { shelved }) => ({ ...w, shelved }),
     "Couldn't update shelved state",
   );
 }
 
-export function useSetAgentWorking() {
-  return useSetWorktreeFlag(
-    "agentWorking",
-    (api, input) => api.worktrees.setAgentWorking(input),
-    "Couldn't clear agent working",
+// Every agent session bound to a worktree goes idle, for a turn whose
+// end no hook reported.
+export function useIdleAgents() {
+  return useWorktreeRowMutation(
+    (api, input: WorktreeVars) => api.worktrees.idleAgents(input),
+    (w) => ({
+      ...w,
+      agentWorking: false,
+      agentSessions: w.agentSessions?.map((s) => ({
+        ...s,
+        state: "idle" as const,
+      })),
+    }),
+    "Couldn't mark the agents idle",
   );
+}
+
+export function useUnbindAgent() {
+  return useWorktreeRowMutation(
+    (api, input: AgentSessionVars) => api.worktrees.unbindAgent(input),
+    (w, { harness, session }) => {
+      const agentSessions = (w.agentSessions ?? []).filter(
+        (s) => s.harness !== harness || s.session !== session,
+      );
+      return {
+        ...w,
+        agentSessions,
+        agentWorking: agentSessions.some((s) => s.state === "working"),
+      };
+    },
+    "Couldn't unbind the agent session",
+  );
+}
+
+export function useResumeAgent() {
+  const { api } = useHostScope();
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: resuming opens a terminal and leaves the session's binding as it was
+  return useMutation<void, Error, AgentSessionVars>({
+    mutationFn: (input) => api.worktrees.resumeAgent(input),
+    meta: { errorTitle: "Couldn't resume the agent session" },
+  });
 }
 
 // Marking a worktree is followed by a project refresh: its auto-pull
@@ -473,9 +498,10 @@ export function useSetAgentWorking() {
 // mark itself already landed, and the fetch path reports its own
 // failures.
 export function useSetAutoPull() {
-  return useSetWorktreeFlag(
-    "autoPull",
-    (api, input) => api.worktrees.setAutoPull(input),
+  return useWorktreeRowMutation(
+    (api, input: WorktreeVars & { autoPull: boolean }) =>
+      api.worktrees.setAutoPull(input),
+    (w, { autoPull }) => ({ ...w, autoPull }),
     "Couldn't update auto-pull",
     (api, input) => {
       if (input.autoPull)

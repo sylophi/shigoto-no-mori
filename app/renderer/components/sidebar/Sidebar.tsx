@@ -16,6 +16,11 @@ import {
 } from "@dnd-kit/sortable";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useReorderProjects } from "@/hooks/projects/useProjects";
+import { useCollapsedProjects } from "@/hooks/projects/useCollapsedProjects";
+import {
+  useMarkAgentsWaiting,
+  useInlineWorktrees,
+} from "@/hooks/config/useSidebarMarks";
 import {
   useSidebarView,
   useSidebarViewHotkey,
@@ -49,7 +54,7 @@ import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
 import { AddProjectButton } from "./AddProjectButton";
-import { useWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
+import { useWorktreeSorts } from "@/hooks/sharedSettings/useWorktreeSort";
 import { SidebarList } from "./SidebarList";
 import { RowContent } from "./RowContent";
 import type { RowHandlers } from "./VirtualRow";
@@ -165,6 +170,7 @@ function Forest({
     filter,
     activeFilter,
   } = useForestSources({ arrangeMode, inboxFacts: inbox });
+  const markAgentsWaiting = useMarkAgentsWaiting();
   const viewSettled = useSidebarViewSettled() || pinnedView !== undefined;
   const reorderProjects = useReorderProjects();
   // The open project and the shelf reveals are kept by group key
@@ -200,7 +206,9 @@ function Forest({
   );
   // The owners shut on the list of projects split by owner, by owner
   // key (ownerOf). Transient like the shelves: every owner starts open.
-  const [shutOwners, setShutOwners] = useState<Set<string>>(() => new Set());
+  const [shutOwners, setShutOwners] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   // The prefix groups shut inside a project, by group key and prefix.
   // Transient too: every group starts open.
   const [shutWorktreeGroups, setShutWorktreeGroups] = useState<
@@ -235,7 +243,7 @@ function Forest({
   // rather than toggles, so a second call before the first lands is
   // harmless.
   const openFold = (row: SidebarRow): boolean => {
-    if (row.kind === "shelved-toggle" && !row.expanded) {
+    if (row.kind === "group-shelf" && !row.expanded) {
       const key = groupKeyOf(row.groupId);
       setShelfOpenKeys((prev) => ({
         ...prev,
@@ -246,6 +254,10 @@ function Forest({
     if (row.kind === "worktree-group" && !row.expanded) {
       const key = worktreeGroupKey(row.groupId, row.prefix);
       setShutWorktreeGroups((prev) => withMember(prev, key, false));
+      return true;
+    }
+    if (row.kind === "owner-header" && !row.expanded) {
+      setShutOwners((prev) => withMember(prev, row.ownerKey, false));
       return true;
     }
     if (row.kind === "inbox-shelf" && !row.expanded) {
@@ -263,8 +275,12 @@ function Forest({
 
   // The tree shows the list of projects or one project on its own, and
   // goes into the project of the page on screen (openProject.ts).
+  // Inline, it shows every project's worktrees under it instead, each
+  // project folding in place.
   const { openKey, onScreenKey } = useOpenProject(projects, remoteItems);
-  const worktreeSort = useWorktreeSort(openKey);
+  const inline = useInlineWorktrees();
+  const { collapsedKeys, toggleCollapsed } = useCollapsedProjects();
+  const worktreeSort = useWorktreeSorts();
   // The level last asked for here, by picking a project or going back,
   // as opposed to one the tree reached by following the page: only the
   // first is a move made in the sidebar, for the list to play.
@@ -284,10 +300,12 @@ function Forest({
         groupedPrefixes,
         shutGroups: shutInboxGroups,
         allowAgentWorking,
+        pinWaiting: markAgentsWaiting,
       })
     : buildSidebarRows({
         ...local,
         openKey,
+        inline: inline ? { collapsed: byGroupKey(collapsedKeys) } : null,
         worktreeSort,
         order,
         openShelves: groupShelvesOpen,
@@ -388,7 +406,7 @@ function Forest({
   }
 
   const handlers: RowHandlers = {
-    onToggle: goTo,
+    onToggle: inline ? toggleCollapsed : goTo,
     onToggleShelved: toggleShelved,
     onToggleShelf: toggleShelf,
     onToggleOwner: (ownerKey) => setShutOwners(withToggled(ownerKey)),
@@ -471,7 +489,7 @@ function Forest({
               inProject
                 ? {
                     groupKey: level,
-                    sort: worktreeSort,
+                    sort: worktreeSort(level),
                     onBack: () => goTo(null),
                   }
                 : undefined

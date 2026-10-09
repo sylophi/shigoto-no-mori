@@ -451,6 +451,10 @@ export const ClientConfigSchema = Schema.Struct({
   // client has no device of its own. Off by default (absent = off),
   // explicit `true` is the opt-in. Nothing on a device reads it.
   villageLife: Schema.optional(Schema.Boolean),
+  // Village news: the toasts villagers send moving in or out
+  // (renderer/lib/villagers/moves.ts), under Village life. On by
+  // default (absent = on), explicit `false` keeps them quiet.
+  villageNews: Schema.optional(Schema.Boolean),
   // Mark the sidebar's terrier-sourced projects (Project.source), the
   // ones the terrier registry lists rather than this app's own, with
   // terrier's paw, on every device this window shows. Off by default
@@ -461,12 +465,26 @@ export const ClientConfigSchema = Schema.Struct({
   // (or is mirrored with) on its row. On by default (absent = on),
   // explicit `false` hides them, on every device this window shows.
   showDeviceBadges: Schema.optional(Schema.Boolean),
-  // Allow agents to mark worktrees as working: file the worktrees an
-  // agent marked with `sm agent-working` on their own folded shelf, on
-  // every device this window shows, and offer to clear the mark on the
-  // worktree page. Off by default (absent = off), explicit `true` is
-  // the opt-in. Off, the mark is ignored.
+  // Shelve worktrees agents are working in: file the worktrees with a
+  // working agent session (`sm agents`) on their own folded shelf, on
+  // every device this window shows. Off by default (absent = off),
+  // explicit `true` is the opt-in.
   allowAgentWorking: Schema.optional(Schema.Boolean),
+  // Mark the worktrees whose agent session waits on the user (a
+  // permission prompt or a question), on every device this window
+  // shows. On by default (absent = on), explicit `false` hides it.
+  markAgentsWaiting: Schema.optional(Schema.Boolean),
+  // The desktop's notifications about agent sessions, on every device
+  // this window shows (renderer/lib/agentWatch.ts): one when a
+  // session starts waiting on the user (on by default, absent = on),
+  // and one when a turn ends (off by default, absent = off).
+  notifyAgentWaiting: Schema.optional(Schema.Boolean),
+  notifyAgentDone: Schema.optional(Schema.Boolean),
+  // Show every project's worktrees under it on the sidebar's list of
+  // projects, each project folding in place, rather than one project
+  // at a time. Off by default (absent = off), explicit `true` is the
+  // opt-in.
+  inlineWorktrees: Schema.optional(Schema.Boolean),
   // Pause the doubutsu wallpaper drift while this machine runs on
   // battery, the same pause an unfocused window gets. On by default
   // (absent = on), explicit `false` keeps it drifting on battery.
@@ -516,10 +534,10 @@ export const ClientConfigSchema = Schema.Struct({
   // Kept like the sort above. On by default (absent = on), explicit
   // `false` is the opt-out (renderer/hooks/projects/useProjectSort.ts).
   groupProjectsByOwner: Schema.optional(Schema.Boolean),
-  // Legacy: the sidebar's folded projects, by group key, from when its
-  // tree folded project by project. Nothing reads it. Still modeled
-  // because a doc can carry it and its keys name peers and repos, so
-  // withoutPeerState has to be able to see it to drop it.
+  // The projects folded on the inline list, by group key
+  // (projectGroupKey in renderer/components/sidebar/buildSidebarRows.ts).
+  // Absence == expanded (renderer/hooks/projects/useCollapsedProjects.ts
+  // is the only reader and writer).
   collapsedProjects: Schema.optional(Schema.Array(Schema.String)),
 });
 export type ClientConfig = typeof ClientConfigSchema.Type;
@@ -535,7 +553,7 @@ export const peerProjectKey = (deviceId: string, projectId: string) =>
 // The client config without what was keyed by the account's peers:
 // a device leaving the account (a sign-out, a sign-in under another)
 // leaves the local port picks, the legacy create-device picks and the
-// legacy fold list behind, since all three name devices or repos of
+// folded projects behind, since all three name devices or repos of
 // the account that is gone, and a later account on this machine or
 // browser must not inherit them.
 export function withoutPeerState(config: ClientConfig): ClientConfig {
@@ -601,4 +619,10 @@ export const WriteWorktreeDescriptionPayloadSchema = Schema.Struct({
 // Input to the window module's non-persisting theme preview.
 export const PreviewThemePayloadSchema = Schema.Struct({
   theme: ThemeSchema,
+});
+
+export const NotifyPayloadSchema = Schema.Struct({
+  title: Schema.String,
+  body: Schema.String,
+  route: Schema.String,
 });

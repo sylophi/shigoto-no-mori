@@ -13,6 +13,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -21,7 +24,10 @@ import {
   useSetGroupProjectsByOwner,
   useSetProjectSort,
 } from "@/hooks/projects/useProjectSort";
-import { useSetWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
+import {
+  useSetWorktreeSort,
+  useWorktreeSorts,
+} from "@/hooks/sharedSettings/useWorktreeSort";
 import { hasLocalHost } from "@/lib/localHost";
 import { AddProjectButton } from "./AddProjectButton";
 import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
@@ -147,6 +153,23 @@ function WorktreeSortMenu({
         onPick={useSetWorktreeSort(groupKey)}
       />
     </ListMenu>
+  );
+}
+
+// The same sort in a project header's menu, for the inline list, where
+// every project is open at once and the toolbar sorts the projects.
+export function WorktreeSortSubmenu({ groupKey }: { groupKey: string }) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>Sort worktrees</DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <SortOptions
+          options={WORKTREE_SORT_OPTIONS}
+          value={useWorktreeSorts()(groupKey)}
+          onPick={useSetWorktreeSort(groupKey)}
+        />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 

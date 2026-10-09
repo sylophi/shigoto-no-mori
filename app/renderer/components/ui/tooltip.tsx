@@ -16,30 +16,19 @@ import { isTruncated } from "@/hooks/ui/useIsTruncated";
 
 import { cn } from "@/lib/utils";
 
-// 500ms before the first tooltip shows; once one is open, moving to a
-// neighboring trigger shows its tooltip immediately (Base UI provider
-// grouping), matching native-menu feel.
-function TooltipProvider({
-  delay = 500,
-  ...props
-}: TooltipPrimitive.Provider.Props) {
-  return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delay={delay}
-      {...props}
-    />
-  );
-}
-
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
 // No data-slot: it would replace the wrapped element's own (see
-// DropdownMenuTrigger).
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger {...props} />;
+// DropdownMenuTrigger). 500ms before each tooltip shows. There is no
+// Tooltip.Provider: its grouping opens the next tooltip at once, so
+// sweeping the pointer past one hint pops up every hint it crosses.
+function TooltipTrigger({
+  delay = 500,
+  ...props
+}: TooltipPrimitive.Trigger.Props) {
+  return <TooltipPrimitive.Trigger delay={delay} {...props} />;
 }
 
 function TooltipContent({
@@ -105,7 +94,7 @@ type TooltipChild = ReactElement<
 // on mousemove, but a wrapper's still run, and the span adds no box.
 // (So a child that turns disabled is remounted into the span.)
 // Newlines in string tips are preserved like multiline titles were.
-// `delay` overrides the provider's opening delay for this trigger.
+// `delay` overrides the 500ms opening delay for this trigger.
 // `whenTruncated` is for a tip that only repeats text on screen in
 // full: it opens only while that text is cut off. `lazy` is for such a
 // tip on every row of a long list (the file tree, the palette), where
@@ -196,11 +185,15 @@ function withoutOpenState(child: TooltipChild) {
     cloneElement(child, { ...mergeProps(props, child.props), ref: props.ref });
 }
 
-// Whether the trigger, or anything in it, is cut off.
+// Whether the trigger, or anything in it, is cut off. Only a box that
+// clips can cut anything off: content spilling out of one that doesn't
+// (a rotated icon's corners) is still on screen.
 function overflows(trigger: Element | undefined): boolean {
   if (!trigger) return false;
-  return [trigger, ...trigger.querySelectorAll("*")].some(isTruncated);
+  return [trigger, ...trigger.querySelectorAll("*")].some(
+    (el) => isTruncated(el) && getComputedStyle(el).overflow !== "visible",
+  );
 }
 
 export type { WithoutTitle };
-export { SimpleTooltip, TooltipProvider };
+export { SimpleTooltip };

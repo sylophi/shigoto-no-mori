@@ -11,6 +11,8 @@ import type {
   CommitChangesResult,
   CommitMessage,
   DiscardChangesResult,
+  HunkStates,
+  LineChange,
   ResetSoftResult,
   Worktree,
 } from "@shigomori/contracts/schemas";
@@ -104,29 +106,117 @@ export function useSetStaged() {
   });
 }
 
-// Everything derived from the working tree: the sidebar's count and
-// recent commits, the patch, and the per-file index state.
-function invalidateWorkingTree(
+// One modified file's hunks and which the next commit takes. Off for
+// anything else (an untracked, deleted, renamed or conflicted file),
+// which only ticks whole.
+export function useFileHunks(
+  projectId: string,
+  worktreeId: string,
+  path: string | undefined,
+) {
+  const { api, keys } = useHostScope();
+  return useQuery<HunkStates>({
+    queryKey: keys.worktreeFileHunks(projectId, worktreeId, path ?? ""),
+    queryFn: path
+      ? () => api.worktrees.fileHunks({ projectId, worktreeId, path })
+      : skipToken,
+    staleTime: 0,
+    meta: { errorTitle: "Couldn't read the file's hunks" },
+  });
+}
+
+interface SetHunksStagedInput {
+  projectId: string;
+  worktreeId: string;
+  path: string;
+  changes: LineChange[];
+  staged: boolean;
+}
+
+// Tick or untick hunks. Answers with a fresh status, settled into the
+// list the way a file tick is, and the hunks are read again.
+export function useSetHunksStaged() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<readonly ChangedFile[], Error, SetHunksStagedInput>({
+    mutationFn: (input) => api.worktrees.setHunksStaged(input),
+    onSuccess: (files, vars) => {
+      const key = keys.worktreeChanges(vars.projectId, vars.worktreeId);
+      const carried = new Map(
+        queryClient
+          .getQueryData<readonly ChangedFile[]>(key)
+          ?.map((file) => [changeKey(file), file.counts]),
+      );
+      queryClient.setQueryData(
+        key,
+        files.map((file) => {
+          const counts = carried.get(changeKey(file));
+          return counts ? { ...file, counts } : file;
+        }),
+      );
+    },
+    onSettled: (_data, _err, vars) =>
+      queryClient.invalidateQueries({
+        queryKey: keys.worktreeFileHunks(
+          vars.projectId,
+          vars.worktreeId,
+          vars.path,
+        ),
+      }),
+    meta: { errorTitle: "Couldn't update the selection" },
+  });
+}
+
+export function useDiscardHunks() {
+  return useWorkingTreeMutation<
+    {
+      projectId: string;
+      worktreeId: string;
+      path: string;
+      changes: LineChange[];
+    },
+    DiscardChangesResult
+  >(
+    (api, input) => api.worktrees.discardHunks(input),
+    (data) => data.worktree,
+    "Couldn't discard the change",
+  );
+}
+
+// Everything derived from the working tree: the patch, the per-file
+// index state, and the operation it may be stopped in.
+export function invalidateTreeState(
   queryClient: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
+): void {
+  for (const queryKey of [
+    keys.worktreeDiff(projectId, worktreeId),
+    keys.worktreeChanges(projectId, worktreeId),
+    keys.worktreeOperation(projectId, worktreeId),
+  ]) {
+    void queryClient.invalidateQueries({ queryKey });
+  }
+}
+
+// That, and the worktree the call answered with written back, for the
+// sidebar's count and recent commits.
+export function invalidateWorkingTree(
+  queryClient: ReturnType<typeof useQueryClient>,
+  keys: QueryKeyRegistry,
+  scope: { projectId: string; worktreeId: string },
   worktree: Worktree,
 ): void {
   queryClient.setQueryData<readonly Worktree[]>(
-    keys.worktrees(projectId),
+    keys.worktrees(scope.projectId),
     (list) => list?.map((w) => (w.id === worktree.id ? worktree : w)),
   );
-  void queryClient.invalidateQueries({
-    queryKey: keys.worktreeDiff(projectId, worktreeId),
-  });
-  void queryClient.invalidateQueries({
-    queryKey: keys.worktreeChanges(projectId, worktreeId),
-  });
+  invalidateTreeState(queryClient, keys, scope);
 }
 
 // Discard, restore and undo share one shape: call the api, then write
 // back the worktree the call answers with and refresh the working tree.
-function useWorkingTreeMutation<
+export function useWorkingTreeMutation<
   Input extends { projectId: string; worktreeId: string },
   Result,
 >(

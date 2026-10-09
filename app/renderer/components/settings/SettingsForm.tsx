@@ -40,6 +40,7 @@ import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import { SettingsSectionChips } from "./SettingsSectionChips";
+import { NotificationsSection } from "./NotificationsSection";
 import { SidebarSection } from "./SidebarSection";
 import { MountOnceVisited, SettingsPanel } from "./SettingsPanel";
 import {
@@ -147,9 +148,14 @@ export function SettingsForm({
           darkTheme: prev.darkTheme,
           pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
           villageLife: prev.villageLife,
+          villageNews: prev.villageNews,
           markTerrierProjects: prev.markTerrierProjects,
           showDeviceBadges: prev.showDeviceBadges,
           allowAgentWorking: prev.allowAgentWorking,
+          markAgentsWaiting: prev.markAgentsWaiting,
+          notifyAgentWaiting: prev.notifyAgentWaiting,
+          notifyAgentDone: prev.notifyAgentDone,
+          inlineWorktrees: prev.inlineWorktrees,
         }));
       }
     }
@@ -269,8 +275,13 @@ export function SettingsForm({
               )}
               villageLife={form.villageLife}
               onVillageLifeChange={setField("villageLife")}
+              villageNews={form.villageNews}
+              onVillageNewsChange={setField("villageNews")}
             />
             <SidebarSection form={form} setForm={setForm} />
+            {hasLocalHost && (
+              <NotificationsSection form={form} setForm={setForm} />
+            )}
             <WorktreePrefixesSection list="hidden" />
             <WorktreePrefixesSection list="grouped" />
             {/* The desktop states its build in this device's General

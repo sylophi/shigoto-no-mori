@@ -1,11 +1,11 @@
 // The update pipeline behind `sm update`. It works on the same files
 // under the data dir as the Go sm and the app, so any of them picks up
 // where another left off:
-//   check  find the release to move to. A full release asks the
-//          update.electronjs.org feed, which compares versions itself
-//          (204 up to date, 200 the release's zip). That feed hides
-//          prereleases, so a prerelease build reads the repo's release
-//          list and picks for itself (updateFeed.ts pickRelease).
+//   check  find the release to move to: read the repo's release list
+//          and pick for itself (updateFeed.ts pickRelease). When GitHub
+//          can't answer, ask the update.electronjs.org feed, which
+//          compares versions itself (204 up to date, 200 the release's
+//          zip) but hides prereleases.
 //   stage  download the zip into updates/, extract it, verify its code
 //          signature, and park the bundle in updates/staged with a
 //          manifest the app reads too.
@@ -49,7 +49,12 @@ import { parseJson } from "./json.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText } from "./platformErrors.ts";
 import { capture, pidAlive } from "./processes.ts";
-import { compareSemver, isPrerelease, parseSemver } from "./semver.ts";
+import {
+  compareSemver,
+  isPrerelease,
+  parseSemver,
+  type Semver,
+} from "./semver.ts";
 import {
   acquireStagingLock,
   StagingLockUnavailable,
@@ -409,9 +414,9 @@ export type Progress =
 export type UpdateInput = {
   readonly running: Running;
   // Stand-ins for the two endpoints (`--feed-url`, `--releases-url`),
-  // empty or absent for the real ones. A feed stand-in takes the
-  // single-answer path on every build, prerelease or not, so one flag
-  // keeps a test build off the real feeds.
+  // empty or absent for the real ones. Either one turns both real
+  // endpoints off, so one flag keeps a test build off them. An endpoint
+  // without a stand-in then isn't asked.
   readonly feedUrl?: string | undefined;
   readonly releasesUrl?: string | undefined;
   readonly progress?: ((progress: Progress) => Effect.Effect<void>) | undefined;
@@ -590,6 +595,21 @@ const discard = (
   within(Stream.runDrain(Stream.take(response.stream, 1)), deadline).pipe(
     Effect.ignore,
   );
+
+// A version that doesn't parse ranks the release list as the lowest.
+const ZERO_VERSION = parseSemver("0.0.0") as Semver;
+
+// The two endpoints, either a stand-in's, or "" for one with none while
+// the other has one.
+const updateServerUrl = (input: UpdateInput) =>
+  input.feedUrl || input.releasesUrl
+    ? (input.feedUrl ?? "")
+    : `https://update.electronjs.org/${FEED_REPO}/darwin-${input.running.arch}/${input.running.version}`;
+
+const releaseListUrl = (input: UpdateInput) =>
+  input.feedUrl || input.releasesUrl
+    ? (input.releasesUrl ?? "")
+    : `https://api.github.com/repos/${FEED_REPO}/releases?per_page=100`;
 
 const feedFailed =
   (source: FeedFailed["source"]) =>
@@ -798,9 +818,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     input: UpdateInput,
   ) {
     const { running } = input;
-    const url =
-      input.feedUrl ||
-      `https://update.electronjs.org/${FEED_REPO}/darwin-${running.arch}/${running.version}`;
+    const url = updateServerUrl(input);
     const failed = feedFailed("update-server");
     const deadline =
       (yield* Clock.currentTimeMillis) + Duration.toMillis(FEED_TIMEOUT);
@@ -886,9 +904,7 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
     input: UpdateInput,
   ) {
     const { running } = input;
-    const url =
-      input.releasesUrl ||
-      `https://api.github.com/repos/${FEED_REPO}/releases?per_page=100`;
+    const url = releaseListUrl(input);
     const failed = feedFailed("release-list");
     const cached = Option.getOrUndefined(yield* readReleaseListCache(url));
     const now = yield* Clock.currentTimeMillis;
@@ -962,21 +978,35 @@ const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   // answer came from the network this run. An answer from the kept
   // release list is unconfirmed: it can lag a release an earlier run
   // already staged, so it never counts as "up to date" for anything
-  // destructive. A prerelease build ranks the release list itself (the
-  // release workflow stamps the tag into the build, so v2.0.0-beta.2
-  // runs as "2.0.0-beta.2"). Every other build lets the server compare.
+  // destructive. The release list is ranked against this build's
+  // version (the release workflow stamps the tag into the build, so
+  // v2.0.0-beta.2 runs as "2.0.0-beta.2"). When GitHub can't answer,
+  // the update server compares instead, but its "nothing newer" can't
+  // speak for a prerelease build's channel, so for one it is
+  // unconfirmed too. When both fail, the release list's error is the
+  // one reported.
   const queryFeed = Effect.fn("Updater.queryFeed")(function* (
     input: UpdateInput,
   ) {
-    const current = parseSemver(input.running.version);
-    if (!input.feedUrl && current !== undefined && isPrerelease(current)) {
-      const list = yield* fetchReleaseList(input);
-      return {
-        release: pickRelease(current, list.releases, input.running.arch),
-        confirmed: list.confirmed,
-      };
-    }
-    return { release: yield* queryUpdateServer(input), confirmed: true };
+    const current = parseSemver(input.running.version) ?? ZERO_VERSION;
+    const fromList = Effect.map(
+      fetchReleaseList(input),
+      ({ releases, confirmed }) => ({
+        release: pickRelease(current, releases, input.running.arch),
+        confirmed,
+      }),
+    );
+    const fromServer = Effect.map(queryUpdateServer(input), (release) => ({
+      release,
+      confirmed: !isPrerelease(current),
+    }));
+    if (releaseListUrl(input) === "") return yield* fromServer;
+    if (updateServerUrl(input) === "") return yield* fromList;
+    return yield* fromList.pipe(
+      Effect.catch((listFailure) =>
+        fromServer.pipe(Effect.mapError(() => listFailure)),
+      ),
+    );
   });
 
   // --- signatures ---

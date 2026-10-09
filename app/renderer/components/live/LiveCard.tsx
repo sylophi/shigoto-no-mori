@@ -48,7 +48,7 @@ import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { cn } from "@/lib/utils";
 import { mappedPullRequest, worktreeTitle } from "@/lib/worktreeTitle";
-import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
+import { AgentItem, ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
 import type { LiveCard as LiveCardModel } from "./liveModel";
 
 // A device's heading over its cards: its mark in its connection tone,
@@ -132,7 +132,12 @@ function CardBody({
       )}
       <ul className="flex flex-col gap-2">
         {card.items.map((item) =>
-          item.kind === "script" ? (
+          item.kind === "agent" ? (
+            <AgentItem
+              key={`${item.session.harness}:${item.session.session}`}
+              session={item.session}
+            />
+          ) : item.kind === "script" ? (
             <ScriptItem
               key={item.run.runId}
               deviceId={card.deviceId}
@@ -275,7 +280,7 @@ function WorktreeHeader({
           <span className="truncate text-2xs text-muted-foreground">
             {state.kind === "unreachable"
               ? `${deviceName} is out of reach`
-              : [worktree?.name, project?.name].filter(Boolean).join(" · ")}
+              : [worktree?.name, project?.name].filter(Boolean).join(" in ")}
           </span>
         )}
       </span>

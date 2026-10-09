@@ -115,6 +115,140 @@ describe("a command line", () => {
   });
 });
 
+// The last line a command printed, as the document it is.
+const lastDoc = (stdout: string) =>
+  JSON.parse(stdout.trim().split("\n").at(-1) ?? "") as Record<string, unknown>;
+
+// The agent verbs as a harness and an agent's shell reach them: the
+// hooks installed into a harness's own file, a create from an agent's
+// shell binding its session, a hook's event moving it, all as Go's sm
+// printed them.
+describe("agents", () => {
+  // A run with `input` on stdin, the way a hook hands an event over.
+  const piped = (
+    cwd: string,
+    args: ReadonlyArray<string>,
+    env: NodeJS.ProcessEnv,
+    input: string,
+  ) =>
+    new Promise<{ code: number | null; stdout: string }>((resolve) => {
+      const child = spawn(built, args, {
+        cwd,
+        env: { ...box.env("cli"), ...env },
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      let stdout = "";
+      child.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
+      child.on("close", (code) => resolve({ code, stdout }));
+      child.stdin.end(input);
+    });
+
+  it("installs the hooks, binds the shell's session and follows its events", async () => {
+    const claude = join(box.home, "claude-config");
+    mkdirSync(claude);
+    const env = {
+      CLAUDE_CONFIG_DIR: claude,
+      CODEX_HOME: join(box.home, "no-codex"),
+    };
+    const repo = box.repo("repo");
+    box.write("registry.json", {
+      projects: [{ id: "R", name: "repo", path: repo }],
+    });
+
+    const status = await start(repo, ["--json", "agents", "status"], env).ended;
+    assert.equal(status.code, 0);
+    assert.deepEqual(lastDoc(status.stdout), {
+      ok: true,
+      harnesses: [
+        {
+          id: "claude",
+          label: "Claude Code",
+          detected: true,
+          path: join(claude, "settings.json"),
+          hooks: "missing",
+        },
+        {
+          id: "codex",
+          label: "Codex",
+          detected: false,
+          path: join(box.home, "no-codex", "hooks.json"),
+          hooks: "missing",
+        },
+      ],
+    });
+    // Every detected harness by default, Codex's missing config dir
+    // left alone.
+    const installed = await start(repo, ["agents", "install"], env).ended;
+    assert.equal(installed.code, 0);
+    assert.match(installed.stdout, /^installed the Claude Code hooks/);
+    assert.match(
+      readFileSync(join(claude, "settings.json"), "utf8"),
+      / agents event --harness claude \|\| true"/,
+    );
+    assert.equal(
+      (await start(repo, ["agents", "install", "pi"], env).ended).code,
+      2,
+    );
+
+    const shell = { ...env, CLAUDE_CODE_SESSION_ID: "s1" };
+    const created = await start(
+      repo,
+      ["--json", "create", "fox", "--no-setup"],
+      shell,
+    ).ended;
+    assert.equal(created.code, 0, created.stderr);
+    const fox = (
+      created.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .find((doc) => doc["event"] === "created") as {
+        worktree: {
+          path: string;
+          agentWorking: boolean;
+          agentSessions: ReadonlyArray<{ session: string; state: string }>;
+        };
+      }
+    ).worktree;
+    assert.equal(fox.agentWorking, true);
+    assert.deepEqual(
+      fox.agentSessions.map(({ session, state }) => [session, state]),
+      [["s1", "working"]],
+    );
+
+    // A hook's run: nothing on stdout and 0, whatever it was handed.
+    const event = await piped(
+      fox.path,
+      ["agents", "event", "--harness", "claude"],
+      env,
+      JSON.stringify({ hook_event_name: "Stop", session_id: "s1" }),
+    );
+    assert.deepEqual(event, { code: 0, stdout: "" });
+    assert.deepEqual(await piped(fox.path, ["agents", "event"], env, "{nope"), {
+      code: 0,
+      stdout: "",
+    });
+    const row = await start(fox.path, ["--json", "agents", "idle"], env).ended;
+    assert.equal(
+      (lastDoc(row.stdout)["worktree"] as { agentWorking: boolean })
+        .agentWorking,
+      false,
+    );
+
+    const unbind = (...args: string[]) =>
+      start(repo, ["--json", "agents", "unbind", ...args], env).ended;
+    assert.deepEqual(
+      lastDoc((await unbind("--harness", "claude", "--session", "s1")).stdout),
+      { ok: true, unbound: true },
+    );
+    assert.deepEqual(
+      lastDoc((await unbind("--harness", "claude", "--session", "s1")).stdout),
+      { ok: true, unbound: false },
+    );
+    assert.equal((await unbind("--harness", "claude")).code, 2);
+  });
+});
+
 describe("transfer", () => {
   let app: FakeApp | undefined;
   afterEach(async () => {

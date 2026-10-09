@@ -449,27 +449,47 @@ describe("a dev build", () => {
   });
 });
 
+// The release list failing, and the update server answering behind it.
+const listDown =
+  (server: (url: URL) => Answer) =>
+  (url: URL): Answer =>
+    url.toString() === LIST ? new Response(null, { status: 500 }) : server(url);
+
 describe("the update server", () => {
-  it("asks for this build and arch, and reads 204 as up to date", async () => {
+  it("is asked, for this build and arch, when the release list fails", async () => {
     const box = newBox();
-    const { client, seen } = network(serverFor(undefined));
+    const { client, seen } = network(listDown(serverFor(undefined)));
     const { seen: steps, progress } = progressLog();
     const doc = await using({ box, http: client }, (u) =>
       u.check({ running: running(box), progress }),
     );
     assert.deepEqual(doc, { ok: true, status: "up-to-date", version: "1.0.0" });
-    assert.deepEqual(seen, [
-      {
-        url: `${FEED}1.0.0`,
-        headers: { "user-agent": "shigoto-no-mori-cli/1.0.0" },
-      },
-    ]);
+    assert.deepEqual(
+      seen.map(({ url }) => url),
+      [LIST, `${FEED}1.0.0`],
+    );
+    assert.deepEqual(seen[1]?.headers, {
+      "user-agent": "shigoto-no-mori-cli/1.0.0",
+    });
     assert.deepEqual(steps, [{ phase: "checking" }]);
+  });
+
+  // It hides prereleases, so its 204 can't vouch for a prerelease
+  // build's channel.
+  it("leaves a prerelease build's up to date unconfirmed", async () => {
+    const box = newBox("2.0.0-beta.2");
+    seedStaged(box, "2.0.0-beta.2");
+    const { client } = network(listDown(serverFor(undefined)));
+    const doc = await using({ box, http: client }, (u) =>
+      u.stage({ running: running(box, "2.0.0-beta.2") }),
+    );
+    assert.equal(doc.status, "up-to-date");
+    assert.ok(existsSync(join(staged(box), "manifest.json")));
   });
 
   it("names the release ahead", async () => {
     const box = newBox();
-    const { client } = network(serverFor("1.2.0"));
+    const { client } = network(listDown(serverFor("1.2.0")));
     assert.deepEqual(
       await using({ box, http: client }, (u) =>
         u.check({ running: running(box) }),
@@ -483,9 +503,10 @@ describe("the update server", () => {
     );
   });
 
+  // A feed stand-in alone takes the release list out of it.
   it("fails on any other answer, in Go's words", async () => {
     const box = newBox();
-    const errorFor = (answer: Answer, feedUrl?: string) =>
+    const errorFor = (answer: Answer, feedUrl = `${FEED}1.0.0`) =>
       failure({ box, http: network(() => answer).client }, (u) =>
         u.check({ running: running(box), feedUrl }),
       ).then(words);
@@ -591,13 +612,62 @@ describe("the release list", () => {
     });
   });
 
-  it("is never asked by a full release build", async () => {
-    const box = newBox();
-    const { client, seen } = network(serverFor(undefined));
-    await using({ box, http: client }, (u) =>
-      u.check({ running: running(box) }),
+  // The update server isn't asked once the list answers.
+  it("is what a full release build follows too", async () => {
+    const box = newBox("1.7.1");
+    const { client, seen } = network((url) =>
+      url.toString() === LIST
+        ? json([listed("v2.0.0-beta.3"), listed("v1.8.0"), listed("v1.7.1")])
+        : undefined,
     );
-    assert.ok(seen.every((request) => request.url.startsWith(FEED)));
+    assert.deepEqual(
+      await using({ box, http: client }, (u) =>
+        u.check({ running: running(box, "1.7.1") }),
+      ),
+      {
+        ok: true,
+        status: "update-available",
+        version: "1.8.0",
+        installed: "1.7.1",
+      },
+    );
+    assert.deepEqual(
+      seen.map(({ url }) => url),
+      [LIST],
+    );
+  });
+
+  it("is the error reported when the update server fails too", async () => {
+    const box = newBox();
+    const { client } = network((url) =>
+      url.toString() === LIST
+        ? new Response(null, { status: 500 })
+        : new Response(null, { status: 502 }),
+    );
+    assert.match(
+      words(
+        await failure({ box, http: client }, (u) =>
+          u.check({ running: running(box) }),
+        ),
+      ),
+      /HTTP 500/,
+    );
+  });
+
+  // Either stand-in keeps the check off both real endpoints.
+  it("is left alone with only a feed stand-in, and the server with only a list one", async () => {
+    const box = newBox();
+    const { client, seen } = network(() => new Response(null, { status: 204 }));
+    await using({ box, http: client }, (u) =>
+      u.check({ running: running(box), feedUrl: "https://stand.in/feed" }),
+    );
+    await failure({ box, http: client }, (u) =>
+      u.check({ running: running(box), releasesUrl: "https://stand.in/list" }),
+    );
+    assert.deepEqual(
+      seen.map(({ url }) => url),
+      ["https://stand.in/feed", "https://stand.in/list"],
+    );
   });
 
   it("answers from a recent copy, then asks again with its ETag", async () => {

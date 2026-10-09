@@ -47,6 +47,8 @@ export class GithubCli extends Context.Service<
     readonly unavailableReason: Effect.Effect<GhUnavailableReason | null>;
     // The first remote whose host gh is logged in to, or null.
     readonly repo: (cwd: string) => Effect.Effect<GithubRepoInfo | null>;
+    // The GitHub host gh knows that `url` is a repository on, or null.
+    readonly hostOf: (url: string) => Effect.Effect<string | null>;
     // For a path that just gained its GitHub remote (a publish), so the
     // next read sees it rather than a cached "not on GitHub".
     readonly evictRepo: (cwd: string) => Effect.Effect<void>;
@@ -236,6 +238,11 @@ const make = Effect.gen(function* () {
     ),
     unavailableReason,
     repo,
+    hostOf: Effect.fn("GithubCli.hostOf")(function* (url: string) {
+      const parsed = parseRemoteUrl(url.trim());
+      if (parsed === null) return null;
+      return (yield* knownHosts).has(parsed.host) ? parsed.host : null;
+    }),
     evictRepo: Effect.fn("GithubCli.evictRepo")((cwd: string) =>
       Cache.invalidate(repos, cwd),
     ),
@@ -273,6 +280,7 @@ export const getGithubCliReadiness = () => call((cli) => cli.readiness);
 export const ghUnavailableReason = () => call((cli) => cli.unavailableReason);
 export const ghReady = async () => (await ghUnavailableReason()) === null;
 export const getGithubRepoInfo = (cwd: string) => call((cli) => cli.repo(cwd));
+export const githubHostOf = (url: string) => call((cli) => cli.hostOf(url));
 export const evictGithubRepoInfo = (cwd: string) =>
   call((cli) => cli.evictRepo(cwd));
 export const ghReadyForRepo = (cwd: string) =>

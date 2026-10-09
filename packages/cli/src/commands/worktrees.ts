@@ -41,7 +41,7 @@ import {
   unmirror,
 } from "./transfer.ts";
 import { cdCommand } from "./shell.ts";
-import { agentWorking, autopull, shelve, unshelve } from "./marks.ts";
+import { autopull, shelve, unshelve } from "./marks.ts";
 import { status } from "./status.ts";
 
 class NoProjects extends Schema.TaggedError<NoProjects>()("NoProjects", {}) {
@@ -326,7 +326,6 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     shelve,
     unshelve,
     autopull,
-    agentWorking,
     create,
     rm,
     move,
