@@ -31,7 +31,7 @@ import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
   type DeviceConnection,
   RemoteConnectError,
-} from "@shared/ipc/socket/wsClientTransport";
+} from "@shared/remote/deviceLink";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
 // jitter-free so a test asserts the exact sequence.

@@ -39,7 +39,7 @@ import {
   scopeOf,
 } from "@shigomori/contracts/contract";
 import { allContractModules } from "@shared/ipc/client";
-import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
+import { createSubscriberRegistry } from "@shared/remote/subscriberRegistry";
 import type {
   ClientTransport,
   HandlerContext,
@@ -129,6 +129,7 @@ export function createLoopbackWire(scope: ContractScope): LoopbackWire {
       subscribers.emit(channel, parsed);
     },
     signal: pageLifetime.signal,
+    connection: pageLifetime.signal,
   };
 
   const server: ServerTransport = {

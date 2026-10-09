@@ -26,7 +26,7 @@ import { WorktreeIdSchema } from "@shigomori/contracts/schemas";
 import { mintHexId } from "@host/lib/hexId";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import { MAX_CONNS_PER_DEVICE } from "../portForward/engine";
-import { MAX_CHANNELS_PER_CONNECTION } from "@shared/ipc/socket/channels";
+import { MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
 import {
   type BridgedConn,
   bridgeSocket,
@@ -65,7 +65,7 @@ const PREFACE_TIMEOUT_MS = 10_000;
 // runaway loop should not exhaust the per-connection channel budget
 // it shares with the port forwards to the same device, so it takes
 // what the forwards leave.
-const MAX_STREAMS = MAX_CHANNELS_PER_CONNECTION - MAX_CONNS_PER_DEVICE;
+const MAX_STREAMS = MAX_CHANNELS_PER_LINK - MAX_CONNS_PER_DEVICE;
 
 function parsePreface(line: string): Preface {
   let parsed: unknown;

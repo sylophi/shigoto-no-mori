@@ -682,6 +682,49 @@
       "launcherId": "-1"
     }
   },
+  "link:challenge": {
+    "success": {
+      "nonce": "5522b2bfe1691d0be54865cfae75e20b"
+    }
+  },
+  "link:end": {
+    "payload": {
+      "channelId": "eb5947651a11954b34b554dfaec19d20"
+    }
+  },
+  "link:hello": {
+    "payload": {
+      "deviceId": "LE",
+      "appVersion": "",
+      "protocolVersion": 2,
+      "nonce": "66588ad2db51677716fe0b8cdc437a13",
+      "proof": "da93f2657981b83be2142c3d11ccb763fa0533ef61a28424cb36a2c92deb2a7d"
+    },
+    "success": {
+      "deviceId": "0",
+      "appVersion": "I2",
+      "proof": "e56051fa93f5353be3624caf53e7e638ad0050867af61239a408a82c9e5f0fdb"
+    }
+  },
+  "link:ping": {},
+  "link:read": {
+    "payload": {
+      "channelId": "49f1c16a9e40610b8eb75db553ec394b"
+    },
+    "success": ""
+  },
+  "link:reset": {
+    "payload": {
+      "channelId": "07abceadaf0a9aa35d9980b0d032bf9e"
+    }
+  },
+  "link:write": {
+    "payload": {
+      "channelId": "bd93b7b5b38128029171ed5ac8d49f57",
+      "seq": 1,
+      "data": "5fo="
+    }
+  },
   "menu:setLaunchToolsEnabled": {
     "payload": {
       "enabled": false

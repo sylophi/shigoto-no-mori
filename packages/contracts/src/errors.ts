@@ -139,6 +139,59 @@ export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>
 
 export const isCommandRefusedError = Schema.is(CommandRefusedError);
 
+// The far side failed the call with something no class above names.
+// Its message is the far side's own words (a refusal marker some
+// callers match, see channelRefusals.ts), and its code the errno or
+// marker it carried, so errorMessageOf and errorCodeOf read it like the
+// error it was.
+export class RemoteCallError extends Schema.TaggedError<RemoteCallError>()(
+  "RemoteCallError",
+  { text: Schema.String, code: Schema.optional(Schema.String) },
+) {
+  override get message(): string {
+    return this.text;
+  }
+}
+
+// The device link's handshake (modules/link.ts): the two builds speak
+// different protocol versions (protocol.ts), so neither can read the
+// other. Terminal until one of them updates, and the peer's page says
+// so in these words.
+export class ProtocolVersionMismatchError extends Schema.TaggedError<ProtocolVersionMismatchError>()(
+  "ProtocolVersionMismatchError",
+  { hostVersion: Schema.Int, clientVersion: Schema.Int },
+) {
+  override get message(): string {
+    return "This device and the other one run versions of Shigoto no Mori that can't talk to each other. Update both to the same version.";
+  }
+}
+
+export const isProtocolVersionMismatchError = Schema.is(
+  ProtocolVersionMismatchError,
+);
+
+// The handshake's refusal: the hello proved no ticket this host minted
+// for that device, or came after the connection's one hello. Terminal
+// for the dial: a redial with the same ticket cannot change the answer.
+export class LinkRefusedError extends Schema.TaggedError<LinkRefusedError>()(
+  "LinkRefusedError",
+  {},
+) {
+  override get message(): string {
+    return "the other device refused this connection";
+  }
+}
+
+// A call on a device link before its hello was accepted.
+export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthenticatedError>()(
+  "LinkUnauthenticatedError",
+  {},
+) {
+  override get message(): string {
+    return "the device link has not said hello yet";
+  }
+}
+
 // Every error above, as it crosses a wire.
 export const ContractErrorSchema = Schema.Union([
   UnknownProjectError,
@@ -149,9 +202,22 @@ export const ContractErrorSchema = Schema.Union([
   BranchNotMergedError,
   SyncConflictsError,
   CommandRefusedError,
+  ProtocolVersionMismatchError,
+  LinkRefusedError,
+  LinkUnauthenticatedError,
 ]);
 
 export const isContractError = Schema.is(ContractErrorSchema);
+
+// How a call fails on the device link: as one of the errors above, or
+// as RemoteCallError, which carries any other failure's message and
+// code.
+export const CallFailureSchema = Schema.Union([
+  ...ContractErrorSchema.members,
+  RemoteCallError,
+]);
+
+export const isRemoteCallError = Schema.is(RemoteCallError);
 
 const encodeContractError = Schema.encodeUnknownOption(ContractErrorSchema);
 const decodeContractError = Schema.decodeUnknownOption(ContractErrorSchema);

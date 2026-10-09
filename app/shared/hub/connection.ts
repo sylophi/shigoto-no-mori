@@ -13,15 +13,9 @@
 // credential-backed ticket mint) arrives through HubConnectOpts.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isDeviceRevoked, isHubRefusal } from "@shared/account/service";
-import {
-  HELLO_TIMEOUT_MS,
-  TERMINATE_GRACE_MS,
-} from "@shared/ipc/socket/frames";
-import {
-  createHeartbeat,
-  type HeartbeatOptions,
-} from "@shared/ipc/socket/heartbeat";
-import { RemoteConnectError } from "@shared/ipc/socket/wsClientTransport";
+import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
+import { createHeartbeat, type HeartbeatOptions } from "@shared/hub/heartbeat";
+import { RemoteConnectError } from "@shared/remote/deviceLink";
 import {
   createHubLink,
   type HubLink,
@@ -57,6 +51,10 @@ import { log } from "@shared/log";
 // HELLO_TIMEOUT_MS.
 const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 
+// After an owner close, how long a stalled device hub has before its
+// socket is cut, so it cannot hold the close for ws's ~30s window.
+const TERMINATE_GRACE_MS = 1_500;
+
 // One dialed hub socket as the platform adapter exposes it to the
 // core. The adapter owns the platform WebSocket and its event wiring,
 // the core owns everything above it.
@@ -91,8 +89,7 @@ type HubConnectionCoreDeps = {
   // listener (the web), whose link then answers every ask with the
   // no-listener refusal.
   serveConnectInfo?: ServeConnectInfo;
-  // Test seams for the liveness heartbeat (shared/ipc/socket/heartbeat.ts,
-  // the rule the direct sockets follow too).
+  // Test seams for the liveness heartbeat (shared/hub/heartbeat.ts).
   heartbeat?: HeartbeatOptions;
 };
 
@@ -275,7 +272,7 @@ export function createHubConnectionCore(
           nextLink.teardown();
         };
 
-        // Liveness (shared/ipc/socket/heartbeat.ts), armed at the accept.
+        // Liveness (shared/hub/heartbeat.ts), armed at the accept.
         // Enforced from the first ping on purpose (no "seen a pong yet"
         // latch): a socket that dies right after the accept must still
         // be found, and the cost of that is only that a Worker

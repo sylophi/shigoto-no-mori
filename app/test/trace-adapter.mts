@@ -1,4 +1,4 @@
-// The tracer's Promise adapter (shared/trace.ts), with a context as the
+// The tracer's Promise adapter (host/lib/util/trace.ts), with a context as the
 // app's graph fills it: a step is a child of the span it is run on,
 // annotations land on the span, a rejection comes back as it was
 // thrown (the move code branches on its class), and without a context
@@ -9,7 +9,7 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Tracer from "effect/Tracer";
 import { afterEach, it } from "vitest";
-import { setTraceContext, traced } from "@shared/trace";
+import { setTraceContext, traced } from "@host/lib/util/trace";
 
 type Ended = {
   name: string;

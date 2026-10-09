@@ -14,7 +14,7 @@
 // already exists or is the keeper's job, and the dial-on-subscribe
 // ensure plus reconnect re-ensure loop this file used to run would be
 // a second retry driver fighting the keeper's ladder.
-import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
+import { createSubscriberRegistry } from "@shared/remote/subscriberRegistry";
 import type { ClientTransport } from "@shared/ipc/transport";
 
 type PushHandler = (payload: unknown) => void;

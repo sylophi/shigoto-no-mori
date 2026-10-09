@@ -1,7 +1,6 @@
-// The client-side liveness heartbeat every long-lived socket runs (the
-// direct sessions in wsClientTransport.ts, the hub socket in
-// shared/hub/connection.ts). One owner for one subtle rule, so the two
-// wires cannot drift on it:
+// The hub socket's liveness heartbeat (shared/hub/connection.ts). The
+// device link has its own in Effect RPC's pings (shared/remote/link.ts),
+// this one goes when step 5 moves the hub link onto it too.
 //
 // A ping goes out every interval. ANY inbound frame answers it (a res
 // or push proves the peer alive as well as a pong does), and a ping
@@ -26,13 +25,18 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schedule from "effect/Schedule";
-import {
-  HEARTBEAT_INTERVAL_MS,
-  HEARTBEAT_TIMEOUT_MS,
-  PROBE_TIMEOUT_MS,
-} from "./frames";
+import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
 
-// Test seams. Real callers take the frames.ts defaults.
+// A websocket over a NAT, a tunnel edge or a laptop that just slept can
+// die without either end seeing a close, so the client pings on this
+// interval and gives the socket up when a ping stays unanswered for the
+// timeout. The timeout runs from the oldest unanswered ping, never from
+// the last frame, so a background tab whose timers the browser throttles
+// is not misjudged dead by its own slow cadence.
+const HEARTBEAT_INTERVAL_MS = 15_000;
+const HEARTBEAT_TIMEOUT_MS = 40_000;
+
+// Test seams. Real callers take the defaults.
 export type HeartbeatOptions = {
   intervalMs?: number;
   timeoutMs?: number;

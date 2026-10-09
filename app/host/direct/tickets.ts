@@ -47,7 +47,7 @@ export type ConnectTicketStore = {
   // Consumes the pending ticket the dialer proved possession of and
   // hands it back, so the caller can compute the host's half of the
   // proof. Null when none matches. The ticket never arrives (see
-  // shared/ipc/socket/proof.ts), so the caller's predicate is tried
+  // shared/remote/proof.ts), so the caller's predicate is tried
   // against this peer's few pending tickets in turn.
   //
   // `arrivedAs` is the path the connection came in on, and must equal

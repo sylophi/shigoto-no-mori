@@ -8,12 +8,13 @@
 // the session every remote-forest query is riding on.
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
-import type { ChannelMux } from "@shared/ipc/socket/channels";
+import type { ChannelMux } from "@shared/remote/channels";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { implSlot } from "@host/lib/util/implSlot";
+import { parentSpan } from "@host/lib/util/trace";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import type { Client } from "@shigomori/contracts/types";
 import { type Worktree } from "@shigomori/contracts/schemas";
@@ -30,7 +31,6 @@ export type PeerSyncApi = Pick<
   | "openSource"
   | "receiveWorktree"
   | "receiveBundle"
-  | "cancelMove"
   // The progress a start the peer runs for this device streams back
   // (mirror:startFrom relays it to its caller).
   | "onPullProgress"
@@ -76,12 +76,22 @@ const { set: setPeerReach, get: requireReach } = implSlot<PeerReach>(
 export { setPeerReach };
 
 // A peer's surface for one contract, on the cached direct session:
-// built per call, never held.
+// built per call, never held. Each call continues the span its caller
+// runs under (a move's step), and `signal` cancels it on the peer.
 export function peerClient<M extends ContractModule>(
   contract: M,
   deviceId: string,
+  options: { readonly signal?: AbortSignal } = {},
 ): Client<M> {
-  return buildClient(contract, requireReach().transportFor(deviceId));
+  const transport = requireReach().transportFor(deviceId);
+  return buildClient(contract, {
+    invoke: (channel, input) =>
+      transport.invoke(channel, input, {
+        signal: options.signal,
+        span: parentSpan(),
+      }),
+    subscribe: transport.subscribe,
+  });
 }
 
 export function peerSyncApiFor(deviceId: string): PeerSyncApi {
@@ -95,8 +105,11 @@ export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
   return peerClient(worktreesContract, deviceId);
 }
 
-export function peerMirrorApiFor(deviceId: string): PeerMirrorApi {
-  return peerClient(mirrorContract, deviceId);
+export function peerMirrorApiFor(
+  deviceId: string,
+  options: { readonly signal?: AbortSignal } = {},
+): PeerMirrorApi {
+  return peerClient(mirrorContract, deviceId, options);
 }
 
 export function peerWorktreeDataApiFor(deviceId: string): PeerWorktreeDataApi {

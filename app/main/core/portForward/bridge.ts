@@ -1,5 +1,5 @@
 // One local socket bridged onto a byte channel of a peer's direct
-// session (shared/ipc/socket/channels.ts), shared by the port-forward
+// session (shared/remote/channels.ts), shared by the port-forward
 // engine and the mirror gateway (main/core/mirror/gateway.ts). The caller
 // supplies the OPEN: a port forward asks the peer to dial a loopback
 // port, a mirror stream asks it to spawn `file-sync serve`. From the
@@ -15,7 +15,7 @@
 // ways with credit-based backpressure, so a slow local consumer pauses
 // the peer's source and the reverse.
 import type { Server, Socket } from "node:net";
-import type { ChannelHandle, ChannelMux } from "@shared/ipc/socket/channels";
+import type { ChannelHandle, ChannelMux } from "@shared/remote/channels";
 import { mintHexId } from "@host/lib/hexId";
 import { bridgeDuplexToChannel } from "@host/socket/channelStreams";
 

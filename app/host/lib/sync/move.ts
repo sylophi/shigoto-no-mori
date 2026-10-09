@@ -192,7 +192,7 @@ export async function pullWorktree(
       }).pipe(
         Effect.scoped,
         Effect.withSpan("Sync.pull", {
-          attributes: moveAttributes("pull", sourceDeviceId, sourceWorktreeId),
+          attributes: moveAttributes("pull", sourceDeviceId),
         }),
       ),
     ),
@@ -247,7 +247,7 @@ export async function sendWorktree(
         Effect.scoped,
         Effect.withSpan("Sync.send", {
           attributes: {
-            ...moveAttributes("send", input.targetDeviceId, input.worktreeId),
+            ...moveAttributes("send", input.targetDeviceId),
             mirror,
           },
         }),

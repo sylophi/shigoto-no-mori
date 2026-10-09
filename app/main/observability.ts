@@ -16,7 +16,7 @@ import * as Option from "effect/Option";
 import * as Tracer from "effect/Tracer";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { logger } from "@shared/log";
-import { setTraceContext } from "@shared/trace";
+import { setTraceContext } from "@host/lib/util/trace";
 import { writeTraceLine } from "./electron/logFile";
 
 const millis = (nanos: bigint) => Number(nanos) / 1_000_000;

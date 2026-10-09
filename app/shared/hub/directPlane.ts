@@ -32,7 +32,7 @@ import {
   type DirectKeeper,
 } from "@shared/hub/directKeeper";
 import { applyDirectPresence } from "@shared/hub/directPresence";
-import type { OpenClientSocket } from "@shared/ipc/socket/wsClientTransport";
+import type { OpenClientSocket } from "@shared/remote/deviceLink";
 import type * as Context from "effect/Context";
 
 // The peer's command-access switch flipping, as its direct listener

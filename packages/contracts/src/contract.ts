@@ -13,6 +13,7 @@ import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type { ContractSchema } from "./codec.ts";
+import { CallFailureSchema } from "./errors.ts";
 import type { GrantId } from "./grants.ts";
 
 // Every contract module tags its calls with the side that serves them.
@@ -127,18 +128,27 @@ export const invoke = <
   input: I,
   output: O,
   options: InvokeOptions = {},
-): Rpc.Rpc<Key, I, O> =>
-  Rpc.make(key, { payload: input, success: output }).annotateMerge(
-    annotationsOf(options),
-  ) as Rpc.Rpc<Key, I, O>;
+): Rpc.Rpc<Key, I, O, typeof CallFailureSchema> =>
+  Rpc.make(key, {
+    payload: input,
+    success: output,
+    error: CallFailureSchema,
+  }).annotateMerge(annotationsOf(options)) as Rpc.Rpc<
+    Key,
+    I,
+    O,
+    typeof CallFailureSchema
+  >;
 
 export const broadcast = <const Key extends string, P extends ContractSchema>(
   key: Key,
   payload: P,
   options: { readonly remote?: boolean } = {},
 ): Rpc.Rpc<Key, typeof Schema.Void, RpcSchema.Stream<P, typeof Schema.Never>> =>
+  // A push is a read: whoever may hear it hears it, so it is ungated
+  // by its own say rather than by a default.
   Rpc.make(key, { success: payload, stream: true }).annotateMerge(
-    annotationsOf(options),
+    annotationsOf({ ...options, gated: false }),
   );
 
 // A view of what `query` answers, classified as the query is: a remote
@@ -152,15 +162,17 @@ export const view = <
   input: I,
   output: O,
   options: Pick<InvokeOptions, "remote" | "gated" | "grant"> = {},
-): Rpc.Rpc<Key, I, RpcSchema.Stream<O, typeof Schema.Never>> =>
+): Rpc.Rpc<Key, I, RpcSchema.Stream<O, typeof CallFailureSchema>> =>
+  // A view's reads fail the way an invoke does.
   Rpc.make(key, {
     payload: input,
     success: output,
+    error: CallFailureSchema,
     stream: true,
   }).annotateMerge(annotationsOf(options)) as Rpc.Rpc<
     Key,
     I,
-    RpcSchema.Stream<O, typeof Schema.Never>
+    RpcSchema.Stream<O, typeof CallFailureSchema>
   >;
 
 // A contract module: the group of its calls, each tagged with its

@@ -23,13 +23,12 @@
 // junk candidate opening first (Docker bridges, VPN interfaces) costs
 // only its own open, never the race.
 //
-// BLOCKED VERDICTS: what makes a verdict terminal is the CLOSE CODE,
-// and it has to be, because this side has no other honest source. The
-// host refuses a bad ticket with CLOSE_AUTH_FAILED (blocked) and
-// refuses a locked-out client with CLOSE_AUTH_LOCKED_OUT (retryable),
-// and only the host can tell those apart: the lockout fires before any
-// hello is read, keys on client IP, and benches whoever dials next
-// even with a perfect ticket.
+// BLOCKED VERDICTS: what makes a verdict terminal is the host's answer,
+// because this side has no other honest source. The host refuses a bad
+// ticket's hello with LinkRefusedError (blocked) and closes on a
+// locked-out client before its hello (retryable), and only the host can
+// tell those apart: the lockout keys on client IP, and benches whoever
+// dials next even with a perfect ticket.
 //
 // A blocked verdict is terminal, but it does NOT end the race: a
 // refusing far end has proved nothing, and a plaintext LAN address may
@@ -79,8 +78,8 @@ import {
   RemoteConnectError,
   type DeviceConnection,
   type PendingDeviceConnection,
-} from "@shared/ipc/socket/wsClientTransport";
-import { HELLO_TIMEOUT_MS } from "@shared/ipc/socket/frames";
+} from "@shared/remote/deviceLink";
+import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 
 // The DeviceConnection shape, so everything downstream of a direct
@@ -158,7 +157,7 @@ export type DirectDialerDeps = {
   // The candidate sockets' constructor, defaulting to the platform
   // global WebSocket. The Electron main process injects the `ws`
   // package so a failed candidate names its errno instead of a bare
-  // 1006 (see ClientSocket in wsClientTransport.ts).
+  // 1006 (see OpenClientSocket in shared/remote/deviceLink.ts).
   openSocket?: OpenClientSocket;
   // Test seams. Real callers take the defaults and real time.
   deadlineMs?: number;
@@ -173,6 +172,8 @@ export type DirectDialer = {
 };
 
 type CandidateFailure = { candidate: DirectCandidate; error: unknown };
+
+const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
 
 // The exhaustion reject: every candidate retired and none refused its
 // ticket. Its message names EVERY candidate and how it
@@ -297,11 +298,11 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
         (candidate, index) =>
           openDevice({
             url: candidate.url,
-            openSocket: deps.openSocket,
+            openSocket: deps.openSocket ?? openGlobalSocket,
             // This candidate's own single-use ticket. It never reaches
             // the wire: a candidate address is answered by whoever
             // holds it on the network we happen to be on, so both ends
-            // prove possession instead (shared/ipc/socket/proof.ts).
+            // prove possession instead (shared/remote/proof.ts).
             ticket: candidate.ticket,
             appVersion: deps.localAppVersion,
             localDeviceId: deps.localDeviceId,
@@ -314,15 +315,14 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             onClose: () => {
               if (winnerIndex === index) opts?.onClose?.();
             },
-            onAnyPush: (channel, payload) => {
+            onPush: (channel, payload) => {
               if (winnerIndex === index) {
                 deps.onAnyPush?.(deviceId, channel, payload);
               }
             },
-            // The hello timer starts at open and covers the TCP open
-            // and any time spent queued behind another hello, so every
-            // candidate self-settles within the overall deadline.
-            helloTimeoutMs: remainingMs,
+            // The open is bounded by what is left of the attempt, and the
+            // race's deadline abandons whatever is still waiting.
+            deadlineMs: remainingMs,
           }),
       );
 

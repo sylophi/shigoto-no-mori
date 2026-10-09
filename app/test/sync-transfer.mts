@@ -62,6 +62,9 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { WorktreeSchema } from "@shigomori/contracts/schemas";
+import * as Context from "effect/Context";
+import * as Tracer from "effect/Tracer";
+import { setTraceContext } from "@host/lib/util/trace";
 import { type PeerChannels, setPeerReach } from "@host/ipc/peerSync";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree } from "@host/lib/sync/move";
@@ -563,7 +566,7 @@ it("lifecycle: finished links are gone at both ends, a channel id is single use,
       () => syncTempDirs(tmp).length === 1,
       "the source to hold its bundle while it sends",
     );
-    // Reading none of it, the source stalls on credit, then this side
+    // Reading none of it, the source stalls on the window, then this side
     // gives up.
     giving.link.reset();
     await waitFor(
@@ -658,7 +661,7 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
       assert.equal(deviceId, "A", "a peer call dialed an unexpected device");
       return {
         ...peerA.transport,
-        invoke: async (channel, input) => {
+        invoke: async (channel, input, options) => {
           // No mirror is asked for here (that is control.mts's).
           if (channel.startsWith("mirror:")) {
             throw new Error("this proof asks for no mirror");
@@ -677,7 +680,7 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
               handlerCtx(),
             );
           }
-          return peerA.transport.invoke(channel, input);
+          return peerA.transport.invoke(channel, input, options);
         },
       };
     },
@@ -705,16 +708,41 @@ it("pull round trip (clean): the branch crosses the direct wire and the worktree
     worktreeIdFromPath(worktree2Path),
     { title: "Second feature", description: "What it does.", describedAt: 7 },
   );
-  cleanPull = await syncHandlers.pullWorktree(
-    {
-      sourceDeviceId: "A",
-      sourceProjectId,
-      sourceWorktreeId: worktreeIdFromPath(worktree2Path),
-      sourceIdentity: identity,
-      branch: "feature2",
-    },
-    pullCtx,
+  // Every span the pull makes, on both devices.
+  const spans: Tracer.NativeSpan[] = [];
+  setTraceContext(
+    Context.make(
+      Tracer.Tracer,
+      Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      }),
+    ),
   );
+  try {
+    cleanPull = await syncHandlers.pullWorktree(
+      {
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: worktreeIdFromPath(worktree2Path),
+        sourceIdentity: identity,
+        branch: "feature2",
+      },
+      pullCtx,
+    );
+  } finally {
+    setTraceContext(null);
+  }
+  // One trace: the source's answers, served on A for the link B's pull
+  // opened, continue the pull's trace.
+  const pull = spans.find((span) => span.name === "Sync.pull");
+  const answers = spans.filter((span) => span.name === "SourceLink.answer");
+  assert.ok(pull !== undefined, "the pull made no span");
+  assert.ok(answers.length > 0, "the source answered under no span");
+  for (const answer of answers) assert.equal(answer.traceId, pull.traceId);
   assert.equal(cleanPull.dirtyApplied, false);
   assert.equal(cleanPull.worktree.branch, "feature2");
   assert.equal(

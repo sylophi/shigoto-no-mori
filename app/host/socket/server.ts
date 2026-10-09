@@ -1,194 +1,162 @@
-// Websocket binding of the shared ServerTransport: the host side of the
-// direct data plane, serving device-to-device data over direct sockets.
-// Registration and listening are decoupled on purpose:
-// main/ipc/register.ts records every REMOTE host handler here at boot
-// whether or not the device is enrolled, so signing in later only
-// starts the socket.
+// The host side of the device link (shared/remote/link.ts): the
+// listener another device dials, serving every contract call annotated
+// `remote` over Effect RPC, the pushes as streams, and the byte
+// channels. Registration and listening are apart on purpose:
+// main/ipc/register.ts records every remote handler in the registrar at
+// boot whether or not the device is enrolled, so signing in later only
+// starts the listener.
 //
-// Auth is a single-use connect ticket minted over the device hub and
-// bound to the hello deviceId (WsServerTicketAuth). Dispatch serves a
-// channel registered gated:false to every authed peer, and anything
-// else (a mutation, or an untagged channel) only under the host's live
-// command-access switch, or as a call the host itself invited (the
-// auth's isInvited), refused with the contract's CommandRefusedError
-// before its handler runs otherwise. One authed socket per deviceId,
-// with supersede.
+// A connection opens with the handshake (modules/link.ts): the ticket a
+// peer proves was minted for it over the hub, bound to its deviceId, and
+// its protocol version must be this build's. Until then every other
+// call is refused (PeerAuth). Then a call annotated gated:false runs for
+// the peer, and any other only under the host's live command switch, or
+// as a call the host itself invited (CommandGate). One link per device:
+// a second hello from the same device supersedes the first.
 //
 // The listener sits on every interface (and behind the tunnel), so it
-// is written to be hostile-safe: a small inbound frame cap, an Origin
-// gate, connection and in-flight caps, failed-auth lockout,
-// backpressure on pushes, and hard termination (not advisory close) on
-// every rejection and shutdown.
-//
-// This file must stay Electron free (pnpm test host-boundary). The
-// Electron facts a listener needs (appVersion) arrive through start
-// opts instead.
+// is written to be hostile-safe: an inbound frame cap, an Origin gate,
+// connection and in-flight caps, a failed-auth lockout, and hard
+// termination on every rejection and shutdown.
 import type { IncomingMessage } from "node:http";
-import { deflateRaw } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import {
-  CommandRefusedError,
-  errorMessageOf,
-} from "@shigomori/contracts/errors";
-import { resolveBroadcast } from "@shared/ipc/registerContract";
+  annotation,
+  channelOf,
+  type ContractCall,
+  Gated,
+  isBroadcast,
+  isInvoke,
+  Remote,
+} from "@shigomori/contracts/contract";
 import {
-  CLOSE_AUTH_FAILED,
-  CLOSE_AUTH_LOCKED_OUT,
-  CLOSE_GOING_AWAY,
-  CLOSE_HELLO_FAILED,
-  CLOSE_OVER_CAPACITY,
-  ClientFrameSchema,
-  decodeFrame,
-  encodeFrame,
+  CommandRefusedError,
+  errorCodeOf,
+  errorMessageOf,
+  isContractError,
+  LinkRefusedError,
+  LinkUnauthenticatedError,
+  ProtocolVersionMismatchError,
+  RemoteCallError,
+} from "@shigomori/contracts/errors";
+import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
+import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FiberSet from "effect/FiberSet";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
+import * as Queue from "effect/Queue";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as RpcServer from "effect/rpc/RpcServer";
+import type * as RpcMessage from "effect/rpc/RpcMessage";
+import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
+import { resolveBroadcast } from "@shared/ipc/registerContract";
+import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import { log } from "@shared/log";
+import {
+  CommandGate,
   HELLO_TIMEOUT_MS,
   HOST_LIVENESS_TIMEOUT_MS,
+  LinkGroup,
+  LinkPeer,
   MAX_IN_FLIGHT_PER_PEER,
-  MAX_INBOUND_FRAME_BYTES,
-  noHandlerMessage,
-  PUSH_BUFFER_LIMIT_BYTES,
-  type ReqFrame,
-  type ServerFrame,
-  TERMINATE_GRACE_MS,
-  resError,
-  resHandlerError,
-} from "@shared/ipc/socket/frames";
+  PeerAuth,
+} from "@shared/remote/link";
 import {
   handshakeProof,
   newHandshakeNonce,
   proofsMatch,
-} from "@shared/ipc/socket/proof";
-import {
-  DEFLATE_MIN_TEXT_LENGTH,
-  DEFLATED_FRAME_KIND,
-} from "@shared/ipc/socket/deflatedFrame";
-import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
-import { createLimiter } from "@shared/util/limit";
-import {
-  createChannelMux,
-  createUnknownChannelFrameWarner,
-} from "@shared/ipc/socket/channels";
-import type { RawData } from "ws";
-import { toBytes, toText } from "./rawData";
-import { log } from "@shared/log";
+} from "@shared/remote/proof";
+import * as HostPushes from "@host/lib/hostPushes";
+import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
+import { withParentSpan } from "@host/lib/util/trace";
+import type * as Views from "@host/lib/views";
+import { type HostChannels, makeHostChannels } from "./channels";
 
-// The binding's auth: short-lived single-use connect tickets minted
-// over the device hub, and the host's command-access switch. Injected
-// at binding creation so this module stays free of the ticket store
-// and the account layer alike.
+// The listener's auth: the single-use connect tickets minted over the
+// hub, and the host's command switch. Injected so this module stays
+// free of the ticket store and the account layer alike.
 export type WsServerTicketAuth = {
-  // Consumes the connect ticket the client proved possession of (it
-  // never travels, see shared/ipc/socket/proof.ts), for the claimed
-  // deviceId and the path the connection arrived on. Returns it so this
-  // binding can compute the host's half, or null when nothing matches.
+  // Consumes the ticket the peer proved it holds (it never travels,
+  // shared/remote/proof.ts), for the claimed deviceId and the path the
+  // connection arrived on, and hands it back so the host can prove it
+  // too. Null when nothing matches.
   matchTicket(
     deviceId: string,
     arrivedAs: DirectCandidateKind,
     matches: (ticket: string) => Promise<boolean>,
   ): Promise<string | null>;
-  // Whether this host runs gated calls (anything not registered
-  // gated:false) from its ticketed peers at all: every ticketed peer
-  // is a device of the same account, so this one switch is the whole
-  // verdict. Read live at every dispatch and every byte-channel frame
-  // (never cached on the session), so flipping the switch takes effect
-  // without a reconnect. This gate is the one place a peer's command
-  // is allowed or refused.
+  // Whether this host runs gated calls from its peers at all: every
+  // ticketed peer is a device of the same account, so this one switch
+  // is the whole verdict. Read at every call and every channel write,
+  // so flipping it takes effect without a reconnect.
   isCommandGranted(): boolean;
-  // The switch's one exception: a gated call this host itself asked
-  // the peer to make (a mirror it invited, host/mirror/invites.ts),
-  // admitted whatever the switch says. Consulted before the switch,
-  // with the authenticated caller, the channel and the raw input, so
-  // it can scope its answer to one peer and one worktree. A byte
-  // channel a call admitted this way attaches survives the switch-off
-  // drop for as long as it lives, whether the switch was on or off at
-  // the open. Absent, the switch is the whole verdict.
+  // The switch's one exception: a gated call this host asked the peer
+  // to make (a mirror it invited, host/mirror/invites.ts), admitted
+  // whatever the switch says, scoped by the call's payload. A byte
+  // channel such a call attaches survives the switch turning off.
   isInvited?(peerDeviceId: string, channel: string, input: unknown): boolean;
 };
 
 export type WsServerStartOpts = {
   port: number;
-  // Where the listener binds. main binds "::" (dual stack: both
-  // families accept), because it advertises IPv6 candidates too and an
-  // IPv4-only bind would make every one of them guaranteed dead. Tests
-  // bind loopback. Kept as a resolved string so this module never
-  // reads config.
+  // main binds "::" (dual stack), because it advertises IPv6
+  // candidates too. Tests bind loopback.
   bindAddress: string;
-  // The host root's id and the host app's version, echoed in the
-  // welcome frame. appVersion is an Electron fact, so the caller
-  // injects it here rather than this module importing electron.
+  // This device's id and app version, for the welcome.
   deviceId: string;
   appVersion: string;
-  // The account the listener serves. An IDENTITY field, compared in
-  // sameListener, so an account switch restarts the listener and drops
-  // every authed socket from the old account instead of leaving them
-  // live under the new one. Unset in tests.
+  // The account the listener serves: an account switch restarts it,
+  // dropping every link from the old account. Unset in tests.
   accountId?: string;
-  // Extra exact-match Origin the upgrade gate admits: the configured
-  // web client's origin, so a browser dial arriving through the wss
-  // tunnel passes. Unset admits origin-less and loopback http origins
-  // only (see isAllowedOrigin).
+  // The configured web client's origin, which the upgrade admits so a
+  // browser dialing through the tunnel passes (isAllowedOrigin).
   allowedOrigin?: string;
-  // Test seam. Real callers take the 10s default.
+  // Test seams. Real callers take the defaults.
   helloTimeoutMs?: number;
-  // Test seam for the host-side liveness sweep (HOST_LIVENESS_TIMEOUT_MS
-  // in frames.ts). Real callers take the shared default.
   livenessTimeoutMs?: number;
 };
 
-// Observable listener state so a bind failure (port taken, EACCES) is
-// not a silent enabled-but-not-listening hole. Exposed via status().
-type WsServerStatus = {
+// So a bind failure (a taken port) is not a silent hole.
+type LinkServerStatus = {
   listening: boolean;
   port: number | null;
   bindAddress: string | null;
   error: string | null;
 };
 
-export type WsServerBinding = ServerTransport & {
-  // Resolves with the bound port (meaningful when opts.port is 0),
-  // rejects when the bind fails. Rejects when already started:
-  // reconciliation goes through refresh.
-  start(opts: WsServerStartOpts): Promise<number>;
-  stop(): Promise<void>;
-  // Reconciles the listener with the wanted state. The resolver runs
-  // INSIDE the serialized lifecycle so the state read and the reconcile
-  // are atomic: two overlapping refreshes cannot apply a stale read
-  // last (an account switch can never be silently reverted). It returns
-  // null to stop, or opts to (re)start unless the running listener
-  // already matches them.
-  refresh(resolve: () => Promise<WsServerStartOpts | null>): Promise<void>;
-  status(): WsServerStatus;
-  // Kill the authed sockets whose peer deviceId is not in the given
-  // roster. Presence scopes the data plane: the
-  // hub brokers membership, so a peer absent from a live roster (a
-  // revoked device, an account switch on its side) loses its direct
-  // socket within one presence broadcast. The caller must only pass a
-  // roster it trusts as live, see shared/hub/directPresence.ts.
-  closePeersNotIn(online: readonly string[]): void;
-};
-
-// Total sockets (authed plus pending) the listener will hold. Over this
-// a new connection is closed before any per-connection state is built.
+// Total sockets (linked plus pending) the listener holds.
 const MAX_CONNECTIONS = 64;
-// Un-welcomed sockets held at once. A separate, tighter cap so a flood
-// of connections that never say hello cannot crowd out real peers.
+// Sockets before their hello, a tighter cap so a flood that never says
+// hello cannot crowd out real peers.
 const MAX_PREAUTH_CONNECTIONS = 16;
-// The in-flight, push-backpressure and terminate-grace bounds are the
-// shared wire caps in frames.ts, so this binding and the hub link
-// cannot drift apart on them.
-// Let a rejection's close frame flush before the socket is destroyed,
-// so the peer sees the code. The dead flag already blocks any frame
-// arriving in this gap, so correctness does not depend on the delay.
-const REJECT_TERMINATE_DELAY_MS = 50;
-// Failed-proof attempts from one client identity before a lockout
-// window starts, so a bad ticket is not a free infinite retry loop.
+// The largest inbound frame: a channel write is at most 256 KiB, which
+// is about 342 KiB as base64 in its JSON.
+const MAX_INBOUND_FRAME_BYTES = 1 << 20;
+// Lets a refusal's answer flush before the socket is cut.
+const REJECT_TERMINATE_DELAY_MS = 250;
+// How long a socket asked to close has before it is cut.
+const TERMINATE_GRACE_MS = 1_500;
+// Failed hellos from one client identity before a lockout window.
 const AUTH_FAILURE_LIMIT = 5;
 const AUTH_LOCKOUT_MS = 30_000;
-
-// How often at most the listener logs a refused web Origin. A deployment whose desktop never set SM_ACCOUNT_WEB_ORIGIN
-// would otherwise be a silent stream of bare upgrade refusals with no
-// clue on either side.
+// How often at most a refused web Origin is logged.
 const ORIGIN_REJECT_LOG_THROTTLE_MS = 60_000;
+
+// Close codes the listener refuses with, for the dialer's log line. The
+// lockout is temporary and keyed on the client's address, so the
+// dialer backs off through it rather than reading it as a refusal.
+const CLOSE_GOING_AWAY = 1001;
+const CLOSE_OVER_CAPACITY = 1013;
+const CLOSE_HELLO_FAILED = 4002;
+const CLOSE_AUTH_LOCKED_OUT = 4003;
 
 function isLoopbackAddress(address: string): boolean {
   return (
@@ -198,30 +166,10 @@ function isLoopbackAddress(address: string): boolean {
   );
 }
 
-// The identity lockout, caps and log lines key on: the socket's
-// remoteAddress, except for connections arriving through the local
-// cloudflared connector, which ALL land on loopback: keying those on
-// remoteAddress would collapse every tunnel-borne client into one
-// 127.0.0.1 bucket, letting 5 bad tickets from anywhere on the internet
-// bench every tunnel dial for the lockout window, forever renewable.
-// cloudflared forwards the real client address in CF-Connecting-IP, so
-// a loopback connection keys on that header instead when present. Only
-// loopback connections may delegate to the header: a LAN peer cannot
-// spoof its way into another bucket because its remoteAddress is not
-// loopback.
-function clientIdentityOf(
-  remoteAddress: string | undefined,
-  cfConnectingIp: string | undefined,
-): string {
-  if (!tunnelBorne(remoteAddress, cfConnectingIp)) {
-    return remoteAddress ?? "unknown";
-  }
-  return (cfConnectingIp ?? "").trim();
-}
-
-// Whether the local cloudflared connector delivered this connection.
-// One predicate, because the lockout bucket above and the candidate
-// kind below must never disagree about the same connection.
+// Whether the local cloudflared connector delivered this connection:
+// it lands on loopback with the real client in CF-Connecting-IP. Only
+// a loopback connection may name itself by the header, so a LAN peer
+// cannot spoof its way into another lockout bucket.
 function tunnelBorne(
   remoteAddress: string | undefined,
   cfConnectingIp: string | undefined,
@@ -232,49 +180,22 @@ function tunnelBorne(
   );
 }
 
-// Which advertised candidate a connection came in on, so a ticket can
-// be held to the kind it was minted for.
-function arrivalKindOf(
+// The identity the lockout and the log lines key on: the socket's
+// address, or for a tunnel-borne connection the client's, since every
+// one of those arrives from loopback.
+function clientIdentityOf(
   remoteAddress: string | undefined,
   cfConnectingIp: string | undefined,
-): DirectCandidateKind {
-  return tunnelBorne(remoteAddress, cfConnectingIp) ? "tunnel" : "lan";
+): string {
+  return tunnelBorne(remoteAddress, cfConnectingIp)
+    ? (cfConnectingIp ?? "").trim()
+    : (remoteAddress ?? "unknown");
 }
 
-// The hello check. Resolves the host's half of the mutual proof when
-// the client proved one of its pending tickets, else null.
-async function answerProof(
-  auth: WsServerTicketAuth,
-  hostNonce: string,
-  arrivedAs: DirectCandidateKind,
-  hello: { deviceId: string; nonce?: string; proof?: string },
-): Promise<string | null> {
-  const { nonce, proof } = hello;
-  if (nonce === undefined || proof === undefined) return null;
-  const ticket = await auth.matchTicket(
-    hello.deviceId,
-    arrivedAs,
-    async (candidate) =>
-      proofsMatch(
-        proof,
-        await handshakeProof(candidate, "client", hostNonce, nonce),
-      ),
-  );
-  if (ticket === null) return null;
-  return handshakeProof(ticket, "host", hostNonce, nonce);
-}
-
-// Origin pre-filter for the upgrade, NOT the security boundary: the
-// hello's ticket proof is what actually authenticates a peer (a bad
-// proof terminates the socket). Legitimate clients are the desktop's
-// main-process dialer, which sends no Origin, and the web client,
-// whose browser-global WebSocket always sends one: a loopback http
-// origin from a locally served web client, or the ONE configured
-// web-client origin, so the deployed web client can dial wss tunnel
-// URLs. The exact-match `allowedOrigin` arrives through start opts
-// from the same SM_ACCOUNT_WEB_ORIGIN env the app's account layer
-// reads, never hardcoded. Anything else is a drive-by browser page,
-// refused before it can even attempt a hello.
+// The Origin pre-filter for the upgrade, not the security boundary (the
+// hello's proof is). The desktop's dialer sends no Origin. The web
+// client's browser always does, from a loopback http page or the one
+// configured web origin.
 function isAllowedOrigin(
   origin: string | undefined,
   allowedOrigin?: string,
@@ -292,753 +213,824 @@ function isAllowedOrigin(
   }
 }
 
-const DEFLATED_FRAME_PREFIX = Buffer.from([DEFLATED_FRAME_KIND]);
-
-// The ordered writer of each socket the host deflates for
-// (shared/ipc/socket/deflatedFrame.ts): a tunnel-borne connection whose
-// hello asked. Every other socket has no entry and its frames go
-// straight out. A LAN peer is left alone on purpose: its link outruns
-// the deflate, which would then be the slow part of a bundle transfer.
-type FrameWriter = (data: string | Uint8Array) => void;
-const deflatingWriters = new WeakMap<WebSocket, FrameWriter>();
-
-// The raw-deflate bytes of a frame's text, or null when it is not
-// worth sending that way (it did not shrink, or zlib refused).
-function deflated(text: string): Promise<Buffer | null> {
-  return new Promise((resolve) => {
-    const raw = Buffer.from(text, "utf8");
-    deflateRaw(raw, (error, bytes) => {
-      resolve(error === null && bytes.length + 1 < raw.length ? bytes : null);
-    });
-  });
-}
-
-// Deflating is async (zlib's thread pool, so a megabyte of diff never
-// blocks the host's loop), and a frame that finishes late must not be
-// overtaken by the ones behind it: script output arrives as ordered
-// pushes, and a channel's bytes keep their place among the JSON frames.
-// So while a deflate is outstanding every later frame of the socket
-// queues behind it, and with none outstanding a frame that needs no
-// deflating goes straight out and pays nothing.
-function createDeflatingWriter(socket: WebSocket): FrameWriter {
-  let queued = 0;
-  const inOrder = createLimiter(1);
-  const write = (data: string | Uint8Array): void => {
-    if (socket.readyState === WebSocket.OPEN) socket.send(data);
-  };
-  return (data) => {
-    const text =
-      typeof data === "string" && data.length >= DEFLATE_MIN_TEXT_LENGTH
-        ? data
-        : null;
-    if (queued === 0 && text === null) {
-      write(data);
-      return;
+// close() alone is advisory: ws keeps delivering frames for a while.
+// The close frame, then a hard cut.
+function closeThenTerminate(
+  ws: WebSocket,
+  code: number,
+  reason: string,
+  delayMs: number,
+): void {
+  try {
+    ws.close(code, reason);
+  } catch {
+    // Already closing.
+  }
+  setTimeout(() => {
+    try {
+      ws.terminate();
+    } catch {
+      // Already gone.
     }
-    queued += 1;
-    void inOrder(async () => {
-      try {
-        const bytes = text === null ? null : await deflated(text);
-        if (bytes === null) write(data);
-        else write(Buffer.concat([DEFLATED_FRAME_PREFIX, bytes]));
-      } catch (error) {
-        // A send that threw (the socket dying under it) loses this
-        // frame only, not the ones queued behind it.
-        log.warn(`[socket] queued send failed: ${errorMessageOf(error)}`);
-      } finally {
-        queued -= 1;
-      }
-    });
+  }, delayMs).unref();
+}
+
+type Push = { readonly channel: string; readonly payload: unknown };
+
+type Served = (ctx: HandlerContext, input: unknown) => Promise<unknown>;
+type View = (input: unknown) => Stream.Stream<unknown, unknown, Views.Services>;
+
+// What the app registers to serve: every remote handler and view, by
+// channel. The pushes it serves are the host's (HostPushes).
+export type LinkRegistrar = Pick<ServerTransport, "handle"> & {
+  readonly served: ReadonlyMap<string, Served>;
+  readonly views: ReadonlyMap<string, View>;
+  readonly view: (channel: string, view: View) => void;
+};
+
+export function createLinkRegistrar(): LinkRegistrar {
+  const served = new Map<string, Served>();
+  const views = new Map<string, View>();
+  const once = (channel: string) => {
+    if (served.has(channel) || views.has(channel)) {
+      throw new Error(`[link] "${channel}" is served already`);
+    }
   };
-}
-
-function sendData(socket: WebSocket, data: string | Uint8Array): void {
-  const writer = deflatingWriters.get(socket);
-  if (writer === undefined) socket.send(data);
-  else writer(data);
-}
-
-// Unconditional send for res and welcome frames: these are answers a
-// caller is awaiting, so they are never dropped under backpressure.
-function send(socket: WebSocket, frame: ServerFrame): void {
-  if (socket.readyState !== WebSocket.OPEN) return;
-  sendData(socket, encodeFrame(frame));
-}
-
-// The context an invited call runs under: the connection's, with
-// every byte channel it attaches marked invited, which the switch-off
-// drop spares (see the binary-frame path in attach).
-function invitedContext(ctx: HandlerContext): HandlerContext {
-  const channels = ctx.channels;
-  if (channels === undefined) return ctx;
   return {
-    ...ctx,
-    channels: {
-      ...channels,
-      attach: (channelId, endpoint) =>
-        channels.attach(channelId, endpoint, { invited: true }),
+    served,
+    views,
+    handle(channel, fn) {
+      once(channel);
+      served.set(channel, fn);
+    },
+    view(channel, view) {
+      once(channel);
+      views.set(channel, view);
     },
   };
 }
 
-export function createWsServerBinding(
-  auth: WsServerTicketAuth,
-): WsServerBinding {
-  const handlers = new Map<
-    string,
-    (ctx: HandlerContext, raw: unknown) => Promise<unknown>
-  >();
-  // The channel names EXPLICITLY registered read-only (gated:false),
-  // collected fail-closed: dispatch serves a channel ungated ONLY when
-  // it is in here, so a mutation or an untagged channel needs the
-  // command-access switch even though it is registered.
-  const readOnlyChannels = new Set<string>();
-  // Sockets past hello, each with its liveness record
-  // (HOST_LIVENESS_TIMEOUT_MS in frames.ts): when its last frame
-  // arrived, and the kill that ends it. broadcastAll fans out to
-  // exactly this set, so an unauthenticated connection can never
-  // receive a push, and one timer per listener sweeps it so a dead
-  // client socket cannot sit here until the OS notices.
-  type Liveness = {
-    lastInboundAt: number;
-    kill(code: number, reason: string): void;
-  };
-  const authed = new Map<WebSocket, Liveness>();
-  let livenessTimer: NodeJS.Timeout | null = null;
-  // The one authed peer per deviceId. A device dials
-  // at most one direct socket to a given peer, so a duplicate authed
-  // connection from the same deviceId supersedes the older one,
-  // mirroring the DO's behavior for its own sockets. The entry carries
-  // the connection's kill function (its dead flag and AbortController
-  // are closure locals of that connection), so supersede and the
-  // roster close can END the old connection: closeThenTerminate alone
-  // would let the old socket keep dispatching req frames for the close
-  // grace window, and a mutating invoke could execute twice.
-  type AuthedPeer = {
-    socket: WebSocket;
-    kill(code: number, reason: string): void;
-  };
-  const authedByDevice = new Map<string, AuthedPeer>();
-  let listener: {
-    wss: WebSocketServer;
-    opts: WsServerStartOpts;
-    generation: number;
-  } | null = null;
-  // Stamped onto every listener so dispatch can tell a peer on the
-  // current listener from one left on a stopped or rotated one.
-  let generationCounter = 0;
-  // Un-welcomed sockets currently held, for the pre-auth cap.
-  let preAuthCount = 0;
-  let droppedPushes = 0;
-  // Last time an Origin refusal was logged, for the throttle.
-  let originRejectLoggedAt = 0;
-  // Failed-proof attempts per client identity (clientIdentityOf), for
-  // lockout.
-  const failedAuth = new Map<string, { count: number; until: number }>();
-  let status: WsServerStatus = {
-    listening: false,
-    port: null,
-    bindAddress: null,
-    error: null,
-  };
-  // Serializes start/stop/refresh so two quick reconciles (an account
-  // change racing a config write) cannot interleave one refresh's stop
-  // with another's start.
-  const lifecycle = createLimiter(1);
-
-  function isLockedOut(ip: string): boolean {
-    const entry = failedAuth.get(ip);
-    if (entry === undefined) return false;
-    if (entry.until <= Date.now()) {
-      // The window elapsed, whether the entry ever reached the limit or
-      // not: forget it so a later genuine attempt starts clean.
-      failedAuth.delete(ip);
-      return false;
-    }
-    return entry.count >= AUTH_FAILURE_LIMIT;
-  }
-
-  function recordAuthFailure(ip: string): void {
-    const now = Date.now();
-    // Every failure stamps an expiry, so an IP that fails a few times
-    // and never returns cannot leave a permanent entry, and expired
-    // entries are pruned here so the map stays bounded by the IPs seen
-    // within one window. Locked means count over the limit AND a live
-    // window.
-    for (const [key, entry] of failedAuth) {
-      if (entry.until <= now) failedAuth.delete(key);
-    }
-    const entry = failedAuth.get(ip) ?? { count: 0, until: 0 };
-    entry.count += 1;
-    entry.until = now + AUTH_LOCKOUT_MS;
-    failedAuth.set(ip, entry);
-  }
-
-  function sendPushText(socket: WebSocket, text: string): void {
-    if (socket.readyState !== WebSocket.OPEN) return;
-    if (socket.bufferedAmount > PUSH_BUFFER_LIMIT_BYTES) {
-      droppedPushes += 1;
-      if (droppedPushes % 50 === 1) {
-        log.warn(
-          `[socket] dropping push under backpressure (dropped ${droppedPushes} so far)`,
-        );
-      }
-      return;
-    }
-    sendData(socket, text);
-  }
-
-  // close() alone is advisory: ws keeps delivering inbound frames for up
-  // to ~30s. Send the close frame, then terminate so the socket is truly
-  // gone. Callers set their dead flag first, so nothing is processed in
-  // the flush gap.
-  function closeThenTerminate(
-    socket: WebSocket,
-    code: number,
-    reason: string,
-  ): void {
-    try {
-      socket.close(code, reason);
-    } catch {
-      // Already closing.
-    }
-    setTimeout(() => {
-      try {
-        socket.terminate();
-      } catch {
-        // Already gone.
-      }
-    }, REJECT_TERMINATE_DELAY_MS);
-  }
-
-  async function dispatch(
-    socket: WebSocket,
-    ctx: HandlerContext,
-    frame: ReqFrame,
-    generation: number,
-  ): Promise<void> {
-    // Generation guard: a peer left on a stopped listener (listener is
-    // null) or a rotated one (different generation), including one still
-    // alive inside the terminate grace window, executes nothing.
-    if (listener === null || listener.generation !== generation) {
-      send(socket, resError(frame.id, "listener no longer active"));
-      return;
-    }
-    const fn = handlers.get(frame.channel);
-    if (fn === undefined) {
-      // Client-scoped and non-remote host channels are never registered
-      // on this binding (main/ipc/register.ts withholds them), so this
-      // is also the answer a remote peer gets for them.
-      send(socket, resError(frame.id, noHandlerMessage(frame.channel)));
-      return;
-    }
-    let call = ctx;
-    if (!readOnlyChannels.has(frame.channel)) {
-      // Fail-closed gate on anything not proven a read (explicitly
-      // registered gated:false): consult the injected
-      // command-access switch LIVE at each call, never cached on the
-      // session, so flipping it takes effect without a reconnect. The
-      // refusal carries the typed code so the client transport
-      // surfaces "that machine will not run commands from here"
-      // distinctly from a real failure. A call this host asked for
-      // (isInvited) runs whatever the switch says, under a context that
-      // marks the channels it attaches as spared from the switch-off
-      // drop: asked first, so a channel opened while the switch is on
-      // is spared too when it flips.
-      const peer = ctx.callerDeviceId;
-      if (
-        peer !== undefined &&
-        auth.isInvited?.(peer, frame.channel, frame.input) === true
-      ) {
-        call = invitedContext(ctx);
-      } else if (!auth.isCommandGranted()) {
-        send(socket, resHandlerError(frame.id, new CommandRefusedError()));
-        return;
-      }
-    }
-    try {
-      const result = await fn(call, frame.input);
-      send(socket, { t: "res", id: frame.id, ok: true, result });
-    } catch (error) {
-      send(socket, resHandlerError(frame.id, error));
-    }
-  }
-
-  function attach(
-    wss: WebSocketServer,
-    opts: WsServerStartOpts,
-    generation: number,
-  ): void {
-    const helloTimeoutMs = opts.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
-    wss.on("connection", (socket, req) => {
-      const forwardedFor = req.headers["cf-connecting-ip"];
-      const cfConnectingIp = Array.isArray(forwardedFor)
-        ? forwardedFor[0]
-        : forwardedFor;
-      const ip = clientIdentityOf(req.socket.remoteAddress, cfConnectingIp);
-      const arrivalKind = arrivalKindOf(
-        req.socket.remoteAddress,
-        cfConnectingIp,
-      );
-      // Caps are checked before any controller or timer is allocated.
-      if (authed.size + preAuthCount >= MAX_CONNECTIONS) {
-        closeThenTerminate(socket, CLOSE_OVER_CAPACITY, "over capacity");
-        return;
-      }
-      if (preAuthCount >= MAX_PREAUTH_CONNECTIONS) {
-        closeThenTerminate(
-          socket,
-          CLOSE_OVER_CAPACITY,
-          "too many pending connections",
-        );
-        return;
-      }
-      if (isLockedOut(ip)) {
-        log.warn(`[socket] rejecting connection from locked-out ${ip}`);
-        // A DISTINCT code from the bad-credential refusal below, and
-        // the distinction is load-bearing: this close happens before
-        // any hello is read, so the client it refuses may hold a
-        // perfectly good ticket and simply share an IP with whoever
-        // burned the attempts. Only this side knows that. Sending
-        // AUTH_FAILED here made a temporary, self-expiring bench look
-        // to the client exactly like a refused credential, which the
-        // direct keeper answers by parking with no timer -- so the
-        // lockout lifted 30s later and nothing ever redialed.
-        closeThenTerminate(
-          socket,
-          CLOSE_AUTH_LOCKED_OUT,
-          "temporarily locked out",
-        );
-        return;
-      }
-
-      preAuthCount += 1;
-      let leftPreAuth = false;
-      const leavePreAuth = (): void => {
-        if (leftPreAuth) return;
-        leftPreAuth = true;
-        preAuthCount -= 1;
-      };
-
-      // Set on any rejection or timeout so no frame is processed after,
-      // even though ws may still deliver buffered frames while closing.
-      let dead = false;
-      // Non-null once the hello handshake succeeded. Everything before
-      // that is answered only with the challenge and a close code: this
-      // listener sits on every interface, so pre-auth traffic gets
-      // nothing else.
-      let ctx: HandlerContext | null = null;
-      let inFlight = 0;
-      const controller = new AbortController();
-      // Byte channels on THIS socket (shared/ipc/socket/channels.ts):
-      // binary frames route here, handlers attach far ends through the
-      // context, and every endpoint is reset when the socket dies.
-      const channels = createChannelMux({
-        send: (frame) => {
-          if (socket.readyState !== WebSocket.OPEN) {
-            throw new Error("socket not open");
-          }
-          sendData(socket, frame);
-        },
-      });
-      const warnUnknownChannelFrame = createUnknownChannelFrameWarner("socket");
-
-      // The host opens the handshake: the client cannot hello until it
-      // has this nonce. Not a secret, so it goes out pre-auth.
-      const hostNonce = newHandshakeNonce();
-      send(socket, { t: "challenge", nonce: hostNonce });
-      // One hello per connection, latched before the proof check
-      // awaits: two hellos racing through the await would otherwise
-      // both see ctx === null and both authenticate.
-      let helloSeen = false;
-
-      // A hello arriving after this fires must not authenticate.
-      const helloTimer = setTimeout(
-        () => kill(CLOSE_HELLO_FAILED, "hello timeout"),
-        helloTimeoutMs,
-      );
-
-      // Out of every map, its channels closed, its in-flight handlers
-      // unwinding. Idempotent: the close after a kill runs it again.
-      const teardown = (): void => {
-        clearTimeout(helloTimer);
-        leavePreAuth();
-        authed.delete(socket);
-        channels.closeAll();
-        // A superseded socket must not evict its replacement, so the
-        // per-device entry is dropped only while it still names THIS
-        // socket, mirroring the DO. The authed identity lives on the
-        // context.
-        const id = ctx?.callerDeviceId;
-        if (id !== undefined && authedByDevice.get(id)?.socket === socket) {
-          authedByDevice.delete(id);
-        }
-        // ctx.signal is connection scoped: one controller per socket,
-        // aborted exactly here (or in kill, which is idempotent with
-        // this cleanup).
-        controller.abort();
-      };
-
-      // End THIS connection now: no frame it delivers after this runs
-      // a handler (dead), its in-flight handlers unwind (the abort),
-      // and it is out of every map before the close frame even
-      // flushes. Registered on the per-device entry so supersede and
-      // the roster close reach it, satisfying closeThenTerminate's
-      // precondition that the caller sets its dead flag first.
-      const kill = (code: number, reason: string): void => {
-        if (dead) return;
-        dead = true;
-        teardown();
-        closeThenTerminate(socket, code, reason);
-      };
-
-      socket.on("close", teardown);
-      socket.on("error", (error) => {
-        log.warn(`[socket] connection error: ${errorMessageOf(error)}`);
-      });
-      socket.on("message", (data, isBinary) => {
-        // The hello path awaits the proof check. A frame that throws
-        // kills its own connection, never the host process.
-        void handleMessage(data, isBinary).catch((error) => {
-          log.warn(
-            `[socket] dropping connection after a failed frame: ${errorMessageOf(error)}`,
-          );
-          kill(CLOSE_GOING_AWAY, "internal error");
-        });
-      });
-
-      async function handleMessage(
-        data: RawData,
-        isBinary: boolean,
-      ): Promise<void> {
-        if (dead) return;
-        const alive = authed.get(socket);
-        if (alive !== undefined) alive.lastInboundAt = Date.now();
-        // Binary frames are byte-channel frames, and only an authed
-        // peer has channels: pre-hello, a binary frame is a malformed
-        // hello. One naming no attached channel (late, after a reset)
-        // is dropped, throttled.
-        if (isBinary && ctx !== null) {
-          // Bytes never pass through dispatch, so the switch is
-          // re-read here: every open was gated on it, and the host
-          // turning peer commands off since drops every channel on
-          // the connection the moment the peer sends anything on one.
-          // Credit frames flow back during any transfer, so a live
-          // stream notices within a window. The channels an invited
-          // call attached were never the switch's to give, so they
-          // stay, and the frame is routed to whichever survive.
-          if (!auth.isCommandGranted()) {
-            channels.dropUninvited();
-            if (channels.size() === 0) return;
-          }
-          if (!channels.handleFrame(toBytes(data))) warnUnknownChannelFrame();
-          return;
-        }
-        const frame = isBinary
-          ? null
-          : decodeFrame(toText(data), ClientFrameSchema);
-        if (ctx === null) {
-          if (frame === null || frame.t !== "hello") {
-            kill(CLOSE_HELLO_FAILED, "malformed hello");
-            return;
-          }
-          if (helloSeen) {
-            kill(CLOSE_HELLO_FAILED, "duplicate hello");
-            return;
-          }
-          helloSeen = true;
-          // The host never receives a ticket, only a proof of holding
-          // one, and a hello that carries no proof proves nothing.
-          const hostProof = await answerProof(
-            auth,
-            hostNonce,
-            arrivalKind,
-            frame,
-          );
-          // The await yielded, so re-read the liveness flag a close or
-          // a timeout may have set meanwhile.
-          if (dead) return;
-          if (hostProof === null) {
-            recordAuthFailure(ip);
-            // The owner gets a real signal under a brute force attempt.
-            log.warn(`[socket] CLOSE_AUTH_FAILED: bad proof from ${ip}`);
-            kill(CLOSE_AUTH_FAILED, "auth failed");
-            return;
-          }
-          clearTimeout(helloTimer);
-          failedAuth.delete(ip);
-          leavePreAuth();
-          // Bound to this socket only, so a handler streaming progress
-          // reaches its caller rather than every peer. Push delivery
-          // is subject to backpressure.
-          const notifier: HandlerContext["notifier"] =
-            (module, key) => (payload) => {
-              const { channel, parsed } = resolveBroadcast(
-                module,
-                key,
-                payload,
-              );
-              sendPushText(
-                socket,
-                encodeFrame({ t: "push", channel, payload: parsed }),
-              );
-            };
-          // The ticket bound this hello to a deviceId, so the context
-          // carries the authenticated peer identity.
-          const callerDeviceId = frame.deviceId;
-          ctx = {
-            signal: controller.signal,
-            callerDeviceId,
-            notifier,
-            channels,
-          };
-          // A device dials at most one direct socket to a given peer,
-          // so a duplicate authed connection from the same deviceId
-          // supersedes the older one, like the DO does for its own
-          // sockets. The old connection is KILLED, not just closed:
-          // kill sets its dead flag and aborts its signal, so nothing
-          // it delivers during the close grace window executes, and no
-          // push reaches it either.
-          authedByDevice
-            .get(callerDeviceId)
-            ?.kill(CLOSE_GOING_AWAY, "superseded");
-          authedByDevice.set(callerDeviceId, { socket, kill });
-          authed.set(socket, { lastInboundAt: Date.now(), kill });
-          if (frame.deflate === true && arrivalKind === "tunnel") {
-            deflatingWriters.set(socket, createDeflatingWriter(socket));
-            log.info(
-              `[socket] deflating large frames for ${frame.deviceId} (tunnel-borne)`,
-            );
-          }
-          send(socket, {
-            t: "welcome",
-            deviceId: opts.deviceId,
-            appVersion: opts.appVersion,
-            proof: hostProof,
-          });
-          return;
-        }
-        // The client's liveness ping (frames.ts): answer it. The
-        // arrival itself was noted above, which is what the sweep reads.
-        if (frame !== null && frame.t === "ping") {
-          send(socket, { t: "pong" });
-          return;
-        }
-        // Past hello, a bad frame is dropped rather than fatal: one
-        // malformed message must not kill a connection carrying other
-        // in-flight calls.
-        if (frame === null || frame.t !== "req") {
-          log.warn("[socket] dropping unparseable frame");
-          return;
-        }
-        if (inFlight >= MAX_IN_FLIGHT_PER_PEER) {
-          send(socket, resError(frame.id, "too many in-flight requests"));
-          return;
-        }
-        inFlight += 1;
-        void dispatch(socket, ctx, frame, generation).finally(() => {
-          inFlight -= 1;
-        });
-      }
+// A contract call: the registered handler, its signal aborted when the
+// call is interrupted (the peer cancelling it, or its link dropping),
+// its failure crossing as the contract error it is, or as
+// RemoteCallError with its message and code.
+const serve = (channel: string, fn: Served) => (payload: unknown) =>
+  Effect.gen(function* () {
+    const peer = yield* LinkPeer;
+    // The call's span: what the handler's own spans and peer calls
+    // continue, so the caller's trace goes on here.
+    const span = yield* Effect.option(Effect.currentSpan);
+    return yield* Effect.tryPromise({
+      try: (signal) =>
+        withParentSpan(span, () =>
+          fn(
+            {
+              signal,
+              connection: peer.closed,
+              callerDeviceId: peer.deviceId,
+              channels: peer.channels,
+              notifier: (module, key) => (push) =>
+                peer.notify(module, key, push),
+            },
+            payload,
+          ),
+        ),
+      catch: (error) =>
+        isContractError(error)
+          ? error
+          : new RemoteCallError({
+              text: errorMessageOf(error),
+              code: errorCodeOf(error),
+            }),
     });
-  }
+  }).pipe(Effect.annotateSpans({ channel }));
 
-  function startNow(opts: WsServerStartOpts): Promise<number> {
-    return new Promise((resolve, reject) => {
-      if (listener !== null) {
-        reject(new Error("[socket] listener already started"));
-        return;
+// A frame's messages. One malformed frame is dropped rather than taking
+// down a link carrying other calls.
+function decodeFrame(
+  parser: RpcSerialization.Parser,
+  frame: Uint8Array | string,
+): ReadonlyArray<RpcMessage.FromClientEncoded> {
+  try {
+    return parser.decode(frame) as ReadonlyArray<RpcMessage.FromClientEncoded>;
+  } catch {
+    log.warn("[link] dropping an unparseable frame");
+    return [];
+  }
+}
+
+// The answer for a call the link carries and nothing here serves.
+const unserved = (tag: string) =>
+  new RemoteCallError({ text: `No handler registered for channel "${tag}"` });
+
+// One socket, from its accept to its close.
+type Connection = {
+  readonly ws: WebSocket;
+  readonly parser: RpcSerialization.Parser;
+  readonly ip: string;
+  readonly arrivalKind: DirectCandidateKind;
+  readonly channels: HostChannels;
+  // The pushes for this peer alone (a move's progress).
+  readonly pushes: PubSub.PubSub<Push>;
+  readonly closed: AbortController;
+  hostNonce: string | null;
+  helloSeen: boolean;
+  deviceId: string | null;
+  inFlight: number;
+  lastInboundAt: number;
+  dead: boolean;
+  kill(code: number, reason: string): void;
+};
+
+export class DeviceLink extends Context.Service<
+  DeviceLink,
+  {
+    // Brings the listener to what `wanted` reads, serialized, so two
+    // overlapping reconciles cannot apply a stale read last. Null stops
+    // it, and the same options as the running listener change nothing.
+    readonly reconcile: (
+      wanted: Effect.Effect<WsServerStartOpts | null>,
+    ) => Effect.Effect<void>;
+    readonly status: Effect.Effect<LinkServerStatus>;
+    // Cuts the links of the devices not in a roster the hub vouched for
+    // as live: a revoked device, an account switch on its side.
+    readonly closePeersNotIn: (
+      online: readonly string[],
+    ) => Effect.Effect<void>;
+  }
+>()("sm/host/DeviceLink") {}
+
+const make = (options: {
+  readonly registrar: LinkRegistrar;
+  readonly auth: WsServerTicketAuth;
+}) =>
+  Effect.gen(function* () {
+    const { registrar, auth } = options;
+    // What the views read, and the pushes every peer hears.
+    const services = yield* Effect.context<Views.Services>();
+    const hostPushes = yield* HostPushes.HostPushes;
+    const runFork = yield* FiberSet.makeRuntime<never>();
+    const lifecycle = yield* Semaphore.make(1);
+    const failedAuth = new Map<string, { count: number; until: number }>();
+    let status: LinkServerStatus = {
+      listening: false,
+      port: null,
+      bindAddress: null,
+      error: null,
+    };
+    let current: {
+      readonly opts: WsServerStartOpts;
+      readonly scope: Scope.Closeable;
+      readonly byDevice: Map<string, Connection>;
+    } | null = null;
+
+    const isLockedOut = (ip: string): boolean => {
+      const entry = failedAuth.get(ip);
+      if (entry === undefined) return false;
+      if (entry.until <= Date.now()) {
+        failedAuth.delete(ip);
+        return false;
       }
-      const generation = ++generationCounter;
-      const wss = new WebSocketServer({
-        host: opts.bindAddress,
-        port: opts.port,
-        // Bounds pre-auth buffering. Inbound frames (hello, req) are
-        // tiny, so a small ceiling costs nothing and denies a hostile
-        // peer a large buffer. Outbound frames are unaffected.
-        maxPayload: MAX_INBOUND_FRAME_BYTES,
-        // Origin gate: no Origin (node and main-process clients), a
-        // loopback http origin, or the configured web origin passes,
-        // anything else is refused. See isAllowedOrigin for why this is
-        // a coarse pre-filter and the hello's proof is the real auth. A
-        // refusal logs (throttled) with the rejected origin, because
-        // the likeliest cause is a web client reaching a desktop that
-        // never set SM_ACCOUNT_WEB_ORIGIN, and without the log the web
-        // dial dies as a bare refusal with no clue on either side.
-        verifyClient: (info: { req: IncomingMessage }) => {
-          const origin = info.req.headers.origin;
-          const allowed = isAllowedOrigin(origin, opts.allowedOrigin);
-          if (!allowed) {
-            const at = Date.now();
-            if (at - originRejectLoggedAt >= ORIGIN_REJECT_LOG_THROTTLE_MS) {
-              originRejectLoggedAt = at;
+      return entry.count >= AUTH_FAILURE_LIMIT;
+    };
+
+    const recordAuthFailure = (ip: string): void => {
+      const now = Date.now();
+      for (const [key, entry] of failedAuth) {
+        if (entry.until <= now) failedAuth.delete(key);
+      }
+      const entry = failedAuth.get(ip) ?? { count: 0, until: 0 };
+      entry.count += 1;
+      entry.until = now + AUTH_LOCKOUT_MS;
+      failedAuth.set(ip, entry);
+    };
+
+    // One listener's life: the socket server, the RPC server over it,
+    // and every connection, all in `scope`.
+    const listen = (opts: WsServerStartOpts, scope: Scope.Scope) =>
+      Effect.gen(function* () {
+        const byDevice = new Map<string, Connection>();
+        const connections = new Map<number, Connection>();
+        let nextClientId = 0;
+        let preAuth = 0;
+        let originRejectLoggedAt = 0;
+        const serialization = RpcSerialization.json;
+        const disconnects = yield* Queue.unbounded<number>();
+        let writeRequest!: (
+          clientId: number,
+          message: RpcMessage.FromClientEncoded,
+        ) => Effect.Effect<void>;
+
+        const protocol = yield* RpcServer.Protocol.make((write) => {
+          writeRequest = write;
+          return Effect.succeed({
+            disconnects,
+            send: (clientId, response) =>
+              Effect.sync(() => {
+                const connection = connections.get(clientId);
+                if (connection === undefined || connection.dead) return;
+                const encoded = connection.parser.encode(response);
+                if (
+                  encoded !== undefined &&
+                  connection.ws.readyState === WebSocket.OPEN
+                ) {
+                  connection.ws.send(encoded);
+                }
+              }),
+            end: () => Effect.void,
+            clientIds: Effect.sync(() => new Set(connections.keys())),
+            initialMessage: Effect.succeedNone,
+            supportsAck: true,
+            supportsTransferables: false,
+            supportsSpanPropagation: true,
+            supportsNotifications: true,
+            codecFor: serialization.codecFor,
+          } satisfies Omit<RpcServer.Protocol["Service"], "run">);
+        });
+
+        // The connection a call came on, which is there for as long as
+        // its calls run: they are interrupted as it closes.
+        const connectionOf = (clientId: number) =>
+          Effect.suspend(() => {
+            const connection = connections.get(clientId);
+            return connection === undefined
+              ? Effect.fail(new LinkUnauthenticatedError())
+              : Effect.succeed(connection);
+          });
+
+        // A refusal answered, then the socket cut once it flushed.
+        const killSoon = (connection: Connection, reason: string) =>
+          Effect.sync(() =>
+            setTimeout(
+              () => connection.kill(CLOSE_HELLO_FAILED, reason),
+              REJECT_TERMINATE_DELAY_MS,
+            ).unref(),
+          );
+
+        const hello = (
+          payload: {
+            readonly deviceId: string;
+            readonly appVersion: string;
+            readonly protocolVersion: number;
+            readonly nonce: string;
+            readonly proof: string;
+          },
+          clientId: number,
+        ) =>
+          Effect.gen(function* () {
+            const connection = yield* connectionOf(clientId);
+            if (payload.protocolVersion !== PROTOCOL_VERSION) {
+              yield* killSoon(connection, "protocol version mismatch");
+              return yield* new ProtocolVersionMismatchError({
+                hostVersion: PROTOCOL_VERSION,
+                clientVersion: payload.protocolVersion,
+              });
+            }
+            const hostNonce = connection.hostNonce;
+            if (connection.helloSeen || hostNonce === null) {
+              yield* killSoon(connection, "hello out of turn");
+              return yield* new LinkRefusedError();
+            }
+            connection.helloSeen = true;
+            const ticket = yield* Effect.promise(() =>
+              auth.matchTicket(
+                payload.deviceId,
+                connection.arrivalKind,
+                async (candidate) =>
+                  proofsMatch(
+                    payload.proof,
+                    await handshakeProof(
+                      candidate,
+                      "client",
+                      hostNonce,
+                      payload.nonce,
+                    ),
+                  ),
+              ),
+            );
+            if (connection.dead) return yield* new LinkRefusedError();
+            if (ticket === null) {
+              recordAuthFailure(connection.ip);
+              // The owner gets a real signal under a brute force attempt.
               log.warn(
-                `[socket] refusing direct upgrade from origin ${origin}` +
-                  " (not an admitted origin; a web client needs" +
-                  " SM_ACCOUNT_WEB_ORIGIN set to its exact origin on this" +
-                  " device)",
+                `[link] refused a hello with a bad proof from ${connection.ip}`,
+              );
+              yield* killSoon(connection, "auth failed");
+              return yield* new LinkRefusedError();
+            }
+            failedAuth.delete(connection.ip);
+            preAuth -= 1;
+            // One link per device: the older one ends now, so nothing it
+            // still delivers runs.
+            byDevice
+              .get(payload.deviceId)
+              ?.kill(CLOSE_GOING_AWAY, "superseded");
+            byDevice.set(payload.deviceId, connection);
+            connection.deviceId = payload.deviceId;
+            return {
+              deviceId: opts.deviceId,
+              appVersion: opts.appVersion,
+              proof: yield* Effect.promise(() =>
+                handshakeProof(ticket, "host", hostNonce, payload.nonce),
+              ),
+            };
+          });
+
+        // The bytes the command switch gave: gone the moment it is off,
+        // the ones an invited call opened aside.
+        const underSwitch = (connection: Connection) =>
+          Effect.sync(() => {
+            if (!auth.isCommandGranted()) connection.channels.dropUninvited();
+          });
+
+        type Options = { readonly client: { readonly id: number } };
+        const linkHandlers: Record<
+          string,
+          (payload: never, options: Options) => unknown
+        > = {
+          "link:challenge": (_: undefined, { client }: Options) =>
+            Effect.map(connectionOf(client.id), (connection) => {
+              connection.hostNonce ??= newHandshakeNonce();
+              return { nonce: connection.hostNonce };
+            }),
+          "link:hello": (
+            payload: Parameters<typeof hello>[0],
+            { client }: Options,
+          ) => hello(payload, client.id),
+          "link:ping": () => Effect.void,
+          "link:read": (
+            { channelId }: { channelId: string },
+            { client }: Options,
+          ) =>
+            Stream.unwrap(
+              Effect.tap(connectionOf(client.id), underSwitch).pipe(
+                Effect.map((connection) => connection.channels.read(channelId)),
+              ),
+            ),
+          "link:write": (
+            {
+              channelId,
+              seq,
+              data,
+            }: { channelId: string; seq: number; data: Uint8Array },
+            { client }: Options,
+          ) =>
+            Effect.tap(connectionOf(client.id), underSwitch).pipe(
+              Effect.flatMap((connection) =>
+                connection.channels.write(channelId, seq, data),
+              ),
+            ),
+          "link:end": (
+            { channelId }: { channelId: string },
+            { client }: Options,
+          ) =>
+            Effect.flatMap(connectionOf(client.id), (connection) =>
+              connection.channels.end(channelId),
+            ),
+          "link:reset": (
+            { channelId }: { channelId: string },
+            { client }: Options,
+          ) =>
+            Effect.flatMap(connectionOf(client.id), (connection) =>
+              connection.channels.reset(channelId),
+            ),
+        };
+
+        // A push: the host's own when it is one every peer may hear
+        // (annotated `remote`), and the ones for this peer alone.
+        const push =
+          (channel: string, toEveryPeer: boolean) =>
+          (_: undefined, { client }: Options) =>
+            Stream.unwrap(
+              Effect.map(connectionOf(client.id), (connection) =>
+                Stream.merge(
+                  toEveryPeer ? hostPushes.stream(channel) : Stream.empty,
+                  Stream.fromPubSub(connection.pushes).pipe(
+                    Stream.filter((entry) => entry.channel === channel),
+                    Stream.map((entry) => entry.payload),
+                  ),
+                ),
+              ),
+            );
+
+        // A view, failing as RemoteCallError when its reads fail.
+        const watch = (view: View) => (payload: unknown) =>
+          view(payload).pipe(
+            Stream.provideContext(services),
+            Stream.mapError(
+              (error) => new RemoteCallError({ text: errorMessageOf(error) }),
+            ),
+          );
+
+        const handlers: Record<string, unknown> = { ...linkHandlers };
+        for (const call of LinkGroup.requests.values()) {
+          const tag = channelOf(call);
+          if (tag in handlers) continue;
+          if (isBroadcast(call)) {
+            handlers[tag] = push(tag, annotation(call, Remote) === true);
+            continue;
+          }
+          if (!isInvoke(call)) {
+            const view = registrar.views.get(tag);
+            handlers[tag] =
+              view === undefined
+                ? () => Stream.fail(unserved(tag))
+                : watch(view);
+            continue;
+          }
+          const fn = registrar.served.get(tag);
+          handlers[tag] =
+            fn === undefined
+              ? () => Effect.fail(unserved(tag))
+              : serve(tag, fn);
+        }
+
+        const peerAuth = Layer.succeed(PeerAuth, (effect, { client, rpc }) =>
+          Effect.suspend(() => {
+            const connection = connections.get(client.id);
+            if (connection === undefined || connection.deviceId === null) {
+              return Effect.fail(new LinkUnauthenticatedError());
+            }
+            const deviceId = connection.deviceId;
+            // A stream (a push, a view, a channel's bytes) lives as
+            // long as its reader wants it, so it holds no place.
+            const streaming = !isInvoke(rpc as ContractCall);
+            if (!streaming && connection.inFlight >= MAX_IN_FLIGHT_PER_PEER) {
+              return Effect.fail(
+                new RemoteCallError({ text: "too many in-flight requests" }),
               );
             }
-          }
-          return allowed;
-        },
-      });
-      attach(wss, opts, generation);
-      const onBindError = (error: Error) => {
-        wss.close();
-        status = {
-          listening: false,
-          port: null,
-          bindAddress: opts.bindAddress,
-          error: errorMessageOf(error),
-        };
-        log.error(
-          `[socket] bind failed on ${opts.bindAddress}:${opts.port}: ${errorMessageOf(error)}`,
+            if (!streaming) connection.inFlight += 1;
+            return effect.pipe(
+              Effect.provideService(LinkPeer, {
+                deviceId,
+                closed: connection.closed.signal,
+                channels: connection.channels,
+                notify: (module, key, payload) => {
+                  const { channel, parsed } = resolveBroadcast(
+                    module,
+                    key,
+                    payload,
+                  );
+                  PubSub.publishUnsafe(connection.pushes, {
+                    channel,
+                    payload: parsed,
+                  });
+                },
+              }),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  if (!streaming) connection.inFlight -= 1;
+                }),
+              ),
+            );
+          }),
         );
-        reject(error);
-      };
-      wss.once("error", onBindError);
-      wss.once("listening", () => {
-        wss.removeListener("error", onBindError);
-        // Post-bind errors must not become crashing 'error' events, and
-        // must surface rather than vanish.
-        wss.on("error", (error) => {
-          status = { ...status, error: errorMessageOf(error) };
-          log.warn(`[socket] server error: ${errorMessageOf(error)}`);
-        });
-        listener = { wss, opts, generation };
-        // The liveness sweep, one timer per LIVE listener (armed here,
-        // after the bind, so a failed bind leaks none): a peer silent
-        // past the timeout is killed like a roster drop. Quarter-period
-        // cadence keeps the worst-case delay past the timeout small
-        // without a busy loop.
-        const livenessTimeoutMs =
-          opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
-        livenessTimer = setInterval(
-          () => {
-            const now = Date.now();
-            for (const entry of authed.values()) {
-              if (now - entry.lastInboundAt > livenessTimeoutMs) {
-                entry.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
+
+        const commandGate = Layer.succeed(
+          CommandGate,
+          (effect, { rpc, payload }) =>
+            Effect.gen(function* () {
+              const peer = yield* LinkPeer;
+              // Only an explicit gated:false is a read. A missing
+              // annotation is gated like a command.
+              if (annotation(rpc as ContractCall, Gated) === false) {
+                return yield* effect;
+              }
+              if (
+                auth.isInvited?.(peer.deviceId, channelOf(rpc), payload) ===
+                true
+              ) {
+                return yield* effect.pipe(
+                  Effect.provideService(LinkPeer, {
+                    ...peer,
+                    channels: {
+                      ...peer.channels,
+                      attach: (channelId, endpoint) =>
+                        peer.channels.attach(channelId, endpoint, {
+                          invited: true,
+                        }),
+                    },
+                  }),
+                );
+              }
+              if (!auth.isCommandGranted()) {
+                return yield* new CommandRefusedError();
+              }
+              return yield* effect;
+            }),
+        );
+
+        yield* RpcServer.make(LinkGroup, {
+          spanPrefix: "DeviceLink",
+          // A handler's defect fails its own call, not every call on
+          // the link.
+          disableFatalDefects: true,
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              LinkGroup.toLayer(Effect.succeed(handlers as never)),
+              peerAuth,
+              commandGate,
+              Layer.succeed(RpcServer.Protocol, protocol),
+            ),
+          ),
+          Effect.forkIn(scope),
+        );
+
+        // A connection's frames into the RPC server, until it closes.
+        const serveSocket = (clientId: number, connection: Connection) =>
+          Effect.gen(function* () {
+            const socket = yield* Socket.fromWebSocket(
+              Effect.succeed(connection.ws),
+            );
+            const { pull } = yield* socket.reader;
+            while (true) {
+              const frames = yield* pull;
+              connection.lastInboundAt = Date.now();
+              for (const frame of frames) {
+                if (connection.dead) return;
+                const messages = decodeFrame(connection.parser, frame);
+                for (const message of messages) {
+                  yield* writeRequest(clientId, message);
+                }
               }
             }
+          }).pipe(
+            Effect.scoped,
+            Effect.ignore,
+            Effect.ensuring(
+              Effect.sync(() => {
+                connection.kill(CLOSE_GOING_AWAY, "closed");
+                connections.delete(clientId);
+                Queue.offerUnsafe(disconnects, clientId);
+              }),
+            ),
+          );
+
+        const wss = new WebSocketServer({
+          host: opts.bindAddress,
+          port: opts.port,
+          maxPayload: MAX_INBOUND_FRAME_BYTES,
+          // A browser offers it, and so does the desktop dialer on a
+          // tunnel candidate, where a diff or a log is worth the CPU. A
+          // LAN dial does not ask: its link outruns the deflate.
+          perMessageDeflate: { threshold: 1024 },
+          verifyClient: (info: { req: IncomingMessage }) => {
+            const origin = info.req.headers.origin;
+            const allowed = isAllowedOrigin(origin, opts.allowedOrigin);
+            const at = Date.now();
+            if (
+              !allowed &&
+              at - originRejectLoggedAt >= ORIGIN_REJECT_LOG_THROTTLE_MS
+            ) {
+              originRejectLoggedAt = at;
+              log.warn(
+                `[link] refusing an upgrade from origin ${origin}` +
+                  " (a web client needs SM_ACCOUNT_WEB_ORIGIN set to its" +
+                  " exact origin on this device)",
+              );
+            }
+            return allowed;
           },
-          Math.max(50, Math.floor(livenessTimeoutMs / 4)),
+        });
+
+        wss.on("connection", (ws, req) => {
+          const forwardedFor = req.headers["cf-connecting-ip"];
+          const cfConnectingIp = Array.isArray(forwardedFor)
+            ? forwardedFor[0]
+            : forwardedFor;
+          const ip = clientIdentityOf(req.socket.remoteAddress, cfConnectingIp);
+          if (connections.size >= MAX_CONNECTIONS) {
+            closeThenTerminate(ws, CLOSE_OVER_CAPACITY, "over capacity", 50);
+            return;
+          }
+          if (preAuth >= MAX_PREAUTH_CONNECTIONS) {
+            closeThenTerminate(
+              ws,
+              CLOSE_OVER_CAPACITY,
+              "too many pending connections",
+              50,
+            );
+            return;
+          }
+          // Its own code: the client refused may hold a perfectly good
+          // ticket and share an address with whoever spent the
+          // attempts, so it backs off rather than giving up.
+          if (isLockedOut(ip)) {
+            log.warn(`[link] refusing a connection from locked-out ${ip}`);
+            closeThenTerminate(
+              ws,
+              CLOSE_AUTH_LOCKED_OUT,
+              "temporarily locked out",
+              50,
+            );
+            return;
+          }
+          ws.on("error", (error) => {
+            log.warn(`[link] connection error: ${errorMessageOf(error)}`);
+          });
+          preAuth += 1;
+          const clientId = nextClientId++;
+          const closed = new AbortController();
+          runFork(
+            Effect.gen(function* () {
+              const pushes = yield* PubSub.sliding<Push>(1024);
+              const connection: Connection = {
+                ws,
+                ip,
+                arrivalKind: tunnelBorne(
+                  req.socket.remoteAddress,
+                  cfConnectingIp,
+                )
+                  ? "tunnel"
+                  : "lan",
+                channels: makeHostChannels(),
+                pushes,
+                closed,
+                parser: serialization.makeUnsafe(),
+                hostNonce: null,
+                helloSeen: false,
+                deviceId: null,
+                inFlight: 0,
+                lastInboundAt: Date.now(),
+                dead: false,
+                kill(code, reason) {
+                  if (connection.dead) return;
+                  connection.dead = true;
+                  if (connection.deviceId === null) preAuth -= 1;
+                  else if (byDevice.get(connection.deviceId) === connection) {
+                    byDevice.delete(connection.deviceId);
+                  }
+                  connection.channels.closeAll();
+                  connection.closed.abort();
+                  closeThenTerminate(
+                    ws,
+                    code,
+                    reason,
+                    REJECT_TERMINATE_DELAY_MS,
+                  );
+                },
+              };
+              connections.set(clientId, connection);
+              // A hello arriving after this does not count.
+              setTimeout(() => {
+                if (connection.deviceId === null) {
+                  connection.kill(CLOSE_HELLO_FAILED, "hello timeout");
+                }
+              }, opts.helloTimeoutMs ?? HELLO_TIMEOUT_MS).unref();
+              yield* serveSocket(clientId, connection);
+            }),
+          );
+        });
+
+        yield* Effect.callback<void, Error>((resume) => {
+          wss.once("error", (error) => resume(Effect.fail(error)));
+          wss.once("listening", () => resume(Effect.void));
+        });
+        wss.on("error", (error) => {
+          status = { ...status, error: errorMessageOf(error) };
+          log.warn(`[link] listener error: ${errorMessageOf(error)}`);
+        });
+
+        // A peer silent past the timeout is cut, as if the roster had
+        // dropped it.
+        const livenessMs = opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
+        yield* Effect.sync(() => {
+          const now = Date.now();
+          for (const connection of connections.values()) {
+            if (now - connection.lastInboundAt > livenessMs) {
+              connection.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
+            }
+          }
+        }).pipe(
+          Effect.repeat(
+            Schedule.spaced(Math.max(50, Math.floor(livenessMs / 4))),
+          ),
+          Effect.forkIn(scope),
         );
-        livenessTimer.unref?.();
+
+        yield* Scope.addFinalizer(
+          scope,
+          Effect.callback<void>((resume) => {
+            for (const connection of connections.values()) {
+              connection.kill(CLOSE_GOING_AWAY, "server stopping");
+            }
+            const grace = setTimeout(() => {
+              for (const ws of wss.clients) ws.terminate();
+            }, TERMINATE_GRACE_MS);
+            wss.close(() => {
+              clearTimeout(grace);
+              resume(Effect.void);
+            });
+          }),
+        );
+
         const address = wss.address();
         const port =
           typeof address === "object" && address !== null
             ? address.port
             : opts.port;
+        log.info(`[link] listening on ${opts.bindAddress}:${port}`);
+        return { port, byDevice };
+      });
+
+    const stopNow = Effect.suspend(() => {
+      const running = current;
+      if (running === null) return Effect.void;
+      current = null;
+      status = { listening: false, port: null, bindAddress: null, error: null };
+      return Scope.close(running.scope, Exit.void);
+    });
+
+    const sameListener = (opts: WsServerStartOpts): boolean => {
+      if (current === null) return false;
+      const was = current.opts;
+      return (
+        was.port === opts.port &&
+        was.bindAddress === opts.bindAddress &&
+        was.accountId === opts.accountId &&
+        was.allowedOrigin === opts.allowedOrigin
+      );
+    };
+
+    const startNow = (opts: WsServerStartOpts) =>
+      Effect.gen(function* () {
+        const scope = yield* Scope.make();
+        const started = yield* Effect.exit(listen(opts, scope));
+        if (Exit.isFailure(started)) {
+          yield* Scope.close(scope, Exit.void);
+          const error = errorMessageOf(
+            Option.getOrElse(Exit.findErrorOption(started), () => "failed"),
+          );
+          status = {
+            listening: false,
+            port: null,
+            bindAddress: opts.bindAddress,
+            error,
+          };
+          log.error(
+            `[link] bind failed on ${opts.bindAddress}:${opts.port}: ${error}`,
+          );
+          return;
+        }
+        current = { opts, scope, byDevice: started.value.byDevice };
         status = {
           listening: true,
-          port,
+          port: started.value.port,
           bindAddress: opts.bindAddress,
           error: null,
         };
-        log.info(`[socket] listening on ${opts.bindAddress}:${port}`);
-        resolve(port);
       });
+
+    yield* Effect.addFinalizer(() => lifecycle.withPermits(1)(stopNow));
+
+    return DeviceLink.of({
+      reconcile: (wanted) =>
+        lifecycle.withPermits(1)(
+          Effect.gen(function* () {
+            const opts = yield* wanted;
+            if (opts !== null && sameListener(opts)) return;
+            yield* stopNow;
+            if (opts !== null) yield* startNow(opts);
+          }),
+        ),
+      status: Effect.sync(() => ({ ...status })),
+      closePeersNotIn: (online) =>
+        Effect.sync(() => {
+          const live = new Set(online);
+          for (const [deviceId, connection] of current?.byDevice ?? []) {
+            if (!live.has(deviceId)) {
+              connection.kill(
+                CLOSE_GOING_AWAY,
+                "no longer in the account roster",
+              );
+            }
+          }
+        }),
     });
-  }
+  });
 
-  function stopNow(): Promise<void> {
-    if (listener === null) return Promise.resolve();
-    const { wss } = listener;
-    // Drop the listener and clear the authed set first: a peer that
-    // keeps sending during the grace window fails the dispatch
-    // generation guard, and no push can reach a peer under a stopped or
-    // rotated listener.
-    listener = null;
-    authed.clear();
-    authedByDevice.clear();
-    if (livenessTimer !== null) {
-      clearInterval(livenessTimer);
-      livenessTimer = null;
-    }
-    status = { listening: false, port: null, bindAddress: null, error: null };
-    for (const socket of wss.clients) {
-      socket.close(CLOSE_GOING_AWAY, "server stopping");
-    }
-    // close() is advisory. Arm a short grace, then terminate any peer
-    // that did not close, so a non-cooperating peer cannot wedge the
-    // lifecycle queue or keep executing under a stopped listener.
-    const graceTimer = setTimeout(() => {
-      for (const socket of wss.clients) socket.terminate();
-    }, TERMINATE_GRACE_MS);
-    return new Promise((resolve) => {
-      wss.close(() => {
-        clearTimeout(graceTimer);
-        resolve();
-      });
-    });
-  }
+export const layer = (options: {
+  readonly registrar: LinkRegistrar;
+  readonly auth: WsServerTicketAuth;
+}) => Layer.effect(DeviceLink, make(options));
 
-  function sameListener(opts: WsServerStartOpts): boolean {
-    if (listener === null) return false;
-    const current = listener.opts;
-    // deviceId and appVersion are process constants, so port,
-    // bindAddress and accountId are the fields a config write or an
-    // account switch can change under us. accountId is an identity
-    // field: a switch must restart the listener so every socket authed
-    // under the old account drops.
-    return (
-      current.port === opts.port &&
-      current.bindAddress === opts.bindAddress &&
-      current.accountId === opts.accountId &&
-      // Env-derived and process-constant in practice, compared anyway
-      // so a changed gate can never silently keep the old one.
-      current.allowedOrigin === opts.allowedOrigin
-    );
-  }
+const promiseAdapter = PromiseAdapter.forService(DeviceLink, "The device link");
+export const adapter = promiseAdapter.layer;
 
-  return {
-    handle(channel, fn, opts) {
-      // Mirrors ipcMain.handle's one-handler-per-channel rule, so a
-      // double registration fails at boot on both wires alike.
-      if (handlers.has(channel)) {
-        throw new Error(
-          `[socket] handler already registered for channel "${channel}"`,
-        );
-      }
-      handlers.set(channel, fn);
-      // Record an EXPLICITLY read-only channel (gated:false) so
-      // dispatch may serve it ungated. Fail-closed: a channel left
-      // untagged, or tagged gated:true, is deliberately NOT
-      // recorded, so dispatch serves it only under the command-access
-      // switch.
-      if (opts?.gated === false) readOnlyChannels.add(channel);
-    },
-    // Payloads arrive already parsed from the shared fan-out path.
-    // Encode once, then fan the identical text out to every authed
-    // socket rather than re-stringifying per peer.
-    broadcastAll(channel, payload) {
-      // The steady state of an idle listener (up, nobody connected)
-      // must not pay a stringify per broadcast.
-      if (authed.size === 0) return;
-      const text = encodeFrame({ t: "push", channel, payload });
-      for (const socket of authed.keys()) sendPushText(socket, text);
-    },
-    closePeersNotIn(online) {
-      // Deleting the visited entry (kill does) is fine under Map
-      // iteration.
-      const live = new Set(online);
-      for (const [deviceId, peer] of authedByDevice) {
-        if (!live.has(deviceId)) {
-          peer.kill(CLOSE_GOING_AWAY, "no longer in the account roster");
-        }
-      }
-    },
-    start: (opts) => lifecycle(() => startNow(opts)),
-    stop: () => lifecycle(() => stopNow()),
-    refresh: (resolve) =>
-      lifecycle(async () => {
-        const opts = await resolve();
-        if (opts !== null && sameListener(opts)) return;
-        await stopNow();
-        if (opts !== null) await startNow(opts);
-      }),
-    status: () => ({ ...status }),
-  };
-}
+// The listener's Promise face, for main/ipc/register.ts.
+export const deviceLink = {
+  // `resolve` reads the wanted state inside the serialized reconcile.
+  refresh: (resolve: () => Promise<WsServerStartOpts | null>) =>
+    promiseAdapter.call((link) => link.reconcile(Effect.promise(resolve))),
+  status: (): LinkServerStatus =>
+    promiseAdapter.runSyncOr(
+      Effect.flatMap(DeviceLink, (link) => link.status),
+      () => ({ listening: false, port: null, bindAddress: null, error: null }),
+    ),
+  closePeersNotIn: (online: readonly string[]) =>
+    promiseAdapter.runIfOpen(
+      Effect.flatMap(DeviceLink, (link) => link.closePeersNotIn(online)),
+    ),
+};

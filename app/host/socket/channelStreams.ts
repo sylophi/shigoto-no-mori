@@ -1,30 +1,25 @@
 // The one adapter between a node duplex stream and a byte channel
-// (shared/ipc/socket/channels.ts). Every byte stream on the direct
-// wire is bridged through here on both ends: the host's loopback
-// socket or serve child's stdio (host/ipc/modules/forward.ts) and the
-// client's accepted local socket (main/core/portForward/bridge.ts, the
-// mirror gateway).
+// (shared/remote/channels.ts). Every byte stream on the device link is
+// bridged through here on both ends: the host's loopback socket or
+// serve child's stdio (host/ipc/modules/forward.ts) and the client's
+// accepted local socket (main/core/portForward/bridge.ts, the mirror
+// gateway).
 //
 // Backpressure is the whole point of the shape:
-//   - inbound bytes are written to the duplex and the channel's credit
-//     is returned from the write CALLBACK, so a slow sink (a paused
-//     TCP consumer, a busy serve child) holds credit back and the peer
-//     pauses its source,
+//   - inbound bytes are written to the duplex and taken from the
+//     channel in the write CALLBACK, so a slow sink (a paused TCP
+//     consumer, a busy serve child) holds the far end back,
 //   - outbound bytes are handed to the channel, and a false return
-//     (credit spent) pauses the duplex until the channel says it is
+//     (its window full) pauses the duplex until the channel says it is
 //     writable again.
 // A duplex 'end' ends the channel's direction, and the close that
 // follows a clean end changes nothing: bytes the channel still holds
-// for lack of credit keep flowing, and the channel completes once the
-// peer ends too. Only a close WITHOUT a prior end (a destroy, an
-// error) resets whatever is left. A peer end ends the duplex. A peer
-// reset destroys it.
+// keep flowing, and the channel completes once the peer ends too. Only
+// a close WITHOUT a prior end (a destroy, an error) resets whatever is
+// left. A peer end ends the duplex. A peer reset destroys it.
 import type { Duplex } from "node:stream";
-import {
-  type ChannelEndpoint,
-  type ChannelHandle,
-  MAX_CHANNELS_PER_CONNECTION,
-} from "@shared/ipc/socket/channels";
+import type { ChannelEndpoint, ChannelHandle } from "@shared/remote/channels";
+import { MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
   CHANNEL_OPEN_NO_CHANNELS,
@@ -114,10 +109,10 @@ export function requireChannels(
 ): NonNullable<HandlerContext["channels"]> {
   const channels = ctx.channels;
   if (channels === undefined) throw new Error(CHANNEL_OPEN_NO_CHANNELS);
-  if (channels.has(channelId) || ctx.signal.aborted) {
+  if (channels.has(channelId) || ctx.connection.aborted) {
     throw new Error(CHANNEL_OPEN_TAKEN);
   }
-  if (channels.size() >= MAX_CHANNELS_PER_CONNECTION) {
+  if (channels.size() >= MAX_CHANNELS_PER_LINK) {
     throw new Error(CHANNEL_OPEN_TOO_MANY);
   }
   return channels;

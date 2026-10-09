@@ -32,7 +32,7 @@ import {
   PUSH_BUFFER_LIMIT_BYTES,
   ReqFrameSchema,
   resError,
-} from "@shared/ipc/socket/frames";
+} from "./frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { mintHexId } from "@host/lib/hexId";
 import { atomicWriteJsonSync } from "@host/lib/util/atomicJson";
@@ -152,6 +152,7 @@ export function createControlServer(deps: {
     };
     const ctx: HandlerContext = {
       signal: controller.signal,
+      connection: controller.signal,
       notifier,
     };
     const inFlight = { count: 0 };

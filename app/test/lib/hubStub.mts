@@ -15,7 +15,7 @@ import {
   hubTextWithinLimit,
   type ServerEnvelope,
 } from "@shigomori/contracts/hubProtocol";
-import { toText } from "@host/socket/rawData";
+import { toText } from "@host/hub/rawData";
 import { boundPort, type Track } from "./checkKit.mts";
 
 // Tickets are "t:<deviceId>:<n>". The real DO burns single-use tickets,

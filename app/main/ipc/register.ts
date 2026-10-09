@@ -12,7 +12,11 @@ import * as Layer from "effect/Layer";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
-import { type ContractModule, scopeOf } from "@shigomori/contracts/contract";
+import {
+  type ContractModule,
+  nameOf,
+  scopeOf,
+} from "@shigomori/contracts/contract";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
@@ -30,7 +34,10 @@ import type {
   BroadcastKeys,
   BroadcastProducerPayload,
   Handlers,
+  ViewHandlers,
 } from "@shigomori/contracts/types";
+import type * as Stream from "effect/Stream";
+import type * as Views from "@host/lib/views";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
@@ -41,7 +48,7 @@ import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import * as TunnelService from "@host/direct/cloudflared";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
-import { createWsServerBinding } from "@host/socket/server";
+import * as DeviceLink from "@host/socket/server";
 import { mirrorInviteAdmits } from "@host/mirror/invites";
 import { dataDir } from "@host/lib/util/paths";
 import { CONTROL_FILE_NAME, createControlServer } from "../core/control/server";
@@ -101,6 +108,7 @@ function contextFor(sender: WebContents): HandlerContext {
   const controller = new AbortController();
   const ctx: HandlerContext = {
     signal: controller.signal,
+    connection: controller.signal,
     notifier: (module, key) => (payload) => {
       if (sender.isDestroyed()) return;
       broadcast(module, key, payload, sender);
@@ -132,23 +140,32 @@ const electronServer: ServerTransport = {
   },
 };
 
-// The direct data plane's listener. Auth consumes single-use connect
-// tickets minted by connectInfo over the device hub, and dispatch gates
-// every channel not registered gated:false on the host's live
-// command-access switch (acceptsPeerCommands: every ticketed peer is a
-// device of this account, so the switch is the whole verdict). That
-// gate is the only enforcement; everything else that shows the switch
-// is a reading of it. Unconditional like the
-// other bindings so registration records handlers at boot, while
-// listening is gated on enrollment in refreshDirectHost below.
+// The device link's listener (host/socket/server.ts). Its hello
+// consumes the single-use connect tickets connectInfo mints over the
+// device hub, and its gate runs every call not annotated gated:false
+// only under the host's live command switch (acceptsPeerCommands:
+// every ticketed peer is a device of this account, so the switch is
+// the whole verdict). That gate is the only enforcement; everything
+// else that shows the switch is a reading of it. The registrar records
+// the handlers at boot, while listening follows enrollment in
+// refreshDirectHost below.
 const directTickets = createConnectTicketStore();
-const directWsServer = createWsServerBinding({
-  matchTicket: (deviceId, arrivedAs, matches) =>
-    directTickets.consumeProven(deviceId, arrivedAs, matches),
-  isCommandGranted: acceptsPeerCommands,
-  // The switch's one exception: the mirrors this device asked for.
-  isInvited: mirrorInviteAdmits,
-});
+const linkRegistrar = DeviceLink.createLinkRegistrar();
+export const deviceLinkLayer = DeviceLink.adapter.pipe(
+  Layer.provideMerge(
+    DeviceLink.layer({
+      registrar: linkRegistrar,
+      auth: {
+        matchTicket: (deviceId, arrivedAs, matches) =>
+          directTickets.consumeProven(deviceId, arrivedAs, matches),
+        isCommandGranted: acceptsPeerCommands,
+        // The switch's one exception: the mirrors this device asked for.
+        isInvited: mirrorInviteAdmits,
+      },
+    }),
+  ),
+);
+const directLink = DeviceLink.deviceLink;
 
 // The tunnel endpoint: a supervised cloudflared child fronting the
 // direct listener's loopback port through this device's named
@@ -231,13 +248,15 @@ const directPlane = createDirectPlane({
     for (const listener of peerPushListeners) listener(push);
   },
   // The candidate sockets ride the `ws` package so a failed dial names
-  // its errno (see ClientSocket in wsClientTransport.ts). Neither ws
-  // nor Node's global sends an Origin header, so the peer's upgrade
-  // gate reads the two identically.
-  openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
+  // its errno (see OpenClientSocket in shared/remote/deviceLink.ts).
+  // Neither ws nor Node's global sends an Origin header, so the peer's
+  // upgrade gate reads the two identically. Deflate only through the
+  // tunnel: a LAN link outruns it.
+  openSocket: (url) =>
+    new WsWebSocket(url, { perMessageDeflate: url.startsWith("wss:") }),
   dialableKinds: devDialKinds(),
   host: {
-    closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
+    closeHostPeersNotIn: (online) => void directLink.closePeersNotIn(online),
     tunnelState: () => TunnelService.tunnel.state(),
   },
 });
@@ -252,7 +271,7 @@ export const hubHandlers = directPlane.handlers;
 // plus the switch the listener's gate reads, reported to the asker.
 const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
-    const current = directWsServer.status();
+    const current = directLink.status();
     return current.listening ? current.port : null;
   },
   mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
@@ -292,16 +311,13 @@ const hostServer: ServerTransport = {
   // direct sessions alone.
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
-    if (opts?.remote === true) {
-      // The gate flag rides along: the direct listener gates
-      // everything not explicitly gated:false on the host's
-      // command-access switch (host/socket/server.ts).
-      directWsServer.handle(channel, fn, { gated: opts.gated });
-    }
+    // The link's gate reads each call's own annotations
+    // (host/socket/server.ts, CommandGate).
+    if (opts?.remote === true) linkRegistrar.handle(channel, fn);
   },
   broadcastAll(channel, payload, opts) {
     electronServer.broadcastAll(channel, payload);
-    if (opts?.remote === true) directWsServer.broadcastAll(channel, payload);
+    // The device link serves the remote ones off the host's pushes.
     publishPush({ channel, payload, remote: opts?.remote === true });
   },
 };
@@ -328,6 +344,22 @@ export function registerContract<M extends ContractModule>(
       });
     },
   });
+}
+
+// A module's views (contract.ts, view), served on the device link to
+// the peers its annotations admit.
+export function registerViews<M extends ContractModule>(
+  module: M,
+  views: ViewHandlers<M, Views.Services>,
+): void {
+  for (const [key, view] of Object.entries(views)) {
+    linkRegistrar.view(
+      `${nameOf(module)}:${key}`,
+      view as (
+        input: unknown,
+      ) => Stream.Stream<unknown, unknown, Views.Services>,
+    );
+  }
 }
 
 // The control contract's registration, on the control wire alone.
@@ -445,16 +477,13 @@ export function probeRemoteConnections(): void {
   directPlane.probe();
 }
 
-// Quit's teardown, alongside stopHubConnection: closes the
-// direct listener so connected peers see a clean going-away instead of
-// a dead socket, AND the cached outbound direct sessions, or each
-// remote host would keep a dead socket in its per-device slot and land
-// our relaunch on the supersede path instead of a clean reconnect.
-// The plane's own stop() owns both halves of that (the keeper's latch
-// and the session close, in the order that matters).
-export function stopDirectHost(): Promise<void> {
+// Quit's teardown, alongside stopHubConnection: closes the outbound
+// links, or each remote host would keep a dead socket in its
+// per-device slot and land our relaunch on the supersede path instead
+// of a clean reconnect. The plane's own stop() latches the keeper
+// first. The listener closes with its layer (deviceLinkLayer).
+export function stopDirectHost(): void {
   directPlane.stop();
-  return directWsServer.stop();
 }
 
 // Reconciles the direct data-plane listener with the account and
@@ -472,7 +501,7 @@ export function stopDirectHost(): Promise<void> {
 // line like the other refresh functions.
 export async function refreshDirectHost(): Promise<void> {
   await logFailure("[direct] listener refresh failed", () =>
-    directWsServer.refresh(async () => {
+    directLink.refresh(async () => {
       const inputs = hubConnectInputs();
       if (inputs === null) return null;
       // The device-scoped opt-out: absent means enrolled, explicit
@@ -504,7 +533,7 @@ export async function refreshDirectHost(): Promise<void> {
   // if that classification ever leaks: a tunnel problem must not fail
   // the config write or account change that triggered the refresh.
   await logFailure("[tunnel] reconcile failed", () => {
-    const listener = directWsServer.status();
+    const listener = directLink.status();
     return TunnelService.tunnel.reconcile(
       listener.listening && listener.port !== null
         ? { port: listener.port }

@@ -56,7 +56,7 @@ import type {
   MirrorSession,
 } from "@shigomori/contracts/modules/mirror";
 import type { ClientTransport } from "@shared/ipc/transport";
-import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
+import { createSubscriberRegistry } from "@shared/remote/subscriberRegistry";
 import {
   FAKE_DIFF,
   FAKE_REPO_MERGE_CONFIG,
