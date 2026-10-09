@@ -51,6 +51,7 @@ import {
   isHubUnreachable,
 } from "../shared/account/service.ts";
 import { deriveAccountId } from "../shared/account/token.ts";
+import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import {
   createAccountStore,
@@ -290,6 +291,10 @@ it("service: the auth tier differs, enroll under the session token and the rest 
   const enrollAuth = entryAt(calls, 0).init.headers.authorization;
   const listAuth = entryAt(calls, 1).init.headers.authorization;
   assert.equal(enrollAuth, "Bearer session-token");
+  // Every call names this build's protocol, which the hub's floor reads.
+  for (const call of calls) {
+    assert.equal(call.init.headers["sm-protocol"], String(PROTOCOL_VERSION));
+  }
   assert.equal(listAuth, "Bearer device-credential");
   assert.notEqual(enrollAuth, listAuth, "enroll and list share a bearer");
 });

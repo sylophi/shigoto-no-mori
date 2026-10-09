@@ -261,6 +261,7 @@ export function createHubConnectionCore(
               `ticket mint failed: ${errorMessageOf(error)}`,
               isHubDeviceRevoked(error) ? CLOSE_DEVICE_REVOKED : null,
               isHubRefusal(error),
+              error instanceof Error ? error : undefined,
             ),
           );
         });

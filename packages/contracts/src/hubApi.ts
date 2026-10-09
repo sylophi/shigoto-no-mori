@@ -17,6 +17,7 @@ import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
 import * as HttpApiSecurity from "effect/http-api/HttpApiSecurity";
+import { PROTOCOL_VERSION } from "./protocol.ts";
 import {
   DeviceIdSchema,
   DeviceListResponseSchema,
@@ -173,6 +174,36 @@ export class HubUpgradeRequiredError extends Schema.TaggedError<HubUpgradeRequir
   }
 }
 
+// ---- The version floor ----
+
+// The oldest protocol the hub serves. A build below it, every v2 build
+// included (they send no version at all), is turned away from every
+// credentialed route. The connect route needs no check of its own: its
+// ticket comes from a mint, which the floor already guards.
+export const HUB_PROTOCOL_FLOOR = PROTOCOL_VERSION;
+
+// The request header a build names its PROTOCOL_VERSION in.
+export const PROTOCOL_HEADER = "sm-protocol";
+
+// This build is older than the hub serves. `error` is the sentence a v2
+// build reads out of a refusal body and shows (it knows no tags), so
+// the one wording reaches every build. A 403 because v2 treats one as
+// terminal until the account changes, rather than retrying forever.
+export class HubUpdateRequiredError extends Schema.TaggedError<HubUpdateRequiredError>()(
+  "HubUpdateRequiredError",
+  { floor: Schema.Int, error: Schema.String },
+  { httpApiStatus: 403 },
+) {
+  override get message(): string {
+    return this.error;
+  }
+}
+
+export class ProtocolFloor extends HttpApiMiddleware.Service<ProtocolFloor>()(
+  "sm/contracts/ProtocolFloor",
+  { error: HubUpdateRequiredError },
+) {}
+
 // The refusals a caller treats as the hub not honoring its credential,
 // terminal until the account changes: a retry cannot turn one into a
 // success.
@@ -181,6 +212,7 @@ export const isHubRefusal = Schema.is(
     HubLoginRejectedError,
     HubCredentialRejectedError,
     HubDeviceRevokedError,
+    HubUpdateRequiredError,
   ]),
 );
 
@@ -237,7 +269,9 @@ const enrollment = HttpApiGroup.make("enrollment", { topLevel: true }).add(
       HubAccountFullError,
       HubUnavailableError,
     ],
-  }).middleware(LoginAuth),
+  })
+    .middleware(LoginAuth)
+    .middleware(ProtocolFloor),
 );
 
 const devices = HttpApiGroup.make("devices", { topLevel: true })
@@ -273,7 +307,8 @@ const devices = HttpApiGroup.make("devices", { topLevel: true })
       error: [HubTunnelUnconfiguredError, HubUnavailableError],
     }),
   )
-  .middleware(DeviceAuth);
+  .middleware(DeviceAuth)
+  .middleware(ProtocolFloor);
 
 // The device's socket to its account's Durable Object. The upgrade
 // succeeds for every ticket this Worker signed, and a ticket the

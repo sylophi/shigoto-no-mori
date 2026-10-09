@@ -536,6 +536,34 @@ it("revoked: the hub's typed revoked refusal on the mint blocks as REVOKED, the 
   assert.equal(revoked.reason, "revoked");
 });
 
+it("update required: the hub's version floor on the mint blocks as update-required in the hub's words, never as a sign-out", async () => {
+  const localStorage = memoryStorage();
+  localStorage.setItem("sm.web.account", STORED_ENVELOPE);
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url === `${HUB_URL}/tickets`) {
+      return jsonResponse(403, {
+        _tag: "HubUpdateRequiredError",
+        floor: 99,
+        error: "Update it to connect.",
+      });
+    }
+    throw new Error(`unexpected fetch in update check: ${url}`);
+  };
+  const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
+  trackTest(() => bridge.stop());
+  await bridge.refreshHub();
+  const socket = async () => (await bridge.api.hub.status()).socket;
+  await waitFor(
+    async () => (await socket()).phase === "blocked",
+    "the blocked socket phase",
+  );
+  const blocked = await socket();
+  assert(blocked.phase === "blocked");
+  assert.equal(blocked.reason, "update-required");
+  assert.equal(blocked.message, "Update it to connect.");
+});
+
 it("device names: the user-agent default is short and human-readable across the major browsers", () => {
   assert.equal(defaultWebDeviceName(CHROME_MAC_UA), "Chrome on macOS");
   assert.equal(
