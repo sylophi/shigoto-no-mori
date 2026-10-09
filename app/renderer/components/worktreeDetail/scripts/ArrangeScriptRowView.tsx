@@ -22,9 +22,9 @@ interface ArrangeScriptRowProps {
 // pin toggle is the drag handle, and it runs nothing. The pin puts the
 // script on the Launch section's row. The cell that's picked up stays
 // behind as a dimmed marker of where the script will land, and
-// ScriptDragPreview follows the pointer (the list's frame clips, so the
+// ScriptDragPreviewView follows the pointer (the list's frame clips, so the
 // cell itself can't).
-export function ArrangeScriptRow({
+export function ArrangeScriptRowView({
   name,
   pinned,
   onPin,
@@ -79,7 +79,7 @@ export function ArrangeScriptRow({
   );
 }
 
-export function ScriptDragPreview({
+export function ScriptDragPreviewView({
   name,
   pinned,
 }: {

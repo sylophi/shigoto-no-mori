@@ -1,7 +1,7 @@
 import { Check, GitBranch, TriangleAlert } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { SYNC_PILL_SHAPE } from "@/components/worktreeDetail/SyncActionButton";
+import { SYNC_PILL_SHAPE } from "@/components/worktreeDetail/SyncActionButtonView";
 import { WorktreeSyncPill } from "@/components/worktreeDetail/WorktreeSyncPill";
 import { useWorktreeOperation } from "@/hooks/worktrees/useGitHistory";
 import { cn } from "@/lib/utils";

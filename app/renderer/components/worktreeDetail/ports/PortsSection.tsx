@@ -3,8 +3,8 @@
 // show and nothing to add: no ports on a worktree the viewer cannot
 // edit.
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { PortActions, PortList, usePortList } from "./PortList";
+import { PortsSectionView } from "./PortsSectionView";
 
 export function PortsSection({ worktree }: { worktree: Worktree }) {
   const state = usePortList(worktree);
@@ -13,16 +13,9 @@ export function PortsSection({ worktree }: { worktree: Worktree }) {
   }
 
   return (
-    <section className="space-y-3">
-      {/* Held at the heading's height: the actions overhang it, so the
-          rows don't shift when one appears. */}
-      <div className="flex h-4 items-center justify-between gap-2">
-        <SectionHeading>Ports</SectionHeading>
-        <div className="-mr-2 flex items-center gap-1">
-          <PortActions state={state} />
-        </div>
-      </div>
-      <PortList state={state} plain />
-    </section>
+    <PortsSectionView
+      actions={<PortActions state={state} />}
+      list={<PortList state={state} plain />}
+    />
   );
 }

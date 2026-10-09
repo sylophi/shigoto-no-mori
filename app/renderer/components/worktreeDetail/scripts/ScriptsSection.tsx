@@ -1,4 +1,3 @@
-import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
@@ -7,8 +6,8 @@ import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { PackageScripts } from "./PackageScripts";
-import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";
+import { ScriptsSectionView } from "./ScriptsSectionView";
 
 interface ScriptsSectionProps {
   worktree: Worktree;
@@ -30,15 +29,6 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
     worktree.projectId,
     worktree.id,
   );
-
-  if (configLoading || pkgLoading) {
-    return (
-      <div className="space-y-1" aria-label="Loading scripts">
-        <Skeleton className="h-7 w-full" />
-        <Skeleton className="h-7 w-full" />
-      </div>
-    );
-  }
 
   const setupCommand = config?.scripts?.setup?.trim() ?? "";
   const teardownCommand = config?.scripts?.teardown?.trim() ?? "";
@@ -73,47 +63,32 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
       command: teardownCommand,
     });
   }
-  const hasLifecycle = lifecycleRows.length > 0;
-
   return (
-    <div className="space-y-4">
-      {/* Keyed so arranging (and the search) stays with the worktree it
-          started in rather than following the page to the next one. */}
-      {pkg && pkgHasScripts && (
-        <PackageScripts key={worktree.id} worktree={worktree} pkg={pkg} />
-      )}
-
-      {lifecycleRows.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-1.5 pl-[18px] text-xs">
-            <span className="font-mono text-muted-foreground">Lifecycle</span>
-          </div>
-          <ScriptList>
-            {lifecycleRows.map((row) => (
-              <ScriptRow
-                key={slotToParam(row.slot)}
-                worktree={worktree}
-                slot={row.slot}
-                label={row.label}
-                command={row.command}
-              />
-            ))}
-          </ScriptList>
-        </div>
-      )}
-
-      {!hasLifecycle &&
-        !remote && (
-          // Configure is a local page, so the CTA only exists locally.
-          <button
-            type="button"
-            onClick={() => toProjectPage("configure", worktree.projectId)}
-            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Configure setup or teardown scripts →
-          </button>
-        )}
-    </div>
+    <ScriptsSectionView
+      loading={configLoading || pkgLoading}
+      packageScripts={
+        pkg &&
+        pkgHasScripts && (
+          // Keyed so arranging (and the search) stays with the worktree
+          // it started in rather than following the page to the next one.
+          <PackageScripts key={worktree.id} worktree={worktree} pkg={pkg} />
+        )
+      }
+      lifecycle={lifecycleRows.map((row) => (
+        <ScriptRow
+          key={slotToParam(row.slot)}
+          worktree={worktree}
+          slot={row.slot}
+          label={row.label}
+          command={row.command}
+        />
+      ))}
+      onConfigure={
+        remote
+          ? undefined
+          : () => toProjectPage("configure", worktree.projectId)
+      }
+    />
   );
 }
 

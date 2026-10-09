@@ -36,7 +36,8 @@ import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
-import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
+import { FlowBodyView, FlowFooterView } from "../flow/FlowChromeView";
+import { LandedPath } from "../flow/FlowChrome";
 import { type Landing, LANDS_HERE } from "../flow/pullSteps";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
@@ -215,7 +216,7 @@ export function TransplantFinish({
 
   return (
     <>
-      <FlowBody>
+      <FlowBodyView>
         <div className="flex flex-col gap-5">
           <section className="space-y-2">
             <SectionHeading>Ready on {thisDeviceLabel}</SectionHeading>
@@ -337,9 +338,9 @@ export function TransplantFinish({
             )
           )}
         </div>
-      </FlowBody>
+      </FlowBodyView>
 
-      <FlowFooter
+      <FlowFooterView
         note={`You can change this later from the worktree's page on ${sourceDeviceLabel}.`}
       >
         <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
@@ -358,7 +359,7 @@ export function TransplantFinish({
               ? "Click again to confirm"
               : FINISH_LABEL[choice]}
         </Button>
-      </FlowFooter>
+      </FlowFooterView>
     </>
   );
 }

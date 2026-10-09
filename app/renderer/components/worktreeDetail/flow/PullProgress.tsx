@@ -33,7 +33,7 @@ import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import { cn } from "@/lib/utils";
 import type { LandingTarget } from "./cloneDestination";
 import { useCreatePlan } from "./createPlan";
-import { FlowBody, FlowFooter } from "./FlowChrome";
+import { FlowBodyView, FlowFooterView } from "./FlowChromeView";
 import {
   AFTER_PULL_POSITION,
   framePosition,
@@ -263,7 +263,7 @@ function ProgressView({
 
   return (
     <>
-      <FlowBody>
+      <FlowBodyView>
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-4">
             <DeviceEnd
@@ -330,19 +330,19 @@ function ProgressView({
               />
             ))}
         </div>
-      </FlowBody>
+      </FlowBodyView>
 
       {ended !== null ? (
-        <FlowFooter note={cancelled ? cancelledWords : failedNote}>
+        <FlowFooterView note={cancelled ? cancelledWords : failedNote}>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
           </Button>
           <Button size="sm" onClick={onRetry}>
             Try again
           </Button>
-        </FlowFooter>
+        </FlowFooterView>
       ) : (
-        <FlowFooter
+        <FlowFooterView
           note={
             cancelling
               ? `Cancelling. Whatever landed ${landing.on} is being removed.`
@@ -357,7 +357,7 @@ function ProgressView({
           >
             {cancelling ? "Cancelling…" : "Cancel"}
           </Button>
-        </FlowFooter>
+        </FlowFooterView>
       )}
     </>
   );

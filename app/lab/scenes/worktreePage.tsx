@@ -50,6 +50,12 @@ import { LOCAL_DEVICE_ID } from "../fake-host/fixtures";
 import { unposedPullRequests } from "../fake-host/pullRequestFixtures";
 import { SceneWindowFrame } from "./frame";
 import { SceneSidebar } from "./sidebar";
+import {
+  gitSection,
+  portsSection,
+  scriptsSection,
+  WorktreeSectionsPartsScene,
+} from "./worktreeSections";
 import { projectNamed, worktreeNamed } from "./world";
 
 const noop = () => {};
@@ -237,9 +243,9 @@ export function WorktreePageScene() {
             }
           />
         }
-        git={null}
-        ports={null}
-        scripts={null}
+        git={gitSection(HUMMINGBIRD)}
+        ports={portsSection()}
+        scripts={scriptsSection()}
         footer={footer({
           kind: "normal",
           confirmDelete: false,
@@ -402,4 +408,10 @@ export function WorktreePagePartsScene() {
       </div>
     </div>
   );
+}
+
+// The Git page's parts, and the worktree page's sections in their other
+// states.
+export function WorktreeSectionsScene() {
+  return <WorktreeSectionsPartsScene worktree={HUMMINGBIRD} />;
 }
