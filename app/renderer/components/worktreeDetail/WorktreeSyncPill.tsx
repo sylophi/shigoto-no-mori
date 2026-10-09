@@ -216,7 +216,7 @@ function PickSide({
         label={confirmPushForce.armed ? "Confirm?" : `Push ${ahead}`}
         tip={
           confirmPushForce.armed
-            ? "Click again to confirm"
+            ? undefined
             : "git push --force-with-lease (overwrites the remote)"
         }
         pending={pushForce.isPending}
@@ -232,7 +232,7 @@ function PickSide({
         label={confirmOverwrite.armed ? "Confirm?" : `Pull ${behind}`}
         tip={
           confirmOverwrite.armed
-            ? "Click again to confirm"
+            ? undefined
             : "git fetch && git reset --hard @{u} (overwrites local)"
         }
         pending={overwrite.isPending}

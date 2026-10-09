@@ -265,20 +265,16 @@ function SessionItem({
         }
         status={<span className={TONE_TEXT[view.tone]}>{view.label}</span>}
         actions={
-          <SimpleTooltip
-            tip={runnerApi === undefined ? view.detail : undefined}
+          <Button
+            size="sm"
+            variant="ghost"
+            className={ON_FILL}
+            disabled={runnerApi === undefined}
+            onClick={() => setOpen(true)}
           >
-            <Button
-              size="sm"
-              variant="ghost"
-              className={ON_FILL}
-              disabled={runnerApi === undefined}
-              onClick={() => setOpen(true)}
-            >
-              <Settings2 />
-              Manage
-            </Button>
-          </SimpleTooltip>
+            <Settings2 />
+            Manage
+          </Button>
         }
         detail={view.detail || undefined}
       />
