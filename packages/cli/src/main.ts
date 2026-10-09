@@ -35,6 +35,7 @@ import {
 import { cdCommand, shellCommand } from "./commands/shell.ts";
 import {
   destination,
+  link,
   list,
   path,
   worktreesCommand,
@@ -101,6 +102,7 @@ const sm = Command.make("sm").pipe(
     worktreesCommand.pipe(Command.provide(services)),
     list.pipe(Command.provide(services)),
     path.pipe(Command.provide(services)),
+    link.pipe(Command.provide(services)),
     destination.pipe(Command.provide(services)),
     status.pipe(Command.provide(services)),
     describe.pipe(Command.provide(services)),

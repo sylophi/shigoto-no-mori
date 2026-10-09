@@ -1,6 +1,9 @@
 // sm [worktrees] <list|path|destination>: the worktrees, and where one
 // is or would go.
 import { messageOf } from "@shigomori/engine/errorDocument";
+import { flavorNames } from "@shigomori/engine/flavor";
+import * as Paths from "@shigomori/engine/Paths";
+import * as Registry from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -281,6 +284,29 @@ const path = Command.make(
     }),
 ).pipe(Command.withDescription("Print a worktree's folder"));
 
+// The deep link that opens a worktree's page in the app. It names this
+// data dir's device, so a link printed on another machine (over ssh, by
+// an agent there) opens that machine's worktree wherever it's clicked.
+export const link = Command.make(
+  "link",
+  {
+    ...worktreeFlags,
+    ref: Argument.String("worktree").pipe(Argument.optional),
+    rest: Argument.String("args").pipe(Argument.variadic()),
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const { worktree, project } = (yield* resolveWorktree(input)).located;
+      const { flavor } = yield* Paths.Paths;
+      const deviceId = yield* (yield* Registry.Registry).deviceId;
+      const url = `${flavorNames(flavor).alias}://open/devices/${encodeURIComponent(deviceId)}/projects/${encodeURIComponent(project.id)}/worktrees/${encodeURIComponent(worktree.id)}`;
+      const { json } = yield* Effect.service(Output);
+      yield* json ? emit({ ok: true, url, worktree: worktree.name }) : out(url);
+    }),
+).pipe(
+  Command.withDescription("Print a link that opens the worktree in the app"),
+);
+
 const destination = Command.make(
   "destination",
   {
@@ -320,6 +346,7 @@ export const worktreesCommand = Command.make("worktrees").pipe(
   Command.withSubcommands([
     list,
     path,
+    link,
     destination,
     status,
     describe,
