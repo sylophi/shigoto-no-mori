@@ -11,6 +11,8 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Launchers from "./Launchers.ts";
 import * as Lifecycle from "./Lifecycle.ts";
+import * as Paths from "./Paths.ts";
+import { CD_FILE_ENV } from "./shellHook.ts";
 import { scriptEnv, shellQuote } from "./Lifecycle.ts";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
@@ -38,6 +40,26 @@ export class LaunchFailed extends Schema.TaggedError<LaunchFailed>()(
     return `Couldn't open ${this.label}: ${this.said}`;
   }
 }
+
+// The app wouldn't open: not installed, or `open` refused.
+export class AppNotOpened extends Schema.TaggedError<AppNotOpened>()(
+  "AppNotOpened",
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return "Couldn't open Shigoto no Mori. Is the app installed?";
+  }
+}
+
+// The dev build has no installed app: it runs from a checkout.
+export class NoDevApp extends Schema.TaggedError<NoDevApp>()("NoDevApp", {}) {
+  override get message(): string {
+    return "This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.";
+  }
+}
+
+// The installed app's bundle id, which still finds it renamed or moved.
+const APP_BUNDLE_ID = "com.sylophi.shigomori";
 
 // How each terminal runs a command line, as an AppleScript taking it as
 // its one argument: into a new window, or into the first one a terminal
@@ -140,11 +162,14 @@ export class Open extends Context.Service<
       located: Worktrees.Located,
       command: string,
     ) => Effect.Effect<void, LaunchFailed>;
+    // Opens (or brings forward) the installed app.
+    readonly app: Effect.Effect<void, AppNotOpened | NoDevApp>;
   }
 >()("sm/engine/Open") {}
 
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const { flavor } = yield* Paths.Paths;
   const launchers = yield* Launchers.Launchers;
   const lifecycle = yield* Lifecycle.Lifecycle;
   const worktrees = yield* Worktrees.Worktrees;
@@ -343,7 +368,28 @@ const make = Effect.gen(function* () {
     yield* inTerminal("the terminal", command, located.worktree.path, entries);
   });
 
-  return Open.of({ open, inTerminal: inTerminalAt });
+  // A cold launch gets this environment, which the app rebuilds at
+  // startup, less the shell hook's directive file, as every launcher.
+  const app = Effect.gen(function* () {
+    if (flavor !== "prod") return yield* new NoDevApp();
+    const code = yield* Effect.scoped(
+      Effect.flatMap(
+        spawner.spawn(
+          ChildProcess.make("open", ["-b", APP_BUNDLE_ID], {
+            stdin: "ignore",
+            env: { [CD_FILE_ENV]: undefined },
+            extendEnv: true,
+          }),
+        ),
+        (handle) => handle.exitCode,
+      ),
+    ).pipe(Effect.mapError((cause) => new AppNotOpened({ cause })));
+    if (code !== 0) {
+      return yield* new AppNotOpened({ cause: `exit status ${code}` });
+    }
+  }).pipe(Effect.withSpan("Open.app"));
+
+  return Open.of({ open, inTerminal: inTerminalAt, app });
 });
 
 export const layer = Layer.effect(Open, make);

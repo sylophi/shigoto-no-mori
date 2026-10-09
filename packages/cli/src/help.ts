@@ -32,6 +32,7 @@ const catalog = (names: Names) => {
         "The tools `open` offers, in the app's order (recent use, then label), hidden ones left out. --json prints {ok, entries: [{kind, id, label, available?}], hiddenCount, usage: {<id>: {lastUsed, recentCount}}}, kind being detected, custom or web. " +
           '--catalog lists every tool the app knows instead, installed or not, with no project needed: --json prints {ok, apps: [{kind: "detected", id: "app:<id>", label, available}]}, sorted by label case-insensitively.',
       ],
+      ["app", "Open the Shigoto no Mori app", ""],
       [
         "devices [-p <project>]",
         "List your other devices",

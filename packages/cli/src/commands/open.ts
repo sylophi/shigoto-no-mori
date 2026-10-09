@@ -76,3 +76,18 @@ export const open = Command.make(
         : out(`opened ${opened.label} in ${located.worktree.name}`);
     }),
 ).pipe(Command.withDescription("Open a worktree in a launcher"));
+
+// sm app: the installed app, opened or brought forward.
+export const app = Command.make(
+  "app",
+  { rest: Argument.String("args").pipe(Argument.variadic()) },
+  ({ rest }) =>
+    Effect.gen(function* () {
+      if (rest.length > 0) {
+        return yield* new UsageError({ problem: "app takes no arguments." });
+      }
+      yield* (yield* Open.Open).app;
+      const { json } = yield* Effect.service(Output);
+      yield* json ? emit({ ok: true }) : out("opened Shigoto no Mori");
+    }),
+).pipe(Command.withDescription("Open the Shigoto no Mori app"));
