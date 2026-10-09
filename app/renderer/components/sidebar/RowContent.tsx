@@ -1,10 +1,9 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { assertNever } from "@/lib/utils";
 import { InboxRow } from "./inbox/InboxRow";
-import { InboxShelfRow } from "./inbox/InboxShelfRow";
 import { FoldHeader } from "./FoldHeader";
 import { ProjectRow } from "./ProjectRow";
-import { ShelvedToggleRow } from "./ShelvedToggleRow";
+import { ShelfRow } from "./ShelfRow";
 import { WorktreeRow } from "./WorktreeRow";
 import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";
 
@@ -114,9 +113,9 @@ export function RowContent({
           <Skeleton className="h-4 w-24" />
         </div>
       );
-    case "shelved-toggle":
+    case "group-shelf":
       return (
-        <ShelvedToggleRow
+        <ShelfRow
           shelf={row.shelf}
           count={row.count}
           expanded={row.expanded}
@@ -125,7 +124,7 @@ export function RowContent({
       );
     case "inbox-shelf":
       return (
-        <InboxShelfRow
+        <ShelfRow
           shelf={row.shelf}
           count={row.count}
           expanded={row.expanded}
