@@ -1,12 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
-import { cn } from "@/lib/utils";
 import { RowContent } from "./RowContent";
-import {
-  ROW_LAYOUT,
-  type GroupShelf,
-  type InboxShelf,
-  type SidebarRow,
-} from "./sidebarRow";
+import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";
+import { VirtualRowView } from "./SidebarRowsView";
 
 // What a row needs from the sidebar but this wrapper only forwards,
 // grouped so VirtualRow's own props stay about positioning and hover.
@@ -47,20 +42,13 @@ export function VirtualRow({
 }: VirtualRowProps) {
   const rowProjectId = projectIdForRow(row);
   return (
-    <div
-      data-index={index}
-      data-slot="sidebar-row"
-      ref={measureRef}
-      className={cn(
-        "absolute top-0 left-0 w-full",
-        ROW_LAYOUT[row.kind],
-        row.kind === "project" && row.pinnedEnd && "pb-3",
-        // Inline, a gap over each project parts it from the one before.
-        row.kind === "project" && row.folded !== undefined && "pt-1",
-      )}
-      style={{ transform: `translateY(${start}px)` }}
-      onMouseEnter={() => setHoveredProjectId(rowProjectId)}
-      onMouseLeave={() =>
+    <VirtualRowView
+      row={row}
+      index={index}
+      start={start}
+      measureRef={measureRef}
+      onHover={() => setHoveredProjectId(rowProjectId)}
+      onLeave={() =>
         setHoveredProjectId((cur) => (cur === rowProjectId ? null : cur))
       }
     >
@@ -69,7 +57,7 @@ export function VirtualRow({
         {...handlers}
         isHovered={hoveredProjectId === rowProjectId}
       />
-    </div>
+    </VirtualRowView>
   );
 }
 

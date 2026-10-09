@@ -31,7 +31,7 @@ const inlineWorktrees = (config: ClientConfig) =>
 
 // Terrier's paw on the projects it lists. Off unless switched on, and
 // then shown only where terrierMarksHere holds too.
-export function useMarkTerrierProjects(): boolean {
+function useMarkTerrierProjects(): boolean {
   return useClientFlag(markTerrierProjects);
 }
 
@@ -47,7 +47,7 @@ export function terrierMarksHere(terrier: boolean): boolean {
 
 // terrierMarksHere over this machine's saved config, for the paw on
 // the open project's header.
-export function useTerrierMarksHere(): boolean {
+function useTerrierMarksHere(): boolean {
   const { data: config } = useLocalGlobalConfig();
   return terrierMarksHere(config?.terrier === true);
 }
@@ -75,4 +75,28 @@ export function useMarkAgentsWaiting(): boolean {
 // (buildSidebarRows' inline). Off unless switched on.
 export function useInlineWorktrees(): boolean {
   return useClientFlag(inlineWorktrees);
+}
+
+// The marks this window's sidebar rows wear (Settings, Appearance), in
+// one read, for the containers that hand them to the rows' views.
+export interface SidebarMarks {
+  // Terrier's paw on a terrier-sourced project.
+  terrier: boolean;
+  // A peer's badge on its rows and project headers.
+  deviceBadges: boolean;
+  // An agent waiting on you, on its worktree's row.
+  agentsWaiting: boolean;
+  // Agent-working worktrees filed on their own shelf.
+  allowAgentWorking: boolean;
+}
+
+export function useSidebarMarks(): SidebarMarks {
+  const markTerrier = useMarkTerrierProjects();
+  const terrierHere = useTerrierMarksHere();
+  return {
+    terrier: markTerrier && terrierHere,
+    deviceBadges: useShowDeviceBadges(),
+    agentsWaiting: useMarkAgentsWaiting(),
+    allowAgentWorking: useAllowAgentWorking(),
+  };
 }

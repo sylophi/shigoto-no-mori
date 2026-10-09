@@ -18,9 +18,8 @@ import {
   type SidebarViewModel,
 } from "./sidebarRow";
 import { VirtualRow, type RowHandlers } from "./VirtualRow";
-import { ARRIVE_FROM } from "./sidebarChrome";
+import { SidebarListView } from "./SidebarRowsView";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
-import { cn } from "@/lib/utils";
 
 interface SidebarListProps {
   rows: SidebarRow[];
@@ -170,8 +169,8 @@ export function SidebarList({
   });
 
   return (
-    <div
-      ref={listRef}
+    <SidebarListView
+      listRef={listRef}
       // Remounted per level so the arrival plays again: going into a
       // project and back out in the sidebar is a move between two
       // places, so the rows arrive from the side they were gone to, a
@@ -181,11 +180,10 @@ export function SidebarList({
       key={
         level === undefined ? "flat" : level === null ? "list" : `in:${level}`
       }
-      className={cn(
-        "relative",
-        moved && asked && ARRIVE_FROM[level === null ? "left" : "right"],
-      )}
-      style={{ height: `${virtualizer.getTotalSize()}px` }}
+      arriveFrom={
+        moved && asked ? (level === null ? "left" : "right") : undefined
+      }
+      height={virtualizer.getTotalSize()}
     >
       {items.map((vi) => {
         const row = rows[vi.index];
@@ -203,7 +201,7 @@ export function SidebarList({
           />
         );
       })}
-    </div>
+    </SidebarListView>
   );
 }
 

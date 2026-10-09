@@ -25,7 +25,7 @@ interface ActivityIconProps {
   kind: ScriptActivityKind;
 }
 
-export function ActivityIcon({ kind }: ActivityIconProps) {
+export function ActivityIconView({ kind }: ActivityIconProps) {
   const { Icon, label, tone } = ACTIVITY[kind];
   // The failure is news, not progress, so it holds still.
   return (

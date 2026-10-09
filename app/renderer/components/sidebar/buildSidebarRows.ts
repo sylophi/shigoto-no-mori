@@ -18,7 +18,7 @@ import type {
   Worktree,
   WorktreeSortMode,
 } from "@shigomori/contracts/schemas";
-import type { SidebarDeviceBadge } from "./DeviceBadge";
+import type { SidebarDeviceBadge } from "./DeviceBadgeView";
 import {
   GROUP_SHELVES,
   type GroupShelf,

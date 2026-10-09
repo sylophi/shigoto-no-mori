@@ -1,10 +1,10 @@
-import { Skeleton } from "@/components/ui/skeleton";
 import { assertNever } from "@/lib/utils";
 import { InboxRow } from "./inbox/InboxRow";
-import { FoldHeader } from "./FoldHeader";
+import { FoldHeaderView } from "./FoldHeaderView";
 import { ProjectRow } from "./ProjectRow";
-import { ShelfRow } from "./ShelfRow";
+import { ShelfRowView } from "./ShelfRowView";
 import { WorktreeRow } from "./WorktreeRow";
+import { WorktreesErrorView, WorktreesLoadingView } from "./SidebarRowsView";
 import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";
 
 interface RowContentProps {
@@ -54,7 +54,7 @@ export function RowContent({
       );
     case "owner-header":
       return (
-        <FoldHeader
+        <FoldHeaderView
           label={row.label}
           count={row.count}
           expanded={row.expanded}
@@ -63,7 +63,7 @@ export function RowContent({
       );
     case "worktree-group":
       return (
-        <FoldHeader
+        <FoldHeaderView
           label={row.prefix}
           count={row.count}
           expanded={row.expanded}
@@ -107,15 +107,10 @@ export function RowContent({
         />
       );
     case "worktree-skeleton":
-      return (
-        <div className="space-y-1 px-2 py-1.5" aria-label="Loading worktrees">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-24" />
-        </div>
-      );
+      return <WorktreesLoadingView />;
     case "group-shelf":
       return (
-        <ShelfRow
+        <ShelfRowView
           shelf={row.shelf}
           count={row.count}
           expanded={row.expanded}
@@ -124,7 +119,7 @@ export function RowContent({
       );
     case "inbox-shelf":
       return (
-        <ShelfRow
+        <ShelfRowView
           shelf={row.shelf}
           count={row.count}
           expanded={row.expanded}
@@ -133,7 +128,7 @@ export function RowContent({
       );
     case "inbox-group":
       return (
-        <FoldHeader
+        <FoldHeaderView
           label={row.prefix}
           count={row.count}
           expanded={row.expanded}
@@ -141,11 +136,7 @@ export function RowContent({
         />
       );
     case "worktree-error":
-      return (
-        <div className="px-2 py-1 text-xs text-muted-foreground">
-          Couldn't load worktrees.
-        </div>
-      );
+      return <WorktreesErrorView />;
     default:
       return assertNever(row);
   }
