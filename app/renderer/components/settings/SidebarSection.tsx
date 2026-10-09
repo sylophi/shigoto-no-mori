@@ -64,6 +64,12 @@ export function SidebarSection({
         label="Shelve worktrees agents are working in"
         description="A worktree waits on its own folded shelf while an agent's turn runs in it. Agents report their turns through the hooks in Integrations."
       />
+      <ToggleRow
+        checked={form.markAgentsWaiting}
+        onCheckedChange={setField("markAgentsWaiting")}
+        label="Mark worktrees whose agent needs you"
+        description="While an agent waits on a permission prompt or a question, with what it asks in its tooltip."
+      />
     </section>
   );
 }

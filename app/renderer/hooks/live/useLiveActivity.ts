@@ -1,10 +1,11 @@
 // What is running across the account right now, for the Live page
 // (components/live/LivePage.tsx) and the sidebar's Live mark: the
-// scripts each host runs, the forwards this machine holds, and the
-// mirrors every host runs. Each part is read the way its own surfaces
-// read it and kept live by its own broadcast (scripts:changed through
-// lib/hostWatch.ts, portForward:changed, mirror:changed), so nothing
-// here polls.
+// scripts each host runs, the forwards this machine holds, the
+// mirrors every host runs. (The agents waiting on you come off the
+// worktree lists, lib/agentWatch.ts.) Each part is read the way its own
+// surfaces read it and kept live by its own broadcast (scripts:changed
+// through lib/hostWatch.ts, portForward:changed, mirror:changed), so
+// nothing here polls.
 import { queryOptions, skipToken, useQueries } from "@tanstack/react-query";
 import type {
   MirrorDaemonStatus,

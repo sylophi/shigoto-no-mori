@@ -24,6 +24,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -35,8 +36,19 @@ type agentSession struct {
 	State   string `json:"state"`
 	// When the state last changed, in ms.
 	At int64 `json:"at"`
-	// The permission prompts it waits on (toolWait).
+	// The permission prompts it waits on, oldest first, each its call
+	// (toolWait) and what it asks (waitAsk).
 	Waits []string `json:"waits,omitempty"`
+	// What the session is about: its custom title, else its first
+	// prompt.
+	Title string `json:"title,omitempty"`
+	// What it waits on while waiting: the newest open prompt's tool, and
+	// the question it asks or the one input that says what the call does
+	// (waitNeed). The app says which kind of prompt by the tool.
+	Tool string `json:"tool,omitempty"`
+	Need string `json:"need,omitempty"`
+	// The message its last turn ended on, while idle.
+	Message string `json:"message,omitempty"`
 }
 
 // A session's states: working through a turn, waiting on the user
@@ -313,8 +325,8 @@ func cmdAgentsIdle(ctx cliContext, args []string) (int, error) {
 	err = updateAgentSessions(func(m map[string][]agentSession) bool {
 		changed := false
 		for i := range m[id.ID] {
-			if m[id.ID][i].State != agentIdle {
-				m[id.ID][i].State, m[id.ID][i].At = agentIdle, now
+			if s := &m[id.ID][i]; s.State != agentIdle {
+				s.State, s.At, s.Waits, s.Tool, s.Need = agentIdle, now, nil, "", ""
 				changed = true
 			}
 		}
@@ -333,7 +345,9 @@ func cmdAgentsIdle(ctx cliContext, args []string) (int, error) {
 
 // What a harness hands its hooks on stdin: the fields Claude Code and
 // Codex share, Notification's type, a Codex subagent's own thread id,
-// and the tool a permission prompt or a tool's end is about.
+// the tool a permission prompt or a tool's end is about, the prompt
+// (with the session's custom title, Claude Code) a turn starts from,
+// and the message it ends on.
 type agentEvent struct {
 	Name             string          `json:"hook_event_name"`
 	Session          string          `json:"session_id"`
@@ -342,38 +356,120 @@ type agentEvent struct {
 	AgentID          string          `json:"agent_id"`
 	ToolName         string          `json:"tool_name"`
 	ToolInput        json.RawMessage `json:"tool_input"`
+	Prompt           string          `json:"prompt"`
+	SessionTitle     string          `json:"session_title"`
+	LastMessage      string          `json:"last_assistant_message"`
 }
 
 // One permission prompt, as the tool call it asks about. The prompt
 // carries no call id, so the call is its tool and input, which its
-// PostToolUse repeats.
+// PostToolUse repeats. A question's PostToolUse adds the answers to
+// it, so those are left out.
 func toolWait(event agentEvent) string {
 	var input any
 	_ = json.Unmarshal(event.ToolInput, &input)
+	if fields, ok := input.(map[string]any); ok && event.ToolName == "AskUserQuestion" {
+		delete(fields, "answers")
+		delete(fields, "annotations")
+	}
 	sum := sha256.Sum256(append([]byte(event.ToolName+"\x00"), mustRaw(input)...))
 	return hex.EncodeToString(sum[:8])
+}
+
+// One open prompt as Waits keeps it: its call, tab, its tool, tab,
+// what it asks. clipLine folds whitespace, so no tab is in the text.
+func waitEntry(event agentEvent) string {
+	return toolWait(event) + "\t" + event.ToolName + "\t" + waitNeed(event)
+}
+
+// An entry's call, and its tool and what it asks (none for an entry
+// stored by an older build, which kept the call alone).
+func waitAsk(entry string) (call, tool, need string) {
+	call, rest, _ := strings.Cut(entry, "\t")
+	tool, need, _ = strings.Cut(rest, "\t")
+	return call, tool, need
+}
+
+// How long the text a session keeps may run, in runes: a line for a
+// title or a prompt's call, a few for a closing message.
+const (
+	agentLineMax    = 120
+	agentMessageMax = 400
+)
+
+// What a permission prompt asks, in a line: the question, or the one
+// input that says what the call does (a command, a file, a URL), a
+// path inside the session's cwd (the worktree) relative to it. Empty
+// when nothing says more than the tool (a plan to review).
+func waitNeed(event agentEvent) string {
+	var input struct {
+		Questions []struct {
+			Question string `json:"question"`
+		} `json:"questions"`
+		Command  string `json:"command"`
+		FilePath string `json:"file_path"`
+		URL      string `json:"url"`
+		Path     string `json:"path"`
+		Pattern  string `json:"pattern"`
+	}
+	_ = json.Unmarshal(event.ToolInput, &input)
+	if len(input.Questions) > 0 {
+		return clipLine(input.Questions[0].Question, agentLineMax)
+	}
+	for _, v := range []string{input.Command, input.FilePath, input.URL, input.Path, input.Pattern} {
+		if v == "" {
+			continue
+		}
+		if rel, ok := strings.CutPrefix(v, strings.TrimSuffix(event.Cwd, "/")+"/"); ok && event.Cwd != "" {
+			v = rel
+		}
+		return clipLine(v, agentLineMax)
+	}
+	return ""
+}
+
+// Text on one line, whitespace runs folded to a space, cut to max
+// runes with an ellipsis.
+func clipLine(text string, max int) string {
+	return truncateRunes(strings.Join(strings.Fields(text), " "), max)
 }
 
 // Moves a session through one event: whether that changed it, and
 // whether its binding goes. A session waits while any permission
 // prompt is open, and a tool's end closes only its own prompt: tools
 // run side by side, and PostToolUse, installed async, can land after a
-// later prompt or after the turn's Stop.
+// later prompt or after the turn's Stop. It also keeps what the app
+// says of the session: its title, what the newest prompt asks, and the
+// message the last turn ended on.
 func (s *agentSession) apply(event agentEvent) (changed, unbind bool) {
-	state, waits := s.State, s.Waits
+	next := *s
 	switch event.Name {
 	case "UserPromptSubmit":
-		state, waits = agentWorking, nil
+		next.State, next.Waits, next.Message = agentWorking, nil, ""
+		if event.SessionTitle != "" {
+			next.Title = clipLine(event.SessionTitle, agentLineMax)
+		} else if next.Title == "" {
+			next.Title = clipLine(event.Prompt, agentLineMax)
+		}
 	case "PermissionRequest":
-		state, waits = agentWaiting, append(slices.Clone(waits), toolWait(event))
+		next.State, next.Waits = agentWaiting, append(slices.Clone(s.Waits), waitEntry(event))
 	case "PostToolUse", "PostToolUseFailure":
-		i := slices.Index(waits, toolWait(event))
+		// Nearly every tool's end, with no prompt open: no need to hash
+		// its input (a whole file, for a Write).
+		if len(s.Waits) == 0 {
+			return false, false
+		}
+		call := toolWait(event)
+		i := slices.IndexFunc(s.Waits, func(entry string) bool {
+			c, _, _ := waitAsk(entry)
+			return c == call
+		})
 		if i < 0 {
 			return false, false
 		}
-		waits = slices.Delete(slices.Clone(waits), i, i+1)
-		if len(waits) == 0 {
-			state = agentWorking
+		next.Waits = slices.Delete(slices.Clone(s.Waits), i, i+1)
+		if len(next.Waits) == 0 {
+			next.State = agentWorking
 		}
 	case "Notification":
 		// Claude Code's "waiting for your input" nudge, a minute after a
@@ -381,21 +477,31 @@ func (s *agentSession) apply(event agentEvent) (changed, unbind bool) {
 		if event.NotificationType != "idle_prompt" {
 			return false, false
 		}
-		state, waits = agentIdle, nil
+		next.State, next.Waits = agentIdle, nil
 	case "Stop", "StopFailure", "Interrupt":
-		state, waits = agentIdle, nil
+		next.State, next.Waits = agentIdle, nil
+		if event.LastMessage != "" {
+			next.Message = clipLine(event.LastMessage, agentMessageMax)
+		}
 	case "SessionEnd", "SubagentStop":
 		return true, true
 	default:
 		return false, false
 	}
-	if state == s.State && slices.Equal(waits, s.Waits) {
+	// What it waits on is the newest prompt still open, for as long as
+	// the waiting lasts.
+	next.Tool, next.Need = "", ""
+	if next.State == agentWaiting && len(next.Waits) > 0 {
+		_, next.Tool, next.Need = waitAsk(next.Waits[len(next.Waits)-1])
+	}
+	if next.State == s.State && slices.Equal(next.Waits, s.Waits) &&
+		next.Title == s.Title && next.Tool == s.Tool && next.Need == s.Need && next.Message == s.Message {
 		return false, false
 	}
-	if state != s.State {
-		s.At = time.Now().UnixMilli()
+	if next.State != s.State {
+		next.At = time.Now().UnixMilli()
 	}
-	s.State, s.Waits = state, waits
+	*s = next
 	return true, false
 }
 

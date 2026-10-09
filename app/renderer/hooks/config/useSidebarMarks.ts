@@ -24,6 +24,8 @@ const showDeviceBadges = (config: ClientConfig) =>
   config.showDeviceBadges !== false;
 const allowAgentWorking = (config: ClientConfig) =>
   config.allowAgentWorking === true;
+const markAgentsWaiting = (config: ClientConfig) =>
+  config.markAgentsWaiting !== false;
 const inlineWorktrees = (config: ClientConfig) =>
   config.inlineWorktrees === true;
 
@@ -60,6 +62,13 @@ export function useShowDeviceBadges(): boolean {
 // on its own shelf (isAgentWorking). Off unless switched on.
 export function useAllowAgentWorking(): boolean {
   return useClientFlag(allowAgentWorking);
+}
+
+// The "Needs you" mark on a worktree whose agent session waits on the
+// user (AgentWaitingMark), its lead in the inbox and the Live mark's
+// amber. On unless switched off.
+export function useMarkAgentsWaiting(): boolean {
+  return useClientFlag(markAgentsWaiting);
 }
 
 // Whether the list of projects shows every project's worktrees under it

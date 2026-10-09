@@ -18,7 +18,6 @@ import {
 } from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
-import { agentSessionsState } from "@/lib/agentSessions";
 import { scriptRunsFor } from "@/store/scriptRuns";
 import { useWorktreeRemoving } from "@/store/worktreeLifecycle";
 import type { QueryClient } from "@tanstack/react-query";
@@ -472,7 +471,7 @@ export function useUnbindAgent() {
       return {
         ...w,
         agentSessions,
-        agentWorking: agentSessionsState(agentSessions) === "working",
+        agentWorking: agentSessions.some((s) => s.state === "working"),
       };
     },
     "Couldn't unbind the agent session",

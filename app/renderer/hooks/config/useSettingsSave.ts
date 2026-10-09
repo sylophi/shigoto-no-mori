@@ -25,8 +25,8 @@ import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first ten fields are client config (appearance), the rest are
-// device config.
+// the first thirteen fields are client config (appearance), the rest
+// are device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
@@ -40,6 +40,9 @@ export interface SettingsFormState {
   markTerrierProjects: boolean;
   showDeviceBadges: boolean;
   allowAgentWorking: boolean;
+  markAgentsWaiting: boolean;
+  notifyAgentWaiting: boolean;
+  notifyAgentDone: boolean;
   inlineWorktrees: boolean;
   launchers: LauncherCommand[];
   hiddenLaunchers: string[];
@@ -76,6 +79,9 @@ export function fromConfig(
     markTerrierProjects: clientConfig.markTerrierProjects ?? false,
     showDeviceBadges: clientConfig.showDeviceBadges ?? true,
     allowAgentWorking: clientConfig.allowAgentWorking ?? false,
+    markAgentsWaiting: clientConfig.markAgentsWaiting ?? true,
+    notifyAgentWaiting: clientConfig.notifyAgentWaiting ?? true,
+    notifyAgentDone: clientConfig.notifyAgentDone ?? false,
     inlineWorktrees: clientConfig.inlineWorktrees ?? false,
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
@@ -183,6 +189,11 @@ export function toClientConfig(state: SettingsFormState): ClientConfig {
     showDeviceBadges: state.showDeviceBadges ? undefined : false,
     // Default is off, the same opt-in serialization as villageLife.
     allowAgentWorking: state.allowAgentWorking ? true : undefined,
+    // Default is on, with the same opt-out serialization as doubutsu.
+    markAgentsWaiting: state.markAgentsWaiting ? undefined : false,
+    notifyAgentWaiting: state.notifyAgentWaiting ? undefined : false,
+    // Default is off, the same opt-in serialization as villageLife.
+    notifyAgentDone: state.notifyAgentDone ? true : undefined,
     // Default is off, the same opt-in serialization as villageLife.
     inlineWorktrees: state.inlineWorktrees ? true : undefined,
   };
