@@ -32,11 +32,8 @@ import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import { getBrowseLeafSegment } from "@shared/projectPaths";
 import { changeKey, type ChangedFile } from "@shared/schemas";
-import {
-  changedFilePaths,
-  includedFiles,
-  type DiffChangesControls,
-} from "./changesControls";
+import { changedFilePaths, type DiffChangesControls } from "./changesControls";
+import { countIncluded, tickedOf, type Ticked } from "./changesPicks";
 import type { IndexEntry } from "@/lib/patchFiles";
 
 // Below this many files a list is short enough to scan, and a filter
@@ -255,7 +252,14 @@ export function DiffFileIndex({
                   menuOpen={menu?.open === true && menu.key === entry.key}
                   onSelect={selectRow}
                   busy={changes?.busy ?? false}
-                  onSetStaged={editable?.onSetStaged}
+                  ticked={
+                    // A conflict goes in by being resolved, from its
+                    // menu, so it has no box.
+                    editable && entry.row && !entry.row.conflicted
+                      ? tickedOf(editable.picks, entry.row)
+                      : undefined
+                  }
+                  onSetTicked={editable?.onSetTicked}
                   onDiscard={editable && requestDiscard}
                 />
               ))}
@@ -278,11 +282,11 @@ export function DiffFileIndex({
       {changes &&
         (editable && pendingDiscard ? (
           <DiscardConfirmStrip
-            label={`Discard ${describeDiscard(pendingDiscard, changes.files)}?`}
+            label={`Discard ${describeDiscard(pendingDiscard, editable)}?`}
             busy={changes.busy}
             onCancel={() => setPendingDiscard(null)}
             onConfirm={() => {
-              const paths = discardPaths(pendingDiscard, changes.files);
+              const paths = discardPaths(pendingDiscard, editable);
               if (paths.length > 0) editable.onDiscard(paths);
               setPendingDiscard(null);
             }}
@@ -295,21 +299,23 @@ export function DiffFileIndex({
 }
 
 // Tri-state "everything" box. Reads from the status list rather than
-// the patch, since that is what a commit takes. Ticking it stages every
-// changed path, unticking clears the index.
+// the patch, since that is what a commit takes. Only the rows with a box
+// of their own: a conflict left out by it would stay out once resolved,
+// and a merge would commit HEAD's side of it.
 function SelectAllCheckbox({ changes }: { changes: DiffChangesControls }) {
-  const total = changes.files.length;
-  const all = changes.files.filter((file) => file.staged === "all").length;
-  const some = includedFiles(changes.files).length > 0;
+  const rows = changes.files.filter((file) => !file.conflicted);
+  const total = rows.length;
+  const all = rows.filter(
+    (file) => tickedOf(changes.picks, file) === "all",
+  ).length;
+  const some = countIncluded(changes.picks, rows) > 0;
   const checked = total > 0 && all === total;
   return (
     <Checkbox
       checked={checked}
       indeterminate={!checked && some}
       disabled={changes.busy || total === 0}
-      onCheckedChange={(next) =>
-        changes.onSetStaged(changes.files.flatMap(changedFilePaths), next)
-      }
+      onCheckedChange={(next) => changes.onSetTicked(rows, next)}
       aria-label={checked ? "Leave every file out" : "Include every file"}
       className="shrink-0"
     />
@@ -323,10 +329,8 @@ function describeSelection(changes: DiffChangesControls): string {
   if (changes.failed) return "Couldn't read the changes";
   const total = changes.files.length;
   if (total === 0) return "No changes";
-  const included = includedFiles(changes.files).length;
-  if (included === 0 || included === total) {
-    return pluralize(total, "changed file");
-  }
+  const included = countIncluded(changes.picks, changes.files);
+  if (included === total) return pluralize(total, "changed file");
   return `${included} of ${pluralize(total, "file")} included`;
 }
 
@@ -337,11 +341,11 @@ type PendingDiscard = "unticked" | "all" | { key: string };
 
 function discardFiles(
   pending: PendingDiscard,
-  files: readonly ChangedFile[],
+  { files, picks }: DiffChangesControls,
 ): ChangedFile[] {
   if (pending === "all") return [...files];
   if (pending === "unticked") {
-    return files.filter((file) => file.staged === "none");
+    return files.filter((file) => tickedOf(picks, file) === "none");
   }
   // A file that stopped being changed while the strip was open (an
   // editor reverted it) has nothing left to discard.
@@ -350,16 +354,16 @@ function discardFiles(
 
 function discardPaths(
   pending: PendingDiscard,
-  files: readonly ChangedFile[],
+  changes: DiffChangesControls,
 ): string[] {
-  return discardFiles(pending, files).flatMap(changedFilePaths);
+  return discardFiles(pending, changes).flatMap(changedFilePaths);
 }
 
 function describeDiscard(
   pending: PendingDiscard,
-  files: readonly ChangedFile[],
+  changes: DiffChangesControls,
 ): string {
-  const picked = discardFiles(pending, files);
+  const picked = discardFiles(pending, changes);
   if (pending === "all") return `all ${pluralize(picked.length, "file")}`;
   if (pending === "unticked") {
     return `the ${pluralize(picked.length, "unticked file")}`;
@@ -379,7 +383,7 @@ function DiscardMenu({
   onPick: (pending: PendingDiscard) => void;
 }) {
   const total = changes.files.length;
-  const unticked = discardFiles("unticked", changes.files).length;
+  const unticked = discardFiles("unticked", changes).length;
   const canDiscardUnticked = unticked > 0 && unticked < total && !changes.busy;
   return (
     <DropdownMenu>
@@ -462,7 +466,8 @@ function IndexRow({
   menuOpen,
   onSelect,
   busy,
-  onSetStaged,
+  ticked,
+  onSetTicked,
   onDiscard,
 }: {
   entry: IndexEntry;
@@ -472,7 +477,8 @@ function IndexRow({
   menuOpen: boolean;
   onSelect: (key: string) => void;
   busy: boolean;
-  onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
+  ticked: Ticked | undefined;
+  onSetTicked: DiffChangesControls["onSetTicked"] | undefined;
   onDiscard: ((key: string) => void) | undefined;
 }) {
   // The file's name leads and its folder trails, dimmed: in a narrow
@@ -508,7 +514,8 @@ function IndexRow({
       )}
     >
       {row &&
-        onSetStaged && (
+        ticked &&
+        onSetTicked && (
           // The tick is the row's own control, not a way into the file:
           // its click stops here rather than selecting.
           <span
@@ -518,20 +525,18 @@ function IndexRow({
           >
             <SimpleTooltip
               tip={
-                row.staged === "partial"
-                  ? "Partly staged: tick to include the whole file"
+                ticked === "partial"
+                  ? "Partly ticked: tick to include the whole file"
                   : undefined
               }
             >
               <Checkbox
-                checked={row.staged === "all"}
-                indeterminate={row.staged === "partial"}
+                checked={ticked === "all"}
+                indeterminate={ticked === "partial"}
                 disabled={busy}
-                onCheckedChange={(next) =>
-                  onSetStaged(changedFilePaths(row), next)
-                }
+                onCheckedChange={(next) => onSetTicked([row], next)}
                 aria-label={
-                  row.staged === "all"
+                  ticked === "all"
                     ? `Leave ${row.path} out of the commit`
                     : `Include ${row.path} in the commit`
                 }
@@ -613,7 +618,7 @@ function FileMenu({
   onDiscard: () => void;
 }) {
   const { row } = entry;
-  const staged = row?.staged;
+  const ticked = row && changes ? tickedOf(changes.picks, row) : undefined;
   return (
     <ContextMenuContent className="min-w-48">
       {row?.conflicted && changes && (
@@ -634,7 +639,7 @@ function FileMenu({
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={changes.busy}
-            onClick={() => changes.onSetStaged(changedFilePaths(row), true)}
+            onClick={() => changes.onResolve(row.path, "as-is")}
           >
             <Check />
             Mark as resolved
@@ -645,14 +650,12 @@ function FileMenu({
       {row && changes && !row.conflicted && (
         <DropdownMenuItem
           disabled={changes.busy}
-          onClick={() =>
-            changes.onSetStaged(changedFilePaths(row), staged !== "all")
-          }
+          onClick={() => changes.onSetTicked([row], ticked !== "all")}
         >
-          {staged === "all" ? <Minus /> : <Check />}
-          {staged === "all"
+          {ticked === "all" ? <Minus /> : <Check />}
+          {ticked === "all"
             ? "Leave out of the commit"
-            : staged === "partial"
+            : ticked === "partial"
               ? "Include the whole file"
               : "Include in the commit"}
         </DropdownMenuItem>

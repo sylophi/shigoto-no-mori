@@ -4,10 +4,9 @@ import { WorktreeScopedPayloadSchema } from "./payloads";
 import { GitRefNameSchema } from "./project";
 import { CommitHashSchema, WorktreeSchema } from "./worktree";
 
-// How much of a changed file is in the index, i.e. what a commit right
-// now would take from it. The changes page draws this as a checkbox:
-// "all" ticked, "none" clear, "partial" indeterminate (hunks staged from
-// a terminal. The app leaves those alone unless the box is toggled).
+// How much of a changed file is in the index. The changes page doesn't
+// tick from this (it keeps its own picks and stages them as it
+// commits), but it tells a staged addition from an untracked file.
 export const StagedStateSchema = z.enum(["none", "partial", "all"]);
 export type StagedState = z.infer<typeof StagedStateSchema>;
 
@@ -50,8 +49,7 @@ export type ChangedFile = z.infer<typeof ChangedFileSchema>;
 // A row's identity. Two rows can name one path: `git rm --cached f`
 // leaves a staged deletion and an untracked file, both called f, and
 // they are separate decisions with separate diffs and separate counts.
-// The kind tells them apart and survives a tick, which moves `staged`
-// and nothing else.
+// The kind tells them apart.
 export function changeKey(file: ChangedFile): string {
   return `${file.kind} ${file.path}`;
 }
@@ -82,22 +80,6 @@ const PathListSchema = z.array(RepoRelPathSchema).min(1);
 export const FileDiffPayloadSchema = WorktreeScopedPayloadSchema.extend({
   paths: PathListSchema,
   untracked: z.boolean(),
-});
-
-export const SetStagedPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  paths: PathListSchema,
-  staged: z.boolean(),
-});
-
-export const CommitChangesPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  summary: z.string().trim().min(1),
-  description: z.string().optional(),
-  // Staged before the commit. When nothing is ticked the page sends
-  // every path it listed, so "all of it" means what was on screen and
-  // not whatever landed in the tree since.
-  stagePaths: z.array(RepoRelPathSchema).optional(),
-  // Rewrite HEAD instead of adding a commit on top of it.
-  amend: z.boolean().optional(),
 });
 
 // A commit's message split the way the composer holds it: first line,
@@ -211,7 +193,8 @@ export type GitOperationState = z.infer<typeof GitOperationStateSchema>;
 
 export const ResolveConflictPayloadSchema = WorktreeScopedPayloadSchema.extend({
   path: RepoRelPathSchema,
-  side: z.enum(["mine", "theirs"]),
+  // "as-is" takes the file as it stands, settled in an editor.
+  side: z.enum(["mine", "theirs", "as-is"]),
 });
 
 // The ways another branch's work comes into the worktree's branch
@@ -270,22 +253,49 @@ export const LineChangeSchema = z.object({
 });
 export type LineChange = z.infer<typeof LineChangeSchema>;
 
-// A modified file's changes and which the next commit takes. Not
-// `editable` when the index holds something the working tree doesn't,
-// which no pick of these changes describes.
-export const HunkStatesSchema = z.object({
-  changes: z.array(LineChangeSchema.extend({ staged: z.boolean() })),
-  editable: z.boolean(),
-});
-export type HunkStates = z.infer<typeof HunkStatesSchema>;
+// The same change by its place in HEAD, which an edit elsewhere in the
+// file leaves where it was. Its place in the working tree moves with
+// every line added above it. How the page keeps a pick and how the
+// commit finds it again.
+export const sameRange = (a: LineChange, b: LineChange) =>
+  a.oldStart === b.oldStart && a.oldCount === b.oldCount;
 
 export const FileHunksPayloadSchema = WorktreeScopedPayloadSchema.extend({
   path: RepoRelPathSchema,
 });
 
-export const SetHunksStagedPayloadSchema = FileHunksPayloadSchema.extend({
-  changes: z.array(LineChangeSchema).min(1),
-  staged: z.boolean(),
+// A modified file's changes, and the HEAD they were read against: the
+// one their places are counted in.
+export const FileHunksSchema = z.object({
+  head: CommitHashSchema,
+  changes: z.array(LineChangeSchema),
+});
+export type FileHunks = z.infer<typeof FileHunksSchema>;
+
+// What a commit takes, as the page has it ticked: whole files by path
+// (both of a rename's), and the files ticked by hunk with the changes
+// picked and the HEAD they were picked against. The index is set to exactly this first, so whatever was
+// staged before (an agent's `git mv`, a terminal's `git add`) only goes
+// in if it is ticked. The paths are what was on screen, not whatever
+// landed in the tree since.
+export const CommitPicksSchema = z.object({
+  paths: z.array(RepoRelPathSchema),
+  hunks: z.array(
+    z.object({
+      path: RepoRelPathSchema,
+      base: CommitHashSchema,
+      changes: z.array(LineChangeSchema).min(1),
+    }),
+  ),
+});
+export type CommitPicks = z.infer<typeof CommitPicksSchema>;
+
+export const CommitChangesPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  summary: z.string().trim().min(1),
+  description: z.string().optional(),
+  ...CommitPicksSchema.shape,
+  // Rewrite HEAD instead of adding a commit on top of it.
+  amend: z.boolean().optional(),
 });
 
 export const DiscardHunksPayloadSchema = FileHunksPayloadSchema.extend({

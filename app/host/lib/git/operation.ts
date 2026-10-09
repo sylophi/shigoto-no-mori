@@ -217,7 +217,8 @@ export function abortOperation(worktreePath: string): Promise<void> {
   });
 }
 
-// Settles one conflicted file with one side's version and stages it.
+// Settles one conflicted file with one side's version, or as it stands,
+// and stages it.
 // The path came out of `git status`, so it is a filename and never a
 // pattern. "mine" is the branch the worktree is on, which git calls "ours"
 // everywhere but a rebase: there HEAD is the branch being replayed onto
@@ -226,9 +227,13 @@ export function abortOperation(worktreePath: string): Promise<void> {
 export function resolveConflict(
   worktreePath: string,
   path: string,
-  side: "mine" | "theirs",
+  side: "mine" | "theirs" | "as-is",
 ): Promise<void> {
   return onIndex(worktreePath, async () => {
+    if (side === "as-is") {
+      await run(worktreePath, ["--literal-pathspecs", "add", "--", path]);
+      return;
+    }
     const operation = await operationInProgress(await gitDirOf(worktreePath));
     const ours = (side === "mine") !== (operation === "rebase");
     try {

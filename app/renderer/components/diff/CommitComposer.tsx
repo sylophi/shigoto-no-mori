@@ -10,7 +10,6 @@ import type { CommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { ChangedFile } from "@shared/schemas";
-import { includedFiles } from "./changesControls";
 
 // Past this a summary is cut off in `git log --oneline`, on GitHub and
 // in most other tools. Shown as a count, never enforced.
@@ -22,15 +21,13 @@ const SUMMARY_SOFT_LIMIT = 72;
 // once the commit lands. Which branch it lands on is the branch bar's
 // to say, right above.
 //
-// The button reads what the commit will take. With files ticked it
-// commits those. With nothing ticked it commits everything listed,
-// the way a fresh commit usually goes, and the reason a tree touched
-// only from a terminal (where nothing is staged yet) isn't a dead end.
+// The button reads what the commit will take: the ticked files.
 //
 // Amending: the button turns into "Amend with ...", the file rules stay
 // the same, and a message-only amend on a clean tree is allowed too.
 export function CommitComposer({
   files,
+  included,
   draft,
   onDraftChange,
   pending,
@@ -39,6 +36,8 @@ export function CommitComposer({
   onCommit,
 }: {
   files: ChangedFile[];
+  // How many of them are ticked.
+  included: number;
   draft: CommitDraft;
   onDraftChange: (next: CommitDraft) => void;
   pending: boolean;
@@ -51,7 +50,6 @@ export function CommitComposer({
   // The description sits one line tall, as tall as what it holds, until
   // it is being written in: the sidebar's height goes to the files.
   const [writing, setWriting] = useState(false);
-  const included = includedFiles(files).length;
   const conflicted = files.filter((file) => file.conflicted).length;
   const summary = draft.summary.trim();
   const label = buttonLabel({
@@ -62,9 +60,9 @@ export function CommitComposer({
   });
   // Everything but the message is in place. When only the summary is
   // missing, the button's tooltip says so: conflicts have their own
-  // line, and an empty list and a commit in flight say it on the button.
+  // line, and nothing ticked and a commit in flight say it on the button.
   const ready =
-    !pending && conflicted === 0 && (files.length > 0 || amend !== null);
+    !pending && conflicted === 0 && (included > 0 || amend !== null);
   const canCommit = ready && summary.length > 0;
   const blocked = ready && !canCommit ? "Write a summary first" : undefined;
 
@@ -239,8 +237,7 @@ export function CommitComposer({
   );
 }
 
-// What the button says it will do. Ticked files go. With nothing
-// ticked, everything listed goes.
+// What the button says it will do: which of the files go.
 function buttonLabel({
   pending,
   amending,
@@ -253,13 +250,13 @@ function buttonLabel({
   included: number;
 }): string {
   if (pending) return amending ? "Amending…" : "Committing…";
-  const count = included > 0 ? included : total;
-  const what = pluralize(count, "file");
+  const what = pluralize(included, "file");
   // "all 1 file" reads wrong, and with one file there is no "all".
-  const scope = included > 0 || count === 1 ? what : `all ${what}`;
+  const scope = included === total && total > 1 ? `all ${what}` : what;
   if (amending) {
-    return total === 0 ? "Amend the message" : `Amend with ${scope}`;
+    return included === 0 ? "Amend the message" : `Amend with ${scope}`;
   }
   if (total === 0) return "Nothing to commit";
+  if (included === 0) return "Nothing ticked";
   return `Commit ${scope}`;
 }

@@ -1,9 +1,14 @@
 // The changes page's working tree, per worktree: which files are
-// changed, how much of each is ticked, and a patch for whichever one
-// is picked. Seeded from the fixture's `changedCount` the first time a
-// worktree is read, then kept, so ticking, committing and discarding
-// show their outcome and the commit → push flow runs end to end.
-import type { ChangedFile, CommitSummary, Worktree } from "@shared/schemas";
+// changed, how much of each is staged, and a patch for whichever one is
+// picked. Seeded from the fixture's `changedCount` the first time a
+// worktree is read, then kept, so committing and discarding show their
+// outcome and the commit → push flow runs end to end.
+import type {
+  ChangedFile,
+  CommitPicks,
+  CommitSummary,
+  Worktree,
+} from "@shared/schemas";
 
 // The files a worktree's changes are drawn from: the first
 // `changedCount` of them, then sorted by path like git status. One of
@@ -21,7 +26,9 @@ const POOL: readonly ChangedFile[] = [
     path: "renderer/components/sidebar/DeviceBadge.tsx",
     kind: "added",
     counts: { additions: 7, deletions: 0 },
-    staged: "none",
+    // In the index the way an agent's `git add` leaves a file, which the
+    // page's ticks pay no mind to.
+    staged: "all",
   },
   {
     path: "renderer/lib/toast.tsx",
@@ -96,34 +103,23 @@ export function createFakeChanges(
   return {
     status: (worktreeId: string) => filesOf(worktreeId),
 
-    setStaged: (worktreeId: string, paths: string[], staged: boolean) => {
-      const set = new Set(paths);
-      const next = filesOf(worktreeId).map((file) =>
-        touches(file, set)
-          ? Object.assign({}, file, { staged: staged ? "all" : "none" })
-          : file,
-      );
-      settle(worktreeId, next);
-      return next;
-    },
-
-    // What the host's commit does to the tree: the ticked files go (or
-    // the ones listed, for a commit-all), and HEAD moves.
+    // What the host's commit does to the tree: the picked files go, and
+    // HEAD moves. A file here has one change, so one ticked by hunk goes
+    // whole.
     commit: (
       worktreeId: string,
       {
         summary,
-        stagePaths,
+        paths,
+        hunks,
         amend,
-      }: { summary: string; stagePaths?: string[]; amend?: boolean },
+      }: CommitPicks & { summary: string; amend?: boolean },
     ) => {
       const worktree = findWorktree(worktreeId);
       if (!worktree) throw new Error("Unknown worktree");
-      const listed = new Set(stagePaths ?? []);
+      const listed = new Set([...paths, ...hunks.map((h) => h.path)]);
       const files = filesOf(worktreeId);
-      const taken = files.filter(
-        (file) => file.staged !== "none" || touches(file, listed),
-      );
+      const taken = files.filter((file) => touches(file, listed));
       if (taken.length === 0 && !amend) throw new Error("Nothing to commit");
       const hash = Math.random().toString(16).slice(2, 9);
       const total = (side: "additions" | "deletions") =>
@@ -162,26 +158,25 @@ export function createFakeChanges(
     },
 
     // The picked file's one change, as patchFor draws it: past three
-    // lines of context, its deletions then its additions. Nothing is
-    // ticked by hunk here, so it reads as unstaged.
+    // lines of context, its deletions then its additions.
     hunks: (worktreeId: string, path: string) => {
       const file = filesOf(worktreeId).find((f) => f.path === path);
       const adds = file?.counts?.additions ?? 0;
       const dels = file?.counts?.deletions ?? 0;
+      const head = findWorktree(worktreeId)?.recentCommits[0]?.hash ?? "0000";
       if (!file || file.kind !== "modified" || adds + dels === 0) {
-        return { changes: [], editable: true };
+        return { head, changes: [] };
       }
       return {
+        head,
         changes: [
           {
             oldStart: dels === 0 ? 3 : 4,
             oldCount: dels,
             newStart: adds === 0 ? 3 : 4,
             newCount: adds,
-            staged: false,
           },
         ],
-        editable: true,
       };
     },
 

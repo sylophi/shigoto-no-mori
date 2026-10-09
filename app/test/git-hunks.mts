@@ -1,18 +1,18 @@
 // Durable proof for the changes page's hunks (host/lib/git/hunks.ts)
-// against a REAL repository: a file's changes read with which are
-// staged, ticked in and out one at a time with the index holding
-// exactly HEAD plus the ticked ones, insertions, deletions and a
-// missing final newline among them, a discard that takes one change
-// out of the file and the index and comes back through its snapshot,
-// a CRLF checkout keeping its line endings through a discard and its
-// ticks read as ticked, a symlink or non-UTF-8 file left whole, and the
-// refusals (an index holding what the file doesn't, a pick the file no
-// longer has).
+// against a REAL repository: a file's changes read, a commit of some of
+// them taking HEAD plus exactly those (insertions, deletions and a
+// missing final newline among them), a pick still found after an edit
+// above it, a discard that takes one change out of the file and the
+// index and comes back through its snapshot, an index holding what the
+// file doesn't left alone, a CRLF checkout keeping its line endings
+// through a discard and committing clean, a symlink or non-UTF-8 file
+// left whole, and a pick the file no longer has refused.
 //
 // Run: pnpm test git-hunks.
 import assert from "node:assert/strict";
 import { readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { LineChange } from "@shared/schemas";
 import {
   makeProof,
   sandboxGit,
@@ -30,9 +30,9 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const { discardHunks, readHunkStates, setHunksStaged } =
-  await import("../host/lib/git/hunks.ts");
+const { discardHunks, readHunks } = await import("../host/lib/git/hunks.ts");
 const { restoreDiscard } = await import("../host/lib/git/changes.ts");
+const { commitPicks } = await import("../host/lib/git/commit.ts");
 
 const git = sandboxGit(gitEnv);
 
@@ -44,6 +44,14 @@ const lines = (n: number) =>
 const crlf = (text: string) => text.replaceAll("\n", "\r\n");
 const read = (repo: string) => readFileSync(join(repo, "f.txt"), "utf8");
 const staged = (repo: string) => git(repo, "show", ":f.txt");
+const committed = (repo: string) => git(repo, "show", "HEAD:f.txt");
+const head = (repo: string) => git(repo, "rev-parse", "HEAD").trim();
+const commitHunks = (repo: string, changes: LineChange[]) =>
+  commitPicks(repo, {
+    summary: "Some of f",
+    paths: [],
+    hunks: [{ path: "f.txt", base: head(repo), changes }],
+  });
 
 // f.txt at twenty lines, then edited in three places far enough apart
 // to be three changes: line 2 changed, a line inserted after 10, and
@@ -65,37 +73,94 @@ function seed(track: Track): string {
   return repo;
 }
 
+// f.txt at twenty lines in a CRLF checkout, then line 2 changed and
+// line 18 deleted.
+function seedCrlf(track: Track): string {
+  const repo = tempDir("sm-hunks-crlf-", track);
+  git(repo, "init", "-q", "-b", "main");
+  git(repo, "config", "core.autocrlf", "true");
+  writeFileSync(join(repo, "f.txt"), crlf(lines(20)));
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "init");
+  writeFileSync(
+    join(repo, "f.txt"),
+    crlf(lines(20).replace("line 2\n", "two\n").replace("line 18\n", "")),
+  );
+  return repo;
+}
+
 async function main() {
   await check(
-    "ticking one change at a time leaves the index at HEAD plus exactly those",
+    "a commit of some changes takes HEAD plus exactly those, and leaves the file as it is",
     async (track) => {
       const repo = seed(track);
-      const { changes, editable } = await readHunkStates(repo, "f.txt");
-      assert.equal(editable, true);
+      const changes = (await readHunks(repo, "f.txt")).changes;
       assert.equal(changes.length, 3, JSON.stringify(changes));
-      assert.ok(changes.every((c) => !c.staged));
-      const [edit, insert] = changes;
-      assert.ok(edit && insert);
+      const [edit, insert, removal] = changes;
+      assert.ok(edit && insert && removal);
 
-      await setHunksStaged(repo, "f.txt", [insert], true);
+      await commitHunks(repo, [insert]);
       assert.equal(
-        staged(repo),
+        committed(repo),
         lines(20).replace("line 10\n", "line 10\ninserted\n"),
       );
-      await setHunksStaged(repo, "f.txt", [edit], true);
-      const after = await readHunkStates(repo, "f.txt");
-      assert.deepEqual(
-        after.changes.map((c) => c.staged),
-        [true, true, false],
-      );
-
-      await setHunksStaged(repo, "f.txt", [insert], false);
-      assert.equal(staged(repo), lines(20).replace("line 2\n", "line two\n"));
-
-      // Every change ticked is the working tree, final newline and all.
-      await setHunksStaged(repo, "f.txt", after.changes, true);
-      assert.equal(staged(repo), EDITED);
       assert.equal(read(repo), EDITED);
+
+      // The rest, final newline and all, is the working tree.
+      const rest = (await readHunks(repo, "f.txt")).changes;
+      await commitHunks(repo, rest);
+      assert.equal(committed(repo), EDITED);
+    },
+  );
+
+  await check(
+    "a pick is found by its place in HEAD after an edit above it moves it, and one the file no longer has is refused",
+    async (track) => {
+      const repo = seed(track);
+      const [, , removal] = (await readHunks(repo, "f.txt")).changes;
+      assert.ok(removal);
+      writeFileSync(
+        join(repo, "f.txt"),
+        EDITED.replace("line 5\n", "line 5\nextra\n"),
+      );
+      await commitHunks(repo, [removal]);
+      assert.equal(
+        committed(repo),
+        lines(20).replace("line 19\n", "").replace(/\n$/, ""),
+      );
+      await assert.rejects(
+        commitHunks(repo, [{ ...removal, oldStart: 7 }]),
+        /f\.txt changed since/,
+      );
+      rmSync(join(repo, "f.txt"));
+      await assert.rejects(
+        commitHunks(repo, [removal]),
+        /f\.txt changed since/,
+      );
+    },
+  );
+
+  await check(
+    "picks read against an older HEAD are refused, whatever they line up with now",
+    async (track) => {
+      const repo = seed(track);
+      const { head: base, changes } = await readHunks(repo, "f.txt");
+      const [, insert] = changes;
+      assert.ok(insert);
+      // A commit from a terminal that shifts every line of HEAD down.
+      const edited = read(repo);
+      writeFileSync(join(repo, "f.txt"), `top\n${lines(20)}`);
+      git(repo, "commit", "-q", "-am", "top");
+      writeFileSync(join(repo, "f.txt"), `top\n${edited}`);
+      await assert.rejects(
+        commitPicks(repo, {
+          summary: "Stale",
+          paths: [],
+          hunks: [{ path: "f.txt", base, changes: [insert] }],
+        }),
+        /f\.txt changed since/,
+      );
+      assert.equal(committed(repo), `top\n${lines(20)}`);
     },
   );
 
@@ -103,59 +168,42 @@ async function main() {
     "a discard takes one change out of the file and the index, and its snapshot brings it back",
     async (track) => {
       const repo = seed(track);
-      const { changes } = await readHunkStates(repo, "f.txt");
-      const [edit, insert] = changes;
-      assert.ok(edit && insert);
-      await setHunksStaged(repo, "f.txt", [edit, insert], true);
+      const [, insert] = (await readHunks(repo, "f.txt")).changes;
+      assert.ok(insert);
+      git(repo, "add", "f.txt");
       const snapshot = await discardHunks(repo, "f.txt", [insert]);
       assert.equal(read(repo), EDITED.replace("inserted\n", ""));
-      assert.equal(staged(repo), lines(20).replace("line 2\n", "line two\n"));
+      assert.equal(staged(repo), EDITED.replace("inserted\n", ""));
       await restoreDiscard(repo, snapshot);
       assert.equal(read(repo), EDITED);
     },
   );
 
   await check(
-    "an index holding what the file doesn't is not editable, and a stale pick is refused",
+    "a discard leaves an index holding what the file doesn't alone, and refuses a stale pick",
     async (track) => {
       const repo = seed(track);
-      const { changes } = await readHunkStates(repo, "f.txt");
-      const [edit] = changes;
+      const [edit] = (await readHunks(repo, "f.txt")).changes;
       assert.ok(edit);
-      writeFileSync(
-        join(repo, "f.txt"),
-        lines(20).replace("line 5\n", "five\n"),
-      );
+      const other = lines(20).replace("line 5\n", "five\n");
+      writeFileSync(join(repo, "f.txt"), other);
       git(repo, "add", "f.txt");
       writeFileSync(join(repo, "f.txt"), EDITED);
-      const states = await readHunkStates(repo, "f.txt");
-      assert.equal(states.editable, false);
       await assert.rejects(
-        setHunksStaged(repo, "f.txt", [edit], true),
-        /whole file/,
-      );
-      git(repo, "reset", "-q");
-      await assert.rejects(
-        setHunksStaged(repo, "f.txt", [{ ...edit, newCount: 9 }], true),
+        discardHunks(repo, "f.txt", [{ ...edit, newCount: 9 }]),
         /changed since/,
       );
+      await discardHunks(repo, "f.txt", [edit]);
+      assert.equal(read(repo), EDITED.replace("line two\n", "line 2\n"));
+      assert.equal(staged(repo), other);
     },
   );
 
   await check(
     "in a CRLF checkout a discard keeps every line's ending",
     async (track) => {
-      const repo = tempDir("sm-hunks-crlf-", track);
-      git(repo, "init", "-q", "-b", "main");
-      git(repo, "config", "core.autocrlf", "true");
-      writeFileSync(join(repo, "f.txt"), crlf(lines(20)));
-      git(repo, "add", ".");
-      git(repo, "commit", "-q", "-m", "init");
-      writeFileSync(
-        join(repo, "f.txt"),
-        crlf(lines(20).replace("line 2\n", "two\n").replace("line 18\n", "")),
-      );
-      const { changes } = await readHunkStates(repo, "f.txt");
+      const repo = seedCrlf(track);
+      const changes = (await readHunks(repo, "f.txt")).changes;
       const [, removal] = changes;
       assert.ok(removal && changes.length === 2);
       await discardHunks(repo, "f.txt", [removal]);
@@ -164,26 +212,16 @@ async function main() {
   );
 
   await check(
-    "in a CRLF checkout a ticked change reads as ticked",
+    "in a CRLF checkout a picked change commits clean",
     async (track) => {
-      const repo = tempDir("sm-hunks-crlf-", track);
-      git(repo, "init", "-q", "-b", "main");
-      git(repo, "config", "core.autocrlf", "true");
-      writeFileSync(join(repo, "f.txt"), crlf(lines(20)));
-      git(repo, "add", ".");
-      git(repo, "commit", "-q", "-m", "init");
-      writeFileSync(
-        join(repo, "f.txt"),
-        crlf(lines(20).replace("line 2\n", "two\n").replace("line 18\n", "")),
-      );
-      const [first] = (await readHunkStates(repo, "f.txt")).changes;
+      const repo = seedCrlf(track);
+      const [first] = (await readHunks(repo, "f.txt")).changes;
       assert.ok(first);
-      await setHunksStaged(repo, "f.txt", [first], true);
-      const after = await readHunkStates(repo, "f.txt");
-      assert.equal(after.editable, true);
-      assert.deepEqual(
-        after.changes.map((c) => c.staged),
-        [true, false],
+      await commitHunks(repo, [first]);
+      assert.equal(committed(repo), lines(20).replace("line 2\n", "two\n"));
+      assert.equal(
+        read(repo),
+        crlf(lines(20).replace("line 2\n", "two\n").replace("line 18\n", "")),
       );
     },
   );
@@ -198,11 +236,15 @@ async function main() {
       git(repo, "commit", "-q", "-m", "link");
       rmSync(join(repo, "link"));
       symlinkSync("f.txt", join(repo, "link"));
-      assert.deepEqual((await readHunkStates(repo, "link")).changes, []);
+      assert.deepEqual((await readHunks(repo, "link")).changes, []);
+      const pick = { oldStart: 1, oldCount: 1, newStart: 1, newCount: 1 };
+      await assert.rejects(discardHunks(repo, "link", [pick]), /whole/);
       await assert.rejects(
-        discardHunks(repo, "link", [
-          { oldStart: 1, oldCount: 1, newStart: 1, newCount: 1 },
-        ]),
+        commitPicks(repo, {
+          summary: "Link by the line",
+          paths: [],
+          hunks: [{ path: "link", base: head(repo), changes: [pick] }],
+        }),
         /whole/,
       );
       assert.equal(readFileSync(join(repo, "f.txt"), "utf8"), EDITED);
@@ -212,7 +254,7 @@ async function main() {
       git(repo, "add", "l.txt");
       git(repo, "commit", "-q", "-m", "latin");
       writeFileSync(join(repo, "l.txt"), Buffer.concat([latin, latin]));
-      assert.deepEqual((await readHunkStates(repo, "l.txt")).changes, []);
+      assert.deepEqual((await readHunks(repo, "l.txt")).changes, []);
     },
   );
 

@@ -1,7 +1,5 @@
 // The working tree as the changes page sees it: a list of files to
 // tick, commit or throw away. Everything here acts on whole files.
-// Hunks staged from a terminal show up as "partial" and are left alone
-// unless the file is toggled.
 import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -28,7 +26,7 @@ const DISCARD_REF_PREFIX = "refs/shigomori/discards/";
 // take index.lock. `--literal-pathspecs` because every path here came
 // out of `git status` and is a filename, not a pattern: without it a
 // file called `a[1].txt` is a glob.
-async function runChunked(
+export async function runChunked(
   worktreePath: string,
   args: string[],
   paths: readonly string[],
@@ -78,8 +76,8 @@ function kindOf(x: string, y: string): ChangeKind {
 // --- index queue -------------------------------------------------------
 
 // Writes to one worktree's index run one after another. Git takes
-// index.lock for each, so two quick ticks, or a tick racing a commit,
-// would otherwise fail on the lock instead of waiting. A failed task
+// index.lock for each, so two quick discards, or a discard racing a
+// commit, would otherwise fail on the lock instead of waiting. A failed task
 // doesn't block the queue.
 const indexQueues = new Map<string, ReturnType<typeof createLimiter>>();
 
@@ -119,7 +117,7 @@ function parseNumstat(stdout: string): Map<string, ChangeCounts | undefined> {
 }
 
 // Untracked files are in no diff git can be asked for in one go, and a
-// `--no-index` process per new file on every tick is too much. Every
+// `--no-index` process per new file on every read is too much. Every
 // line in a new file is an addition, so count newlines here, with git's
 // own limits: a NUL in the first 8k means binary, and past a few MB it
 // is not worth reading a file to put a number beside its name.
@@ -262,64 +260,7 @@ export function listChangesForPage(
   return listChangedFiles(worktreePath, { untracked: "all", counts: true });
 }
 
-// --- staging -----------------------------------------------------------
-
-// Tick or untick files in the index. `add -A` so a deleted tracked file
-// stages as a removal and an untracked one as an addition. Unstaging is
-// `reset` rather than `restore --staged`: restore refuses a path git
-// doesn't know (an untracked file that was never ticked) and an unborn
-// branch, and reset quietly accepts both.
-//
-// Answers with a fresh status from the same queue slot, so two quick
-// ticks resolve in order and the later answer is the complete one.
-export function setStaged(
-  worktreePath: string,
-  paths: readonly string[],
-  staged: boolean,
-): Promise<ChangedFile[]> {
-  return onIndex(worktreePath, async () => {
-    if (staged) {
-      await runChunked(worktreePath, ["add", "-A"], paths);
-    } else {
-      await runChunked(worktreePath, ["reset", "-q"], paths);
-    }
-    // No counts: staging moves the index, and the counts compare the
-    // working tree against HEAD. The page keeps the ones it has.
-    return listChangedFiles(worktreePath, { untracked: "all" });
-  });
-}
-
 // --- commit ------------------------------------------------------------
-
-// Commits the index. Two `-m` flags give git the summary and body as
-// separate paragraphs. Hooks run as they would in a terminal, and their
-// output rides along in the thrown error for the page to show.
-// `stagePaths` are added first, in the same queue slot: that is what
-// "nothing ticked" means to the commit button. `amend` folds the index
-// into HEAD under the new message instead of adding a commit.
-export function commitStaged(
-  worktreePath: string,
-  message: {
-    summary: string;
-    description?: string;
-    amend?: boolean;
-    stagePaths?: readonly string[];
-  },
-): Promise<string> {
-  return onIndex(worktreePath, async () => {
-    if (message.stagePaths && message.stagePaths.length > 0) {
-      await runChunked(worktreePath, ["add", "-A"], message.stagePaths);
-    }
-    const args = ["commit", "--quiet"];
-    if (message.amend) args.push("--amend");
-    args.push("-m", message.summary);
-    const body = message.description?.trim();
-    if (body) args.push("-m", body);
-    await run(worktreePath, args);
-    const hash = await run(worktreePath, ["rev-parse", "--short", "HEAD"]);
-    return hash.trim();
-  });
-}
 
 // A commit's message split the way the composer holds it. `%s` and `%b`
 // are git's own split, and a NUL between them survives any subject a

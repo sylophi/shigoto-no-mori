@@ -10,8 +10,6 @@ import {
   useDiscardHunks,
   useFileHunks,
   useRestoreDiscard,
-  useSetHunksStaged,
-  useSetStaged,
   useWorktreeChanges,
 } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
@@ -35,11 +33,18 @@ import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { BranchBar } from "./BranchBar";
+import { changedFilePaths, type DiffChangesControls } from "./changesControls";
 import {
-  changedFilePaths,
-  includedFiles,
-  type DiffChangesControls,
-} from "./changesControls";
+  afterCommit,
+  commitPicksOf,
+  countIncluded,
+  pickedHunks,
+  prunedPicks,
+  setFilesTicked,
+  setHunksTicked,
+  updatePicks,
+  useChangesPicks,
+} from "./changesPicks";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
@@ -92,6 +97,9 @@ function ChangesView({
     projectId,
     worktreeId,
   );
+  const picks = useChangesPicks(projectId, worktreeId);
+  const setPicks = (change: Parameters<typeof updatePicks>[2]) =>
+    updatePicks(projectId, worktreeId, change);
   // The pick is held as the row's key and resolved against the live
   // list, so a file that stops being changed (discarded, committed,
   // reverted in an editor) falls back to the first row instead of
@@ -103,12 +111,22 @@ function ChangesView({
   // changes (an addition, a removal, a rename) or a conflict.
   const hunkPath =
     picked?.kind === "modified" && !picked.conflicted ? picked.path : undefined;
-  const { data: hunkStates } = useFileHunks(
+  const { data: fileHunks } = useFileHunks(
     projectId,
     worktreeId,
     canCommand ? hunkPath : undefined,
   );
-  const { mutate: stageHunks, isPending: stagingHunks } = useSetHunksStaged();
+  const paneKey = picked ? changeKey(picked) : null;
+  // Each fresh read drops the picks about what is no longer there, so
+  // the boxes and the commit agree.
+  useEffect(() => {
+    if (!files) return;
+    const pane =
+      paneKey && fileHunks ? { key: paneKey, hunks: fileHunks } : undefined;
+    updatePicks(projectId, worktreeId, (current) =>
+      prunedPicks(current, files, pane),
+    );
+  }, [projectId, worktreeId, files, paneKey, fileHunks]);
   const { mutate: discardHunks, isPending: discardingHunks } =
     useDiscardHunks();
   const diff = useFileDiff(
@@ -117,9 +135,6 @@ function ChangesView({
     picked ? changedFilePaths(picked) : [],
     picked ? isUntracked(picked) : false,
   );
-  // `mutate` is stable across renders. The result object is not, and it
-  // would reach every list row as a new callback.
-  const { mutate: stage } = useSetStaged();
   const commit = useCommitChanges();
   const { mutate: discardPaths, isPending: discarding } = useDiscardChanges();
   const { mutate: restore, isPending: restoring } = useRestoreDiscard();
@@ -141,7 +156,6 @@ function ChangesView({
     undo.pending ||
     stash.isPending ||
     resolve.isPending ||
-    stagingHunks ||
     discardingHunks;
   const resetAmendDraft = useAmendDraft({
     projectId,
@@ -155,8 +169,6 @@ function ChangesView({
   const say = useWorktreeSuccessToast();
 
   const onCommit = () => {
-    const list = files ?? [];
-    const included = includedFiles(list).length;
     const wasAmend = amending;
     commit.mutate(
       {
@@ -164,11 +176,12 @@ function ChangesView({
         worktreeId,
         summary: draft.summary.trim(),
         description: draft.description,
-        stagePaths: included === 0 ? list.flatMap(changedFilePaths) : undefined,
+        ...commitPicksOf(picks, files ?? []),
         amend: wasAmend,
       },
       {
         onSuccess: () => {
+          setPicks(afterCommit);
           resetAmendDraft();
           setDraft(EMPTY_DRAFT);
           if (wasAmend) setAmending(false);
@@ -227,21 +240,21 @@ function ChangesView({
     readOnly: !canCommand,
     selectedKey: picked ? changeKey(picked) : null,
     onSelect: setPickedKey,
-    onSetStaged: (paths, staged) =>
-      stage({ projectId, worktreeId, paths, staged }),
+    picks,
+    onSetTicked: (rows, ticked) =>
+      setPicks((current) =>
+        setFilesTicked(current, rows.map(changeKey), ticked),
+      ),
     onDiscard,
     hunks:
-      hunkPath && hunkStates
+      hunkPath && paneKey && fileHunks
         ? {
-            states: hunkStates,
-            onSetStaged: (changes, staged) =>
-              stageHunks({
-                projectId,
-                worktreeId,
-                path: hunkPath,
-                changes,
-                staged,
-              }),
+            changes: fileHunks.changes,
+            picked: pickedHunks(picks, paneKey, fileHunks),
+            onSetTicked: (changes, ticked) =>
+              setPicks((current) =>
+                setHunksTicked(current, paneKey, fileHunks, changes, ticked),
+              ),
             onDiscard: (changes) =>
               discardHunks(
                 { projectId, worktreeId, path: hunkPath, changes },
@@ -304,6 +317,7 @@ function ChangesView({
       {showComposer && (
         <CommitComposer
           files={list}
+          included={countIncluded(picks, list)}
           draft={draft}
           onDraftChange={setDraft}
           pending={commit.isPending}
