@@ -2,6 +2,7 @@
 // env files it wrote rather than out of port-pool's own state: the
 // files are the contract both sides agree on.
 
+import { parseEnv } from "node:util";
 import * as Predicate from "effect/Predicate";
 
 // A port name, the port it holds, and where it was found.
@@ -61,31 +62,6 @@ export function parsePortPoolConfig(text: string | undefined): PortPoolConfig {
   };
 }
 
-// KEY=VALUE lines from a dotenv file: comments, blanks, `export `
-// prefixes and surrounding quotes off. Not a full dotenv parser, since
-// port-pool writes these files.
-export function parseEnvAssignments(content: string): Map<string, string> {
-  const env = new Map<string, string>();
-  for (const line of content.split("\n")) {
-    let trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-    if (trimmed.startsWith("export "))
-      trimmed = trimmed.slice("export ".length);
-    const cut = trimmed.indexOf("=");
-    if (cut < 0) continue;
-    let value = trimmed.slice(cut + 1).trim();
-    if (
-      value.length >= 2 &&
-      (value[0] === '"' || value[0] === "'") &&
-      value.at(-1) === value[0]
-    ) {
-      value = value.slice(1, -1);
-    }
-    env.set(trimmed.slice(0, cut).trim(), value);
-  }
-  return env;
-}
-
 // The value each declared port name holds in the env files `files`
 // (name to content). Only a whole-value template ("${renderer}") can be
 // reversed: a name inside a larger string (a URL) goes unreported
@@ -102,12 +78,12 @@ export function matchPorts(
   for (const file of Object.keys(config.envFiles).toSorted()) {
     const content = files.get(file);
     if (content === undefined) continue;
-    const env = parseEnvAssignments(content);
+    const env = parseEnv(content);
     const vars = config.envFiles[file] ?? {};
     for (const key of Object.keys(vars).toSorted()) {
       const name = byTemplate.get(vars[key] ?? "");
       if (name === undefined || seen.has(name)) continue;
-      const raw = env.get(key) ?? "";
+      const raw = env[key] ?? "";
       // Go's Atoi: an optional sign and digits, nothing else.
       if (!/^[+-]?\d+$/.test(raw)) continue;
       const port = Number.parseInt(raw, 10);
