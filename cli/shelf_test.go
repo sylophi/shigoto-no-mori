@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func strp(s string) *string { return &s }
@@ -114,7 +115,7 @@ func TestSettleShelves(t *testing.T) {
 	// status and an unmarked id are left alone.
 	seedRegistry(t, `{"shelvedWorktrees":{"w1":true,"w2":true,"w3":true},"shelfSnapshots":{"w2":{"at":"bad"}}}`)
 	rows := []worktreeJSON{row("w1"), row("w2"), row("w3"), row("gone")}
-	settleShelves(rows, []rowProbe{ok, ok, {at: 1000}, ok}, contextNow())
+	settleShelves(rows, []rowProbe{ok, ok, {at: 1000}, ok}, contextNow(), idleShelf{})
 	for _, id := range []string{"w1", "w2"} {
 		got, found := snapshotOf(id)
 		if !found || got.At != 1000 || got.Changed != 1 || got.Head == nil || *got.Head != "abc1234" {
@@ -135,7 +136,7 @@ func TestSettleShelves(t *testing.T) {
 
 	// Nothing moved: stays shelved.
 	rows = []worktreeJSON{row("w1")}
-	settleShelves(rows, []rowProbe{{at: 2000, statusOK: true}}, contextNow())
+	settleShelves(rows, []rowProbe{{at: 2000, statusOK: true}}, contextNow(), idleShelf{})
 	if !rows[0].Shelved || !readShelvedSet()["w1"] {
 		t.Fatal("w1 unshelved with nothing moved")
 	}
@@ -150,11 +151,11 @@ func TestSettleShelves(t *testing.T) {
 	if err := setShelved("w1", true); err != nil {
 		t.Fatal(err)
 	}
-	settleShelves([]worktreeJSON{row("w1")}, []rowProbe{{at: 3000, statusOK: true}}, contextNow())
+	settleShelves([]worktreeJSON{row("w1")}, []rowProbe{{at: 3000, statusOK: true}}, contextNow(), idleShelf{})
 	fresh, _ := snapshotOf("w1")
 	rows = []worktreeJSON{row("w1")}
 	rows[0].ChangedCount = 5
-	settleShelves(rows, []rowProbe{{at: 4000, statusOK: true}}, stale)
+	settleShelves(rows, []rowProbe{{at: 4000, statusOK: true}}, stale, idleShelf{})
 	if !rows[0].Shelved || !readShelvedSet()["w1"] {
 		t.Error("a stale listing undid the reshelve")
 	}
@@ -165,7 +166,7 @@ func TestSettleShelves(t *testing.T) {
 	// Worked in: the mark and the snapshot go, the row says so.
 	rows = []worktreeJSON{row("w1"), row("w2")}
 	rows[0].RecentCommits = []commitSummary{{Hash: "def5678"}}
-	settleShelves(rows, []rowProbe{{at: 5000, statusOK: true}, {at: 5000, statusOK: true}}, contextNow())
+	settleShelves(rows, []rowProbe{{at: 5000, statusOK: true}, {at: 5000, statusOK: true}}, contextNow(), idleShelf{})
 	if rows[0].Shelved || readShelvedSet()["w1"] {
 		t.Error("w1: a commit didn't unshelve it")
 	}
@@ -174,5 +175,125 @@ func TestSettleShelves(t *testing.T) {
 	}
 	if !rows[1].Shelved || !readShelvedSet()["w2"] {
 		t.Error("w2 went with w1")
+	}
+}
+
+// The idle shelf, against a sandbox registry with synthetic rows: a
+// managed row untouched for longer than the setting goes on the shelf
+// with its snapshot, and anything newer, unmanaged or unread stays.
+func TestSettleShelvesIdle(t *testing.T) {
+	sandboxDataDir(t)
+	const day = int64(24 * time.Hour / time.Millisecond)
+	now := 100 * day
+	probe := rowProbe{at: now, statusOK: true}
+	dir := t.TempDir()
+	row := func(id string, touched int64) worktreeJSON {
+		return worktreeJSON{ID: id, Path: dir, CreatedAt: touched}
+	}
+	idleNow := func() idleShelf {
+		all, err := readRegistryFile()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return idleShelf{after: 7 * 24 * time.Hour, unshelvedAt: unshelvedAtFrom(all)}
+	}
+	seedRegistry(t, `{}`)
+
+	old := now - 8*day
+	committed := row("committed", old)
+	committed.RecentCommits = []commitSummary{{Hash: "abc1234", Date: time.UnixMilli(now - day).Format(time.RFC3339)}}
+	edited := row("edited", old)
+	edited.LastChangeAt = now - day
+	agent := row("agent", old)
+	agent.AgentSessions = []agentSession{{State: agentIdle, At: now - day}}
+	waiting := row("waiting", old)
+	waiting.AgentSessions = []agentSession{{State: agentWaiting, At: old}}
+	primary := row("primary", old)
+	primary.IsPrimary = true
+	external := row("external", old)
+	external.IsExternal = true
+	// A pull it only follows isn't a touch.
+	pulled := row("pulled", old)
+	pulled.AutoPull = true
+	pulled.RecentCommits = committed.RecentCommits
+	rows := []worktreeJSON{
+		row("idle", old), pulled, row("fresh", now-6*day), row("unknown", 0),
+		committed, edited, agent, waiting, primary, external, row("unread", old),
+	}
+	probes := make([]rowProbe, len(rows))
+	for i := range probes {
+		probes[i] = probe
+	}
+	probes[len(rows)-1] = rowProbe{at: now}
+	settleShelves(rows, probes, buildContext{}, idleNow())
+	shelved := readShelvedSet()
+	for _, r := range rows {
+		want := r.ID == "idle" || r.ID == "pulled"
+		if r.Shelved != want || shelved[r.ID] != want {
+			t.Errorf("%s: shelved row %v, mark %v; want %v", r.ID, r.Shelved, shelved[r.ID], want)
+		}
+	}
+	var snapshots map[string]json.RawMessage
+	_ = json.Unmarshal(readFile(t, registryPath())[shelfSnapshotsKey], &snapshots)
+	if got, ok := parseShelfSnapshot(snapshots["idle"]); !ok || got.At != now {
+		t.Errorf("idle: snapshot %+v, %v; want the listing's", got, ok)
+	}
+
+	// Unshelved by hand: the unshelve is a touch, so it stays off.
+	if err := setShelved("idle", false); err != nil {
+		t.Fatal(err)
+	}
+	rows = []worktreeJSON{row("idle", old)}
+	settleShelves(rows, []rowProbe{{at: time.Now().UnixMilli(), statusOK: true}}, buildContext{}, idleNow())
+	if rows[0].Shelved || readShelvedSet()["idle"] {
+		t.Error("idle: shelved again right after an unshelve")
+	}
+
+	// A listing that read the registry before an unshelve doesn't shelve
+	// over it.
+	if err := setShelved("stale", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := setShelved("stale", false); err != nil {
+		t.Fatal(err)
+	}
+	stale := idleNow()
+	stale.unshelvedAt = nil
+	rows = []worktreeJSON{row("stale", old)}
+	settleShelves(rows, []rowProbe{probe}, buildContext{}, stale)
+	if rows[0].Shelved || readShelvedSet()["stale"] {
+		t.Error("stale: a stale listing shelved over the unshelve")
+	}
+
+	// Unshelved by work: that counts as a touch too.
+	worked := row("idle", old)
+	worked.Shelved = true
+	worked.ChangedCount = 1
+	if err := setShelved("idle", true); err != nil {
+		t.Fatal(err)
+	}
+	rows = []worktreeJSON{row("idle", old)}
+	rows[0].Shelved = true
+	settleShelves(rows, []rowProbe{{at: now, statusOK: true}}, buildContext{}, idleShelf{})
+	all, err := readRegistryFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows = []worktreeJSON{worked}
+	settleShelves(rows, []rowProbe{{at: now, statusOK: true}}, buildContext{shelfSnapshots: shelfSnapshotsFrom(all)}, idleShelf{})
+	if rows[0].Shelved || readShelvedSet()["idle"] {
+		t.Fatal("idle: work didn't unshelve it")
+	}
+	rows = []worktreeJSON{row("idle", old)}
+	settleShelves(rows, []rowProbe{{at: time.Now().UnixMilli(), statusOK: true}}, buildContext{}, idleNow())
+	if rows[0].Shelved || readShelvedSet()["idle"] {
+		t.Error("idle: shelved again right after work unshelved it")
+	}
+
+	// Off: nothing goes on the shelf.
+	rows = []worktreeJSON{row("off", old)}
+	settleShelves(rows, []rowProbe{probe}, buildContext{}, idleShelf{})
+	if rows[0].Shelved || readShelvedSet()["off"] {
+		t.Error("off: shelved with the setting off")
 	}
 }

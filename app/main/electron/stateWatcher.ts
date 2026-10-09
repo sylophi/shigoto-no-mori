@@ -18,14 +18,15 @@
 //
 // One write a read does make is the full listing's shelf bookkeeping
 // (cli/shelf.go): it records a snapshot of a newly shelved worktree,
-// and unshelves one that has been worked in since. A registry.json
-// change confined to the snapshots is dropped here, like the updater's
+// unshelves one that has been worked in since, and, with the idle
+// shelf on, shelves one nothing has touched. A registry.json change
+// confined to the snapshots is dropped here, like the updater's
 // control files below: nobody displays them, and reacting would relist
-// every project only to find the snapshot already taken. An unshelve
-// clears the shelved mark too, so it goes through like an `sm
-// unshelve` from a terminal: one refresh that brings every window and
-// peer the row's new place, whose listing then has nothing left to
-// write. (An unshelve by the describe right after an app mutation
+// every project only to find the snapshot already taken. A shelve or
+// unshelve flips the shelved mark too, so it goes through like `sm
+// shelve` or `sm unshelve` from a terminal: one refresh that brings
+// every window and peer the row's new place, whose listing then has
+// nothing left to write. (An unshelve by the describe right after an app mutation
 // falls inside that mutation's echo window instead, and the acting
 // window already holds the row.)
 import { type FSWatcher, mkdirSync, readFileSync, watch } from "node:fs";

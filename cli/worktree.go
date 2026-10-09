@@ -280,7 +280,7 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 		})
 	}
 	wg.Wait()
-	settleShelves(results, probes, ctx)
+	settleShelves(results, probes, ctx, loadIdleShelf())
 	return results, nil
 }
 
