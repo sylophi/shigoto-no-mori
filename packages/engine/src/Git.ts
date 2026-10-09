@@ -46,6 +46,7 @@ import {
   splitZ,
   subcommandOf,
   type WorktreeEntry,
+  writesRepo,
 } from "./gitParse.ts";
 import { isNotFound } from "./platformErrors.ts";
 
@@ -201,6 +202,17 @@ export type PrimaryRelation = {
   readonly behindPrimary: number;
   readonly mergedIntoPrimary: boolean;
 };
+
+// Told when a git that may move refs, HEAD, the index, the config or a
+// worktree entry starts in `cwd`, and handed back the function that
+// says it ended, however it ended. The app's host watches each
+// repository's git directory and skips the echo of its own writes: a
+// write in flight, or done within the echo window. Anywhere nobody
+// watches (the terminal), it does nothing.
+export const GitWrites = Context.Reference<(cwd: string) => () => void>(
+  "sm/engine/GitWrites",
+  { defaultValue: () => () => () => {} },
+);
 
 export class Git extends Context.Service<
   Git,
@@ -680,6 +692,7 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const slots = yield* Semaphore.make(SPAWN_SLOTS);
+  const beginWrite = yield* GitWrites;
 
   const run = Effect.fn("Git.run")(function* (
     cwd: string,
@@ -695,6 +708,12 @@ const make = Effect.gen(function* () {
       new GitOutputTooLargeError({ subcommand, limitBytes: limit });
     return yield* Effect.scoped(
       Effect.gen(function* () {
+        if (writesRepo(args)) {
+          yield* Effect.acquireRelease(
+            Effect.sync(() => beginWrite(cwd)),
+            (end) => Effect.sync(end),
+          );
+        }
         const handle = yield* spawner
           .spawn(
             ChildProcess.make("git", [...args], {
