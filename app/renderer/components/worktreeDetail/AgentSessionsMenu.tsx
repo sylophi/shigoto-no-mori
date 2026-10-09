@@ -1,4 +1,5 @@
-import { Bot, Check, Copy, Unlink } from "lucide-react";
+import type { ReactNode } from "react";
+import { Bot, Check, Copy, Play, Unlink } from "lucide-react";
 import { useCopied } from "@/components/ui/copy-button";
 import {
   DropdownMenu,
@@ -11,13 +12,16 @@ import { IconButton } from "@/components/ui/icon-button";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   useIdleAgents,
+  useResumeAgent,
   useUnbindAgent,
 } from "@/hooks/worktrees/useWorktreeMutations";
 import {
   AGENT_STATE_VIEW,
   agentSessionsState,
+  canResume,
   harnessLabel,
   waitingSession,
 } from "@/lib/agentSessions";
@@ -30,7 +34,8 @@ import { FooterVerb, LABEL_RANK } from "./footerFit";
 // verb in their combined state's tone that opens the list. Marking them
 // idle is for a turn whose end no hook reported (Claude Code reports
 // none when it is interrupted), and unbinding one is for a session
-// that bound itself where it doesn't belong.
+// that bound itself where it doesn't belong. An idle session on this
+// machine can be resumed in a terminal.
 export function AgentSessionsMenu({
   worktree,
   sessions,
@@ -119,6 +124,19 @@ function SessionRow({
       : undefined;
   // Under the harness's name (no title), the sentence goes without it.
   const sentence = stateLabel(session, session.title !== undefined);
+  const { remote } = useHostScope();
+  const resume = useResumeAgent();
+  const unbind = useUnbindAgent();
+  const vars = {
+    projectId: worktree.projectId,
+    worktreeId: worktree.id,
+    harness: session.harness,
+    session: session.session,
+  };
+  // Resuming a session that isn't idle would run it twice, the second
+  // copy beside one still mid-turn wherever it runs.
+  const resumable =
+    session.state === "idle" && canResume(session.harness) && !remote;
   return (
     <div className="space-y-0.5 px-2 py-1.5 text-xs">
       <div className="flex items-center gap-2">
@@ -132,7 +150,20 @@ function SessionRow({
           className="min-w-0 flex-1 text-xs"
         />
         <SessionId id={session.session} />
-        <UnbindButton worktree={worktree} session={session} busy={busy} />
+        {resumable && (
+          <SessionAction
+            label="Resume in terminal"
+            icon={<Play className="size-3" />}
+            disabled={resume.isPending || busy}
+            onClick={() => resume.mutate(vars)}
+          />
+        )}
+        <SessionAction
+          label="Unbind"
+          icon={<Unlink className="size-3" />}
+          disabled={unbind.isPending || busy}
+          onClick={() => unbind.mutate(vars)}
+        />
       </div>
       <p className="flex gap-2 pl-3 text-2xs">
         <span className={cn("flex items-center gap-1", TONE_TEXT[view.tone])}>
@@ -173,32 +204,26 @@ function SessionId({ id }: { id: string }) {
   );
 }
 
-function UnbindButton({
-  worktree,
-  session,
-  busy,
+function SessionAction({
+  label,
+  icon,
+  disabled,
+  onClick,
 }: {
-  worktree: Worktree;
-  session: AgentSession;
-  busy: boolean;
+  label: string;
+  icon: ReactNode;
+  disabled: boolean;
+  onClick: () => void;
 }) {
-  const unbind = useUnbindAgent();
   return (
-    <SimpleTooltip tip="Unbind">
+    <SimpleTooltip tip={label}>
       <IconButton
-        aria-label="Unbind"
-        disabled={unbind.isPending || busy}
-        onClick={() =>
-          unbind.mutate({
-            projectId: worktree.projectId,
-            worktreeId: worktree.id,
-            harness: session.harness,
-            session: session.session,
-          })
-        }
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
         className="-my-1 p-0.5"
       >
-        <Unlink className="size-3" />
+        {icon}
       </IconButton>
     </SimpleTooltip>
   );

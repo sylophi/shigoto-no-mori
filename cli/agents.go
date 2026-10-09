@@ -71,7 +71,9 @@ type harness struct {
 	// thread id the subagent's own shell binds under (Codex). A Claude
 	// Code subagent works within its parent's session.
 	subagentIDs bool
-	install     hookInstall
+	// The command that resumes a session, given its id.
+	resume  string
+	install hookInstall
 }
 
 func lookupHarness(id string) *harness {
@@ -213,15 +215,12 @@ func cmdAgents(_ cliContext, args []string) (int, error) {
 		return 0, nil
 	}
 	switch args[0] {
-	case "bind", "idle":
-		ctx, err := loadContext()
-		if err != nil {
-			return 1, err
-		}
-		if args[0] == "bind" {
-			return cmdAgentsBind(ctx, args[1:])
-		}
-		return cmdAgentsIdle(ctx, args[1:])
+	case "bind":
+		return withContext(cmdAgentsBind, args[1:])
+	case "idle":
+		return withContext(cmdAgentsIdle, args[1:])
+	case "resume":
+		return withContext(cmdAgentsResume, args[1:])
 	case "unbind":
 		return cmdAgentsUnbind(args[1:])
 	case "event":
@@ -233,8 +232,17 @@ func cmdAgents(_ cliContext, args []string) (int, error) {
 	case "status":
 		return cmdAgentsStatus(args[1:])
 	default:
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s agents <bind|unbind|idle|install|uninstall|status> [args]", args[0], binaryName)
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s agents <bind|unbind|idle|resume|install|uninstall|status> [args]", args[0], binaryName)
 	}
+}
+
+// A subcommand that targets a worktree, which takes the context.
+func withContext(run func(cliContext, []string) (int, error), args []string) (int, error) {
+	ctx, err := loadContext()
+	if err != nil {
+		return 1, err
+	}
+	return run(ctx, args)
 }
 
 // sm agents bind [<name>] [--harness <id> --session <id>]
@@ -340,6 +348,32 @@ func cmdAgentsIdle(ctx cliContext, args []string) (int, error) {
 		return 0, nil
 	}
 	out(greenOut("agent sessions idle in " + id.Name))
+	return 0, nil
+}
+
+// sm agents resume [<name>] --harness <id> --session <id>: the
+// session's own CLI picks it up again in the worktree, in the user's
+// terminal. A harness finds a session by its id from any directory.
+func cmdAgentsResume(ctx cliContext, args []string) (int, error) {
+	spec := worktreeTargetSpec()
+	spec.strings["harness"] = []string{}
+	spec.strings["session"] = []string{}
+	parsed, target, err := parseWorktreeArgs(ctx, args, spec, false)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	harnessID, session := parsed.strings["harness"], parsed.strings["session"]
+	if harnessID == "" || session == "" {
+		return 2, usageErrf("--harness and --session are required.")
+	}
+	h := lookupHarness(harnessID)
+	if h == nil {
+		return 1, errf("Don't know how to resume a %s session", harnessID)
+	}
+	if err := launchInTerminal(h.resume+" "+shellQuote(session), target.worktree.Path); err != nil {
+		return 1, err
+	}
+	emitOrOut(map[string]any{"ok": true}, greenOut("resumed "+harnessID+" session "+shortSession(session)+" in "+target.worktree.Name))
 	return 0, nil
 }
 

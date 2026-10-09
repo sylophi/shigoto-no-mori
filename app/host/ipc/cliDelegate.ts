@@ -898,6 +898,30 @@ export async function unbindAgentViaCli(
   finalOkDoc(result, "sm agents unbind failed");
 }
 
+// Resumes one agent session in the worktree, in the user's terminal.
+// It writes no state, so it runs as a reader and leaves the watchers
+// listening while macOS may hold it on an Automation prompt.
+export async function resumeAgentViaCli(
+  project: Project,
+  worktreeId: string,
+  harness: string,
+  session: string,
+): Promise<void> {
+  const result = await runner().runCli(
+    [
+      ...worktreeArgv(["agents", "resume"], project, worktreeId),
+      "--harness",
+      harness,
+      "--session",
+      session,
+    ],
+    undefined,
+    undefined,
+    { readOnly: true },
+  );
+  finalOkDoc(result, "sm agents resume failed", { worktreeId });
+}
+
 // `git worktree move` plus the re-key of everything stored under the
 // worktree's path-derived id (marks, its data file, a pending dirty capture).
 // The caller keeps the app-side guards around it (the tombstone, script

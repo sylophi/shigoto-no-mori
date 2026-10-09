@@ -400,6 +400,7 @@ export function useIsDeletingWorktree(
 // on error. Optimistic writes change a row and never add or drop one:
 // the villager news reads those as moves (lib/villagers/moves.ts).
 type WorktreeVars = { projectId: string; worktreeId: string };
+type AgentSessionVars = WorktreeVars & { harness: string; session: string };
 
 function useWorktreeRowMutation<V extends WorktreeVars>(
   call: (api: HostApi, input: V) => Promise<Worktree>,
@@ -462,8 +463,7 @@ export function useIdleAgents() {
 
 export function useUnbindAgent() {
   return useWorktreeRowMutation(
-    (api, input: WorktreeVars & { harness: string; session: string }) =>
-      api.worktrees.unbindAgent(input),
+    (api, input: AgentSessionVars) => api.worktrees.unbindAgent(input),
     (w, { harness, session }) => {
       const agentSessions = (w.agentSessions ?? []).filter(
         (s) => s.harness !== harness || s.session !== session,
@@ -476,6 +476,15 @@ export function useUnbindAgent() {
     },
     "Couldn't unbind the agent session",
   );
+}
+
+export function useResumeAgent() {
+  const { api } = useHostScope();
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: resuming opens a terminal and leaves the session's binding as it was
+  return useMutation<void, Error, AgentSessionVars>({
+    mutationFn: (input) => api.worktrees.resumeAgent(input),
+    meta: { errorTitle: "Couldn't resume the agent session" },
+  });
 }
 
 // Marking a worktree is followed by a project refresh: its auto-pull
