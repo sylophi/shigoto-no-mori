@@ -258,7 +258,7 @@ const hubServer = createHubConnection({
 // so a remote req gets a no-handler res instead of a native dialog or
 // an app-menu mutation.
 const hostServer: ServerTransport = {
-  // The Electron wire always serves host calls. The direct listener,
+  // The loopback always serves host calls. The direct listener,
   // the one remote wire, serves a call ONLY when it opted into
   // remote exposure, so a host-scoped-but-not-remote channel
   // (runtime:nuke, launchers:launch) is never even registered on it. A
@@ -280,8 +280,19 @@ const hostServer: ServerTransport = {
   },
 };
 
+// The shell's modules, served on every window's shell port. A push of
+// theirs annotated `remote` is this host's answer to its peers
+// (account:commandAccessChanged), so the device link carries it too.
+const shellServer: ServerTransport = {
+  handle: (channel, fn) => shellRegistrar.handle(channel, fn),
+  broadcastAll(channel, payload, opts) {
+    shellRegistrar.broadcastAll(channel, payload);
+    if (opts?.remote === true) publishPush({ channel, payload, remote: true });
+  },
+};
+
 const serverFor = (module: ContractModule): ServerTransport =>
-  isHostSide(module) ? hostServer : shellRegistrar;
+  isHostSide(module) ? hostServer : shellServer;
 
 export function registerContract<M extends ContractModule>(
   module: M,
@@ -352,9 +363,9 @@ export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
   void ShellLink.shellLink.pushTo(webContents, { channel, payload: parsed });
 }
 
-// A push to every window: the host's (every one reaches the windows
-// over the loopback, and the ones annotated `remote` the device link's
-// peers too), or the shell's, on every window's shell port.
+// A push to every window: the host's over the loopback, the shell's on
+// every window's shell port, and either, when annotated `remote`, to
+// the device link's peers too.
 export function broadcastAll<
   M extends ContractModule,
   K extends BroadcastKeys<M>,
