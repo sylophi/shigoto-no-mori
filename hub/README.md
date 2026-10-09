@@ -160,8 +160,9 @@ Every app request names its protocol in an `sm-protocol` header, and
 the Worker refuses a build naming none, or one below
 `HUB_PROTOCOL_FLOOR` (`packages/contracts/src/hubApi.ts`), with a 403
 `HubUpdateRequiredError` whose `error` field is the sentence a v2 build
-shows. Raising the floor turns away every build below it at once, so it
-moves only with a release that has reached the devices.
+shows. The floor is `PROTOCOL_VERSION`, so a protocol bump raises it at
+the hub's next deploy and turns away every build below it at once:
+deploy the hub only once that release has reached the devices.
 
 ### Abuse limits
 
