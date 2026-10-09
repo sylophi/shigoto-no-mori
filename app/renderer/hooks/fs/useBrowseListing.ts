@@ -18,6 +18,10 @@ interface UseBrowseListingOptions {
   enabled?: boolean;
 }
 
+// What a browse list draws from (FolderPickerView and the add-project
+// views take it whole).
+export type BrowseListing = ReturnType<typeof useBrowseListing>;
+
 export function useBrowseListing({
   query,
   setQuery,

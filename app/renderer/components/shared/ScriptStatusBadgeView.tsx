@@ -13,7 +13,7 @@ interface ScriptStatusBadgeProps {
   variant?: "row" | "header";
 }
 
-export function ScriptStatusBadge({
+export function ScriptStatusBadgeView({
   state,
   variant = "row",
 }: ScriptStatusBadgeProps) {

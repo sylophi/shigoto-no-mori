@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { FoldVertical, RotateCcw } from "lucide-react";
-import { VillagerFace } from "@/components/shared/VillagerSays";
+import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { DialogueFrame } from "@/components/villagers/VillagerDialogue";
 import { TypedWords } from "@/components/villagers/TypedWords";
 import { ChipButton } from "@/components/ui/chip-button";
@@ -254,7 +254,7 @@ function NobodyYet() {
   return (
     <DialogueFrame name="Isabelle" color={null} className="max-w-xl">
       {face !== null && (
-        <VillagerFace face={face} className="size-10 shrink-0" />
+        <VillagerFaceView face={face} className="size-10 shrink-0" />
       )}
       <p className="min-w-0 flex-1 text-sm leading-snug font-medium">
         <TypedWords words={NOBODY_YET} />

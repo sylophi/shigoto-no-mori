@@ -1,4 +1,4 @@
-import { VillagerFace } from "@/components/shared/VillagerSays";
+import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { cn } from "@/lib/utils";
 import type { VillagerRarity } from "@shared/villagers/rarity";
 import { Confetti } from "./Celebration";
@@ -31,7 +31,7 @@ export function BirthdayFace({
 }) {
   return (
     <span className={cn("relative inline-flex shrink-0", className)}>
-      <VillagerFace face={face} className="size-full" />
+      <VillagerFaceView face={face} className="size-full" />
       <PartyHat className="absolute -top-[38%] right-[-8%] h-[62%] rotate-[20deg]" />
     </span>
   );

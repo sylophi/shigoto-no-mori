@@ -9,7 +9,7 @@ interface CustomLauncherInputProps {
   onRemove: () => void;
 }
 
-export function CustomLauncherInput({
+export function CustomLauncherInputView({
   launcher,
   onChange,
   onRemove,

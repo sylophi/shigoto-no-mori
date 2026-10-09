@@ -9,7 +9,7 @@ import {
   SquarePen,
 } from "lucide-react";
 import { Kbd } from "@/components/ui/kbd";
-import { LauncherIcon } from "@/components/shared/LauncherIcon";
+import { LauncherIconView } from "@/components/shared/LauncherIconView";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { openPullRequest } from "@/components/worktreeDetail/pullRequests/pullRequestShared";
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
@@ -256,7 +256,7 @@ function LauncherVerbs({
         key: `launch:${launcher.id}`,
         label: launcher.label,
         search: `Open in ${launcher.label}`,
-        icon: <LauncherIcon entry={launcher} />,
+        icon: <LauncherIconView entry={launcher} />,
         keys: i < 9 ? `⌘${i + 1}` : undefined,
         run: () => {
           launch({

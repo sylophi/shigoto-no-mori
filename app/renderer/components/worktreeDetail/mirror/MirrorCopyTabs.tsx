@@ -7,7 +7,8 @@
 // device. Unlike the project pages' tabs, a pick here navigates: each
 // side is a worktree of its own, with its own route, so the page stays
 // one device's throughout.
-import { DeviceTabBar, useDeviceRoster } from "@/components/shared/DeviceTabs";
+import { useDeviceRoster } from "@/components/shared/DeviceTabs";
+import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -30,7 +31,7 @@ export function MirrorCopyTabs({ copies }: { copies: MirrorCopies }) {
   const { toDeviceWorktree } = useWorktreeNav();
   const { deviceId, tabs } = copies;
   return (
-    <DeviceTabBar
+    <DeviceTabBarView
       tabs={tabs}
       selectedId={deviceId}
       onSelect={(id) => {

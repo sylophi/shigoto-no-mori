@@ -1,4 +1,4 @@
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { SettingsForm } from "./SettingsForm";
@@ -15,7 +15,7 @@ export function Settings() {
   if (isLoading || isClientLoading) {
     return (
       <div data-doubutsu-page="settings" className="flex h-full flex-col">
-        <PageHeader
+        <PageHeaderView
           eyebrow="Shigoto no Mori"
           title="Settings"
           watermark="設定"

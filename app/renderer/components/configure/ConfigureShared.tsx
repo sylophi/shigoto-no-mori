@@ -7,7 +7,7 @@
 import type { Project } from "@shigomori/contracts/schemas";
 import { CreateOnSection } from "./CreateOnSection";
 import { LeaveOutSection } from "./LeaveOutSection";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 export function ConfigureShared({ project }: { project: Project }) {
   return (

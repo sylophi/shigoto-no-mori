@@ -1,255 +1,71 @@
-import { useState, type KeyboardEvent } from "react";
-import { Command } from "cmdk";
-import { Folder } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ChipButton } from "@/components/ui/chip-button";
-import { FileManagerIcon } from "@/components/ui/file-manager";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
+// The folder picker (FolderPickerView) in a modal, over the scope's
+// disk: browsing a peer's works the same as this one's.
+import { useState } from "react";
+import {
+  FolderPickerView,
+  type FolderPickerProps,
+} from "@/components/shared/FolderPickerView";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
-import {
-  ITEM_CLASS,
-  keepFocusInInput,
-  MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
-import {
-  canNavigateUp,
-  ensureTrailingSep,
-  isAnchoredPath,
-  normalizeForSubmit,
-} from "@shared/projectPaths";
-import { BrowseKeyHints, BrowseUpItem } from "./BrowseListParts";
+import { ensureTrailingSep } from "@shared/projectPaths";
 
-// Prefix used as the cmdk `value` for browse-list items. `hasHighlighted`
-// reads it back to tell "a row is highlighted" from "nothing is".
-const BROWSE_VALUE_PREFIX = "browse:";
-
-interface FolderPickerModalProps {
-  initialPath?: string;
-  title?: string;
-  confirmLabel?: string;
-  // One line under the input explaining what the picked folder is for.
-  // Also shown by the native dialog (its message) when Finder is used.
-  hint?: string;
-  onPick: (path: string) => void;
-  onClose: () => void;
-}
-
-// Folder picker built on the same path-as-input pattern as the Add
-// Project modal: typing a path lists the directory live, the
-// list filters by the trailing leaf segment, and ↩ confirms / enters
-// the highlighted entry.
 export function FolderPickerModal({
   initialPath,
-  title = "Pick a folder",
-  confirmLabel = "Use this folder",
-  hint,
-  onPick,
-  onClose,
-}: FolderPickerModalProps) {
+  ...props
+}: FolderPickerProps & { initialPath?: string }) {
+  const {
+    title = "Pick a folder",
+    confirmLabel = "Use this folder",
+    hint,
+    onPick,
+    onClose,
+  } = props;
   // Seed the input value with the caller's path; otherwise drop into ~/.
   // When an initialPath is provided we append a separator (matching the
   // path's own style) so the listing fires immediately rather than
   // treating the basename as a leaf filter.
   const seed = initialPath ? ensureTrailingSep(initialPath) : "~/";
   const [query, setQuery] = useState<string>(seed);
-  // The listing rides the scope, so browsing a peer's disk works the
-  // same as this one's. The native dialog is this machine's window
-  // manager, though: it can only ever pick a path here, so a peer's
-  // picker keeps the typed listing alone.
+  // The native dialog is this machine's window manager: it can only
+  // ever pick a path here.
   const { remote } = useHostScope();
   const [highlighted, setHighlighted] = useState<string>("");
+  const browse = useBrowseListing({ query, setQuery, setHighlighted });
 
-  const {
-    browseDir,
-    leafFilter,
-    listingEnabled,
-    listing,
-    isLoading,
-    error,
-    filtered,
-    browseTo,
-    browseUp,
-  } = useBrowseListing({ query, setQuery, setHighlighted });
-
-  const submitTarget = normalizeForSubmit(query);
-  // The folder we'd confirm, off the listing's resolved path where
-  // there is one: the listed folder itself when the input ends in "/"
-  // (the user is "inside" it), and the typed name under it otherwise.
-  // The listing is of that name's parent then, never the folder asked
-  // for. With nothing listed it's whatever they've typed verbatim.
-  const confirmTarget =
-    listingEnabled && listing
-      ? `${leafFilter ? ensureTrailingSep(listing.path) : listing.path}${leafFilter}`
-      : submitTarget;
-  const canConfirm = isAnchoredPath(confirmTarget) && !error;
-  const hasHighlighted = highlighted.startsWith(BROWSE_VALUE_PREFIX);
-
-  const confirm = () => {
-    if (!canConfirm) return;
-    onPick(confirmTarget);
+  const openFinder = async () => {
+    let picked: string | null;
+    try {
+      picked = await window.api.dialog.pickFolder({
+        title,
+        buttonLabel: confirmLabel,
+        message: hint,
+        // Open Finder where the picker is, not at ~.
+        defaultPath: browse.listing?.path,
+      });
+    } catch (err) {
+      // Cancelling resolves to null, so a rejection is a real
+      // dialog/IPC failure.
+      notifyError("Couldn't open the folder picker", err);
+      return;
+    }
+    if (picked) onPick(picked);
   };
-
-  const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      confirm();
-      return;
-    }
-    if (e.key === "Enter" && !hasHighlighted) {
-      e.preventDefault();
-      e.stopPropagation();
-      confirm();
-      return;
-    }
-    if (e.key === "ArrowLeft" && canNavigateUp(query) && !leafFilter) {
-      e.preventDefault();
-      e.stopPropagation();
-      browseUp();
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-      return;
-    }
-    if (e.key === "Backspace" && query === "") {
-      e.preventDefault();
-      onClose();
-    }
-  };
-
-  const canBrowseUp = canNavigateUp(query);
-  const confirmKbd = hasHighlighted ? "⌘↩" : "↩";
 
   return (
     // Escape is owned by the Command.Input handler so it can also exit
     // typeahead state; let the input swallow it before the shell sees it.
     <ModalShell onClose={onClose} closeOnEscape={false}>
-      <Command
-        label={title}
-        loop
-        shouldFilter={false}
-        value={highlighted}
-        onValueChange={setHighlighted}
-        className={MODAL_COMMAND_CLASS}
-      >
-        <div
-          data-slot="search-row"
-          className="relative flex items-center gap-2 border-b border-border px-3 py-2"
-        >
-          <Command.Input
-            // oxlint-disable-next-line jsx-a11y/no-autofocus -- picker just opened
-            autoFocus
-            value={query}
-            onValueChange={setQuery}
-            onKeyDown={onInputKeyDown}
-            placeholder="Enter a path (e.g. ~/projects/)"
-            className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
-          />
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={confirm}
-            disabled={!canConfirm}
-            aria-label={`${confirmLabel} (${confirmKbd})`}
-          >
-            <span>{confirmLabel}</span>
-            <KbdGroup className="pointer-events-none">
-              <Kbd>{confirmKbd}</Kbd>
-            </KbdGroup>
-          </Button>
-        </div>
-        {hint && (
-          <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
-            {hint}
-          </p>
-        )}
-
-        <Command.List
-          onMouseDown={keepFocusInInput}
-          className="overflow-y-auto p-2"
-        >
-          {canBrowseUp && <BrowseUpItem onSelect={browseUp} />}
-
-          {filtered.map((entry) => {
-            const entryPath = `${browseDir}${entry.name}`;
-            return (
-              <Command.Item
-                key={entry.name}
-                value={`${BROWSE_VALUE_PREFIX}${entryPath}`}
-                keywords={[entry.name]}
-                onSelect={() => browseTo(entry.name)}
-                className={ITEM_CLASS}
-              >
-                <Folder className="size-4 text-muted-foreground/80" />
-                <SimpleTooltip whenTruncated lazy tip={entry.name}>
-                  <span className="min-w-0 flex-1 truncate font-mono">
-                    {entry.name}
-                  </span>
-                </SimpleTooltip>
-              </Command.Item>
-            );
-          })}
-
-          {isLoading && !listing && (
-            <div className="p-3 text-xs text-muted-foreground">Loading…</div>
-          )}
-          {!isLoading && !error && filtered.length === 0 && (
-            <div className="p-3 text-center text-xs text-muted-foreground">
-              {leafFilter.length > 0
-                ? `No folders matching "${leafFilter}".`
-                : "Empty directory."}
-            </div>
-          )}
-          {error && (
-            <div className="p-3 text-center text-xs text-muted-foreground">
-              Couldn't read folder.
-            </div>
-          )}
-        </Command.List>
-
-        <div
-          data-slot="footer-row"
-          className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-        >
-          <div className="flex items-center gap-3">
-            <BrowseKeyHints enterFolder={hasHighlighted} goUp={canBrowseUp} />
-          </div>
-          {!remote && (
-            <ChipButton
-              onClick={async () => {
-                let picked: string | null;
-                try {
-                  picked = await window.api.dialog.pickFolder({
-                    title,
-                    buttonLabel: confirmLabel,
-                    message: hint,
-                    // Open Finder where the picker is, not at ~.
-                    defaultPath: listing?.path,
-                  });
-                } catch (err) {
-                  // Cancelling resolves to null, so a rejection is a real
-                  // dialog/IPC failure.
-                  notifyError("Couldn't open the folder picker", err);
-                  return;
-                }
-                if (picked) onPick(picked);
-              }}
-            >
-              <FileManagerIcon />
-              Open in Finder
-            </ChipButton>
-          )}
-        </div>
-      </Command>
+      <FolderPickerView
+        {...props}
+        query={query}
+        setQuery={setQuery}
+        highlighted={highlighted}
+        setHighlighted={setHighlighted}
+        browse={browse}
+        onOpenFinder={remote ? undefined : () => void openFinder()}
+      />
     </ModalShell>
   );
 }

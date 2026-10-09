@@ -23,7 +23,7 @@ interface WorktreeMoveDetailsProps {
 // a from/to path grid, and an inline error line, trailed by the status
 // badge. The surrounding row (checkbox, wrapper element) stays with each
 // flow since those genuinely differ.
-export function WorktreeMoveDetails({
+export function WorktreeMoveDetailsView({
   branch,
   detached,
   fromPath,

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { LauncherIcon } from "@/components/shared/LauncherIcon";
+import { LauncherIconView } from "@/components/shared/LauncherIconView";
 import { SectionIntro } from "@/components/ui/section-heading";
 import { cn } from "@/lib/utils";
 import type { DetectedLauncher } from "@shigomori/contracts/schemas";
@@ -48,7 +48,7 @@ export function DetectedToolsSection({
                   className={cn(isHidden && "opacity-50 hover:opacity-100")}
                   onClick={() => onToggle(tool.id)}
                 >
-                  <LauncherIcon entry={tool} className="size-3.5" />
+                  <LauncherIconView entry={tool} className="size-3.5" />
                   {tool.label}
                 </Button>
               );

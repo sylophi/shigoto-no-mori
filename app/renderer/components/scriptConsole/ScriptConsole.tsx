@@ -1,5 +1,5 @@
-import { SubPageNotFound } from "@/components/shared/SubPageNotFound";
-import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
+import { SubPageNotFoundView } from "@/components/shared/SubPageNotFoundView";
+import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { paramToSlot } from "@/store/scriptRuns";
 import { ScriptConsoleInner } from "./ScriptConsoleInner";
@@ -12,10 +12,10 @@ export function ScriptConsole() {
   const slot = paramToSlot(scriptKey);
 
   if (!worktree) {
-    return <WorktreeMissing {...missing} message="Script not found." />;
+    return <WorktreeMissingView {...missing} message="Script not found." />;
   }
   if (!slot) {
-    return <SubPageNotFound onBack={goBack} message="Script not found." />;
+    return <SubPageNotFoundView onBack={goBack} message="Script not found." />;
   }
 
   return <ScriptConsoleInner worktree={worktree} slot={slot} onBack={goBack} />;

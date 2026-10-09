@@ -4,7 +4,7 @@
 // close it to open a dialog.
 import { Archive, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, useRef } from "react";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import {
   Popover,
   PopoverClose,
@@ -64,7 +64,7 @@ export function WorktreeOptions({
         finalFocus={() => !handedOff.current}
       >
         <div className="flex flex-col gap-3 p-2">
-          <ToggleRow
+          <ToggleRowView
             label={<OptionLabel icon={<RefreshCw />} name="Auto-pull" />}
             description={
               canAutoPull
@@ -78,7 +78,7 @@ export function WorktreeOptions({
             }
           />
           {canShelve && (
-            <ToggleRow
+            <ToggleRowView
               label={<OptionLabel icon={<Archive />} name="Shelved" />}
               description="Folded away under Shelved in the sidebar, out of the main list."
               checked={worktree.shelved}

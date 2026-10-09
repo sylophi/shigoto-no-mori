@@ -1,5 +1,5 @@
 import { Heart } from "lucide-react";
-import { VillagerFace } from "@/components/shared/VillagerSays";
+import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { StationeryPrint } from "@/components/villagers/StationeryPrint";
 import { FaceStamp } from "@/components/villagers/VillagerLetter";
 import {
@@ -233,7 +233,7 @@ function NewestFace({ entry }: { entry: VisitedEntry }) {
         Newest face
       </span>
       <span className="flex min-w-0 items-center gap-1.5 rounded-full bg-muted py-0.5 pr-2.5 pl-0.5">
-        {face !== null && <VillagerFace face={face} className="size-5" />}
+        {face !== null && <VillagerFaceView face={face} className="size-5" />}
         <span className="truncate text-xs font-bold">{entry.profile.name}</span>
         <span className="shrink-0 text-xs text-muted-foreground">
           {formatRelativeTime(entry.visits.first, now)}

@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { terrierMarksHere } from "@/hooks/config/useSidebarMarks";
@@ -30,13 +30,13 @@ export function SidebarSection({
   return (
     <section className="space-y-3">
       <SectionHeading className="mb-1">Sidebar</SectionHeading>
-      <ToggleRow
+      <ToggleRowView
         checked={form.inlineWorktrees}
         onCheckedChange={setField("inlineWorktrees")}
         label="Show worktrees inline"
         description="Lists every project's worktrees under it, instead of one project at a time."
       />
-      <ToggleRow
+      <ToggleRowView
         checked={signedIn && form.showDeviceBadges}
         onCheckedChange={setField("showDeviceBadges")}
         disabled={!signedIn}
@@ -47,7 +47,7 @@ export function SidebarSection({
             : "Sign in to bring in your other devices. Open projects and each worktree are then badged with the devices they live on."
         }
       />
-      <ToggleRow
+      <ToggleRowView
         checked={terrierOn && form.markTerrierProjects}
         onCheckedChange={setField("markTerrierProjects")}
         disabled={!terrierOn}
@@ -58,13 +58,13 @@ export function SidebarSection({
             : "Turn on Automatically use terrier in this device's settings to list terrier's projects, then mark them here."
         }
       />
-      <ToggleRow
+      <ToggleRowView
         checked={form.allowAgentWorking}
         onCheckedChange={setField("allowAgentWorking")}
         label="Shelve worktrees agents are working in"
         description="A worktree waits on its own folded shelf while an agent's turn runs in it. Agents report their turns through the hooks in Integrations."
       />
-      <ToggleRow
+      <ToggleRowView
         checked={form.markAgentsWaiting}
         onCheckedChange={setField("markAgentsWaiting")}
         label="Mark worktrees whose agent needs you"

@@ -3,14 +3,14 @@
 // once so their look cannot drift between shells.
 import type { FallbackProps } from "react-error-boundary";
 import { type ToastClassnames, Toaster } from "sonner";
-import { ErrorFallback } from "@/components/ErrorFallback";
+import { ErrorFallbackView } from "@/components/ErrorFallbackView";
 import { VillageToaster } from "@/components/villagers/toasts";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 
 export function AppErrorFallback({ error }: FallbackProps) {
   const err = error instanceof Error ? error : new Error(String(error));
   return (
-    <ErrorFallback
+    <ErrorFallbackView
       error={err}
       scope="app"
       action={{

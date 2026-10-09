@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { worktreeTitle } from "@/lib/worktreeTitle";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { VillagerFace } from "@/components/shared/VillagerSays";
+import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
 import { useResident } from "@/hooks/villagers/useResident";
@@ -187,7 +187,7 @@ function EntryName({ worktree }: { worktree: Worktree }) {
         <WorktreeKindIcon worktree={worktree} />
       )}
       {resident?.face && (
-        <VillagerFace
+        <VillagerFaceView
           face={resident.face}
           tint={false}
           className="-my-0.5 size-3.5"

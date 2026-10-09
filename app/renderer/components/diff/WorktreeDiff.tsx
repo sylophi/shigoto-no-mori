@@ -47,7 +47,7 @@ import {
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
-import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
+import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 
 export function WorktreeDiff() {
   const { projectId, worktreeId, nav, worktree, goBack, missing } =
@@ -60,7 +60,7 @@ export function WorktreeDiff() {
     nav.toDiff(projectId, worktreeId, { amend: on, replace: true });
 
   if (!worktree) {
-    return <WorktreeMissing {...missing} />;
+    return <WorktreeMissingView {...missing} />;
   }
 
   return (

@@ -19,9 +19,9 @@ import {
   type RefObject,
 } from "react";
 import { AlertTriangle, GitPullRequest } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
-import { PAGE_BODY } from "@/components/shared/PageShell";
-import { PinnedMark } from "@/components/shared/PinnedMark";
+import { PageHeaderView } from "@/components/shared/PageHeaderView";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -67,7 +67,7 @@ export function ProjectGrid() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Projects" watermark="森" />
+      <PageHeaderView title="Projects" watermark="森" />
       <div className={PAGE_BODY}>
         {sections.length > 0 ? (
           <Grid sections={sections} work={work} />
@@ -286,7 +286,7 @@ function ProjectTile({
                   {project.name}
                 </span>
               </SimpleTooltip>
-              {pinned && <PinnedMark />}
+              {pinned && <PinnedMarkView />}
               <DeviceBadgeCluster devices={devices} />
             </span>
             {/* Two lines tall even when shorter or empty, so a repo

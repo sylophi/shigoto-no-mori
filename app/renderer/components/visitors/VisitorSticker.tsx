@@ -1,6 +1,6 @@
 import { type CSSProperties, useState } from "react";
 import { Heart } from "lucide-react";
-import { VillagerFace } from "@/components/shared/VillagerSays";
+import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { StationeryPrint } from "@/components/villagers/StationeryPrint";
 import { FaceStamp } from "@/components/villagers/VillagerLetter";
@@ -190,7 +190,7 @@ function StickerFront({
               className="size-full rotate-3 bg-popover transition-transform duration-300 group-hover/sticker:rotate-0"
             />
           ) : (
-            <VillagerFace
+            <VillagerFaceView
               face={face}
               className="size-full transition-transform duration-300 group-hover/sticker:scale-110 group-hover/sticker:-rotate-6"
             />
@@ -254,7 +254,7 @@ function StickerBack({
       )}
     >
       <span className="flex items-center gap-2">
-        {face !== null && <VillagerFace face={face} className="size-5" />}
+        {face !== null && <VillagerFaceView face={face} className="size-5" />}
         <span className={cn("min-w-0 truncate text-xs font-bold", ink)}>
           {profile.name}
         </span>
@@ -297,7 +297,7 @@ function EmptySlot({
     >
       <span className="flex size-14 items-center justify-center">
         {face !== null && (
-          <VillagerFace
+          <VillagerFaceView
             face={face}
             tint={false}
             className="size-12 opacity-15 brightness-0 dark:opacity-25 dark:invert"

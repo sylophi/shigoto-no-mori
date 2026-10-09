@@ -12,7 +12,7 @@ import { assertNever } from "@/lib/utils";
 import { slotLabel, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ConsoleBody } from "./ConsoleBody";
-import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
+import { ScriptStatusBadgeView } from "@/components/shared/ScriptStatusBadgeView";
 
 interface InnerProps {
   worktree: Worktree;
@@ -56,7 +56,7 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
               </SimpleTooltip>
             )}
             <div className="min-h-[1rem]">
-              <ScriptStatusBadge state={state} variant="header" />
+              <ScriptStatusBadgeView state={state} variant="header" />
             </div>
             {outputOnly && (
               <p className="text-xs text-muted-foreground">

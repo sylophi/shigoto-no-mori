@@ -71,7 +71,7 @@
  *    Settings' Visitors section), the
  *    `doubutsu-only` / `v1-only` classes
  *    (per-theme markup shipped side by side), li[data-row-idx]
- *    (shared/PickerRow.tsx).
+ *    (shared/PickerRowView.tsx).
  *
  * 4. Upstream library attributes (re-verify on upgrades; theme-contract
  *    greps the packages): Base UI's data-highlighted / data-disabled /

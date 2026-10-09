@@ -4,7 +4,7 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
 import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
+import { ScriptStatusBadgeView } from "@/components/shared/ScriptStatusBadgeView";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
 interface ScriptRowProps {
@@ -72,7 +72,7 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
           className="flex max-w-1/2 min-w-0 items-center gap-2 border-l border-border px-2.5 py-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         >
           <span className="min-w-0 truncate">
-            <ScriptStatusBadge state={state} />
+            <ScriptStatusBadgeView state={state} />
           </span>
           <ChevronRight aria-hidden className="size-3 shrink-0" />
         </button>
