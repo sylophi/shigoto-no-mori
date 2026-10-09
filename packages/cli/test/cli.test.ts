@@ -1293,7 +1293,7 @@ describe("transfer", () => {
   });
 });
 
-describe("menus", () => {
+describe("at a terminal", () => {
   // The built binary in a terminal of its own (BSD script's pty), each
   // key typed once the screen shows the text paired with it: what it
   // showed, stdout and stderr together, escapes and all.
@@ -1373,6 +1373,15 @@ describe("menus", () => {
     );
     assert.match(shown, /NAME +BRANCH +SYNC +CHANGES/);
     assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
+  });
+
+  it("writes stderr as it is, with no color of Bun's", async () => {
+    const shown = await inTerminal(["path", "nosuch"], []);
+    // After script's echo of the end of input.
+    assert.ok(
+      shown.endsWith('\u001b[31msmd:\u001b[0m No worktree named "nosuch".\r\n'),
+      JSON.stringify(shown),
+    );
   });
 
   it("filters by name, and esc cancels", async () => {
