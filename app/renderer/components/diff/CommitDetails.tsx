@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   Combine,
   Copy,
   Ellipsis,
@@ -13,6 +14,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCopied } from "@/components/ui/copy-button";
 import { IconButton } from "@/components/ui/icon-button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
@@ -166,16 +168,16 @@ export function CommitDetails({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button variant="ghost" size="icon-xs" aria-label="More">
-                <Ellipsis />
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="start" sideOffset={4}>
-            {actions.canCommand && (
+        {actions.canCommand && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="ghost" size="icon-xs" aria-label="More">
+                  <Ellipsis />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start" sideOffset={4}>
               <DropdownMenuItem
                 disabled={busy}
                 onClick={() => actions.newWorktreeFrom(commit)}
@@ -183,18 +185,30 @@ export function CommitDetails({
                 <FolderGit2 />
                 New worktree from here
               </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              onClick={() => void navigator.clipboard.writeText(commit.hash)}
-            >
-              <Copy />
-              Copy hash
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        <CopyHashButton hash={commit.hash} />
       </div>
       {actions.dialog}
     </div>
+  );
+}
+
+// The commit's hash at the row's far end, copied with a click.
+function CopyHashButton({ hash }: { hash: string }) {
+  const [copied, copy] = useCopied(hash);
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      onClick={copy}
+      aria-label={`Copy hash ${hash}`}
+      className="ml-auto text-muted-foreground"
+    >
+      <span className="font-mono">{hash}</span>
+      {copied ? <Check /> : <Copy />}
+    </Button>
   );
 }
 
