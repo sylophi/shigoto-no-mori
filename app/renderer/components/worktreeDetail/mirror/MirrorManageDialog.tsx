@@ -11,45 +11,14 @@
 // controls need that device's command grant, like any mutation on a
 // peer. Without it the dialog is read-only and says whose switch it is.
 import { useState } from "react";
-import {
-  AlertCircle,
-  ArrowLeftRight,
-  Check,
-  GitBranch,
-  Loader2,
-  Pause,
-  Play,
-  RefreshCw,
-  Settings2,
-  Square,
-  type LucideIcon,
-} from "lucide-react";
-import type {
-  MirrorEvent,
-  MirrorEventKind,
-  MirrorSession,
-} from "@shigomori/contracts/modules/mirror";
+import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import {
   isHaltedStatus,
   mirrorStopRefusalReason,
   mirrorFilesSettled,
   mirrorStopBlocker,
 } from "@shigomori/contracts/modules/mirror";
-import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
-import { RelativeDate } from "@/components/ui/relative-date";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import {
-  StatusDot,
-  type StatusTone,
-  TONE_PILL,
-  TONE_TEXT,
-} from "@/components/ui/status-dot";
-import { InlineError } from "@/components/ui/inline-error";
-import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
@@ -59,17 +28,6 @@ import {
   useSetMirrorIgnores,
 } from "@/hooks/remote/useMirrors";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
-import { getBrowseLeafSegment, normalizeForSubmit } from "@shared/projectPaths";
-import {
-  CARD,
-  CARD_NOTE,
-  FlowHeaderView,
-  FlowBodyView,
-  FlowFooterView,
-} from "../flow/FlowChromeView";
 import {
   type IgnoreSelection,
   modeOf,
@@ -78,16 +36,15 @@ import {
   selectionOf,
 } from "../flow/ignoreChoice";
 import { browseWorktree, LeaveOutPicker } from "../flow/LeaveOutPicker";
-import { gitVerdict, type MirrorLook } from "./mirrorStatus";
-
-type MirrorNames = {
-  // The device running the session, which holds the original.
-  runner: string;
-  // The device holding the copy.
-  copy: string;
-  // The mirror's other party as the page it opened from sees it.
-  other: string;
-};
+import {
+  MirrorHistoryListView,
+  MirrorIgnoresApplyView,
+  MirrorManageDialogView,
+  type MirrorNames,
+  MirrorPairStripView,
+  type StopConfirm,
+} from "./MirrorManageDialogView";
+import type { MirrorLook } from "./mirrorStatus";
 
 export function MirrorManageDialog({
   session,
@@ -134,140 +91,30 @@ export function MirrorManageDialog({
   const resumable = session.paused || isHaltedStatus(session.status);
   return (
     <ModalShell onClose={onClose} popoverClassName="max-w-3xl">
-      <FlowHeaderView
-        tint={TONE_PILL[view.tone]}
-        icon={RefreshCw}
-        spin={view.spinning}
-        title={`Mirror with ${names.other}`}
+      <MirrorManageDialogView
+        session={session}
+        view={view}
+        names={names}
+        revealUnder={revealUnder}
+        canControl={canControl}
+        busy={busy}
+        resumable={resumable}
+        stop={stop}
+        onPauseResume={() =>
+          (resumable ? controls.resume : controls.pause).mutate(session.session)
+        }
         onClose={onClose}
-      >
-        <p className="flex min-w-0 items-center gap-1.5">
-          <StatusDot
-            tone={view.tone}
-            label={
-              <span className={cn("text-xs font-medium", TONE_TEXT[view.tone])}>
-                {view.label}
-              </span>
-            }
+        pair={<PairStrip session={session} names={names} />}
+        ignores={
+          <Ignores
+            session={session}
+            worktree={worktree}
+            canControl={canControl}
+            setIgnores={setIgnores}
           />
-          {/* Trouble is spelled out in the body (Notice), so the header
-              carries only the quiet lifecycle line. */}
-          {view.detail !== "" &&
-            view.tone !== "rose" &&
-            view.tone !== "amber" && (
-              <SimpleTooltip whenTruncated tip={view.detail}>
-                <span className="min-w-0 truncate">
-                  <span aria-hidden>· </span>
-                  {view.detail}
-                </span>
-              </SimpleTooltip>
-            )}
-        </p>
-      </FlowHeaderView>
-
-      <FlowBodyView>
-        <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="flex min-w-0 flex-col gap-5">
-            <div className="space-y-2">
-              <PairStrip session={session} names={names} />
-              <Facts session={session} />
-            </div>
-            <Notice
-              session={session}
-              view={view}
-              names={names}
-              revealUnder={revealUnder}
-            />
-            <Ignores
-              session={session}
-              worktree={worktree}
-              canControl={canControl}
-              setIgnores={setIgnores}
-            />
-          </div>
-          <section className="space-y-2">
-            <SectionHeading>History</SectionHeading>
-            <HistoryList localWorktreeId={worktree.id} />
-          </section>
-        </div>
-      </FlowBodyView>
-
-      {stop.confirming ? (
-        <FlowFooterView
-          note={
-            <span
-              className={cn(
-                stop.blocker !== undefined &&
-                  "text-amber-700 dark:text-amber-300",
-              )}
-            >
-              {stop.note}
-            </span>
-          }
-        >
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={stop.pending}
-            onClick={stop.cancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            variant={stop.blocker === undefined ? "default" : "destructive"}
-            disabled={stop.pending}
-            onClick={stop.confirm}
-          >
-            {stop.pending && <Loader2 className="animate-spin" />}
-            {stop.pending
-              ? "Stopping…"
-              : stop.blocker === undefined
-                ? "Stop and remove the copy"
-                : "Remove the copy anyway"}
-          </Button>
-        </FlowFooterView>
-      ) : (
-        <FlowFooterView
-          note={
-            !canControl
-              ? peerReadOnlyNote(names.runner)
-              : session.stopping === true
-                ? `Removing the copy on ${names.copy}…`
-                : undefined
-          }
-        >
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Close
-          </Button>
-          {canControl && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  (resumable ? controls.resume : controls.pause).mutate(
-                    session.session,
-                  )
-                }
-              >
-                {resumable ? <Play /> : <Pause />}
-                {resumable ? "Resume" : "Pause"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline-destructive"
-                disabled={busy}
-                onClick={stop.ask}
-              >
-                <Square />
-                Stop mirroring
-              </Button>
-            </>
-          )}
-        </FlowFooterView>
-      )}
+        }
+        history={<HistoryList localWorktreeId={worktree.id} />}
+      />
     </ModalShell>
   );
 }
@@ -286,7 +133,7 @@ function useStopConfirm(
   session: MirrorSession,
   names: MirrorNames,
   onStopped: (removedCopy: boolean) => void,
-) {
+): StopConfirm {
   const [confirming, setConfirming] = useState(false);
   const [refusal, setRefusal] = useState<{
     reason: string;
@@ -321,9 +168,7 @@ function useStopConfirm(
   };
 }
 
-// The two worktrees the mirror pairs, side by side: the original on
-// the device running the session, the copy on its peer. A stop removes
-// the copy, so which is which is the first thing on the page.
+// The pair's two devices, the runner's (this scope's) and the copy's.
 function PairStrip({
   session,
   names,
@@ -333,158 +178,12 @@ function PairStrip({
 }) {
   const { deviceId: runnerDeviceId } = useHostScope();
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-lg bg-muted/40 px-3 py-2.5">
-      <PairEnd
-        deviceId={runnerDeviceId}
-        name={names.runner}
-        side="original"
-        path={session.localRoot}
-      />
-      <SimpleTooltip tip="Kept in step both ways">
-        <ArrowLeftRight
-          aria-label="Kept in step both ways"
-          className="size-4 text-muted-foreground"
-        />
-      </SimpleTooltip>
-      <PairEnd
-        deviceId={session.deviceId}
-        name={names.copy}
-        side="copy"
-        path={session.remoteRoot}
-        align="end"
-      />
-    </div>
-  );
-}
-
-function PairEnd({
-  deviceId,
-  name,
-  side,
-  path,
-  align = "start",
-}: {
-  deviceId: string;
-  name: string;
-  side: "original" | "copy";
-  path: string;
-  align?: "start" | "end";
-}) {
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-col gap-0.5 leading-tight",
-        align === "end" && "items-end text-right",
-      )}
-    >
-      <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
-        <DeviceGlyphView
-          icon={useDeviceIcon(deviceId)}
-          className="size-3.5 shrink-0 text-muted-foreground"
-        />
-        <SimpleTooltip whenTruncated tip={name}>
-          <span className="truncate">{name}</span>
-        </SimpleTooltip>
-        <span className="shrink-0 text-xs font-normal text-muted-foreground">
-          {side}
-        </span>
-      </span>
-      {/* The folder alone: the two paths sit on two machines, and
-          shortened to fit they read as noise. The tooltip has it whole. */}
-      <SimpleTooltip tip={path}>
-        <span className="max-w-full min-w-0 truncate font-mono text-2xs text-muted-foreground">
-          {getBrowseLeafSegment(normalizeForSubmit(path))}
-        </span>
-      </SimpleTooltip>
-    </div>
-  );
-}
-
-// The mirror's figures in one quiet line under the pair: how long it
-// has run, how much the original holds, whether git agrees (its detail
-// on hover). A paused session reports no files and git off, because
-// the engine tears its scan down while paused, so the line says
-// "paused" instead of figures that read as a mirror that lost
-// everything.
-function Facts({ session }: { session: MirrorSession }) {
-  const git = gitVerdict(session.git);
-  return (
-    <p className="flex flex-wrap items-center gap-x-1.5 px-1 text-xs text-muted-foreground">
-      <span>
-        Started{" "}
-        {session.createdAt > 0 ? (
-          <RelativeDate date={new Date(session.createdAt).toISOString()} />
-        ) : (
-          "just now"
-        )}
-      </span>
-      <span aria-hidden>·</span>
-      {session.paused ? (
-        <span>paused</span>
-      ) : (
-        <>
-          <span className="tabular-nums">
-            {pluralize(session.local.files, "file")}
-          </span>
-          <span aria-hidden>·</span>
-          <SimpleTooltip tip={session.git?.detail || undefined}>
-            <span>
-              <StatusDot
-                tone={git.tone}
-                className="text-xs"
-                label={`Git ${git.label.toLowerCase()}`}
-              />
-            </span>
-          </SimpleTooltip>
-        </>
-      )}
-    </p>
-  );
-}
-
-// The thing to act on, when there is one: a halt, an error, a git
-// verdict, a lost link, or the conflicts held still. Nothing when the
-// mirror is fine. A conflict reveals in this machine's Finder, under
-// whichever side this machine holds.
-function Notice({
-  session,
-  view,
-  names,
-  revealUnder,
-}: {
-  session: MirrorSession;
-  view: MirrorLook;
-  names: MirrorNames;
-  revealUnder: string | undefined;
-}) {
-  if (view.showConflicts) {
-    return (
-      <div className="flex items-center gap-2">
-        <MirrorConflictsChip
-          session={session}
-          tone={view.tone}
-          label={view.label}
-          names={names}
-          revealUnder={revealUnder}
-        />
-        <span className="text-xs text-muted-foreground">
-          held still until one side matches the other
-        </span>
-      </div>
-    );
-  }
-  if (view.detail === "" || (view.tone !== "rose" && view.tone !== "amber")) {
-    return null;
-  }
-  return (
-    <p
-      className={cn(
-        "rounded-lg px-3 py-2 text-xs break-words whitespace-pre-line select-text",
-        TONE_PILL[view.tone],
-      )}
-    >
-      {view.detail}
-    </p>
+    <MirrorPairStripView
+      session={session}
+      names={names}
+      runnerIcon={useDeviceIcon(runnerDeviceId)}
+      copyIcon={useDeviceIcon(session.deviceId)}
+    />
   );
 }
 
@@ -536,102 +235,19 @@ function Ignores({
       disabled={!canControl || setIgnores.isPending}
     >
       {dirty && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            onClick={apply}
-            disabled={setIgnores.isPending || waiting || !settled}
-          >
-            {setIgnores.isPending && <Loader2 className="animate-spin" />}
-            {setIgnores.isPending ? "Re-opening…" : "Apply"}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={setIgnores.isPending}
-            onClick={() => setDraft(null)}
-          >
-            Revert
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            {settled
-              ? "Re-opens the mirror."
-              : "Can change once the mirror is running and in step."}
-          </span>
-        </div>
+        <MirrorIgnoresApplyView
+          pending={setIgnores.isPending}
+          disabled={setIgnores.isPending || waiting || !settled}
+          settled={settled}
+          onApply={apply}
+          onRevert={() => setDraft(null)}
+        />
       )}
     </LeaveOutPicker>
   );
 }
 
-const EVENT_LOOK: Record<
-  MirrorEventKind,
-  { icon: LucideIcon; tone: StatusTone; label: string }
-> = {
-  started: { icon: Play, tone: "emerald", label: "Started" },
-  stopped: { icon: Square, tone: "slate", label: "Stopped" },
-  paused: { icon: Pause, tone: "slate", label: "Paused" },
-  resumed: { icon: Play, tone: "emerald", label: "Resumed" },
-  "ignores-changed": { icon: Settings2, tone: "sky", label: "Rule changed" },
-  connected: { icon: Check, tone: "emerald", label: "Connected" },
-  disconnected: { icon: AlertCircle, tone: "amber", label: "Disconnected" },
-  halted: { icon: AlertCircle, tone: "rose", label: "Halted" },
-  error: { icon: AlertCircle, tone: "rose", label: "Error" },
-  recovered: { icon: Check, tone: "emerald", label: "Recovered" },
-  conflict: { icon: AlertCircle, tone: "amber", label: "Conflict" },
-  "git-diverged": { icon: GitBranch, tone: "amber", label: "Git diverged" },
-  "git-blocked": { icon: GitBranch, tone: "amber", label: "Git waiting" },
-  "git-error": { icon: GitBranch, tone: "rose", label: "Git error" },
-  "git-synced": { icon: GitBranch, tone: "emerald", label: "Git in step" },
-};
-
 function HistoryList({ localWorktreeId }: { localWorktreeId: string }) {
   const { data: events, isPending } = useMirrorHistory(localWorktreeId);
-  if (isPending) {
-    return (
-      <div className={cn(CARD, "space-y-1.5")}>
-        <Skeleton className="h-3.5 w-2/3" />
-        <Skeleton className="h-3.5 w-1/2" />
-      </div>
-    );
-  }
-  if (events === undefined || events.length === 0) {
-    return <p className={CARD_NOTE}>Nothing yet.</p>;
-  }
-  return (
-    <ol className="max-h-96 space-y-2.5 overflow-y-auto text-xs">
-      {events.map((event) => (
-        <EventRow
-          key={`${event.at}:${event.kind}:${event.detail}`}
-          event={event}
-        />
-      ))}
-    </ol>
-  );
-}
-
-function EventRow({ event }: { event: MirrorEvent }) {
-  const look = EVENT_LOOK[event.kind];
-  return (
-    <li className="flex min-w-0 items-start gap-2">
-      <StatusDot tone={look.tone} className="mt-[5px]" />
-      <div className="min-w-0 flex-1 leading-snug">
-        <div className="flex items-baseline gap-2">
-          <span className={cn("font-medium", TONE_TEXT[look.tone])}>
-            {look.label}
-          </span>
-          <span className="ml-auto shrink-0 text-muted-foreground">
-            <RelativeDate date={new Date(event.at).toISOString()} />
-          </span>
-        </div>
-        {event.detail !== "" && (
-          <InlineError
-            message={event.detail}
-            title={look.label}
-            className="text-muted-foreground"
-          />
-        )}
-      </div>
-    </li>
-  );
+  return <MirrorHistoryListView events={events} isPending={isPending} />;
 }

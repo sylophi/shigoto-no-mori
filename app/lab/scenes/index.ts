@@ -20,6 +20,13 @@ import {
   PhoneInboxScene,
   PhoneNotFoundScene,
 } from "./shell";
+import {
+  FlowPartsScene,
+  FlowStepsScene,
+  MirrorManageScene,
+  MirrorReviewScene,
+  TransplantReviewScene,
+} from "./flows";
 import { PullRequestPartsScene } from "./pullRequests";
 import { SidebarPartsScene } from "./sidebarParts";
 import {
@@ -52,6 +59,11 @@ export const scenes = {
   worktreePageParts: { Scene: WorktreePagePartsScene, size: [1100, 900] },
   worktreeSections: { Scene: WorktreeSectionsScene, size: [1400, 1000] },
   pullRequestParts: { Scene: PullRequestPartsScene, size: [1100, 1300] },
+  transplantReview: { Scene: TransplantReviewScene, size: [960, 780] },
+  mirrorReview: { Scene: MirrorReviewScene, size: [960, 640] },
+  flowSteps: { Scene: FlowStepsScene, size: [1800, 1300] },
+  mirrorManage: { Scene: MirrorManageScene, size: [1600, 720] },
+  flowParts: { Scene: FlowPartsScene, size: [1100, 800] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

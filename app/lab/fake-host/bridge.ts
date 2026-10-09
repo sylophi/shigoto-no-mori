@@ -94,6 +94,7 @@ import {
   type FakeWorktree,
   worktree as worktreeFixture,
 } from "./fixtures";
+import { endpointState } from "./mirrorFixtures";
 import { villagerHandlersFor } from "./villagerData";
 
 // A fixture table: a handler for each channel it answers, typed by the
@@ -1161,17 +1162,6 @@ function setMirrorPaused(session: string, paused: boolean) {
   noteMirrorEvent(entry.localWorktreeId, paused ? "paused" : "resumed", "");
   mirrorChanged();
 }
-
-const endpointState = () => ({
-  connected: true,
-  scanned: true,
-  directories: 42,
-  files: 318,
-  symbolicLinks: 0,
-  totalFileSize: 4_820_000,
-  problems: [],
-  excludedProblems: 0,
-});
 
 // A posed mirror, run by the forest holding the original: the send
 // lands the copy on the local forest, then a session opens on top and

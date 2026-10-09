@@ -19,11 +19,6 @@ import { RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shared/git/branches";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Chip } from "@/components/ui/chip-button";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import {
   DestinationProvider,
@@ -31,16 +26,20 @@ import {
 } from "@/hooks/remote/useHostScope";
 import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
-import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
-import { CARD, FlowBodyView, FlowFooterView } from "../flow/FlowChromeView";
+import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { LandedPath } from "../flow/FlowChrome";
-import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
-import type { DestinationPick } from "../flow/PullReview";
-import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
+import { usePeerDestination } from "../flow/peerTargets";
+import type { DestinationPick, PeerTarget } from "../flow/PullReviewView";
+import {
+  type FlowStage,
+  type Landing,
+  LANDS_HERE,
+  stepHeadline,
+} from "../flow/pullSteps";
 import { selectionSummary, sessionSummary } from "../flow/ignoreChoice";
 import { describeMirror } from "./mirrorStatus";
+import { MirrorHeadlineView, MirrorLiveView } from "./MirrorDialogView";
 import { MirrorReview } from "./MirrorReview";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;
 
@@ -175,7 +174,6 @@ function MirrorFlow({
   const { stage, progress, start, open, pull, target } = flow;
   const summary = selectionSummary(pull.selection);
   const landingBranch = pullLandingBranch(worktree);
-  const renamed = landingBranch !== worktree.branch;
   // Leaving a live mirror here, by any way out, opens the copy: the
   // peer's page this opened on folds into it in the sidebar, and what
   // it launches runs on the peer. A mirror to a peer opened on this
@@ -210,48 +208,22 @@ function MirrorFlow({
       }}
       onClose={finish}
       headline={
-        <>
-          {stage === "review" &&
-            (renamed ? (
-              <>
-                A live copy of {sourceDeviceLabel}'s primary checkout{" "}
-                {landing.on}, on{" "}
-                <span className="font-mono">{landingBranch}</span>, kept in step
-                with its <span className="font-mono">{worktree.branch}</span>.
-              </>
-            ) : (
-              <>
-                A live copy of{" "}
-                <span className="font-mono">{worktree.branch}</span>{" "}
-                {landing.on}, kept in step with {sourceDeviceLabel}.
-              </>
-            ))}
-          {stage === "running" &&
-            (progress.frame === null
+        <MirrorHeadlineView
+          stage={stage}
+          branch={worktree.branch}
+          landingBranch={landingBranch}
+          sourceDeviceLabel={sourceDeviceLabel}
+          on={landing.on}
+          running={
+            progress.frame === null
               ? landing.onPeer
                 ? `Reaching ${thisDeviceLabel}.`
                 : "Reaching the source."
               : progress.frame.step === "apply" && !mirror.isSuccess
                 ? "Opening the mirror."
-                : `${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`)}
-          {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
-          {stage === "cancelled" &&
-            `Stopped before the mirror opened. Nothing on ${sourceDeviceLabel} changed.`}
-          {stage === "done" &&
-            (renamed ? (
-              <>
-                <span className="font-mono">{landingBranch}</span> {landing.on}{" "}
-                follows {sourceDeviceLabel}'s{" "}
-                <span className="font-mono">{worktree.branch}</span> and stays
-                in step.
-              </>
-            ) : (
-              <>
-                <span className="font-mono">{worktree.branch}</span> is on both
-                devices and stays in step.
-              </>
-            ))}
-        </>
+                : `${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`
+          }
+        />
       }
     >
       {/* Step 1: the shared review (flow/PullReview.tsx), the original
@@ -305,17 +277,12 @@ function RunnerScope({
 function MirrorLive({
   session,
   landed,
-  branch,
-  sourceDeviceLabel,
-  thisDeviceLabel,
-  dirtyApplied,
-  onDone,
+  ...props
 }: {
   session: string;
   landed: Worktree;
   branch: string;
   sourceDeviceLabel: string;
-  // The device holding the copy, and the words for that.
   thisDeviceLabel: string;
   dirtyApplied: boolean;
   onDone: () => void;
@@ -324,43 +291,12 @@ function MirrorLive({
   const live: MirrorSession | undefined = sessions.find(
     (entry) => entry.session === session,
   );
-  const view = live === undefined ? null : describeMirror(live);
-  const summary = live === undefined ? null : sessionSummary(live);
   return (
-    <>
-      <FlowBodyView>
-        <section className="space-y-2">
-          <SectionHeading>Copy on {thisDeviceLabel}</SectionHeading>
-          <div className={cn(CARD, "space-y-1.5")}>
-            <SimpleTooltip whenTruncated tip={branch}>
-              <p className="truncate font-mono text-sm font-semibold">
-                {branch}
-              </p>
-            </SimpleTooltip>
-            <LandedPath path={landed.path} />
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              <Chip>
-                <StatusDot
-                  tone={view?.tone ?? "sky"}
-                  label={view?.label ?? "Opening"}
-                />
-              </Chip>
-              {summary !== null && <Chip>{summary}</Chip>}
-              {!dirtyApplied && (
-                <Chip className="text-amber-700 dark:text-amber-300">
-                  Uncommitted changes stayed on {sourceDeviceLabel}
-                </Chip>
-              )}
-            </div>
-          </div>
-        </section>
-      </FlowBodyView>
-      {/* One way out, to this device's half of the pair (finish). */}
-      <FlowFooterView>
-        <Button size="sm" onClick={onDone}>
-          Done
-        </Button>
-      </FlowFooterView>
-    </>
+    <MirrorLiveView
+      {...props}
+      path={<LandedPath path={landed.path} />}
+      status={live === undefined ? null : describeMirror(live)}
+      summary={live === undefined ? null : sessionSummary(live)}
+    />
   );
 }

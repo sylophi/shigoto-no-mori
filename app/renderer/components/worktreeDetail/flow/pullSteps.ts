@@ -190,3 +190,6 @@ export function stepHeadline(
         : `Bringing the ignored files over from ${sourceDeviceLabel}`;
   }
 }
+
+// Where a pull flow stands, from its review to its last step.
+export type FlowStage = "review" | "running" | "failed" | "cancelled" | "done";
