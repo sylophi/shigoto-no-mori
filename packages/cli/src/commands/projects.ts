@@ -1,6 +1,7 @@
 // sm projects <list|add|remove|reorder|icon|config>: the registered
 // projects, terrier's included, and each one's settings.
 import { basename } from "node:path";
+import * as Config from "@shigomori/engine/Config";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Projects from "@shigomori/engine/Projects";
@@ -25,6 +26,7 @@ import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 import { pickProject } from "../pickers.ts";
 import { confirm, interactive } from "../prompt.ts";
 import { configVerbs, type Settings } from "./config.ts";
+import { carryOverVerb } from "./configLists.ts";
 
 const refreshIconsFlag = Flag.Boolean("refresh-icons").pipe(
   Flag.withDescription(
@@ -106,27 +108,84 @@ const projectDescriptions: Readonly<Record<string, string>> = {
   launchers: "Per-project launchers (`launcher` verbs)",
 };
 
-// The project settings' parent: -p and --project-id go before or after
-// the verb.
-const settingsOf = Command.make("config").pipe(
-  Command.withSharedFlags(projectFlags),
-);
+// A project's settings, by the flags that name it.
+const settingsFor = (flags: Parameters<typeof resolveProject>[0]) =>
+  Effect.gen(function* () {
+    const project = yield* resolveProject(flags);
+    const settings: Settings = {
+      scope: { kind: "project", projectId: project.id, path: project.path },
+      project: project.name,
+      listCommand: "projects config list",
+      descriptions: projectDescriptions,
+    };
+    return { settings, project };
+  });
+
+// The flags that set the scripts and the default branch, as Go long
+// had them: before any verb, and not together with one.
+const legacyFlags = {
+  setup: Flag.String("setup").pipe(
+    Flag.withDescription("Set the setup script ('' clears it)"),
+    Flag.optional,
+  ),
+  teardown: Flag.String("teardown").pipe(
+    Flag.withDescription("Set the teardown script ('' clears it)"),
+    Flag.optional,
+  ),
+  defaultBranch: Flag.String("default-branch").pipe(
+    Flag.withDescription("Set the default branch"),
+    Flag.optional,
+  ),
+};
+
+// The project settings' parent. -p and --project-id go before or after
+// the verb. With no verb it prints the settings as stored, or with the
+// flags sets them.
+const settingsOf = Command.make("config", legacyFlags, (input) =>
+  Effect.gen(function* () {
+    // The shared flags reach the parent's handler too, untyped there.
+    const { settings, project } = yield* settingsFor(
+      input as typeof input & Parameters<typeof resolveProject>[0],
+    );
+    const config = yield* Config.Config;
+    const { json, stdoutColor } = yield* Effect.service(Output);
+    const updates = [
+      ["defaultBranch", input.defaultBranch],
+      ["scripts.setup", input.setup],
+      ["scripts.teardown", input.teardown],
+    ] as const;
+    if (updates.every(([, flag]) => Option.isNone(flag))) {
+      const stored = yield* config.read(settings.scope);
+      if (json) return yield* emit(stored);
+      return yield* stored === null
+        ? note(`No config for ${project.name} yet.`)
+        : out(JSON.stringify(stored, null, 2));
+    }
+    if (Option.exists(input.defaultBranch, (ref) => ref.trim() === "")) {
+      return yield* new UsageError({
+        problem:
+          "--default-branch can't be empty: it's required, so set a ref instead of clearing it.",
+      });
+    }
+    // An empty script clears it.
+    for (const [key, flag] of updates) {
+      if (Option.isSome(flag))
+        yield* config.set(settings.scope, key, flag.value);
+    }
+    yield* json
+      ? emit({ ok: true, project: project.name })
+      : out(styles(stdoutColor).green(`configured ${project.name}`));
+  }),
+).pipe(Command.withSharedFlags(projectFlags));
+
+const projectSettings = Effect.flatMap(settingsOf, settingsFor);
 
 const projectConfig = settingsOf.pipe(
   Command.withDescription("A project's settings"),
-  Command.withSubcommands(
-    configVerbs(
-      Effect.gen(function* () {
-        const found = yield* resolveProject(yield* settingsOf);
-        return {
-          scope: { kind: "project", projectId: found.id, path: found.path },
-          project: found.name,
-          listCommand: "projects config list",
-          descriptions: projectDescriptions,
-        } satisfies Settings;
-      }),
-    ),
-  ),
+  Command.withSubcommands([
+    ...configVerbs(Effect.map(projectSettings, ({ settings }) => settings)),
+    carryOverVerb(projectSettings),
+  ]),
 );
 
 const yesFlag = Flag.Boolean("yes").pipe(
