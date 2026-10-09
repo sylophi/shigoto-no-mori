@@ -1,5 +1,9 @@
 // The settings verbs: `sm config` over the device's settings, and the
 // same verbs under `sm projects config` over a project's.
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import * as Config from "@shigomori/engine/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -8,6 +12,8 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
+import { interactive } from "../prompt.ts";
+import { launcherVerb } from "./configLists.ts";
 import { emit, out, Output, renderTable, styles } from "../output.ts";
 
 // Where a verb reads and writes, and how its output names that.
@@ -21,6 +27,29 @@ export type Settings = {
   readonly descriptions: Readonly<Record<string, string>>;
 };
 
+// The command a verb's usage names: `config`, or `projects config`
+// with its -p.
+export const usage = (settings: Settings, verb: string) =>
+  Effect.flatMap(
+    Effect.service(Output),
+    ({ binaryName }) =>
+      new UsageError({
+        problem:
+          settings.project === undefined
+            ? `Usage: ${binaryName} config ${verb}`
+            : `Usage: ${binaryName} projects config ${verb} [-p <project>]`,
+      }),
+  );
+
+// The editor, or what it left, wouldn't do.
+class EditFailed extends Schema.TaggedError<EditFailed>()("EditFailed", {
+  problem: Schema.String,
+}) {
+  override get message(): string {
+    return this.problem;
+  }
+}
+
 // A value as a person reads it: text as it is, anything else as JSON.
 const rendered = (value: unknown) =>
   value === null || value === undefined
@@ -30,7 +59,7 @@ const rendered = (value: unknown) =>
       : JSON.stringify(value);
 
 // A verb's document under --json, carrying a project's name.
-const document = (settings: Settings, doc: object) =>
+export const document = (settings: Settings, doc: object) =>
   emit(
     settings.project === undefined
       ? { ok: true, ...doc }
@@ -38,7 +67,7 @@ const document = (settings: Settings, doc: object) =>
   );
 
 // A project's lines end with its name.
-const suffix = (settings: Settings) =>
+export const suffix = (settings: Settings) =>
   settings.project === undefined ? "" : ` for ${settings.project}`;
 
 // A key back at its default, and the default a person now gets.
@@ -165,7 +194,74 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       }),
   ).pipe(Command.withDescription("Write the whole document (app plumbing)"));
 
-  return [list, get, read, set, unset, write] as const;
+  // The whole document in $VISUAL or $EDITOR, written back as one save
+  // once the editor quits. The store holds the settings, so the editor
+  // gets a copy in a file of its own.
+  const edit = Command.make("edit", {}, () =>
+    Effect.gen(function* () {
+      const settings = yield* resolve;
+      const { json, binaryName } = yield* Effect.service(Output);
+      const editor = process.env["VISUAL"] || process.env["EDITOR"] || "";
+      if (json || editor === "" || !(yield* interactive)) {
+        const verbs = settings.listCommand.replace(/ list$/, "");
+        return yield* new UsageError({
+          problem: `edit opens the settings in $VISUAL or $EDITOR at a terminal. Use \`${binaryName} ${verbs} set\` instead, or the app.`,
+        });
+      }
+      const config = yield* Config.Config;
+      // A project with none is seeded first, its default branch filled in.
+      if ((yield* config.read(settings.scope)) === null) {
+        yield* config.change(settings.scope, (doc) => doc);
+      }
+      const stored = (yield* config.read(settings.scope)) ?? {};
+      const dir = mkdtempSync(join(tmpdir(), "sm-settings-"));
+      const file = join(dir, "settings.json");
+      writeFileSync(file, `${JSON.stringify(stored, null, 2)}\n`, {
+        mode: 0o600,
+      });
+      const ran = spawnSync("/bin/sh", ["-c", `${editor} "$0"`, file], {
+        stdio: "inherit",
+      });
+      if (ran.status !== 0) {
+        rmSync(dir, { recursive: true, force: true });
+        return yield* new EditFailed({
+          problem: `${editor} failed: ${ran.error?.message ?? `exit status ${String(ran.status)}`}`,
+        });
+      }
+      // A bad edit stays where it was made, for another try.
+      const kept = ` The edit is kept at ${file}.`;
+      const payload = yield* Schema.decodeEffect(
+        Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
+      )(readFileSync(file, "utf8")).pipe(
+        Effect.mapError(
+          () =>
+            new EditFailed({
+              problem: `The edit isn't a JSON object, so nothing changed.${kept}`,
+            }),
+        ),
+      );
+      yield* config.write(settings.scope, payload).pipe(
+        Effect.mapError(
+          (error) =>
+            new EditFailed({
+              problem: `${error.message} Nothing changed.${kept}`,
+            }),
+        ),
+      );
+      rmSync(dir, { recursive: true, force: true });
+    }),
+  ).pipe(Command.withDescription("Edit the settings in $VISUAL or $EDITOR"));
+
+  return [
+    list,
+    get,
+    read,
+    set,
+    unset,
+    write,
+    edit,
+    launcherVerb(resolve),
+  ] as const;
 }
 
 const device: Settings = {
