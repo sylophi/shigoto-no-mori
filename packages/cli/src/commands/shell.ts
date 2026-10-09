@@ -195,49 +195,72 @@ export const enter = (name: string, target: string, cdFile: string) =>
   });
 
 // Bare `sm cd` goes anywhere: the project menu first, the current
-// project highlighted, unless -p names one or there is only one.
-const menuProject = (at: Worktrees.Here, project: string | undefined) =>
-  project === undefined && at.projects.length > 1
+// project highlighted, unless -p names one or there is only one. Bare
+// `sm worktrees switch` stays in the current project.
+const menuProject = (
+  at: Worktrees.Here,
+  project: string | undefined,
+  acrossProjects: boolean,
+) =>
+  acrossProjects && project === undefined && at.projects.length > 1
     ? pickProject(at, at.current?.project.id)
     : projectAt(at, project);
 
-export const cdCommand = Command.make(
-  "cd",
-  {
-    project: projectFlags.project,
-    name: Argument.String("worktree").pipe(Argument.optional),
-  },
-  (input) =>
-    Effect.gen(function* () {
-      const { json, binaryName, stderrColor } = yield* Effect.service(Output);
-      const cdFile = yield* envVar(CD_FILE_ENV);
-      // A wrapper's directive file with a name needs no terminal. --json
-      // is refused outright: a cd that moves the caller's shell and
-      // prints no document would break every NDJSON reader.
-      if (
-        json ||
-        (!(yield* interactive) && (cdFile === "" || Option.isNone(input.name)))
-      ) {
-        return yield* new UsageError({
-          problem: `This command opens a subshell and needs an interactive terminal. In scripts use cd "$(${binaryName} path <name>)".`,
-        });
-      }
-      const at = yield* here;
-      const worktrees = yield* Worktrees.Worktrees;
-      const project = Option.getOrUndefined(given(input.project));
-      const { worktree } = Option.isSome(input.name)
-        ? yield* worktrees.resolve(at, { ref: input.name.value, project })
-        : yield* pickWorktree(at, yield* menuProject(at, project), {
-            // Entering where you stand isn't a destination.
-            excludeId: at.current?.worktree.id,
-            primaryOk: true,
+const enterCommand = (
+  name: "cd" | "switch",
+  acrossProjects: boolean,
+  description: string,
+) =>
+  Command.make(
+    name,
+    {
+      project: projectFlags.project,
+      name: Argument.String("worktree").pipe(Argument.optional),
+    },
+    (input) =>
+      Effect.gen(function* () {
+        const { json, binaryName, stderrColor } = yield* Effect.service(Output);
+        const cdFile = yield* envVar(CD_FILE_ENV);
+        // A wrapper's directive file with a name needs no terminal. --json
+        // is refused outright: a cd that moves the caller's shell and
+        // prints no document would break every NDJSON reader.
+        if (
+          json ||
+          (!(yield* interactive) &&
+            (cdFile === "" || Option.isNone(input.name)))
+        ) {
+          return yield* new UsageError({
+            problem: `This command opens a subshell and needs an interactive terminal. In scripts use cd "$(${binaryName} path <name>)".`,
           });
-      if (at.current?.worktree.id === worktree.id) {
-        const { cyan, dim } = styles(stderrColor);
-        return yield* note(
-          `Already in ${cyan(worktree.name)} ${dim(`(${worktree.path})`)}.`,
-        );
-      }
-      yield* enter(worktree.name, worktree.path, cdFile);
-    }),
-).pipe(Command.withDescription("Enter a worktree"));
+        }
+        const at = yield* here;
+        const worktrees = yield* Worktrees.Worktrees;
+        const project = Option.getOrUndefined(given(input.project));
+        const { worktree } = Option.isSome(input.name)
+          ? yield* worktrees.resolve(at, { ref: input.name.value, project })
+          : yield* pickWorktree(
+              at,
+              yield* menuProject(at, project, acrossProjects),
+              {
+                // Entering where you stand isn't a destination.
+                excludeId: at.current?.worktree.id,
+                primaryOk: true,
+              },
+            );
+        if (at.current?.worktree.id === worktree.id) {
+          const { cyan, dim } = styles(stderrColor);
+          return yield* note(
+            `Already in ${cyan(worktree.name)} ${dim(`(${worktree.path})`)}.`,
+          );
+        }
+        yield* enter(worktree.name, worktree.path, cdFile);
+      }),
+  ).pipe(Command.withDescription(description));
+
+export const cdCommand = enterCommand("cd", true, "Enter a worktree");
+
+export const switchCommand = enterCommand(
+  "switch",
+  false,
+  "Enter one of this project's worktrees",
+);

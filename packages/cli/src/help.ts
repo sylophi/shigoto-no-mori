@@ -70,6 +70,11 @@ const catalog = (names: Names) => {
         "Status card for one worktree",
         "Where the worktree you're standing in stands: its title, branch, base, changes, stash, last commit, ports, scripts, PR. The PR lookup needs gh and degrades to a note rather than stalling the card. --no-pr skips it.",
       ],
+      [
+        "worktrees switch [<name>]",
+        "Open a subshell in this project's worktrees",
+        "Like cd without the project menu. Exit the shell to return, or cd in place with shell integration.",
+      ],
       ["worktrees path [<name>]", "Print a worktree's directory", ""],
       [
         "worktrees create [<name>] [-b <branch-name>] [--base <ref>] [--no-cd] [--no-setup] [--no-clone]",
