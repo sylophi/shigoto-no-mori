@@ -26,7 +26,7 @@ import {
   styles,
   type Styles,
 } from "../output.ts";
-import { divergenceCell, flagNames, truncate } from "./cells.ts";
+import { changesCell, flagsCell, syncCell, titleCell } from "./cells.ts";
 import { adopt, create, move, rekey, rm, setup } from "./changes.ts";
 import { describe } from "./describe.ts";
 import { done, land, merge, pr } from "./landing.ts";
@@ -43,24 +43,6 @@ import {
 import { cdCommand } from "./shell.ts";
 import { agentWorking, autopull, shelve, unshelve } from "./marks.ts";
 import { status } from "./status.ts";
-
-// A title cut to fit a terminal line.
-const titleCell = (title: string | undefined) => truncate(title ?? "", 50);
-
-const syncCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
-  row.detached
-    ? paint.yellow("detached")
-    : row.hasUpstream
-      ? divergenceCell(paint, row.ahead, row.behind, "synced")
-      : paint.dim("local");
-
-const changesCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
-  row.changedCount > 0
-    ? paint.yellow(`${row.changedCount} changed`)
-    : paint.dim("clean");
-
-const flagsCell = (paint: Styles, row: Parameters<typeof flagNames>[0]) =>
-  paint.dim(flagNames(row).join(", "));
 
 class NoProjects extends Schema.TaggedError<NoProjects>()("NoProjects", {}) {
   override get message(): string {

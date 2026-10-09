@@ -161,7 +161,7 @@ export const adopt = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const { located } = yield* resolveWorktree(input);
+      const { located } = yield* resolveWorktree(input, false);
       const { json, stderrColor } = yield* Effect.service(Output);
       const { cyan } = styles(stderrColor);
       const old = located.worktree.path;
@@ -236,7 +236,7 @@ export const rm = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const { located } = yield* resolveWorktree(input);
+      const { located } = yield* resolveWorktree(input, false);
       if (input.stack) {
         return yield* removeStack(located, {
           force: input.force,
@@ -304,10 +304,13 @@ export const move = Command.make(
         });
       }
       const destination = yield* absolute(input.args[count - 1] ?? "");
-      const { located } = yield* resolveWorktree({
-        ...input,
-        ref: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
-      });
+      const { located } = yield* resolveWorktree(
+        {
+          ...input,
+          ref: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
+        },
+        false,
+      );
       const wasInside = cwdInside(located.worktree.path);
       const moved = yield* (yield* Worktrees.Worktrees).move(
         located,

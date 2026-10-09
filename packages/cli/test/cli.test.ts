@@ -1293,6 +1293,103 @@ describe("transfer", () => {
   });
 });
 
+describe("menus", () => {
+  // The built binary in a terminal of its own (BSD script's pty), each
+  // key typed once the screen shows the text paired with it: what it
+  // showed, stdout and stderr together, escapes and all.
+  const inTerminal = async (
+    args: ReadonlyArray<string>,
+    keys: ReadonlyArray<readonly [shown: string, key: string]>,
+  ) => {
+    // script takes no socket for its input, which node's pipes are, so
+    // cat hands it a pipe.
+    const command = 'cat | script -q /dev/null "$@"';
+    const child = spawn("sh", ["-c", command, "sh", built, ...args], {
+      cwd: box.home,
+      env: { ...box.env("cli"), TERM: "xterm-256color" },
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    let shown = "";
+    child.stdout.on("data", (chunk: Buffer) => (shown += chunk));
+    const ended = new Promise((resolve) => child.on("close", resolve));
+    const waitFor = async (
+      text: string,
+      from: number,
+      deadline: number,
+    ): Promise<void> => {
+      if (shown.slice(from).includes(text)) return;
+      if (Date.now() > deadline) {
+        throw new Error(`Never showed ${text}:\n${shown}`);
+      }
+      await sleep(50);
+      return waitFor(text, from, deadline);
+    };
+    const type = async (
+      steps: ReadonlyArray<readonly [string, string]>,
+    ): Promise<void> => {
+      const [step, ...rest] = steps;
+      if (step === undefined) return;
+      await waitFor(step[0], shown.length, Date.now() + 10_000);
+      // Past the frame, so the key lands in the menu that drew it.
+      await sleep(150);
+      child.stdin.write(step[1]);
+      return type(rest);
+    };
+    try {
+      await type(keys);
+      child.stdin.end();
+      await ended;
+      return shown;
+    } finally {
+      child.kill();
+    }
+  };
+  const DOWN = "\u001b[B";
+  const HELP = "enter select";
+
+  // Two projects, beta with a worktree "fox".
+  const projects = () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.git(beta, "worktree", "add", "-q", "-b", "fox", `${box.home}/fox`);
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+  };
+
+  it("picks a project, then one of its worktrees", async () => {
+    projects();
+    const shown = await inTerminal(
+      ["path"],
+      [
+        ["Select a project:", DOWN],
+        ["▸ beta", "\r"],
+        ["Select a worktree in beta:", DOWN],
+        ["▸ fox", "\r"],
+      ],
+    );
+    assert.match(shown, /NAME +BRANCH +SYNC +CHANGES/);
+    assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
+  });
+
+  it("filters by name, and esc cancels", async () => {
+    projects();
+    const shown = await inTerminal(
+      ["path"],
+      [
+        [HELP, "/"],
+        ["type to filter", "be"],
+        ["/be", "\r"],
+        ["Select a worktree in beta:", "\u001b"],
+      ],
+    );
+    assert.match(shown, /Cancelled\./);
+  });
+});
+
 describe("doctor", () => {
   // Each side's data dir, which the checklist names, as one.
   const sideNeutral = (seen: unknown): unknown =>
