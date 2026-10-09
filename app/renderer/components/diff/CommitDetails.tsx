@@ -206,8 +206,8 @@ function CopyHashButton({ hash }: { hash: string }) {
       aria-label={`Copy hash ${hash}`}
       className="ml-auto text-muted-foreground"
     >
-      {copied ? <Check /> : <Copy />}
       <span className="font-mono">{hash}</span>
+      {copied ? <Check /> : <Copy />}
     </Button>
   );
 }
