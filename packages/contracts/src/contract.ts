@@ -312,8 +312,8 @@ export function channelOf(call: ContractCall): string {
   return call["_tag"];
 }
 
-// By the payload's AST, not the schema's identity: a bundle may hold two
-// copies of effect (the renderer's does), each with its own Schema.Void.
+// Read off the AST's tag, not by identity: the renderer's bundle can
+// hold two copies of effect, and each has its own Schema.Void.
 export function isBroadcast(call: ContractCall): boolean {
   return (
     RpcSchema.isStreamSchema(call.successSchema) &&
