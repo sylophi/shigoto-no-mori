@@ -17,7 +17,7 @@ import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useLandingTarget } from "./cloneDestination";
-import { FlowHeader, StepRail } from "./FlowChrome";
+import { FlowHeaderView, StepRailView } from "./FlowChromeView";
 import { usePullChoice } from "./ignoreChoice";
 import { PullProgress, type PullProgressProps } from "./PullProgress";
 import type { DestinationPick } from "./PullReview";
@@ -221,7 +221,7 @@ export function PullFlowFrame({
       closeOnEscape={!running}
       popoverClassName="max-w-4xl"
     >
-      <FlowHeader
+      <FlowHeaderView
         tint={look.tint}
         icon={look.icon}
         spin={look.spin}
@@ -234,8 +234,12 @@ export function PullFlowFrame({
         onClose={onClose}
       >
         {headline}
-      </FlowHeader>
-      <StepRail current={STAGE_STEP[stage]} steps={steps} label={stepsLabel} />
+      </FlowHeaderView>
+      <StepRailView
+        current={STAGE_STEP[stage]}
+        steps={steps}
+        label={stepsLabel}
+      />
       {children}
       {STAGE_STEP[stage] === 1 && target && (
         <PullProgress

@@ -1,16 +1,5 @@
 import { use, useState, type ReactNode } from "react";
-import {
-  ChevronRight,
-  Cloud,
-  CloudOff,
-  GitFork,
-  Layers,
-  Search,
-  Split,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Cloud, CloudOff, GitFork, Split } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
 import {
   useBranchCommits,
@@ -20,7 +9,6 @@ import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { NO_REWRITE, type CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
 import {
   deriveRemoteSyncState,
   type BranchHistory,
@@ -29,15 +17,26 @@ import {
 } from "@shigomori/contracts/schemas";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
-import { CommitRow, HistorySelection, useRowSelection } from "./CommitRow";
+import { CommitRow } from "./CommitRow";
+import { HistorySelection } from "./CommitRowView";
+import {
+  BranchChangesRowView,
+  EarlierToggleView,
+  HistoryListView,
+  NoteView,
+  RefLineView,
+  ShowMoreView,
+  SplitHeaderView,
+  UpToDateView,
+} from "./HistoryListView";
 import { useCommitActions, type CommitActions } from "./useCommitActions";
 
-// The Git page's History tab: a search field, the branch's whole diff,
-// then its commits, newest first, with the refs that matter drawn as
-// lines across the list where they point. The remote's copy of the
-// branch sits under the commits it doesn't have yet, with the push, and
-// the primary branch where the branch began, with the sync. Under that,
-// folded, the history before the branch.
+// The Git page's History tab (HistoryListView): a search field, the
+// branch's whole diff, then its commits, newest first, with the refs
+// that matter drawn as lines across the list where they point. The
+// remote's copy of the branch sits under the commits it doesn't have
+// yet, with the push, and the primary branch where the branch began,
+// with the sync. Under that, folded, the history before the branch.
 export function HistoryList({
   worktree,
   selected,
@@ -51,42 +50,19 @@ export function HistoryList({
   const query = useDebouncedValue(search.trim(), 250);
 
   return (
-    <HistorySelection value={selected}>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="relative px-2 pb-2">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute top-1/2 left-4.5 -mt-1 size-3.5 -translate-y-1/2 text-muted-foreground/60"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape" && search) {
-                e.stopPropagation();
-                setSearch("");
-              }
-            }}
-            placeholder="Search commit messages"
-            aria-label="Search commit messages"
-            spellCheck={false}
-            className="w-full py-1.5 pr-2.5 pl-7 text-xs"
-          />
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
-          {query ? (
-            <SearchResults
-              worktree={worktree}
-              query={query}
-              actions={actions}
-            />
-          ) : (
-            <BranchCommits worktree={worktree} actions={actions} />
-          )}
-        </div>
-        {actions.dialog}
-      </div>
-    </HistorySelection>
+    <HistoryListView
+      selected={selected}
+      search={search}
+      onSearchChange={setSearch}
+      body={
+        query ? (
+          <SearchResults worktree={worktree} query={query} actions={actions} />
+        ) : (
+          <BranchCommits worktree={worktree} actions={actions} />
+        )
+      }
+      dialog={actions.dialog}
+    />
   );
 }
 
@@ -105,7 +81,7 @@ function BranchCommits({
   const rewriteAt = useCommitRewrites(worktree, history?.commits ?? []);
   const [earlierOpen, setEarlierOpen] = useState(false);
   if (!history) {
-    return <Note>Reading the history…</Note>;
+    return <NoteView>Reading the history…</NoteView>;
   }
   const own = history.commits;
   const base = history.base;
@@ -132,21 +108,10 @@ function BranchCommits({
       {split ? <SplitRows {...props} /> : <LineRows {...props} />}
       {earlierFrom && (
         <>
-          <button
-            type="button"
-            aria-expanded={earlierOpen}
-            onClick={() => setEarlierOpen((open) => !open)}
-            className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Earlier commits
-            <ChevronRight
-              aria-hidden
-              className={cn(
-                "size-3.5 transition-transform",
-                earlierOpen && "rotate-90",
-              )}
-            />
-          </button>
+          <EarlierToggleView
+            open={earlierOpen}
+            onToggle={() => setEarlierOpen((open) => !open)}
+          />
           {earlierOpen && (
             <EarlierCommits
               worktree={worktree}
@@ -204,7 +169,7 @@ function LineRows({
       remote = {
         at: 0,
         line: (
-          <RefLine
+          <RefLineView
             key="remote"
             icon={<CloudOff aria-hidden className="size-3.5" />}
             name="Local only"
@@ -218,7 +183,7 @@ function LineRows({
     remote = {
       at: run ? lacked : 0,
       line: (
-        <RefLine
+        <RefLineView
           key="remote"
           icon={<Cloud aria-hidden className="size-3.5" />}
           name={remoteName(worktree, history.upstream)}
@@ -228,13 +193,7 @@ function LineRows({
               ? `${upstream} has everything from here down`
               : `${upstream} lacks the commits marked as not pushed`
           }
-          action={
-            state.kind === "synced" ? (
-              <span className="text-xs text-muted-foreground">Up to date</span>
-            ) : (
-              pill
-            )
-          }
+          action={state.kind === "synced" ? <UpToDateView /> : pill}
         />
       ),
     };
@@ -293,7 +252,7 @@ function SplitRows({
   const forkAtBase =
     history.base !== null && history.upstreamFork === history.base.hash;
   const sharedLine = (back: boolean) => (
-    <RefLine
+    <RefLineView
       key="shared"
       icon={<Cloud aria-hidden className="size-3.5" />}
       name={back ? "Shared further back" : "Shared from here"}
@@ -306,30 +265,21 @@ function SplitRows({
   );
 
   const rows: ReactNode[] = [
-    <div key="split" className="pb-1">
-      <RefLine
-        icon={<Split aria-hidden className="size-3.5" />}
-        name={`Split from ${name}`}
-        tip={`This branch and ${upstream} each have commits the other lacks`}
-      />
-      <div className="flex flex-wrap items-center justify-end gap-2 px-2">
-        <SegmentedControl
-          aria-label="Side of the split"
-          className="min-w-32 flex-1"
-          optionClassName="flex-1 justify-center px-1 py-0.5 text-xs"
-          value={side}
-          onChange={setSide}
-          options={[
-            { value: "here", label: `Here ${mine.length}` },
-            {
-              value: "remote",
-              label: `${name} ${theirs.length}${history.incomingMore ? "+" : ""}`,
-            },
-          ]}
+    <SplitHeaderView
+      key="split"
+      refLine={
+        <RefLineView
+          icon={<Split aria-hidden className="size-3.5" />}
+          name={`Split from ${name}`}
+          tip={`This branch and ${upstream} each have commits the other lacks`}
         />
-        <WorktreeSyncPill worktree={worktree} compact />
-      </div>
-    </div>,
+      }
+      side={side}
+      onSide={setSide}
+      hereCount={mine.length}
+      remoteLabel={`${name} ${theirs.length}${history.incomingMore ? "+" : ""}`}
+      pill={<WorktreeSyncPill worktree={worktree} compact />}
+    />,
   ];
   if (side === "here") {
     own.forEach((commit, index) => {
@@ -388,7 +338,7 @@ function SplitRows({
 function BaseLine({ worktree, base }: { worktree: Worktree; base: string }) {
   const behind = worktree.behindPrimary;
   return (
-    <RefLine
+    <RefLineView
       icon={<GitFork aria-hidden className="size-3.5" />}
       name={base}
       mono
@@ -414,45 +364,9 @@ function BaseLine({ worktree, base }: { worktree: Worktree; base: string }) {
   );
 }
 
-// A ref, drawn as a line across the list at the commit it points to,
-// like a "new messages" line: its name, the rule, and its one move.
-function RefLine({
-  icon,
-  name,
-  mono = false,
-  tip,
-  action,
-}: {
-  icon: ReactNode;
-  name: string;
-  mono?: boolean;
-  tip: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="flex min-h-8 items-center gap-2 px-2 py-1">
-      <SimpleTooltip tip={tip}>
-        <span className="flex min-w-0 shrink items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="shrink-0">{icon}</span>
-          <span className={cn("truncate", mono && "font-mono")}>{name}</span>
-        </span>
-      </SimpleTooltip>
-      <span
-        aria-hidden
-        className="h-px min-w-2 flex-1 bg-muted-foreground/25"
-      />
-      {action && <span className="flex shrink-0 items-center">{action}</span>}
-    </div>
-  );
-}
-
-// The branch's whole diff, picked like a commit. How far the primary
-// branch has moved on since is the footer's to say, beside its sync.
 function BranchChangesRow({
   worktree,
-  base,
-  own,
-  more,
+  ...props
 }: {
   worktree: Worktree;
   base: string;
@@ -460,28 +374,11 @@ function BranchChangesRow({
   more: boolean;
 }) {
   const nav = useWorktreeNav();
-  const selected = useRowSelection("branch");
   return (
-    <button
-      type="button"
-      aria-current={selected || undefined}
-      onClick={() => nav.toBranchDiff(worktree.projectId, worktree.id, true)}
-      className={cn(
-        "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring",
-        selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-      )}
-    >
-      <Layers
-        aria-hidden
-        className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">All branch changes</span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {more ? `${own}+ commits` : pluralize(own, "commit")} since {base}
-        </span>
-      </span>
-    </button>
+    <BranchChangesRowView
+      {...props}
+      onOpen={() => nav.toBranchDiff(worktree.projectId, worktree.id, true)}
+    />
   );
 }
 
@@ -542,8 +439,9 @@ function SearchResults({
       { query },
     );
   const commits = data ? data.pages.flat() : [];
-  if (isLoading) return <Note>Searching…</Note>;
-  if (commits.length === 0) return <Note>No commit messages match.</Note>;
+  if (isLoading) return <NoteView>Searching…</NoteView>;
+  if (commits.length === 0)
+    return <NoteView>No commit messages match.</NoteView>;
   return (
     <PastCommits
       worktree={worktree}
@@ -585,22 +483,7 @@ function PastCommits({
           faded={faded}
         />
       ))}
-      {more && (
-        <button
-          type="button"
-          disabled={more.pending}
-          onClick={more.load}
-          className="px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-        >
-          {more.pending ? "Loading…" : "Show more"}
-        </button>
-      )}
+      {more && <ShowMoreView pending={more.pending} onLoad={more.load} />}
     </>
-  );
-}
-
-function Note({ children }: { children: ReactNode }) {
-  return (
-    <p className="px-2 py-1.5 text-xs text-muted-foreground">{children}</p>
   );
 }

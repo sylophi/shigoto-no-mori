@@ -21,7 +21,11 @@ import {
   PhoneNotFoundScene,
 } from "./shell";
 import { SidebarPartsScene } from "./sidebarParts";
-import { WorktreePagePartsScene, WorktreePageScene } from "./worktreePage";
+import {
+  WorktreePagePartsScene,
+  WorktreePageScene,
+  WorktreeSectionsScene,
+} from "./worktreePage";
 
 export interface Scene {
   // Takes no props: a scene is one picture.
@@ -45,6 +49,7 @@ export const scenes = {
   sidebarParts: { Scene: SidebarPartsScene, size: [920, 560] },
   worktreePage: { Scene: WorktreePageScene, ...DESKTOP },
   worktreePageParts: { Scene: WorktreePagePartsScene, size: [1100, 900] },
+  worktreeSections: { Scene: WorktreeSectionsScene, size: [1400, 1000] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

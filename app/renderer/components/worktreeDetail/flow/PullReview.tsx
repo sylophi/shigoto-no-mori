@@ -58,7 +58,7 @@ import type { LandingTarget } from "./cloneDestination";
 import { useCreatePlan } from "./createPlan";
 import type { PullChoiceState } from "./ignoreChoice";
 import { PullLeaveOut } from "./PullLeaveOut";
-import { FlowBody, FlowFooter } from "./FlowChrome";
+import { FlowBodyView, FlowFooterView } from "./FlowChromeView";
 import { isReadyTarget, type PeerTarget } from "./peerTargets";
 import { type Landing, LANDS_HERE } from "./pullSteps";
 
@@ -153,7 +153,7 @@ function PullReviewFooter({
   const { refusal } = useLocalCollision(target?.project, worktree, landing);
   const unpicked = target === null;
   return (
-    <FlowFooter
+    <FlowFooterView
       note={
         refusal ??
         blocked ??
@@ -171,7 +171,7 @@ function PullReviewFooter({
         {startLabel}
         <ArrowRight />
       </Button>
-    </FlowFooter>
+    </FlowFooterView>
   );
 }
 
@@ -238,7 +238,7 @@ export function PullReviewStep({
   const title = worktreeTitle(worktree, pr);
   return (
     <>
-      <FlowBody>
+      <FlowBodyView>
         <div className="flex flex-col gap-6">
           <div className="relative grid overflow-hidden rounded-xl border border-border bg-card md:grid-cols-2">
             <SourceCard
@@ -292,7 +292,7 @@ export function PullReviewStep({
             )}
           </div>
         </div>
-      </FlowBody>
+      </FlowBodyView>
 
       <DestinationScope>
         <PullReviewFooter

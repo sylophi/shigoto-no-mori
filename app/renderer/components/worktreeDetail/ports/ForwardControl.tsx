@@ -1,29 +1,11 @@
-// The forward band under a remote port's header: on the left the
-// mapping as a form, `<device>:<remote port> -> localhost:<field>`. On
-// the right the switch with its state spelled out, and Open once the
-// forward is up. The switch does not wait for a server: a forward to a
-// port with nothing listening stays on and reaches the server once one
-// comes up, and the state word says it is waiting. The field is the
-// local end. While the forward is off it shows the remembered
-// preference (default: the same number as the remote port, the least
-// surprising place for it to land). While it is on it shows where the
-// listener actually bound, and committing a new number moves the
-// listener there. Failures land under the band rather than in a toast,
-// since the fix (pick another local port) is right here.
-import { useRef, useState } from "react";
-import { ArrowRight, Loader2 } from "lucide-react";
+// A remote port's forward (ForwardControlView), driven on this machine:
+// the switch, and the local port it lands on.
+import { useState } from "react";
 import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
-import { digitsOnly, parsePortNumber } from "@shigomori/contracts/schemas";
-import { Input } from "@/components/ui/input";
-import { TONE_TEXT } from "@/components/ui/status-dot";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useForwardLocalPort } from "@/hooks/config/useForwardLocalPort";
 import { usePortForwardControl } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
-import { cn } from "@/lib/utils";
-import { OpenLocalhostButton } from "./OpenLocalhostButton";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { ForwardControlView } from "./ForwardControlView";
 
 export function ForwardControl({
   deviceId,
@@ -37,13 +19,8 @@ export function ForwardControl({
   remotePort: number;
   // The worktree whose port list this is, recorded on the forward.
   worktree: PortForwardWorktree;
-  // Whether a server is behind the port over there right now.
   listening: boolean;
-  // Whether this device may drive verbs on the peer. A live forward can
-  // always be switched off (that is a local act), but switching one on
-  // opens a grant-gated conn over there.
   granted: boolean;
-  // The band's frame and inset, which the row decides (PortRow).
   className?: string;
 }) {
   const deviceLabel = useRemoteDeviceLabel(deviceId);
@@ -53,155 +30,45 @@ export function ForwardControl({
     deviceId,
     remotePort,
   );
-  // The field's uncommitted text, null while not editing.
-  const [draft, setDraft] = useState<string | null>(null);
   // A live forward being relocated to another local port, so the
   // state word says so instead of reading the old forward as a stop.
   const [pendingMove, setPendingMove] = useState(false);
-  // Escape blurs the field to leave it, and that blur fires commit
-  // synchronously, before the state reset lands: the flag is what
-  // tells that blur to drop the draft rather than apply it.
-  const abandoning = useRef(false);
   const live = forward !== undefined;
   const localPort = live ? forward.localPort : preferred;
-  const shown = draft ?? String(localPort);
-
-  const commit = () => {
-    const abandoned = abandoning.current;
-    abandoning.current = false;
-    if (draft === null || abandoned) return;
-    setDraft(null);
-    const next = parsePortNumber(draft);
-    if (next === undefined || next === localPort) return;
-    clearError();
-    if (live) {
-      // Remembered only once the listener has actually moved: a number
-      // that cannot bind must not become the default every later
-      // switch-on retries.
-      setPendingMove(true);
-      apply(
-        { on: true, localPort: next },
-        {
-          onSuccess: () => setLocalPort(next),
-          onSettled: () => setPendingMove(false),
-        },
-      );
-    } else {
-      setLocalPort(next);
-    }
-  };
-
-  const toggle = (on: boolean) => {
-    clearError();
-    if (on) apply({ on: true, localPort });
-    else apply({ on: false });
-  };
-
-  // Why it can't be turned on, when it can't.
-  const switchTip = live || granted ? undefined : peerReadOnlyNote();
-
-  const state = describeState(
-    !isPending ? null : !live ? "start" : pendingMove ? "move" : "stop",
-    forward,
-    listening,
-  );
-
   return (
-    <div
-      className={cn("flex flex-wrap items-center gap-x-4 gap-y-1.5", className)}
-    >
-      <div className="tabular flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-        <span>
-          {deviceLabel}:{remotePort}
-        </span>
-        <ArrowRight aria-hidden className="size-3 shrink-0 opacity-60" />
-        <span aria-hidden>localhost:</span>
-        <Input
-          inputMode="numeric"
-          value={shown}
-          aria-label={`Local port for ${remotePort}`}
-          onFocus={(event) => event.currentTarget.select()}
-          onChange={(event) => setDraft(digitsOnly(event.target.value))}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur();
-            if (event.key === "Escape") {
-              abandoning.current = true;
-              setDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-          className={cn(
-            "h-6 w-16 px-1.5 text-center font-mono text-xs text-foreground tabular",
-            live && "font-medium",
-          )}
-        />
-      </div>
-
-      <div className="ml-auto flex items-center gap-2">
-        <span
-          className={cn(
-            "text-xs",
-            state.serving
-              ? cn("font-medium", TONE_TEXT.emerald)
-              : TONE_TEXT.slate,
-          )}
-        >
-          {state.word}
-        </span>
-        {/* A fixed-width slot so the spinner standing in for the switch
-            does not shift the Open button beside it. */}
-        <span className="flex w-8 shrink-0 items-center justify-center">
-          {isPending ? (
-            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-          ) : (
-            <SimpleTooltip tip={switchTip}>
-              <Switch
-                checked={live}
-                disabled={!live && !granted}
-                aria-label={`Forward port ${remotePort}`}
-                onCheckedChange={toggle}
-              />
-            </SimpleTooltip>
-          )}
-        </span>
-        <OpenLocalhostButton
-          port={localPort}
-          disabledReason={live ? undefined : "Switch the forward on to open it"}
-        />
-      </div>
-
-      {error !== null && (
-        <p className={cn("basis-full text-2xs leading-snug", TONE_TEXT.rose)}>
-          {error}
-        </p>
-      )}
-    </div>
+    <ForwardControlView
+      deviceLabel={deviceLabel}
+      remotePort={remotePort}
+      localPort={localPort}
+      live={live}
+      pending={
+        !isPending ? null : !live ? "start" : pendingMove ? "move" : "stop"
+      }
+      connCount={forward?.connCount ?? 0}
+      listening={listening}
+      granted={granted}
+      error={error}
+      onLocalPort={(next) => {
+        clearError();
+        if (live) {
+          setPendingMove(true);
+          apply(
+            { on: true, localPort: next },
+            {
+              onSuccess: () => setLocalPort(next),
+              onSettled: () => setPendingMove(false),
+            },
+          );
+        } else {
+          setLocalPort(next);
+        }
+      }}
+      onToggle={(on) => {
+        clearError();
+        if (on) apply({ on: true, localPort });
+        else apply({ on: false });
+      }}
+      className={className}
+    />
   );
-}
-
-// The word beside the switch, and whether it reads as up (a settled
-// forward with a server behind it).
-function describeState(
-  pending: "start" | "stop" | "move" | null,
-  forward: { connCount: number } | undefined,
-  listening: boolean,
-): { word: string; serving: boolean } {
-  if (pending === "start") return { word: "Starting", serving: false };
-  if (pending === "stop") return { word: "Stopping", serving: false };
-  if (pending === "move") return { word: "Moving", serving: false };
-  if (forward === undefined) return { word: "Off", serving: false };
-  // Open conns outrank the liveness poll, which lags a server that
-  // just came up. The engine counts a conn only once its far end
-  // opened, so a dial to a dead port never reads as one.
-  if (!listening && forward.connCount === 0) {
-    return { word: "Waiting for a server", serving: false };
-  }
-  return {
-    word:
-      forward.connCount > 0
-        ? `Forwarding, ${forward.connCount} open`
-        : "Forwarding",
-    serving: true,
-  };
 }

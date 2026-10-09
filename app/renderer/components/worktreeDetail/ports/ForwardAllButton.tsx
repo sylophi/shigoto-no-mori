@@ -1,24 +1,12 @@
-// A peer's port list's bulk actions: forward every listed port in one
-// go, and stop every forward the list shows. A port with nothing
-// listening yet is started too: the engine binds the forward anyway and
-// it reaches the server once one comes up. Each start lands on the
-// local port the row remembers (preferredLocalPort), so the bulk action
-// and the switches agree on where a port goes. Starts run one at a
-// time: each opens a probe channel on the peer, and the order makes a
-// local-port collision between two rows deterministic. The rows reflect
-// the outcome live off the engine's broadcast. Failures fold into one
-// toast per action rather than one per port.
-import type { ReactNode } from "react";
+// A peer's port list's bulk actions (ForwardAllButtonView), one
+// forward at a time.
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, Power, PowerOff } from "lucide-react";
 import {
   errorMessageOf,
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
 import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
 import type { WorktreePort } from "@shigomori/contracts/schemas";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { preferredLocalPort } from "@/hooks/config/useForwardLocalPort";
 import {
@@ -27,13 +15,12 @@ import {
 } from "@/hooks/remote/usePortForwards";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { notifyError } from "@/lib/toast";
+import {
+  type ForwardAllMode,
+  ForwardAllButtonView,
+} from "./ForwardAllButtonView";
 
-type Mode = "start" | "stop";
-
-const MODE_FACE: Record<Mode, { icon: ReactNode; label: string }> = {
-  start: { icon: <Power />, label: "Forward all" },
-  stop: { icon: <PowerOff />, label: "Stop all" },
-};
+type Mode = ForwardAllMode;
 
 export function ForwardAllButton({
   deviceId,
@@ -117,37 +104,14 @@ export function ForwardAllButton({
     : ["start"];
 
   return (
-    <>
-      {modes.map((mode) => {
-        const running = bulk.isPending && bulk.variables === mode;
-        const face = running
-          ? {
-              icon: <Loader2 className="animate-spin" />,
-              label: mode === "start" ? "Forwarding…" : "Stopping…",
-            }
-          : MODE_FACE[mode];
-        return (
-          <SimpleTooltip
-            key={mode}
-            tip={mode === "start" && !bulk.isPending ? startBlocker : undefined}
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={
-                bulk.isPending ||
-                configQuery.isPending ||
-                (mode === "start" && !canStart)
-              }
-              onClick={() => bulk.mutate(mode)}
-            >
-              {face.icon}
-              {face.label}
-            </Button>
-          </SimpleTooltip>
-        );
-      })}
-    </>
+    <ForwardAllButtonView
+      modes={modes}
+      runningMode={bulk.isPending ? (bulk.variables ?? null) : null}
+      canStart={canStart}
+      startBlocker={startBlocker}
+      waiting={configQuery.isPending}
+      onRun={(mode) => bulk.mutate(mode)}
+    />
   );
 }
 

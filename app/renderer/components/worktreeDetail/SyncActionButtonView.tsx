@@ -35,7 +35,7 @@ interface SyncActionButtonProps {
   onClick: () => void;
 }
 
-export function SyncActionButton({
+export function SyncActionButtonView({
   tone,
   icon: Icon,
   label,

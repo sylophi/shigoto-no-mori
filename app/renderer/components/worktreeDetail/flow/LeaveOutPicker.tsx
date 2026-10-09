@@ -33,7 +33,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import { withToggled } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
-import { CARD, CARD_NOTE, CardSkeleton } from "./FlowChrome";
+import { CARD, CARD_NOTE, CardSkeletonView } from "./FlowChromeView";
 import {
   exceptionsOf,
   IGNORE_BASE_COPY,
@@ -244,7 +244,7 @@ function IgnoredList({
   >;
   brought: ReadonlySet<string>;
 }) {
-  if (ignored.isPending) return <CardSkeleton />;
+  if (ignored.isPending) return <CardSkeletonView />;
   if (ignored.isError) {
     return <p className={CARD_NOTE}>Couldn't list the ignored files.</p>;
   }

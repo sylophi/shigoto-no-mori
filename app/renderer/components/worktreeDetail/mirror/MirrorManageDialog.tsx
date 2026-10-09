@@ -66,10 +66,10 @@ import { getBrowseLeafSegment, normalizeForSubmit } from "@shared/projectPaths";
 import {
   CARD,
   CARD_NOTE,
-  FlowHeader,
-  FlowBody,
-  FlowFooter,
-} from "../flow/FlowChrome";
+  FlowHeaderView,
+  FlowBodyView,
+  FlowFooterView,
+} from "../flow/FlowChromeView";
 import {
   type IgnoreSelection,
   modeOf,
@@ -134,7 +134,7 @@ export function MirrorManageDialog({
   const resumable = session.paused || isHaltedStatus(session.status);
   return (
     <ModalShell onClose={onClose} popoverClassName="max-w-3xl">
-      <FlowHeader
+      <FlowHeaderView
         tint={TONE_PILL[view.tone]}
         icon={RefreshCw}
         spin={view.spinning}
@@ -163,9 +163,9 @@ export function MirrorManageDialog({
               </SimpleTooltip>
             )}
         </p>
-      </FlowHeader>
+      </FlowHeaderView>
 
-      <FlowBody>
+      <FlowBodyView>
         <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="flex min-w-0 flex-col gap-5">
             <div className="space-y-2">
@@ -190,10 +190,10 @@ export function MirrorManageDialog({
             <HistoryList localWorktreeId={worktree.id} />
           </section>
         </div>
-      </FlowBody>
+      </FlowBodyView>
 
       {stop.confirming ? (
-        <FlowFooter
+        <FlowFooterView
           note={
             <span
               className={cn(
@@ -226,9 +226,9 @@ export function MirrorManageDialog({
                 ? "Stop and remove the copy"
                 : "Remove the copy anyway"}
           </Button>
-        </FlowFooter>
+        </FlowFooterView>
       ) : (
-        <FlowFooter
+        <FlowFooterView
           note={
             !canControl
               ? peerReadOnlyNote(names.runner)
@@ -266,7 +266,7 @@ export function MirrorManageDialog({
               </Button>
             </>
           )}
-        </FlowFooter>
+        </FlowFooterView>
       )}
     </ModalShell>
   );

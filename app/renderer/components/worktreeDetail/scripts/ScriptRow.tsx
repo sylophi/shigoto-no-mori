@@ -1,82 +1,38 @@
-import { ChevronRight, Play, Square } from "lucide-react";
+// A script's row (ScriptRowView), run and stopped on the worktree's
+// host, its output a click away.
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { cn } from "@/lib/utils";
 import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { ScriptStatusBadgeView } from "@/components/shared/ScriptStatusBadgeView";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { ScriptRowView } from "./ScriptRowView";
 
-interface ScriptRowProps {
+export function ScriptRow({
+  worktree,
+  slot,
+  label,
+  command,
+}: {
   worktree: Worktree;
   slot: ScriptSlot;
   label: string;
   command: string;
-}
-
-export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
+}) {
   const { toScript } = useWorktreeNav();
-  // The runner also says whether a run can be dispatched from here (a
-  // peer that has not granted control refuses commands) and why.
   const { state, busy, canRun, disabledReason, start, stop } = useScriptRunner(
     worktree,
     slot,
   );
-  // No history means there's nothing for the console to show, so the
-  // right-side "view output" affordance only appears once a run lands.
-  const hasHistory = state.status !== "idle";
-
-  const openConsole = () => toScript(worktree.projectId, worktree.id, slot);
-
-  const actionLabel = busy ? `Stop ${label}` : `Run ${label}`;
-
   return (
-    <div className={cn("flex items-stretch text-xs")}>
-      {/* The name over the command it runs: the name can be cut off in
-          a narrow column. */}
-      <SimpleTooltip
-        tip={disabledReason ?? (command ? `${label}\n${command}` : undefined)}
-      >
-        <button
-          type="button"
-          onClick={busy ? stop : start}
-          disabled={state.cancelling || !canRun}
-          aria-label={actionLabel}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-            busy
-              ? "text-destructive hover:bg-destructive/10"
-              : "hover:bg-accent",
-          )}
-        >
-          {busy ? (
-            <Square aria-hidden className="size-3 shrink-0" />
-          ) : (
-            <Play
-              aria-hidden
-              className="size-3 shrink-0 text-muted-foreground"
-            />
-          )}
-          <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
-        </button>
-      </SimpleTooltip>
-
-      {/* Capped at half the row so a long status (a failed run's exit
-          code and age) in a narrow grid column truncates instead of
-          squeezing the script's name out. */}
-      {hasHistory && (
-        <button
-          type="button"
-          onClick={openConsole}
-          aria-label={`View ${label} output`}
-          className="flex max-w-1/2 min-w-0 items-center gap-2 border-l border-border px-2.5 py-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <span className="min-w-0 truncate">
-            <ScriptStatusBadgeView state={state} />
-          </span>
-          <ChevronRight aria-hidden className="size-3 shrink-0" />
-        </button>
-      )}
-    </div>
+    <ScriptRowView
+      label={label}
+      command={command}
+      state={state}
+      busy={busy}
+      canRun={canRun}
+      disabledReason={disabledReason}
+      onRun={start}
+      onStop={stop}
+      onOpenConsole={() => toScript(worktree.projectId, worktree.id, slot)}
+    />
   );
 }

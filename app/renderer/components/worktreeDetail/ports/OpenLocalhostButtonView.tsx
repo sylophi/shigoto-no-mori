@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { openExternalUrl } from "@/lib/openExternal";
 
-export function OpenLocalhostButton({
+export function OpenLocalhostButtonView({
   port,
   disabledReason,
 }: {

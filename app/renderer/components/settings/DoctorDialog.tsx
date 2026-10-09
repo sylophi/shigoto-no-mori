@@ -41,10 +41,10 @@ import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import {
   CARD,
-  FlowBody,
-  FlowFooter,
-  FlowHeader,
-} from "../worktreeDetail/flow/FlowChrome";
+  FlowBodyView,
+  FlowFooterView,
+  FlowHeaderView,
+} from "../worktreeDetail/flow/FlowChromeView";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // `sm doctor` for the scoped device, behind Settings' health check
@@ -76,7 +76,7 @@ export function DoctorDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell onClose={onClose} popoverClassName="max-w-2xl">
-      <FlowHeader
+      <FlowHeaderView
         tint={TONE_PILL[report ? summaryTone(report) : "slate"]}
         icon={Stethoscope}
         title={remote ? `Health check on ${deviceLabel}` : "Health check"}
@@ -95,8 +95,8 @@ export function DoctorDialog({ onClose }: { onClose: () => void }) {
             </>
           )}
         </p>
-      </FlowHeader>
-      <FlowBody>
+      </FlowHeaderView>
+      <FlowBodyView>
         <div className="space-y-5">
           {error && (
             <ErrorBanner
@@ -170,8 +170,8 @@ export function DoctorDialog({ onClose }: { onClose: () => void }) {
             </div>
           )}
         </div>
-      </FlowBody>
-      <FlowFooter
+      </FlowBodyView>
+      <FlowFooterView
         note={
           repairable > 0
             ? `Repair fixes the ${pluralize(repairable, "problem")} marked repairable. The rest need a decision only you can make.`
@@ -209,7 +209,7 @@ export function DoctorDialog({ onClose }: { onClose: () => void }) {
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
-      </FlowFooter>
+      </FlowFooterView>
     </ModalShell>
   );
 }

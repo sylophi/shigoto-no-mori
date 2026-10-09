@@ -101,17 +101,11 @@ const PENDING = [
   "villagers/",
   "visitors/",
   "worktreeDetail/flow/",
-  "worktreeDetail/git/",
   "worktreeDetail/mirror/",
-  "worktreeDetail/ports/",
   "worktreeDetail/pullRequests/",
-  "worktreeDetail/scripts/",
   "worktreeDetail/transplant/",
   "worktreeDetail/MirrorConflicts.tsx",
   "worktreeDetail/MirrorPill.tsx",
-  "worktreeDetail/SyncActionButton.tsx",
-  "worktreeDetail/WorktreePrimarySyncPill.tsx",
-  "worktreeDetail/WorktreeSyncPill.tsx",
   "worktreeLocation/",
 ];
 

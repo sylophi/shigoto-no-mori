@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { RewordDialogView, RewordFormView } from "./RewordDialogView";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { Textarea } from "@/components/ui/textarea";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
@@ -125,23 +123,21 @@ function RewordDialog({
   );
   return (
     <ModalShell onClose={onClose} popoverClassName="max-w-lg">
-      <div className="p-5">
-        <h2 className="text-base font-semibold">
-          Reword <span className="font-mono">{hash}</span>
-        </h2>
-        {message.data ? (
-          <RewordForm
-            worktree={worktree}
-            hash={hash}
-            head={head}
-            initial={message.data}
-            onClose={onClose}
-            onRewritten={onRewritten}
-          />
-        ) : (
-          <div className="mt-4 h-40" />
-        )}
-      </div>
+      <RewordDialogView
+        hash={hash}
+        form={
+          message.data && (
+            <RewordForm
+              worktree={worktree}
+              hash={hash}
+              head={head}
+              initial={message.data}
+              onClose={onClose}
+              onRewritten={onRewritten}
+            />
+          )
+        }
+      />
     </ModalShell>
   );
 }
@@ -184,39 +180,15 @@ function RewordForm({
       },
     );
   };
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      save();
-    }
-  };
   return (
-    <div className="mt-4 flex flex-col gap-2">
-      <Input
-        aria-label="Summary"
-        placeholder="Summary (required)"
-        value={summary}
-        onChange={(e) => setSummary(e.target.value)}
-        onKeyDown={onKeyDown}
-        // oxlint-disable-next-line jsx-a11y/no-autofocus -- the dialog exists to edit this field
-        autoFocus
-      />
-      <Textarea
-        aria-label="Description"
-        placeholder="Description"
-        rows={5}
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        onKeyDown={onKeyDown}
-      />
-      <div className="mt-3 flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button size="sm" onClick={save} disabled={!canSave}>
-          Reword
-        </Button>
-      </div>
-    </div>
+    <RewordFormView
+      summary={summary}
+      onSummaryChange={setSummary}
+      description={description}
+      onDescriptionChange={setDescription}
+      canSave={canSave}
+      onSave={save}
+      onCancel={onClose}
+    />
   );
 }
