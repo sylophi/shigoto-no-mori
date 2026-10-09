@@ -11,6 +11,7 @@ import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 import type { ContractSchema } from "./codec.ts";
 import { CallFailureSchema } from "./errors.ts";
 import type { GrantId } from "./grants.ts";
@@ -311,10 +312,12 @@ export function channelOf(call: ContractCall): string {
   return call["_tag"];
 }
 
+// By the payload's AST, not the schema's identity: a bundle may hold two
+// copies of effect (the renderer's does), each with its own Schema.Void.
 export function isBroadcast(call: ContractCall): boolean {
   return (
     RpcSchema.isStreamSchema(call.successSchema) &&
-    call.payloadSchema === Schema.Void
+    SchemaAST.isVoid(call.payloadSchema.ast)
   );
 }
 
