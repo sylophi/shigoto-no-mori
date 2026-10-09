@@ -7,7 +7,8 @@
 // page itself explains the state (AccountSection) instead of the button
 // hiding.
 // Live wears a dot while anything runs: a script on any device, a
-// forward this machine holds, a mirror.
+// forward this machine holds, a mirror. An amber one while an agent
+// waits on you instead, as long as the sidebar marks those.
 // Settings wears a dot while any device holds an update this window
 // could install from its General section there: the local machine's,
 // or a peer's (the only kind a hostless client can have).
@@ -17,23 +18,36 @@ import {
   Radio,
   Settings as SettingsIcon,
 } from "lucide-react";
+import { useMarkAgentsWaiting } from "@/hooks/config/useSidebarMarks";
 import { useLiveCount } from "@/hooks/live/useLiveActivity";
+import { agentsNeedYou } from "@/lib/agentNeeds";
+import { useWaitingAgents } from "@/lib/agentWatch";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { hasLocalHost } from "@/lib/localHost";
+import { cn } from "@/lib/utils";
 import { NavIconButton } from "./NavIconButton";
 
 export function SidebarNavActions() {
   const updateReady = Object.keys(useStagedUpdates()).length > 0;
   const live = useLiveCount();
-  const liveLabel = live > 0 ? `Live (${live} running)` : "Live";
+  const waiting = useWaitingAgents().length;
+  const needsYou = useMarkAgentsWaiting() && waiting > 0;
+  const liveLabel = needsYou
+    ? `Live (${agentsNeedYou(waiting)})`
+    : live > 0
+      ? `Live (${live} running)`
+      : "Live";
   return (
     <>
       <NavIconButton to="/live" label={liveLabel}>
         <Radio className="size-3.5" />
-        {live > 0 && (
+        {(needsYou || live > 0) && (
           <span
             aria-hidden
-            className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-emerald-500 ring-2 ring-card"
+            className={cn(
+              "pointer-events-none absolute top-1 right-1 size-1.5 rounded-full ring-2 ring-card",
+              needsYou ? "bg-amber-500" : "bg-emerald-500",
+            )}
           />
         )}
       </NavIconButton>

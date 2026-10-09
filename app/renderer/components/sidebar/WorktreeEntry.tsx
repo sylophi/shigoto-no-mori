@@ -10,6 +10,7 @@ import { useResident } from "@/hooks/villagers/useResident";
 import type { StackPosition } from "@shared/pullRequestStack";
 import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
+import { AgentWaitingMark } from "./AgentWaitingMark";
 import {
   MirrorBadge,
   RowDeviceBadge,
@@ -152,6 +153,7 @@ export function WorktreeEntry({
           </span>
         </span>
         <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 empty:hidden">
+          <AgentWaitingMark worktree={worktree} />
           {mark && <ActivityIcon kind={mark} />}
           {!(inline && isDeleting) && (
             <>

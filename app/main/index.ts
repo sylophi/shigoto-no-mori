@@ -29,6 +29,7 @@ import {
   deepLinkRouteInArgv,
   receiveDeepLink,
 } from "./electron/deepLink";
+import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
@@ -423,6 +424,9 @@ function openDeepLink(route: string): void {
   const live = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   receiveDeepLink(route, live?.webContents);
 }
+
+// A notification's click opens its page the same way.
+setNotificationOpener(openDeepLink);
 
 // Windows and Linux pass a deep link in a launch's argv: this
 // process's own when the link started the app, the second instance's

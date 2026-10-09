@@ -19,7 +19,9 @@ import {
   AGENT_STATE_VIEW,
   agentSessionsState,
   harnessLabel,
+  waitingSession,
 } from "@/lib/agentSessions";
+import { needLine, needView, stateLabel } from "@/lib/agentNeeds";
 import { cn } from "@/lib/utils";
 import type { AgentSession, Worktree } from "@shared/schemas";
 import { FooterVerb, LABEL_RANK } from "./footerFit";
@@ -41,6 +43,7 @@ export function AgentSessionsMenu({
   const idle = useIdleAgents();
   const state = agentSessionsState(sessions);
   const view = AGENT_STATE_VIEW[state];
+  const waiting = waitingSession(sessions);
   const [only] = sessions;
   const label =
     sessions.length === 1 && only
@@ -57,34 +60,19 @@ export function AgentSessionsMenu({
             label={label}
             variant="ghost"
             className={cn("shrink-0", TONE_TEXT[view.tone])}
-            tip={view.label}
+            tip={waiting ? needLine(waiting) : view.label}
           />
         }
       />
-      <DropdownMenuContent align="end" side="top" className="min-w-56">
-        {sessions.map((session) => {
-          const sessionView = AGENT_STATE_VIEW[session.state];
-          return (
-            <div
-              key={`${session.harness}:${session.session}`}
-              className="flex items-center gap-3 px-2 py-1.5 text-xs"
-            >
-              <StatusDot
-                tone={sessionView.tone}
-                label={harnessLabel(session.harness)}
-                className="text-xs"
-              />
-              <span className={cn("ml-auto", TONE_TEXT[sessionView.tone])}>
-                {sessionView.label}
-              </span>
-              <span className="text-muted-foreground tabular-nums">
-                <RelativeDate date={new Date(session.at).toISOString()} />
-              </span>
-              <SessionId id={session.session} />
-              <UnbindButton worktree={worktree} session={session} busy={busy} />
-            </div>
-          );
-        })}
+      <DropdownMenuContent align="end" side="top" className="w-80">
+        {sessions.map((session) => (
+          <SessionRow
+            key={`${session.harness}:${session.session}`}
+            worktree={worktree}
+            session={session}
+            busy={busy}
+          />
+        ))}
         {state !== "idle" && (
           <>
             <DropdownMenuSeparator />
@@ -103,6 +91,64 @@ export function AgentSessionsMenu({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+// One session: what it is about (its title, else its harness) in its
+// state's dot, its state under that (as a sentence about its harness
+// once a title leads, led by the icon of the prompt it waits on) with
+// when it changed, then what that prompt is about, or the message its
+// last turn ended on.
+function SessionRow({
+  worktree,
+  session,
+  busy,
+}: {
+  worktree: Worktree;
+  session: AgentSession;
+  busy: boolean;
+}) {
+  const view = AGENT_STATE_VIEW[session.state];
+  const harness = harnessLabel(session.harness);
+  const label = session.title ?? harness;
+  const need = session.state === "waiting" ? needView(session) : undefined;
+  const detail = need
+    ? need.text
+    : session.state === "idle"
+      ? session.message
+      : undefined;
+  // Under the harness's name (no title), the sentence goes without it.
+  const sentence = stateLabel(session, session.title !== undefined);
+  return (
+    <div className="space-y-0.5 px-2 py-1.5 text-xs">
+      <div className="flex items-center gap-2">
+        <StatusDot
+          tone={view.tone}
+          label={
+            <SimpleTooltip whenTruncated tip={label}>
+              <span className="truncate">{label}</span>
+            </SimpleTooltip>
+          }
+          className="min-w-0 flex-1 text-xs"
+        />
+        <SessionId id={session.session} />
+        <UnbindButton worktree={worktree} session={session} busy={busy} />
+      </div>
+      <p className="flex gap-2 pl-3 text-2xs">
+        <span className={cn("flex items-center gap-1", TONE_TEXT[view.tone])}>
+          {need && <need.Icon aria-hidden className="size-3 shrink-0" />}
+          {sentence}
+        </span>
+        <span className="ml-auto shrink-0 text-muted-foreground tabular-nums">
+          <RelativeDate date={new Date(session.at).toISOString()} />
+        </span>
+      </p>
+      {detail && (
+        <p className="line-clamp-3 pl-3 text-2xs break-words text-foreground/80">
+          {detail}
+        </p>
+      )}
+    </div>
   );
 }
 

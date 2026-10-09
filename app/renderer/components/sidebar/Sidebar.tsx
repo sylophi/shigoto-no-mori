@@ -17,7 +17,10 @@ import {
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useReorderProjects } from "@/hooks/projects/useProjects";
 import { useCollapsedProjects } from "@/hooks/projects/useCollapsedProjects";
-import { useInlineWorktrees } from "@/hooks/config/useSidebarMarks";
+import {
+  useMarkAgentsWaiting,
+  useInlineWorktrees,
+} from "@/hooks/config/useSidebarMarks";
 import {
   useSidebarView,
   useSidebarViewHotkey,
@@ -167,6 +170,7 @@ function Forest({
     filter,
     activeFilter,
   } = useForestSources({ arrangeMode, inboxFacts: inbox });
+  const markAgentsWaiting = useMarkAgentsWaiting();
   const viewSettled = useSidebarViewSettled() || pinnedView !== undefined;
   const reorderProjects = useReorderProjects();
   // The open project and the shelf reveals are kept by group key
@@ -296,6 +300,7 @@ function Forest({
         groupedPrefixes,
         shutGroups: shutInboxGroups,
         allowAgentWorking,
+        pinWaiting: markAgentsWaiting,
       })
     : buildSidebarRows({
         ...local,

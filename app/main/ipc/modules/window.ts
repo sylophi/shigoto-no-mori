@@ -1,6 +1,7 @@
 import { windowContract } from "@shared/ipc/modules/window";
 import type { Handlers } from "@shared/ipc/types";
 import { applyThemeSource } from "../../electron/clientConfig";
+import { showNotification } from "../../electron/notifications";
 import { relaunchApp } from "../../electron/relaunch";
 
 export const windowHandlers: Handlers<typeof windowContract> = {
@@ -14,5 +15,9 @@ export const windowHandlers: Handlers<typeof windowContract> = {
 
   relaunch: () => {
     relaunchApp();
+  },
+
+  notify: (input) => {
+    showNotification(input);
   },
 };
