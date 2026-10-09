@@ -512,7 +512,7 @@ function DiffFileRow({
           collapsed,
         }}
         metrics={DIFF_METRICS}
-        lineAnnotations={hunks && hunkAnnotations(fileDiff, hunks.states)}
+        lineAnnotations={hunks && hunkAnnotations(fileDiff, hunks)}
         renderAnnotation={
           hunks
             ? (annotation) => (

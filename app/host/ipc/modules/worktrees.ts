@@ -4,14 +4,13 @@ import type { Handlers } from "@shared/ipc/types";
 import type { Project, Worktree, WorktreeRemoval } from "@shared/schemas";
 import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
 import {
-  commitStaged,
   discardChanges,
   listChangesForPage,
   readCommitMessage,
   resetSoft,
   restoreDiscard,
-  setStaged,
 } from "@host/lib/git/changes";
+import { commitPicks } from "@host/lib/git/commit";
 import {
   getCommitDiff,
   getFileDiff,
@@ -23,11 +22,7 @@ import {
   rewordCommit,
   squashIntoParent,
 } from "@host/lib/git/history";
-import {
-  discardHunks,
-  readHunkStates,
-  setHunksStaged,
-} from "@host/lib/git/hunks";
+import { discardHunks, readHunks } from "@host/lib/git/hunks";
 import {
   applyStash,
   dropStash,
@@ -356,18 +351,8 @@ export const worktreesHandlers: Handlers<
   changeStatus: async (input) =>
     listChangesForPage(await findWorktreePathOrThrow(input)),
 
-  setStaged: async (input) =>
-    setStaged(await findWorktreePathOrThrow(input), input.paths, input.staged),
-
   fileHunks: async (input) =>
-    readHunkStates(await findWorktreePathOrThrow(input), input.path),
-  setHunksStaged: async (input) =>
-    setHunksStaged(
-      await findWorktreePathOrThrow(input),
-      input.path,
-      input.changes,
-      input.staged,
-    ),
+    readHunks(await findWorktreePathOrThrow(input), input.path),
   discardHunks: async (input) => {
     const { result: snapshot, worktree } = await mutateAndDescribeWith(
       input,
@@ -379,7 +364,7 @@ export const worktreesHandlers: Handlers<
   commit: async (input) => {
     const { result: hash, worktree } = await mutateAndDescribeWith(
       input,
-      (wt) => commitStaged(wt.path, input),
+      (wt) => commitPicks(wt.path, input),
     );
     return { hash, worktree };
   },
