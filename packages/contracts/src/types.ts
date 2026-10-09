@@ -1,7 +1,9 @@
 // The types a contract module gives its two sides: the handler table
 // that serves it and the client that calls it. Both key a call by its
 // name, its channel without the module prefix. A client subscribes to a
-// push as `on` and the push's capitalized name.
+// push as `on` and the push's capitalized name. A view is served as a
+// stream, and only the RPC transport has a client for it.
+import type * as Stream from "effect/Stream";
 import type { Decoded, Encoded } from "./codec.ts";
 import type {
   CallsOf,
@@ -9,11 +11,13 @@ import type {
   InputOf,
   OutputOf,
   PayloadOf,
+  Pushing,
   Streaming,
 } from "./contract.ts";
 
 type InvokesOf<M> = Exclude<CallsOf<M>, Streaming>;
-type BroadcastsOf<M> = Extract<CallsOf<M>, Streaming>;
+type BroadcastsOf<M> = Extract<CallsOf<M>, Pushing>;
+type ViewsOf<M> = Exclude<Extract<CallsOf<M>, Streaming>, Pushing>;
 
 type KeyOf<Tag> = Tag extends `${string}:${infer K}` ? K : never;
 
@@ -44,6 +48,13 @@ export type Handlers<M extends ContractModule, Ctx = unknown> = {
     input: Decoded<InputOf<R>>,
     context: Ctx,
   ) => Promise<Decoded<OutputOf<R>>> | Decoded<OutputOf<R>>;
+};
+
+// What serves a module's views: each one's stream, from its input.
+export type ViewHandlers<M extends ContractModule, R> = {
+  [V in ViewsOf<M> as KeyOf<V["_tag"]>]: (
+    input: Decoded<InputOf<V>>,
+  ) => Stream.Stream<Decoded<PayloadOf<V>>, unknown, R>;
 };
 
 export type Client<M extends ContractModule> = {

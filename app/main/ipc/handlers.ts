@@ -60,11 +60,14 @@ import { forwardHandlers } from "@host/ipc/modules/forward";
 import { fsHandlers } from "@host/ipc/modules/fs";
 import { gitHandlers } from "@host/ipc/modules/git";
 import { githubCliHandlers } from "@host/ipc/modules/githubCli";
-import { globalConfigHandlers } from "@host/ipc/modules/globalConfig";
+import {
+  globalConfigHandlers,
+  globalConfigViews,
+} from "@host/ipc/modules/globalConfig";
 import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
-import { mirrorHandlers } from "@host/ipc/modules/mirror";
+import { mirrorHandlers, mirrorViews } from "@host/ipc/modules/mirror";
 import {
   setMirrorGitAppliedListener,
   setMirrorGitChangedListener,
@@ -96,11 +99,14 @@ import {
   stopPortForwardsTo,
 } from "./modules/portForward";
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
-import { portsHandlers } from "@host/ipc/modules/ports";
-import { projectsHandlers } from "@host/ipc/modules/projects";
+import { portsHandlers, portsViews } from "@host/ipc/modules/ports";
+import { projectsHandlers, projectsViews } from "@host/ipc/modules/projects";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
-import { scriptsHandlers } from "@host/ipc/modules/scripts";
-import { sharedSettingsHandlers } from "@host/ipc/modules/sharedSettings";
+import { scriptsHandlers, scriptsViews } from "@host/ipc/modules/scripts";
+import {
+  sharedSettingsHandlers,
+  sharedSettingsViews,
+} from "@host/ipc/modules/sharedSettings";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
 import { controlHandlers } from "@host/ipc/modules/control";
@@ -119,6 +125,7 @@ import { navHandlers } from "./modules/nav";
 import {
   setWorktreeRemovalBroadcaster,
   worktreesHandlers,
+  worktreesViews,
 } from "@host/ipc/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
 import {
@@ -158,6 +165,7 @@ import {
   refreshHubConnection,
   registerContract,
   registerControlContract,
+  registerViews,
   hubHandlers,
   onPeerPush,
 } from "./register";
@@ -669,17 +677,21 @@ export function registerIpcHandlers(): void {
     }
   });
   registerContract(mirrorContract, mirrorHandlers);
+  registerViews(mirrorContract, mirrorViews);
   registerContract(windowContract, windowHandlers);
   registerContract(navContract, navHandlers);
   registerContract(projectsContract, projectsHandlers);
+  registerViews(projectsContract, projectsViews);
   registerContract(dialogContract, dialogHandlers);
   registerContract(runtimeContract, runtimeHandlers);
   registerContract(shellContract, shellHandlers);
   registerContract(releasesContract, releasesHandlers);
   registerContract(branchesContract, branchesHandlers);
   registerContract(globalConfigContract, globalConfigHandlers);
+  registerViews(globalConfigContract, globalConfigViews);
   registerContract(portPoolContract, portPoolHandlers);
   registerContract(portsContract, portsHandlers);
+  registerViews(portsContract, portsViews);
   registerContract(terrierContract, terrierHandlers);
   registerContract(agentsContract, agentsHandlers);
   registerContract(menuContract, menuHandlers);
@@ -689,14 +701,17 @@ export function registerIpcHandlers(): void {
   registerContract(gitContract, gitHandlers);
   registerContract(githubCliContract, githubCliHandlers);
   registerContract(worktreesContract, worktreesHandlers);
+  registerViews(worktreesContract, worktreesViews);
   registerContract(hygieneContract, hygieneHandlers);
   registerContract(scriptsContract, scriptsHandlers);
+  registerViews(scriptsContract, scriptsViews);
   // A burst (a lifecycle starting setup and port-pool together, a
   // project's scripts stopped at once) goes out as one ping.
   onRunningScriptsChanged(
     coalesce(() => broadcastAll(scriptsContract, "changed", undefined), 150),
   );
   registerContract(sharedSettingsContract, sharedSettingsHandlers);
+  registerViews(sharedSettingsContract, sharedSettingsViews);
   registerContract(cliContract, cliHandlers);
   // The CLI's cross-device verbs, on the control wire alone
   // (packages/contracts/src/modules/control.ts). The device registry rides the

@@ -2,7 +2,10 @@
 // channel (`<module>:<key>`), and the call's classification as
 // annotations on it, which the registrar and the transports read. An
 // invoke is a plain Rpc. A push (what the transport still calls a
-// broadcast) is a streaming Rpc whose chunks are its payloads.
+// broadcast) is a streaming Rpc with no payload, whose chunks are its
+// payloads. A view is a streaming Rpc with a payload (VoidSchema when it
+// takes nothing): what a query answers, then again each time it
+// changes. Only the RPC transport serves views.
 import * as Context from "effect/Context";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -65,19 +68,6 @@ export const Gated = Context.Service<"sm/contracts/Gated", boolean>(
   "sm/contracts/Gated",
 );
 
-// Whether a resolved gated call moved host state a remote viewer
-// caches. Absent reads as true for a gated invoke: the registrar fires
-// onMutationResolved (the remote-viewer cache ping) unless a call says
-// exactly false. False only on gated channels whose effects are
-// invisible to viewers, like forward's byte shuttling, so an open
-// stream does not re-invalidate a peer's cached view of this host on
-// every poll or send resolution. Orthogonal to Gated, which stays true
-// on such channels.
-export const MovesHostState = Context.Service<
-  "sm/contracts/MovesHostState",
-  boolean
->("sm/contracts/MovesHostState");
-
 // When true, a successful call counts as the user "using" the project
 // named by the payload's `projectId`, feeding the sidebar usage sorts.
 // Opt-in so reads and view-only preference changes never count.
@@ -109,7 +99,6 @@ type InvokeOptions = {
   readonly tracksProjectUsage?: boolean;
   readonly remote?: boolean;
   readonly gated?: boolean;
-  readonly movesHostState?: boolean;
   readonly invitable?: InvitableScope;
   readonly grant?: GrantId;
 };
@@ -124,7 +113,6 @@ function annotationsOf(options: InvokeOptions): Context.Context<never> {
   add(TracksProjectUsage, options.tracksProjectUsage);
   add(Remote, options.remote);
   add(Gated, options.gated);
-  add(MovesHostState, options.movesHostState);
   add(Invitable, options.invitable);
   add(Grant, options.grant);
   return annotations as Context.Context<never>;
@@ -161,6 +149,30 @@ export const broadcast = <const Key extends string, P extends ContractSchema>(
   Rpc.make(key, { success: payload, stream: true }).annotateMerge(
     annotationsOf({ ...options, gated: false }),
   );
+
+// A view of what `query` answers, classified as the query is: a remote
+// view must say whether it is gated, like any remote invoke.
+export const view = <
+  const Key extends string,
+  I extends ContractSchema,
+  O extends ContractSchema,
+>(
+  key: Key,
+  input: I,
+  output: O,
+  options: Pick<InvokeOptions, "remote" | "gated" | "grant"> = {},
+): Rpc.Rpc<Key, I, RpcSchema.Stream<O, typeof CallFailureSchema>> =>
+  // A view's reads fail the way an invoke does.
+  Rpc.make(key, {
+    payload: input,
+    success: output,
+    error: CallFailureSchema,
+    stream: true,
+  }).annotateMerge(annotationsOf(options)) as Rpc.Rpc<
+    Key,
+    I,
+    RpcSchema.Stream<O, typeof CallFailureSchema>
+  >;
 
 // A contract module: the group of its calls, each tagged with its
 // channel, annotated with the module's name and scope (each call
@@ -230,9 +242,14 @@ export function callsOf(module: ContractModule): ContractCall[] {
   return [...module.requests.values()];
 }
 
-// A push, as a type: its success is a stream.
+// A push or a view, as a type: its success is a stream.
 export type Streaming = {
   readonly successSchema: RpcSchema.Stream<Schema.Top, Schema.Top>;
+};
+
+// A push, as a type: a stream with no payload.
+export type Pushing = Streaming & {
+  readonly payloadSchema: typeof Schema.Void;
 };
 
 // The calls of a module, as a union of their Rpc types.
@@ -295,12 +312,19 @@ export function channelOf(call: ContractCall): string {
 }
 
 export function isBroadcast(call: ContractCall): boolean {
-  return RpcSchema.isStreamSchema(call.successSchema);
+  return (
+    RpcSchema.isStreamSchema(call.successSchema) &&
+    call.payloadSchema === Schema.Void
+  );
+}
+
+export function isInvoke(call: ContractCall): boolean {
+  return !RpcSchema.isStreamSchema(call.successSchema);
 }
 
 export function payloadOf<R extends ContractCall>(call: R): PayloadOf<R> {
   if (!RpcSchema.isStreamSchema(call.successSchema)) {
-    throw new Error(`${channelOf(call)} is not a push`);
+    throw new Error(`${channelOf(call)} is not a push or a view`);
   }
   return call.successSchema.success as PayloadOf<R>;
 }

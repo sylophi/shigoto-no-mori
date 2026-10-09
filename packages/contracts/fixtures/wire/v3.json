@@ -584,6 +584,12 @@
   "globalConfig:read": {
     "success": {}
   },
+  "globalConfig:watch": {
+    "success": {
+      "githubCli": true,
+      "\udc00": -7e-323
+    }
+  },
   "globalConfig:writeDeviceSettings": {
     "payload": {
       "patch": {
@@ -702,7 +708,10 @@
   },
   "link:ping": {},
   "link:read": {
-    "payload": ""
+    "payload": {
+      "channelId": "49f1c16a9e40610b8eb75db553ec394b"
+    },
+    "success": ""
   },
   "link:reset": {
     "payload": {
@@ -1135,6 +1144,191 @@
       "removedCopy": true
     }
   },
+  "mirror:watch": {
+    "success": {
+      "daemon": "running",
+      "sessions": [
+        {
+          "session": "\udc00",
+          "name": "",
+          "labels": {},
+          "localRoot": "\u0000",
+          "localProjectId": "",
+          "localWorktreeId": "dw",
+          "deviceId": "\t",
+          "projectId": "\t",
+          "worktreeId": "\udc00",
+          "remoteRoot": "\udc00",
+          "paused": false,
+          "ignores": [],
+          "ignoreMode": "everything",
+          "createdAt": 2,
+          "status": "disconnected",
+          "statusText": "-1",
+          "successfulCycles": 3,
+          "conflicts": [
+            {
+              "root": "0",
+              "localChanges": [
+                {
+                  "path": "\n",
+                  "kind": "created"
+                },
+                {
+                  "path": "\udc00",
+                  "kind": "created"
+                }
+              ],
+              "remoteChanges": [
+                {
+                  "path": "",
+                  "kind": "deleted"
+                },
+                {
+                  "path": "\udc00",
+                  "kind": "deleted"
+                }
+              ]
+            }
+          ],
+          "excludedConflicts": 3,
+          "local": {
+            "connected": false,
+            "scanned": true,
+            "directories": 1,
+            "files": 4,
+            "symbolicLinks": 3,
+            "totalFileSize": 0,
+            "problems": [],
+            "excludedProblems": 3
+          },
+          "remote": {
+            "connected": false,
+            "scanned": true,
+            "directories": 2,
+            "files": 2,
+            "symbolicLinks": 2,
+            "totalFileSize": 1,
+            "problems": [
+              {
+                "path": "\u0000",
+                "error": "Zh"
+              },
+              {
+                "path": "",
+                "error": "\ud800"
+              }
+            ],
+            "excludedProblems": 0
+          }
+        },
+        {
+          "session": "j",
+          "name": " ",
+          "labels": {},
+          "localRoot": "O;",
+          "localProjectId": "Z%",
+          "localWorktreeId": "",
+          "deviceId": "\n",
+          "projectId": ";q",
+          "worktreeId": "\t",
+          "remoteRoot": "",
+          "paused": false,
+          "ignores": ["'", ";"],
+          "ignoreMode": "gitignored",
+          "createdAt": 0,
+          "status": "watching",
+          "statusText": "ch",
+          "successfulCycles": 2,
+          "conflicts": [
+            {
+              "root": "\t",
+              "localChanges": [],
+              "remoteChanges": [
+                {
+                  "path": "\u0000",
+                  "kind": "created"
+                },
+                {
+                  "path": "b7",
+                  "kind": "modified"
+                }
+              ]
+            },
+            {
+              "root": "UJ",
+              "localChanges": [
+                {
+                  "path": "",
+                  "kind": "created"
+                },
+                {
+                  "path": "0",
+                  "kind": "deleted"
+                }
+              ],
+              "remoteChanges": [
+                {
+                  "path": "",
+                  "kind": "deleted"
+                },
+                {
+                  "path": "\u0000",
+                  "kind": "created"
+                }
+              ]
+            }
+          ],
+          "excludedConflicts": 0,
+          "local": {
+            "connected": true,
+            "scanned": true,
+            "directories": 4,
+            "files": 1,
+            "symbolicLinks": 1,
+            "totalFileSize": 4,
+            "problems": [],
+            "excludedProblems": 3
+          },
+          "remote": {
+            "connected": true,
+            "scanned": true,
+            "directories": 1,
+            "files": 4,
+            "symbolicLinks": 0,
+            "totalFileSize": 4,
+            "problems": [
+              {
+                "path": "\u0000",
+                "error": "0"
+              },
+              {
+                "path": "o#",
+                "error": ""
+              }
+            ],
+            "excludedProblems": 0
+          }
+        }
+      ],
+      "serving": [
+        {
+          "channelId": "0c371ca0d55c2a7844cff06f1638abfa",
+          "projectId": "",
+          "worktreeId": "21cb7eee88ec",
+          "peerDeviceId": "U7",
+          "since": 0
+        },
+        {
+          "channelId": "481d0fac57805d4b14d25fdf6fcf98a5",
+          "projectId": "F$",
+          "worktreeId": "23159cb47157",
+          "peerDeviceId": "\u0000",
+          "since": 3
+        }
+      ]
+    }
+  },
   "nav:addProject": {},
   "nav:deepLink": {},
   "nav:launchById": {
@@ -1248,6 +1442,26 @@
           "port": 2,
           "source": "custom",
           "listening": false
+        }
+      ]
+    }
+  },
+  "ports:watch": {
+    "payload": {
+      "projectId": "\ud800",
+      "worktreeId": ")"
+    },
+    "success": {
+      "ports": [
+        {
+          "port": 57437,
+          "source": "custom",
+          "listening": false
+        },
+        {
+          "port": 16026,
+          "source": "pool",
+          "listening": true
         }
       ]
     }
@@ -1402,6 +1616,20 @@
       "projectId": "D"
     }
   },
+  "projects:watch": {
+    "success": [
+      {
+        "id": "",
+        "name": "D>",
+        "path": "\n"
+      },
+      {
+        "id": "-1",
+        "name": "\t",
+        "path": ""
+      }
+    ]
+  },
   "projects:worktreeIncludeStatus": {
     "payload": {
       "projectId": "\ud800"
@@ -1490,6 +1718,11 @@
       "scriptCount": 2
     }
   },
+  "scripts:watch": {
+    "success": {
+      "runs": []
+    }
+  },
   "scripts:write": {
     "payload": {
       "runId": "\t",
@@ -1545,6 +1778,17 @@
       "key": "+1",
       "value": "\udc00"
     },
+    "success": {
+      "entries": {
+        "quickCreateDevice/remote:github.com/alex/notes": {
+          "value": "dev_1c94b0da",
+          "at": 1759834800000,
+          "by": "dev_8f3ac2e1"
+        }
+      }
+    }
+  },
+  "sharedSettings:watch": {
     "success": {
       "entries": {
         "quickCreateDevice/remote:github.com/alex/notes": {
@@ -3727,5 +3971,97 @@
       "shelved": true,
       "autoPull": true
     }
+  },
+  "worktrees:watch": {
+    "payload": {
+      "projectId": "Ju"
+    },
+    "success": [
+      {
+        "id": " ",
+        "projectId": "\u0000",
+        "name": "\udc00",
+        "branch": "\ud800",
+        "path": " ",
+        "ahead": 2,
+        "behind": 1,
+        "hasUpstream": true,
+        "hasRemote": false,
+        "divergedClean": true,
+        "behindPrimary": 4,
+        "unpushedCount": 2,
+        "mergedIntoPrimary": true,
+        "changedCount": 2,
+        "recentCommits": [
+          {
+            "hash": "a7e3",
+            "subject": "",
+            "author": ",N",
+            "date": "f",
+            "additions": 3,
+            "deletions": 2
+          },
+          {
+            "hash": "0274",
+            "subject": "",
+            "author": "p[",
+            "date": ";",
+            "additions": 0,
+            "deletions": 0
+          }
+        ],
+        "isPrimary": false,
+        "isExternal": true,
+        "detached": true,
+        "shelved": true,
+        "autoPull": true
+      },
+      {
+        "id": "\t",
+        "projectId": "\ud800",
+        "name": "^",
+        "branch": "",
+        "path": "\n",
+        "ahead": 2,
+        "behind": 2,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 4,
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "recentCommits": [
+          {
+            "hash": "fe6d",
+            "subject": "\t",
+            "author": "1+",
+            "date": "Ig",
+            "additions": 1,
+            "deletions": 4
+          },
+          {
+            "hash": "e74f",
+            "subject": "-1",
+            "author": "",
+            "date": "Fc",
+            "additions": 0,
+            "deletions": 4
+          }
+        ],
+        "isPrimary": false,
+        "isExternal": true,
+        "detached": true,
+        "shelved": false,
+        "autoPull": true
+      }
+    ]
+  },
+  "worktrees:watchChangeStatus": {
+    "payload": {
+      "projectId": "\u0000",
+      "worktreeId": "P8"
+    },
+    "success": []
   }
 }

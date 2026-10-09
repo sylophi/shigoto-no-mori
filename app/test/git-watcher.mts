@@ -144,13 +144,12 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
     await runtime?.dispose();
     runtime = null;
   };
-  const restart = async (suppressed = false) => {
+  const restart = async () => {
     await stop();
     await caughtUp(join(repo, ".git"));
     runtime = ManagedRuntime.make(
       gitWatcherLayer({
         onChange: (projectId) => changes.push(projectId),
-        suppressed: () => suppressed,
         projects: () => projects,
       }).pipe(Layer.provide(NodeServices.layer)),
     );
@@ -190,14 +189,6 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   await waitFor(() => changes.length >= 3, "the branch delete to ping");
   await delay(350);
   assert.deepEqual(changes, ["p1", "p1", "p1"]);
-
-  // Suppressed events (a running sm CLI child) never ping.
-  await restart(true);
-  writeFileSync(join(worktree, "c.txt"), "three\n");
-  git(worktree, "add", "c.txt");
-  git(worktree, "commit", "-q", "-m", "three");
-  await delay(700);
-  assert.equal(changes.length, 3, "a suppressed commit must not ping");
 
   // The project leaves the registry: its watch closes and a later
   // commit is not observed.

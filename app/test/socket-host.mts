@@ -16,8 +16,9 @@
 // other channel.
 //
 // Interruption: a call its caller cancels, or whose link drops, is
-// interrupted on the host, its handler's signal aborted. Tracing: the
-// host's span for a call continues the caller's trace.
+// interrupted on the host, its handler's signal aborted. Views stream
+// their values. Tracing: the host's span for a call continues the
+// caller's trace.
 //
 // The golden read surface: every channel servable ungated (remote:true,
 // gated:false) is pinned in read-surface.golden.json, so flipping a
@@ -40,6 +41,7 @@ import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import { WebSocket } from "ws";
 import { expect, it } from "vitest";
@@ -59,7 +61,6 @@ import {
   Gated,
   Grant,
   isBroadcast,
-  MovesHostState,
   payloadOf,
   Remote,
   scopeOf,
@@ -137,6 +138,8 @@ function serve(listener: DirectListener, seen: Seen): void {
     }
   });
   binding.handle("worktrees:list", (ctx) => hang(seen, ctx));
+  // A view: what the projects list reads as, twice.
+  binding.view("projects:watch", () => Stream.make([], []));
   binding.handle("forward:open", async (ctx, input) => {
     const { channelId } = input as { channelId: string };
     const record = {
@@ -282,6 +285,9 @@ async function rawLink(
     payload: unknown,
   ) => Effect.Effect<unknown, unknown>;
   const call = (tag: string, payload?: unknown) => flat(tag, payload);
+  const watch = (tag: string, payload?: unknown) =>
+    // oxlint-disable-next-line shigomori/no-double-cast -- a streaming call answers a Stream, which the flat type above does not say
+    flat(tag, payload) as unknown as Stream.Stream<unknown, unknown>;
   const hello = async (ticket: string, protocolVersion = PROTOCOL_VERSION) => {
     const { nonce: hostNonce } = (await Effect.runPromise(
       call("link:challenge"),
@@ -297,7 +303,7 @@ async function rawLink(
       }),
     );
   };
-  return { call, hello, closed };
+  return { call, watch, hello, closed };
 }
 
 const failureOf = (exit: Exit.Exit<unknown, unknown>) => {
@@ -647,6 +653,23 @@ it("stop: the listener stopping closes every link, and nothing answers after", a
   assert.equal(after.blocked, false);
 });
 
+it("views: a view streams its values over the link, and one nothing serves fails as RemoteCallError", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const raw = await rawLink(track, listener);
+  assert.ok(
+    Exit.isSuccess(await raw.hello(mintTicket(listener.tickets, CLIENT))),
+  );
+  const values = await Effect.runPromise(
+    Stream.runCollect(raw.watch("projects:watch")),
+  );
+  assert.deepEqual(values, [[], []]);
+  const unserved = failureOf(
+    await Effect.runPromiseExit(Stream.runCollect(raw.watch("scripts:watch"))),
+  );
+  assert.ok(unserved instanceof RemoteCallError);
+});
+
 it("tracing: the host's span for a call continues the caller's trace", async () => {
   const track = trackTest;
   const spans: Tracer.NativeSpan[] = [];
@@ -703,16 +726,6 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       if (grant !== undefined) {
         granted.set(grant, [...(granted.get(grant) ?? []), channelOf(call)]);
       }
-      // movesHostState opts a gated call out of the remote-viewer
-      // cache ping. On an ungated call it is meaningless, so its
-      // presence there is a tagging mistake.
-      if (annotation(call, MovesHostState) !== undefined) {
-        assert.equal(
-          annotation(call, Gated),
-          true,
-          `${channelOf(call)} tags movesHostState without gated:true`,
-        );
-      }
     }
   }
   // The consent table (grants.ts) lists exactly the calls that name
@@ -738,10 +751,6 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
   // host's paths.
   assert.equal(annotation(callOf(runtimeContract, "info"), Remote), true);
   assert.equal(annotation(callOf(runtimeContract, "info"), Gated), true);
-  assert.equal(
-    annotation(callOf(runtimeContract, "info"), MovesHostState),
-    false,
-  );
   assert.equal(annotation(callOf(launchersContract, "launch"), Remote), false);
   // The cli module rides the wire wholly behind the grant: even
   // its status reads name host paths, so none of it is ungated.
@@ -830,35 +839,9 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       `sync.${key} must require the command grant`,
     );
   }
-  // The reads, the link open and the cancel opt out of the viewer
-  // cache ping: they move no state a remote viewer caches (a
-  // capture taken over a link writes a ref the git watcher
-  // announces, and a cancel's rollback resolves under the cancelled
-  // call). The two receives land refs and a worktree, and keep it.
-  for (const key of [
-    "ignoredPaths",
-    "worktreeFolder",
-    "hasCommits",
-    "openSource",
-    "cancelMove",
-  ] as const) {
-    assert.equal(
-      annotation(callOf(syncContract, key), MovesHostState),
-      false,
-      `sync.${key} must opt out of the viewer cache ping`,
-    );
-  }
-  for (const key of ["receiveWorktree", "receiveBundle"] as const) {
-    assert.notEqual(
-      annotation(callOf(syncContract, key), MovesHostState),
-      false,
-      `sync.${key} lands refs and must keep the viewer cache ping`,
-    );
-  }
   // The byte-stream opens (step 8, reworked onto channels): both
-  // are grant-gated commands, but neither moves state a remote
-  // viewer caches, so both opt out of the mutation cache ping. The
-  // bytes themselves ride binary channel frames, never invokes.
+  // are grant-gated commands. The bytes themselves ride binary
+  // channel frames, never invokes.
   for (const [name, call] of [
     ["forward.open", callOf(forwardContract, "open")],
     ["mirror.openStream", callOf(mirrorContract, "openStream")],
@@ -868,11 +851,6 @@ it("contract invariant: every host invoke classifies itself, and every remote ga
       annotation(call, Gated),
       true,
       `${name} must require the command grant`,
-    );
-    assert.equal(
-      annotation(call, MovesHostState),
-      false,
-      `${name} must opt out of the viewer cache ping`,
     );
   }
   // The move orchestrators and the teardown are LOCAL-only: a

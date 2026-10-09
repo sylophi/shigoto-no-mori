@@ -4,7 +4,8 @@ import {
   type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import * as Views from "@host/lib/views";
 import { findProjectOrThrow } from "@host/lib/projects";
 import {
   attachScript,
@@ -36,6 +37,17 @@ function resolveScriptCommand(
       return `port-pool release ${shellQuote(worktreePath)}`;
   }
 }
+
+export const scriptsViews: ViewHandlers<
+  typeof scriptsContract,
+  Views.Services
+> = {
+  watch: () =>
+    Views.view(
+      () => ({ runs: listRunningScripts() }),
+      Views.pushed(scriptsContract, "changed"),
+    ),
+};
 
 export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
   {

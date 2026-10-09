@@ -21,17 +21,18 @@ import {
 } from "@host/lib/scripts";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
 import * as Engine from "@host/lib/engine";
-import * as StoreWatcher from "@host/lib/storeWatcher";
+import * as StoreChanges from "@host/lib/storeChanges";
+import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
+import * as HostPushes from "@host/lib/hostPushes";
 import * as Ports from "@host/lib/ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
 import * as Terrier from "@host/lib/terrier";
 import * as Villagers from "@host/lib/villagers";
 import * as Processes from "@host/lib/util/processes";
-import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import * as GitWatcher from "./core/gitWatcher";
-import { gitDirOf, reconcileGitWatchers } from "./core/gitWatcher";
+import { reconcileGitWatchers } from "./core/gitWatcher";
 import { startBackgroundFetch } from "./electron/fetch";
 import * as MirrorDaemon from "./core/mirror/daemon";
 import * as FileSyncRunner from "./electron/fileSyncRunner";
@@ -47,7 +48,6 @@ import { stopAllPortForwards } from "./ipc/modules/portForward";
 import {
   broadcastAll,
   deviceLinkLayer,
-  onHostMutationSettled,
   refreshHubConnection,
   startControlHost,
   stopControlHost,
@@ -94,10 +94,11 @@ const firstProjectList = Layer.effectDiscard(
   ),
 );
 
-// External CLI writes reach the windows as an explicit invalidation
-// broadcast. Window focus will not do: React Query refetches only on a
-// blur to focus transition, and the window may be focused the whole
-// time an agent works in a terminal beside it.
+// A store write, the terminal's or the app's own, reaches every window
+// and every viewing device as an explicit invalidation broadcast.
+// Window focus will not do: React Query refetches only on a blur to
+// focus transition, and the window may be focused the whole time an
+// agent works in a terminal beside it.
 function onExternalStateChange() {
   broadcastAll(gitContract, "externalChange", undefined);
   // A title `sm describe` wrote, announced like a git change so a
@@ -146,10 +147,10 @@ const logged = <R>(name: string, layer: Layer.Layer<never, never, R>) =>
     ),
   );
 
-const storeWatcher = logged(
-  "the store watcher",
-  StoreWatcher.adapter.pipe(
-    Layer.provide(StoreWatcher.layer(onExternalStateChange)),
+const storeChanges = logged(
+  "the store's changes",
+  StoreChanges.adapter.pipe(
+    Layer.provide(StoreChanges.layer(onExternalStateChange)),
   ),
 );
 
@@ -161,18 +162,7 @@ const gitWatcher = logged(
     Layer.provide(
       GitWatcher.layer({
         onChange: announceProjectChanged,
-        // The app's own git commands move refs the same way an agent's
-        // do, and their callers already invalidate their targets, so an
-        // app-run mutating git command (the host's or the engine's) in
-        // flight or just done in that repository is skipped.
-        suppressed: (gitDir) =>
-          gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
       }),
-    ),
-    // An app-side project add or remove is the app's own store write,
-    // which the store watcher doesn't see.
-    Layer.tap(() =>
-      Effect.sync(() => onHostMutationSettled(reconcileGitWatchers)),
     ),
   ),
 );
@@ -249,6 +239,11 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     // A villager download under way stops here, and resumes next launch.
     Layer.provideMerge(Villagers.adapter),
     Layer.provideMerge(Villagers.deviceLayer),
+    // Every push the host makes and every store write, which the wires
+    // and the views read.
+    Layer.provideMerge(HostPushes.adapter),
+    Layer.provideMerge(HostPushes.layer),
+    Layer.provideMerge(EngineStoreChanges.layer),
     // The engine and its store, which everything above reads and
     // writes the projects, worktrees and settings through.
     Layer.provideMerge(Engine.adapter),
@@ -278,7 +273,7 @@ export const layer = (options: {
     // cleanly.
     Layer.provideMerge(deviceLinkLayer),
     Layer.provideMerge(gitWatcher),
-    Layer.provideMerge(storeWatcher),
+    Layer.provideMerge(storeChanges),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),
     Layer.provideMerge(firstProjectList),
     // Every file-sync child, the daemon and the serve children a peer's

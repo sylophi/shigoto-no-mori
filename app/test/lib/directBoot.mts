@@ -13,6 +13,9 @@ import type { WsServerStartOpts } from "@host/socket/server";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Stream from "effect/Stream";
+import * as StoreChanges from "@shigomori/engine/StoreChanges";
+import * as HostPushes from "@host/lib/hostPushes";
 import {
   createConnectTicketStore,
   type ConnectTicketStore,
@@ -41,6 +44,12 @@ import { type Track, waitFor } from "./checkKit.mts";
 // ServerTransport, for registerContract and broadcastAll), and the
 // listener's own state.
 type WsServerBinding = DeviceLink.LinkRegistrar & {
+  // A push from the host, as main's broadcastAll publishes it.
+  broadcastAll(
+    channel: string,
+    payload: unknown,
+    opts?: { remote?: boolean },
+  ): void;
   status(): { listening: boolean; port: number | null };
   closePeersNotIn(online: readonly string[]): Promise<void>;
   // Brings the listener to `opts` (null stops it), as main's refresh
@@ -103,7 +112,16 @@ export async function startDirectListener(
             : { isInvited: opts.isInvited }),
         },
       }),
-      opts.provide ?? Layer.empty,
+      Layer.mergeAll(
+        HostPushes.layer,
+        // The store says nothing here: the views a proof reads are
+        // host-views.mts's.
+        Layer.succeed(StoreChanges.StoreChanges, {
+          subscribe: Effect.succeed(Stream.never),
+          release: Effect.void,
+        }),
+        opts.provide ?? Layer.empty,
+      ),
     ),
   );
   track(() => runtime.dispose());
@@ -113,6 +131,16 @@ export async function startDirectListener(
   let current = await onLink((link) => link.status);
   const binding: WsServerBinding = {
     ...registrar,
+    broadcastAll: (channel, payload, broadcastOpts) =>
+      runtime.runSync(
+        Effect.flatMap(HostPushes.HostPushes, (pushes) =>
+          pushes.publish({
+            channel,
+            payload,
+            remote: broadcastOpts?.remote === true,
+          }),
+        ),
+      ),
     status: () => current,
     closePeersNotIn: (online) => onLink((link) => link.closePeersNotIn(online)),
     reconcile: async (next) => {

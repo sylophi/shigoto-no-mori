@@ -1,4 +1,4 @@
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { broadcast, defineContract, invoke, view } from "../contract.ts";
 import {
   MergeSharedSettingsPayloadSchema,
   SetSharedSettingPayloadSchema,
@@ -21,25 +21,26 @@ export const sharedSettingsContract = defineContract(
     remote: true,
     gated: false,
   }),
+  view("watch", VoidSchema, SharedSettingsDocSchema, {
+    remote: true,
+    gated: false,
+  }),
   // A write made at this device: the handler stamps it, so the stamp
   // and the device id are never the caller's to claim. Local only. A
   // peer's write arrives as an already-stamped entry through merge.
   invoke("set", SetSharedSettingPayloadSchema, SharedSettingsDocSchema, {
     remote: false,
     gated: true,
-    movesHostState: false,
   }),
   // Folds another copy's entries into this one and answers the result.
   // Mutating, so a peer needs the command grant to push. A device that
   // grants none still converges, because its own window pulls (reads a
-  // peer, merges here over the local wire). movesHostState false on
-  // both writers: `changed` below is the precise signal, and the broad
-  // viewer ping would refetch a peer's whole forest over a preference.
+  // peer, merges here over the local wire). `changed` below is the
+  // signal.
   invoke("merge", MergeSharedSettingsPayloadSchema, SharedSettingsDocSchema, {
     remote: true,
     gated: true,
     grant: "changeApp",
-    movesHostState: false,
   }),
   // This copy moved, carrying it whole. Fired only when a set or a
   // merge actually changed something, which is what ends the exchange:

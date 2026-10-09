@@ -26,6 +26,8 @@ import {
   type ContractCall,
   Gated,
   isBroadcast,
+  isInvoke,
+  Remote,
 } from "@shigomori/contracts/contract";
 import {
   CommandRefusedError,
@@ -72,7 +74,9 @@ import {
   newHandshakeNonce,
   proofsMatch,
 } from "@shared/remote/proof";
+import * as HostPushes from "@host/lib/hostPushes";
 import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
+import type * as Views from "@host/lib/views";
 import { type HostChannels, makeHostChannels } from "./channels";
 
 // The listener's auth: the single-use connect tickets minted over the
@@ -233,28 +237,34 @@ function closeThenTerminate(
 type Push = { readonly channel: string; readonly payload: unknown };
 
 type Served = (ctx: HandlerContext, input: unknown) => Promise<unknown>;
+type View = (input: unknown) => Stream.Stream<unknown, unknown, Views.Services>;
 
-// What the app registers to serve: every remote handler, and the
-// pushes it fans out to every linked peer.
-export type LinkRegistrar = ServerTransport & {
+// What the app registers to serve: every remote handler and view, by
+// channel. The pushes it serves are the host's (HostPushes).
+export type LinkRegistrar = Pick<ServerTransport, "handle"> & {
   readonly served: ReadonlyMap<string, Served>;
-  readonly pushes: PubSub.PubSub<Push>;
+  readonly views: ReadonlyMap<string, View>;
+  readonly view: (channel: string, view: View) => void;
 };
 
 export function createLinkRegistrar(): LinkRegistrar {
   const served = new Map<string, Served>();
-  const pushes = Effect.runSync(PubSub.unbounded<Push>());
+  const views = new Map<string, View>();
+  const once = (channel: string) => {
+    if (served.has(channel) || views.has(channel)) {
+      throw new Error(`[link] "${channel}" is served already`);
+    }
+  };
   return {
     served,
-    pushes,
+    views,
     handle(channel, fn) {
-      if (served.has(channel)) {
-        throw new Error(`[link] handler already registered for "${channel}"`);
-      }
+      once(channel);
       served.set(channel, fn);
     },
-    broadcastAll(channel, payload) {
-      PubSub.publishUnsafe(pushes, { channel, payload });
+    view(channel, view) {
+      once(channel);
+      views.set(channel, view);
     },
   };
 }
@@ -302,6 +312,10 @@ function decodeFrame(
   }
 }
 
+// The answer for a call the link carries and nothing here serves.
+const unserved = (tag: string) =>
+  new RemoteCallError({ text: `No handler registered for channel "${tag}"` });
+
 // One socket, from its accept to its close.
 type Connection = {
   readonly ws: WebSocket;
@@ -345,6 +359,9 @@ const make = (options: {
 }) =>
   Effect.gen(function* () {
     const { registrar, auth } = options;
+    // What the views read, and the pushes every peer hears.
+    const services = yield* Effect.context<Views.Services>();
+    const hostPushes = yield* HostPushes.HostPushes;
     const runFork = yield* FiberSet.makeRuntime<never>();
     const lifecycle = yield* Semaphore.make(1);
     const failedAuth = new Map<string, { count: number; until: number }>();
@@ -572,40 +589,52 @@ const make = (options: {
             ),
         };
 
-        // A push: every one fanned out to all peers, and the ones for
-        // this peer alone.
+        // A push: the host's own when it is one every peer may hear
+        // (annotated `remote`), and the ones for this peer alone.
         const push =
-          (channel: string) =>
+          (channel: string, toEveryPeer: boolean) =>
           (_: undefined, { client }: Options) =>
             Stream.unwrap(
               Effect.map(connectionOf(client.id), (connection) =>
                 Stream.merge(
-                  Stream.fromPubSub(registrar.pushes),
-                  Stream.fromPubSub(connection.pushes),
-                ).pipe(
-                  Stream.filter((entry) => entry.channel === channel),
-                  Stream.map((entry) => entry.payload),
+                  toEveryPeer ? hostPushes.stream(channel) : Stream.empty,
+                  Stream.fromPubSub(connection.pushes).pipe(
+                    Stream.filter((entry) => entry.channel === channel),
+                    Stream.map((entry) => entry.payload),
+                  ),
                 ),
               ),
             );
+
+        // A view, failing as RemoteCallError when its reads fail.
+        const watch = (view: View) => (payload: unknown) =>
+          view(payload).pipe(
+            Stream.provideContext(services),
+            Stream.mapError(
+              (error) => new RemoteCallError({ text: errorMessageOf(error) }),
+            ),
+          );
 
         const handlers: Record<string, unknown> = { ...linkHandlers };
         for (const call of LinkGroup.requests.values()) {
           const tag = channelOf(call);
           if (tag in handlers) continue;
-          if (isBroadcast(call as ContractCall)) {
-            handlers[tag] = push(tag);
+          if (isBroadcast(call)) {
+            handlers[tag] = push(tag, annotation(call, Remote) === true);
+            continue;
+          }
+          if (!isInvoke(call)) {
+            const view = registrar.views.get(tag);
+            handlers[tag] =
+              view === undefined
+                ? () => Stream.fail(unserved(tag))
+                : watch(view);
             continue;
           }
           const fn = registrar.served.get(tag);
           handlers[tag] =
             fn === undefined
-              ? () =>
-                  Effect.fail(
-                    new RemoteCallError({
-                      text: `No handler registered for channel "${tag}"`,
-                    }),
-                  )
+              ? () => Effect.fail(unserved(tag))
               : serve(tag, fn);
         }
 
