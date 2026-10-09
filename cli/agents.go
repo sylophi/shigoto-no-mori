@@ -112,6 +112,11 @@ func anyWorking(sessions []agentSession) bool {
 	return slices.ContainsFunc(sessions, func(s agentSession) bool { return s.State == agentWorking })
 }
 
+// Whether any session is mid-turn: working, or waiting on the user.
+func anyActive(sessions []agentSession) bool {
+	return slices.ContainsFunc(sessions, func(s agentSession) bool { return s.State != agentIdle })
+}
+
 // Read-modify-write of the bindings under the registry lock. fn edits
 // the map in place and reports whether it changed anything, so an
 // unchanged map writes nothing.

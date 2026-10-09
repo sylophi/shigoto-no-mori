@@ -93,6 +93,9 @@ var globalConfigKeys = []configKey{
 		desc: "Start new worktrees (and added projects' primaries) with auto-pull on"},
 	{name: "autoPullPrimaryOnly", kind: boolKind, def: false,
 		desc: "autoPullNew applies to added projects' primaries only"},
+	// Off when unset (nil): no number of days means never.
+	{name: "autoShelveDays", kind: intKind,
+		desc: "Shelve worktrees untouched for this many days"},
 	// Off when unset, which is what an install from before this setting
 	// has. Fresh installs are seeded with it on (seedFreshInstall).
 	{name: "doubutsuNames", kind: boolKind, def: false,

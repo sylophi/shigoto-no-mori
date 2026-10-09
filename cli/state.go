@@ -319,6 +319,7 @@ type globalConfig struct {
 	DoubutsuNames         *bool             `json:"doubutsuNames"`
 	CodexWorktreeNames    *bool             `json:"codexWorktreeNames"`
 	ManagedOnProjectDrive *bool             `json:"managedOnProjectDrive"`
+	AutoShelveDays        *int              `json:"autoShelveDays"`
 	Launchers             []launcherCommand `json:"launchers"`
 	HiddenLaunchers       []string          `json:"hiddenLaunchers"`
 	Terminal              string            `json:"terminal"`
@@ -425,15 +426,22 @@ const projectOrderKey = "projectOrder"
 // it goes with the worktree's other marks.
 const shelfSnapshotsKey = "shelfSnapshots"
 
+// When each worktree last came off the shelf (`sm unshelve`, adopt, or
+// a listing that saw it worked in), epoch ms. The idle shelf
+// (shelf.go) counts it as a touch, so an unshelved worktree isn't
+// shelved again by the next listing. A shelve clears the entry.
+const unshelvedAtKey = "unshelvedAt"
+
 // Every map in the registry keyed by worktree id: the `{ worktreeId:
-// true }` marks, the shelf snapshots and the agent sessions. A worktree's id is
+// true }` marks, the shelf snapshots and unshelve times, and the agent
+// sessions. A worktree's id is
 // derived from its path, so the flows that retire an id (rm, project
 // remove) clear it from each of these through dropWorktreeMarks, and a
 // new mark only has to be added to this list. The app reads the marks
 // off rows and identities (`sm worktrees list`); `sm shelve`, `sm
 // autopull` flip them, the listing keeps the shelf snapshots, and
 // `sm agents` the sessions.
-var worktreeMarkKeys = []string{shelvedKey, autoPullKey, shelfSnapshotsKey, agentSessionsKey}
+var worktreeMarkKeys = []string{shelvedKey, autoPullKey, shelfSnapshotsKey, unshelvedAtKey, agentSessionsKey}
 
 // The id the app mints for its data dir (host/lib/config/deviceId.ts).
 // The CLI only reads it, for `sm link`.
@@ -873,29 +881,38 @@ func splitLocked() error {
 
 // Flips the id in the shelved map (store.ts writeKey semantics) and
 // retires its snapshot either way, so the next listing judges the new
-// shelf against a fresh one.
+// shelf against a fresh one. An unshelve records when it happened.
 func setShelved(worktreeID string, shelved bool) error {
-	return updateShelf(func(marks map[string]bool, snapshots map[string]json.RawMessage) (bool, error) {
-		_, hadSnapshot := snapshots[worktreeID]
-		if marks[worktreeID] == shelved && !hadSnapshot {
+	return updateShelf(func(shelf shelfState) (bool, error) {
+		_, hadSnapshot := shelf.snapshots[worktreeID]
+		if shelf.marks[worktreeID] == shelved && !hadSnapshot {
 			return false, nil
 		}
 		if shelved {
-			marks[worktreeID] = true
+			shelf.marks[worktreeID] = true
+			delete(shelf.unshelvedAt, worktreeID)
 		} else {
-			delete(marks, worktreeID)
+			delete(shelf.marks, worktreeID)
+			shelf.unshelvedAt[worktreeID] = time.Now().UnixMilli()
 		}
-		delete(snapshots, worktreeID)
+		delete(shelf.snapshots, worktreeID)
 		return true, nil
 	})
 }
 
-// Read-modify-write of the shelved marks and the shelf snapshots
-// together, in one pass under the registry lock. fn edits both maps in
-// place and reports whether it changed anything; false skips the
-// write. Snapshot values pass through as raw JSON, so an entry fn
-// doesn't touch is written back byte for byte.
-func updateShelf(fn func(marks map[string]bool, snapshots map[string]json.RawMessage) (bool, error)) error {
+// The registry's shelf maps, as updateShelf hands them to its fn.
+type shelfState struct {
+	marks       map[string]bool
+	snapshots   map[string]json.RawMessage
+	unshelvedAt map[string]int64
+}
+
+// Read-modify-write of the shelved marks, the shelf snapshots and the
+// unshelve times together, in one pass under the registry lock. fn
+// edits the maps in place and reports whether it changed anything.
+// False skips the write. Snapshot values pass through as raw JSON, so
+// an entry fn doesn't touch is written back byte for byte.
+func updateShelf(fn func(shelf shelfState) (bool, error)) error {
 	if err := ensureRegistrySplit(); err != nil {
 		return err
 	}
@@ -904,19 +921,27 @@ func updateShelf(fn func(marks map[string]bool, snapshots map[string]json.RawMes
 		if err != nil {
 			return err
 		}
-		marks := map[string]bool{}
-		if err := decodeKey(registryPath(), shelvedKey, all[shelvedKey], &marks); err != nil {
+		shelf := shelfState{
+			marks:       map[string]bool{},
+			snapshots:   map[string]json.RawMessage{},
+			unshelvedAt: map[string]int64{},
+		}
+		if err := decodeKey(registryPath(), shelvedKey, all[shelvedKey], &shelf.marks); err != nil {
 			return err
 		}
-		snapshots := map[string]json.RawMessage{}
-		if err := decodeKey(registryPath(), shelfSnapshotsKey, all[shelfSnapshotsKey], &snapshots); err != nil {
+		if err := decodeKey(registryPath(), shelfSnapshotsKey, all[shelfSnapshotsKey], &shelf.snapshots); err != nil {
 			return err
 		}
-		changed, err := fn(marks, snapshots)
+		if err := decodeKey(registryPath(), unshelvedAtKey, all[unshelvedAtKey], &shelf.unshelvedAt); err != nil {
+			return err
+		}
+		changed, err := fn(shelf)
 		if err != nil || !changed {
 			return err
 		}
-		for key, value := range map[string]any{shelvedKey: marks, shelfSnapshotsKey: snapshots} {
+		for key, value := range map[string]any{
+			shelvedKey: shelf.marks, shelfSnapshotsKey: shelf.snapshots, unshelvedAtKey: shelf.unshelvedAt,
+		} {
 			encoded, err := json.Marshal(value)
 			if err != nil {
 				return err

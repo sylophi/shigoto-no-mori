@@ -260,6 +260,12 @@ export const GlobalConfigSchema = z.object({
   // When true, autoPullNew covers only the primary checkout of a newly
   // added project. Nothing on its own.
   autoPullPrimaryOnly: z.boolean().optional(),
+  // The idle shelf: a managed worktree nothing has touched for this
+  // many days (no commit, edit, agent session, creation or unshelve)
+  // goes on the shelf, where working in it brings it back as before.
+  // Kept by the CLI's full listing (cli/shelf.go). Absent is off, and a
+  // patch turns it off with null.
+  autoShelveDays: z.number().int().positive().nullable().optional(),
   // When true, auto-picked worktree names are Animal Crossing villager
   // and character names, the ones with a face on Nookipedia
   // (cli/embed/doubutsu-names.json, e.g. `raymond`), instead of
@@ -343,6 +349,7 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     autoPopulateInstall: true,
     autoPullNew: true,
     autoPullPrimaryOnly: true,
+    autoShelveDays: true,
     doubutsuNames: true,
     codexWorktreeNames: true,
     managedOnProjectDrive: true,
@@ -374,6 +381,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   autoPopulateInstall: false,
   autoPullNew: false,
   autoPullPrimaryOnly: false,
+  autoShelveDays: null,
   doubutsuNames: false,
   codexWorktreeNames: false,
   managedOnProjectDrive: false,

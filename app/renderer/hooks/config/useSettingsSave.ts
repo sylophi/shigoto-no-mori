@@ -52,6 +52,8 @@ export interface SettingsFormState {
   autoPopulateInstall: boolean;
   autoPullNew: boolean;
   autoPullPrimaryOnly: boolean;
+  // Null while the idle shelf is off.
+  autoShelveDays: number | null;
   doubutsuNames: boolean;
   codexWorktreeNames: boolean;
   managedOnProjectDrive: boolean;
@@ -98,6 +100,7 @@ export function fromConfig(
     autoPullNew: config.autoPullNew ?? DEFAULTS.autoPullNew,
     autoPullPrimaryOnly:
       config.autoPullPrimaryOnly ?? DEFAULTS.autoPullPrimaryOnly,
+    autoShelveDays: config.autoShelveDays ?? DEFAULTS.autoShelveDays,
     doubutsuNames: config.doubutsuNames ?? DEFAULTS.doubutsuNames,
     codexWorktreeNames:
       config.codexWorktreeNames ?? DEFAULTS.codexWorktreeNames,
@@ -136,6 +139,7 @@ export function toDeviceSettingsPatch(
     autoPopulateInstall: state.autoPopulateInstall,
     autoPullNew: state.autoPullNew,
     autoPullPrimaryOnly: state.autoPullPrimaryOnly,
+    autoShelveDays: state.autoShelveDays,
     doubutsuNames: state.doubutsuNames,
     codexWorktreeNames: state.codexWorktreeNames,
     managedOnProjectDrive: state.managedOnProjectDrive,
@@ -237,7 +241,7 @@ interface SettingsSaveResult {
 export function invalidateDeviceSettingsQueries(
   queryClient: QueryClient,
   keys: QueryKeyRegistry,
-  worktreeNamesChanged: boolean,
+  worktreeRowsChanged: boolean,
 ): void {
   void queryClient.invalidateQueries({ queryKey: keys.globalConfig() });
   // Launcher catalogs for every project depend on global custom launchers.
@@ -252,11 +256,29 @@ export function invalidateDeviceSettingsQueries(
   // has nothing to invalidate here.)
   void queryClient.invalidateQueries({ queryKey: keys.projects() });
   // Toggling Codex-style worktree names renames external worktrees in
-  // every project's list. Gated on the change because this refetch
-  // costs a git fan-out per worktree, unlike the ones above.
-  if (worktreeNamesChanged) {
+  // every project's list, and a new idle shelf setting shelves the
+  // worktrees it now covers on the next listing. Gated on the change
+  // because this refetch costs a git fan-out per worktree, unlike the
+  // ones above.
+  if (worktreeRowsChanged) {
     void queryClient.invalidateQueries({ queryKey: keys.worktreesAll() });
   }
+}
+
+// The device settings the worktree listing reads: Codex-style names,
+// and the idle shelf.
+const WORKTREE_ROW_SETTINGS = ["codexWorktreeNames", "autoShelveDays"] as const;
+
+// Whether a save changes what the worktree listing answers (see
+// invalidateDeviceSettingsQueries), against the stored config the form
+// was seeded from.
+export function changesWorktreeRows(
+  before: GlobalConfig,
+  after: SettingsFormState,
+): boolean {
+  return WORKTREE_ROW_SETTINGS.some(
+    (key) => (before[key] ?? DEFAULTS[key]) !== after[key],
+  );
 }
 
 // One Save over two stores, as ONE mutation so isPending, isSuccess and
@@ -284,11 +306,10 @@ export function useSettingsSave({
   const initialClientDoc = serialize(toClientConfig(initialState));
 
   return useMutation({
-    // Decided up front: initialState follows the live config query, which
+    // Decided up front: initialConfig follows the live config query, which
     // can refetch the saved value before onSuccess runs.
     onMutate: (state: SettingsFormState) => ({
-      worktreeNamesChanged:
-        state.codexWorktreeNames !== initialState.codexWorktreeNames,
+      worktreeRowsChanged: changesWorktreeRows(initialConfig, state),
     }),
     mutationFn: async (
       state: SettingsFormState,
@@ -333,7 +354,7 @@ export function useSettingsSave({
     onSuccess: (
       { devicePersisted, clientPersisted, clientConfig },
       _state,
-      { worktreeNamesChanged },
+      { worktreeRowsChanged },
     ) => {
       if (clientPersisted) {
         // setQueryData where the device half invalidates: the
@@ -347,7 +368,7 @@ export function useSettingsSave({
         invalidateDeviceSettingsQueries(
           queryClient,
           queryKeys,
-          worktreeNamesChanged,
+          worktreeRowsChanged,
         );
       }
     },
@@ -359,7 +380,7 @@ export function useSettingsSave({
         invalidateDeviceSettingsQueries(
           queryClient,
           queryKeys,
-          context?.worktreeNamesChanged ?? true,
+          context?.worktreeRowsChanged ?? true,
         );
       }
     },

@@ -110,7 +110,7 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 		build := loadBuildContext(target.proj)
 		row, probe := probeWorktree(target.proj, target.worktree, build)
 		rows := []worktreeJSON{row}
-		settleShelves(rows, []rowProbe{probe}, build)
+		settleShelves(rows, []rowProbe{probe}, build, loadIdleShelf())
 		row = rows[0]
 		if jsonMode {
 			emit(rows)

@@ -41,6 +41,7 @@ export type RegistryFile = {
   shelvedWorktrees?: Record<string, boolean>;
   autoPullWorktrees?: Record<string, boolean>;
   shelfSnapshots?: Record<string, ShelfSnapshot>;
+  unshelvedAt?: Record<string, number>;
 };
 
 // The data dir's registry.json as the CLI last wrote it.
