@@ -23,24 +23,14 @@ export function execGh(
     timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
     cwd: options.cwd,
     maxBuffer: options.maxBuffer,
-    // gh runs git for some commands (a clone, a push), and nobody is at
-    // this process's terminal to answer git's credential prompt: one
-    // that can't authenticate fails rather than waits.
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
   });
 }
 
 // gh's stderr tends to be one long line with a `gh:` prefix; the rest
 // is usable as-is. Trim noise so the renderer banner stays compact.
-// When git fails under gh, gh's own last line is "failed to run git:
-// exit status 128", and git's reason is the `fatal:` line before it.
 export function trimGhError(raw: string): string {
   const trimmed = raw.trim();
   const lines = trimmed.split(/\r?\n/).filter((l) => l.length > 0);
   const last = lines[lines.length - 1] ?? trimmed;
-  const fatal = last.startsWith("failed to run git")
-    ? lines.findLast((line) => line.startsWith("fatal: "))
-    : undefined;
-  if (fatal !== undefined) return fatal.slice("fatal: ".length);
   return last.replace(/^gh:\s*/i, "");
 }

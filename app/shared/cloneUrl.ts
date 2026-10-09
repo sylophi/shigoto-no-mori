@@ -18,9 +18,10 @@ export function repoNameFromUrl(url: string): string | null {
   return normalizeRemoteUrl(url)?.split("/").at(-1) ?? null;
 }
 
-// `owner/repo`, the way gh names a GitHub repository. Neither part
-// can start with a dash, so it never reads as an option either.
-const GITHUB_SHORTHAND = /^[A-Za-z0-9][A-Za-z0-9-]*\/([A-Za-z0-9._-]+)$/;
+// `owner/repo`, the way gh names a GitHub repository (an Enterprise
+// Managed User's handle carries an underscore). The owner can't start
+// with a dash, so it never reads as an option.
+const GITHUB_SHORTHAND = /^[A-Za-z0-9][A-Za-z0-9_-]*\/([A-Za-z0-9._-]+)$/;
 
 export function isGithubShorthand(source: string): boolean {
   const repo = source.trim().match(GITHUB_SHORTHAND)?.[1];

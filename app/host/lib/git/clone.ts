@@ -1,7 +1,6 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { cloneUrlOf, isGithubShorthand } from "@shared/cloneUrl";
-import { cloneGithubRepo } from "@host/lib/githubCli/actions";
+import { cloneUrlOf } from "@shared/cloneUrl";
 import { ghReady } from "@host/lib/githubCli/readiness";
 import { isGithubRemoteUrl } from "@host/lib/githubCli/remote";
 import { isENOENT, pathExists } from "@host/lib/util/paths";
@@ -32,15 +31,29 @@ export async function checkNewCheckoutDestination(
 
 // Clones `source` into `parentDir/name` and returns the new checkout's
 // path. The payload schema has already held the source to a real remote
-// or a GitHub `owner/repo`, and the name to one segment. A GitHub
-// repository clones through gh where the device's gh is ready, and
-// over plain https otherwise.
+// or a GitHub `owner/repo` (cloned over https), and the name to one
+// segment.
 export async function cloneRepo(
   source: string,
   parentDir: string,
   name: string,
 ): Promise<string> {
   const dest = await checkNewCheckoutDestination(parentDir, name);
+  const url = cloneUrlOf(source);
+  // Where the device's gh is signed in, it is git's credential helper
+  // for a GitHub remote, the way `gh auth setup-git` would set it up,
+  // so a private repository clones over https without that setup. Only
+  // for this clone: the URL stays as pasted, and the checkout's config
+  // is left alone.
+  const ghCredentials =
+    (await isGithubRemoteUrl(url)) && (await ghReady())
+      ? [
+          "-c",
+          "credential.helper=",
+          "-c",
+          "credential.helper=!gh auth git-credential",
+        ]
+      : [];
   // Nobody is at this process's terminal to answer a credential prompt,
   // least of all when the clone was asked for from another device, so
   // git's own is turned off and a remote it can't authenticate to fails
@@ -49,17 +62,10 @@ export async function cloneRepo(
   // batch mode here would override the user's own ssh command. A
   // packaged app has no terminal for ssh to ask on, so it fails there
   // too, and the clone has no timeout beyond that.
-  // gh turns git's prompt off the same way (./githubCli/exec.ts).
-  const viaGh =
-    (isGithubShorthand(source) || (await isGithubRemoteUrl(source))) &&
-    (await ghReady());
-  const clone = viaGh
-    ? cloneGithubRepo(source, dest)
-    : // `--` ends the options: the URL and name come from the caller.
-      run(parentDir, ["clone", "--", cloneUrlOf(source), name], {
-        env: { GIT_TERMINAL_PROMPT: "0" },
-      });
-  await clone.catch((error: unknown) => {
+  // `--` ends the options: the URL and name come from the caller.
+  await run(parentDir, [...ghCredentials, "clone", "--", url, name], {
+    env: { GIT_TERMINAL_PROMPT: "0" },
+  }).catch((error: unknown) => {
     // Refusing to prompt, git names the URL it wanted a password for,
     // userinfo and all, and a pasted token sits there. The message goes
     // to a toast, so that part is dropped.

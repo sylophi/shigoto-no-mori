@@ -21,7 +21,6 @@ scrubProcessGitEnv();
 
 const { cloneRepo } = await import("../host/lib/git/clone.ts");
 const { isGithubRemoteUrl } = await import("../host/lib/githubCli/remote.ts");
-const { trimGhError } = await import("../host/lib/githubCli/exec.ts");
 const {
   cloneFolderName,
   cloneUrlOf,
@@ -78,7 +77,12 @@ async function main() {
   await check(
     "a GitHub owner/repo is accepted, and names the repo's https URL",
     () => {
-      for (const url of ["owner/repo", "my-org/repo.v2", "owner/.github"]) {
+      for (const url of [
+        "owner/repo",
+        "my-org/repo.v2",
+        "owner/.github",
+        "alice_acme/tools",
+      ]) {
         assert.ok(accepts({ url, parentDir: "~/dev" }), url);
       }
       assert.equal(cloneUrlOf(" owner/repo "), "https://github.com/owner/repo");
@@ -99,19 +103,6 @@ async function main() {
     ];
     const github = await Promise.all(urls.map(isGithubRemoteUrl));
     assert.deepEqual(github, [true, true, true, false, false]);
-  });
-
-  await check("a git failure under gh reads as git's reason", () => {
-    assert.equal(
-      trimGhError(
-        "Command failed: gh repo clone o/r /tmp/r\nCloning into '/tmp/r'...\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nfailed to run git: exit status 128\n",
-      ),
-      "Could not read from remote repository.",
-    );
-    assert.equal(
-      trimGhError("gh: Not Found (HTTP 404)"),
-      "Not Found (HTTP 404)",
-    );
   });
 
   await check("the folder name is held to one path segment", () => {

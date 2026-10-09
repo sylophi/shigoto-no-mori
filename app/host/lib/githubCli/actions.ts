@@ -174,42 +174,44 @@ export async function listGithubOwners(): Promise<string[]> {
   return stdout.split("\n").filter((line) => line.length > 0);
 }
 
+const GhViewerReposSchema = z.object({
+  data: z.object({
+    viewer: z.object({
+      repositories: z.object({
+        // A repository the response couldn't resolve is a null.
+        nodes: z.array(z.object({ nameWithOwner: z.string() }).nullable()),
+      }),
+    }),
+  }),
+});
+
 // The repositories the clone dialog offers: the signed-in user's own,
 // their organizations' and the ones they collaborate on, most recently
 // pushed first. The first hundred: one further back can still be typed
 // in as `owner/repo`.
 export async function listGithubRepos(): Promise<string[]> {
+  // An organization whose SAML gh's token isn't authorized for answers
+  // with an error beside the rest of the list. gh exits non-zero on it,
+  // with the response on stdout, and the repositories that did come
+  // are still the ones to offer.
   const stdout = await runGh(
     [
       "api",
       "graphql",
       "-f",
       "query=query { viewer { repositories(first: 100, ownerAffiliations: [OWNER, ORGANIZATION_MEMBER, COLLABORATOR], orderBy: {field: PUSHED_AT, direction: DESC}) { nodes { nameWithOwner } } } }",
-      "--jq",
-      ".data.viewer.repositories.nodes[].nameWithOwner",
     ],
     { fallback: "Couldn't list your GitHub repositories" },
-  );
-  return stdout.split("\n").filter((line) => line.length > 0);
-}
-
-// Clones a GitHub repository (a remote URL or `owner/repo`) to `dest`
-// with gh, which signs git in with its own login, so a private
-// repository clones over https with no credential helper set up. A URL
-// keeps its protocol, and the shorthand takes gh's git_protocol. A fork
-// gains its parent as `upstream`. `dest` is absolute, so it can't read
-// as an option, and the source never starts with a dash
-// (shared/cloneUrl.ts).
-export async function cloneGithubRepo(
-  source: string,
-  dest: string,
-): Promise<void> {
-  await runGh(["repo", "clone", source, dest], {
-    fallback: "gh repo clone failed",
-    // As long as the transfer takes, like the git clone it stands in
-    // for (host/lib/git/clone.ts).
-    timeout: 0,
+  ).catch((err: unknown) => {
+    const cause = (err as { cause?: { stdout?: unknown } }).cause;
+    if (typeof cause?.stdout === "string" && cause.stdout.trim()) {
+      return cause.stdout;
+    }
+    throw err;
   });
+  const { nodes } = GhViewerReposSchema.parse(JSON.parse(stdout)).data.viewer
+    .repositories;
+  return nodes.flatMap((node) => (node ? [node.nameWithOwner] : []));
 }
 
 // Creates `owner/<folder name>` on GitHub from the repo at `cwd` (no
