@@ -282,26 +282,34 @@ export async function getWorktreePullRequest(
   branch: string,
 ): Promise<PullRequestDetail | null> {
   if (!(await ghReadyForRepo(cwd))) return null;
-  const [detail, reviews] = await Promise.all([
+  const [detail, extras] = await Promise.all([
     runGhPrListDetail(cwd, branch),
-    fetchReviews(cwd, branch),
+    fetchGraphqlExtras(cwd, branch),
   ]);
   if (!detail) return null;
-  const match = reviews?.find((pr) => pr.number === detail.number);
-  return match ? { ...detail, reviews: toReviews(match) } : detail;
+  const match = extras?.find((pr) => pr.number === detail.number);
+  if (!match) return detail;
+  return {
+    ...detail,
+    body: detail.body && withSignedImages(detail.body, match.bodyHTML),
+    reviews: toReviews(match),
+  };
 }
 
 // The reviews come from GraphQL, beside the gh pr list call, for two
 // fields gh pr list doesn't offer: latestOpinionatedReviews, which keeps
 // an approval its reviewer later commented under (latestReviews has the
-// comment instead), and review states without each review's body. On
-// its own call so a failure (a team request needs read:org, which a
-// token can lack) costs only the reviews chip, not the PR.
-const REVIEWS_QUERY = `query($owner: String!, $repo: String!, $head: String!) {
+// comment instead), and review states without each review's body. So
+// does the body as GitHub renders it, for its images' signed URLs
+// (withSignedImages). On its own call so a failure (a team request
+// needs read:org, which a token can lack) costs only the reviews chip
+// and the private images, not the PR.
+const EXTRAS_QUERY = `query($owner: String!, $repo: String!, $head: String!) {
   repository(owner: $owner, name: $repo) {
     pullRequests(headRefName: $head, first: 10, orderBy: {field: CREATED_AT, direction: DESC}) {
       nodes {
         number
+        bodyHTML
         author { login }
         reviewDecision
         latestOpinionatedReviews(first: 100) { nodes { author { login } state } }
@@ -326,8 +334,9 @@ const GqlReviewSchema = z.object({
   state: z.string(),
 });
 
-const GqlReviewsPullRequestSchema = z.object({
+const GqlExtrasPullRequestSchema = z.object({
   number: z.number().int().positive(),
+  bodyHTML: z.string().catch(""),
   author: z.object({ login: z.string() }).nullable(),
   reviewDecision: PullRequestReviewDecisionSchema.nullable().catch(null),
   latestOpinionatedReviews: z.object({ nodes: z.array(GqlReviewSchema) }),
@@ -345,22 +354,22 @@ const GqlReviewsPullRequestSchema = z.object({
     ),
   }),
 });
-type GqlReviewsPullRequest = z.infer<typeof GqlReviewsPullRequestSchema>;
+type GqlExtrasPullRequest = z.infer<typeof GqlExtrasPullRequestSchema>;
 
-const GqlReviewsResponseSchema = z.object({
+const GqlExtrasResponseSchema = z.object({
   data: z.object({
     repository: z.object({
-      pullRequests: z.object({ nodes: z.array(GqlReviewsPullRequestSchema) }),
+      pullRequests: z.object({ nodes: z.array(GqlExtrasPullRequestSchema) }),
     }),
   }),
 });
 
-// The branch's newest PRs with their reviews, or null on any failure:
-// the PR shows without the reviews chip then.
-async function fetchReviews(
+// The branch's newest PRs with their reviews and rendered bodies, or
+// null on any failure: the PR shows without the reviews chip then.
+async function fetchGraphqlExtras(
   cwd: string,
   branch: string,
-): Promise<GqlReviewsPullRequest[] | null> {
+): Promise<GqlExtrasPullRequest[] | null> {
   try {
     const { stdout } = await execGh(
       [
@@ -373,11 +382,11 @@ async function fetchReviews(
         "-f",
         `head=${branch}`,
         "-f",
-        `query=${REVIEWS_QUERY}`,
+        `query=${EXTRAS_QUERY}`,
       ],
       { cwd },
     );
-    const parsed = GqlReviewsResponseSchema.safeParse(JSON.parse(stdout));
+    const parsed = GqlExtrasResponseSchema.safeParse(JSON.parse(stdout));
     return parsed.success
       ? parsed.data.data.repository.pullRequests.nodes
       : null;
@@ -394,7 +403,7 @@ const SUBMITTED_REVIEW_STATE = PullRequestReviewerStateSchema.exclude([
 // else their comment, then whoever's asked and hasn't answered. The
 // author's own reviews (replies in a thread are reviews too) are left
 // out, and DISMISSED fails the state parse and drops.
-function toReviews(pr: GqlReviewsPullRequest): PullRequestReviews {
+function toReviews(pr: GqlExtrasPullRequest): PullRequestReviews {
   const author = pr.author?.login;
   const reviewers: PullRequestReviews["reviewers"] = [];
   const seen = new Set<string>();
@@ -413,6 +422,41 @@ function toReviews(pr: GqlReviewsPullRequest): PullRequestReviews {
     if (login) reviewers.push({ login, state: "REQUESTED" });
   }
   return { decision: pr.reviewDecision, reviewers };
+}
+
+// An attachment (github.com/user-attachments/assets/<id>, or the older
+// github.com/<owner>/<repo>/assets/<n>/<id>) in a private repo loads
+// only for a browser signed in to GitHub, which the app's
+// windows aren't, so the markdown body's images stay blank. The body
+// GitHub renders points each at a signed URL anyone can load for five
+// minutes, and an image in the markdown (![](…) or src=…) takes its
+// attachment's. A link stays as written, for the browser it opens in.
+// A signed URL is reused while it has a minute left, so a refetch
+// leaves the body as it was and its images don't load again.
+const SIGNED_URL_REUSE_MS = 4 * 60_000;
+const signedUrls = new Map<string, { url: string; until: number }>();
+const SIGNED_URL =
+  /https:\/\/private-user-images\.githubusercontent\.com\/\d+\/\d+-([0-9a-f-]{36})\.[^"]+/g;
+const ATTACHED_IMAGE =
+  /(!\[[^\]]*\]\(\s*<?|\bsrc\s*=\s*["']?)https:\/\/github\.com\/(?:user-attachments\/assets|[\w.-]+\/[\w.-]+\/assets\/\d+)\/([0-9a-f-]{36})/g;
+
+function withSignedImages(body: string, bodyHTML: string): string {
+  const now = Date.now();
+  for (const [id, signed] of signedUrls) {
+    if (signed.until <= now) signedUrls.delete(id);
+  }
+  for (const [url, id] of bodyHTML.matchAll(SIGNED_URL)) {
+    if (id !== undefined && !signedUrls.has(id)) {
+      signedUrls.set(id, {
+        url: url.replaceAll("&amp;", "&"),
+        until: now + SIGNED_URL_REUSE_MS,
+      });
+    }
+  }
+  return body.replace(ATTACHED_IMAGE, (whole, lead: string, id: string) => {
+    const signed = signedUrls.get(id);
+    return signed ? lead + signed.url : whole;
+  });
 }
 
 // Server-side filtering + minimal fields keeps this cheap even on
