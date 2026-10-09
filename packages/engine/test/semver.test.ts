@@ -2,7 +2,6 @@
 // then properties over generated versions and generated junk.
 import assert from "node:assert/strict";
 import * as Arbitrary from "effect/Arbitrary";
-import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
 import {
@@ -12,24 +11,12 @@ import {
   releaseChannel,
   type Semver,
 } from "../src/semver.ts";
+import { holds, textOf } from "./lib/properties.ts";
 
 const parsed = (raw: string): Semver => {
   const version = parseSemver(raw);
   assert.ok(version, `parseSemver(${raw}) failed`);
   return version;
-};
-
-// A property that holds for every generated value, or the shrunk input
-// that broke it.
-const holds = async <A>(
-  arbitrary: Arbitrary.Arbitrary<A>,
-  property: (value: A) => boolean,
-  runs = 1000,
-) => {
-  const result = await Effect.runPromise(
-    Arbitrary.checkEffect(arbitrary, property, { runs }),
-  );
-  assert.equal(Arbitrary.formatCheckFailure(result), undefined);
 };
 
 describe("parseSemver", () => {
@@ -189,29 +176,24 @@ const reference = (raw: string) => {
 
 // Strings built from the pieces versions are made of, and the ones that
 // trip parsers up.
-const junk = Arbitrary.map(
-  Arbitrary.array(
-    Arbitrary.schema(
-      Schema.Literals([
-        "0",
-        "1",
-        "01",
-        "12",
-        ".",
-        "-",
-        "+",
-        "v",
-        "beta",
-        "a_b",
-        " ",
-        "9223372036854775807",
-        "9223372036854775808",
-        "1.2.3",
-      ]),
-    ),
-    { maxLength: 8 },
-  ),
-  (pieces) => pieces.join(""),
+const junk = textOf(
+  [
+    "0",
+    "1",
+    "01",
+    "12",
+    ".",
+    "-",
+    "+",
+    "v",
+    "beta",
+    "a_b",
+    " ",
+    "9223372036854775807",
+    "9223372036854775808",
+    "1.2.3",
+  ],
+  { maxLength: 8 },
 );
 
 describe("semver properties", () => {
