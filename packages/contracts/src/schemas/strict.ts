@@ -46,9 +46,16 @@ export function strict<const Fields extends Schema.Struct.Fields>(
             SchemaTransformation.passthrough(),
           ),
         // Already JSON, as every contract schema's encoded side is
-        // (codec.ts), so a JSON codec (the device link's) runs the key
-        // check above on the wire's object as it is.
+        // (codec.ts), so a JSON codec runs the key check above on the
+        // wire's object as it is.
         toCodecJson: () => undefined,
+        // Any other codec (the device link's binary one) lays it out as
+        // the struct it wraps.
+        toCodec: ([codec]) =>
+          Schema.link<Schema.Struct<Fields>["Encoded"]>()(
+            codec,
+            SchemaTransformation.passthrough(),
+          ),
       },
     ),
     { struct },

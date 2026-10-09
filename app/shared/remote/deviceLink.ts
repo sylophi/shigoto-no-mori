@@ -218,7 +218,7 @@ export function openDevice(
       Effect.provideService(Socket.Socket, socket),
       Effect.provide(
         Layer.mergeAll(
-          RpcSerialization.layerJson,
+          RpcSerialization.layerSchemaBinary(),
           Layer.succeed(RpcClient.ConnectionHooks, {
             onConnect: Effect.void,
             onDisconnect: Deferred.succeed(dropped, undefined),
