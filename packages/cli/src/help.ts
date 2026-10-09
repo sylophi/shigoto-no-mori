@@ -32,6 +32,7 @@ const catalog = (names: Names) => {
         "The tools `open` offers, in the app's order (recent use, then label), hidden ones left out. --json prints {ok, entries: [{kind, id, label, available?}], hiddenCount, usage: {<id>: {lastUsed, recentCount}}}, kind being detected, custom or web. " +
           '--catalog lists every tool the app knows instead, installed or not, with no project needed: --json prints {ok, apps: [{kind: "detected", id: "app:<id>", label, available}]}, sorted by label case-insensitively.',
       ],
+      ["app", "Open the Shigoto no Mori app", ""],
       [
         "devices [-p <project>]",
         "List your other devices",
@@ -184,6 +185,13 @@ const catalog = (names: Names) => {
         "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
           "App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher.",
       ],
+      [
+        "worktrees link [<name>]",
+        "Print a link that opens the worktree in the app",
+        "A " +
+          names.alias +
+          "://open/devices/<id>/projects/<id>/worktrees/<id> URL, for a chat, a note or a script. It names this device, so it opens this machine's worktree wherever it's clicked. Add /diff, /files or /pr-diff for that page. `open` it to open it now (the installed app launches if it isn't running). --project-id <id> --worktree-id <id> address the worktree exactly. --json prints {ok, url, worktree}.",
+      ],
     ],
 
     projects: [
@@ -208,6 +216,14 @@ const catalog = (names: Names) => {
         "Worktrees stay on disk. Prompts for confirmation (--yes skips). " +
           "When two projects share a name, remove by path (which also " +
           "reaches an entry whose repo has since moved away).",
+      ],
+      [
+        "projects relocate [<name-or-path>] <new-path>",
+        "Point a project at its moved repo",
+        "For a repo moved or renamed by hand: refused while the old path is still there. The project keeps its config and state, " +
+          "and its worktrees are reconnected to the repo (`git worktree repair`), including any that moved with it. " +
+          "After a rename, managed worktrees move to the folder named after the new one. " +
+          "--json prints {ok, project}, project being a `projects list` row.",
       ],
       [
         "projects reorder --ids <id1,id2,...>",

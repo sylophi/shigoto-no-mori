@@ -46,7 +46,6 @@ import {
   incomingRefFor,
   linkSource,
   type ProgressFrame,
-  sourceWorktreeAttribute,
   type WorktreeSource,
 } from "@host/lib/sync/sourceLink";
 import { notifierFor } from "@host/ipc/modules/worktrees";
@@ -109,17 +108,12 @@ async function refuseLandingCollision(
   }
 }
 
-// A move's span attributes, keyed by its source worktree like the
-// source's answers (sourceWorktreeAttribute).
+// A move's span attributes. The peer's half of a move continues the
+// same trace over the device link, so nothing else ties the two.
 export const moveAttributes = (
   direction: "pull" | "send",
   peer: string | undefined,
-  sourceWorktreeId: string,
-) => ({
-  direction,
-  peer,
-  ...sourceWorktreeAttribute(sourceWorktreeId),
-});
+) => ({ direction, peer });
 
 // What a landing is told: which repo (by identity, re-resolved here),
 // which branch the commits arrive under and which one the copy is
@@ -356,11 +350,7 @@ export const landForSender: Handlers<
     }).pipe(
       Effect.scoped,
       Effect.withSpan("Sync.receive", {
-        attributes: moveAttributes(
-          "send",
-          ctx.callerDeviceId,
-          landing.sourceWorktreeId,
-        ),
+        attributes: moveAttributes("send", ctx.callerDeviceId),
       }),
     ),
   );

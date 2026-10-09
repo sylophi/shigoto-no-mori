@@ -22,7 +22,7 @@ import { adopt, create, move, rekey, rm, setup } from "./commands/changes.ts";
 import { done, land, merge, pr } from "./commands/landing.ts";
 import { dirty } from "./commands/dirty.ts";
 import { bundle } from "./commands/bundle.ts";
-import { open } from "./commands/open.ts";
+import { app, open } from "./commands/open.ts";
 import { update } from "./commands/update.ts";
 import {
   bring,
@@ -35,6 +35,7 @@ import {
 import { cdCommand, shellCommand } from "./commands/shell.ts";
 import {
   destination,
+  link,
   list,
   path,
   worktreesCommand,
@@ -101,6 +102,7 @@ const sm = Command.make("sm").pipe(
     worktreesCommand.pipe(Command.provide(services)),
     list.pipe(Command.provide(services)),
     path.pipe(Command.provide(services)),
+    link.pipe(Command.provide(services)),
     destination.pipe(Command.provide(services)),
     status.pipe(Command.provide(services)),
     describe.pipe(Command.provide(services)),
@@ -121,6 +123,7 @@ const sm = Command.make("sm").pipe(
     dirty.pipe(Command.provide(services)),
     bundle.pipe(Command.provide(services)),
     open.pipe(Command.provide(services)),
+    app.pipe(Command.provide(services)),
     send.pipe(Command.provide(services)),
     bring.pipe(Command.provide(services)),
     mirror.pipe(Command.provide(services)),

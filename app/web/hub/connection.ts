@@ -18,7 +18,7 @@ import {
   createHubConnectionCore,
   type HubSocketAdapter,
 } from "@shared/hub/connection";
-import type { HeartbeatOptions } from "@shared/ipc/socket/heartbeat";
+import type { HeartbeatOptions } from "@shared/hub/heartbeat";
 import type {
   HubConnectOpts,
   HubConnectionStatus,

@@ -47,6 +47,7 @@ import {
 import { stopAllPortForwards } from "./ipc/modules/portForward";
 import {
   broadcastAll,
+  deviceLinkLayer,
   refreshHubConnection,
   startControlHost,
   stopControlHost,
@@ -166,17 +167,18 @@ const gitWatcher = logged(
   ),
 );
 
-// The hub socket and the direct listener, which follows the same
-// enrollment condition. Both reconcile again on every account change
-// (main/ipc/handlers.ts). The closes are fire and forget: the hub close
-// frame flushes or the Durable Object notices the dead socket, and
-// connected peers see the direct listener go away cleanly.
+// The hub socket and the device link's listener, which follows the
+// same enrollment condition. Both reconcile again on every account
+// change (main/ipc/handlers.ts). The closes are fire and forget: the
+// hub close frame flushes or the Durable Object notices the dead
+// socket, and the outbound links close. The listener closes with its
+// own layer, below.
 const remotePlanes = lifetime(
   "the hub connection",
   Effect.sync(() => void refreshHubConnection()),
   () => {
     void stopHubConnection();
-    void stopDirectHost();
+    stopDirectHost();
   },
 );
 
@@ -265,8 +267,11 @@ export const layer = (options: {
     Layer.provideMerge(mirrorDaemon),
     Layer.provideMerge(mirrorGateway),
     Layer.provideMerge(remotePlanes),
-    // The cloudflared child, fronting the direct listener above.
+    // The cloudflared child, fronting the device link's listener.
     Layer.provideMerge(tunnelLayer),
+    // The listener peers dial, which connected peers see go away
+    // cleanly.
+    Layer.provideMerge(deviceLinkLayer),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(storeChanges),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),

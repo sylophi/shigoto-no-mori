@@ -1,5 +1,5 @@
 // How commits cross between devices: a SOURCE LINK, one byte channel
-// (shared/ipc/socket/channels.ts) between the device holding a
+// (shared/remote/channels.ts) between the device holding a
 // worktree (the source) and the device that wants its commits (the
 // destination). Whichever of the two opened the channel, the
 // conversation on it is the same: the destination asks, the source
@@ -27,10 +27,11 @@
 // Bundles are built and unpacked by the CLI (`sm bundle create` and
 // `sm bundle unpack`), refs landing only under refs/shigomori/, in a
 // temp dir (mkdtemp, 0700) of their own that the ask removes whatever
-// happens. The channel's credit is the flow control end to end: the
-// sender waits for credit, and the receiver returns it only once the
-// bytes are on disk. A link whose other end goes away (a reset, a
-// revoked grant, the socket dying) fails whatever is waiting on it.
+// happens. The channel is the flow control end to end: the sender
+// waits once its queue is full, and the receiver takes a piece only
+// once the bytes are on disk. A link whose other end goes away (a
+// reset, a revoked grant, the device link dropping) fails whatever is
+// waiting on it.
 import { mkdtemp, open as openFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,7 +41,7 @@ import type * as Scope from "effect/Scope";
 import * as Schema from "effect/Schema";
 import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { runTraced, traced } from "@shared/trace";
+import { runTraced, traced, withParentSpan } from "@host/lib/util/trace";
 import {
   type SyncCapture,
   SyncCaptureSchema,
@@ -48,11 +49,8 @@ import {
   SyncPullProgressSchema,
   SyncPullWorktreePayloadSchema,
 } from "@shigomori/contracts/modules/sync";
-import {
-  CHANNEL_MAX_FRAME_BYTES,
-  type ChannelEndpoint,
-  type ChannelHandle,
-} from "@shared/ipc/socket/channels";
+import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
+import type { ChannelEndpoint, ChannelHandle } from "@shared/remote/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
   CommitHashSchema,
@@ -83,9 +81,9 @@ const MAX_LINE_BYTES = 1 << 20;
 export type Link = {
   // The next message, or null once the other end ended cleanly.
   read(): Promise<unknown>;
-  // Exactly `bytes` raw bytes, each piece handed to `sink`. A piece's
-  // credit goes back only once the sink resolved, so a slow disk
-  // slows the sender.
+  // Exactly `bytes` raw bytes, each piece handed to `sink`. A piece is
+  // taken only once the sink resolved, so a slow disk slows the
+  // sender.
   readBytes(
     bytes: number,
     sink: (piece: Buffer) => Promise<void>,
@@ -109,9 +107,9 @@ export type Link = {
 export function attachLink(
   attach: (endpoint: ChannelEndpoint) => ChannelHandle,
 ): Link {
-  // Bytes the other end sent that nothing has read yet, each with its
-  // credit callback: at most a window's worth, since that is all the
-  // other end may send before credit comes back.
+  // Bytes the other end sent that nothing has read yet, each with the
+  // callback that takes it: at most a window's worth, since the other
+  // end waits on the ones not taken.
   const pending: { data: Buffer; consumed: () => void }[] = [];
   let ended = false;
   let failure: Error | null = null;
@@ -167,8 +165,8 @@ export function attachLink(
   async function writeBytes(bytes: Uint8Array): Promise<void> {
     if (failure !== null) throw failure;
     if (!handle.open) throw new Error(LINK_GONE);
-    // A false return queued the bytes for lack of credit: they go once
-    // credit comes back, and the next write waits for that.
+    // A false return queued the bytes past the window: they go as the
+    // far end takes what is ahead, and the next write waits for that.
     if (handle.write(bytes)) return;
     await new Promise<void>((resolve, reject) => {
       writable.add({ resolve, reject });
@@ -436,12 +434,12 @@ async function sendBundle(
         // A buffer per piece: the channel holds on to what it could not
         // send yet.
         const piece = Buffer.allocUnsafe(
-          Math.min(CHANNEL_MAX_FRAME_BYTES, bytes - offset),
+          Math.min(CHANNEL_MAX_WRITE_BYTES, bytes - offset),
         );
         // oxlint-disable-next-line no-await-in-loop -- pieces go in order
         const { bytesRead } = await file.read(piece, 0, piece.length, offset);
         if (bytesRead === 0) throw new Error("the bundle shrank while sending");
-        // oxlint-disable-next-line no-await-in-loop -- the channel's credit
+        // oxlint-disable-next-line no-await-in-loop -- the channel's window
         await link.writeBytes(piece.subarray(0, bytesRead));
         offset += bytesRead;
       }
@@ -454,13 +452,6 @@ async function sendBundle(
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
-
-// The key a move and everything else on its source worktree go by in
-// every device's trace file: the source worktree is the one id the
-// device running a move, the device landing it and the source all hold.
-export const sourceWorktreeAttribute = (worktreeId: string) => ({
-  sourceWorktree: worktreeId,
-});
 
 // One question, answered on the link.
 async function answerAsk(
@@ -516,10 +507,8 @@ export async function serveSource(
       }
       try {
         // oxlint-disable-next-line no-await-in-loop -- one question at a time
-        await traced(
-          "SourceLink.answer",
-          { ask: request.ask, ...sourceWorktreeAttribute(worktreeId) },
-          () => answerAsk(link, project, facts, request),
+        await traced("SourceLink.answer", { ask: request.ask }, () =>
+          answerAsk(link, project, facts, request),
         );
       } catch (error) {
         if (error instanceof BrokenLink) throw error;
@@ -589,7 +578,9 @@ export const offer = <T>(
     void serveSource(link, project, worktreeId, { onProgress, failure }).catch(
       () => {},
     );
-    const answering = openOnPeer(channelId);
+    // The peer's call continues the move's trace.
+    const span = yield* Effect.option(Effect.currentSpan);
+    const answering = withParentSpan(span, () => openOnPeer(channelId));
     // Not a step: the peer's answer cannot be cut short, so an
     // interrupt stops waiting at once and hands a late one to `onLate`.
     return yield* Effect.tryPromise({

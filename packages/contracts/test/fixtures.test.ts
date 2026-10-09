@@ -77,7 +77,7 @@ describe.each(exported)("%s", (name, schema) => {
 
   it("accepts its samples unchanged", () => {
     for (const value of fixture.accepts ?? []) {
-      for (const form of wireForms(schema, value)) {
+      for (const form of wireForms(schema, value, { bridged: true })) {
         assert.equal(form, json(value));
       }
     }
@@ -85,7 +85,7 @@ describe.each(exported)("%s", (name, schema) => {
 
   it("normalizes its inputs to their outputs", () => {
     for (const { input, output } of fixture.normalizes ?? []) {
-      for (const form of wireForms(schema, input)) {
+      for (const form of wireForms(schema, input, { bridged: true })) {
         assert.equal(form, json(output));
       }
     }

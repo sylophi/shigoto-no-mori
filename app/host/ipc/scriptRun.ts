@@ -62,6 +62,6 @@ function withoutNul(text: string | undefined): string {
 
 export function scriptEventNotifier(ctx: HandlerContext): NotifyScriptEvent {
   return Object.assign(ctx.notifier(scriptsContract, "event"), {
-    connection: ctx.signal,
+    connection: ctx.connection,
   });
 }

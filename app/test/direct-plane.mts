@@ -63,10 +63,10 @@
 //     the slower one never sends a hello, so the winner's session
 //     survives (no host-side supersede) and the loser's ticket is
 //     never spent.
-//   - the host NAMES its refusals: a ticket it read and rejected
-//     closes CLOSE_AUTH_FAILED (blocked, terminal, the keeper parks),
-//     while a client benched by the failed-auth window closes
-//     CLOSE_AUTH_LOCKED_OUT (unblocked, transient, the keeper ladders)
+//   - the host NAMES its refusals: a ticket it read and rejected is
+//     LinkRefusedError (blocked, terminal, the keeper parks), while a
+//     client benched by the failed-auth window is closed with the
+//     lockout's code (unblocked, transient, the keeper ladders)
 //     even on a single candidate holding a VALID ticket, the shape a
 //     tunnel-only peer has.
 //   - the listener keys lockout on CF-Connecting-IP for
@@ -143,17 +143,15 @@ import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import { it } from "vitest";
-import { CommandRefusedError } from "@shigomori/contracts/errors";
 import {
-  CLOSE_AUTH_FAILED,
-  CLOSE_AUTH_LOCKED_OUT,
-  type ServerFrame,
-} from "@shared/ipc/socket/frames";
+  CommandRefusedError,
+  LinkRefusedError,
+} from "@shigomori/contracts/errors";
 import {
-  type ConnectDeviceOptions,
+  type DeviceLinkOptions,
   openDevice,
   RemoteConnectError,
-} from "@shared/ipc/socket/wsClientTransport";
+} from "@shared/remote/deviceLink";
 import {
   DirectCandidateSchema,
   type DirectCandidateKind,
@@ -161,7 +159,6 @@ import {
   DirectConnectInfoSchema,
 } from "@shigomori/contracts/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shigomori/contracts/modules/hub";
-import { createChannelMux } from "@shared/ipc/socket/channels";
 import { type HubHandlers, makeHubHandlers } from "@shared/hub/bridgeHandlers";
 import {
   createDirectDialer,
@@ -209,7 +206,7 @@ import {
   CONNECT_INFO_ASK,
   HubAskRefusedError,
 } from "@shared/hub/link";
-import { handshakeProof, newHandshakeNonce } from "@shared/ipc/socket/proof";
+import { newHandshakeNonce } from "@shared/remote/proof";
 import {
   TunnelProvisionDeniedError,
   TunnelUnconfiguredError,
@@ -242,6 +239,11 @@ import { startStubHub } from "./lib/hubStub.mts";
 // hangs or dies on its own, never reaching any listener.
 const BLACKHOLE = "203.0.113.1";
 
+const ECHO = "projects:defaultBranch";
+const WHOAMI = "projects:pickWorktreeName";
+const MUTATE = "git:refreshProject";
+const echoOf = (value: string) => ({ projectId: value });
+
 // The shared listener fixture (test/lib/directBoot.mts) with this
 // check's data-plane test handlers mounted. Handler counters prove
 // refusals never ran a body.
@@ -253,22 +255,16 @@ async function startDirectListener(
   const listener = await startListenerFixture(track, {
     ...opts,
     registerHandlers: (binding) => {
-      binding.handle("test:echo", async (_ctx, raw) => raw, {
-        gated: false,
+      // An echo, a who-am-I and a command, on real calls the link
+      // serves: two reads and a gated one.
+      binding.handle(
+        ECHO,
+        async (_ctx, raw) => (raw as { projectId: string }).projectId,
+      );
+      binding.handle(WHOAMI, async (ctx) => ctx.callerDeviceId ?? "none");
+      binding.handle(MUTATE, async () => {
+        mutateRuns += 1;
       });
-      binding.handle(
-        "test:whoami",
-        async (ctx) => ctx.callerDeviceId ?? "none",
-        { gated: false },
-      );
-      binding.handle(
-        "test:mutate",
-        async () => {
-          mutateRuns += 1;
-          return "mutated";
-        },
-        { gated: true },
-      );
     },
   });
   return { ...listener, mutateRuns: () => mutateRuns };
@@ -280,7 +276,7 @@ async function startDirectListener(
 function dialWith(
   port: number,
   ticket: string,
-  overrides: Partial<ConnectDeviceOptions> = {},
+  overrides: Partial<DeviceLinkOptions> = {},
 ) {
   return openDevice({
     url: `ws://127.0.0.1:${port}`,
@@ -289,10 +285,20 @@ function dialWith(
     localDeviceId: "A",
     expectedDeviceId: "B",
     onClose: () => {},
-    helloTimeoutMs: 800,
+    openSocket: (url) => new WsClient(url),
+    deadlineMs: 800,
     ...overrides,
   }).authenticate();
 }
+
+// The host's refusal of a ticket: blocked, carrying LinkRefusedError.
+const refusedTicket = (error: unknown) =>
+  error instanceof RemoteConnectError &&
+  error.blocked &&
+  error.refusal instanceof LinkRefusedError;
+
+// The close code the listener refuses a locked-out client with.
+const CLOSE_AUTH_LOCKED_OUT = 4003;
 
 // A dialer over a FAKE ask answering a fixed candidate list, for
 // scenarios that need per-candidate URLs (different ports, stubs) the
@@ -369,11 +375,25 @@ async function delayProxy(track: Track, targetPort: number, delayMs: number) {
   return proxy.port;
 }
 
-// A stub host opens the handshake the way a real listener does. Without
-// the challenge the client never sends its hello, so a stub
-// that waits for one would just stall until the deadline.
-function sendChallenge(socket: WsClient) {
-  socket.send(JSON.stringify({ t: "challenge", nonce: newHandshakeNonce() }));
+// A stub host answers the link's challenge the way a real listener
+// does (an RPC Exit for the request), so the client goes on to say
+// hello. Every other frame it only hands to `heard`.
+function answerChallenges(socket: WsClient, heard: (frame: string) => void) {
+  socket.on("message", (data) => {
+    const frame = String(data);
+    const request = JSON.parse(frame) as Record<string, unknown>;
+    if (request["_tag"] === "Request" && request["tag"] === "link:challenge") {
+      socket.send(
+        JSON.stringify({
+          _tag: "Exit",
+          requestId: request["id"],
+          exit: { _tag: "Success", value: { nonce: newHandshakeNonce() } },
+        }),
+      );
+      return;
+    }
+    heard(frame);
+  });
 }
 
 // The store never takes a raw ticket back (the dialer proves
@@ -395,49 +415,27 @@ async function consumeTicket(
   return matched !== null;
 }
 
-// One raw direct dial through the `ws` client (which, unlike the
-// browser-global WebSocket, can set headers), for the lockout-identity
-// scenario. Resolves with the close code and whether a welcome landed.
-function rawHeaderDial(
+// One dial with the connector's CF-Connecting-IP header set, as a
+// tunnel-borne connection arrives, for the lockout-identity scenario.
+// Resolves with whether it linked, and its failure when it did not.
+async function rawHeaderDial(
   port: number,
   ticket: string,
   cfConnectingIp: string,
-): Promise<{ code: number; welcomed: boolean }> {
-  return new Promise((resolve) => {
-    const socket = new WsClient(`ws://127.0.0.1:${port}`, {
-      headers: { "cf-connecting-ip": cfConnectingIp },
+): Promise<{ welcomed: boolean; error?: RemoteConnectError }> {
+  try {
+    const connection = await dialWith(port, ticket, {
+      openSocket: (url) =>
+        new WsClient(url, {
+          headers: { "cf-connecting-ip": cfConnectingIp },
+        }),
     });
-    let welcomed = false;
-    socket.on("message", (data) => {
-      const frame: ServerFrame = JSON.parse(String(data));
-      if (frame.t === "challenge") {
-        // The ticket never goes on the wire: answer the host's nonce
-        // with an HMAC of both, exactly as the real client does.
-        const nonce = newHandshakeNonce();
-        void handshakeProof(ticket, "client", frame.nonce, nonce).then(
-          (proof) => {
-            socket.send(
-              JSON.stringify({
-                t: "hello",
-                deviceId: "A",
-                appVersion: "1.0.0",
-                nonce,
-                proof,
-                deflate: false,
-              }),
-            );
-          },
-        );
-        return;
-      }
-      if (frame.t === "welcome") {
-        welcomed = true;
-        socket.close();
-      }
-    });
-    socket.on("error", () => {});
-    socket.on("close", (code) => resolve({ code, welcomed }));
-  });
+    connection.close();
+    return { welcomed: true };
+  } catch (error) {
+    assert.ok(error instanceof RemoteConnectError, String(error));
+    return { welcomed: false, error };
+  }
 }
 
 // The bridge cache (shared/hub/bridgeHandlers.ts) driven directly
@@ -463,7 +461,7 @@ function heldDial() {
               invoke: async () => null,
               subscribe: () => () => {},
             },
-            channels: createChannelMux({ send: () => {} }),
+            channels: { attach: notYetSet, has: () => false, size: () => 0 },
             close: () => {
               closed += 1;
             },
@@ -518,7 +516,7 @@ it("brokering: connectInfo over the device hub carries fully dialable candidates
   assert.equal(new Set(tickets).size, tickets.length);
   // Listener down: the host answers unavailable, never a stale
   // candidate.
-  await listener.binding.stop();
+  await listener.binding.reconcile(null);
   assert.deepEqual(await ask(), { available: false });
 });
 
@@ -579,12 +577,12 @@ it("direct dial: the handshake completes with the pinned identity and invokes fl
   assert.deepEqual(bridge.directPeerVersions(), { B: "2.0.0" });
   // The direct wire carries the authed caller identity to
   // handlers.
-  assert.equal(await invokeB(bridge, "test:whoami"), "A");
+  assert.equal(await invokeB(bridge, WHOAMI, echoOf("p")), "A");
   const baseline = stub.forwardedCount();
   for (let i = 0; i < 5; i += 1) {
     // oxlint-disable-next-line no-await-in-loop -- sequential invokes measure the device hub stays flat
-    const result = await invokeB(bridge, "test:echo", { i });
-    assert.deepEqual(result, { i });
+    const result = await invokeB(bridge, ECHO, echoOf(String(i)));
+    assert.equal(result, String(i));
   }
   assert.equal(
     stub.forwardedCount(),
@@ -612,7 +610,7 @@ it("concurrent race: a junk candidate enumerating first no longer defeats a reac
     elapsed < 2000,
     `the reachable candidate waited on the junk one (${elapsed}ms)`,
   );
-  assert.equal(await invokeB(bridge, "test:echo", "raced"), "raced");
+  assert.equal(await invokeB(bridge, ECHO, echoOf("raced")), "raced");
 });
 
 it("blocked verdict is terminal but does not end the race: an auth-refused candidate still rejects the attempt as blocked once the remaining candidates have had their turn, never as a transient timeout", async () => {
@@ -634,10 +632,7 @@ it("blocked verdict is terminal but does not end the race: an auth-refused candi
   const { bridge } = makeDirectBridge(client, { deadlineMs: 1500 });
   await assert.rejects(
     () => bridge.dialPeer("B"),
-    (error) =>
-      error instanceof RemoteConnectError &&
-      error.blocked &&
-      error.code === CLOSE_AUTH_FAILED,
+    (error) => refusedTicket(error),
     "an auth-refused candidate did not reject the attempt as blocked",
   );
 });
@@ -704,7 +699,7 @@ it("serialized hellos: with two reachable candidates the slow one never hellos, 
   // frames drain before judging the winner's health.
   await delay(450);
   assert.equal(
-    await connection.transport.invoke("test:echo", "still the winner"),
+    await connection.transport.invoke(ECHO, echoOf("still the winner")),
     "still the winner",
     "the slow candidate's late hello superseded the winning session",
   );
@@ -728,8 +723,7 @@ it("the host names its lockout on the wire: a client inside the failed-auth wind
     // oxlint-disable-next-line no-await-in-loop -- lockout counts sequential failures
     await assert.rejects(
       () => dialWith(listener.port, "smpt_wrong"),
-      (error) =>
-        error instanceof RemoteConnectError && error.code === CLOSE_AUTH_FAILED,
+      refusedTicket,
     );
   }
   // ONE candidate, a VALID ticket, and a benched IP: the shape a
@@ -779,7 +773,7 @@ it("the host names its lockout on the wire: a client inside the failed-auth wind
   keeper.stop();
 });
 
-it("a genuine ticket refusal still PARKS: a ticket the host read and rejected closes CLOSE_AUTH_FAILED, is blocked and terminal, and the keeper schedules nothing", async () => {
+it("a genuine ticket refusal still PARKS: a ticket the host read and rejected is refused with LinkRefusedError, is blocked and terminal, and the keeper schedules nothing", async () => {
   // The other side of the same line. Same single-candidate shape,
   // same connection-time close code family, opposite verdict --
   // and the ONLY thing separating them is what the host put on the
@@ -805,8 +799,7 @@ it("a genuine ticket refusal still PARKS: a ticket the host read and rejected cl
     },
   );
   assert.ok(verdict instanceof RemoteConnectError);
-  assert.equal(verdict.code, CLOSE_AUTH_FAILED);
-  assert.equal(verdict.blocked, true, "a refused ticket was not blocked");
+  assert.ok(refusedTicket(verdict), "a refused ticket was not blocked");
   assert.equal(isTerminalDialError(verdict), true);
   const { keeper, clock, dials } = stubKeeper(verdict);
   keeper.reconcile(["B"]);
@@ -894,10 +887,7 @@ it("the ticket never travels: a machine that answers at an advertised LAN addres
   const heard: string[] = [];
   const impostor = new WebSocketServer({ host: "127.0.0.1", port: 0 });
   impostor.on("connection", (socket) => {
-    sendChallenge(socket);
-    socket.on("message", (data) => {
-      heard.push(String(data));
-    });
+    answerChallenges(socket, (frame) => heard.push(frame));
   });
   await new Promise((resolve) => impostor.on("listening", resolve));
   trackTest(
@@ -908,17 +898,16 @@ it("the ticket never travels: a machine that answers at an advertised LAN addres
   await assert.rejects(
     () =>
       dialWith(boundPort(impostor), ticket, {
-        helloTimeoutMs: 600,
+        deadlineMs: 600,
         expectedDeviceId: "B",
       }),
     "the client accepted a host that never proved it holds the ticket",
   );
-  const captured = heard.at(-1);
+  const captured = heard.find((frame) => frame.includes("link:hello"));
   assert.ok(captured !== undefined, "the impostor saw no hello at all");
-  const hello: Record<string, unknown> = JSON.parse(captured);
-  assert.equal(hello.t, "hello");
+  const hello = JSON.parse(captured) as { payload: Record<string, unknown> };
   assert.equal(
-    hello.token,
+    hello.payload["ticket"],
     undefined,
     "the connect ticket was sent to whoever answered first",
   );
@@ -929,30 +918,34 @@ it("the ticket never travels: a machine that answers at an advertised LAN addres
   );
 
   // What the impostor did capture, replayed verbatim at the real
-  // listener, authenticates nothing: the proof answers a nonce that
-  // listener never issued.
-  const replay = await new Promise<{ code: number; welcomed: boolean }>(
-    (resolve) => {
-      const socket = new WsClient(`ws://127.0.0.1:${listener.port}`);
-      let welcomed = false;
-      socket.on("message", (data) => {
-        const frame: ServerFrame = JSON.parse(String(data));
-        if (frame.t === "challenge") socket.send(captured);
-        if (frame.t === "welcome") {
-          welcomed = true;
-          socket.close();
-        }
-      });
-      socket.on("error", () => {});
-      socket.on("close", (code) => resolve({ code, welcomed }));
-    },
-  );
-  assert.equal(
-    replay.welcomed,
-    false,
-    "a captured hello was replayed into a session",
-  );
-  assert.equal(replay.code, CLOSE_AUTH_FAILED);
+  // listener after its own challenge, links nothing: the proof answers
+  // a nonce that listener never issued.
+  const replay = await new Promise<string>((resolve) => {
+    const socket = new WsClient(`ws://127.0.0.1:${listener.port}`);
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify({
+          _tag: "Request",
+          id: "0",
+          tag: "link:challenge",
+          payload: null,
+          headers: [],
+        }),
+      );
+    });
+    socket.on("message", (data) => {
+      const frame = JSON.parse(String(data)) as Record<string, unknown>;
+      if (frame["_tag"] !== "Exit") return;
+      if (frame["requestId"] === "0") {
+        socket.send(captured);
+        return;
+      }
+      socket.close();
+      resolve(String(data));
+    });
+    socket.on("error", () => {});
+  });
+  assert.match(replay, /"_tag":"LinkRefusedError"/);
   // The ticket was never spent by any of that, so the honest dial
   // it belongs to still works.
   assert.equal(
@@ -981,7 +974,7 @@ it("tickets are bound to the path they were minted for: a LAN ticket presented o
     false,
     "a LAN ticket authed through the tunnel path",
   );
-  assert.equal(crossPath.code, CLOSE_AUTH_FAILED);
+  assert.ok(refusedTicket(crossPath.error));
   // Refused, not consumed: the honest LAN dial it was minted for is
   // untouched by someone else's failed attempt.
   assert.equal(
@@ -996,12 +989,12 @@ it("loopback lockout identity: the ticket listener keys lockout on CF-Connecting
   // Five bad tickets under one forwarded identity lock IT out.
   for (let i = 0; i < 5; i += 1) {
     // oxlint-disable-next-line no-await-in-loop -- lockout counts sequential failures
-    const { code } = await rawHeaderDial(
+    const { error } = await rawHeaderDial(
       listener.port,
       "smpt_wrong",
       "198.51.100.7",
     );
-    assert.equal(code, CLOSE_AUTH_FAILED);
+    assert.ok(refusedTicket(error));
   }
   // The locked identity is refused at connection time even with a
   // VALID ticket (never presented, so it stays live). Minted
@@ -1020,7 +1013,7 @@ it("loopback lockout identity: the ticket listener keys lockout on CF-Connecting
   // from "you are benched for 30s", and this dial is the proof it
   // must: the ticket here is VALID and was never even read.
   assert.equal(
-    locked.code,
+    locked.error?.code,
     CLOSE_AUTH_LOCKED_OUT,
     "the lockout refusal was indistinguishable from a bad ticket",
   );
@@ -1059,7 +1052,7 @@ it("deadline: a peer that never answers the ask cannot hang the bridge cache, wh
   // deadline rejection instead of hanging every consumer.
   const dialing = bridge.dialPeer("B");
   await assert.rejects(
-    async () => invokeB(bridge, "test:echo", "hung peer"),
+    async () => invokeB(bridge, ECHO, echoOf("hung peer")),
     /did not answer within/,
   );
   await assert.rejects(() => dialing, /did not answer within/);
@@ -1077,7 +1070,7 @@ it("deadline: a peer that never answers the ask cannot hang the bridge cache, wh
   const baseline = stub.receivedCount();
   const retryStartedAt = Date.now();
   await assert.rejects(
-    async () => invokeB(bridge, "test:echo", "retry"),
+    async () => invokeB(bridge, ECHO, echoOf("retry")),
     /no direct connection to B/,
   );
   assert.ok(
@@ -1091,7 +1084,7 @@ it("deadline: a peer that never answers the ask cannot hang the bridge cache, wh
   );
 });
 
-it("ticket single-use and expiry: a replayed ticket and an expired ticket are refused with the auth-failure code", async () => {
+it("ticket single-use and expiry: a replayed ticket and an expired ticket are refused", async () => {
   const listener = await startDirectListener(trackTest, {
     ticketOpts: { ttlMs: 80 },
   });
@@ -1101,10 +1094,7 @@ it("ticket single-use and expiry: a replayed ticket and an expired ticket are re
   // Replay: the ticket was consumed on first presentation.
   await assert.rejects(
     () => dialWith(listener.port, ticket),
-    (error) =>
-      error instanceof RemoteConnectError &&
-      error.code === CLOSE_AUTH_FAILED &&
-      error.blocked,
+    refusedTicket,
     "a replayed ticket authenticated",
   );
   // Expiry: a fresh ticket past its TTL is refused too.
@@ -1112,8 +1102,7 @@ it("ticket single-use and expiry: a replayed ticket and an expired ticket are re
   await delay(150);
   await assert.rejects(
     () => dialWith(listener.port, stale),
-    (error) =>
-      error instanceof RemoteConnectError && error.code === CLOSE_AUTH_FAILED,
+    refusedTicket,
     "an expired ticket authenticated",
   );
 });
@@ -1162,13 +1151,8 @@ it("identity binding: a ticket minted for one device refuses another, and a wron
   // the refusal under test is the listener's, not the client's.
   const wrongPeer = mintTicket(listener.tickets, "A");
   await assert.rejects(
-    () =>
-      dialWith(listener.port, wrongPeer, {
-        localDeviceId: "C",
-        expectedDeviceId: undefined,
-      }),
-    (error) =>
-      error instanceof RemoteConnectError && error.code === CLOSE_AUTH_FAILED,
+    () => dialWith(listener.port, wrongPeer, { localDeviceId: "C" }),
+    refusedTicket,
     "a ticket bound to another device authenticated",
   );
   // The welcome names B. A dial pinned to another identity must
@@ -1192,7 +1176,7 @@ it("grant gate on the direct wire: mutating refused with the typed error pre-gra
   );
   trackTest(() => connection.close());
   await assert.rejects(
-    () => connection.transport.invoke("test:mutate", undefined),
+    () => connection.transport.invoke(MUTATE, echoOf("p")),
     (error) =>
       error instanceof CommandRefusedError &&
       /not permitted to run commands/.test(error.message),
@@ -1204,18 +1188,18 @@ it("grant gate on the direct wire: mutating refused with the typed error pre-gra
     "a mutating handler ran for an ungranted peer",
   );
   // Reads are served with the switch off.
-  assert.equal(await connection.transport.invoke("test:echo", "read"), "read");
+  assert.equal(await connection.transport.invoke(ECHO, echoOf("read")), "read");
   // Grant: the SAME socket serves the mutation, no reconnect.
   listener.setAccepts(true);
   assert.equal(
-    await connection.transport.invoke("test:mutate", undefined),
-    "mutated",
+    await connection.transport.invoke(MUTATE, echoOf("p")),
+    undefined,
   );
   assert.equal(listener.mutateRuns(), 1);
   // Revoke: takes effect live at the next dispatch.
   listener.setAccepts(false);
   await assert.rejects(
-    () => connection.transport.invoke("test:mutate", undefined),
+    () => connection.transport.invoke(MUTATE, echoOf("p")),
     (error) => error instanceof CommandRefusedError,
     "a revoke did not take effect without a reconnect",
   );
@@ -1229,10 +1213,7 @@ it("supersede kills the old socket dead: nothing it delivers after the supersede
     listener.port,
     mintTicket(listener.tickets, "A"),
   );
-  assert.equal(
-    await first.transport.invoke("test:mutate", undefined),
-    "mutated",
-  );
+  assert.equal(await first.transport.invoke(MUTATE, echoOf("p")), undefined);
   assert.equal(listener.mutateRuns(), 1);
   // The same device dials again: the old socket is superseded AND
   // killed (dead flag set, signal aborted), so a mutating req it
@@ -1244,7 +1225,7 @@ it("supersede kills the old socket dead: nothing it delivers after the supersede
   );
   trackTest(() => second.close());
   await assert.rejects(
-    () => first.transport.invoke("test:mutate", undefined),
+    () => first.transport.invoke(MUTATE, echoOf("p")),
     "an invoke on the superseded socket resolved",
   );
   // Let any frame that raced the close drain before counting.
@@ -1254,10 +1235,7 @@ it("supersede kills the old socket dead: nothing it delivers after the supersede
     1,
     "the superseded socket still executed a mutating handler",
   );
-  assert.equal(
-    await second.transport.invoke("test:mutate", undefined),
-    "mutated",
-  );
+  assert.equal(await second.transport.invoke(MUTATE, echoOf("p")), undefined);
   assert.equal(listener.mutateRuns(), 2);
 });
 
@@ -1283,7 +1261,7 @@ it("one round trip: a winning dial costs the device hub exactly one ask and one 
   assert.equal(AskFrameSchema.parse(ask.frame).ask, CONNECT_INFO_ASK);
   assert.equal(AnswerFrameSchema.parse(answer.frame).ok, true);
   const baseline = stub.forwardedCount();
-  assert.equal(await invokeB(bridge, "test:echo", "direct"), "direct");
+  assert.equal(await invokeB(bridge, ECHO, echoOf("direct")), "direct");
   await delay(150);
   assert.equal(
     stub.forwardedCount(),
@@ -1310,7 +1288,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
     reconcilePeers: (online) => reconcileCalls.push([...online]),
   };
   await bridge.dialPeer("B");
-  assert.deepEqual(await invokeB(bridge, "test:echo", "up"), "up");
+  assert.deepEqual(await invokeB(bridge, ECHO, echoOf("up")), "up");
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
   // Our own hub link down (no live roster): the working direct
   // session must survive an device-hub outage, but the keeper
@@ -1329,7 +1307,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
     "a hub-down reconcile did not empty the keeper's desired set",
   );
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
-  assert.deepEqual(await invokeB(bridge, "test:echo", "outage"), "outage");
+  assert.deepEqual(await invokeB(bridge, ECHO, echoOf("outage")), "outage");
   // A live roster still naming the peer: nothing closes, and the
   // keeper receives the roster as its desired set.
   applyDirectPresence(CONNECTED, ["A", "B"], presenceDeps);
@@ -1349,7 +1327,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
   );
   applyDirectPresence(CONNECTED, ["A"], presenceDeps);
   assert.equal(
-    await inbound.transport.invoke("test:echo", "still here"),
+    await inbound.transport.invoke(ECHO, echoOf("still here")),
     "still here",
   );
   applyDirectPresence(CONNECTED, [], presenceDeps);
@@ -1370,7 +1348,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
     { onClose: () => (inboundClosed = true) },
   );
   assert.equal(
-    await inbound2.transport.invoke("test:echo", "before stop"),
+    await inbound2.transport.invoke(ECHO, echoOf("before stop")),
     "before stop",
   );
   applyDirectPresence({ phase: "stopped" }, ["A", "B"], presenceDeps);
@@ -1473,7 +1451,7 @@ it("supervised and eager: presence alone establishes the session (no invoke anyw
     "the keeper to redial the dropped session",
   );
   assert.deepEqual(
-    await invokeB(bridge, "test:echo", "recovered"),
+    await invokeB(bridge, ECHO, echoOf("recovered")),
     "recovered",
   );
   // Quit: stop() is BOTH halves in the order that matters (latch,
@@ -1519,7 +1497,7 @@ it("command access on the answer and live: the connectInfo answer's switch lands
     "the flip never fanned a fresh status out",
   );
   // The gate agrees with what the snapshot says.
-  assert.equal(await invokeB(bridge, "test:mutate"), "mutated");
+  assert.equal(await invokeB(bridge, MUTATE, echoOf("p")), undefined);
   // Off again, live on the same socket, and the gate refuses.
   listener.setAccepts(false);
   await waitFor(
@@ -1527,7 +1505,7 @@ it("command access on the answer and live: the connectInfo answer's switch lands
     "the switch-off push to reach the bridge",
   );
   await assert.rejects(
-    async () => invokeB(bridge, "test:mutate"),
+    async () => invokeB(bridge, MUTATE, echoOf("p")),
     (error) => error instanceof CommandRefusedError,
   );
   // A fresh dial reads the switch off its answer again.
@@ -1555,7 +1533,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
   // Direct available: the keeper-shaped dial establishes the
   // session, and invokes ride it leaving the device hub flat.
   await bridge.dialPeer("B");
-  assert.deepEqual(await invokeB(bridge, "test:echo", { n: 1 }), { n: 1 });
+  assert.deepEqual(await invokeB(bridge, ECHO, echoOf("1")), "1");
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
   // The welcome-confirmed version surfaces for the direct session,
   // so the owner's status snapshot can feed the skew check.
@@ -1566,7 +1544,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
     "opening a direct session never fired onDirectChange",
   );
   const baseline = stub.forwardedCount();
-  assert.deepEqual(await invokeB(bridge, "test:echo", { n: 2 }), { n: 2 });
+  assert.deepEqual(await invokeB(bridge, ECHO, echoOf("2")), "2");
   assert.equal(
     stub.forwardedCount(),
     baseline,
@@ -1574,7 +1552,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
   );
   // Closing the direct socket (listener teardown) drops the cache
   // and the direct marker.
-  await listener.binding.stop();
+  await listener.binding.reconcile(null);
   await waitFor(
     () => Object.keys(bridge.directPeerVersions()).length === 0,
     "the direct session to drop from the cache",
@@ -1587,7 +1565,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
   // A sessionless invoke refuses at once and dials nothing: the
   // keeper owns dialing, so use cannot be a trigger.
   await assert.rejects(
-    async () => invokeB(bridge, "test:echo", { n: 3 }),
+    async () => invokeB(bridge, ECHO, echoOf("3")),
     /no direct connection to B/,
   );
   // The keeper's next dial re-decides: the host answers
@@ -1605,7 +1583,7 @@ it("unreachable is typed: a failed direct dial rejects the invoke with the dial 
   // tickets and a port nobody listens on, so the dial itself fails
   // and the failure is the outcome (direct or nothing).
   const deadPort = listener.port;
-  await listener.binding.stop();
+  await listener.binding.reconcile(null);
   listener.listenerPort = () => deadPort;
   const { client } = await bootPair(stub, trackTest, listener);
   const { bridge } = makeDirectBridge(client, { deadlineMs: 1500 });
@@ -1613,7 +1591,7 @@ it("unreachable is typed: a failed direct dial rejects the invoke with the dial 
   // An invoke racing the in-flight dial shares its typed fate.
   const dialing = bridge.dialPeer("B");
   await assert.rejects(
-    async () => invokeB(bridge, "test:echo", "unreachable"),
+    async () => invokeB(bridge, ECHO, echoOf("unreachable")),
     // Typed pin: a dead advertised port fails the candidate's
     // socket, so the dial error is the connect error itself, not
     // some incidental throw.
@@ -1656,12 +1634,12 @@ it("pushes: a host broadcast reaches a direct-connected client through the share
   await bridge.dialPeer("B");
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
   const baseline = stub.forwardedCount();
-  listener.binding.broadcastAll("test:ping", { n: 7 });
+  listener.binding.broadcastAll("git:projectChanged", { projectId: "seven" });
   await waitFor(() => pushes.length > 0, "the direct push");
   assert.deepEqual(pushes[0], {
     deviceId: "B",
-    channel: "test:ping",
-    payload: { n: 7 },
+    channel: "git:projectChanged",
+    payload: { projectId: "seven" },
   });
   assert.equal(
     stub.forwardedCount(),
@@ -1832,9 +1810,7 @@ it("the terminal classification covers exactly the verdicts a redial cannot chan
   // would feed the host's failed-auth lockout.
   assert.equal(isTerminalDialError(new NoDialableCandidateError("B")), true);
   assert.equal(
-    isTerminalDialError(
-      new RemoteConnectError("ticket refused", CLOSE_AUTH_FAILED, true),
-    ),
+    isTerminalDialError(new RemoteConnectError("ticket refused", null, true)),
     true,
   );
   assert.equal(
@@ -2010,7 +1986,7 @@ it("keeper discipline: eager dial on roster entry, the exact shared ladder on tr
 
 it("keeper parks on terminal verdicts with NO timer (the lockout-protection rule), and the peer's roster round trip is what redials it", async () => {
   const { keeper, clock, dials, succeed } = stubKeeper(
-    new RemoteConnectError("ticket refused", CLOSE_AUTH_FAILED, true),
+    new RemoteConnectError("ticket refused", null, true),
   );
   keeper.reconcile(["B"]);
   await clock.settle();

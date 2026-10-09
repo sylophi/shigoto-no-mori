@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -774,5 +775,108 @@ describe("run", () => {
     } else {
       assert.equal(ended.signal, signal);
     }
+  });
+});
+
+describe("app", () => {
+  it("takes no arguments, and the dev build has no installed app to open", async () => {
+    const [extra, dev] = await Promise.all([
+      runAt(box.home, "app", "now"),
+      runAt(box.home, "app"),
+    ]);
+    assert.equal(extra.code, 2);
+    assert.equal(extra.stderr, "smd: app takes no arguments.\n");
+    assert.equal(dev.code, 1);
+    assert.equal(
+      dev.stderr,
+      "smd: This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.\n",
+    );
+  });
+});
+
+describe("worktrees link", () => {
+  it("prints the link that opens the worktree in the app, on this device", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    const printed = await runAt(alpha, "link");
+    assert.equal(printed.code, 0, printed.stderr);
+    assert.match(
+      printed.stdout,
+      /^shigomori-dev:\/\/open\/devices\/[0-9a-f-]{36}\/projects\/A\/worktrees\/[0-9a-f]+\n$/,
+    );
+    const asked = await runAt(
+      box.home,
+      "--json",
+      "wt",
+      "link",
+      "-p",
+      "alpha",
+      "root",
+    );
+    assert.deepEqual(asked.doc, {
+      ok: true,
+      url: printed.stdout.trim(),
+      worktree: "alpha",
+    });
+  });
+});
+
+describe("projects relocate", () => {
+  it("points a project at its moved repo, as the Go sm did", async () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    const usage = await runAt(box.home, "projects", "relocate");
+    assert.equal(usage.code, 2);
+    assert.equal(
+      usage.stderr,
+      "smd: Usage: smd projects relocate [<name-or-path>] <new-path>\n",
+    );
+    const stillThere = await runAt(
+      box.home,
+      "projects",
+      "relocate",
+      "alpha",
+      beta,
+    );
+    assert.equal(stillThere.code, 1);
+    assert.equal(
+      stillThere.stderr,
+      `smd: ${alpha} is still there. Relocate is for a repo that was moved or renamed by hand.\n`,
+    );
+    const moved = join(box.home, "gamma");
+    renameSync(alpha, moved);
+    const relocated = await runAt(
+      box.home,
+      "projects",
+      "relocate",
+      "alpha",
+      moved,
+    );
+    assert.equal(relocated.code, 0, relocated.stderr);
+    assert.equal(relocated.stdout, `relocated gamma to ${moved}\n`);
+    const again = await runAt(
+      box.home,
+      "--json",
+      "projects",
+      "relocate",
+      "--project-id",
+      "A",
+      moved,
+    );
+    const doc = again.doc as {
+      ok: boolean;
+      project: { id: string; path: string };
+    };
+    assert.equal(doc.ok, true);
+    assert.equal(doc.project.id, "A");
+    assert.equal(doc.project.path, moved);
   });
 });

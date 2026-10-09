@@ -1,4 +1,5 @@
-// Mutual proof of ticket possession for the direct data plane's hello.
+// Mutual proof of ticket possession for the device link's hello
+// (packages/contracts/src/modules/link.ts).
 //
 // The dialer races candidate addresses it learned from the peer, and a
 // plain ws:// LAN address is answered by whoever holds it on the
@@ -24,10 +25,6 @@ const PROOF_DOMAIN = "sm-direct-v1";
 
 // 128 bits. A nonce is public and only has to never repeat per ticket.
 const NONCE_BYTES = 16;
-
-// Enforced at the frame schema, so a malformed nonce is a malformed
-// frame and never reaches the proof construction.
-export const HANDSHAKE_NONCE_PATTERN = /^[0-9a-f]{32}$/;
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(

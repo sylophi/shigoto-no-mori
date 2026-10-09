@@ -8,11 +8,14 @@
 // direct connection without a second copy of the plumbing.
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
-import {
-  createWsServerBinding,
-  type WsServerBinding,
-  type WsServerStartOpts,
-} from "@host/socket/server";
+import * as DeviceLink from "@host/socket/server";
+import type { WsServerStartOpts } from "@host/socket/server";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Stream from "effect/Stream";
+import * as StoreChanges from "@shigomori/engine/StoreChanges";
+import * as HostPushes from "@host/lib/hostPushes";
 import {
   createConnectTicketStore,
   type ConnectTicketStore,
@@ -32,9 +35,27 @@ import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
 import { WebSocket as WsClient } from "ws";
+import { type DeviceConnection, openDevice } from "@shared/remote/deviceLink";
 import { startStubHub, type StubHub } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";
 import { type Track, waitFor } from "./checkKit.mts";
+
+// The listener as a proof drives it: the registrar it serves (a
+// ServerTransport, for registerContract and broadcastAll), and the
+// listener's own state.
+type WsServerBinding = DeviceLink.LinkRegistrar & {
+  // A push from the host, as main's broadcastAll publishes it.
+  broadcastAll(
+    channel: string,
+    payload: unknown,
+    opts?: { remote?: boolean },
+  ): void;
+  status(): { listening: boolean; port: number | null };
+  closePeersNotIn(online: readonly string[]): Promise<void>;
+  // Brings the listener to `opts` (null stops it), as main's refresh
+  // does.
+  reconcile(opts: WsServerStartOpts | null): Promise<void>;
+};
 
 export type DirectListenerOpts = {
   ticketOpts?: ConnectTicketStoreOpts;
@@ -49,6 +70,8 @@ export type DirectListenerOpts = {
     channel: string,
     input: unknown,
   ) => boolean;
+  // What the listener's graph runs on beyond its own (a tracer).
+  provide?: Layer.Layer<never>;
 };
 
 export type DirectListener = {
@@ -75,14 +98,58 @@ export async function startDirectListener(
 ): Promise<DirectListener> {
   const tickets = createConnectTicketStore(opts.ticketOpts);
   let accepts = false;
-  const binding = createWsServerBinding({
-    matchTicket: (deviceId, arrivedAs, matches) =>
-      tickets.consumeProven(deviceId, arrivedAs, matches),
-    isCommandGranted: () => accepts,
-    ...(opts.isInvited === undefined ? {} : { isInvited: opts.isInvited }),
-  });
+  const registrar = DeviceLink.createLinkRegistrar();
+  const runtime = ManagedRuntime.make(
+    Layer.provideMerge(
+      DeviceLink.layer({
+        registrar,
+        auth: {
+          matchTicket: (deviceId, arrivedAs, matches) =>
+            tickets.consumeProven(deviceId, arrivedAs, matches),
+          isCommandGranted: () => accepts,
+          ...(opts.isInvited === undefined
+            ? {}
+            : { isInvited: opts.isInvited }),
+        },
+      }),
+      Layer.mergeAll(
+        HostPushes.layer,
+        // The store says nothing here: the views a proof reads are
+        // host-views.mts's.
+        Layer.succeed(StoreChanges.StoreChanges, {
+          subscribe: Effect.succeed(Stream.never),
+          release: Effect.void,
+        }),
+        opts.provide ?? Layer.empty,
+      ),
+    ),
+  );
+  track(() => runtime.dispose());
+  const onLink = <A,>(
+    f: (link: DeviceLink.DeviceLink["Service"]) => Effect.Effect<A>,
+  ) => runtime.runPromise(Effect.flatMap(DeviceLink.DeviceLink, f));
+  let current = await onLink((link) => link.status);
+  const binding: WsServerBinding = {
+    ...registrar,
+    broadcastAll: (channel, payload, broadcastOpts) =>
+      runtime.runSync(
+        Effect.flatMap(HostPushes.HostPushes, (pushes) =>
+          pushes.publish({
+            channel,
+            payload,
+            remote: broadcastOpts?.remote === true,
+          }),
+        ),
+      ),
+    status: () => current,
+    closePeersNotIn: (online) => onLink((link) => link.closePeersNotIn(online)),
+    reconcile: async (next) => {
+      await onLink((link) => link.reconcile(Effect.succeed(next)));
+      current = await onLink((link) => link.status);
+    },
+  };
   opts.registerHandlers?.(binding);
-  const port = await binding.start({
+  await binding.reconcile({
     port: 0,
     bindAddress: "127.0.0.1",
     deviceId: opts.deviceId ?? "B",
@@ -90,7 +157,8 @@ export async function startDirectListener(
     helloTimeoutMs: 1000,
     ...opts.start,
   });
-  track(() => binding.stop());
+  const port = binding.status().port;
+  assert.ok(port !== null, "the listener did not bind");
   return {
     binding,
     tickets,
@@ -324,11 +392,9 @@ function bridgePeerTransport(
   const counts = new Map<string, number>();
   return {
     transport: {
-      invoke: (channel, input) => {
+      invoke: (channel, input, options) => {
         counts.set(channel, (counts.get(channel) ?? 0) + 1);
-        return Promise.resolve(
-          bridge.invokePeer({ deviceId, channel, input }, undefined),
-        );
+        return bridge.invokeOnPeer(deviceId, channel, input, options);
       },
       subscribe: (channel, handler) => {
         const listener = (push: HubPeerPush) => {
@@ -341,8 +407,30 @@ function bridgePeerTransport(
       },
     },
     invokeCount: (channel) => counts.get(channel) ?? 0,
-    // The session's byte channels (shared/ipc/socket/channels.ts),
+    // The session's byte channels (shared/remote/channels.ts),
     // resolving like invokePeer does.
     channels: () => bridge.peerChannels(deviceId),
   };
+}
+
+// One link to a listener, dialed straight at its port with a ticket
+// minted for `deviceId`, closed with the test.
+export async function dialListener(
+  track: Track,
+  listener: Pick<DirectListener, "port" | "tickets">,
+  opts: { deviceId?: string; hostDeviceId?: string } = {},
+): Promise<DeviceConnection> {
+  const deviceId = opts.deviceId ?? "client";
+  const connection = await openDevice({
+    url: `ws://127.0.0.1:${listener.port}`,
+    ticket: mintTicket(listener.tickets, deviceId),
+    appVersion: "1.0.0",
+    localDeviceId: deviceId,
+    expectedDeviceId: opts.hostDeviceId ?? "B",
+    onClose: () => {},
+    openSocket: (url) => new WsClient(url),
+    deadlineMs: 3000,
+  }).authenticate();
+  track(() => connection.close());
+  return connection;
 }

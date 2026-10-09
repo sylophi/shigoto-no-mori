@@ -22,7 +22,9 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
-import { runTraced } from "@shared/trace";
+import * as Option from "effect/Option";
+import type * as Tracer from "effect/Tracer";
+import { runTraced, withParentSpan } from "@host/lib/util/trace";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { onAbort } from "@host/lib/util/abort";
 
@@ -130,9 +132,18 @@ export const unwrapStep = (error: unknown): unknown =>
 // One step of a move that waits on a promise. Interrupting the move
 // aborts the signal it is given and waits for it to settle, so nothing
 // it was writing is still running when a finalizer undoes the move.
+// Its spans, and the peer calls it makes, are the move's.
 export const step = <A>(run: (signal: AbortSignal) => Promise<A>) =>
+  Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
+    stepUnder(span, run),
+  );
+
+const stepUnder = <A>(
+  span: Option.Option<Tracer.AnySpan>,
+  run: (signal: AbortSignal) => Promise<A>,
+) =>
   Effect.callback<A, MoveStepError>((resume, signal) => {
-    const running = run(signal);
+    const running = withParentSpan(span, () => run(signal));
     running.then(
       (value) => resume(Effect.succeed(value)),
       (cause: unknown) => resume(Effect.fail(new MoveStepError({ cause }))),
