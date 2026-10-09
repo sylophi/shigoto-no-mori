@@ -18,6 +18,19 @@ import { flavor, version } from "./build.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { runCommand } from "./commands/run.ts";
 import { adopt, create, move, rekey, rm, setup } from "./commands/changes.ts";
+import { done, land, merge, pr } from "./commands/landing.ts";
+import { dirty } from "./commands/dirty.ts";
+import { bundle } from "./commands/bundle.ts";
+import { open } from "./commands/open.ts";
+import { update } from "./commands/update.ts";
+import {
+  bring,
+  devices,
+  mirror,
+  mirrors,
+  send,
+  unmirror,
+} from "./commands/transfer.ts";
 import { cdCommand, shellCommand } from "./commands/shell.ts";
 import {
   destination,
@@ -28,7 +41,7 @@ import {
 import { describe } from "./commands/describe.ts";
 import { agentWorking, autopull, shelve, unshelve } from "./commands/marks.ts";
 import { status } from "./commands/status.ts";
-import { engine } from "./engine.ts";
+import { doctor, engine } from "./engine.ts";
 import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
 
@@ -61,6 +74,7 @@ const VERBS: Readonly<Record<string, string>> = {
   remove: "rm",
   mv: "move",
   c: "cd",
+  o: "open",
 };
 const PROJECT_VERBS: Readonly<Record<string, string>> = {
   ls: "list",
@@ -119,7 +133,21 @@ const sm = Command.make("sm").pipe(
     adopt.pipe(Command.provide(services)),
     setup.pipe(Command.provide(services)),
     rekey.pipe(Command.provide(services)),
-    doctorCommand.pipe(Command.provide(services)),
+    pr.pipe(Command.provide(services)),
+    merge.pipe(Command.provide(services)),
+    land.pipe(Command.provide(services)),
+    done.pipe(Command.provide(services)),
+    dirty.pipe(Command.provide(services)),
+    bundle.pipe(Command.provide(services)),
+    open.pipe(Command.provide(services)),
+    send.pipe(Command.provide(services)),
+    bring.pipe(Command.provide(services)),
+    mirror.pipe(Command.provide(services)),
+    unmirror.pipe(Command.provide(services)),
+    mirrors.pipe(Command.provide(services)),
+    devices.pipe(Command.provide(services)),
+    doctorCommand.pipe(Command.provide(doctor(flavor))),
+    update.pipe(Command.provide(services)),
   ]),
 );
 

@@ -25,6 +25,7 @@ import {
 import { emit, note, out, Output, styles } from "../output.ts";
 import { interactive } from "../prompt.ts";
 import { reporter } from "../reporter.ts";
+import { removeStack } from "./landing.ts";
 import { enter } from "./shell.ts";
 
 // A setup script failed, which its own lines said.
@@ -160,7 +161,7 @@ export const adopt = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const { located } = yield* resolveWorktree(input);
+      const { located } = yield* resolveWorktree(input, false);
       const { json, stderrColor } = yield* Effect.service(Output);
       const { cyan } = styles(stderrColor);
       const old = located.worktree.path;
@@ -231,10 +232,18 @@ export const rm = Command.make(
     force: force("Remove it with uncommitted changes"),
     keepBranch: flag("keep-branch", "Keep its branch"),
     skipCleanup: flag("skip-cleanup", "Skip its teardown and port release"),
+    stack: flag("stack", "The worktrees of the landed stack under it too"),
   },
   (input) =>
     Effect.gen(function* () {
-      const { located } = yield* resolveWorktree(input);
+      const { located } = yield* resolveWorktree(input, false);
+      if (input.stack) {
+        return yield* removeStack(located, {
+          force: input.force,
+          keepBranch: input.keepBranch,
+          skipCleanup: input.skipCleanup,
+        });
+      }
       const { json, stdoutColor } = yield* Effect.service(Output);
       const removed = yield* (yield* Worktrees.Worktrees)
         .remove(
@@ -295,10 +304,13 @@ export const move = Command.make(
         });
       }
       const destination = yield* absolute(input.args[count - 1] ?? "");
-      const { located } = yield* resolveWorktree({
-        ...input,
-        ref: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
-      });
+      const { located } = yield* resolveWorktree(
+        {
+          ...input,
+          ref: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
+        },
+        false,
+      );
       const wasInside = cwdInside(located.worktree.path);
       const moved = yield* (yield* Worktrees.Worktrees).move(
         located,

@@ -23,7 +23,7 @@ const shelf = (name: "shelve" | "unshelve") =>
     (input) =>
       Effect.gen(function* () {
         const shelved = name === "shelve";
-        const { worktree } = (yield* resolveWorktree(input)).located;
+        const { worktree } = (yield* resolveWorktree(input, false)).located;
         yield* (yield* Worktrees.Worktrees).setShelved(worktree, shelved);
         const { json, stdoutColor } = yield* Effect.service(Output);
         yield* json

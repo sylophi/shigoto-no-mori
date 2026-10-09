@@ -15,15 +15,103 @@ import { isCommitHash } from "@shigomori/contracts/schemas";
 export const splitZ = (stdout: string): string[] =>
   stdout.split("\0").filter((entry) => entry.length > 0);
 
-// The subcommand of a git argv: its first argument that is not a
-// global option (`-c key=value`, `-C dir`, `--no-pager`).
-export function subcommandOf(args: readonly string[]): string {
+// Where the subcommand sits in a git argv: its first argument that is
+// not a global option (`-c key=value`, `-C dir`, `--no-pager`).
+const subcommandIndex = (args: readonly string[]): number => {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] ?? "";
     if (arg === "-c" || arg === "-C") i++;
-    else if (!arg.startsWith("-")) return arg;
+    else if (!arg.startsWith("-")) return i;
   }
-  return "";
+  return -1;
+};
+
+export const subcommandOf = (args: readonly string[]): string =>
+  args[subcommandIndex(args)] ?? "";
+
+// Subcommands that never move refs, HEAD, the index or a worktree
+// entry. These run on every listing (a status per worktree, a branch
+// list per project), and counting them as writes would let the app's
+// own refetch swallow the very external commit it should surface.
+// write-tree and commit-tree write objects but move nothing a git
+// directory watcher listens to, and every caller that keeps what they
+// make follows up with an update-ref.
+const READ_ONLY_SUBCOMMANDS = new Set([
+  "blame",
+  "cat-file",
+  "check-attr",
+  "check-ignore",
+  "commit-tree",
+  "count-objects",
+  "describe",
+  "diff",
+  "diff-tree",
+  "for-each-ref",
+  "log",
+  "ls-files",
+  "ls-remote",
+  "ls-tree",
+  "merge-base",
+  "merge-tree",
+  "name-rev",
+  "rev-list",
+  "rev-parse",
+  "shortlog",
+  "show",
+  "show-ref",
+  "status",
+  "var",
+  "write-tree",
+]);
+
+// Whether a git argv may move refs, HEAD, the index, the config or a
+// worktree entry. An unknown subcommand counts as a write, the safe
+// direction: a spurious one costs a watcher one skipped echo, a missed
+// one a redundant refresh.
+export function writesRepo(args: readonly string[]): boolean {
+  const index = subcommandIndex(args);
+  const subcommand = args[index];
+  if (subcommand === undefined) return false;
+  if (READ_ONLY_SUBCOMMANDS.has(subcommand)) return false;
+  const rest = args.slice(index + 1);
+  // The list forms of otherwise writing subcommands.
+  switch (subcommand) {
+    case "worktree":
+      return rest[0] !== "list";
+    case "branch":
+      return !rest.some(
+        (arg) =>
+          arg === "--list" ||
+          arg === "-a" ||
+          arg === "--all" ||
+          arg === "--show-current" ||
+          arg.startsWith("--format") ||
+          arg.startsWith("--merged") ||
+          arg.startsWith("--no-merged") ||
+          arg.startsWith("--contains"),
+      );
+    case "remote":
+      return rest.length > 0 && rest[0] !== "-v" && rest[0] !== "get-url";
+    case "stash":
+      return rest[0] !== "list";
+    case "tag":
+      return !rest.some((arg) => arg === "-l" || arg === "--list");
+    case "config": {
+      // A read names one key (`--bool core.symlinks`, `get core.eol`),
+      // a write a key and a value, or says what it does in a flag.
+      if (rest.some((arg) => /^--(unset|add|replace|rename|remove)/.test(arg)))
+        return true;
+      const named = rest.filter((arg) => !arg.startsWith("-"));
+      if (named[0] === "get" || named[0] === "list") return false;
+      return named.length > 1;
+    }
+    case "symbolic-ref":
+      return rest.filter((arg) => !arg.startsWith("-")).length > 1;
+    case "hook":
+      return rest[0] !== "list";
+    default:
+      return true;
+  }
 }
 
 // Non-empty trimmed lines.

@@ -4,16 +4,21 @@
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { it, vi } from "vitest";
 import {
   BranchNotMergedError,
   CloneDestinationError,
+  Git,
   GitCommandError,
+  GitWrites,
+  layer as gitLayer,
   GitOutputTooLargeError,
   NoRemoteError,
   OverwriteRefusedError,
@@ -84,6 +89,33 @@ it("feeds stdin, layers env, and accepts the exit codes it is told to", async ()
     }),
   );
   assert.match(diff, /\+x/);
+});
+
+it("says when a writing git starts and ends, and not for a read", async () => {
+  const repo = seedRepo();
+  const marks: string[] = [];
+  const writes = Layer.succeed(GitWrites, (cwd: string) => {
+    marks.push(`begin ${cwd}`);
+    return () => marks.push(`end ${cwd}`);
+  });
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const g = yield* Git;
+      yield* g.status(repo);
+      yield* g.run(repo, ["-c", "x.y=z", "rev-parse", "HEAD"]);
+      yield* g.run(repo, ["branch", "--list"]);
+      assert.deepEqual(marks, []);
+      yield* g.createBranch({ repo, name: "side" });
+      assert.deepEqual(marks, [`begin ${repo}`, `end ${repo}`]);
+      // A failed write still ends.
+      yield* Effect.flip(g.run(repo, ["checkout", "no-such-branch"]));
+      assert.deepEqual(marks.slice(2), [`begin ${repo}`, `end ${repo}`]);
+    }).pipe(
+      Effect.provide(
+        gitLayer.pipe(Layer.provide(writes), Layer.provide(NodeServices.layer)),
+      ),
+    ),
+  );
 });
 
 it("an interrupted run takes its git down with it, hooks and all", async () => {

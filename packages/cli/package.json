@@ -12,11 +12,14 @@
     "@effect/platform-bun": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@shigomori/engine": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "ink": "^7.1.1",
+    "react": "catalog:"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

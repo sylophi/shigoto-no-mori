@@ -155,7 +155,13 @@ export default defineConfig(({ mode }) => {
     // external theme boot script, copied verbatim into dist-web. The
     // desktop's app-root public/ is outside this root, so its
     // material icons come in through the materialIcons plugin above.
-    optimizeDeps: { entries: ["index.html"] },
+    // The contracts package is served as source. Prebundled, it carries a
+    // copy of effect's Schema of its own, and the renderer's Schema calls
+    // fail on schemas built by that copy.
+    optimizeDeps: {
+      entries: ["index.html"],
+      exclude: ["@shigomori/contracts"],
+    },
     define: {
       __APP_VERSION__: JSON.stringify(version),
       __APP_COMMIT__: JSON.stringify(commit),

@@ -2,11 +2,13 @@
 // builds once: its store over the process's SQLite driver, its flavor,
 // and where the darwin helper (macfs) is. The updater talks HTTP through
 // fetch, the one client Node and Bun both have.
+import * as Bundle from "./Bundle.ts";
 import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import * as Control from "./Control.ts";
 import * as Darwin from "./Darwin.ts";
+import * as Dirty from "./Dirty.ts";
 import * as Doctor from "./Doctor.ts";
 import type { Flavor } from "./flavor.ts";
 import * as Git from "./Git.ts";
@@ -18,10 +20,12 @@ import * as Launchers from "./Launchers.ts";
 import * as Landing from "./Landing.ts";
 import * as Layout from "./Layout.ts";
 import * as Lifecycle from "./Lifecycle.ts";
+import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
+import * as SharedSettings from "./SharedSettings.ts";
 import * as Store from "./Store.ts";
 import type * as SqlClient from "effect/sql/SqlClient";
 import * as Terrier from "./Terrier.ts";
@@ -46,6 +50,9 @@ const services = (options: EngineOptions) =>
     Projects.layer,
     Doctor.layer,
     Transfer.layer,
+    Dirty.layer,
+    Bundle.layer,
+    Open.layer,
   ).pipe(
     Layer.provideMerge(Hygiene.layer),
     Layer.provideMerge(Worktrees.layer),
@@ -69,7 +76,13 @@ const services = (options: EngineOptions) =>
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(Darwin.layer(options.macfs)),
     Layer.provideMerge(
-      Layer.mergeAll(Config.layer, Usage.layer, Identity.layer, Icons.layer),
+      Layer.mergeAll(
+        Config.layer,
+        Usage.layer,
+        Identity.layer,
+        Icons.layer,
+        SharedSettings.layer,
+      ),
     ),
     Layer.provideMerge(Git.layer),
     Layer.provideMerge(options.store),

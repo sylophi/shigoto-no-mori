@@ -22,7 +22,7 @@ export const GRANTS = {
   changeCode: {
     title: "Change your code",
     detail:
-      "Create, delete and move worktrees, commit, discard changes, push (force push too) and merge pull requests with this machine's Git and GitHub credentials.",
+      "Create, delete and move worktrees, commit, discard changes, push (force push too), publish new repositories and merge pull requests with this machine's Git and GitHub credentials.",
     calls: [
       "branches:create",
       "branches:delete",

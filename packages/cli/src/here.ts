@@ -10,6 +10,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Flag from "effect/cli/Flag";
 import { note, Output, styles } from "./output.ts";
+import { noteUnregistered, pickProject, pickWorktree } from "./pickers.ts";
+import { interactive } from "./prompt.ts";
 
 // Terrier's trouble, before a command that lists projects.
 export const warnTerrier = Effect.gen(function* () {
@@ -41,7 +43,8 @@ export const given = (flag: Option.Option<string>) =>
   Option.filter(flag, (value) => value !== "");
 
 // The project a command names: --project-id as the app addresses it,
-// else -p or a positional, else the one at the cwd.
+// else -p or a positional, else the one at the cwd. Outside every
+// project, a person at a terminal picks one.
 export const resolveProject = (ref: {
   readonly projectId: Option.Option<string>;
   readonly project: Option.Option<string>;
@@ -49,11 +52,32 @@ export const resolveProject = (ref: {
   Effect.gen(function* () {
     const worktrees = yield* Worktrees.Worktrees;
     const at = yield* here;
-    return yield* Option.match(given(ref.projectId), {
-      onSome: (projectId) => worktrees.resolveProjectById(at, projectId),
-      onNone: () =>
-        worktrees.resolveProject(at, Option.getOrUndefined(given(ref.project))),
-    });
+    const projectId = given(ref.projectId);
+    if (Option.isSome(projectId)) {
+      return yield* worktrees.resolveProjectById(at, projectId.value);
+    }
+    return yield* projectAt(at, Option.getOrUndefined(given(ref.project)));
+  });
+
+// The project `ref` names, else the one at the cwd, else (for a person
+// at a terminal) the one picked from the menu.
+export const projectAt = (at: Worktrees.Here, ref: string | undefined) =>
+  Effect.gen(function* () {
+    if (ref === undefined && at.current === undefined) {
+      const menu = yield* pickedProject(at);
+      if (Option.isSome(menu)) return menu.value;
+    }
+    return yield* (yield* Worktrees.Worktrees).resolveProject(at, ref);
+  });
+
+// The project menu, when a person is there to use it.
+const pickedProject = (at: Worktrees.Here) =>
+  Effect.gen(function* () {
+    if (!(yield* interactive) || at.projects.length === 0) {
+      return Option.none();
+    }
+    yield* noteUnregistered(at);
+    return Option.some(yield* pickProject(at));
   });
 
 // How a command names its worktree: a name, <project>/<name> or a path
@@ -64,22 +88,68 @@ export const worktreeFlags = {
 };
 
 // The worktree a command names, else the one at the cwd, and where the
-// command runs.
-export const resolveWorktree = (ref: {
-  readonly ref?: Option.Option<string>;
-  readonly project: Option.Option<string>;
-  readonly projectId: Option.Option<string>;
-  readonly worktreeId: Option.Option<string>;
-}) =>
+// command runs. Named by nothing, a person at a terminal picks from a
+// menu where Go offers one: outside every worktree, in the primary
+// checkout, or with -p naming a project the cwd isn't in. `primaryOk`
+// is off for the commands that refuse the primary checkout.
+export const resolveWorktree = (
+  ref: {
+    readonly ref?: Option.Option<string>;
+    readonly project: Option.Option<string>;
+    readonly projectId: Option.Option<string>;
+    readonly worktreeId: Option.Option<string>;
+  },
+  primaryOk = true,
+) =>
   Effect.gen(function* () {
     const at = yield* here;
-    const located = yield* (yield* Worktrees.Worktrees).resolve(at, {
+    const worktrees = yield* Worktrees.Worktrees;
+    const target = {
       ref: Option.getOrUndefined(given(ref.ref ?? Option.none())),
       project: Option.getOrUndefined(given(ref.project)),
       projectId: Option.getOrUndefined(given(ref.projectId)),
       worktreeId: Option.getOrUndefined(given(ref.worktreeId)),
-    });
+    };
+    const picked =
+      target.ref === undefined && target.worktreeId === undefined
+        ? yield* pickedWorktree(at, target.project, primaryOk)
+        : Option.none();
+    const located = Option.isSome(picked)
+      ? picked.value
+      : yield* worktrees.resolve(at, target);
     return { at, located };
+  });
+
+const pickedWorktree = (
+  at: Worktrees.Here,
+  project: string | undefined,
+  primaryOk: boolean,
+) =>
+  Effect.gen(function* () {
+    if (!(yield* interactive)) return Option.none();
+    const worktrees = yield* Worktrees.Worktrees;
+    if (project !== undefined) {
+      const named = yield* worktrees.resolveProject(at, project);
+      if (at.current?.project.id !== named.id) {
+        return Option.some(yield* pickWorktree(at, named, { primaryOk }));
+      }
+    }
+    if (at.current !== undefined) {
+      // From the primary checkout a menu surprises less than acting on
+      // it, the primary itself last on it.
+      return at.current.worktree.isPrimary
+        ? Option.some(
+            yield* pickWorktree(at, at.current.project, {
+              primaryOk,
+              primaryLast: true,
+            }),
+          )
+        : Option.none();
+    }
+    const chosen = yield* pickedProject(at);
+    return Option.isSome(chosen)
+      ? Option.some(yield* pickWorktree(at, chosen.value, { primaryOk }))
+      : Option.none();
   });
 
 // A typed path, home-expanded and made absolute against the cwd, as
