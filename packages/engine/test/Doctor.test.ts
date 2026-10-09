@@ -763,7 +763,12 @@ describe("the data dir found by pointer", () => {
 
   const runAt = async () => {
     const runtime = ManagedRuntime.make(
-      engineLayer({ flavor: "dev", store: nodeStore, macfs: macfs() }).pipe(
+      engineLayer({
+        flavor: "dev",
+        store: nodeStore,
+        macfs: macfs(),
+        sm: "smd",
+      }).pipe(
         Layer.provide(NodeServices.layer),
         Layer.provide(
           ConfigProvider.layer(

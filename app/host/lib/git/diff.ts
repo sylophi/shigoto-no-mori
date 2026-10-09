@@ -55,8 +55,9 @@ export async function getFileDiff(
 
 // Unified patch of a single commit, with the commit metadata stripped
 // (`--format=`) so the output feeds straight into @pierre/diffs'
-// `parsePatchFiles`. Returns empty for commits without diffs (e.g. an
-// unconfigured merge commit).
+// `parsePatchFiles`. A merge's is against its first parent, what it
+// brought into the branch, as a plain patch rather than git's combined
+// one. Empty for a commit that changes nothing.
 export async function getCommitDiff(
   worktreePath: string,
   hash: string,
@@ -67,7 +68,15 @@ export async function getCommitDiff(
   // malicious repo an arbitrary file write.
   return runLenient(
     worktreePath,
-    ["show", "--format=", "--no-color", "--end-of-options", hash, "--"],
+    [
+      "show",
+      "--format=",
+      "--no-color",
+      "--diff-merges=first-parent",
+      "--end-of-options",
+      hash,
+      "--",
+    ],
     { maxBuffer: PATCH_MAX_BUFFER },
   );
 }

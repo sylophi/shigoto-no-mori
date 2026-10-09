@@ -1,6 +1,7 @@
 // What a pasted string means to the add-project flow: a remote to
 // clone, or a path to browse.
 import {
+  cloneUrlOf,
   isCloneableRemote,
   normalizeRemoteUrl,
 } from "@shigomori/contracts/predicates/remoteUrl";
@@ -10,6 +11,11 @@ import {
 export function repoNameFromUrl(url: string): string | null {
   if (!isCloneableRemote(url)) return null;
   return normalizeRemoteUrl(url)?.split("/").at(-1) ?? null;
+}
+
+// The folder a clone of `source` makes, or null when it is not one.
+export function cloneFolderName(source: string): string | null {
+  return repoNameFromUrl(cloneUrlOf(source));
 }
 
 // The URL another device should clone to get this repo, out of `git

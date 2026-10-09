@@ -87,12 +87,39 @@ export function useWorktreeNav() {
       );
     },
 
-    toCommit(projectId: string, worktreeId: string, hash: string) {
-      go("commit", { projectId, worktreeId, hash });
+    // The Git page's Stashes tab with no stash picked.
+    toStashes(projectId: string, worktreeId: string, replace = false) {
+      go("stashes", { projectId, worktreeId }, replace);
+    },
+
+    // One stash, on the Git page's Stashes tab.
+    toStash(
+      projectId: string,
+      worktreeId: string,
+      hash: string,
+      replace = false,
+    ) {
+      go("stash", { projectId, worktreeId, hash }, replace);
+    },
+
+    // `replace` for a step between commits on a commit's page, so Back
+    // leaves the page rather than stepping back through every commit.
+    toCommit(
+      projectId: string,
+      worktreeId: string,
+      hash: string,
+      replace = false,
+    ) {
+      go("commit", { projectId, worktreeId, hash }, replace);
     },
 
     toPrDiff(projectId: string, worktreeId: string) {
       go("prDiff", { projectId, worktreeId });
+    },
+
+    // Everything the branch changes against the primary branch.
+    toBranchDiff(projectId: string, worktreeId: string, replace = false) {
+      go("branchDiff", { projectId, worktreeId }, replace);
     },
 
     // The files page, opened on `path` when given (a file to show). A

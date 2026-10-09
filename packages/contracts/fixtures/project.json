@@ -297,6 +297,10 @@
         "url": "git@github.com:sylophi/port-pool.git",
         "parentDir": "/Users/alex/dev",
         "terrier": true
+      },
+      {
+        "url": "sylophi/shigoto-no-mori",
+        "parentDir": "~/dev"
       }
     ],
     "normalizes": [
@@ -350,6 +354,10 @@
         "url": "git@github.com:sylophi/port-pool.git",
         "parentDir": "/Users/alex/dev",
         "terrier": "yes"
+      },
+      {
+        "url": "-o/repo",
+        "parentDir": "~/dev"
       }
     ]
   },

@@ -9,7 +9,6 @@ import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullR
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import {
-  worktreeLastActivityAt,
   type Project,
   type PullRequest,
   type Worktree,
@@ -25,6 +24,7 @@ import {
 import type { SidebarDeviceBadge } from "../DeviceBadge";
 import type { StackPosition } from "@shared/pullRequestStack";
 import type { InboxShelf, SidebarRow, SidebarViewModel } from "../sidebarRow";
+import { byInboxRank, inboxRank, type InboxRank } from "./inboxRank";
 
 interface BuildInboxRowsArgs {
   projects: readonly Project[];
@@ -53,11 +53,13 @@ interface BuildInboxRowsArgs {
   // as their header alone.
   groupedPrefixes: readonly string[];
   shutGroups: ReadonlySet<string>;
-  // Whether the agent-working mark counts (isAgentWorking).
+  // Whether a working agent session shelves its worktree (isAgentWorking).
   allowAgentWorking: boolean;
+  // Whether a worktree whose agent waits on you leads its box (inboxRank).
+  pinWaiting: boolean;
 }
 
-interface Entry {
+interface Entry extends InboxRank {
   worktree: Worktree;
   project: Project;
   pr: PullRequest | undefined;
@@ -67,7 +69,6 @@ interface Entry {
   mirror: SidebarDeviceBadge | undefined;
   mirrorWorktreeId: string | undefined;
   shelf: InboxShelf | null;
-  activityAt: number;
 }
 
 // A worktree lands in exactly one box. An agent's working mark and
@@ -88,13 +89,6 @@ function bucketFor(
   if (shelf !== null) return shelf;
   if (worktree.mergedIntoPrimary || pr?.state === "MERGED") return "merged";
   return "live";
-}
-
-// Newest work first, name as the tiebreak so worktrees with no activity
-// at all (fresh, never committed, clean) still land in a stable order.
-function byRecency(a: Entry, b: Entry): number {
-  const diff = b.activityAt - a.activityAt;
-  return diff !== 0 ? diff : a.worktree.name.localeCompare(b.worktree.name);
 }
 
 function worktreeRow(entry: Entry): SidebarRow {
@@ -136,6 +130,7 @@ export function buildInboxRows({
   groupedPrefixes,
   shutGroups,
   allowAgentWorking,
+  pinWaiting,
 }: BuildInboxRowsArgs): SidebarViewModel {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
   // Failed listings, local or remote, hold the empty message back (the
@@ -181,7 +176,7 @@ export function buildInboxRows({
       const pr = prs?.[worktree.branch];
       const bucket = bucketFor(worktree, pr, hiddenPrefixes, allowAgentWorking);
       const entry: Entry = {
-        worktree,
+        ...inboxRank(worktree, pinWaiting),
         project,
         pr,
         stack: pullRequestStackPosition(prs, worktree.branch, trunk),
@@ -192,7 +187,6 @@ export function buildInboxRows({
             ? peerOfLocal.get(worktree.id)?.peerWorktreeId
             : undefined,
         shelf: bucket === "live" ? null : bucket,
-        activityAt: worktreeLastActivityAt(worktree),
       };
       if (device === undefined) localBucket.set(worktree.id, bucket);
       if (bucket === "live") {
@@ -266,7 +260,7 @@ export function buildInboxRows({
       prefix,
     );
   }
-  const rows: SidebarRow[] = rest.toSorted(byRecency).map(worktreeRow);
+  const rows: SidebarRow[] = rest.toSorted(byInboxRank).map(worktreeRow);
   for (const prefix of groupedPrefixes) {
     const entries = grouped.get(prefix);
     if (!entries) continue;
@@ -279,7 +273,7 @@ export function buildInboxRows({
       expanded,
     });
     if (!expanded) continue;
-    rows.push(...entries.toSorted(byRecency).map(worktreeRow));
+    rows.push(...entries.toSorted(byInboxRank).map(worktreeRow));
   }
   for (const shelf of [
     "agentWorking",
@@ -298,7 +292,7 @@ export function buildInboxRows({
       expanded,
     });
     if (!expanded) continue;
-    rows.push(...entries.toSorted(byRecency).map(worktreeRow));
+    rows.push(...entries.toSorted(byInboxRank).map(worktreeRow));
   }
 
   return {

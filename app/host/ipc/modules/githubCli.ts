@@ -4,6 +4,7 @@ import {
   disablePullRequestAutoMerge,
   getPullRequestDiff,
   listGithubOwners,
+  listGithubRepos,
   publishRepo,
   setPullRequestDraft,
 } from "@host/lib/githubCli/actions";
@@ -28,6 +29,8 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   readiness: () => getGithubCliReadiness(),
 
   owners: () => listGithubOwners(),
+
+  repos: () => listGithubRepos(),
 
   publish: async ({ projectId, owner, visibility }) => {
     const project = await findProjectOrThrow(projectId);

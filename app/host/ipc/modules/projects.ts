@@ -1,4 +1,4 @@
-import { pickCloneUrl, repoNameFromUrl } from "@shared/cloneUrl";
+import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { reorderProjects } from "@shared/reorder";
 import type { Handlers } from "@shigomori/contracts/types";
@@ -84,9 +84,9 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   },
 
   clone: async ({ url, parentDir, name, terrier }) => {
-    const folder = name ?? repoNameFromUrl(url);
-    // The payload schema has held the URL to a remote already. Not
-    // echoed: it may carry a token.
+    const folder = name ?? cloneFolderName(url);
+    // The payload schema has held the URL to a clone source already.
+    // Not echoed: it may carry a token.
     if (folder === null) throw new Error("Not a git remote URL");
     const path = await cloneRepo(url, expandHome(parentDir), folder);
     return registerNewCheckout(path, terrier, "Cloned into");

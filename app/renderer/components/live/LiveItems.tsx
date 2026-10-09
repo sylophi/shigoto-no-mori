@@ -1,5 +1,6 @@
 // The live things a card lists, each a block with its status and its
-// actions as labelled buttons (LiveBlock, at the end). A script: its output (the
+// actions as labelled buttons (LiveBlock, at the end). An agent waiting
+// on you: what it asks, and since when. A script: its output (the
 // console takes up the run's output whichever window or device started
 // it, hooks/scripts/useScriptRunner.ts), a restart and a stop. A
 // mirror: how it is doing, and its manage dialog (status, history,
@@ -23,9 +24,14 @@ import {
   X,
 } from "lucide-react";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
-import type { RunningScript, Worktree } from "@shigomori/contracts/schemas";
+import type {
+  AgentSession,
+  RunningScript,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
+import { RelativeDate } from "@/components/ui/relative-date";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { RunnerScope } from "@/components/worktreeDetail/mirror/MirrorAction";
@@ -42,6 +48,7 @@ import {
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useNow } from "@/hooks/ui/useNow";
 import { openExternalUrl } from "@/lib/openExternal";
+import { needView } from "@/lib/agentNeeds";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
@@ -85,6 +92,33 @@ function DeviceName({ deviceId }: { deviceId: string }) {
         <span className="truncate">{name}</span>
       </SimpleTooltip>
     </span>
+  );
+}
+
+// An agent waiting on you: the icon of the prompt it waits on, what it
+// wants and what about, and since when. Answering happens where the
+// agent runs, so the card's header (the way to the worktree) is the one
+// thing to do about it.
+export function AgentItem({ session }: { session: AgentSession }) {
+  const { Icon, sentence, text } = needView(session);
+  return (
+    <LiveBlock
+      mark={<Icon aria-hidden className={cn("size-4", TONE_TEXT.amber)} />}
+      title={
+        <>
+          <span className={cn("shrink-0 font-medium", TONE_TEXT.amber)}>
+            {sentence}
+            {text && ":"}
+          </span>
+          {text && (
+            <SimpleTooltip whenTruncated tip={text}>
+              <span className="min-w-0 truncate">{text}</span>
+            </SimpleTooltip>
+          )}
+        </>
+      }
+      status={<RelativeDate date={new Date(session.at).toISOString()} />}
+    />
   );
 }
 
@@ -265,20 +299,16 @@ function SessionItem({
         }
         status={<span className={TONE_TEXT[view.tone]}>{view.label}</span>}
         actions={
-          <SimpleTooltip
-            tip={runnerApi === undefined ? view.detail : undefined}
+          <Button
+            size="sm"
+            variant="ghost"
+            className={ON_FILL}
+            disabled={runnerApi === undefined}
+            onClick={() => setOpen(true)}
           >
-            <Button
-              size="sm"
-              variant="ghost"
-              className={ON_FILL}
-              disabled={runnerApi === undefined}
-              onClick={() => setOpen(true)}
-            >
-              <Settings2 />
-              Manage
-            </Button>
-          </SimpleTooltip>
+            <Settings2 />
+            Manage
+          </Button>
         }
         detail={view.detail || undefined}
       />

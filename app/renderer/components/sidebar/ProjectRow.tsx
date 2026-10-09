@@ -31,6 +31,9 @@ interface ProjectRowProps {
   // The open project, alone in the tree: the row is its title. Else
   // the row is one of the list, to be picked.
   expanded: boolean;
+  // On the inline list, whether the project is folded to the row,
+  // which picking flips.
+  folded: boolean | undefined;
   // The page on screen belongs to this project.
   current: boolean;
   // On the list, the worktrees the project holds beside its primary
@@ -56,6 +59,7 @@ export function ProjectRow({
   groupKey,
   pinned,
   expanded,
+  folded,
   current,
   branches,
   devices,
@@ -93,9 +97,11 @@ export function ProjectRow({
   );
   // The header stands for the repo on every device, and terrier lists
   // it per device, so any checkout of it being terrier's marks it.
-  // Only the open project wears the paw, so only it looks.
+  // Only the open (or unfolded) project wears the paw, so only it
+  // looks.
   const terrierInGroup =
-    expanded && group.some((member) => member.project.source === "terrier");
+    (expanded || folded === false) &&
+    group.some((member) => member.project.source === "terrier");
   // Right-clicking the header pops the same dropdown anchored to the
   // `…` button. Synthesizing a click on the trigger reuses base-ui's
   // normal open flow, which avoids the stray-pointer behavior we'd get
@@ -130,8 +136,10 @@ export function ProjectRow({
           "group/project relative flex items-center gap-0.5 rounded-md py-0.5 transition-colors",
           // It fills like the worktree rows it leads to: under the
           // pointer, and for the project the page on screen belongs
-          // to, which is where the list was left from.
-          pickable && (current ? "bg-accent" : "hover:bg-accent/60"),
+          // to, which is where the list was left from. Unfolded, the
+          // page's own row shows that.
+          pickable &&
+            (current && folded !== false ? "bg-accent" : "hover:bg-accent/60"),
         )}
       >
         <ProjectHeader
@@ -149,6 +157,7 @@ export function ProjectRow({
           relocating={relocating}
           onLocate={arrangeMode ? undefined : onLocate}
           expanded={expanded}
+          folded={folded}
           current={current}
           onToggle={onToggle}
           listeners={listeners}
@@ -188,6 +197,7 @@ export function ProjectRow({
             isHovered={isHovered || expanded}
             triggerRef={triggerRef}
             onLocate={onLocate}
+            sortsWorktrees={folded !== undefined}
           />
         )}
       </div>

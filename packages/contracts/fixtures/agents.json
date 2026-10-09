@@ -1,0 +1,43 @@
+{
+  "AgentHarnessStatusListSchema": {
+    "accepts": [
+      [],
+      [
+        {
+          "id": "claude",
+          "label": "Claude Code",
+          "detected": false,
+          "path": "/Users/alex/.claude/settings.json",
+          "hooks": "missing"
+        }
+      ]
+    ],
+    "rejects": [
+      [
+        {
+          "id": "claude"
+        }
+      ]
+    ]
+  },
+  "SetAgentHooksPayloadSchema": {
+    "accepts": [
+      {
+        "harness": "claude",
+        "install": true
+      },
+      {
+        "harness": "codex",
+        "install": false
+      }
+    ],
+    "rejects": [
+      {
+        "harness": "claude"
+      },
+      {
+        "install": true
+      }
+    ]
+  }
+}

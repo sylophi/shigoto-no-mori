@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   CommitHashSchema,
@@ -173,6 +174,65 @@ export async function listGithubOwners(): Promise<string[]> {
     { fallback: "Couldn't list your GitHub accounts" },
   );
   return stdout.split("\n").filter((line) => line.length > 0);
+}
+
+const decodeViewerRepos = Schema.decodeUnknownOption(
+  Schema.Struct({
+    data: Schema.Struct({
+      viewer: Schema.Struct({
+        repositories: Schema.Struct({
+          // A repository the response couldn't resolve is a null.
+          nodes: Schema.Array(
+            Schema.NullOr(Schema.Struct({ nameWithOwner: Schema.String })),
+          ),
+        }),
+      }),
+    }),
+  }),
+);
+
+// The repositories the clone dialog offers: the signed-in user's own,
+// their organizations' and the ones they collaborate on, most recently
+// pushed first. The first hundred: one further back can still be typed
+// in as `owner/repo`.
+export async function listGithubRepos(): Promise<string[]> {
+  const stdout = await runGh(
+    [
+      "api",
+      "graphql",
+      "-f",
+      "query=query { viewer { repositories(first: 100, ownerAffiliations: [OWNER, ORGANIZATION_MEMBER, COLLABORATOR], orderBy: {field: PUSHED_AT, direction: DESC}) { nodes { nameWithOwner } } } }",
+    ],
+    { fallback: "Couldn't list your GitHub repositories" },
+  ).catch((err: unknown) => {
+    // An organization whose SAML gh's token isn't authorized for answers
+    // with an error beside the rest of the list. gh exits non-zero on
+    // it, with the response on stdout, and the repositories that did
+    // come are still the ones to offer. Any other failure stands.
+    const cause = (err as { cause?: { stdout?: unknown } }).cause;
+    const partial = typeof cause?.stdout === "string" ? cause.stdout : "";
+    if (reposOf(partial) === null) throw err;
+    return partial;
+  });
+  const repos = reposOf(stdout);
+  if (repos === null) throw new Error("Couldn't list your GitHub repositories");
+  return repos;
+}
+
+// The `owner/repo`s in a viewer-repositories response, or null when it
+// carries none (no data, or not JSON at all).
+function reposOf(stdout: string): string[] | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  const parsed = decodeViewerRepos(json);
+  if (Option.isNone(parsed)) return null;
+  return parsed.value.data.viewer.repositories.nodes.flatMap((node) =>
+    node ? [node.nameWithOwner] : [],
+  );
 }
 
 // Creates `owner/<folder name>` on GitHub from the repo at `cwd` (no

@@ -1,6 +1,10 @@
 import * as Schema from "effect/Schema";
+import type { ContractSchema } from "../codec.ts";
 import { broadcast, defineContract, invoke } from "../contract.ts";
 import {
+  AgentSessionPayloadSchema,
+  ApplyStashPayloadSchema,
+  BranchHistorySchema,
   ChangedFileSchema,
   CheckoutBranchPayloadSchema,
   CommitChangesPayloadSchema,
@@ -17,8 +21,17 @@ import {
   DeleteWorktreeResultSchema,
   DiscardChangesPayloadSchema,
   DiscardChangesResultSchema,
+  DiscardHunksPayloadSchema,
+  DropStashPayloadSchema,
   FileDiffPayloadSchema,
+  FileHunksPayloadSchema,
+  GitOperationStateSchema,
+  HunkStatesSchema,
   ListCommitsPayloadSchema,
+  MergeBranchPayloadSchema,
+  MergeBranchResultSchema,
+  MergePreviewPayloadSchema,
+  MergePreviewSchema,
   ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
@@ -26,27 +39,39 @@ import {
   ResetSoftResultSchema,
   ReadWorktreeFilePayloadSchema,
   RestoreDiscardPayloadSchema,
+  RestoreStashPayloadSchema,
+  ResolveConflictPayloadSchema,
+  RewordCommitPayloadSchema,
   SetAutoPullPayloadSchema,
-  SetAgentWorkingPayloadSchema,
+  SetHunksStagedPayloadSchema,
   SetShelvedPayloadSchema,
   SetStagedPayloadSchema,
+  SquashCommitPayloadSchema,
+  StashChangesPayloadSchema,
+  StashEntrySchema,
   WorktreeCarryOverCompleteSchema,
   WorktreeFileSchema,
   WorktreeLifecyclePhaseSchema,
   WorktreeRemovalSchema,
   WorktreeSchema,
   WorktreeScopedPayloadSchema,
+  VoidSchema,
 } from "../schemas/index.ts";
 
 // Every worktree-scoped git mutation shares this contract; naming it
 // once means a new one can't silently miss tracksProjectUsage.
-const worktreeMutation = <const Key extends string>(key: Key) =>
-  invoke(key, WorktreeScopedPayloadSchema, WorktreeSchema, {
+const worktreeMutationOf = <const Key extends string, P extends ContractSchema>(
+  key: Key,
+  payload: P,
+) =>
+  invoke(key, payload, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
     grant: "changeCode",
   });
+const worktreeMutation = <const Key extends string>(key: Key) =>
+  worktreeMutationOf(key, WorktreeScopedPayloadSchema);
 
 export const worktreesContract = defineContract(
   "worktrees",
@@ -114,11 +139,17 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  invoke("setAgentWorking", SetAgentWorkingPayloadSchema, WorktreeSchema, {
+  // Every agent session bound to the worktree goes idle, for a turn
+  // whose end no hook reported.
+  worktreeMutation("idleAgents"),
+  // One agent session stops being bound to the worktree.
+  worktreeMutationOf("unbindAgent", AgentSessionPayloadSchema),
+  // One agent session picks up again in its harness's CLI, in a
+  // terminal on this machine, so like a launch it isn't served to
+  // other devices.
+  invoke("resumeAgent", AgentSessionPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    remote: false,
   }),
   invoke("checkoutBranch", CheckoutBranchPayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
@@ -158,6 +189,29 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
+  // One modified file's hunks (host/lib/git/hunks.ts): which the next
+  // commit takes, ticking them, and throwing them away.
+  invoke("fileHunks", FileHunksPayloadSchema, HunkStatesSchema, {
+    remote: true,
+    gated: false,
+  }),
+  invoke(
+    "setHunksStaged",
+    SetHunksStagedPayloadSchema,
+    Schema.Array(ChangedFileSchema),
+    { remote: true, gated: true, grant: "changeCode" },
+  ),
+  invoke(
+    "discardHunks",
+    DiscardHunksPayloadSchema,
+    DiscardChangesResultSchema,
+    {
+      tracksProjectUsage: true,
+      remote: true,
+      gated: true,
+      grant: "changeCode",
+    },
+  ),
   invoke("commit", CommitChangesPayloadSchema, CommitChangesResultSchema, {
     tracksProjectUsage: true,
     remote: true,
@@ -199,6 +253,91 @@ export const worktreesContract = defineContract(
     ListCommitsPayloadSchema,
     Schema.Array(CommitSummarySchema),
     { remote: true, gated: false },
+  ),
+  // The Git timeline: the branch's own commits back to where it left
+  // the primary branch, and its upstream.
+  invoke("branchHistory", WorktreeScopedPayloadSchema, BranchHistorySchema, {
+    remote: true,
+    gated: false,
+  }),
+  // What the branch changes against the primary branch, as a pull
+  // request would show it, pull request or not.
+  invoke("branchDiff", WorktreeScopedPayloadSchema, Schema.String, {
+    remote: true,
+    gated: false,
+  }),
+  // The commit menu's history moves (host/lib/git/history.ts). A
+  // cherry-pick's worktree is the one the commit lands on.
+  worktreeMutationOf("revertCommit", CommitDiffPayloadSchema),
+  worktreeMutationOf("cherryPick", CommitDiffPayloadSchema),
+  worktreeMutationOf("rewordCommit", RewordCommitPayloadSchema),
+  worktreeMutationOf("squashCommit", SquashCommitPayloadSchema),
+  // The stashes made on the worktree's branch (host/lib/git/stash.ts).
+  invoke(
+    "stashes",
+    WorktreeScopedPayloadSchema,
+    Schema.Array(StashEntrySchema),
+    { remote: true, gated: false },
+  ),
+  // One stash's contents, as a patch.
+  invoke("stashDiff", DropStashPayloadSchema, Schema.String, {
+    remote: true,
+    gated: false,
+  }),
+  worktreeMutationOf("stashChanges", StashChangesPayloadSchema),
+  worktreeMutationOf("applyStash", ApplyStashPayloadSchema),
+  invoke("dropStash", DropStashPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  // A drop's undo.
+  invoke("restoreStash", RestoreStashPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  // A merge, rebase, cherry-pick or revert stopped on conflicts
+  // (host/lib/git/operation.ts), and the moves that see it through.
+  invoke("operation", WorktreeScopedPayloadSchema, GitOperationStateSchema, {
+    remote: true,
+    gated: false,
+  }),
+  worktreeMutationOf("resolveConflict", ResolveConflictPayloadSchema),
+  // Another branch brought into the worktree's (host/lib/git/merge.ts):
+  // first how the two stand, then the move.
+  invoke("mergePreview", MergePreviewPayloadSchema, MergePreviewSchema, {
+    remote: true,
+    gated: false,
+  }),
+  invoke("mergeBranch", MergeBranchPayloadSchema, MergeBranchResultSchema, {
+    tracksProjectUsage: true,
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  worktreeMutation("continueOperation"),
+  worktreeMutation("abortOperation"),
+  // The way on from a sync from primary that conflicts: merge anyway
+  // and stop on the conflicts.
+  invoke("mergePrimary", WorktreeScopedPayloadSchema, MergeBranchResultSchema, {
+    tracksProjectUsage: true,
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
+  // The way on from a split with the upstream that conflicts: merge it
+  // and stop on the conflicts.
+  invoke(
+    "mergeUpstream",
+    WorktreeScopedPayloadSchema,
+    MergeBranchResultSchema,
+    {
+      tracksProjectUsage: true,
+      remote: true,
+      gated: true,
+      grant: "changeCode",
+    },
   ),
   worktreeMutation("push"),
   worktreeMutation("pull"),

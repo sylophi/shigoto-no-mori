@@ -55,6 +55,8 @@ export function VirtualRow({
         "absolute top-0 left-0 w-full",
         ROW_LAYOUT[row.kind],
         row.kind === "project" && row.pinnedEnd && "pb-3",
+        // Inline, a gap over each project parts it from the one before.
+        row.kind === "project" && row.folded !== undefined && "pt-1",
       )}
       style={{ transform: `translateY(${start}px)` }}
       onMouseEnter={() => setHoveredProjectId(rowProjectId)}
@@ -90,7 +92,7 @@ function projectIdForRow(row: SidebarRow): string | null {
   // peer's worktree keeps its project header's actions alive.
   if (
     row.kind === "remote-worktree" ||
-    row.kind === "shelved-toggle" ||
+    row.kind === "group-shelf" ||
     row.kind === "worktree-group"
   ) {
     return row.groupId;

@@ -1,6 +1,6 @@
 // Durable proof for the Agent working shelf: with agents allowed to
-// mark worktrees as working, a worktree an agent marked (`sm
-// agent-working`) files on its own fold (groupShelfOf, which the
+// mark worktrees as working, a worktree with a working agent session
+// (`sm agents`) files on its own fold (groupShelfOf, which the
 // inbox's buildInboxRows files by too, and the tree's buildSidebarRows),
 // folded until opened and ahead of the other folds, and the mark
 // outranks being shelved or hidden. Cleared, or with agents not allowed
@@ -57,13 +57,14 @@ const rows = (trees: Worktree[], allowAgentWorking: boolean, open: boolean) =>
       { data: {}, isLoading: false, isPending: false, error: null },
     ],
     openKey: projectGroupKey(project, undefined),
+    inline: null,
     order: projectGroupOrder({
       projects: [project],
       remote: [],
       sortMode: "manual",
       pinned: new Set(),
     }),
-    worktreeSort: "name",
+    worktreeSort: () => "name",
     openShelves: {
       agentWorking: { has: () => open },
       shelved: { has: () => false },
@@ -82,7 +83,7 @@ const rows = (trees: Worktree[], allowAgentWorking: boolean, open: boolean) =>
     .map(line);
 
 const line = (row: SidebarRow) => {
-  if (row.kind === "shelved-toggle") {
+  if (row.kind === "group-shelf") {
     return `${row.expanded ? "v" : ">"} ${row.shelf} ${row.count}`;
   }
   if ("worktree" in row) return row.worktree.name;
@@ -108,10 +109,10 @@ it("the tree: an Agent working fold ahead of Shelved", () => {
   assert.deepEqual(rows(forest(true), true, true), [
     "main",
     "live",
+    "v agentWorking 3",
     "agent",
     "agent-shelved",
     "exp/agent",
-    "v agentWorking 3",
     "> shelved 1",
   ]);
 });

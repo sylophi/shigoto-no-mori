@@ -28,7 +28,8 @@ export function isRawKeySurface(target: EventTarget | null): boolean {
 // a modal shell, a sheet, an open menu, popover or combobox popup, or
 // the blocking veil. None of them trap focus (they mount as siblings of
 // the router, and the popups portal out), so a bare-key shortcut in the
-// page underneath still fires unless it asks.
+// page underneath still fires unless it asks. One still animating out
+// (data-closed, on it or around it) has already let go.
 const OVERLAY_SLOTS = [
   "modal-shell",
   "sheet-content",
@@ -37,7 +38,7 @@ const OVERLAY_SLOTS = [
   "combobox-popup",
   "blocking-overlay",
 ]
-  .map((slot) => `[data-slot="${slot}"]`)
+  .map((slot) => `[data-slot="${slot}"]:not([data-closed], [data-closed] *)`)
   .join(", ");
 
 export function isOverlayOpen(): boolean {

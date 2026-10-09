@@ -2,9 +2,9 @@
 // work on another machine in one place: its files ("Files", the same
 // button the local footer leads with, on the grant), a live mirror of
 // the worktree here ("Mirror here"), or moving it here and deciding
-// what becomes of the source ("Transplant"). Its ports have a section
-// of the page (ports/PortsSection.tsx). Text buttons, since the footer
-// has room to say what they do. The running mirror's button, on a
+// what becomes of the source ("Transplant", a row of the footer's
+// Options popover). Its ports have a section of the page
+// (ports/PortsSection.tsx). The running mirror's button, on a
 // worktree already part of one (mirror/MirrorAction.tsx), stands in
 // for "Mirror here": a worktree holds one mirror, the rule the local
 // footer's "Mirror to…" follows. Files and that button lead the footer
@@ -15,15 +15,13 @@
 // clone the repo here first. A repo with no identity at all gets a
 // line of explanation instead of an empty footer. The peer's primary
 // checkout can only be mirrored: a transplant would have to tear the
-// project itself down.
+// project itself down. The page renders it in two parts, the way it
+// does the local footer's (PeerTransferActions.tsx).
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { useState } from "react";
 import { RefreshCw, Shovel } from "lucide-react";
-import {
-  isRealBranch,
-  type Project,
-  type Worktree,
-} from "@shigomori/contracts/schemas";
+import type { TransferPartProps } from "./PeerTransferActions";
+import { OptionAction } from "./WorktreeOptions";
+import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
@@ -39,68 +37,42 @@ import { MirrorDialog } from "./mirror/MirrorDialog";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 
 // The two transfers, or the one line that explains their absence.
-export function RemoteTransferActions({
-  worktree,
-  project,
-}: {
-  worktree: Worktree;
-  project: Project;
-}) {
-  const { granted } = useCommandAccess();
-  // Which dialog is open, held here so an open one outlives the
+export function RemoteTransferActions(props: TransferPartProps) {
+  const { worktree, open } = props;
+  // The page holds which dialog is open, so an open one outlives the
   // buttons: the grant reads undefined for a moment when the direct
   // link blips, and a run in progress must keep its progress, its
   // cancel and its report rather than vanish mid-run (the local
   // footer's PeerTransferActions holds its dialog the same way).
-  const [open, setOpen] = useState<OpenDialog>(null);
+  const { granted } = useCommandAccess();
   const transferable =
     granted && !worktree.detached && isRealBranch(worktree.branch);
-  return (
-    (transferable || open !== null) && (
-      <TransferActions
-        worktree={worktree}
-        project={project}
-        buttons={transferable}
-        open={open}
-        setOpen={setOpen}
-      />
-    )
-  );
+  if (!transferable && open === null) return null;
+  return <TransferActions {...props} buttons={transferable} />;
 }
 
-type OpenDialog = "mirror" | "transplant" | null;
-type DialogState = {
-  // Whether the buttons show: a dialog held open past the grant shows
-  // alone.
-  buttons: boolean;
-  open: OpenDialog;
-  setOpen: (open: OpenDialog) => void;
-};
+// Whether the buttons show: a dialog held open past the grant shows
+// alone.
+type ButtonsProps = TransferPartProps & { buttons: boolean };
 
-function TransferActions({
-  worktree,
-  project,
-  ...dialogState
-}: {
-  worktree: Worktree;
-  project: Project;
-} & DialogState) {
+function TransferActions(props: ButtonsProps) {
+  const { project, part } = props;
   const localProject = useLocalProjectForIdentity(project.identity);
   // A project git couldn't identify can never match a local one, so no
   // transfer here will ever work. Say so: two controls disappearing
   // without a word reads as a bug, and the cause (the repo, not the
   // app) is fixable by the person looking at it.
-  if (project.identity == null) return <NoIdentityNote />;
+  if (project.identity == null) {
+    return part === "footer" && <NoIdentityNote />;
+  }
   // Identified, and either held here or not: with no checkout on this
   // machine the dialogs clone the repo first (over the device link, so
   // a repo with no remote comes too), and say where.
   return (
     <TransferButtons
-      worktree={worktree}
-      project={project}
+      {...props}
       sourceIdentity={project.identity}
       localProject={localProject}
-      {...dialogState}
     />
   );
 }
@@ -127,27 +99,44 @@ function NoIdentityNote() {
 function TransferButtons({
   worktree,
   project,
-  sourceIdentity,
-  localProject,
-  buttons,
+  part,
   open,
   setOpen,
-}: {
-  worktree: Worktree;
-  project: Project;
+  buttons,
+  sourceIdentity,
+  localProject,
+}: ButtonsProps & {
   sourceIdentity: string;
   localProject: Project | undefined;
-} & DialogState) {
+}) {
   const { deviceId } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
   const blocker = useMirrorHereBlocker(deviceLabel);
+  if (part === "option") {
+    // Transplant is destructive on the remote side, so it opens the
+    // review dialog: the dialog is the confirmation. Not while
+    // mirrored, like the local footer's.
+    return (
+      buttons &&
+      !worktree.isPrimary &&
+      !mirrored && (
+        <OptionAction
+          icon={<Shovel />}
+          label="Transplant"
+          description="Move this worktree to this device."
+          onClick={() => setOpen("transplant")}
+        />
+      )
+    );
+  }
   const dialog = {
     worktree,
     project,
     sourceIdentity,
     localProject,
     sourceDeviceLabel: deviceLabel,
+    onClose: () => setOpen(null),
   };
   return (
     <>
@@ -155,9 +144,9 @@ function TransferButtons({
           between its worktree and the new copy here, both run on the
           peer, which holds the original, asked for through this
           device's own start (which invites them past its switch) and
-          driven by the mirror dialog. It only exists in the app: the copy lands on this
-          machine, which a browser is not. A
-          mirror withdraws the button, not an OPEN dialog: the mirror it
+          driven by the mirror dialog. It only exists in the app: the
+          copy lands on this machine, which a browser is not. A mirror
+          withdraws the button, not an OPEN dialog: the mirror it
           starts is what withdraws it, and the dialog's last step (the
           report) must stay up. */}
       {buttons && canForwardPorts && !mirrored && (
@@ -170,25 +159,8 @@ function TransferButtons({
           onClick={() => setOpen("mirror")}
         />
       )}
-      {open === "mirror" && (
-        <MirrorDialog {...dialog} onClose={() => setOpen(null)} />
-      )}
-      {/* Transplant is destructive on the remote side, so it opens the
-          review dialog instead of firing on a double-click: the dialog
-          is the confirmation. */}
-      {/* Not while mirrored, like the local footer's. */}
-      {buttons && !worktree.isPrimary && !mirrored && (
-        <FooterActionButton
-          rank={LABEL_RANK.transplant}
-          icon={<Shovel />}
-          label="Transplant"
-          tip="Move this worktree to this device"
-          onClick={() => setOpen("transplant")}
-        />
-      )}
-      {open === "transplant" && (
-        <TransplantDialog {...dialog} onClose={() => setOpen(null)} />
-      )}
+      {open === "mirror" && <MirrorDialog {...dialog} />}
+      {open === "transplant" && <TransplantDialog {...dialog} />}
     </>
   );
 }

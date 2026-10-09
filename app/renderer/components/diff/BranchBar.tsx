@@ -3,6 +3,7 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { SYNC_PILL_SHAPE } from "@/components/worktreeDetail/SyncActionButton";
 import { WorktreeSyncPill } from "@/components/worktreeDetail/WorktreeSyncPill";
+import { useWorktreeOperation } from "@/hooks/worktrees/useGitHistory";
 import { cn } from "@/lib/utils";
 import {
   deriveRemoteSyncState,
@@ -15,13 +16,15 @@ import {
 // commit is waiting to go out, so the page never has to be left to
 // push what it just made.
 export function BranchBar({ worktree }: { worktree: Worktree }) {
-  const { detached } = worktree;
+  // Mid-rebase, git holds HEAD detached, but the branch is still the
+  // one being replayed, and the banner above says the rest.
+  const { data: operation } = useWorktreeOperation(worktree);
+  const rebasing = worktree.detached ? (operation?.rebasing ?? null) : null;
+  const detached = worktree.detached && rebasing === null;
+  const branch = rebasing ?? worktree.branch;
   const Icon = detached ? TriangleAlert : GitBranch;
   return (
-    <div
-      data-slot="branch-bar"
-      className="flex min-h-9 items-center gap-2 px-3 py-1"
-    >
+    <div data-slot="branch-bar" className="flex h-7 items-center gap-2 px-3">
       <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
         <Icon
           aria-hidden
@@ -37,13 +40,16 @@ export function BranchBar({ worktree }: { worktree: Worktree }) {
           tip={
             detached
               ? "HEAD is on a commit, not a branch: new commits here belong to no branch"
-              : worktree.branch
+              : branch
           }
         >
           <span className="truncate font-mono select-text">
-            <BranchLabel branch={worktree.branch} detached={detached} />
+            <BranchLabel branch={branch} detached={detached} />
           </span>
         </SimpleTooltip>
+        {rebasing !== null && (
+          <span className="shrink-0 text-muted-foreground">rebasing</span>
+        )}
       </span>
       {deriveRemoteSyncState(worktree).kind === "synced" ? (
         <span className={cn(SYNC_PILL_SHAPE, "text-muted-foreground")}>

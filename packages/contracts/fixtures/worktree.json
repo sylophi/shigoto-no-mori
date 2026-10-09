@@ -641,6 +641,14 @@
         "worktreeId": "e0f76c6cc80a",
         "skip": 200,
         "count": 200
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 0,
+        "count": 30,
+        "query": "sidebar",
+        "from": "b3e91d4"
       }
     ],
     "normalizes": [
@@ -695,6 +703,13 @@
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a",
         "skip": 0
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "skip": 0,
+        "count": 30,
+        "query": "   "
       }
     ]
   },
@@ -806,26 +821,6 @@
       {
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a"
-      }
-    ]
-  },
-  "SetAgentWorkingPayloadSchema": {
-    "accepts": [
-      {
-        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
-        "worktreeId": "cbc5ccb43624",
-        "agentWorking": true
-      }
-    ],
-    "rejects": [
-      {
-        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
-        "worktreeId": "cbc5ccb43624"
-      },
-      {
-        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
-        "worktreeId": "cbc5ccb43624",
-        "agentWorking": "on"
       }
     ]
   },
@@ -1248,6 +1243,59 @@
         "shelved": true,
         "autoPull": false,
         "agentWorking": true
+      },
+      {
+        "id": "wt_sm_hum",
+        "projectId": "p_sm",
+        "name": "happy-hummingbird",
+        "branch": "v2-exp/remote-ui-flows",
+        "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+        "ahead": 3,
+        "behind": 0,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 0,
+        "unpushedCount": 3,
+        "primaryRef": "origin/main",
+        "primaryBranch": "main",
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "createdAt": 1791027600000,
+        "recentCommits": [
+          {
+            "hash": "b3e91d4",
+            "subject": "Show which device a worktree lives on",
+            "author": "sylophi",
+            "date": "2026-10-07T12:41:00.000Z",
+            "additions": 38,
+            "deletions": 14
+          },
+          {
+            "hash": "e7c0a52",
+            "subject": "Badge merged projects with their devices",
+            "author": "sylophi",
+            "date": "2026-10-07T12:06:00.000Z",
+            "additions": 84,
+            "deletions": 12
+          }
+        ],
+        "isPrimary": false,
+        "isExternal": false,
+        "detached": false,
+        "shelved": false,
+        "autoPull": false,
+        "agentWorking": true,
+        "agentSessions": [
+          {
+            "harness": "claude",
+            "session": "5f2c9e4a",
+            "state": "working",
+            "at": 1791027600000,
+            "title": "Remote UI flows"
+          }
+        ],
+        "title": "Remote UI flows"
       }
     ],
     "normalizes": [
@@ -1477,6 +1525,89 @@
         "isExternal": true,
         "detached": false,
         "shelved": false
+      }
+    ]
+  },
+  "AgentSessionPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "harness": "claude",
+        "session": "5f2c9e4a-1d3b-4c8e-9a7f-2b6d0e1c3a5f"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "harness": "",
+        "session": "s1"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "harness": "codex"
+      }
+    ]
+  },
+  "BranchHistorySchema": {
+    "accepts": [
+      {
+        "commits": [
+          {
+            "hash": "b3e91d4",
+            "subject": "Show which device a worktree lives on",
+            "author": "sylophi",
+            "date": "2026-10-07T12:41:00.000Z",
+            "additions": 38,
+            "deletions": 14
+          }
+        ],
+        "more": false,
+        "base": {
+          "ref": "origin/main",
+          "hash": "e7c0a52"
+        },
+        "upstream": "origin/feature",
+        "unpushed": ["b3e91d4"],
+        "incoming": [],
+        "incomingMore": false,
+        "upstreamFork": "e7c0a52",
+        "merges": []
+      },
+      {
+        "commits": [],
+        "more": true,
+        "base": null,
+        "upstream": null,
+        "unpushed": [],
+        "incoming": [],
+        "incomingMore": false,
+        "upstreamFork": null,
+        "merges": [
+          {
+            "hash": "b3e91d4",
+            "firstParent": "e7c0a52"
+          }
+        ]
+      }
+    ],
+    "rejects": [
+      {
+        "commits": [],
+        "more": false,
+        "base": null,
+        "upstream": null,
+        "unpushed": ["not a hash"],
+        "incoming": [],
+        "incomingMore": false,
+        "upstreamFork": null,
+        "merges": []
+      },
+      {
+        "commits": [],
+        "more": false
       }
     ]
   }

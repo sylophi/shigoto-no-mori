@@ -1,4 +1,3 @@
-import type { ComponentProps } from "react";
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 
 import { cn } from "@/lib/utils";
@@ -68,16 +67,6 @@ function SheetContent({
   );
 }
 
-function SheetHeader({ className, ...props }: ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="sheet-header"
-      className={cn("flex flex-col gap-0.5 p-4", className)}
-      {...props}
-    />
-  );
-}
-
 function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
   return (
     <SheetPrimitive.Title
@@ -88,17 +77,4 @@ function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
   );
 }
 
-function SheetDescription({
-  className,
-  ...props
-}: SheetPrimitive.Description.Props) {
-  return (
-    <SheetPrimitive.Description
-      data-slot="sheet-description"
-      className={cn("text-sm text-muted-foreground", className)}
-      {...props}
-    />
-  );
-}
-
-export { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription };
+export { Sheet, SheetContent, SheetTitle };

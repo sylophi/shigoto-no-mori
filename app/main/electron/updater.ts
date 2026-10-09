@@ -15,10 +15,11 @@
 // Dev builds run from a checkout, so they report `unsupported` and the
 // renderer hides the check button.
 //
-// `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
-// testing of a signed build, and `SHIGOMORI_UPDATE_RELEASES_URL` the
-// release list a prerelease build ranks instead. updateEndpoints.ts
-// moves both out of our environment and hands them to the check alone.
+// `SHIGOMORI_UPDATE_RELEASES_URL` overrides the release list for
+// end-to-end testing of a signed build, and `SHIGOMORI_UPDATE_FEED_URL`
+// the update server it falls back to (the engine's Updater).
+// updateEndpoints.ts moves both out of our environment and hands them
+// to the check alone.
 import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";

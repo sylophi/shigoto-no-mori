@@ -26,7 +26,7 @@ import type {
   ShigomoriWorktreeData,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { repoNameFromUrl } from "@shared/cloneUrl";
+import { cloneFolderName } from "@shared/cloneUrl";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
@@ -39,6 +39,7 @@ import {
 import { decode } from "@shigomori/contracts/codec";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
+import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
 import {
   MIRROR_HISTORY_LIMIT,
   summarizeIgnores,
@@ -287,6 +288,23 @@ function hostHandlersFor(
     Object.entries(fakeCustomPorts).map(([id, ports]) => [id, { ports }]),
   );
   const allWorktrees = () => Object.values(forest.worktrees).flat();
+  // Claude Code's hooks in, Codex's waiting on a fresh install.
+  let agentHarnesses: AgentHarnessStatus[] = [
+    {
+      id: "claude",
+      label: "Claude Code",
+      detected: true,
+      path: `${disk.home}/.claude/settings.json`,
+      hooks: "installed",
+    },
+    {
+      id: "codex",
+      label: "Codex",
+      detected: true,
+      path: `${disk.home}/.codex/hooks.json`,
+      hooks: "missing",
+    },
+  ];
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const changes = createFakeChanges(findWorktree);
@@ -327,7 +345,7 @@ function hostHandlersFor(
       const parent = resolveOnDisk(disk, parentDir);
       const entries = disk.dirs[parent];
       if (entries === undefined) throw new Error(`${parent} is not a folder`);
-      const folder = name ?? repoNameFromUrl(url) ?? "repo";
+      const folder = name ?? cloneFolderName(url) ?? "repo";
       if (entries.some((entry) => entry.name === folder)) {
         throw new Error(`${parent}/${folder} already exists`);
       }
@@ -432,6 +450,38 @@ function hostHandlersFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",
       ),
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
+    "worktrees:idleAgents": ({ worktreeId }) => {
+      const worktree = findWorktree(worktreeId);
+      if (!worktree) throw new Error("Unknown worktree");
+      worktree.agentWorking = false;
+      worktree.agentSessions = worktree.agentSessions?.map((session) => ({
+        ...session,
+        state: "idle",
+        at: Date.now(),
+      }));
+      return worktree;
+    },
+    "worktrees:unbindAgent": ({ worktreeId, harness, session }) => {
+      const worktree = findWorktree(worktreeId);
+      if (!worktree) throw new Error("Unknown worktree");
+      worktree.agentSessions = worktree.agentSessions?.filter(
+        (s) => s.harness !== harness || s.session !== session,
+      );
+      worktree.agentWorking =
+        worktree.agentSessions?.some((s) => s.state === "working") ?? false;
+      return worktree;
+    },
+    "worktrees:resumeAgent": () => undefined,
+    "agents:status": () => agentHarnesses,
+    "agents:setHooks": async ({ harness, install }) => {
+      await sleep(400);
+      agentHarnesses = setHooks(
+        agentHarnesses,
+        harness,
+        install ? "installed" : "missing",
+      );
+      return agentHarnesses;
+    },
     "worktrees:create": ({ projectId, worktreeName, branchName }) => {
       const name = worktreeName ?? "tender-tanuki";
       const created = worktreeFixture({
@@ -504,6 +554,49 @@ function hostHandlersFor(
         pushed(w);
       }),
     "worktrees:commitDiff": () => FAKE_DIFF,
+    "worktrees:branchDiff": () => FAKE_DIFF,
+    // The Git timeline's reads: the row's own commits, from a fork on
+    // the primary branch for any worktree but the primary, one stash on
+    // happy-hummingbird, nothing stopped, and a hunk per picked file.
+    "worktrees:branchHistory": ({ worktreeId }) => {
+      const w = findWorktree(worktreeId);
+      return {
+        commits: w?.recentCommits ?? [],
+        more: false,
+        base:
+          w && !w.isPrimary
+            ? { ref: w.primaryRef ?? "origin/main", hash: "a1b2c3d" }
+            : null,
+        upstream: w?.hasUpstream ? `origin/${w.branch}` : null,
+        unpushed: (w?.recentCommits ?? [])
+          .slice(0, w?.ahead ?? 0)
+          .map((c) => c.hash),
+        incoming: [],
+        incomingMore: false,
+        upstreamFork: null,
+        merges: [],
+      };
+    },
+    "worktrees:stashes": ({ worktreeId }) =>
+      worktreeId === "wt_sm_hum"
+        ? [
+            {
+              hash: "5ca1ab1",
+              message: "Badge merged projects with their devices",
+              named: false,
+              date: new Date(Date.now() - 3 * 3600_000).toISOString(),
+            },
+          ]
+        : [],
+    "worktrees:stashDiff": () => FAKE_DIFF,
+    "worktrees:operation": () => ({
+      operation: null,
+      continuable: false,
+      conflicted: 0,
+      rebasing: null,
+    }),
+    "worktrees:fileHunks": ({ worktreeId, path }) =>
+      changes.hunks(worktreeId, path),
     // For an amend's prefill: the subject the row carries, no body.
     "worktrees:commitMessage": ({ worktreeId, hash }) => ({
       summary:
@@ -610,6 +703,13 @@ function hostHandlersFor(
       };
     },
     "githubCli:owners": () => ["rin", "sylophi", "dittofleet"],
+    "githubCli:repos": () => [
+      "sylophi/shigoto-no-mori",
+      "dittofleet/terrier",
+      "rin/dotfiles",
+      "dittofleet/port-pool",
+      "rin/notes",
+    ],
     // Takes the push's moment, and gives the project the remote it
     // would have.
     "githubCli:publish": async ({ projectId, owner = "rin" }) => {
@@ -823,6 +923,22 @@ function hostHandlersFor(
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// An install or uninstall, as the CLI answers it: a fresh Codex
+// install isn't trusted yet.
+function setHooks(
+  harnesses: AgentHarnessStatus[],
+  id: string,
+  hooks: AgentHarnessStatus["hooks"],
+): AgentHarnessStatus[] {
+  return harnesses.map((harness) => {
+    if (harness.id !== id) return harness;
+    const { trusted: _trusted, ...rest } = harness;
+    return hooks === "installed" && id === "codex"
+      ? { ...rest, hooks, trusted: false }
+      : { ...rest, hooks };
+  });
+}
 
 // What a push or a publish leaves: every commit on the branch is on the
 // remote now.
@@ -1259,6 +1375,7 @@ async function fakeSyncPull(
     shelved: false,
     autoPull: false,
     agentWorking: false,
+    agentSessions: [],
   });
   (local.worktrees[project.id] ??= []).push(landed);
   // The real host pings this after any app-driven mutation, and the

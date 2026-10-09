@@ -1,4 +1,5 @@
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -7,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import { type AgentSession, agentSession } from "./agentSessions.ts";
 import * as Icons from "./Icons.ts";
 import * as Identity from "./Identity.ts";
 import * as Terrier from "./Terrier.ts";
@@ -23,7 +25,11 @@ export type RegisteredProject = {
 };
 
 // The marks a worktree can carry, keyed by its path-derived id.
-export type WorktreeMark = "shelved" | "autoPull" | "agentWorking";
+export type WorktreeMark = "shelved" | "autoPull";
+
+// The agent sessions bound to each worktree, by its id, in the order
+// they were bound.
+export type BoundSessions = Map<string, Array<AgentSession>>;
 
 export class ProjectAlreadyAdded extends Schema.TaggedError<ProjectAlreadyAdded>()(
   "ProjectAlreadyAdded",
@@ -107,9 +113,24 @@ export class Registry extends Context.Service<
       worktreeId: string,
       on: boolean,
     ) => Effect.Effect<void>;
+    readonly agentSessions: Effect.Effect<BoundSessions>;
+    // Binds a session to a worktree, moving it off any other. A session
+    // bound elsewhere keeps its state and waits, and a new one starts as
+    // given, from now.
+    readonly bindAgentSession: (
+      session: Omit<AgentSession, "at">,
+      worktreeId: string,
+    ) => Effect.Effect<void>;
+    // A read-modify-write of every binding in one transaction. `edit`
+    // changes the map in place and says whether it changed anything, so
+    // an unchanged map writes nothing.
+    readonly updateAgentSessions: (
+      edit: (sessions: BoundSessions) => boolean,
+    ) => Effect.Effect<void>;
     // Clears what is kept under an id that is going away.
     readonly forgetWorktree: (worktreeId: string) => Effect.Effect<void>;
-    // Carries the marks of a moved checkout to its new id. The shelf
+    // Carries the marks and agent sessions of a moved checkout to its
+    // new id. The shelf
     // snapshot stays behind: a move can give every file a fresh mtime.
     readonly moveWorktree: (from: string, to: string) => Effect.Effect<void>;
     // The id this data dir goes by, minted on first ask.
@@ -237,6 +258,7 @@ const make = Effect.gen(function* () {
           const primary = worktreeIdFromPath(project.path);
           yield* sql`DELETE FROM worktree_marks WHERE worktree_id = ${primary}`;
           yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${primary}`;
+          yield* sql`DELETE FROM agent_sessions WHERE worktree_id = ${primary}`;
           yield* sql`DELETE FROM icon_cache WHERE project_path = ${project.path}`;
           return { id: project.id, name: project.name, path: project.path };
         }),
@@ -363,11 +385,117 @@ const make = Effect.gen(function* () {
     );
   }, Effect.orDie);
 
+  type SessionRow = {
+    readonly harness: string;
+    readonly session: string;
+    readonly worktree_id: string;
+    readonly state: AgentSession["state"];
+    readonly at: number;
+    readonly waits: string;
+    readonly title: string | null;
+    readonly tool: string | null;
+    readonly need: string | null;
+    readonly message: string | null;
+  };
+
+  const agentSessions = sql<SessionRow>`
+    SELECT harness, session, worktree_id, state, at, waits, title, tool,
+      need, message FROM agent_sessions ORDER BY rowid`.pipe(
+    Effect.map((found) => {
+      const bound: BoundSessions = new Map();
+      for (const row of found) {
+        const list = bound.get(row.worktree_id) ?? [];
+        list.push(
+          agentSession({
+            harness: row.harness,
+            session: row.session,
+            state: row.state,
+            at: row.at,
+            waits: JSON.parse(row.waits) as Array<string>,
+            title: row.title ?? undefined,
+            tool: row.tool ?? undefined,
+            need: row.need ?? undefined,
+            message: row.message ?? undefined,
+          }),
+        );
+        bound.set(row.worktree_id, list);
+      }
+      return bound;
+    }),
+    Effect.orDie,
+    Effect.withSpan("Registry.agentSessions"),
+  );
+
+  const writeAgentSessions = (bound: BoundSessions) =>
+    Effect.gen(function* () {
+      yield* sql`DELETE FROM agent_sessions`;
+      const stored = [...bound].flatMap(([worktree_id, list]) =>
+        list.map((session) => ({
+          harness: session.harness,
+          session: session.session,
+          worktree_id,
+          state: session.state,
+          at: session.at,
+          waits: JSON.stringify(session.waits ?? []),
+          title: session.title ?? null,
+          tool: session.tool ?? null,
+          need: session.need ?? null,
+          message: session.message ?? null,
+        })),
+      );
+      if (stored.length > 0) {
+        yield* sql`INSERT INTO agent_sessions ${sql.insert(stored)}`;
+      }
+    });
+
+  const updateAgentSessions = Effect.fn("Registry.updateAgentSessions")(
+    function* (edit: (sessions: BoundSessions) => boolean) {
+      yield* sql.withTransaction(
+        Effect.gen(function* () {
+          const bound = yield* agentSessions;
+          if (!edit(bound)) return;
+          for (const [id, list] of bound) {
+            if (list.length === 0) bound.delete(id);
+          }
+          yield* writeAgentSessions(bound);
+        }),
+      );
+    },
+    Effect.orDie,
+  );
+
+  const bindAgentSession = Effect.fn("Registry.bindAgentSession")(function* (
+    session: Omit<AgentSession, "at">,
+    worktreeId: string,
+  ) {
+    const now = yield* Clock.currentTimeMillis;
+    yield* updateAgentSessions((bound) => {
+      for (const [id, list] of bound) {
+        const index = list.findIndex(
+          (s) => s.harness === session.harness && s.session === session.session,
+        );
+        if (index < 0) continue;
+        if (id === worktreeId) return false;
+        const [moved] = list.splice(index, 1);
+        if (moved !== undefined) {
+          bound.set(worktreeId, [...(bound.get(worktreeId) ?? []), moved]);
+        }
+        return true;
+      }
+      bound.set(worktreeId, [
+        ...(bound.get(worktreeId) ?? []),
+        agentSession({ ...session, at: now }),
+      ]);
+      return true;
+    });
+  });
+
   const forgetWorktree = Effect.fn("Registry.forgetWorktree")(function* (
     worktreeId: string,
   ) {
     yield* sql`DELETE FROM worktree_marks WHERE worktree_id = ${worktreeId}`;
     yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${worktreeId}`;
+    yield* sql`DELETE FROM agent_sessions WHERE worktree_id = ${worktreeId}`;
   }, Effect.orDie);
 
   const moveWorktree = Effect.fn("Registry.moveWorktree")(function* (
@@ -380,6 +508,7 @@ const make = Effect.gen(function* () {
             AND mark IN (SELECT mark FROM worktree_marks WHERE worktree_id = ${from})`,
         sql`UPDATE worktree_marks SET worktree_id = ${to} WHERE worktree_id = ${from}`,
         sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${from}`,
+        sql`UPDATE agent_sessions SET worktree_id = ${to} WHERE worktree_id = ${from}`,
       ]),
     );
   }, Effect.orDie);
@@ -446,6 +575,9 @@ const make = Effect.gen(function* () {
     reorder,
     marked,
     setMark,
+    agentSessions,
+    bindAgentSession,
+    updateAgentSessions,
     forgetWorktree,
     moveWorktree,
     deviceId,

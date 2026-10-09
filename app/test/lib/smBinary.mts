@@ -127,7 +127,7 @@ export async function hostEngine(dataDir: string, macfs = "macfs") {
   process.env["SHIGOMORI_DATA_DIR"] = dataDir;
   const runtime = ManagedRuntime.make(
     Engine.adapter.pipe(
-      Layer.provideMerge(Engine.layer({ flavor: "prod", macfs })),
+      Layer.provideMerge(Engine.layer({ flavor: "prod", macfs, sm: "sm" })),
       Layer.provideMerge(NodeServices.layer),
     ),
   );
@@ -153,7 +153,7 @@ export async function addProject(
 export async function secondEngine(dataDir: string) {
   const Engine = await import("@host/lib/engine");
   const runtime = ManagedRuntime.make(
-    Engine.layer({ flavor: "prod", macfs: builtMacfs() }).pipe(
+    Engine.layer({ flavor: "prod", macfs: builtMacfs(), sm: "sm" }).pipe(
       Layer.provideMerge(NodeServices.layer),
     ),
   );

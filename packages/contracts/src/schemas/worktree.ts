@@ -30,11 +30,33 @@ export const CommitSummarySchema = Schema.Struct({
   author: Schema.String,
   date: Schema.String,
   // Net additions/deletions across all files in this commit, parsed
-  // from `git log --shortstat`. Zero for empty/merge commits.
+  // from `git log --shortstat`. Zero for an empty commit, and for a
+  // merge from the CLI. The app's own reads count a merge against its
+  // first parent.
   additions: Schema.Natural,
   deletions: Schema.Natural,
 });
 export type CommitSummary = typeof CommitSummarySchema.Type;
+
+// An agent harness's session bound to a worktree (engine/Agents.ts):
+// working through a turn, waiting on the user mid-turn (a permission
+// prompt), or idle once the turn ended. harness is "claude", "codex",
+// or whatever a harness without built-in support calls itself. at is
+// when the state last changed, in ms. title is what the session is
+// about (its custom title, else its first prompt), tool and need what
+// it waits on (the prompt's tool, and its question, command, file or
+// URL), and message the one its last turn ended on.
+const AgentSessionSchema = Schema.Struct({
+  harness: Schema.String,
+  session: Schema.String,
+  state: Schema.Literals(["working", "waiting", "idle"]),
+  at: Schema.Finite,
+  title: Schema.optional(Schema.String),
+  tool: Schema.optional(Schema.String),
+  need: Schema.optional(Schema.String),
+  message: Schema.optional(Schema.String),
+});
+export type AgentSession = typeof AgentSessionSchema.Type;
 
 export const WorktreeSchema = Schema.Struct({
   id: Schema.String,
@@ -128,11 +150,14 @@ export const WorktreeSchema = Schema.Struct({
   // Meant for the primary checkout and other branches only ever read
   // here.
   autoPull: Schema.Boolean,
-  // Agent-driven "come back later" flag (`sm agent-working`): an agent
-  // is working here, so once agents are allowed to (isAgentWorking) the
-  // sidebar files it on its own shelf until the agent clears it and
-  // hands the work back. Absent (an older build's row) = off.
+  // Whether an agent session bound here is working (`sm agents`): once
+  // agents are allowed to (isAgentWorking) the sidebar files the
+  // worktree on its own shelf until every session's turn ends. Absent
+  // (an older build's row) = off.
   agentWorking: Schema.optional(Schema.Boolean),
+  // The agent sessions bound here, which their harness's hooks keep up
+  // to date. Absent from a peer on an older build.
+  agentSessions: Schema.optional(Schema.Array(AgentSessionSchema)),
   // What `sm describe` set (WorktreeDescriptionSchema): the work's
   // name and summary, until a pull request's take their place
   // (renderer/lib/worktreeTitle.ts). Absent when unset.
@@ -244,15 +269,18 @@ export function canRewriteCommits(
 // When the worktree last saw work, epoch ms, for recency sorting.
 // Uncommitted edits count: a worktree you were typing in five minutes
 // ago should outrank one whose last commit is newer but that you
-// haven't touched since. 0 when nothing is known, like a clean
-// worktree with no commits yet.
+// haven't touched since. So does an agent session changing state (a
+// turn starting or ending, a prompt waiting on you), whether or not it
+// touched a file. 0 when nothing is known, like a clean worktree with
+// no commits yet.
 export function worktreeLastActivityAt(
-  worktree: Pick<Worktree, "lastChangeAt" | "recentCommits">,
+  worktree: Pick<Worktree, "lastChangeAt" | "recentCommits" | "agentSessions">,
 ): number {
   const committed = Date.parse(worktree.recentCommits[0]?.date ?? "");
   return Math.max(
     worktree.lastChangeAt ?? 0,
     Number.isNaN(committed) ? 0 : committed,
+    ...(worktree.agentSessions ?? []).map((s) => s.at),
   );
 }
 
@@ -267,9 +295,9 @@ export function isManagedWorktree(
   return !worktree.isPrimary && !worktree.isExternal;
 }
 
-// Whether the agent-working mark counts: only once the window allows
-// agents to mark worktrees as working (useAllowAgentWorking). Otherwise
-// the mark is ignored everywhere.
+// Whether a working agent session files the worktree on its shelf:
+// only once the window allows it (useAllowAgentWorking). Otherwise the
+// shelf ignores it everywhere.
 export function isAgentWorking(
   worktree: Pick<Worktree, "agentWorking">,
   allowAgentWorking: boolean,
@@ -435,9 +463,10 @@ export const SetAutoPullPayloadSchema = Schema.Struct({
   autoPull: Schema.Boolean,
 });
 
-export const SetAgentWorkingPayloadSchema = Schema.Struct({
+export const AgentSessionPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
-  agentWorking: Schema.Boolean,
+  harness: Schema.NonEmptyString,
+  session: Schema.NonEmptyString,
 });
 
 export const CheckoutBranchPayloadSchema = Schema.Struct({
@@ -459,7 +488,41 @@ export const ListCommitsPayloadSchema = Schema.Struct({
     Schema.isGreaterThan(0),
     Schema.isLessThanOrEqualTo(200),
   ),
+  // Only commits whose message holds this, case blind.
+  query: Schema.optional(Schema.Trim.check(Schema.isMinLength(1))),
+  // History from this commit rather than HEAD.
+  from: Schema.optional(CommitHashSchema),
 });
+
+// What the Git page's History tab draws (host/lib/git/worktrees.ts,
+// readBranchHistory): the branch's own commits, newest first, the
+// commit it left its base at, and how it stands against the upstream it
+// pushes to.
+export const BranchHistorySchema = Schema.Struct({
+  commits: Schema.Array(CommitSummarySchema),
+  // More commits than were asked for: the list was cut.
+  more: Schema.Boolean,
+  // Where the branch left the primary ref (`ref`, e.g. "origin/main").
+  // Null for the primary checkout, the primary branch itself, and a
+  // detached HEAD, whose commits are just HEAD's newest.
+  base: Schema.NullOr(
+    Schema.Struct({ ref: Schema.String, hash: CommitHashSchema }),
+  ),
+  // The upstream's short name ("origin/feature"), null without one.
+  upstream: Schema.NullOr(Schema.String),
+  // HEAD's commits the upstream lacks, by short hash (as `commits` has
+  // them), the upstream's own commits HEAD lacks, newest first (cut like
+  // `commits`, `incomingMore` saying so), and where the two last agreed.
+  // Empty and null without an upstream.
+  unpushed: Schema.Array(CommitHashSchema),
+  incoming: Schema.Array(CommitSummarySchema),
+  incomingMore: Schema.Boolean,
+  upstreamFork: Schema.NullOr(CommitHashSchema),
+  merges: Schema.Array(
+    Schema.Struct({ hash: CommitHashSchema, firstParent: CommitHashSchema }),
+  ),
+});
+export type BranchHistory = typeof BranchHistorySchema.Type;
 
 export const CleanupErrorSchema = Schema.Struct({
   phase: Schema.Literals(["teardown", "portPoolRelease"]),

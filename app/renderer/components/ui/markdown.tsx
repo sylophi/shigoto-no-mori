@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
 
 // Remote images load lazily and without a referrer: a long changelog
 // shouldn't pull every screenshot at once, and GitHub needn't learn
-// which page asked. On a purifier of the module's own, so no other
-// sanitize in the app picks the rule up.
+// which page asked. An image GitHub signed for five minutes
+// (the host's withSignedImages), loads at once: lazily, one under a
+// description's fold would wait past its signature. On a purifier of
+// the module's own, so no other sanitize in the app picks the rule up.
 const purify = DOMPurify(window);
 // The one input a description has is a task list's checkbox (`- [x]`),
 // which shows its state and is never a control. Any other goes.
@@ -21,7 +23,10 @@ purify.addHook("uponSanitizeElement", (node, data) => {
 });
 purify.addHook("afterSanitizeAttributes", (node) => {
   if (node.tagName === "IMG") {
-    node.setAttribute("loading", "lazy");
+    const signed = node
+      .getAttribute("src")
+      ?.startsWith("https://private-user-images.githubusercontent.com/");
+    if (!signed) node.setAttribute("loading", "lazy");
     node.setAttribute("referrerpolicy", "no-referrer");
   }
   if (node.tagName === "INPUT") node.setAttribute("disabled", "");

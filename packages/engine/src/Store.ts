@@ -14,6 +14,7 @@ import {
   importJson,
   StoreImportError,
 } from "./migrations/importJson.ts";
+import { agentSessions } from "./migrations/agentSessions.ts";
 import { tables } from "./migrations/tables.ts";
 import * as Paths from "./Paths.ts";
 
@@ -67,6 +68,7 @@ export const layer = (
           loader: Migrator.fromRecord({
             "1_tables": tables,
             "2_import_json": Effect.provideContext(importJson, platform),
+            "3_agent_sessions": agentSessions,
           }),
         }).pipe(Effect.provideService(SqlClient.SqlClient, client));
         return client;
@@ -110,6 +112,7 @@ export const fromFiles = (
         loader: Migrator.fromRecord({
           "1_tables": tables,
           "2_import_json": Effect.provideContext(importFiles(true), platform),
+          "3_agent_sessions": agentSessions,
         }),
       }).pipe(
         Effect.provideService(SqlClient.SqlClient, client),

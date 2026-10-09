@@ -70,6 +70,55 @@ export async function verifyRev(cwd: string, rev: string): Promise<string> {
   ).trim();
 }
 
+// The upstream by its name ("origin/feature"), or null without one.
+export async function upstreamName(cwd: string): Promise<string | null> {
+  try {
+    const out = await run(cwd, [
+      "rev-parse",
+      "--abbrev-ref",
+      "--symbolic-full-name",
+      "@{u}",
+    ]);
+    return out.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// How many commits `revs` name, `flags` (rev-list's own) applied.
+export async function countCommits(
+  cwd: string,
+  revs: string[],
+  flags: string[] = [],
+): Promise<number> {
+  const out = await run(cwd, [
+    "rev-list",
+    "--count",
+    ...flags,
+    "--end-of-options",
+    ...revs,
+  ]);
+  return Number(out.trim());
+}
+
+// Leaves out what any remote has, as the CLI's unpushed count does.
+const NOT_ON_A_REMOTE = ["--not", "--remotes", "--not"];
+
+// HEAD's own commits past `ref`: how many, how many of them are
+// merges, and how many no remote has.
+export async function ownCommitCounts(
+  cwd: string,
+  ref: string,
+): Promise<{ own: number; merges: number; unpushed: number }> {
+  const range = [`${ref}..HEAD`];
+  const [own, merges, unpushed] = await Promise.all([
+    countCommits(cwd, range),
+    countCommits(cwd, range, ["--merges"]),
+    countCommits(cwd, range, NOT_ON_A_REMOTE),
+  ]);
+  return { own, merges, unpushed };
+}
+
 export function treeOf(cwd: string, commit: string): Promise<string> {
   return verifyRev(cwd, `${commit}^{tree}`);
 }

@@ -1,6 +1,7 @@
 // The app's calls into the engine that owns the data model: every
 // worktree and project mutation (create, adopt, delete, done, merge,
-// move, the shelf and auto-pull marks, project add, remove and reorder)
+// move, the shelf and auto-pull marks, agent sessions and hooks, project
+// add, remove and reorder)
 // and every read of what the engine owns (worktree rows and identities,
 // the project list and icons, the stored config, the launcher row,
 // package scripts). The app and a terminal run the same services, and
@@ -16,6 +17,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as EngineConfig from "@shigomori/engine/Config";
+import * as Agents from "@shigomori/engine/Agents";
 import * as Bundle from "@shigomori/engine/Bundle";
 import * as Dirty from "@shigomori/engine/Dirty";
 import * as Doctor from "@shigomori/engine/Doctor";
@@ -31,6 +33,8 @@ import * as Registry from "@shigomori/engine/Registry";
 import * as Scripts from "@shigomori/engine/Scripts";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
+  type AgentHarnessStatus,
+  AgentHarnessStatusListSchema,
   CarryOverReportSchema,
   CleanupErrorSchema,
   type CleanupError,
@@ -721,17 +725,94 @@ export const setAutoPull = (
 ) =>
   setMark((worktrees) => worktrees.setAutoPull, project, worktreeId, autoPull);
 
-export const setAgentWorking = (
+// ---- Agent sessions and their harnesses' hooks (engine Agents) ----
+
+// A worktree's refreshed row after `edit` changed what is kept for it.
+async function rowAfter(
   project: Project,
   worktreeId: string,
-  agentWorking: boolean,
-) =>
-  setMark(
-    (worktrees) => worktrees.setAgentWorking,
-    project,
-    worktreeId,
-    agentWorking,
+  edit: (located: Worktrees.Located) => Effect.Effect<void, unknown, Services>,
+): Promise<Worktree> {
+  const row = await change(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* edit(located);
+      return yield* (yield* Worktrees.Worktrees).row(located);
+    }),
+    { projectId: project.id, worktreeId },
   );
+  return decodeWorktree(row);
+}
+
+// Every agent session bound to the worktree goes idle.
+export const idleAgents = (project: Project, worktreeId: string) =>
+  rowAfter(project, worktreeId, (located) =>
+    Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
+      agents.idle(located.worktree),
+    ),
+  );
+
+// Unbinds one agent session from the worktree it is bound to.
+export const unbindAgent = (
+  project: Project,
+  worktreeId: string,
+  harness: string,
+  session: string,
+) =>
+  rowAfter(project, worktreeId, () =>
+    Effect.flatMap(Effect.service(Agents.Agents), (agents) =>
+      agents.unbind({ harness, session }),
+    ),
+  );
+
+// Resumes one agent session in the worktree, in the user's terminal. It
+// writes no state, so it is no change the busy prompt counts, while
+// macOS may hold it on an Automation prompt.
+export async function resumeAgent(
+  project: Project,
+  worktreeId: string,
+  harness: string,
+  session: string,
+): Promise<void> {
+  await call(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      yield* (yield* Agents.Agents).resume(located, { harness, session });
+    }),
+    { projectId: project.id, worktreeId },
+  );
+}
+
+const decodeHarnesses = Schema.decodeUnknownSync(AgentHarnessStatusListSchema);
+
+export async function agentHarnesses(): Promise<AgentHarnessStatus[]> {
+  return [
+    ...decodeHarnesses(
+      await call(
+        Effect.flatMap(Effect.service(Agents.Agents), (a) => a.statuses),
+      ),
+    ),
+  ];
+}
+
+// Installs or removes one harness's hooks, answered with every
+// harness's status.
+export async function setAgentHooks(
+  harness: string,
+  install: boolean,
+): Promise<AgentHarnessStatus[]> {
+  return [
+    ...decodeHarnesses(
+      await change(
+        Effect.gen(function* () {
+          const agents = yield* Agents.Agents;
+          yield* agents.setHooks([harness], install);
+          return yield* agents.statuses;
+        }),
+      ),
+    ),
+  ];
+}
 
 // `git worktree move` plus the re-key of everything stored under the
 // worktree's path-derived id (marks, its data, a pending dirty capture).

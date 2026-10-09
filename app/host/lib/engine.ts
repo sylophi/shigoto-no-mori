@@ -24,6 +24,8 @@ export const layer = (options: {
   readonly flavor: Flavor;
   // The darwin helper, Resources/macfs when packaged.
   readonly macfs: string;
+  // The terminal `sm` the agent hooks run, Resources/sm when packaged.
+  readonly sm: string;
 }) =>
   engineLayer({
     ...options,

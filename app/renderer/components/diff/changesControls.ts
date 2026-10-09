@@ -1,4 +1,5 @@
 import type { ChangedFile } from "@shigomori/contracts/schemas";
+import type { HunkControls } from "./HunkBar";
 
 // What turns the read-only diff view into the changes page: the status
 // rows the file list draws, which of them is in the pane, and the actions
@@ -14,6 +15,12 @@ export interface DiffChangesControls {
   failed: boolean;
   onSetStaged: (paths: string[], staged: boolean) => void;
   onDiscard: (paths: string[]) => void;
+  // Every change, untracked files included, into a stash.
+  onStash: () => void;
+  // The picked file's hunks, when it ticks by hunk (a modified file).
+  hunks?: HunkControls;
+  // Settle a conflicted file with one side's version.
+  onResolve: (path: string, side: "mine" | "theirs") => void;
   // The row whose diff is in the pane (patchFiles.changeKey), and how
   // to change it. The page owns this because the page fetches that
   // file's diff.

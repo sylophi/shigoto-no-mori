@@ -22,6 +22,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Agents from "../../src/Agents.ts";
 import * as Config from "../../src/Config.ts";
 import * as Control from "../../src/Control.ts";
 import * as Doctor from "../../src/Doctor.ts";
@@ -43,6 +44,7 @@ import * as Worktrees from "../../src/Worktrees.ts";
 
 // The services a harness case calls.
 export type Engine =
+  | Agents.Agents
   | Config.Config
   | Icons.Icons
   | Launchers.Launchers
@@ -58,6 +60,10 @@ export type Engine =
   | Doctor.Doctor
   | Control.Control
   | Transfer.Transfer;
+
+// What the agent hooks run, as the installed binary names itself.
+export const HOOK_BINARY =
+  "/Applications/Shigoto no Mori.app/Contents/Resources/smd";
 
 const macfsDir = join(import.meta.dirname, "..", "..", "..", "..", "macfs");
 
@@ -179,7 +185,11 @@ export type Sandbox = {
   readonly remove: () => Promise<void>;
 };
 
-export function sandbox(): Sandbox {
+// `env` is more of the environment the engine reads (a harness's
+// config dir, the session a shell runs in).
+export function sandbox(
+  options: { readonly env?: Readonly<Record<string, string>> } = {},
+): Sandbox {
   const originalPath = process.env.PATH;
   const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-sandbox-")));
   const seed = join(root, "seed");
@@ -205,6 +215,7 @@ export function sandbox(): Sandbox {
             HOME: root,
             PATH: process.env.PATH ?? "",
             SHIGOMORI_DATA_DIR: sideDir("engine"),
+            ...options.env,
           },
         }),
       ),
@@ -212,9 +223,12 @@ export function sandbox(): Sandbox {
   let runtime: ManagedRuntime.ManagedRuntime<Engine, unknown> | undefined;
   const engineRuntime = () => {
     runtime ??= ManagedRuntime.make(
-      engineLayer({ flavor: "dev", store: nodeStore, macfs: macfs() }).pipe(
-        Layer.provide(platform()),
-      ),
+      engineLayer({
+        flavor: "dev",
+        store: nodeStore,
+        macfs: macfs(),
+        sm: HOOK_BINARY,
+      }).pipe(Layer.provide(platform())),
     );
     return runtime;
   };

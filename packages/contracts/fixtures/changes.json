@@ -1095,5 +1095,634 @@
         "worktreeId": "wt_sm_hum"
       }
     ]
+  },
+  "RewordCommitPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "b3e91d4",
+        "summary": "Show the device",
+        "description": "Body",
+        "expectHead": "b3e91d4"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "b3e91d4",
+        "summary": "Show the device",
+        "expectHead": "e7c0a52"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "cbc5ccb43624",
+          "hash": "b3e91d4",
+          "summary": "  Show the device  ",
+          "expectHead": "b3e91d4"
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "cbc5ccb43624",
+          "hash": "b3e91d4",
+          "summary": "Show the device",
+          "expectHead": "b3e91d4"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "b3e91d4",
+        "summary": "   ",
+        "expectHead": "b3e91d4"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "b3e91d4",
+        "summary": "x"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "--output=x",
+        "summary": "x",
+        "expectHead": "b3e91d4"
+      }
+    ]
+  },
+  "SquashCommitPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "b3e91d4",
+        "expectHead": "e7c0a52"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "b3e91d4"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "nope",
+        "expectHead": "e7c0a52"
+      }
+    ]
+  },
+  "StashEntrySchema": {
+    "accepts": [
+      {
+        "hash": "5c1e0f9a2b7d",
+        "message": "WIP sidebar",
+        "named": true,
+        "date": "2026-10-07T12:41:00.000Z"
+      },
+      {
+        "hash": "5c1e0f9",
+        "message": "Show which device a worktree lives on",
+        "named": false,
+        "date": "2026-10-07T12:41:00.000Z"
+      }
+    ],
+    "rejects": [
+      {
+        "hash": "5c1e0f9",
+        "message": "x",
+        "date": "2026-10-07T12:41:00.000Z"
+      },
+      {
+        "hash": "zz",
+        "message": "x",
+        "named": false,
+        "date": ""
+      }
+    ]
+  },
+  "StashChangesPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "message": "before the rebase"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "message": 3
+      }
+    ]
+  },
+  "ApplyStashPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "5c1e0f9",
+        "drop": false
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "5c1e0f9",
+        "drop": true
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "5c1e0f9"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "-x",
+        "drop": true
+      }
+    ]
+  },
+  "DropStashPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "5c1e0f9"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "--all"
+      }
+    ]
+  },
+  "RestoreStashPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "5c1e0f9",
+        "message": "WIP sidebar",
+        "named": true
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "5c1e0f9",
+        "message": "WIP"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "hash": "5c1e0f9",
+        "named": true
+      }
+    ]
+  },
+  "GitOperationStateSchema": {
+    "accepts": [
+      {
+        "operation": null,
+        "continuable": false,
+        "conflicted": 0,
+        "rebasing": null
+      },
+      {
+        "operation": "rebase",
+        "continuable": true,
+        "conflicted": 2,
+        "rebasing": "feature/sidebar"
+      }
+    ],
+    "rejects": [
+      {
+        "operation": "merge",
+        "continuable": true,
+        "conflicted": -1,
+        "rebasing": null
+      },
+      {
+        "operation": "merge",
+        "continuable": true,
+        "conflicted": 0
+      }
+    ]
+  },
+  "ResolveConflictPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts",
+        "side": "mine"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "README.md",
+        "side": "theirs"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts",
+        "side": "both"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "../etc/passwd",
+        "side": "mine"
+      }
+    ]
+  },
+  "MergePreviewPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "ref": "origin/main"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "ref": "feature/sidebar"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "ref": ""
+      }
+    ]
+  },
+  "MergePreviewSchema": {
+    "accepts": [
+      {
+        "incoming": 3,
+        "own": 2,
+        "pushed": 1,
+        "ownMerges": 0,
+        "conflicts": [],
+        "incomingSubject": null
+      },
+      {
+        "incoming": 1,
+        "own": 0,
+        "pushed": 0,
+        "ownMerges": 0,
+        "conflicts": null,
+        "incomingSubject": "Fix the badge"
+      },
+      {
+        "incoming": 4,
+        "own": 5,
+        "pushed": 5,
+        "ownMerges": 1,
+        "conflicts": ["src/app.ts"],
+        "incomingSubject": null
+      }
+    ],
+    "rejects": [
+      {
+        "incoming": -1,
+        "own": 0,
+        "pushed": 0,
+        "ownMerges": 0,
+        "conflicts": [],
+        "incomingSubject": null
+      },
+      {
+        "incoming": 1,
+        "own": 0,
+        "pushed": 0,
+        "ownMerges": 0,
+        "conflicts": []
+      }
+    ]
+  },
+  "MergeBranchPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "ref": "origin/main",
+        "method": "merge"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "ref": "feature/sidebar",
+        "method": "squash",
+        "message": "Sidebar work"
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "cbc5ccb43624",
+          "ref": "origin/main",
+          "method": "squash",
+          "message": "  Sidebar work "
+        },
+        "output": {
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "worktreeId": "cbc5ccb43624",
+          "ref": "origin/main",
+          "method": "squash",
+          "message": "Sidebar work"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "ref": "origin/main",
+        "method": "octopus"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "ref": "origin/main",
+        "method": "squash",
+        "message": "  "
+      }
+    ]
+  },
+  "MergeBranchResultSchema": {
+    "accepts": [
+      {
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "agentWorking": false,
+          "title": "Remote UI flows"
+        },
+        "stopped": false
+      }
+    ],
+    "rejects": [
+      {
+        "worktree": {
+          "id": "wt_sm_hum",
+          "projectId": "p_sm",
+          "name": "happy-hummingbird",
+          "branch": "v2-exp/remote-ui-flows",
+          "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+          "ahead": 3,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 3,
+          "primaryRef": "origin/main",
+          "primaryBranch": "main",
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "createdAt": 1791027600000,
+          "recentCommits": [
+            {
+              "hash": "b3e91d4",
+              "subject": "Show which device a worktree lives on",
+              "author": "sylophi",
+              "date": "2026-10-07T12:41:00.000Z",
+              "additions": 38,
+              "deletions": 14
+            },
+            {
+              "hash": "e7c0a52",
+              "subject": "Badge merged projects with their devices",
+              "author": "sylophi",
+              "date": "2026-10-07T12:06:00.000Z",
+              "additions": 84,
+              "deletions": 12
+            }
+          ],
+          "isPrimary": false,
+          "isExternal": false,
+          "detached": false,
+          "shelved": false,
+          "autoPull": false,
+          "agentWorking": false,
+          "title": "Remote UI flows"
+        }
+      },
+      {
+        "stopped": true
+      }
+    ]
+  },
+  "HunkStatesSchema": {
+    "accepts": [
+      {
+        "changes": [
+          {
+            "oldStart": 2,
+            "oldCount": 1,
+            "newStart": 2,
+            "newCount": 1,
+            "staged": true
+          },
+          {
+            "oldStart": 10,
+            "oldCount": 0,
+            "newStart": 11,
+            "newCount": 1,
+            "staged": false
+          }
+        ],
+        "editable": true
+      },
+      {
+        "changes": [],
+        "editable": false
+      }
+    ],
+    "rejects": [
+      {
+        "changes": [
+          {
+            "oldStart": 2,
+            "oldCount": 1,
+            "newStart": 2,
+            "newCount": 1
+          }
+        ],
+        "editable": true
+      },
+      {
+        "changes": []
+      }
+    ]
+  },
+  "FileHunksPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "/etc/passwd"
+      }
+    ]
+  },
+  "SetHunksStagedPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts",
+        "changes": [
+          {
+            "oldStart": 2,
+            "oldCount": 1,
+            "newStart": 2,
+            "newCount": 1
+          }
+        ],
+        "staged": true
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts",
+        "changes": [],
+        "staged": true
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts",
+        "changes": [
+          {
+            "oldStart": 2,
+            "oldCount": 1,
+            "newStart": 2,
+            "newCount": 1
+          }
+        ]
+      }
+    ]
+  },
+  "DiscardHunksPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts",
+        "changes": [
+          {
+            "oldStart": 2,
+            "oldCount": 1,
+            "newStart": 2,
+            "newCount": 1
+          }
+        ]
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "path": "src/app.ts",
+        "changes": []
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "cbc5ccb43624",
+        "changes": [
+          {
+            "oldStart": 2,
+            "oldCount": 1,
+            "newStart": 2,
+            "newCount": 1
+          }
+        ]
+      }
+    ]
   }
 }

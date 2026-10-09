@@ -144,6 +144,7 @@ export function worktree(
     shelved: false,
     autoPull: false,
     agentWorking: false,
+    agentSessions: [],
     ...base,
   };
 }
@@ -263,6 +264,16 @@ const localWorktrees: Record<string, FakeWorktree[]> = {
       branch: "fix-stale-locks",
       path: "/Users/rin/.sm/worktrees/shigoto-no-mori/brave-badger",
       createdAt: now - 1 * DAY,
+      agentWorking: true,
+      agentSessions: [
+        {
+          harness: "claude",
+          session: "4f2d8a61-0c3e-4b7a-9e55-2b1f6d0a7c93",
+          state: "working",
+          at: now - 6 * 60_000,
+          title: "Fix the stale lock files the daemon leaves after a crash",
+        },
+      ],
       ahead: 2,
       lastChangeAt: now - 5 * HOUR,
       recentCommits: [
@@ -282,6 +293,26 @@ const localWorktrees: Record<string, FakeWorktree[]> = {
       branch: "port-pool-retry",
       path: "/Users/rin/.sm/worktrees/shigoto-no-mori/quiet-quail",
       createdAt: now - 10 * DAY,
+      agentSessions: [
+        {
+          harness: "codex",
+          session: "01a11cac-636e-7453-a8bb-1b3a3f50418d",
+          state: "waiting",
+          at: now - 2 * 60_000,
+          title: "Retry port-pool provisioning when a port is taken",
+          tool: "Bash",
+          need: "pnpm test port-pool",
+        },
+        {
+          harness: "claude",
+          session: "9b7e1d04-55aa-4c61-8f2e-d3c0b6a1e872",
+          state: "idle",
+          at: now - 3 * HOUR,
+          title: "Which retry backoff should port-pool use?",
+          message:
+            "Retries now back off from 100ms up to 2s, and the provision test covers a port taken twice in a row. Opened PR #212.",
+        },
+      ],
       behindPrimary: 3,
       primaryRef: "origin/main",
       lastChangeAt: now - 2 * DAY,

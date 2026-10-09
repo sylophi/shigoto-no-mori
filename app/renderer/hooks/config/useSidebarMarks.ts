@@ -24,6 +24,10 @@ const showDeviceBadges = (config: ClientConfig) =>
   config.showDeviceBadges !== false;
 const allowAgentWorking = (config: ClientConfig) =>
   config.allowAgentWorking === true;
+const markAgentsWaiting = (config: ClientConfig) =>
+  config.markAgentsWaiting !== false;
+const inlineWorktrees = (config: ClientConfig) =>
+  config.inlineWorktrees === true;
 
 // Terrier's paw on the projects it lists. Off unless switched on, and
 // then shown only where terrierMarksHere holds too.
@@ -54,9 +58,21 @@ export function useShowDeviceBadges(): boolean {
   return useClientFlag(showDeviceBadges);
 }
 
-// Whether agents may mark worktrees as working (`sm agent-working`),
-// which then files them on their own shelf (isAgentWorking). Off unless
-// switched on.
+// Whether a worktree an agent session is working in (`sm agents`) goes
+// on its own shelf (isAgentWorking). Off unless switched on.
 export function useAllowAgentWorking(): boolean {
   return useClientFlag(allowAgentWorking);
+}
+
+// The "Needs you" mark on a worktree whose agent session waits on the
+// user (AgentWaitingMark), its lead in the inbox and the Live mark's
+// amber. On unless switched off.
+export function useMarkAgentsWaiting(): boolean {
+  return useClientFlag(markAgentsWaiting);
+}
+
+// Whether the list of projects shows every project's worktrees under it
+// (buildSidebarRows' inline). Off unless switched on.
+export function useInlineWorktrees(): boolean {
+  return useClientFlag(inlineWorktrees);
 }

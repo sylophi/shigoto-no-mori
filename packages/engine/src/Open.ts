@@ -134,6 +134,12 @@ export class Open extends Context.Service<
       located: Worktrees.Located,
       tool: string,
     ) => Effect.Effect<Launchers.Launchable, UnknownLauncher | LaunchFailed>;
+    // Runs a command line in the user's chosen terminal, in the
+    // worktree.
+    readonly inTerminal: (
+      located: Worktrees.Located,
+      command: string,
+    ) => Effect.Effect<void, LaunchFailed>;
   }
 >()("sm/engine/Open") {}
 
@@ -329,7 +335,15 @@ const make = Effect.gen(function* () {
     return entry;
   });
 
-  return Open.of({ open });
+  const inTerminalAt = Effect.fn("Open.inTerminal")(function* (
+    located: Worktrees.Located,
+    command: string,
+  ) {
+    const entries = yield* launchers.launchable(located.project);
+    yield* inTerminal("the terminal", command, located.worktree.path, entries);
+  });
+
+  return Open.of({ open, inTerminal: inTerminalAt });
 });
 
 export const layer = Layer.effect(Open, make);

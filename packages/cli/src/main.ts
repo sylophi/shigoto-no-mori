@@ -40,7 +40,8 @@ import {
   worktreesCommand,
 } from "./commands/worktrees.ts";
 import { describe } from "./commands/describe.ts";
-import { agentWorking, autopull, shelve, unshelve } from "./commands/marks.ts";
+import { autopull, shelve, unshelve } from "./commands/marks.ts";
+import { agentsCommand } from "./commands/agents.ts";
 import { status } from "./commands/status.ts";
 import { doctor, engine } from "./engine.ts";
 import { Killed, report } from "./errors.ts";
@@ -89,6 +90,7 @@ const NAMESPACES: Readonly<Record<string, string>> = {
   project: "projects",
   p: "projects",
   launcher: "launchers",
+  agent: "agents",
 };
 
 function canonical(args: ReadonlyArray<string>) {
@@ -136,7 +138,7 @@ const sm = Command.make("sm").pipe(
     shelve.pipe(Command.provide(services)),
     unshelve.pipe(Command.provide(services)),
     autopull.pipe(Command.provide(services)),
-    agentWorking.pipe(Command.provide(services)),
+    agentsCommand.pipe(Command.provide(services)),
     create.pipe(Command.provide(services)),
     rm.pipe(Command.provide(services)),
     move.pipe(Command.provide(services)),

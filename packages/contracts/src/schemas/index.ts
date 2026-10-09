@@ -25,4 +25,5 @@ export * from "./ports.ts";
 export * from "./sharedSettings.ts";
 export * from "./villagers.ts";
 export * from "./releases.ts";
+export * from "./agents.ts";
 export * from "./void.ts";

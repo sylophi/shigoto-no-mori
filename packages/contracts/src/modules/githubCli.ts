@@ -5,6 +5,7 @@ import {
   GithubCliPullRequestDiffPayloadSchema,
   GithubCliReadinessSchema,
   GithubOwnerListSchema,
+  GithubRepoListSchema,
   GithubCliWorktreePullRequestPayloadSchema,
   MergePullRequestPayloadSchema,
   MergePullRequestResultSchema,
@@ -29,6 +30,11 @@ export const githubCliContract = defineContract(
   }),
   // Where the add-project dialog can publish a new repository.
   invoke("owners", VoidSchema, GithubOwnerListSchema, {
+    remote: true,
+    gated: false,
+  }),
+  // What the add-project dialog offers to clone, as `owner/repo`.
+  invoke("repos", VoidSchema, GithubRepoListSchema, {
     remote: true,
     gated: false,
   }),

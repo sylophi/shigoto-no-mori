@@ -16,6 +16,12 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Git from "./Git.ts";
 import { parseJson } from "./json.ts";
+import {
+  checkVerdict,
+  MERGE_PROGRESS_QUERY,
+  type MergeProgress,
+  parseMergeProgress,
+} from "./mergeProgress.ts";
 import { isNotFound } from "./platformErrors.ts";
 
 // A gh that couldn't answer, sorted where it failed: not installed, not
@@ -196,14 +202,11 @@ export class GitHub extends Context.Service<
     // doesn't block the merge, and --auto is only asked where GitHub is
     // known to accept it.
     readonly mergeSettings: (repo: string) => Effect.Effect<MergeSettings>;
-    // What became of an auto-merge just armed: gh's --auto merges at once
-    // when the verdict moved since the lookup, and a merge queue queues
-    // it. A failed or unreadable read means still armed: gh accepted the
-    // merge, and this only shapes the report.
-    readonly autoMergeOutcome: (
+    // Where an open PR stands on its way to merging.
+    readonly mergeProgress: (
       repo: string,
       number: number,
-    ) => Effect.Effect<"merged" | "queued" | "auto-merge">;
+    ) => Effect.Effect<MergeProgress, GitHubCliError | GitHubOutputError>;
     // The PR's merge verdict, "" when gh's answer has none.
     readonly mergeStateStatus: (
       repo: string,
@@ -240,11 +243,6 @@ const PROBE_TIMEOUT = Duration.seconds(6);
 const REPO_MERGE_QUERY =
   "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
   "{ mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed } }";
-
-// GraphQL, since `gh pr view --json` doesn't expose isInMergeQueue.
-const AUTO_MERGE_OUTCOME_QUERY =
-  "query($number: Int!, $owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
-  "{ pullRequest(number: $number) { state isInMergeQueue autoMergeRequest { mergeMethod } } } }";
 
 const ASYNC_MERGE_POLL = Duration.seconds(2);
 const ASYNC_MERGE_TIMEOUT_MS = 3 * 60 * 1000;
@@ -334,34 +332,12 @@ export const commandMessageOf = (error: GitHubCliError): string => {
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 const count = (value: unknown) => (typeof value === "number" ? value : 0);
 
-const PASSING = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
-const FAILING = new Set([
-  "FAILURE",
-  "ERROR",
-  "TIMED_OUT",
-  "CANCELLED",
-  "ACTION_REQUIRED",
-  "STARTUP_FAILURE",
-]);
-
-// gh's statusCheckRollup is a mixed array: CheckRun nodes carry status
-// and conclusion, StatusContext nodes carry state. One node is one
-// verdict.
+// One node is one verdict (checkVerdict).
 const rollupChecks = (nodes: unknown): PullRequestChecks => {
   const checks = { total: 0, passing: 0, failing: 0, pending: 0 };
   for (const node of Array.isArray(nodes) ? nodes : []) {
-    const fields = Predicate.isObject(node) ? node : {};
-    let verdict = text(fields["state"]);
-    if (verdict === "") {
-      verdict =
-        text(fields["status"]) === "COMPLETED"
-          ? text(fields["conclusion"])
-          : "PENDING";
-    }
     checks.total++;
-    if (PASSING.has(verdict)) checks.passing++;
-    else if (FAILING.has(verdict)) checks.failing++;
-    else checks.pending++;
+    checks[checkVerdict(node)]++;
   }
   return checks;
 };
@@ -714,7 +690,7 @@ const make = Effect.gen(function* () {
     };
   });
 
-  const autoMergeOutcome = Effect.fn("GitHub.autoMergeOutcome")(function* (
+  const mergeProgress = Effect.fn("GitHub.mergeProgress")(function* (
     repo: string,
     number: number,
   ) {
@@ -728,16 +704,13 @@ const make = Effect.gen(function* () {
       "-F",
       "name={repo}",
       "-f",
-      `query=${AUTO_MERGE_OUTCOME_QUERY}`,
-    ]).pipe(Effect.option);
-    const repository = Option.isSome(stdout)
-      ? repositoryOf(stdout.value)
-      : undefined;
-    const pr = repository?.["pullRequest"];
-    if (!Predicate.isObject(pr)) return "auto-merge" as const;
-    if (pr["state"] === "MERGED") return "merged" as const;
-    if (pr["isInMergeQueue"] === true) return "queued" as const;
-    return "auto-merge" as const;
+      `query=${MERGE_PROGRESS_QUERY}`,
+    ]);
+    const progress = parseMergeProgress(stdout);
+    if (progress === undefined) {
+      return yield* new GitHubOutputError({ command: "api graphql" });
+    }
+    return progress;
   });
 
   const mergeStateStatus = Effect.fn("GitHub.mergeStateStatus")(function* (
@@ -860,7 +833,7 @@ const make = Effect.gen(function* () {
     checkedOutFrom,
     hasMergedPullRequest,
     mergeSettings,
-    autoMergeOutcome,
+    mergeProgress,
     mergeStateStatus,
     stackFor,
     mergeStackAsync,

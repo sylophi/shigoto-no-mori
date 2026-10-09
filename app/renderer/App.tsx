@@ -1,7 +1,6 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { ErrorBoundary } from "react-error-boundary";
 import { AppErrorFallback } from "@/components/AppChrome";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { OverlaysProvider } from "@/hooks/ui/useOverlays";
 import { PaletteProvider } from "@/hooks/ui/usePalette";
@@ -18,10 +17,8 @@ export function App({ router }: { router: AppRouter }) {
       <PaletteProvider>
         <ErrorBoundary FallbackComponent={AppErrorFallback}>
           <OverlaysProvider>
-            <TooltipProvider>
-              <RouterProvider router={router} />
-              <DevThemeHotkeys />
-            </TooltipProvider>
+            <RouterProvider router={router} />
+            <DevThemeHotkeys />
           </OverlaysProvider>
         </ErrorBoundary>
       </PaletteProvider>

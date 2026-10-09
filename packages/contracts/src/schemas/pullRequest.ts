@@ -263,6 +263,9 @@ export type MergePullRequestResult = typeof MergePullRequestResultSchema.Type;
 // user first, then their organizations.
 export const GithubOwnerListSchema = Schema.Array(Schema.String);
 
+// What the add-project dialog offers to clone, as `owner/repo`.
+export const GithubRepoListSchema = Schema.Array(Schema.String);
+
 // Publishes a project with no remote yet to GitHub as
 // `owner/<its folder name>`, and pushes it there. No owner is gh's
 // signed-in user. The owner is held to GitHub's own login shape.

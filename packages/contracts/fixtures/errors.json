@@ -34,6 +34,10 @@
         "branch": "feat/x"
       },
       {
+        "_tag": "SyncConflictsError",
+        "ref": "origin/main"
+      },
+      {
         "_tag": "CommandRefusedError"
       }
     ],

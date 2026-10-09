@@ -1,6 +1,6 @@
 // The finish line, over the engine's Landing: pr opens a worktree's pull
-// request, merge merges it (or arms auto-merge, or queues it), land
-// merges and cleans up, done puts a checkout back on the primary branch,
+// request, merge merges it (arming auto-merge, or letting a queue take
+// it, and waiting for GitHub to merge it), land merges and cleans up, done puts a checkout back on the primary branch,
 // and rm --stack cleans up a landed stack. The engine answers each with
 // Go's --json document, which a person's lines are read from.
 import { execFile } from "node:child_process";
@@ -99,29 +99,55 @@ const target = {
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
 // A merge as a person reads it: merged, queued, or auto-merge armed.
-const mergeLine = (doc: Doc, title: string) =>
+const mergeLine = (
+  outcome: {
+    readonly number: unknown;
+    readonly method: unknown;
+    readonly outcome: unknown;
+    readonly alreadyArmed?: boolean | undefined;
+  },
+  title: string,
+) =>
   Effect.flatMap(Effect.service(Output), ({ stdoutColor }) => {
     const verb =
-      doc["outcome"] === "queued"
+      outcome.outcome === "queued"
         ? "queued"
-        : doc["outcome"] === "auto-merge"
-          ? "auto-merge enabled for"
+        : outcome.outcome === "auto-merge"
+          ? outcome.alreadyArmed === true
+            ? "auto-merge already enabled for"
+            : "auto-merge enabled for"
           : "merged";
     return out(
       styles(stdoutColor).green(
-        `${verb} PR #${String(doc["number"])} (${text(doc["method"])}): ${title}`,
+        `${verb} PR #${String(outcome.number)} (${text(outcome.method)}): ${title}`,
       ),
     );
   });
 
+const docOutcome = (doc: Doc) => ({
+  number: doc["number"],
+  method: doc["method"],
+  outcome: doc["outcome"],
+});
+
 // The landing reporter: the worktree events as the other verbs report
-// them, and each layer of a stack as it merges.
+// them, each layer of a stack as it merges, and the wait for GitHub to
+// merge a PR that didn't on the spot.
 const landingReporter = (title: { current: string }) =>
   Effect.gen(function* () {
     const base = yield* reporter();
-    const { json, stdoutColor } = yield* Effect.service(Output);
+    const output = yield* Effect.service(Output);
+    const { json, stdoutColor, stderrColor } = output;
     return {
       ...base,
+      pending: (pr, outcome) =>
+        json
+          ? Effect.void
+          : mergeLine({ ...outcome, number: pr.number }, pr.title).pipe(
+              Effect.provideService(Output, output),
+            ),
+      waiting: (line) =>
+        json ? Effect.void : note(styles(stderrColor).dim(line)),
       merged: (event: Doc, pr: { readonly title: string }) =>
         json
           ? emit(event)
@@ -263,7 +289,7 @@ export const merge = Command.make(
         const project = yield* resolveProject(input);
         const doc = yield* landing.merge({ project, number }, options, report);
         if (json) return yield* emit(doc);
-        if (!input.stack) yield* mergeLine(doc, title.current);
+        if (!input.stack) yield* mergeLine(docOutcome(doc), title.current);
         return;
       }
       const { located } = yield* resolveWorktree(input);
@@ -271,15 +297,10 @@ export const merge = Command.make(
       if (json) return yield* emit(doc);
       // A stack's layers were said as they merged.
       if (input.stack) return;
-      yield* mergeLine(doc, text(doc["title"]));
-      const cleanup = `\`${binaryName} done\` (primary checkout) or \`${binaryName} rm ${located.worktree.name}\` (managed worktree)`;
+      yield* mergeLine(docOutcome(doc), text(doc["title"]));
       yield* note(
         styles(stderrColor).dim(
-          doc["outcome"] === "auto-merge"
-            ? `GitHub merges it once its requirements are met; then ${cleanup}`
-            : doc["outcome"] === "queued"
-              ? `the merge queue lands it; then ${cleanup}`
-              : `next: ${cleanup}`,
+          `next: \`${binaryName} done\` (primary checkout) or \`${binaryName} rm ${located.worktree.name}\` (managed worktree)`,
         ),
       );
     }),
@@ -306,10 +327,10 @@ export const land = Command.make(
         yield* landingReporter({ current: "" }),
       );
       const merged = doc["merged"] as Doc | undefined;
-      // Merged on GitHub's own time: nothing to clean up yet.
+      // A stack a merge queue took: nothing to clean up yet.
       if (merged === undefined && doc["outcome"] !== undefined) {
         if (json) return yield* emit(doc);
-        yield* mergeLine(doc, text(doc["title"]));
+        yield* mergeLine(docOutcome(doc), text(doc["title"]));
         return yield* note(
           styles(stderrColor).dim(
             `nothing removed yet. Run \`${binaryName} land\` again once GitHub has merged it`,

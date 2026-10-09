@@ -73,6 +73,31 @@
       "sharedSignIn": false
     }
   },
+  "agents:setHooks": {
+    "payload": {
+      "harness": "Ks",
+      "install": false
+    },
+    "success": [
+      {
+        "id": "0",
+        "label": "",
+        "detected": true,
+        "path": "-1",
+        "hooks": "outdated"
+      },
+      {
+        "id": "jh",
+        "label": "v[",
+        "detected": false,
+        "path": "y",
+        "hooks": "missing"
+      }
+    ]
+  },
+  "agents:status": {
+    "success": []
+  },
   "branches:create": {
     "payload": {
       "projectId": "\n",
@@ -529,6 +554,9 @@
       "projectId": "\ud800"
     },
     "success": null
+  },
+  "githubCli:repos": {
+    "success": ["\ud800"]
   },
   "githubCli:resolvePullRequestCheckout": {
     "payload": {
@@ -1810,6 +1838,13 @@
   },
   "window:blurred": {},
   "window:focused": {},
+  "window:notify": {
+    "payload": {
+      "title": "😀",
+      "body": "0",
+      "route": "["
+    }
+  },
   "window:previewTheme": {
     "payload": {
       "theme": "dark"
@@ -1837,6 +1872,153 @@
       "projectId": "\t",
       "worktreeId": "ba5d92355f6c",
       "data": {}
+    }
+  },
+  "worktrees:abortOperation": {
+    "payload": {
+      "projectId": " ",
+      "worktreeId": " "
+    },
+    "success": {
+      "id": "",
+      "projectId": "-1",
+      "name": "",
+      "branch": "😀",
+      "path": "\ud800",
+      "ahead": 2,
+      "behind": 4,
+      "hasUpstream": false,
+      "hasRemote": true,
+      "divergedClean": false,
+      "behindPrimary": 1,
+      "unpushedCount": 2,
+      "mergedIntoPrimary": true,
+      "changedCount": 3,
+      "recentCommits": [
+        {
+          "hash": "61b5",
+          "subject": " ",
+          "author": "\ud800",
+          "date": "\t",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "hash": "d29a",
+          "subject": "wH",
+          "author": "ma",
+          "date": "😀",
+          "additions": 2,
+          "deletions": 0
+        }
+      ],
+      "isPrimary": false,
+      "isExternal": true,
+      "detached": true,
+      "shelved": false,
+      "autoPull": true
+    }
+  },
+  "worktrees:applyStash": {
+    "payload": {
+      "projectId": "+=",
+      "worktreeId": "\n",
+      "hash": "dc4d",
+      "drop": false
+    },
+    "success": {
+      "id": "\n",
+      "projectId": "%\"",
+      "name": "😀",
+      "branch": "0",
+      "path": "",
+      "ahead": 3,
+      "behind": 0,
+      "hasUpstream": true,
+      "hasRemote": false,
+      "divergedClean": true,
+      "behindPrimary": 1,
+      "unpushedCount": 4,
+      "mergedIntoPrimary": true,
+      "changedCount": 2,
+      "recentCommits": [
+        {
+          "hash": "2438",
+          "subject": "😀",
+          "author": "F",
+          "date": ">?",
+          "additions": 1,
+          "deletions": 4
+        }
+      ],
+      "isPrimary": false,
+      "isExternal": true,
+      "detached": false,
+      "shelved": true,
+      "autoPull": false
+    }
+  },
+  "worktrees:branchDiff": {
+    "payload": {
+      "projectId": "\ud800",
+      "worktreeId": " "
+    },
+    "success": ""
+  },
+  "worktrees:branchHistory": {
+    "payload": {
+      "projectId": " ",
+      "worktreeId": "\udc00"
+    },
+    "success": {
+      "commits": [
+        {
+          "hash": "87b4",
+          "subject": " ",
+          "author": "-1",
+          "date": "\n",
+          "additions": 0,
+          "deletions": 4
+        },
+        {
+          "hash": "3481",
+          "subject": "\ud800",
+          "author": "",
+          "date": "pc",
+          "additions": 1,
+          "deletions": 3
+        }
+      ],
+      "more": true,
+      "base": null,
+      "upstream": "",
+      "unpushed": [],
+      "incoming": [
+        {
+          "hash": "f2df",
+          "subject": "",
+          "author": "\udc00",
+          "date": "",
+          "additions": 1,
+          "deletions": 2
+        },
+        {
+          "hash": "2387",
+          "subject": "😀",
+          "author": "",
+          "date": "",
+          "additions": 1,
+          "deletions": 4
+        }
+      ],
+      "incomingMore": false,
+      "upstreamFork": null,
+      "merges": [
+        {
+          "hash": "d68d",
+          "firstParent": "4306"
+        }
+      ]
     }
   },
   "worktrees:carryOverComplete": {
@@ -1898,6 +2080,52 @@
       "isExternal": false,
       "detached": false,
       "shelved": false,
+      "autoPull": false
+    }
+  },
+  "worktrees:cherryPick": {
+    "payload": {
+      "projectId": "s",
+      "worktreeId": "U ",
+      "hash": "fe57"
+    },
+    "success": {
+      "id": "",
+      "projectId": "\u0000",
+      "name": "\t",
+      "branch": " ",
+      "path": "d",
+      "ahead": 0,
+      "behind": 2,
+      "hasUpstream": true,
+      "hasRemote": true,
+      "divergedClean": false,
+      "behindPrimary": 3,
+      "unpushedCount": 0,
+      "mergedIntoPrimary": true,
+      "changedCount": 4,
+      "recentCommits": [
+        {
+          "hash": "f152",
+          "subject": ">w",
+          "author": "",
+          "date": "\udc00",
+          "additions": 4,
+          "deletions": 1
+        },
+        {
+          "hash": "0a2c",
+          "subject": "\udc00",
+          "author": "",
+          "date": "ga",
+          "additions": 2,
+          "deletions": 3
+        }
+      ],
+      "isPrimary": true,
+      "isExternal": true,
+      "detached": false,
+      "shelved": true,
       "autoPull": false
     }
   },
@@ -1967,6 +2195,51 @@
     "success": {
       "summary": "-1",
       "description": "Ty"
+    }
+  },
+  "worktrees:continueOperation": {
+    "payload": {
+      "projectId": "\u0000",
+      "worktreeId": "\ud800"
+    },
+    "success": {
+      "id": "\ud800",
+      "projectId": " ",
+      "name": "\t",
+      "branch": "81",
+      "path": "-1",
+      "ahead": 0,
+      "behind": 0,
+      "hasUpstream": true,
+      "hasRemote": true,
+      "divergedClean": true,
+      "behindPrimary": 0,
+      "unpushedCount": 4,
+      "mergedIntoPrimary": true,
+      "changedCount": 1,
+      "recentCommits": [
+        {
+          "hash": "e38e",
+          "subject": "\t",
+          "author": "",
+          "date": "",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "hash": "cef1",
+          "subject": "n\\",
+          "author": "",
+          "date": "",
+          "additions": 1,
+          "deletions": 4
+        }
+      ],
+      "isPrimary": true,
+      "isExternal": true,
+      "detached": true,
+      "shelved": true,
+      "autoPull": true
     }
   },
   "worktrees:convertExternal": {
@@ -2136,6 +2409,59 @@
       }
     }
   },
+  "worktrees:discardHunks": {
+    "payload": {
+      "projectId": "r",
+      "worktreeId": "Y",
+      "path": "I5",
+      "changes": [
+        {
+          "oldStart": 3,
+          "oldCount": 3,
+          "newStart": 4,
+          "newCount": 1
+        },
+        {
+          "oldStart": 1,
+          "oldCount": 2,
+          "newStart": 0,
+          "newCount": 1
+        }
+      ]
+    },
+    "success": {
+      "snapshot": "4bc9",
+      "worktree": {
+        "id": "\u0000",
+        "projectId": "W'",
+        "name": " ",
+        "branch": "0",
+        "path": "I}",
+        "ahead": 1,
+        "behind": 2,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": true,
+        "behindPrimary": 0,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": true,
+        "changedCount": 2,
+        "recentCommits": [],
+        "isPrimary": false,
+        "isExternal": false,
+        "detached": true,
+        "shelved": false,
+        "autoPull": false
+      }
+    }
+  },
+  "worktrees:dropStash": {
+    "payload": {
+      "projectId": "\t",
+      "worktreeId": "\ud800",
+      "hash": "17e5"
+    }
+  },
   "worktrees:fileDiff": {
     "payload": {
       "projectId": "F",
@@ -2144,6 +2470,70 @@
       "untracked": false
     },
     "success": "\"O"
+  },
+  "worktrees:fileHunks": {
+    "payload": {
+      "projectId": "\n",
+      "worktreeId": "\ud800",
+      "path": "zG"
+    },
+    "success": {
+      "changes": [
+        {
+          "oldStart": 3,
+          "oldCount": 0,
+          "newStart": 0,
+          "newCount": 3,
+          "staged": true
+        }
+      ],
+      "editable": false
+    }
+  },
+  "worktrees:idleAgents": {
+    "payload": {
+      "projectId": "1",
+      "worktreeId": "?"
+    },
+    "success": {
+      "id": "",
+      "projectId": "\t",
+      "name": "",
+      "branch": "L",
+      "path": "",
+      "ahead": 2,
+      "behind": 2,
+      "hasUpstream": true,
+      "hasRemote": true,
+      "divergedClean": false,
+      "behindPrimary": 4,
+      "unpushedCount": 4,
+      "mergedIntoPrimary": false,
+      "changedCount": 2,
+      "recentCommits": [
+        {
+          "hash": "7354",
+          "subject": "",
+          "author": "-1",
+          "date": "ak",
+          "additions": 1,
+          "deletions": 1
+        },
+        {
+          "hash": "fd6a",
+          "subject": "E",
+          "author": " ",
+          "date": "fp",
+          "additions": 1,
+          "deletions": 4
+        }
+      ],
+      "isPrimary": false,
+      "isExternal": true,
+      "detached": true,
+      "shelved": false,
+      "autoPull": false
+    }
   },
   "worktrees:lifecyclePhase": {
     "payload": {
@@ -2245,6 +2635,171 @@
         "deletions": 0
       }
     ]
+  },
+  "worktrees:mergeBranch": {
+    "payload": {
+      "projectId": "Rv",
+      "worktreeId": "mB",
+      "ref": "\t",
+      "method": "rebase"
+    },
+    "success": {
+      "worktree": {
+        "id": "^",
+        "projectId": "z",
+        "name": "",
+        "branch": ";n",
+        "path": "$",
+        "ahead": 0,
+        "behind": 2,
+        "hasUpstream": true,
+        "hasRemote": false,
+        "divergedClean": false,
+        "behindPrimary": 4,
+        "unpushedCount": 3,
+        "mergedIntoPrimary": false,
+        "changedCount": 0,
+        "recentCommits": [
+          {
+            "hash": "4482",
+            "subject": "",
+            "author": ".",
+            "date": "",
+            "additions": 2,
+            "deletions": 1
+          },
+          {
+            "hash": "9b66",
+            "subject": " ",
+            "author": "AS",
+            "date": "v",
+            "additions": 2,
+            "deletions": 0
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": false
+      },
+      "stopped": false
+    }
+  },
+  "worktrees:mergePreview": {
+    "payload": {
+      "projectId": "0",
+      "worktreeId": "\n",
+      "ref": "Ms"
+    },
+    "success": {
+      "incoming": 4,
+      "own": 2,
+      "pushed": 0,
+      "ownMerges": 4,
+      "conflicts": null,
+      "incomingSubject": ""
+    }
+  },
+  "worktrees:mergePrimary": {
+    "payload": {
+      "projectId": "F",
+      "worktreeId": "-1"
+    },
+    "success": {
+      "worktree": {
+        "id": "",
+        "projectId": "4",
+        "name": "Ht",
+        "branch": "\udc00",
+        "path": "/$",
+        "ahead": 1,
+        "behind": 2,
+        "hasUpstream": true,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 4,
+        "unpushedCount": 3,
+        "mergedIntoPrimary": false,
+        "changedCount": 3,
+        "recentCommits": [
+          {
+            "hash": "1042",
+            "subject": "of",
+            "author": "",
+            "date": "\t",
+            "additions": 4,
+            "deletions": 4
+          },
+          {
+            "hash": "1dde",
+            "subject": "",
+            "author": "\udc00",
+            "date": " ",
+            "additions": 2,
+            "deletions": 3
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": false,
+        "detached": true,
+        "shelved": false,
+        "autoPull": false
+      },
+      "stopped": true
+    }
+  },
+  "worktrees:mergeUpstream": {
+    "payload": {
+      "projectId": "\t",
+      "worktreeId": "0"
+    },
+    "success": {
+      "worktree": {
+        "id": "Y}",
+        "projectId": "0",
+        "name": "\udc00",
+        "branch": "0",
+        "path": "W7",
+        "ahead": 0,
+        "behind": 2,
+        "hasUpstream": false,
+        "hasRemote": true,
+        "divergedClean": false,
+        "behindPrimary": 1,
+        "unpushedCount": 0,
+        "mergedIntoPrimary": true,
+        "changedCount": 0,
+        "recentCommits": [
+          {
+            "hash": "2927",
+            "subject": "\udc00",
+            "author": "-1",
+            "date": "$6",
+            "additions": 3,
+            "deletions": 0
+          }
+        ],
+        "isPrimary": true,
+        "isExternal": false,
+        "detached": true,
+        "shelved": false,
+        "autoPull": true
+      },
+      "stopped": true
+    }
+  },
+  "worktrees:operation": {
+    "payload": {
+      "projectId": "\n",
+      "worktreeId": "}"
+    },
+    "success": {
+      "operation": null,
+      "continuable": true,
+      "conflicted": 3,
+      "rebasing": "-1"
+    }
   },
   "worktrees:overwrite": {
     "payload": {
@@ -2600,6 +3155,53 @@
       }
     }
   },
+  "worktrees:resolveConflict": {
+    "payload": {
+      "projectId": "-1",
+      "worktreeId": "D.",
+      "path": "\t",
+      "side": "theirs"
+    },
+    "success": {
+      "id": "~+",
+      "projectId": "\t",
+      "name": "0",
+      "branch": "Il",
+      "path": "Y",
+      "ahead": 0,
+      "behind": 0,
+      "hasUpstream": true,
+      "hasRemote": true,
+      "divergedClean": false,
+      "behindPrimary": 0,
+      "unpushedCount": 1,
+      "mergedIntoPrimary": false,
+      "changedCount": 3,
+      "recentCommits": [
+        {
+          "hash": "ebfd",
+          "subject": "0",
+          "author": "",
+          "date": "9t",
+          "additions": 0,
+          "deletions": 1
+        },
+        {
+          "hash": "64db",
+          "subject": "\udc00",
+          "author": "😀",
+          "date": "\udc00",
+          "additions": 2,
+          "deletions": 3
+        }
+      ],
+      "isPrimary": false,
+      "isExternal": false,
+      "detached": true,
+      "shelved": false,
+      "autoPull": false
+    }
+  },
   "worktrees:restoreDiscard": {
     "payload": {
       "projectId": "0",
@@ -2646,34 +3248,115 @@
       "autoPull": true
     }
   },
-  "worktrees:setAgentWorking": {
+  "worktrees:restoreStash": {
     "payload": {
-      "projectId": "@\"",
-      "worktreeId": "C",
-      "agentWorking": false
+      "projectId": "😀",
+      "worktreeId": "-1",
+      "hash": "1d30",
+      "message": "",
+      "named": false
+    }
+  },
+  "worktrees:resumeAgent": {
+    "payload": {
+      "projectId": ".L",
+      "worktreeId": "53",
+      "harness": "zG",
+      "session": "V~"
+    }
+  },
+  "worktrees:revertCommit": {
+    "payload": {
+      "projectId": "ww",
+      "worktreeId": " ",
+      "hash": "c637"
     },
     "success": {
-      "id": "w{",
-      "projectId": "1\\",
-      "name": "0",
-      "branch": "-1",
+      "id": "😀",
+      "projectId": "n",
+      "name": "G ",
+      "branch": "",
       "path": "",
       "ahead": 0,
-      "behind": 4,
-      "hasUpstream": true,
-      "hasRemote": false,
+      "behind": 1,
+      "hasUpstream": false,
+      "hasRemote": true,
       "divergedClean": true,
-      "behindPrimary": 2,
+      "behindPrimary": 0,
       "unpushedCount": 2,
       "mergedIntoPrimary": false,
-      "changedCount": 1,
-      "recentCommits": [],
+      "changedCount": 4,
+      "recentCommits": [
+        {
+          "hash": "be8f",
+          "subject": "9C",
+          "author": "D,",
+          "date": "-O",
+          "additions": 0,
+          "deletions": 1
+        },
+        {
+          "hash": "86d3",
+          "subject": "-1",
+          "author": "\ud800",
+          "date": "\t",
+          "additions": 3,
+          "deletions": 2
+        }
+      ],
       "isPrimary": false,
-      "isExternal": false,
+      "isExternal": true,
       "detached": true,
       "shelved": true,
-      "autoPull": true,
-      "agentWorking": false
+      "autoPull": false
+    }
+  },
+  "worktrees:rewordCommit": {
+    "payload": {
+      "projectId": "😀",
+      "worktreeId": "B{",
+      "hash": "6f4c",
+      "summary": "鱨",
+      "expectHead": "3c39"
+    },
+    "success": {
+      "id": "0",
+      "projectId": "\t",
+      "name": "",
+      "branch": "|0",
+      "path": "",
+      "ahead": 2,
+      "behind": 2,
+      "hasUpstream": true,
+      "hasRemote": true,
+      "divergedClean": false,
+      "behindPrimary": 0,
+      "unpushedCount": 1,
+      "mergedIntoPrimary": true,
+      "changedCount": 4,
+      "recentCommits": [
+        {
+          "hash": "6625",
+          "subject": "Vn",
+          "author": "0",
+          "date": "\t",
+          "additions": 0,
+          "deletions": 2
+        },
+        {
+          "hash": "2fbe",
+          "subject": "",
+          "author": "\n",
+          "date": "",
+          "additions": 0,
+          "deletions": 4
+        }
+      ],
+      "isPrimary": true,
+      "isExternal": false,
+      "detached": false,
+      "shelved": false,
+      "autoPull": false
     }
   },
   "worktrees:setAutoPull": {
@@ -2722,6 +3405,34 @@
       "autoPull": false
     }
   },
+  "worktrees:setHunksStaged": {
+    "payload": {
+      "projectId": "0",
+      "worktreeId": "\t",
+      "path": "0",
+      "changes": [
+        {
+          "oldStart": 4,
+          "oldCount": 3,
+          "newStart": 3,
+          "newCount": 0
+        }
+      ],
+      "staged": false
+    },
+    "success": [
+      {
+        "path": "\u0000",
+        "kind": "added",
+        "staged": "none"
+      },
+      {
+        "path": "\t",
+        "kind": "renamed",
+        "staged": "none"
+      }
+    ]
+  },
   "worktrees:setShelved": {
     "payload": {
       "projectId": "😀",
@@ -2765,6 +3476,88 @@
         "staged": "none"
       }
     ]
+  },
+  "worktrees:squashCommit": {
+    "payload": {
+      "projectId": "-1",
+      "worktreeId": "\udc00",
+      "hash": "b7cf",
+      "expectHead": "9662"
+    },
+    "success": {
+      "id": "ik",
+      "projectId": "\ud800",
+      "name": "",
+      "branch": " ",
+      "path": "",
+      "ahead": 2,
+      "behind": 2,
+      "hasUpstream": false,
+      "hasRemote": false,
+      "divergedClean": false,
+      "behindPrimary": 2,
+      "unpushedCount": 1,
+      "mergedIntoPrimary": false,
+      "changedCount": 3,
+      "recentCommits": [],
+      "isPrimary": false,
+      "isExternal": true,
+      "detached": false,
+      "shelved": true,
+      "autoPull": true
+    }
+  },
+  "worktrees:stashChanges": {
+    "payload": {
+      "projectId": "-1",
+      "worktreeId": "M"
+    },
+    "success": {
+      "id": "tm",
+      "projectId": "😀",
+      "name": "=0",
+      "branch": "e",
+      "path": "",
+      "ahead": 0,
+      "behind": 3,
+      "hasUpstream": true,
+      "hasRemote": true,
+      "divergedClean": false,
+      "behindPrimary": 1,
+      "unpushedCount": 3,
+      "mergedIntoPrimary": false,
+      "changedCount": 3,
+      "recentCommits": [
+        {
+          "hash": "118f",
+          "subject": "3",
+          "author": "g2",
+          "date": "0",
+          "additions": 2,
+          "deletions": 1
+        }
+      ],
+      "isPrimary": true,
+      "isExternal": false,
+      "detached": true,
+      "shelved": false,
+      "autoPull": true
+    }
+  },
+  "worktrees:stashDiff": {
+    "payload": {
+      "projectId": "9",
+      "worktreeId": "0",
+      "hash": "7a55"
+    },
+    "success": "I_"
+  },
+  "worktrees:stashes": {
+    "payload": {
+      "projectId": "\u0000",
+      "worktreeId": "😀"
+    },
+    "success": []
   },
   "worktrees:switchToPrimaryAndDeleteBranch": {
     "payload": {
@@ -2844,6 +3637,53 @@
       "isPrimary": true,
       "isExternal": true,
       "detached": true,
+      "shelved": true,
+      "autoPull": true
+    }
+  },
+  "worktrees:unbindAgent": {
+    "payload": {
+      "projectId": "\u0000",
+      "worktreeId": "v",
+      "harness": "g",
+      "session": "-1"
+    },
+    "success": {
+      "id": "F",
+      "projectId": "} ",
+      "name": "",
+      "branch": "😀",
+      "path": "\t",
+      "ahead": 3,
+      "behind": 2,
+      "hasUpstream": true,
+      "hasRemote": true,
+      "divergedClean": true,
+      "behindPrimary": 1,
+      "unpushedCount": 0,
+      "mergedIntoPrimary": true,
+      "changedCount": 3,
+      "recentCommits": [
+        {
+          "hash": "60b4",
+          "subject": "\ud800",
+          "author": "(&",
+          "date": " ",
+          "additions": 1,
+          "deletions": 4
+        },
+        {
+          "hash": "711b",
+          "subject": "\udc00",
+          "author": "",
+          "date": "3\\",
+          "additions": 0,
+          "deletions": 0
+        }
+      ],
+      "isPrimary": true,
+      "isExternal": true,
+      "detached": false,
       "shelved": true,
       "autoPull": true
     }

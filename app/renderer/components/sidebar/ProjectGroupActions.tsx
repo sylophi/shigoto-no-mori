@@ -41,6 +41,7 @@ import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shigomori/contracts/schemas";
 import { AddToDeviceSubmenu } from "./AddToDeviceSubmenu";
+import { WorktreeSortSubmenu } from "./SidebarToolbar";
 import {
   ProjectCreateMenuItems,
   ProjectPageMenuItems,
@@ -158,6 +159,9 @@ interface ProjectGroupActionsProps {
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   // Set while the header's project is missing and can be located.
   onLocate?: () => void;
+  // Offers the project's worktree sort, which the toolbar holds for a
+  // project stepped into (the inline list's headers).
+  sortsWorktrees?: boolean;
 }
 
 export function ProjectGroupActions({
@@ -169,6 +173,7 @@ export function ProjectGroupActions({
   isHovered,
   triggerRef,
   onLocate,
+  sortsWorktrees = false,
 }: ProjectGroupActionsProps) {
   const creator = useGroupCreator(members, identity);
   const setPinned = useSetProjectPinned(groupKey);
@@ -235,6 +240,7 @@ export function ProjectGroupActions({
           <DropdownMenuItem onClick={() => setPinned(!pinned)}>
             {pinned ? "Unpin" : "Pin"}
           </DropdownMenuItem>
+          {sortsWorktrees && <WorktreeSortSubmenu groupKey={groupKey} />}
           <AddToDeviceSubmenu
             name={name}
             members={members}

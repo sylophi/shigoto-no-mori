@@ -28,6 +28,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import { type AgentSession, anyWorking } from "./agentSessions.ts";
 import * as CarryOver from "./CarryOver.ts";
 import type { CarryOverReport } from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
@@ -132,7 +133,10 @@ export type WorktreeRow = {
   readonly detached: boolean;
   readonly shelved: boolean;
   readonly autoPull: boolean;
+  // Whether a bound agent session is working (Agents.ts), and the
+  // sessions themselves.
   readonly agentWorking: boolean;
+  readonly agentSessions: ReadonlyArray<AgentSession>;
   readonly title?: string;
   readonly description?: string;
   readonly projectName: string;
@@ -374,21 +378,16 @@ export class TargetError extends Schema.TaggedError<TargetError>()(
   }
 }
 
-// The marks only a managed worktree can carry, refused on the primary
+// The shelf takes only a managed worktree, refusing the primary
 // checkout or an external one.
 export class MarkRefused extends Schema.TaggedError<MarkRefused>()(
   "MarkRefused",
-  {
-    mark: Schema.Literals(["shelved", "agentWorking"]),
-    reason: Schema.Literals(["primary", "external"]),
-  },
+  { reason: Schema.Literals(["primary", "external"]) },
 ) {
   override get message(): string {
-    const what =
-      this.reason === "primary" ? "The primary checkout" : "External worktrees";
-    return this.mark === "shelved"
-      ? `${what} can't be shelved`
-      : `${what} can't be marked as agent working`;
+    return this.reason === "primary"
+      ? "The primary checkout can't be shelved"
+      : "External worktrees can't be shelved";
   }
 }
 
@@ -689,12 +688,6 @@ export class Worktrees extends Context.Service<
       worktree: WorktreeIdentity,
       on: boolean,
     ) => Effect.Effect<void>;
-    // The mark an agent sets on a worktree it works in, and clears when
-    // it hands the work back.
-    readonly setAgentWorking: (
-      worktree: WorktreeIdentity,
-      on: boolean,
-    ) => Effect.Effect<void, MarkRefused>;
     readonly description: (
       located: Located,
     ) => Effect.Effect<DescriptionView, DescribeRefused>;
@@ -736,7 +729,11 @@ export class Worktrees extends Context.Service<
         readonly base?: string | undefined;
         readonly checkout?: boolean | undefined;
         readonly skipSetup?: boolean | undefined;
-        readonly agentWorking?: boolean | undefined;
+        // The agent session that creates the worktree to work in, bound
+        // to it from the start.
+        readonly agentSession?:
+          | Pick<AgentSession, "harness" | "session" | "state">
+          | undefined;
         // Clone the files from an existing checkout where it can (the
         // default), instead of having git write them all.
         readonly clone?: boolean | undefined;
@@ -941,16 +938,21 @@ const RECENT_COMMITS = 4;
 // so rows are built a few at a time.
 const ROW_SLOTS = 6;
 
-// Only managed worktrees carry the shelved and agent-working marks: the
+// Only managed worktrees are shelved and have agent sessions: the
 // primary checkout and externals never do.
-const isShelfable = (worktree: WorktreeIdentity) =>
+export const isShelfable = (worktree: WorktreeIdentity) =>
   !worktree.isPrimary && !worktree.isExternal;
 const isShelved = (worktree: WorktreeIdentity, shelved: ReadonlySet<string>) =>
   isShelfable(worktree) && shelved.has(worktree.id);
+const sessionsOf = (
+  worktree: WorktreeIdentity,
+  marked: { readonly agentSessions: Registry.BoundSessions },
+): ReadonlyArray<AgentSession> =>
+  isShelfable(worktree) ? (marked.agentSessions.get(worktree.id) ?? []) : [];
 const isAgentWorking = (
   worktree: WorktreeIdentity,
-  marked: { readonly agentWorking: ReadonlySet<string> },
-) => isShelfable(worktree) && marked.agentWorking.has(worktree.id);
+  marked: { readonly agentSessions: Registry.BoundSessions },
+) => anyWorking(sessionsOf(worktree, marked));
 
 // Each project's rows, a project git can't list skipped.
 const across = <A>(
@@ -1071,11 +1073,11 @@ const make = Effect.gen(function* () {
   // before the probes: a snapshot taken after a row's probes started
   // must not be compared against them.
   const marks = Effect.gen(function* () {
-    const [shelved, autoPull, agentWorking] = yield* Effect.all(
+    const [shelved, autoPull, agentSessions] = yield* Effect.all(
       [
         registry.marked("shelved"),
         registry.marked("autoPull"),
-        registry.marked("agentWorking"),
+        registry.agentSessions,
       ],
       { concurrency: 3 },
     );
@@ -1087,7 +1089,7 @@ const make = Effect.gen(function* () {
             Effect.orElseSucceed(() => []),
           )).map(({ worktree_id, ...snapshot }) => [worktree_id, snapshot]),
     );
-    return { shelved, autoPull, agentWorking, snapshots };
+    return { shelved, autoPull, agentSessions, snapshots };
   });
 
   // What every row of one project is built against, read once.
@@ -1186,6 +1188,7 @@ const make = Effect.gen(function* () {
         // Unlike the shelf, any checkout can follow its upstream.
         autoPull: context.autoPull.has(worktree.id),
         agentWorking: isAgentWorking(worktree, context),
+        agentSessions: sessionsOf(worktree, context),
         ...nonEmpty("title", title),
         ...nonEmpty("description", description),
         projectName: context.project.name,
@@ -1757,15 +1760,10 @@ const make = Effect.gen(function* () {
 
   // --- marks and descriptions ---
 
-  const refuseUnshelfable = (
-    mark: MarkRefused["mark"],
-    worktree: WorktreeIdentity,
-    on: boolean,
-  ) =>
+  const refuseUnshelfable = (worktree: WorktreeIdentity, on: boolean) =>
     on && !isShelfable(worktree)
       ? Effect.fail(
           new MarkRefused({
-            mark,
             reason: worktree.isPrimary ? "primary" : "external",
           }),
         )
@@ -1775,7 +1773,7 @@ const make = Effect.gen(function* () {
     worktree: WorktreeIdentity,
     on: boolean,
   ) {
-    yield* refuseUnshelfable("shelved", worktree, on);
+    yield* refuseUnshelfable(worktree, on);
     yield* registry.setMark("shelved", worktree.id, on);
   });
 
@@ -1784,14 +1782,6 @@ const make = Effect.gen(function* () {
     on: boolean,
   ) {
     yield* registry.setMark("autoPull", worktree.id, on);
-  });
-
-  const setAgentWorking = Effect.fn("Worktrees.setAgentWorking")(function* (
-    worktree: WorktreeIdentity,
-    on: boolean,
-  ) {
-    yield* refuseUnshelfable("agentWorking", worktree, on);
-    yield* registry.setMark("agentWorking", worktree.id, on);
   });
 
   // The open pull request that owns the description: never one on the
@@ -2228,7 +2218,9 @@ const make = Effect.gen(function* () {
       readonly base?: string | undefined;
       readonly checkout?: boolean | undefined;
       readonly skipSetup?: boolean | undefined;
-      readonly agentWorking?: boolean | undefined;
+      readonly agentSession?:
+        | Pick<AgentSession, "harness" | "session" | "state">
+        | undefined;
       readonly clone?: boolean | undefined;
     },
     reporter: Reporter,
@@ -2259,8 +2251,8 @@ const make = Effect.gen(function* () {
     if (autoPullNew && !primaryOnly) {
       yield* registry.setMark("autoPull", made.id, true);
     }
-    if (input.agentWorking) {
-      yield* registry.setMark("agentWorking", made.id, true);
+    if (input.agentSession !== undefined) {
+      yield* registry.bindAgentSession(input.agentSession, made.id);
     }
     const worktree = yield* row({ project, worktree: made });
     if (cloned !== undefined)
@@ -2716,7 +2708,6 @@ const make = Effect.gen(function* () {
     }
     yield* removeCheckout(project.path, worktree.path, true);
     yield* registry.setMark("shelved", worktree.id, false);
-    yield* registry.setMark("agentWorking", worktree.id, false);
     const { made, found, cloned } = yield* addWorktree(project, {
       name,
       branch: "",
@@ -2925,7 +2916,6 @@ const make = Effect.gen(function* () {
     resolve,
     setShelved,
     setAutoPull,
-    setAgentWorking,
     description,
     scriptContext: ({ project, worktree }) =>
       scriptContext(project, worktree).pipe(

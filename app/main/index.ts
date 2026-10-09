@@ -28,6 +28,7 @@ import {
   deepLinkRouteInArgv,
   receiveDeepLink,
 } from "./electron/deepLink";
+import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
@@ -48,7 +49,7 @@ import { applyUserShellEnv } from "./core/shellEnv";
 import * as HostLayer from "./hostLayer";
 import { bundledBinaryPath } from "./electron/bundledBinary";
 import { storeFailureReport } from "./electron/storeFailure";
-import { cliBinaryName } from "@shared/packaging/cliDist.mts";
+import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import {
   MACFS_BINARY_NAME,
   MACFS_DIST_DIR,
@@ -124,6 +125,11 @@ captureConsoleToFile();
 // other Electron project started from here would silently boot our
 // binary instead of its own.
 delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
+// An agent session's id, when an agent started the app (a dev run):
+// nothing the app spawns is that session, and an `sm` it runs would
+// bind the session wherever it runs (the engine's Agents).
+delete process.env.CLAUDE_CODE_SESSION_ID;
+delete process.env.CODEX_THREAD_ID;
 takeUpdateEndpointOverrides();
 
 // One live instance per data dir. A second copy (typically a fresh
@@ -192,6 +198,10 @@ registerIpcHandlers();
 const engineOptions = {
   flavor: app.isPackaged ? ("prod" as const) : ("dev" as const),
   macfs: bundledBinaryPath(MACFS_DIST_DIR, MACFS_BINARY_NAME),
+  sm: bundledBinaryPath(
+    CLI_DIST_DIR,
+    cliBinaryName(app.isPackaged ? "prod" : "dev"),
+  ),
 };
 
 // The process's one layer graph, built in the ready handler once the
@@ -420,6 +430,9 @@ function openDeepLink(route: string): void {
   const live = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   receiveDeepLink(route, live?.webContents);
 }
+
+// A notification's click opens its page the same way.
+setNotificationOpener(openDeepLink);
 
 // Windows and Linux pass a deep link in a launch's argv: this
 // process's own when the link started the app, the second instance's

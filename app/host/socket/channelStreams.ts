@@ -63,14 +63,12 @@ export function bridgeDuplexToChannel(
     },
     onEnd() {
       if (!duplex.destroyed && !duplex.writableEnded) duplex.end();
-      // With this side already ended too, the channel is complete and
-      // the mux drops it. The duplex's own close follows.
-      if (!handle.open) finish();
     },
     onReset() {
       duplex.destroy();
       finish();
     },
+    onComplete: finish,
     onWritable() {
       duplex.resume();
     },
@@ -84,7 +82,6 @@ export function bridgeDuplexToChannel(
   duplex.on("end", () => {
     endedCleanly = true;
     handle.end();
-    if (!handle.open) finish();
   });
   // 'close' always follows 'error'. The listener must exist or node
   // treats a stream error as an uncaught throw.

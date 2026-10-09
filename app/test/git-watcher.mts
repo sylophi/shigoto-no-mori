@@ -70,7 +70,7 @@ async function caughtUp(gitDir: string): Promise<void> {
   }
 }
 
-it("allowlist: refs, HEAD, packed-refs and a worktree's HEAD count, while objects, logs, index, FETCH_HEAD and lock files do not", async () => {
+it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operation's markers count, while objects, logs, index, FETCH_HEAD and lock files do not", async () => {
   for (const path of [
     "HEAD",
     "ORIG_HEAD",
@@ -81,6 +81,11 @@ it("allowlist: refs, HEAD, packed-refs and a worktree's HEAD count, while object
     "worktrees/feat",
     "worktrees/feat/HEAD",
     "worktrees\\feat\\HEAD",
+    "MERGE_HEAD",
+    "SQUASH_MSG",
+    "rebase-merge",
+    "worktrees/feat/MERGE_HEAD",
+    "worktrees/feat/rebase-apply",
   ]) {
     assert.ok(isRelevantGitPath(path), `${path} must count`);
   }
@@ -98,6 +103,8 @@ it("allowlist: refs, HEAD, packed-refs and a worktree's HEAD count, while object
     "worktrees/feat/index",
     "worktrees/feat/logs/HEAD",
     "worktrees/feat/COMMIT_EDITMSG",
+    "rebase-merge/done",
+    "worktrees/feat/rebase-merge/msgnum",
   ]) {
     assert.ok(!isRelevantGitPath(path), `${path} must not count`);
   }
