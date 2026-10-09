@@ -17,7 +17,7 @@ import { select } from "./menu.ts";
 import { collapseHome, note, Output, styles } from "./output.ts";
 
 // A menu with nothing to offer, in Go's words.
-export class NothingToPick extends Schema.TaggedError<NothingToPick>()(
+class NothingToPick extends Schema.TaggedError<NothingToPick>()(
   "NothingToPick",
   { problem: Schema.String },
 ) {
