@@ -37,9 +37,13 @@ export function useRemoteDevices(): readonly RemoteDevice[] {
 
 // The account's machines: every registered device that hosts projects.
 // A browser client is a device on the account too, but there is no
-// host behind it to read config, updater state or a forest from.
+// host behind it to read config, updater state or a forest from, and
+// neither is there behind a peer that isn't sharing.
 export function useHostDevices(): readonly RemoteDevice[] {
-  return useRemoteDevices().filter((device) => hostsProjects(device.platform));
+  return useRemoteDevices().filter(
+    (device) =>
+      hostsProjects(device.platform) && device.status.phase !== "notSharing",
+  );
 }
 
 // Every device that runs things, as (id, api) pairs: this machine when

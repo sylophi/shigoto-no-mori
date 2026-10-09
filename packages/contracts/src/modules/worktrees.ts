@@ -76,9 +76,12 @@ const worktreeMutation = <const Key extends string>(key: Key) =>
 export const worktreesContract = defineContract(
   "worktrees",
   "host",
+  // A mirror into this device looks its copy up here (whether it is
+  // gone), invited past the sharing switch.
   invoke("list", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
     remote: true,
     gated: false,
+    invitable: "project",
   }),
   view("watch", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
     remote: true,

@@ -49,10 +49,15 @@ type ControlImpl = {
   // The account's device registry. Empty when signed out.
   listDevices: () => Promise<DeviceInfo[]>;
   // The devices a direct session is established to (the only ones a
-  // call can reach), each with whether it runs this device's commands:
-  // the hub status snapshot's peerAcceptsCommands, the same reading
-  // the app's windows show.
-  directPeers: () => Promise<Readonly<Record<string, boolean>>>;
+  // call can reach), each with whether it shares with this device and
+  // runs its commands: the hub status snapshot's peerSharesData and
+  // peerAcceptsCommands, the same reading the app's windows show.
+  directPeers: () => Promise<Readonly<Record<string, DirectPeer>>>;
+};
+
+export type DirectPeer = {
+  readonly sharesData: boolean;
+  readonly acceptsCommands: boolean;
 };
 
 const { set: setControlImpl, get: requireImpl } = implSlot<ControlImpl>(
@@ -114,14 +119,15 @@ export async function standingsOf(
   );
 }
 
-// Command access comes first: a send needs it whether or not the device
-// holds the repo (without it, it clones the repo first), and a bring
-// needs both.
+// Sharing comes first: a device that isn't sharing serves nothing.
+// Then command access: a send needs it whether or not the device holds
+// the repo (without it, it clones the repo first), and a bring needs
+// both.
 async function standingOf(
   device: DeviceInfo,
   identity: string | null,
   // Undefined when no direct session is established.
-  acceptsCommands: boolean | undefined,
+  peer: DirectPeer | undefined,
   grant: boolean,
 ): Promise<ControlDevice> {
   const base = {
@@ -130,7 +136,8 @@ async function standingOf(
     platform: device.platform,
   };
   const offline = { ...base, block: "offline" as const };
-  if (acceptsCommands === undefined) return offline;
+  if (peer === undefined) return offline;
+  if (!peer.sharesData) return { ...base, block: "not-sharing" };
   try {
     const projects = await probe(
       peerClient(projectsContract, device.deviceId).list(),
@@ -147,7 +154,7 @@ async function standingOf(
               project.identity === identity && project.pathExists !== false,
           );
     const holding = held === undefined ? {} : { projectId: held.id };
-    if (grant && !acceptsCommands) {
+    if (grant && !peer.acceptsCommands) {
       return { ...base, ...holding, block: "no-grant" };
     }
     return held === undefined
@@ -223,7 +230,7 @@ export async function peerMirrors(
   const hereId = thisDeviceId();
   const direct = await requireImpl().directPeers();
   const peers = peersOf(registry, hereId).filter(
-    (device) => direct[device.deviceId] !== undefined,
+    (device) => direct[device.deviceId]?.sharesData === true,
   );
   const found = await Promise.all(
     peers.map(async (device): Promise<PeerMirror[]> => {

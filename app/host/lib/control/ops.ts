@@ -75,6 +75,7 @@ import {
 import {
   candidates,
   cloneIntoOn,
+  type DirectPeer,
   directPeers,
   mirrorOf,
   peerMirrorOf,
@@ -250,6 +251,12 @@ async function alreadyMirrored(
   };
 }
 
+// A device's block when no project was asked about.
+function blockOf(peer: DirectPeer | undefined): Pick<ControlDevice, "block"> {
+  if (peer === undefined) return { block: "offline" };
+  return peer.sharesData ? {} : { block: "not-sharing" };
+}
+
 export const devices: Ops["devices"] = async ({ projectId }) => {
   const { here, peers } = await roster();
   if (projectId === undefined) {
@@ -260,9 +267,7 @@ export const devices: Ops["devices"] = async ({ projectId }) => {
         deviceId: device.deviceId,
         name: nameOf(device),
         platform: device.platform,
-        ...(direct[device.deviceId] !== undefined
-          ? {}
-          : { block: "offline" as const }),
+        ...blockOf(direct[device.deviceId]),
       })),
     };
   }
@@ -285,13 +290,17 @@ export const peerWorktrees: Ops["peerWorktrees"] = async ({
   const unreachable = standings.filter(
     (standing) => standing.block === "offline",
   );
-  // A device asked for by name and not there is a refusal, not an
-  // empty list.
-  const [blocked] = unreachable;
-  if (device !== undefined && blocked !== undefined) {
+  // A device asked for by name and not there, or not sharing, is a
+  // refusal, not an empty list. Unnamed, one that isn't sharing lists
+  // nothing.
+  const blocked = standings.find(
+    (standing) =>
+      standing.block === "offline" || standing.block === "not-sharing",
+  );
+  if (device !== undefined && blocked?.block !== undefined) {
     throw new ControlError(
       "device-blocked",
-      `"${blocked.name}" ${BLOCK_REASON.offline}.`,
+      `"${blocked.name}" ${BLOCK_REASON[blocked.block]}.`,
     );
   }
   const { worktrees, unanswered } = await worktreesOn(standings);
@@ -386,6 +395,12 @@ export const bring: TransferOp<"bring"> = async (
     throw new ControlError(
       "device-blocked",
       `"${standings[0].name}" ${BLOCK_REASON["no-project"]}, so it has nothing to bring.`,
+    );
+  }
+  if (input.device !== undefined && standings[0]?.block === "not-sharing") {
+    throw new ControlError(
+      "device-blocked",
+      `"${standings[0].name}" ${BLOCK_REASON["not-sharing"]}.`,
     );
   }
   const { worktrees, unanswered } = await worktreesOn(standings);

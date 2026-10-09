@@ -39,6 +39,9 @@
       },
       {
         "_tag": "CommandRefusedError"
+      },
+      {
+        "_tag": "NotSharingError"
       }
     ],
     "rejects": [

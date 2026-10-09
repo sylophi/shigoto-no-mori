@@ -359,6 +359,13 @@ const GlobalConfigSchema = Schema.Struct({
   // enrolled, explicit `false` is the opt-out). Config-only (no
   // Settings UI): toggle by editing config.json or `sm config edit`.
   directConnections: Schema.optional(Schema.Boolean),
+  // Sharing with the account's other devices: when false, this
+  // device's link refuses every call they make, reads included, and
+  // pushes them nothing, except for the mirrors this device asked for.
+  // ON by default (absent = sharing). Set from the account page
+  // (sharing:set) or `sm config`, never through the Settings form, so
+  // no peer can write it.
+  shareWithDevices: Schema.optional(Schema.Boolean),
   // Tunnel endpoints: absolute path to the
   // cloudflared binary, for installs not on PATH. Absent means PATH
   // discovery. A missing binary reads as tunnels off with a typed

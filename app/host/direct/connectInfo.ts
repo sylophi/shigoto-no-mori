@@ -1,9 +1,10 @@
 // Host side of the direct data plane's brokering: the answer to a
 // peer's connectInfo ask over the device hub (shared/hub/link.ts): how
-// to reach this device, and whether it runs the asker's commands. A
+// to reach this device, whether it shares with the asker and whether
+// it runs the asker's commands. A
 // factory rather than a plain function because the deps are owned by
 // whoever assembled the direct listener: main wires the real listener
-// status, ticket store, tunnel runner and command-access switch in,
+// status, ticket store, tunnel runner and both switches in,
 // and the direct-plane check drives the same factory with its own
 // instances.
 //
@@ -43,6 +44,9 @@ type ConnectInfoDeps = {
   // reads, reported to the asker so its UI and CLI know up front. The
   // gate stays the only thing that enforces it.
   acceptsCommands(): boolean;
+  // The sharing switch the link's SharingGate reads, reported the same
+  // way.
+  sharesData(): boolean;
   // Test seam for the interface enumeration.
   candidateAddresses?(): string[];
 };
@@ -107,6 +111,7 @@ export function makeConnectInfo(
       available: true,
       candidates,
       acceptsCommands: deps.acceptsCommands(),
+      sharesData: deps.sharesData(),
     };
   };
 }
