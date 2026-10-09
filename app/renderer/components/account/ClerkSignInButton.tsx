@@ -1,8 +1,7 @@
 import { useAuth, useClerk } from "@clerk/react";
-import { LogIn } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useEnroll } from "@/hooks/account/useAccount";
 import { hasLocalHost } from "@/lib/localHost";
+import { SignInButtonView } from "./AccountButtonsView";
 
 // The shared sign-in affordance, beside ClerkSignOutButton for the
 // same reason: no shell layout ever calls a Clerk hook itself. Mount
@@ -21,30 +20,22 @@ export function ClerkSignInButton() {
   const enroll = useEnroll();
   if (isSignedIn) {
     return (
-      <Button
-        size="sm"
-        disabled={enroll.isPending}
+      <SignInButtonView
+        retry
+        pending={enroll.isPending}
         onClick={() => enroll.mutate(() => getToken({ skipCache: true }))}
-      >
-        <LogIn />
-        {enroll.isPending ? "Enrolling…" : "Retry enrollment"}
-      </Button>
+      />
     );
   }
   return (
-    <Button
-      size="sm"
-      // A browser round trip (OAuth) must land back on a path this tree
-      // serves, so the tab returns to where it left. The desktop's flow
-      // runs in the system browser and deep-links back on its own.
+    <SignInButtonView
+      retry={false}
+      pending={false}
       onClick={() =>
         clerk.openSignIn(
           hasLocalHost ? undefined : { forceRedirectUrl: location.href },
         )
       }
-    >
-      <LogIn />
-      Sign in
-    </Button>
+    />
   );
 }

@@ -94,7 +94,6 @@ const PENDING = [
   "manageBranches/",
   "newWorktree/",
   "palette/",
-  "remote/",
   "scriptConsole/",
   "settings/",
   "tidy/",

@@ -20,6 +20,7 @@ import {
   PhoneInboxScene,
   PhoneNotFoundScene,
 } from "./shell";
+import { DevicesPageScene, DevicesPartsScene } from "./devices";
 import {
   FlowPartsScene,
   FlowStepsScene,
@@ -64,6 +65,8 @@ export const scenes = {
   flowSteps: { Scene: FlowStepsScene, size: [1800, 1300] },
   mirrorManage: { Scene: MirrorManageScene, size: [1600, 720] },
   flowParts: { Scene: FlowPartsScene, size: [1100, 800] },
+  devicesPage: { Scene: DevicesPageScene, ...DESKTOP },
+  devicesParts: { Scene: DevicesPartsScene, size: [1200, 1500] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

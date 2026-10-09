@@ -1,16 +1,7 @@
-// "Keep this device reachable": the one device fact the account's OTHER
-// machines depend on, so it belongs to THIS device's registry row
-// rather than to a lone section at the bottom of the page. Indented
-// under the row it modifies, it reads as a property of that machine --
-// which is exactly what it is, and what the copy has to keep saying
-// ("applies to this machine only") when the control floats free.
-//
-// Written immediately through the client store, never staged in a form:
-// flipping it is the whole action.
 import { keepReachableOn } from "@shigomori/contracts/schemas/config";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useKeepReachableUpdate } from "@/hooks/config/useKeepReachableUpdate";
+import { KeepReachableToggleView } from "./KeepReachableToggleView";
 
 // Launch-at-login via setLoginItemSettings only takes on macOS and
 // Windows. It is a no-op on Linux in Electron. The crash-recovery half
@@ -20,22 +11,16 @@ const launchAtLoginSupported =
   typeof navigator !== "undefined" &&
   /Macintosh|Windows/.test(navigator.userAgent);
 
+// Written immediately through the client store.
 export function KeepReachableToggle() {
   const { data: clientConfig } = useClientConfig();
   const keepReachableUpdate = useKeepReachableUpdate();
-  const keepReachable = keepReachableOn(clientConfig ?? {});
-
   return (
-    <ToggleRowView
-      checked={keepReachable}
-      onCheckedChange={(next) => keepReachableUpdate.mutate(next)}
-      disabled={keepReachableUpdate.isPending}
-      label="Keep this device reachable"
-      description={
-        launchAtLoginSupported
-          ? "Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this machine stays available to your account."
-          : "Relaunches Shigoto no Mori after a recoverable crash so this machine stays available to your account. Starting automatically at login isn't supported on this platform."
-      }
+    <KeepReachableToggleView
+      on={keepReachableOn(clientConfig ?? {})}
+      pending={keepReachableUpdate.isPending}
+      onChange={(next) => keepReachableUpdate.mutate(next)}
+      launchAtLogin={launchAtLoginSupported}
     />
   );
 }

@@ -1,5 +1,4 @@
-// The account's device registry: one line naming the account with its
-// sign-out, then one row per machine, this one first. This component
+// The account's device registry (DeviceRegistryView). This component
 // owns every query the rows read -- the account list, the host chips
 // and the per-peer command-access verdicts -- so a row is a pure
 // function of what it is handed and the page makes one fan-out instead
@@ -36,10 +35,14 @@ import {
   useTunnelState,
 } from "@/hooks/remote/useHubStatus";
 import { useNow } from "@/hooks/ui/useNow";
-import { abbreviateId } from "@/lib/abbreviateId";
 import { localDeviceId } from "@/lib/queryKeys";
 import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
+import {
+  AccountIdentityView,
+  DeviceRegistryView,
+  SignInBannerView,
+} from "./DeviceRegistryView";
 import { useHostChipIndex } from "./deviceHostChips";
 import { deviceRowStatus } from "./deviceRegistryStatus";
 
@@ -114,75 +117,72 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   }
 
   return (
-    <section className="flex flex-col gap-5">
-      {/* The account is one thin line -- who is signed in -- and the
-          sign-out sits with it: ending the session is what removes THIS
-          machine from the account (see the Remove button's note in the
-          row). A hub account has no other properties, and the rows say
-          everything about its devices, so no headcount repeats them. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <AccountIdentity accountId={accountId} />
-        <ClerkSignOutButton className="-my-1 text-muted-foreground" />
-      </div>
-
-      {/* One slot for what is wrong with this device's sign-in, and
-          the way back sits in it because that is where the bad news
-          is. Blocked outranks a missing session: a device removed
-          from the account has nothing left to keep. */}
-      {block?.reason === "update-required" ? (
-        // Signing in again changes nothing here: only an update does.
-        <ErrorBanner>{block.message}</ErrorBanner>
-      ) : blockedMessage !== null ? (
-        // The button re-enrolls this machine (the Clerk session
-        // outlives a revoked device credential), which is the way back
-        // if the automatic sign-out did not land.
-        <SignInBanner>{blockedMessage}</SignInBanner>
-      ) : (
-        <SessionMissingBanner />
-      )}
-
-      {devicesQuery.isLoading ? (
-        <p className="text-xs text-muted-foreground/70">
-          Loading devices&hellip;
-        </p>
-      ) : devicesQuery.isError ? (
-        // A failed list is unknown, not empty, so no "No devices yet"
-        // under it. Nothing at all when the banner above already named
-        // the cause: the refusal line would restate it in vaguer words
-        // and read as a second, separate problem.
-        blockedMessage === null && (
-          <ErrorBanner>{describeListError(devicesQuery.error)}</ErrorBanner>
+    <DeviceRegistryView
+      account={<AccountIdentity accountId={accountId} />}
+      signOut={<ClerkSignOutButton className="-my-1 text-muted-foreground" />}
+      // One slot for what is wrong with this device's sign-in, and the
+      // way back sits in it because that is where the bad news is.
+      // Blocked outranks a missing session: a device removed from the
+      // account has nothing left to keep.
+      banner={
+        block?.reason === "update-required" ? (
+          // Signing in again changes nothing here: only an update does.
+          <ErrorBanner>{block.message}</ErrorBanner>
+        ) : blockedMessage !== null ? (
+          // The button re-enrolls this machine (the Clerk session
+          // outlives a revoked device credential), which is the way
+          // back if the automatic sign-out did not land.
+          <SignInBannerView signIn={<ClerkSignInButton />}>
+            {blockedMessage}
+          </SignInBannerView>
+        ) : (
+          <SessionMissingBanner />
         )
-      ) : rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground/70">No devices yet.</p>
-      ) : (
-        <ul className="divide-y divide-border">
-          {rows.map((row) => (
-            <DeviceRegistryRow
-              key={row.device.deviceId}
-              {...row}
-              showId={(nameCount.get(row.name) ?? 0) > 1}
-              chips={hosts.byDevice.get(row.device.deviceId) ?? []}
-              // An unreachable peer's queries are disabled, so it is
-              // never the one still fetching: without this gate one
-              // slow peer would suppress every other row's empty
-              // state.
-              chipsLoading={
-                row.isThisDevice
-                  ? hosts.localLoading
-                  : hosts.remoteLoading && row.status.reachable
+      }
+      list={
+        devicesQuery.isLoading
+          ? { state: "loading" }
+          : devicesQuery.isError
+            ? {
+                state: "failed",
+                // Nothing when the banner above already named the
+                // cause: the refusal line would restate it in vaguer
+                // words and read as a second, separate problem.
+                message:
+                  blockedMessage === null
+                    ? describeListError(devicesQuery.error)
+                    : null,
               }
-              onRevokeDevice={() => revokeDevice.mutate(row.device.deviceId)}
-              revokePending={
-                revokeDevice.isPending &&
-                revokeDevice.variables === row.device.deviceId
+            : {
+                state: "ready",
+                rows: rows.map((row) => (
+                  <DeviceRegistryRow
+                    key={row.device.deviceId}
+                    {...row}
+                    showId={(nameCount.get(row.name) ?? 0) > 1}
+                    chips={hosts.byDevice.get(row.device.deviceId) ?? []}
+                    // An unreachable peer's queries are disabled, so it
+                    // is never the one still fetching: without this gate
+                    // one slow peer would suppress every other row's
+                    // empty state.
+                    chipsLoading={
+                      row.isThisDevice
+                        ? hosts.localLoading
+                        : hosts.remoteLoading && row.status.reachable
+                    }
+                    onRevokeDevice={() =>
+                      revokeDevice.mutate(row.device.deviceId)
+                    }
+                    revokePending={
+                      revokeDevice.isPending &&
+                      revokeDevice.variables === row.device.deviceId
+                    }
+                    tunnel={row.isThisDevice ? tunnel : undefined}
+                  />
+                )),
               }
-              tunnel={row.isThisDevice ? tunnel : undefined}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
+      }
+    />
   );
 }
 
@@ -204,22 +204,9 @@ function describeListError(error: unknown): string {
   return `Couldn't load the device list: ${errorMessageOf(error)}`;
 }
 
-// The person, not the account's key: the hub keys on the Clerk user
-// id, but nobody recognises that string as themselves, so the line
-// reads the email (or name) Clerk knows. With no profile to read (still
-// loading, or no session at all) the line names the account by its
-// abbreviated id and does not call that "signed in". A leaf, like the
-// sign-out button beside it, so Clerk's session churn re-renders one
-// span and not the registry.
 function AccountIdentity({ accountId }: { accountId: string }) {
-  const person = useAccountIdentity();
   return (
-    <p className="text-xs text-muted-foreground">
-      {person === null ? "Account" : "Signed in as"}{" "}
-      <span className="font-medium text-foreground select-text">
-        {person ?? abbreviateId(accountId)}
-      </span>
-    </p>
+    <AccountIdentityView person={useAccountIdentity()} accountId={accountId} />
   );
 }
 
@@ -238,20 +225,9 @@ function SessionMissingBanner() {
   const signingOut = useIsMutating({ mutationKey: CLERK_SIGN_OUT_KEY }) > 0;
   if (!sessionMissing || signingOut) return null;
   return (
-    <SignInBanner>
+    <SignInBannerView signIn={<ClerkSignInButton />}>
       This device is still on the account, but you are no longer signed in. Sign
       in again as the same person to keep it there, or sign out to remove it.
-    </SignInBanner>
-  );
-}
-
-// The banner shape both sign-in problems share: the sentence, and the
-// button beside it.
-function SignInBanner({ children }: { children: React.ReactNode }) {
-  return (
-    <ErrorBanner className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-      <span className="min-w-0 flex-1 basis-64">{children}</span>
-      <ClerkSignInButton />
-    </ErrorBanner>
+    </SignInBannerView>
   );
 }
