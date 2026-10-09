@@ -757,6 +757,22 @@ describe("run", () => {
   });
 });
 
+describe("app", () => {
+  it("takes no arguments, and the dev build has no installed app to open", async () => {
+    const [extra, dev] = await Promise.all([
+      runAt(box.home, "app", "now"),
+      runAt(box.home, "app"),
+    ]);
+    assert.equal(extra.code, 2);
+    assert.equal(extra.stderr, "smd: app takes no arguments.\n");
+    assert.equal(dev.code, 1);
+    assert.equal(
+      dev.stderr,
+      "smd: This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.\n",
+    );
+  });
+});
+
 describe("worktrees link", () => {
   it("prints the link that opens the worktree in the app, on this device", async () => {
     const alpha = box.repo("alpha");
