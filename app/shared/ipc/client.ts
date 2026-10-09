@@ -206,6 +206,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     githubCli: {
       readiness: githubCliClient.readiness,
       owners: githubCliClient.owners,
+      repos: githubCliClient.repos,
       publish: githubCliClient.publish,
       projectPullRequests: (projectId: string) =>
         githubCliClient.projectPullRequests({ projectId }),

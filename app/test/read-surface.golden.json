@@ -7,6 +7,7 @@
   "githubCli:readiness",
   "githubCli:repoDescription",
   "githubCli:repoMergeConfig",
+  "githubCli:repos",
   "githubCli:worktreePullRequest",
   "globalConfig:read",
   "hygiene:diskUsage",
