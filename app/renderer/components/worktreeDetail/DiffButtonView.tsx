@@ -4,7 +4,7 @@ import { DiffStats } from "@/components/ui/diff-stats";
 // The way to a diff: the file icon and count, the lines it adds and
 // takes, like the Branch section's changes button. `words={false}`
 // keeps the number alone, for a row with no room to spare.
-export function DiffButton({
+export function DiffButtonView({
   changedFiles,
   additions,
   deletions,

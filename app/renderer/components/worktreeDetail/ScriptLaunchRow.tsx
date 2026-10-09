@@ -1,7 +1,4 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { Play, Square } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useLocalGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
@@ -13,6 +10,10 @@ import {
   pinnedEntries,
   type SortableEntry,
 } from "./scripts/sortPackageScripts";
+import {
+  ScriptLaunchButtonView,
+  ScriptLaunchRowView,
+} from "./ScriptLaunchRowView";
 
 // Matches the `gap-2` on both the visible row and the measurer.
 const GAP_PX = 8;
@@ -83,8 +84,9 @@ export function ScriptLaunchRow({
   if (candidates.length === 0) return null;
   if (pinned) {
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        {candidates.map((entry) => (
+      <ScriptLaunchRowView
+        pinned
+        buttons={candidates.map((entry) => (
           <ScriptLaunchButton
             key={entry.name}
             worktree={worktree}
@@ -92,7 +94,7 @@ export function ScriptLaunchRow({
             command={entry.command}
           />
         ))}
-      </div>
+      />
     );
   }
   return <FittedScriptRow worktree={worktree} candidates={candidates} />;
@@ -140,8 +142,9 @@ function FittedScriptRow({
   // clip, and clipping would eat the pills' focus ring, which paints outside
   // the button box.
   return (
-    <div ref={containerRef} className="relative flex items-center gap-2">
-      {candidates.slice(0, fitCount).map((entry) => (
+    <ScriptLaunchRowView
+      pinned={false}
+      buttons={candidates.slice(0, fitCount).map((entry) => (
         <ScriptLaunchButton
           key={entry.name}
           worktree={worktree}
@@ -149,31 +152,12 @@ function FittedScriptRow({
           command={entry.command}
         />
       ))}
-
-      {/* inert keeps the natural-width copy out of the tab order and the
-          accessibility tree; pointer-events-none alone leaves the duplicated
-          buttons focusable. The wrapper is pinned to the row's width and
-          clips: a left-0 absolute nowrap box shrink-wraps to its full
-          content width, so unclipped it widens the scroll pane's scrollable
-          area (horizontal scrollbar). The observed inner div stays w-max so
-          pill-width changes (font swap, doubutsu weight remap) resize it
-          and re-trigger measurement even while it overflows the wrapper;
-          clipping doesn't affect the children's measured rects. */}
-      <div
-        aria-hidden
-        inert
-        className="pointer-events-none invisible absolute inset-x-0 top-0 overflow-hidden"
-      >
-        <div
-          ref={measurerRef}
-          className="flex w-max items-center gap-2 whitespace-nowrap"
-        >
-          {candidates.map((entry) => (
-            <ScriptPill key={entry.name} name={entry.name} busy={false} />
-          ))}
-        </div>
-      </div>
-    </div>
+      measure={{
+        rowRef: containerRef,
+        measurerRef,
+        names: candidates.map((entry) => entry.name),
+      }}
+    />
   );
 }
 
@@ -211,7 +195,6 @@ function ScriptLaunchButton({
     worktree,
     slot,
   );
-  const actionLabel = busy ? `Stop ${name}` : `Run ${name}`;
 
   // Cmd-click detours to the script's console instead of toggling the
   // run. Cmd is the modifier the tooltip advertises.
@@ -224,40 +207,13 @@ function ScriptLaunchButton({
   };
 
   return (
-    <SimpleTooltip tip={disabledReason ?? `${command}\n⌘click to view output`}>
-      <ScriptPill
-        name={name}
-        busy={busy}
-        disabled={state.cancelling || !canRun}
-        onClick={handleClick}
-        aria-label={actionLabel}
-      />
-    </SimpleTooltip>
-  );
-}
-
-// Presentational half, shared by the visible row and the measurer so the two
-// can't drift apart. Both icons render at the same size, so a running script
-// occupies exactly the width it was measured at.
-function ScriptPill({
-  name,
-  busy,
-  ...props
-}: {
-  name: string;
-  busy: boolean;
-} & React.ComponentProps<typeof Button>) {
-  // Pill height tracks the launcher row above it, but the glyph and label
-  // inside are the Scripts section's (size-3 icon, text-xs mono). These are
-  // scripts, and reading them at the launcher's weight overstates them.
-  return (
-    <Button variant="outline" size="sm" {...props}>
-      {busy ? (
-        <Square aria-hidden className="size-3 text-destructive" />
-      ) : (
-        <Play aria-hidden className="size-3 text-muted-foreground" />
-      )}
-      <span className="font-mono text-xs">{name}</span>
-    </Button>
+    <ScriptLaunchButtonView
+      name={name}
+      command={command}
+      busy={busy}
+      disabled={state.cancelling || !canRun}
+      disabledReason={disabledReason}
+      onClick={handleClick}
+    />
   );
 }

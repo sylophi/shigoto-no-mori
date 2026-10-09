@@ -10,27 +10,31 @@ import { cn } from "@/lib/utils";
 // (the host's withSignedImages), loads at once: lazily, one under a
 // description's fold would wait past its signature. On a purifier of
 // the module's own, so no other sanitize in the app picks the rule up.
-const purify = DOMPurify(window);
-// The one input a description has is a task list's checkbox (`- [x]`),
-// which shows its state and is never a control. Any other goes.
-purify.addHook("uponSanitizeElement", (node, data) => {
-  if (
-    data.tagName === "input" &&
-    (node as Element).getAttribute("type") !== "checkbox"
-  ) {
-    node.parentNode?.removeChild(node);
-  }
-});
-purify.addHook("afterSanitizeAttributes", (node) => {
-  if (node.tagName === "IMG") {
-    const signed = node
-      .getAttribute("src")
-      ?.startsWith("https://private-user-images.githubusercontent.com/");
-    if (!signed) node.setAttribute("loading", "lazy");
-    node.setAttribute("referrerpolicy", "no-referrer");
-  }
-  if (node.tagName === "INPUT") node.setAttribute("disabled", "");
-});
+// A server (a scene rendered in Node or at build time) has no DOM to
+// sanitize with, and draws the source as text instead (Markdown).
+const purify = DOMPurify(typeof window === "undefined" ? undefined : window);
+if (purify.isSupported) {
+  // The one input a description has is a task list's checkbox (`- [x]`),
+  // which shows its state and is never a control. Any other goes.
+  purify.addHook("uponSanitizeElement", (node, data) => {
+    if (
+      data.tagName === "input" &&
+      (node as Element).getAttribute("type") !== "checkbox"
+    ) {
+      node.parentNode?.removeChild(node);
+    }
+  });
+  purify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "IMG") {
+      const signed = node
+        .getAttribute("src")
+        ?.startsWith("https://private-user-images.githubusercontent.com/");
+      if (!signed) node.setAttribute("loading", "lazy");
+      node.setAttribute("referrerpolicy", "no-referrer");
+    }
+    if (node.tagName === "INPUT") node.setAttribute("disabled", "");
+  });
+}
 
 // Written in v1's vocabulary like any component: tokens only, so the
 // doubutsu overlay and the palettes carry over.
@@ -87,6 +91,16 @@ export function Markdown({
   source: string;
   className?: string;
 }) {
+  if (!purify.isSupported) {
+    return (
+      <div
+        data-slot="markdown"
+        className={cn(PROSE, "whitespace-pre-wrap", className)}
+      >
+        {source}
+      </div>
+    );
+  }
   const html = htmlOf(source);
   return (
     // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- delegates the clicks of the links inside, which are the focusable controls (Enter on one fires this same click)

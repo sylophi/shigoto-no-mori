@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { createContext, use, useRef, type ReactNode } from "react";
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 
 import { cn } from "@/lib/utils";
@@ -71,7 +71,43 @@ function PopoverContent({
 function PopoverClose({
   ...props
 }: WithoutTitle<PopoverPrimitive.Close.Props>) {
+  if (use(StaticPopoverContext)) {
+    return (
+      <button
+        type="button"
+        className={props.className as string | undefined}
+        onClick={props.onClick}
+      >
+        {props.children as ReactNode}
+      </button>
+    );
+  }
   return <PopoverPrimitive.Close {...props} />;
 }
 
-export { Popover, PopoverTrigger, PopoverContent, PopoverClose };
+// A popover drawn open in place, for a scene (lab/scenes): Base UI's
+// popup needs an open popover and a portal, neither of which draws on a
+// server, so this is its surface, and a close inside draws as a plain
+// button. Placed by its parent, where the live one floats.
+const StaticPopoverContext = createContext(false);
+
+function StaticPopover({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <StaticPopoverContext value={true}>
+      <div
+        data-slot="popover-content"
+        className={cn(FLOATING_SURFACE_CLASS, "w-72", className)}
+      >
+        {children}
+      </div>
+    </StaticPopoverContext>
+  );
+}
+
+export { Popover, PopoverTrigger, PopoverContent, PopoverClose, StaticPopover };

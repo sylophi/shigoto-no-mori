@@ -1,18 +1,16 @@
-import { useEffect, useState } from "react";
-import { Combobox } from "@base-ui/react/combobox";
-import { Check, Loader2, Search } from "lucide-react";
+// The branch switcher (BranchSwitcherView) over the project's branches,
+// listed afresh each time it opens.
+import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import type { BranchEntry } from "@/components/shared/BranchComboboxView";
 import { useBranches } from "@/hooks/git/useBranches";
-import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
-import { type BranchEntry } from "@/components/shared/BranchComboboxView";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { BranchSwitcherView } from "./BranchSwitcherView";
 
-// Switching the worktree's branch, opened from BranchMenu.
 export function BranchSwitcher({
   worktree,
   anchorRef,
@@ -24,18 +22,14 @@ export function BranchSwitcher({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: branches, isFetching: branchesFetching } = useBranches(
-    worktree.projectId,
-  );
+  const { data: branches, isFetching } = useBranches(worktree.projectId);
   const { data: peerWorktrees = [] } = useWorktrees(worktree.projectId);
   const checkout = useCheckoutBranch();
   const queryClient = useQueryClient();
   const { keys } = useHostScope();
-  const [query, setQuery] = useState("");
   // A fresh list each time it opens.
   useEffect(() => {
     if (!open) return;
-    setQuery("");
     void queryClient.invalidateQueries({
       queryKey: keys.branches(worktree.projectId),
     });
@@ -57,91 +51,30 @@ export function BranchSwitcher({
   // was picked survives when several carry the same name).
   const localSet = new Set(branches?.local ?? []);
   const remoteSet = new Set(branches?.remote ?? []);
-  const all: BranchEntry[] = [];
+  const entries: BranchEntry[] = [];
   for (const name of branches?.local ?? []) {
-    if (!occupied.has(name)) all.push({ name, kind: "local" });
+    if (!occupied.has(name)) entries.push({ name, kind: "local" });
   }
   for (const name of branches?.remote ?? []) {
     if (!localSet.has(localBranchOf(name, remoteSet))) {
-      all.push({ name, kind: "remote" });
+      entries.push({ name, kind: "remote" });
     }
   }
-  const sorted = rankByScore(query, all, (b) => b.name);
-
   return (
-    <Combobox.Root
-      value={worktree.branch}
-      onValueChange={(v) => {
-        const next = v as string | null;
-        if (!next || next === worktree.branch) return;
+    <BranchSwitcherView
+      branch={worktree.branch}
+      entries={entries}
+      fetching={isFetching}
+      onPick={(branch) =>
         checkout.mutate({
           projectId: worktree.projectId,
           worktreeId: worktree.id,
-          branch: next,
-        });
-      }}
-      inputValue={query}
-      onInputValueChange={setQuery}
+          branch,
+        })
+      }
+      anchorRef={anchorRef}
       open={open}
       onOpenChange={onOpenChange}
-      autoHighlight
-    >
-      <Combobox.Portal>
-        <Combobox.Positioner
-          anchor={anchorRef}
-          sideOffset={6}
-          side="bottom"
-          align="start"
-          className="z-50"
-        >
-          <Combobox.Popup className="flex max-h-72 w-72 flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md">
-            <div className="flex items-center gap-2 border-b border-border px-3">
-              <Search
-                aria-hidden
-                className="size-3.5 shrink-0 text-muted-foreground/60"
-              />
-              <Combobox.Input
-                placeholder="Switch to branch…"
-                className="flex-1 bg-transparent py-2 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
-              />
-              {branchesFetching && (
-                <Loader2
-                  aria-label="Syncing branches"
-                  className="size-3.5 shrink-0 animate-spin text-muted-foreground/60"
-                />
-              )}
-            </div>
-            <Combobox.List className="flex-1 overflow-y-auto p-1">
-              {sorted.length === 0 && (
-                <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                  No matching branches.
-                </div>
-              )}
-              {sorted.map((entry) => (
-                <Combobox.Item
-                  key={`${entry.kind}:${entry.name}`}
-                  value={entry.name}
-                  className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-                >
-                  <SimpleTooltip whenTruncated lazy tip={entry.name}>
-                    <span className="flex-1 truncate font-mono">
-                      {entry.name}
-                    </span>
-                  </SimpleTooltip>
-                  {entry.name === worktree.branch && (
-                    <Check className="size-3.5 text-muted-foreground" />
-                  )}
-                  {entry.kind === "remote" && (
-                    <span className="text-3xs text-muted-foreground">
-                      remote
-                    </span>
-                  )}
-                </Combobox.Item>
-              ))}
-            </Combobox.List>
-          </Combobox.Popup>
-        </Combobox.Positioner>
-      </Combobox.Portal>
-    </Combobox.Root>
+    />
   );
 }

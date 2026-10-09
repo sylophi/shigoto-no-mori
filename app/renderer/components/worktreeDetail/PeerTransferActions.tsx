@@ -22,9 +22,9 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { FooterActionButton } from "./FooterActionButton";
-import { LABEL_RANK } from "./footerFit";
-import { OptionAction } from "./WorktreeOptions";
+import { FooterActionButtonView } from "./FooterActionButtonView";
+import { LABEL_RANK } from "./FooterVerbView";
+import { OptionActionView } from "./WorktreeOptionsView";
 import { usePeerTargets } from "./flow/peerTargets";
 import { MirrorToDialog } from "./mirror/MirrorDialog";
 import { TransplantToDialog } from "./transplant/TransplantDialog";
@@ -78,7 +78,7 @@ function TransferButtons({
       canOpen &&
       !worktree.isPrimary &&
       !mirrored && (
-        <OptionAction
+        <OptionActionView
           icon={<Shovel />}
           label="Transplant"
           description="Move this worktree to another device."
@@ -98,7 +98,7 @@ function TransferButtons({
     <>
       {/* App only, like "Mirror here": the daemon lives in main. */}
       {canOpen && canForwardPorts && !mirrored && (
-        <FooterActionButton
+        <FooterActionButtonView
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
           label="Mirror"

@@ -3,12 +3,11 @@ import {
   useWorktreeNav,
 } from "@/hooks/worktrees/useWorktreeNav";
 import { useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
+import { WorktreeUnavailableView } from "./WorktreeDetailView";
 
 export function WorktreeDetail() {
   const { projectId, worktreeId } = useScopedWorktreeParams();
@@ -61,19 +60,10 @@ export function WorktreeDetail() {
     // as a deleted worktree and offer no way back.
     if (worktreesError) {
       return (
-        <CenteredMessage className="flex-col gap-3">
-          Couldn't load worktrees.
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refetchWorktrees()}
-          >
-            Retry
-          </Button>
-        </CenteredMessage>
+        <WorktreeUnavailableView onRetry={() => void refetchWorktrees()} />
       );
     }
-    return <CenteredMessage>Worktree not found.</CenteredMessage>;
+    return <WorktreeUnavailableView />;
   }
 
   return (
