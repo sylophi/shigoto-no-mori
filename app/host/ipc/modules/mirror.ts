@@ -2,9 +2,10 @@
 // modules/mirror.ts): the sessions this device runs
 // (host/mirror/sessions.ts) and what it serves a peer mirroring from
 // here (host/mirror/serving.ts).
-import type { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import * as Views from "@host/lib/views";
 import { forgetMirrorInvitesOf } from "@host/mirror/invites";
 import { engine } from "@host/mirror/registry";
 import {
@@ -20,6 +21,12 @@ import {
   startMirrorTo,
   stopMirror,
 } from "@host/mirror/sessions";
+
+export const mirrorViews: ViewHandlers<typeof mirrorContract, Views.Services> =
+  {
+    watch: () =>
+      Views.view(() => mirrorList(), Views.pushed(mirrorContract, "changed")),
+  };
 
 export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   list: () => mirrorList(),

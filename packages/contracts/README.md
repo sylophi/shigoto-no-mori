@@ -16,7 +16,7 @@ The package has no runtime dependency besides `effect` and imports nothing from 
 
 ## Wire samples
 
-`src/protocol.ts` holds the protocol version, and `fixtures/wire/v<version>.json` one encoded sample of every part each call sends: an invoke's payload and result, a push's payload. `test/wire.test.ts` checks that every call has its samples and that each still decodes and goes back to exactly itself, so a schema change that leaves this build unable to read what an older build sends fails there. Such a change bumps the version, and the samples file is replaced by one for the new version.
+`src/protocol.ts` holds the protocol version, and `fixtures/wire/v<version>.json` one encoded sample of every part each call sends: an invoke's payload and result, a push's payload, a view's payload and value. `test/wire.test.ts` checks that every call has its samples and that each still decodes and goes back to exactly itself, so a schema change that leaves this build unable to read what an older build sends fails there. Such a change bumps the version, and the samples file is replaced by one for the new version.
 
 The samples prove one direction: this build reads what the version's samples hold. That an older build of the same version reads everything this one sends (a new optional field in a strict result, a new literal) is the reviewer's call, and a bump when it cannot.
 

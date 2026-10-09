@@ -19,8 +19,7 @@ import { strict } from "../schemas/strict.ts";
 //
 // Served on the control wire ONLY (main/ipc/handlers.ts), so the module
 // annotates every call remote: false. Its caller is a local process of
-// this user and commands this machine without a grant. `gated` is what
-// pings the app's windows and the remote viewers once an op moved state.
+// this user and commands this machine without a grant.
 //
 // Each op takes what a person would say (a device by name, a worktree
 // by name or branch) and resolves it the way the dialogs do.

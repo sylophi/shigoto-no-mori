@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import type { ContractSchema } from "../codec.ts";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { broadcast, defineContract, invoke, view } from "../contract.ts";
 import {
   AgentSessionPayloadSchema,
   ApplyStashPayloadSchema,
@@ -77,6 +77,10 @@ export const worktreesContract = defineContract(
   "worktrees",
   "host",
   invoke("list", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
+    remote: true,
+    gated: false,
+  }),
+  view("watch", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
     remote: true,
     gated: false,
   }),
@@ -172,13 +176,18 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "browseFiles",
-    movesHostState: false,
   }),
   // The changes page's list: every changed file, its index state and
   // its counts. The one read the page needs to draw the rail, and the
   // one a tick refetches.
   invoke(
     "changeStatus",
+    WorktreeScopedPayloadSchema,
+    Schema.Array(ChangedFileSchema),
+    { remote: true, gated: false },
+  ),
+  view(
+    "watchChangeStatus",
     WorktreeScopedPayloadSchema,
     Schema.Array(ChangedFileSchema),
     { remote: true, gated: false },

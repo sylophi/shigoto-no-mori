@@ -543,13 +543,13 @@ export const syncContract = defineContract(
     "worktreeFolder",
     SyncWorktreeFolderPayloadSchema,
     Schema.Array(SyncWorktreeFolderEntrySchema),
-    { remote: true, gated: true, grant: "browseFiles", movesHostState: false },
+    { remote: true, gated: true, grant: "browseFiles" },
   ),
   invoke(
     "ignoredPaths",
     SyncIgnoredPathsPayloadSchema,
     SyncIgnoredPathsResultSchema,
-    { remote: true, gated: true, grant: "browseFiles", movesHostState: false },
+    { remote: true, gated: true, grant: "browseFiles" },
   ),
   // The git follower's question about the copy's repo, so a mirror
   // into this device asks it (invitable, by the copy's project).
@@ -561,23 +561,19 @@ export const syncContract = defineContract(
       remote: true,
       gated: true,
       grant: "browseFiles",
-      movesHostState: false,
       invitable: "project",
     },
   ),
   // The link opens and the call returns: what crosses after is bytes on
   // the channel, and a capture it takes is announced by the git
-  // watcher like any ref write, so the open itself pings no viewer. The
-  // follower fetching the copy's commits opens one on the copy.
+  // watcher like any ref write. The follower fetching the copy's commits opens one on the copy.
   invoke("openSource", SyncOpenSourcePayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
-    movesHostState: false,
     invitable: "copy",
   }),
-  // Both land refs (and a worktree), so both keep the viewer ping,
-  // which fires once they are done. Both are a mirror's into the copy's
+  // Both land refs (and a worktree). Both are a mirror's into the copy's
   // device: the landing of the invited original, and the follower's
   // push into the copy's project (under refs/shigomori/, never a
   // branch, so the project is scope enough).
@@ -610,13 +606,11 @@ export const syncContract = defineContract(
   ),
   // The cancel reaches the device running the move or its landing (the
   // payload's note), so it rides the grant like the moves themselves.
-  // Whether it moved host state is the cancelled call's own news (its
-  // rollback resolves under that call), so this one skips the ping.
   invoke(
     "cancelMove",
     SyncCancelMovePayloadSchema,
     SyncCancelMoveResultSchema,
-    { remote: true, gated: true, grant: "changeCode", movesHostState: false },
+    { remote: true, gated: true, grant: "changeCode" },
   ),
   // A move's second half, local-only like the moves: its remote half,
   // after a pull, is the peer's ordinary grant-gated worktrees:delete.

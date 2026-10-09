@@ -17,7 +17,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, beforeAll } from "vitest";
@@ -74,15 +73,13 @@ function builtMacfs(): string {
   return binary;
 }
 
+// The engine reads its data dir from the environment when the graph
+// is built (host/lib/engine.ts). Set here, so a proof never writes to
+// the dev app's, or to one the shell exported.
+process.env.SHIGOMORI_DATA_DIR = engineDataDir;
 const engine = Engine.adapter.pipe(
   Layer.provideMerge(
     Engine.layer({ flavor: "dev", macfs: builtMacfs(), sm: "smd" }),
-  ),
-  Layer.provide(
-    ConfigProvider.layerAdd(
-      ConfigProvider.fromEnv({ env: { SHIGOMORI_DATA_DIR: engineDataDir } }),
-      { asPrimary: true },
-    ),
   ),
 );
 

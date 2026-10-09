@@ -1,6 +1,9 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import * as Views from "@host/lib/views";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import type {
   Project,
   Worktree,
@@ -130,6 +133,50 @@ export function setWorktreeRemovalBroadcaster(
 ): void {
   broadcastRemoval = broadcaster;
 }
+
+const gitMoved = (projectId: string) =>
+  Views.either(
+    Views.pushed(gitContract, "projectChanged", (moved) => {
+      return moved.projectId === projectId;
+    }),
+    Views.pushed(gitContract, "refsRefreshed", (fetched) => {
+      return fetched.projectId === projectId;
+    }),
+  );
+
+export const worktreesViews: ViewHandlers<
+  typeof worktreesContract,
+  Views.Services
+> = {
+  watch: ({ projectId }) =>
+    Views.view(
+      () => listWorktrees(projectId),
+      Views.either(
+        Views.wrote(
+          "projects",
+          "project_config",
+          "worktree_marks",
+          "shelf_snapshots",
+          "worktree_data",
+          "agent_sessions",
+        ),
+        gitMoved(projectId),
+      ),
+    ),
+  // A file edited in the worktree moves no ref and writes no row, so the
+  // list is also read again every few seconds.
+  watchChangeStatus: (input) =>
+    Views.view(
+      async () => listChangesForPage(await findWorktreePathOrThrow(input)),
+      Views.either(
+        gitMoved(input.projectId),
+        Views.pushed(mirrorContract, "gitChanged", (staged) => {
+          return staged.worktreeId === input.worktreeId;
+        }),
+      ),
+      { every: "2 seconds" },
+    ),
+};
 
 export const worktreesHandlers: Handlers<
   typeof worktreesContract,

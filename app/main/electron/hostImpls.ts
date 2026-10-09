@@ -33,7 +33,7 @@ import {
 import { busyActionRemoteRefusal } from "./busyPrompt";
 import { refreshProject, sweepForPeer } from "./fetch";
 import { relaunchAppUnattended } from "./relaunch";
-import { stopStoreWatcher } from "@host/lib/storeWatcher";
+import { releaseStore } from "@host/lib/storeChanges";
 import { stopUpdaterBridge } from "./updaterBridge";
 
 export function installHostImpls(): void {
@@ -62,7 +62,7 @@ export function installHostImpls(): void {
   });
   setRuntimeImpl({
     uninstallCliEverything,
-    stopStoreWatcher,
+    releaseStore,
     stopUpdaterBridge,
     stopControlHost,
     broadcastNukeProgress: (progress) =>

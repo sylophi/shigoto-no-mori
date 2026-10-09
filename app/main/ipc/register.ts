@@ -7,14 +7,12 @@
 // through the contract's payload schema before it crosses the bridge.
 import { bundledBinaryPath } from "../electron/bundledBinary";
 import { devDialKinds } from "../electron/devDialKinds";
-import { coalesce } from "@host/lib/util/coalesce";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
 import { type ContractModule, scopeOf } from "@shigomori/contracts/contract";
-import { gitContract } from "@shigomori/contracts/modules/git";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
@@ -25,7 +23,6 @@ import {
 } from "@shared/ipc/registerContract";
 import {
   type HandlerContext,
-  isRemoteCaller,
   type ServerTransport,
   settle,
 } from "@shared/ipc/transport";
@@ -312,54 +309,6 @@ const hostServer: ServerTransport = {
 const serverFor = (module: ContractModule): ServerTransport =>
   scopeOf(module) === "host" ? hostServer : electronServer;
 
-// App-driven host mutations never reach viewers through the store
-// watcher, which sees only other processes' commits
-// (host/lib/storeWatcher.ts). So after any mutating host
-// invoke resolves (whichever wire carried it), ping the direct
-// listener's peers with the existing git:externalChange broadcast, the
-// same signal a truly external write produces. The Electron wire is
-// pinged only when the acting client was a REMOTE peer: the acting
-// local renderer is already fresh via its mutation's targeted
-// invalidation and must not start paying a broad invalidation for every
-// one of its own writes, while a change a peer drove is external to
-// this window exactly like a CLI write, and would otherwise sit unseen
-// until a focus refetch.
-// A trailing coalesce folds a burst of mutations into one ping without
-// re-arming, so a steady stream still pings at a bounded rate. If the
-// watcher fires for the same change anyway, viewer-side invalidation
-// is idempotent, so the overlap is harmless.
-const MUTATION_PING_MS = 300;
-let mutationPingLocal = false;
-// Followers of "a host mutation settled", on the same coalesced
-// cadence as the ping: the git-directory watcher tracks the project
-// registry through this, because an app-side project add or remove
-// runs as a CLI child whose registry write the state watcher drops as
-// the app's own.
-const mutationSettledListeners = new Set<() => void>();
-export function onHostMutationSettled(listener: () => void): void {
-  mutationSettledListeners.add(listener);
-}
-const flushMutationPing = coalesce(() => {
-  const pingLocal = mutationPingLocal;
-  mutationPingLocal = false;
-  // resolveBroadcast runs the (void) payload through the contract
-  // schema, exactly like the composite broadcastAll path.
-  // externalChange is remote:true by contract, and must stay that
-  // way: this path pushes to the direct peers unconditionally.
-  const { channel, parsed } = resolveBroadcast(
-    gitContract,
-    "externalChange",
-    undefined,
-  );
-  directWsServer.broadcastAll(channel, parsed);
-  if (pingLocal) electronServer.broadcastAll(channel, parsed);
-  for (const listener of mutationSettledListeners) listener();
-}, MUTATION_PING_MS);
-function pingViewers(ctx: HandlerContext): void {
-  if (isRemoteCaller(ctx)) mutationPingLocal = true;
-  flushMutationPing();
-}
-
 export function registerContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext>,
@@ -378,28 +327,16 @@ export function registerContract<M extends ContractModule>(
         }
       });
     },
-    // Only host-scoped modules can move host state a viewer caches.
-    // Client-scoped calls are never gated anyway, so this gate is
-    // belt and braces.
-    onMutationResolved: scopeOf(module) === "host" ? pingViewers : undefined,
   });
 }
 
-// The control contract's registration, on the control wire alone. A
-// mutation the CLI drove is external to every window here, exactly
-// like one a peer drove (and its CLI children mute the state watcher
-// the same way), so it pings the local windows along with the remote
-// viewers.
+// The control contract's registration, on the control wire alone.
 export function registerControlContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext>,
 ): void {
   registerContractCore(module, handlers, controlServer.transport, {
     validateOutputs: VALIDATE_OUTPUTS,
-    onMutationResolved: () => {
-      mutationPingLocal = true;
-      flushMutationPing();
-    },
   });
 }
 

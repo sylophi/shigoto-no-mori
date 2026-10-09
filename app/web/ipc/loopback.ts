@@ -34,7 +34,7 @@ import {
   type ContractCall,
   type ContractScope,
   Gated,
-  isBroadcast,
+  isInvoke,
   outputOf,
   scopeOf,
 } from "@shigomori/contracts/contract";
@@ -76,7 +76,7 @@ export function invokeIndexFor(
   for (const module of allContractModules) {
     if (scopeOf(module) !== scope) continue;
     for (const call of callsOf(module)) {
-      if (!isBroadcast(call)) index.set(channelOf(call), call);
+      if (isInvoke(call)) index.set(channelOf(call), call);
     }
   }
   return index;

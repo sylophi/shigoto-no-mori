@@ -15,6 +15,7 @@ import {
   type ContractModule,
   inputOf,
   isBroadcast,
+  isInvoke,
   outputOf,
   payloadOf,
 } from "../src/contract.ts";
@@ -50,7 +51,7 @@ for (const module of modules) {
         ? [["payload", payloadOf(call)]]
         : [
             ["payload", inputOf(call)],
-            ["success", outputOf(call)],
+            ["success", isInvoke(call) ? outputOf(call) : payloadOf(call)],
           ];
       calls.set(
         channel,

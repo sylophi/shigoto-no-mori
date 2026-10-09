@@ -1,5 +1,6 @@
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import * as Views from "@host/lib/views";
 import {
   DEVICE_SETTINGS_DEFAULTS,
   type DeviceSettingsPatch,
@@ -25,6 +26,13 @@ function isDefault(key: keyof DeviceSettingsPatch, value: unknown): boolean {
 const MANAGED_KEYS = Object.keys(
   DEVICE_SETTINGS_DEFAULTS,
 ) as (keyof DeviceSettingsPatch)[];
+
+export const globalConfigViews: ViewHandlers<
+  typeof globalConfigContract,
+  Views.Services
+> = {
+  watch: () => Views.view(readGlobalConfig, Views.wrote("device_config")),
+};
 
 export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
   // config.json as stored, read through the CLI (`sm config read`) and

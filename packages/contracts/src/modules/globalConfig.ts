@@ -1,4 +1,4 @@
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, view } from "../contract.ts";
 import {
   StoredGlobalConfigSchema,
   VoidSchema,
@@ -11,6 +11,10 @@ export const globalConfigContract = defineContract(
   // The stored document, loose so legacy and newer keys pass through.
   // It carries no secret, so every wire serves it ungated.
   invoke("read", VoidSchema, StoredGlobalConfigSchema, {
+    remote: true,
+    gated: false,
+  }),
+  view("watch", VoidSchema, StoredGlobalConfigSchema, {
     remote: true,
     gated: false,
   }),

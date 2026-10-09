@@ -1,7 +1,8 @@
 import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { reorderProjects } from "@shared/reorder";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import * as Views from "@host/lib/views";
 import type { Project } from "@shigomori/contracts/schemas";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { listBranches } from "@host/lib/git/branches";
@@ -62,6 +63,19 @@ async function registerNewCheckout(
     );
   }
 }
+
+export const projectsViews: ViewHandlers<
+  typeof projectsContract,
+  Views.Services
+> = {
+  // The usage log orders the list; terrier's identities and a missing
+  // folder are not the store's, and show on the next write.
+  watch: () =>
+    Views.view(
+      listProjectsWithStatus,
+      Views.wrote("projects", "project_order", "project_config", "usage"),
+    ),
+};
 
 export const projectsHandlers: Handlers<typeof projectsContract> = {
   list: () => listProjectsWithStatus(),

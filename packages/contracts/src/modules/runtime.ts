@@ -18,7 +18,7 @@ import {
 // worktree will land at the same way the local ones do, behind the
 // command grant like the fs reads (it names the host's homedir and
 // data dir, which a peer this host has not granted control to has no
-// use for). It moves no state, so it never pings viewers.
+// use for).
 export const runtimeContract = defineContract(
   "runtime",
   "host",
@@ -26,18 +26,13 @@ export const runtimeContract = defineContract(
     remote: true,
     gated: true,
     grant: "browseFiles",
-    movesHostState: false,
   }),
   invoke("nuke", VoidSchema, VoidSchema, { remote: false }),
-  invoke(
-    "moveDataDir",
-    MoveDataDirPayloadSchema,
-    VoidSchema,
-    // The host restarts right after, and the session that comes back
-    // refetches everything, so the viewer ping would only race the
-    // quit.
-    { remote: true, gated: true, grant: "changeApp", movesHostState: false },
-  ),
+  invoke("moveDataDir", MoveDataDirPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeApp",
+  }),
   broadcast("nukeProgress", NukeProgressSchema, {
     remote: true,
   }),

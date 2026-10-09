@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { broadcast, defineContract, invoke } from "../contract.ts";
+import { broadcast, defineContract, invoke, view } from "../contract.ts";
 import { broughtPaths } from "../mirrorIgnores.ts";
 import {
   type MirrorIgnoreMode,
@@ -646,6 +646,10 @@ export const mirrorContract = defineContract(
     remote: true,
     gated: false,
   }),
+  view("watch", VoidSchema, MirrorListResultSchema, {
+    remote: true,
+    gated: false,
+  }),
   // Served to peers on the command grant: the copy's device asks the
   // original's to start the mirror into it (see the payload's note).
   invoke("startTo", MirrorStartToPayloadSchema, MirrorStartToResultSchema, {
@@ -664,9 +668,7 @@ export const mirrorContract = defineContract(
   // The controls, served to peers on the command grant: the device at
   // the far end of a mirror drives the session from its own page
   // through the device running it (renderer/hooks/remote/useMirrors.ts
-  // useWorktreeMirrorLinks). Stop moves a worktree (the copy goes),
-  // and every one of them moves the list, so all keep the host-state
-  // ping.
+  // useWorktreeMirrorLinks).
   invoke("stop", MirrorStopPayloadSchema, MirrorStopResultSchema, {
     remote: true,
     gated: true,
@@ -680,7 +682,6 @@ export const mirrorContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
-    movesHostState: false,
     invitable: "copy",
   }),
   invoke("pause", MirrorSessionPayloadSchema, VoidSchema, {
@@ -705,13 +706,11 @@ export const mirrorContract = defineContract(
     remote: true,
     gated: false,
   }),
-  // Grant-gated like every byte-stream open. The stream changes nothing
-  // a viewer caches (the serving set fans out on `changed` below).
+  // Grant-gated like every byte-stream open.
   invoke("openStream", MirrorOpenStreamPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
-    movesHostState: false,
     invitable: "copy",
   }),
   // The git half, served to the device mirroring FROM here: read a
@@ -722,11 +721,9 @@ export const mirrorContract = defineContract(
     remote: true,
     gated: true,
     grant: "browseFiles",
-    movesHostState: false,
     invitable: "copy",
   }),
-  // Moves refs and the index here, which every viewer of this host
-  // caches, so it keeps the host-state ping.
+  // Moves refs and the index here.
   invoke(
     "applyGitState",
     MirrorApplyGitStatePayloadSchema,

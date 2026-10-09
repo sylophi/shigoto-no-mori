@@ -21,8 +21,7 @@ import { strict } from "../schemas/strict.ts";
 // {remote:true, gated:true}: the surface rides the host's command
 // grant, fail-closed. open dials 127.0.0.1 only, because the feature IS
 // reaching the remote machine's own loopback dev server, never a hop
-// beyond it. movesHostState:false: an open changes nothing a remote
-// viewer caches.
+// beyond it.
 
 // Channel ids are CLIENT-minted (schemas/hexId.ts pins the shape):
 // the caller attaches its endpoint under the id before the open, so
@@ -55,6 +54,5 @@ export const forwardContract = defineContract(
     remote: true,
     gated: true,
     grant: "reachServers",
-    movesHostState: false,
   }),
 );
