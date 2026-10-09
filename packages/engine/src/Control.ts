@@ -234,6 +234,9 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
       (proof) =>
         call("link:hello", {
           deviceId,
+          // The loopback holds every caller apart, whatever it says.
+          deviceKind: "desktop",
+          connectionId: newHandshakeNonce().slice(0, 32),
           appVersion: paths.binaryName,
           protocolVersion: PROTOCOL_VERSION,
           nonce: clientNonce,

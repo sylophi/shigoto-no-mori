@@ -1,6 +1,6 @@
 // Schema-derived stub values for the OS-bound contract surface the web
 // client cannot serve. The bridge answers an eligible unhandled channel
-// (see loopback.ts for the fail-closed eligibility rule) with a benign
+// (see localRegistrar.ts for the fail-closed eligibility rule) with a benign
 // default derived from the invoke's OUTPUT schema, so a shared
 // component that brushes an OS-only read renders an empty state instead
 // of throwing.

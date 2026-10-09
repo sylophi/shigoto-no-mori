@@ -1,12 +1,17 @@
-// The web bridge's in-page wire: one ServerTransport and one ClientTransport joined back to back, so
-// the shared registrar
-// (shared/ipc/registerContract.ts) mounts real browser-backed handlers
-// exactly the way the Electron and socket bindings mount theirs, and
-// buildApi consumes the client half exactly the way the desktop window
-// consumes its links. Nothing above or below this seam knows the wire is a
-// Map.
+// The tab's local registrar: what a browser serves itself, in the page.
+// A web client is a device with no host (decision 6 of V3.md): every
+// host it shows is a peer, reached over the device link through the
+// hub (shared/hub/directPlane.ts). What stays in the page are the
+// client modules (the account, the client config, the hub bridge, the
+// shell, the releases) and the browser's own copy of the shared
+// settings, mounted through the shared registrar
+// (shared/ipc/registerContract.ts) like every binding's, and called
+// through buildApi like every window's.
 //
-// Channels no handler was registered for are answered FAIL-CLOSED:
+// A host call nothing here serves is the renderer asking a local host
+// the browser does not have, which it still does in a few places until
+// step 6 makes "local" one device in the list. Those are answered
+// FAIL-CLOSED:
 //
 //   - An invoke explicitly classified `gated: false` (the registrar
 //     makes every remote-exposed host invoke classify itself, and only
@@ -59,21 +64,22 @@ import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 //     every theme flip.
 const STUB_ALLOWED = new Set(["window:previewTheme"]);
 
-export type LoopbackWire = {
+export type LocalRegistrar = {
   server: ServerTransport;
   client: ClientTransport;
 };
 
-// Every invoke of one scope, keyed by channel, for the stub
-// fallback. Built from the same module list buildApi consumes so the
-// inventory cannot drift from the api surface. Exported for the fake host's
-// fixture wire (lab/fake-host/bridge.ts), which stubs the same way.
+// Every invoke (of one scope, when given), keyed by channel, for the
+// stub fallback. Built from the same module list buildApi consumes so
+// the inventory cannot drift from the api surface. Exported for the
+// fake host's fixture wire (lab/fake-host/bridge.ts), which stubs the
+// same way.
 export function invokeIndexFor(
-  scope: ContractScope,
+  scope?: ContractScope,
 ): Map<string, ContractCall> {
   const index = new Map<string, ContractCall>();
   for (const module of allContractModules) {
-    if (scopeOf(module) !== scope) continue;
+    if (scope !== undefined && scopeOf(module) !== scope) continue;
     for (const call of callsOf(module)) {
       if (isInvoke(call)) index.set(channelOf(call), call);
     }
@@ -81,13 +87,13 @@ export function invokeIndexFor(
   return index;
 }
 
-export function createLoopbackWire(scope: ContractScope): LoopbackWire {
+export function createLocalRegistrar(): LocalRegistrar {
   const handlers = new Map<
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
-  const subscribers = createSubscriberRegistry(`loopback:${scope}`);
-  const invokeIndex = invokeIndexFor(scope);
+  const subscribers = createSubscriberRegistry("tab");
+  const invokeIndex = invokeIndexFor();
   // Fallback verdicts are computed once per channel: the policy is
   // deterministic and some stub outputs are sizeable object shapes. A
   // verdict is either a resolvable stub value or the rejection message.
@@ -119,8 +125,7 @@ export function createLoopbackWire(scope: ContractScope): LoopbackWire {
 
   // One handler context for the page's lifetime. The signal seam exists
   // for callers that outlive their peer; in-page the caller IS the
-  // peer, so it never aborts, matching the Electron binding's
-  // same-document behavior.
+  // peer, so it never aborts.
   const pageLifetime = new AbortController();
   const context: HandlerContext = {
     notifier: (module, key) => (payload) => {
