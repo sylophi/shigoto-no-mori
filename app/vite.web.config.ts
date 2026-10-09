@@ -16,9 +16,14 @@ import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
 import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
 import { fixedDevServerPort } from "./scripts/lib/portsEnvFile.mts";
 
+// Bounded, so a stalled remote (remoteTag's) costs the version rather
+// than the build.
 function gitOutput(args: string): string | null {
   try {
-    return execSync(`git ${args}`, { stdio: ["ignore", "pipe", "ignore"] })
+    return execSync(`git ${args}`, {
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 10_000,
+    })
       .toString()
       .trim();
   } catch {
@@ -26,15 +31,34 @@ function gitOutput(args: string): string | null {
   }
 }
 
+// Git can't read the repository in Vercel's deploy build, so there
+// Vercel names the commit and the remote names its tag. The commit is
+// cut to the length git abbreviates this repo's to, so it reads as the
+// desktop's does.
 function buildInfo(mode: string): { version: string; commit: string } {
-  const sha = gitOutput("rev-parse --short HEAD");
+  const vercelSha = process.env.VERCEL_GIT_COMMIT_SHA;
+  const sha = vercelSha
+    ? vercelSha.slice(0, 8)
+    : gitOutput("rev-parse --short HEAD");
   const dirty =
     (gitOutput("status --porcelain -- ':(exclude,top)app/package.json'") ??
       "") !== "";
   const commit = sha ? (dirty ? `${sha}-dirty` : sha) : "unknown";
-  const tag = gitOutput("describe --tags --exact-match HEAD");
+  const tag = vercelSha
+    ? remoteTag(vercelSha)
+    : gitOutput("describe --tags --exact-match HEAD");
   const version = mode === "production" ? (tag ?? "unknown") : "dev";
   return { version, commit };
+}
+
+function remoteTag(sha: string): string | undefined {
+  return gitOutput(
+    `ls-remote --tags https://github.com/${process.env.VERCEL_GIT_REPO_OWNER}/${process.env.VERCEL_GIT_REPO_SLUG}`,
+  )
+    ?.split("\n")
+    .find((line) => line.startsWith(`${sha}\t`))
+    ?.split("\t")[1]
+    ?.replace(/^refs\/tags\/|\^\{\}$/g, "");
 }
 
 // The material icons the file pickers show. scripts/copy-material-icons.mts
