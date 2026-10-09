@@ -54,8 +54,8 @@ export function cliDataDirName(flavor: CliFlavor): string {
 
 // The data dir's name before 2.0 (the app name spelled out, visible
 // in $HOME). Boot adopts a legacy dir that still holds state, in
-// place, while the current name holds none (host/lib/util/paths.ts
-// initDataDir, mirrored by cli/state.go). The data-folder move in
+// place, while the current name holds none (the engine's
+// Paths.ts, which host/lib/util/paths.ts reads). The data-folder move in
 // Settings is what renames it (host/lib/dataDirMove.ts).
 export function legacyDataDirName(flavor: CliFlavor): string {
   return flavor === "prod" ? "shigomori" : "shigomori-dev";

@@ -98,7 +98,7 @@ function getUpdaterState(): UpdaterState {
 
 const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
 
-// Mirrors cli/updater.go stagedDir()/stagedManifestPath().
+// Mirrors the engine's Updater.ts.
 const stagedDir = () => join(dataDir(), "updates", "staged");
 
 // null unless a well-formed manifest describes a bundle that is

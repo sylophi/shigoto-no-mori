@@ -43,7 +43,7 @@ export interface DeviceUpdater {
 // the build it runs. Unknown for a peer whose welcome hasn't named it,
 // which doesn't count. Neither does a build that doesn't update itself
 // (a dev build), nor one off the beta ride behind a prerelease: its
-// own check stays on full releases (cli/updater.go pickRelease), so it
+// own check stays on full releases (pickRelease in the engine's updateFeed.ts), so it
 // would never find it.
 export function findOutdated(devices: readonly DeviceUpdater[]): KnownUpdates {
   let latest: string | null = null;

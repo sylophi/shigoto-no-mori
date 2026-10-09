@@ -4,8 +4,8 @@
 // two never drift apart.
 // Why a pull under the source's folder name is refused up front: the
 // name is taken here (a worktree of this project by that name, case-
-// insensitively, or anything at the path), the same rule the CLI
-// create applies (cli/worktree.go).
+// insensitively, or anything at the path), the same rule the
+// engine's create applies (Worktrees.ts).
 // `where` places the landing device when it is not the one speaking
 // ("on Thinkpad"): the review of a flow to a peer, told from the
 // sending side.

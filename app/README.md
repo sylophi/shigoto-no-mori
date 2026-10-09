@@ -29,12 +29,13 @@ is the binding underneath, and the two bindings are parallel:
 `host/` is what a binding serves: the projects, worktrees, scripts and
 git of the machine it runs on. It is not the engine for them: the data
 model (the project list, worktree rows and identities, their marks,
-config, the launcher row, package scripts) belongs to the `sm` CLI
-(`../cli`), and the host reads and changes it only by running
-`sm --json` (`host/ipc/cliDelegate.ts`), so the app and a terminal
-never disagree. What `host/lib` keeps is what lives in the app's
-process (running scripts, mirror sessions, the device link) and the
-plain git the CLI has no verb for (diffs, commits, pulls). The browser binding serves none of it (a
+config, the launcher row, package scripts) belongs to the engine
+(`../packages/engine`), which the host runs in-process
+(`host/lib/engine.ts`, `host/lib/engineCalls.ts`) on the same store
+as the terminal `sm`, so the app and a terminal never disagree. What
+`host/lib` keeps is what lives in the app's process (running scripts,
+mirror sessions, the device link) and the plain git the engine has no
+service for (diffs, commits, pulls). The browser binding serves none of it (a
 tab hosts nothing), so the web client is the desktop with no local
 projects: a hostless controller for the account's other devices. The
 renderer gates the few surfaces that only make sense with a machine of

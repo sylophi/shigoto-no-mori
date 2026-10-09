@@ -106,7 +106,7 @@ const packagerIgnore = (file: string): boolean => {
 
 // @electron/osx-sign's default.darwin.plist, which the app and its
 // plain helpers are signed with, plus Apple Events: terminal tools
-// open in the user's terminal over AppleScript (cli/terminals.go), and
+// open in the user's terminal over AppleScript (the engine's Open.ts), and
 // under the hardened runtime the app's child osascript is refused
 // without it.
 const MAC_ENTITLEMENTS = path.join(

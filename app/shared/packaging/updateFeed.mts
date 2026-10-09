@@ -1,5 +1,5 @@
-// GitHub repo the update feed serves releases from. The CLI owns the
-// whole update pipeline (cli/updater.go): build-cli.mts injects this so
+// GitHub repo the update feed serves releases from. The engine owns the
+// whole update pipeline (Updater.ts): build-cli.mts injects this so
 // the feed can never point at a different repo than the app came from,
 // forge.config.ts publishes there, and the in-app changelog
 // (shared/releases.ts) reads the same repo's releases.

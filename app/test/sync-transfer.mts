@@ -284,8 +284,7 @@ beforeAll(async () => {
     "second feature",
   );
   feature2Tip = await gitOut(worktree2Path, "rev-parse", "HEAD");
-  // The real app derivation (host/lib/git/worktrees.ts, Go twin in
-  // cli/worktree.go), imported straight from its home now that
+  // The real app derivation (host/lib/git/worktrees.ts), imported straight from its home now that
   // tsAliasLoader handles the transitive JSON import. The capture ref
   // must land at refs/shigomori/dirty/<this id>, asserted below.
   worktreeId = worktreeIdFromPath(worktreePath);
@@ -884,7 +883,7 @@ it("transplant (clean): the worktree lands here and the source worktree, its sm 
   // data, and the branch. A MANAGED worktree (sm create, the realistic
   // transplant source): `sm rm` only deletes the branch for managed
   // worktrees, and the sandbox's unset DeleteBranchOnRemove defaults
-  // to delete (cli/cmd_rm.go).
+  // to delete (Worktrees.remove in the engine).
   const wt3Create = await sm(
     "create",
     "--project-id",

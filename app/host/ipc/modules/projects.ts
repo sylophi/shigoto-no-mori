@@ -74,7 +74,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     }
 
     // Into terrier first, so registering mints the id terrier's listing
-    // of the repo carries (registerProject in cli/cmd_project.go):
+    // of the repo carries (Projects.add in the engine):
     // removing the project here later leaves it under the same id, its
     // per-project state intact.
     if (terrier) await terrierAdd(path);
@@ -191,6 +191,6 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     return statCarryOverPaths(project.id, project.path, paths);
   },
 
-  // The CLI resolves icons through its shared cache (cli/icon.go).
+  // The engine resolves icons through its shared cache (Icons.ts).
   icon: ({ projectId }) => projectIcon(projectId),
 };

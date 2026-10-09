@@ -1,7 +1,7 @@
 // The worktree reads the host makes. The rows and identities come from
-// the CLI, which owns the data model (`sm worktrees list`, see
-// host/ipc/cliDelegate.ts). What stays here is plain git the CLI has no
-// verb for: the paged commit history, the upstream counts the
+// the engine, which owns the data model (Worktrees.list, see
+// host/lib/engineCalls.ts). What stays here is plain git the engine
+// has no service for: the paged commit history, the upstream counts the
 // auto-pull sweep decides on right before it pulls, and the prune
 // after a data dir wipe.
 import { createHash } from "node:crypto";
@@ -60,7 +60,7 @@ export async function findWorktreeIdentityOrThrow(
   return identity;
 }
 
-// The CLI's id rule (worktreeIDFromPath in cli/paths.go), for the few
+// The engine's id rule (worktreeIdFromPath in worktreeLayout.ts), for the few
 // places that key something by a checkout path rather than by a listed
 // identity (the mirror's scratch index dir). sha256 of the absolute
 // path, 12 hex chars: the same path produces the same id anywhere.
@@ -95,8 +95,8 @@ export async function getUpstreamCounts(
 // on its own line after each commit's formatted output. A SOH (\x01)
 // sentinel between records keeps parsing robust against subjects that
 // contain tabs or newlines, and NUL between fields against an author
-// name with a tab (git keeps those). The CLI reads its own `git log` the
-// same way (cli/gitx.go), and both are held to
+// name with a tab (git keeps those). The engine reads its own `git log` the
+// same way (gitParse.ts), and both are held to
 // shared/fixtures/git-log.json.
 const LOG_SENTINEL = "\x01";
 export const LOG_FORMAT = `${LOG_SENTINEL}%h%x00%an%x00%aI%x00%s`;

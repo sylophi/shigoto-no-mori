@@ -1,9 +1,8 @@
 // Pure path math for worktree layouts, for the renderer: the Worktree
 // Location page's previews and the destinations it asks relocate for,
 // the New Worktree form's destination label, the convert-external
-// preview. A display-side mirror of resolveWorktreeBase in
-// cli/paths.go, which decides where a worktree actually lands;
-// test/cli-reads.mts pins the two against each other for every layout.
+// preview. A display-side mirror of worktreeBase in the engine's
+// worktreeLayout.ts, which decides where a worktree actually lands.
 //
 // Kept dependency-free so it can run in either environment.
 
@@ -19,7 +18,7 @@ const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/worktrees`;
 // Containment test: true when `path` IS `ancestor` or sits anywhere
 // beneath it. Prefix matching by intent. Callers guarding destructive
 // flows (nuke, data dir move) want the whole subtree. Contrast the
-// CLI's isManagedPath (cli/paths.go), which deliberately uses parent
+// engine's isManagedPath (worktreeLayout.ts), which deliberately uses parent
 // equality instead.
 export function isSameOrInside(path: string, ancestor: string): boolean {
   const folded = path.replace(/\/+$/, "");
@@ -40,7 +39,7 @@ function joinPath(base: string, ...segments: string[]): string {
 
 // The external drive a path sits on: /Volumes/<name> for anything below
 // a mounted volume, null otherwise. Mirrors externalVolumeRoot in
-// cli/paths.go.
+// the engine's worktreeLayout.ts.
 function externalVolumeRoot(path: string): string | null {
   const match = /^(\/Volumes\/[^/]+)\/+[^/]/.exec(path);
   return match?.[1] ?? null;
@@ -60,7 +59,7 @@ export interface DeviceLayoutInputs extends Pick<
 // the managed layout uses while the device's setting is on. Null when there is
 // no such place: the project is on the internal drive, or the data dir
 // sits on the project's drive and the managed root is on it already.
-// Mirrors projectDriveBase in cli/paths.go.
+// Mirrors projectDriveBase in the engine's worktreeLayout.ts.
 export function projectDriveBaseFor(
   projectPath: string,
   {

@@ -64,8 +64,8 @@ class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
   }
 }
 
-// The ref the CLI's dirty capture lands a worktree's uncommitted state
-// under (cli/cmd_dirty.go owns the name on that side).
+// The ref the engine's dirty capture lands a worktree's uncommitted
+// state under (Dirty.ts owns the name on that side).
 const dirtyRefFor = (worktreeId: string) =>
   `refs/shigomori/dirty/${worktreeId}`;
 
@@ -396,10 +396,9 @@ const landIncoming = (
     // caller cannot subscribe by an id that does not exist yet.
     progress({ step: "create" });
     const notify = notifierFor(ctx);
-    // Acquired whole even under a cancel: the move's signal kills the
-    // create's CLI child (its setup script with it), and a create cut
-    // short still answers with its worktree (cliDelegate.ts,
-    // runStreamingCreate), which the release then removes. Released
+    // Acquired whole even under a cancel: the move's signal interrupts the
+    // create (its setup script with it), and a create cut short still
+    // answers with its worktree (engineCalls.ts, runStreamingCreate), which the release then removes. Released
     // with the move, and only when it was interrupted.
     const { worktree } = yield* Effect.acquireRelease(
       step(() =>

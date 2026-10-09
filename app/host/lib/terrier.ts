@@ -1,9 +1,9 @@
 // The app's side of terrier, the user's tool that keeps a cross-tool
 // registry of repo paths, merged into the project list when the global
-// `terrier` toggle is on. The merge is the CLI's (cli/terrier.go, read
-// through `sm projects list`); what the app keeps is the readiness
+// `terrier` toggle is on. The merge is the engine's (Terrier.ts, read
+// through Projects.list); what the app keeps is the readiness
 // probe behind the Settings toggle: is terrier installed, and does
-// `terrier ls --json` still answer in the shape the CLI reads. And
+// `terrier ls --json` still answer in the shape the engine reads. And
 // `terrier add`, for the add-project dialog's offer to register a new
 // project there too.
 import * as Cache from "effect/Cache";
@@ -34,8 +34,8 @@ const TERRIER_SPAWN_TIMEOUT_MS = 10_000;
 
 const READINESS_TTL = Duration.seconds(30);
 
-// What the bundled CLI reads out of `terrier ls --json`
-// (parseTerrierListings in cli/terrier.go), so Settings calls the
+// What the engine reads out of `terrier ls --json`
+// (Terrier.ts), so Settings calls the
 // integration ready exactly when the merge would run.
 const isTerrierListing = Schema.is(
   Schema.Struct({

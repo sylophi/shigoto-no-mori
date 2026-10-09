@@ -44,7 +44,7 @@ async function resolveMatchedPaths(projectPath: string): Promise<string[]> {
 //
 // Every checkout's own .worktreeinclude counts, resolved against that
 // checkout's gitignore and unioned, the same way the CLI resolves it at
-// creation (resolveWorktreeIncludeAcross in cli/carryover.go). So a
+// creation (the engine's CarryOver.ts). So a
 // pattern that only exists on a feature branch's worktree still shows
 // up as covered here.
 export async function readWorktreeIncludeStatus(
