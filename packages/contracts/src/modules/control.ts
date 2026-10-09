@@ -32,6 +32,7 @@ import { strict } from "../schemas/strict.ts";
 // (renderer/components/shared/deviceTargets.ts).
 const ControlDeviceBlockSchema = Schema.Literals([
   "offline",
+  "not-sharing",
   "no-project",
   "no-grant",
 ]);
@@ -41,8 +42,8 @@ const ControlDeviceSchema = strict(
     deviceId: DeviceIdSchema,
     name: Schema.String,
     platform: Schema.String,
-    // Absent when no project was asked about: then only `offline` can be
-    // told. With one, absent means the device can take a send or serve a
+    // Absent when no project was asked about: then only `offline` and
+    // `not-sharing` can be told. With one, absent means the device can take a send or serve a
     // bring. `no-project` still takes a send (which clones the repo there
     // first) but cannot serve a bring.
     block: Schema.optional(ControlDeviceBlockSchema),

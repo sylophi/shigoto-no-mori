@@ -15,6 +15,13 @@
 // byte channel it attaches outlives the drop the switch-off deals every
 // other channel.
 //
+// The sharing gate (SharingGate): with the host's sharing off, a peer's
+// reads and commands alike are refused with NotSharingError before
+// their handlers run, and its pushes are withheld, save for the mirror
+// this device asked for, whose calls on its copy are still served and
+// whose copy's pushes still arrive. Flipped while a peer is linked,
+// its calls and views under way end, and it hears the switch both ways.
+//
 // Interruption: a call its caller cancels, or whose link drops, is
 // interrupted on the host, its handler's signal aborted. Views stream
 // their values. Tracing: the host's span for a call continues the
@@ -50,6 +57,7 @@ import {
   CommandRefusedError,
   LinkRefusedError,
   LinkUnauthenticatedError,
+  NotSharingError,
   ProtocolVersionMismatchError,
   RemoteCallError,
   UnknownProjectError,
@@ -95,6 +103,13 @@ import {
 import { LinkGroup } from "@shigomori/contracts/link";
 import { handshakeProof, newHandshakeNonce } from "@shigomori/contracts/proof";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
+import {
+  inviteMirror,
+  landInvitedMirror,
+  mirrorInviteAdmits,
+  mirrorInviteSees,
+  setMirrorInviteStore,
+} from "@host/mirror/invites";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import type { ChannelHandle } from "@shigomori/contracts/link";
 import { type Track, waitFor } from "./lib/checkKit.mts";
@@ -581,6 +596,117 @@ it("invited calls: with commands off a call the host asked for runs while the re
   );
   await waitFor(() => granted.reset(), "the dialer to hear the drop");
   assert.equal(invited.reset(), false);
+});
+
+it("sharing gate: with sharing off a peer's reads and commands are refused and never run, and its pushes withheld, while the mirror this device asked for is still served and still hears its copy, and turning it back on needs no reconnect", async () => {
+  const track = trackTest;
+  const copy = { projectId: "copy-project", worktreeId: "abcdef012345" };
+  setMirrorInviteStore({ load: () => [], save: () => {} });
+  track(() => setMirrorInviteStore(null));
+  inviteMirror({
+    peerDeviceId: CLIENT,
+    sourceWorktreeId: "0123456789ab",
+    identity: "repo-identity",
+  });
+  landInvitedMirror(CLIENT, "0123456789ab", copy);
+  const { listener, seen } = await listen(track, {
+    isInvited: mirrorInviteAdmits,
+    seesPush: mirrorInviteSees,
+    registerHandlers: (binding) =>
+      binding.handle("worktreeData:read", async () => null),
+  });
+  listener.setAccepts(true);
+  listener.setSharing(false);
+  const connection = await dial(track, listener);
+  const heard: unknown[] = [];
+  connection.transport.subscribe("git:projectChanged", (p) => heard.push(p));
+  assert.ok(
+    (await rejection(invoke(connection, "git:sweep"))) instanceof
+      NotSharingError,
+  );
+  assert.ok(
+    (await rejection(
+      invoke(connection, "git:refreshProject", { projectId: "p" }),
+    )) instanceof NotSharingError,
+  );
+  assert.equal(seen.refreshes, 0, "a handler ran while not sharing");
+  // The mirror's own call on its copy, and the same call elsewhere.
+  assert.equal(await invoke(connection, "worktreeData:read", copy), null);
+  assert.ok(
+    (await rejection(
+      invoke(connection, "worktreeData:read", {
+        projectId: copy.projectId,
+        worktreeId: "543210fedcba",
+      }),
+    )) instanceof NotSharingError,
+  );
+  // A push about another project goes before each one about the copy's,
+  // so the copy's arriving alone shows the other was withheld.
+  await waitFor(() => {
+    listener.binding.broadcastAll("git:projectChanged", {
+      projectId: "elsewhere",
+    });
+    listener.binding.broadcastAll("git:projectChanged", {
+      projectId: copy.projectId,
+    });
+    return has(heard, copy.projectId);
+  }, "the mirror to hear its copy");
+  assert.equal(has(heard, "elsewhere"), false);
+  listener.setSharing(true);
+  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
+  await waitFor(() => {
+    listener.binding.broadcastAll("git:projectChanged", {
+      projectId: "elsewhere",
+    });
+    return has(heard, "elsewhere");
+  }, "the peer to hear the rest again");
+});
+
+it("sharing flipped under a linked peer: its calls and views under way end with NotSharingError, its handler's signal aborted, and it hears the switch both ways", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track, {
+    registerHandlers: (binding) =>
+      binding.view("sharedSettings:watch", () => Stream.never),
+  });
+  // Its own device: the raw link below says hello as CLIENT.
+  const connection = await dial(track, listener, { deviceId: "second" });
+  const flips: unknown[] = [];
+  const fence: unknown[] = [];
+  connection.transport.subscribe("sharing:changed", (on) => flips.push(on));
+  connection.transport.subscribe("git:projectChanged", (p) => fence.push(p));
+  // The link's push streams are up once a push reaches it.
+  await waitFor(() => {
+    listener.binding.broadcastAll("git:projectChanged", { projectId: "up" });
+    return has(fence, "up");
+  }, "the peer's pushes to be up");
+  const raw = await rawLink(track, listener);
+  assert.ok(
+    Exit.isSuccess(await raw.hello(mintTicket(listener.tickets, CLIENT))),
+  );
+  const view = Effect.runPromiseExit(
+    Stream.runDrain(raw.watch("sharedSettings:watch")),
+  );
+  const call = rejection(
+    invoke(connection, "worktrees:list", { projectId: "p" }),
+  );
+  await waitFor(() => seen.hanging.length === 1, "the call to run");
+  listener.setSharing(false);
+  assert.ok((await call) instanceof NotSharingError);
+  assert.ok(failureOf(await view) instanceof NotSharingError);
+  await waitFor(
+    () => seen.hanging[0]?.signal.aborted === true,
+    "the handler's signal to abort",
+  );
+  await waitFor(() => flips.includes(false), "the peer to hear it go off");
+  // The command switch's word still reaches it while it is off.
+  const grants: unknown[] = [];
+  connection.transport.subscribe("account:commandAccessChanged", (on) =>
+    grants.push(on),
+  );
+  listener.setAccepts(true);
+  await waitFor(() => grants.includes(true), "the peer to hear the grant");
+  listener.setSharing(true);
+  await waitFor(() => flips.includes(true), "the peer to hear it come on");
 });
 
 it("byte channels: bytes cross both ways in order, and an end on each side completes the channel", async () => {

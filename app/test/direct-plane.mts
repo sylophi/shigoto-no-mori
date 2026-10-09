@@ -152,6 +152,7 @@ import { it } from "vitest";
 import {
   CommandRefusedError,
   LinkRefusedError,
+  NotSharingError,
 } from "@shigomori/contracts/errors";
 import {
   type DeviceLinkOptions,
@@ -495,6 +496,7 @@ function heldDial() {
       onlineDeviceIds: [],
       peerAppVersions: {},
       peerAcceptsCommands: {},
+      peerSharesData: {},
     }),
     connectDirect: () =>
       new Promise((resolve) => {
@@ -512,6 +514,7 @@ function heldDial() {
             remoteDeviceId: "B",
             remoteAppVersion: "9",
             acceptsCommands: false,
+            sharesData: true,
           });
       }),
     onDirectChange: () => {
@@ -692,6 +695,7 @@ it("a refusing candidate cannot deny the dial: a far end that refuses has proved
   const { dialer } = fakeAskDialer({
     available: true,
     acceptsCommands: false,
+    sharesData: true,
     candidates: [
       {
         kind: "lan",
@@ -722,6 +726,7 @@ it("serialized hellos: with two reachable candidates the slow one never hellos, 
   const { dialer } = fakeAskDialer({
     available: true,
     acceptsCommands: false,
+    sharesData: true,
     candidates: [
       {
         kind: "lan",
@@ -776,6 +781,7 @@ it("the host names its lockout on the wire: a client inside the failed-auth wind
   const { dialer } = fakeAskDialer({
     available: true,
     acceptsCommands: false,
+    sharesData: true,
     candidates: [
       { kind: "lan", url: `ws://127.0.0.1:${listener.port}`, ticket },
     ],
@@ -825,6 +831,7 @@ it("a genuine ticket refusal still PARKS: a ticket the host read and rejected is
   const { dialer } = fakeAskDialer({
     available: true,
     acceptsCommands: false,
+    sharesData: true,
     candidates: [
       {
         kind: "lan",
@@ -900,6 +907,7 @@ it("candidate boundary: a tunnel-kind ws:// candidate is refused by the schema a
     {
       available: true,
       acceptsCommands: false,
+      sharesData: true,
       candidates: [
         {
           kind: "tunnel",
@@ -1557,6 +1565,35 @@ it("command access on the answer and live: the connectInfo answer's switch lands
   assert.deepEqual(bridge.directPeerAccess(), { B: true });
 });
 
+it("sharing on the answer and live: the answer's switch lands in the snapshot, the host's flips reach it as pushes over the same session, and with it off the gate refuses even a read", async () => {
+  const stub = await startStubHub(trackTest);
+  const listener = await startDirectListener(trackTest);
+  const { client } = await bootPair(stub, trackTest, listener);
+  const { plane, bridge } = makeDirectBridge(client);
+  trackTest(() => plane.stop());
+  await bridge.dialPeer("B");
+  assert.deepEqual(plane.status().peerSharesData, { B: true });
+  listener.setSharing(false);
+  await waitFor(
+    () => plane.status().peerSharesData.B === false,
+    "the sharing-off push to reach the snapshot",
+  );
+  await assert.rejects(
+    async () => invokeB(bridge, ECHO, echoOf("p")),
+    (error) => error instanceof NotSharingError,
+  );
+  // A fresh dial reads it off the answer.
+  bridge.closeDirectPeers();
+  await bridge.dialPeer("B");
+  assert.deepEqual(plane.status().peerSharesData, { B: false });
+  listener.setSharing(true);
+  await waitFor(
+    () => plane.status().peerSharesData.B === true,
+    "the sharing-on push to reach the snapshot",
+  );
+  assert.equal(await invokeB(bridge, ECHO, echoOf("p")), "p");
+});
+
 it("routing: the cache is direct or nothing, directPeerVersions reports the direct session, and a closed direct socket drops the cache, refuses sessionless invokes and rejects typed on the next dial", async () => {
   const stub = await startStubHub(trackTest);
   const listener = await startDirectListener(trackTest);
@@ -1702,6 +1739,7 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
     candidateAddresses: () => ["127.0.0.1", "fd00::1"],
     tunnelUrl: () => tunnel,
     acceptsCommands: () => false,
+    sharesData: () => true,
   });
   const all = { dialableKinds: ["lan", "tunnel"] };
   // Unhealthy tunnel: lan candidates only, with IPv6 literals
@@ -1741,6 +1779,7 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
     candidateAddresses: () => [],
     tunnelUrl: () => tunnel,
     acceptsCommands: () => false,
+    sharesData: () => true,
   })("A", all);
   assert.equal(only.available, true);
   assert.deepEqual(

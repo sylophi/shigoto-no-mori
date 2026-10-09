@@ -49,6 +49,9 @@ function presentationOf(status: RemoteDeviceStatus): {
       return { tone: "rose", label: "Blocked" };
     case "stopped":
       return { tone: "slate", label: "Off" };
+    // Connected, but its sharing switch is off.
+    case "notSharing":
+      return { tone: "slate", label: "Not sharing" };
   }
 }
 

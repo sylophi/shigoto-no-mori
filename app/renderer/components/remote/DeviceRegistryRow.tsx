@@ -33,12 +33,14 @@ import {
 import { abbreviateId } from "@/lib/abbreviateId";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { cn } from "@/lib/utils";
+import { useSharing } from "@/hooks/account/useSharing";
 import { AcceptCommandsToggle } from "./AcceptCommandsToggle";
 import { DeviceHosts } from "./DeviceHosts";
 import { DeviceIconPicker } from "./DeviceIconPicker";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
+import { ShareDataToggle } from "./ShareDataToggle";
 import type { HostChip } from "./deviceHostChips";
 import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus";
 import { deviceTraits } from "@/lib/remote/deviceTraits";
@@ -268,15 +270,8 @@ export function DeviceRegistryRow({
           </div>
         </div>
       ) : isThisDevice ? (
-        // What this machine exposes to the account's other devices,
-        // in the order a person asks: may they drive it, and will it
-        // be there when they try. A browser exposes neither.
-        traits.exposable && (
-          <div className="flex flex-col gap-3">
-            <AcceptCommandsToggle />
-            <KeepReachableToggle />
-          </div>
-        )
+        // A browser exposes nothing to the account's other devices.
+        traits.exposable && <ExposureSwitches />
       ) : (
         // Forwarding binds a real listener on THIS machine, so it is
         // app-only, and against a machine that serves calls, so never a
@@ -292,5 +287,19 @@ export function DeviceRegistryRow({
         )
       )}
     </li>
+  );
+}
+
+// What this machine exposes to the account's other devices, in the
+// order a person asks: do they see it, may they drive it, and will it
+// be there when they try. Not sharing, there is nothing to control.
+function ExposureSwitches() {
+  const sharing = useSharing().data !== false;
+  return (
+    <div className="flex flex-col gap-3">
+      <ShareDataToggle />
+      {sharing && <AcceptCommandsToggle />}
+      <KeepReachableToggle />
+    </div>
   );
 }

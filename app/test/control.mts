@@ -16,7 +16,9 @@
 //     the loopback serves nothing before a hello.
 //   - a loopback.json wiped under the running app comes back.
 //   - `devices` names the peers, leaves a browser out, and reports
-//     offline, no-grant and ready per device for the repo.
+//     offline, not-sharing, no-grant and ready per device for the
+//     repo, and a peer that isn't sharing takes no send and lists no
+//     worktrees when named.
 //   - `send` lands a dirty worktree on the peer with its commit and its
 //     uncommitted work, streams progress events, picks the only ready
 //     device unasked, and refuses an unknown device, an ambiguous one
@@ -570,7 +572,13 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
     listDevices: async () => registry,
     directPeers: async () =>
       Object.fromEntries(
-        connected.map((id) => [id, listener.acceptsCommands()]),
+        connected.map((id) => [
+          id,
+          {
+            acceptsCommands: listener.acceptsCommands(),
+            sharesData: listener.sharesData(),
+          },
+        ]),
       ),
   });
   // Every reach into the peer: its contracts, and the session's byte
@@ -624,7 +632,7 @@ it("loopback.json is owner-only, a call before the hello is refused, and a stale
   writeFileSync(loopbackFile, JSON.stringify(published));
 });
 
-it("devices: names the peers, skips the browser, and reports offline, no-grant and ready for the repo", async () => {
+it("devices: names the peers, skips the browser, and reports offline, not-sharing, no-grant and ready for the repo", async () => {
   // ---- (3) devices: standing per device for the repo.
   const devicesOf = async (...args: string[]) =>
     devicesDoc(await sm("devices", ...args));
@@ -652,6 +660,37 @@ it("devices: names the peers, skips the browser, and reports offline, no-grant a
   assert.ok(mac !== undefined, "the peer is listed");
   assert.equal(mac.block, undefined);
   assert.equal(mac.projectId, targetProjectId);
+  // Sharing off outranks the grant, with or without a repo asked about.
+  listener.setSharing(false);
+  try {
+    assert.deepEqual(
+      (await devicesOf("-p", "source")).devices.map((device) => [
+        device.name,
+        device.block,
+      ]),
+      [
+        ["Studio Mac", "not-sharing"],
+        ["Studio Laptop", "offline"],
+      ],
+    );
+    assert.equal(
+      (await devicesOf()).devices.find((device) => device.name === "Studio Mac")
+        ?.block,
+      "not-sharing",
+    );
+    await refused(
+      ["worktrees", "send", "wt-send", "-p", "source", "--to", "Studio Mac"],
+      "device-blocked",
+      /"Studio Mac" doesn't share with other devices/,
+    );
+    await refused(
+      ["worktrees", "list", "--remote", "-p", "source", "--from", "Studio Mac"],
+      "device-blocked",
+      /"Studio Mac" doesn't share with other devices/,
+    );
+  } finally {
+    listener.setSharing(true);
+  }
 });
 
 it("send: refuses an unknown, an ambiguous and an offline device by code, lands a dirty worktree on the only ready one with streamed progress, and passes the peer's refusal of a repeat through", async () => {

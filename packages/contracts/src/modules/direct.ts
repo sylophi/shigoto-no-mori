@@ -111,6 +111,8 @@ export type DirectConnectInfoInput = typeof DirectConnectInfoInputSchema.Type;
 // gated calls. Every asker is a device of the same account, so it is
 // the same bit for all of them. It informs the asker's UI and CLI
 // only; the listener's dispatch gate still decides every call.
+// sharesData is the host's sharing switch, read the same way: off, its
+// link serves the asker nothing.
 export const DirectConnectInfoSchema = Schema.Union([
   Schema.Struct({ available: Schema.Literal(false) }),
   Schema.Struct({
@@ -119,6 +121,7 @@ export const DirectConnectInfoSchema = Schema.Union([
       Schema.isMinLength(1),
     ),
     acceptsCommands: Schema.Boolean,
+    sharesData: Schema.Boolean,
   }),
 ]);
 export type DirectConnectInfo = typeof DirectConnectInfoSchema.Type;

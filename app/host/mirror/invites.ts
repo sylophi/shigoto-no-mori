@@ -10,8 +10,9 @@
 // leaves an invitation behind: the one peer may run exactly the calls
 // a mirror into this device makes (the contracts tag them `invitable`,
 // packages/contracts/src/contract.ts), on the one worktree the mirror landed,
-// whatever the switch says. The direct listener's gate consults it
-// (host/socket/server.ts isInvited), and nothing else reads it.
+// whatever the switch says, and whether this device shares with its
+// peers at all. The device link's gates consult it (host/socket/server.ts
+// isInvited and seesPush), and nothing else reads it.
 //
 // An invitation is pending from the ask until the peer's landing
 // answers (it admits only that landing: of the original it names, into
@@ -219,6 +220,24 @@ function sameCloneInto(
   return a === undefined || b === undefined
     ? a === b
     : a.parentDir === b.parentDir && a.name === b.name;
+}
+
+// The pushes a mirror into this device follows (git:projectChanged,
+// mirror:gitChanged) while sharing is off: one naming the project of a
+// copy the peer's landed invitation covers.
+export function mirrorInviteSees(
+  peerDeviceId: string,
+  payload: unknown,
+): boolean {
+  return (
+    Schema.is(ProjectScopedPayloadSchema)(payload) &&
+    invites.some(
+      (invite) =>
+        invite.peerDeviceId === peerDeviceId &&
+        isLanded(invite) &&
+        invite.copy.projectId === payload.projectId,
+    )
+  );
 }
 
 export function mirrorInviteAdmits(

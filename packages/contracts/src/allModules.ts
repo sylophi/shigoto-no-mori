@@ -24,6 +24,7 @@ import { hubContract } from "./modules/hub.ts";
 import { runtimeContract } from "./modules/runtime.ts";
 import { scriptsContract } from "./modules/scripts.ts";
 import { sharedSettingsContract } from "./modules/sharedSettings.ts";
+import { sharingContract } from "./modules/sharing.ts";
 import { cliContract } from "./modules/cli.ts";
 import { shellContract } from "./modules/shell.ts";
 import { terrierContract } from "./modules/terrier.ts";
@@ -65,6 +66,7 @@ export const allContractModules = [
   runtimeContract,
   scriptsContract,
   sharedSettingsContract,
+  sharingContract,
   cliContract,
   shellContract,
   terrierContract,

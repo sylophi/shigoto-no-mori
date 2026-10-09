@@ -20,6 +20,7 @@ import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
+import { NotSharingView } from "./NotSharingView";
 
 function RemoteScopeGate({
   deviceId,
@@ -36,6 +37,14 @@ function RemoteScopeGate({
   // keys this gate by deviceId, so the kept api never outlives a
   // navigation to a different device.
   const api = useLastGoodApi(device);
+
+  // Nothing it shared is kept, so there is no page to stand under a
+  // banner.
+  if (device?.status.phase === "notSharing") {
+    return (
+      <NotSharingView label={device.label} action={<OpenDevicesButton />} />
+    );
+  }
 
   // No session has ever been open on this device in this window (a
   // fresh open of a route for a device that is off), so there is

@@ -95,6 +95,8 @@ Poses ride the URL:
   2.1.0, so the others count as behind it (the update toast, Update
   all).
 - `?downloading=sm,tp,mini`: the devices downloading the update.
+- `?notSharing=tp,mini`: the devices with sharing off, by the same
+  keys, which then serve this page nothing.
 - `?crowd=<n>`: up to 20 more projects on Studio Mac, most holding
   their primary checkout alone, for the forest at the size where
   finding a project gets hard. Add `&crowdShared=1` to have terrier

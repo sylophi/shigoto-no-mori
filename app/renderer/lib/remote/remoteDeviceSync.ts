@@ -48,6 +48,7 @@ import {
   hostKeyDeviceId,
   invalidateDeviceSession,
   queryKeysFor,
+  removeDeviceCache,
 } from "@/lib/queryKeys";
 import {
   rejectingClientTransport,
@@ -123,6 +124,10 @@ let liveSessions: ReadonlySet<string> = new Set();
 // Each live session's command access in the last snapshot seen, so a
 // peer's switch flipping mid-session can be spotted (noteSessions).
 let lastAccess: Readonly<Record<string, boolean>> = {};
+
+// Each session's sharing switch in the last snapshot seen, so the one
+// that just went off is dropped from the cache once (noteSessions).
+let lastSharing: Readonly<Record<string, boolean>> = {};
 
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
@@ -252,8 +257,13 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
 // hard-failed during the dial window, so sweeping through them would
 // refetch everything except what is broken.
 //
+// A peer's sharing switch is another thing only the snapshot says. A
+// session whose peer isn't sharing is not a live one here: what the
+// peer shared is dropped from the cache as the switch goes off, and
+// it lands like a new session when the switch comes back on.
+//
 // A peer's command access flipping on a session that stays up is the
-// other thing only the snapshot says. Runtime info is gated on it (a
+// last thing only the snapshot says. Runtime info is gated on it (a
 // peer refuses it to a device it will not take commands from), caches
 // forever and sits outside the state-moved sweep, so it is re-asked
 // here or the peer's paths stay raw until a focus. Either direction
@@ -262,7 +272,16 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
 // it would refetch every gated read, and on an off flip each of those
 // would toast a refusal.
 function noteSessions(status: HubStatus): void {
-  const now = new Set(Object.keys(status.peerAppVersions));
+  const now = new Set(
+    Object.keys(status.peerAppVersions).filter(
+      (deviceId) => status.peerSharesData[deviceId] !== false,
+    ),
+  );
+  for (const [deviceId, shares] of Object.entries(status.peerSharesData)) {
+    if (!shares && lastSharing[deviceId] !== false && boundQueryClient) {
+      removeDeviceCache(boundQueryClient, deviceId);
+    }
+  }
   for (const deviceId of now) {
     if (liveSessions.has(deviceId)) {
       const before = lastAccess[deviceId];
@@ -281,6 +300,7 @@ function noteSessions(status: HubStatus): void {
   }
   liveSessions = now;
   lastAccess = status.peerAcceptsCommands;
+  lastSharing = status.peerSharesData;
 }
 
 // Followers of a session landing that have more to do than refetch:
@@ -314,6 +334,7 @@ function leaveAccount(queryClient: QueryClient): void {
   apis.clear();
   liveSessions = new Set();
   lastAccess = {};
+  lastSharing = {};
   queryClient.removeQueries({
     queryKey: accountDevicesQueryOptions.queryKey,
     exact: true,
@@ -340,7 +361,13 @@ function buildEntry(
   const version = current.peerAppVersions[info.deviceId];
   let status: RemoteDeviceStatus;
   let api: RemoteDeviceApi | undefined;
-  if (version !== undefined) {
+  if (
+    version !== undefined &&
+    current.peerSharesData[info.deviceId] === false
+  ) {
+    // Connected, but it serves nothing: no api, so nothing asks it.
+    status = { phase: "notSharing" };
+  } else if (version !== undefined) {
     // A live direct session is the whole data plane, and it outlives a
     // hub blip on purpose, so it reads connected first, before the
     // socket phase is even consulted.
@@ -375,7 +402,11 @@ function buildEntry(
     icon: info.icon,
     status,
     appVersion: version ?? "",
-    acceptsCommands: current.peerAcceptsCommands[info.deviceId],
+    // One that isn't sharing runs nothing for this device either.
+    acceptsCommands:
+      status.phase === "notSharing"
+        ? false
+        : current.peerAcceptsCommands[info.deviceId],
     api,
   };
 }

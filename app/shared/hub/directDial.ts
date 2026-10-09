@@ -84,10 +84,15 @@ import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 
 // The DeviceConnection shape, so everything downstream of a direct
 // dial (the bridge cache, sync, port-forward) is transport agnostic,
-// plus the one fact the connectInfo answer carried beside the
-// candidates: whether the peer runs this device's commands. The
-// bridge keeps it current from the peer's commandAccessChanged push.
-export type PeerConnection = DeviceConnection & { acceptsCommands: boolean };
+// plus the two facts the connectInfo answer carried beside the
+// candidates: whether the peer runs this device's commands, and
+// whether it shares with this device at all. The bridge keeps them
+// current from the peer's commandAccessChanged and sharing:changed
+// pushes.
+export type PeerConnection = DeviceConnection & {
+  acceptsCommands: boolean;
+  sharesData: boolean;
+};
 
 export type ConnectPeerOpts = {
   // Called once when an ESTABLISHED direct connection dies on its own
@@ -452,7 +457,11 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       info.candidates.slice(0, MAX_DIAL_CANDIDATES),
       Math.max(1, deadlineAt - now()),
     );
-    return { ...connection, acceptsCommands: info.acceptsCommands };
+    return {
+      ...connection,
+      acceptsCommands: info.acceptsCommands,
+      sharesData: info.sharesData,
+    };
   }
 
   return { connectDirect };

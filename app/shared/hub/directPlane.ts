@@ -21,6 +21,7 @@
 
 import { callOf, channelOf, payloadOf } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
+import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { safeDecode } from "@shigomori/contracts/codec";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shigomori/contracts/modules/hub";
@@ -39,6 +40,9 @@ import type * as Context from "effect/Context";
 // pushes it. The bridge records it on the peer's session so the status
 // snapshot's peerAcceptsCommands follows the switch live.
 const COMMAND_ACCESS_CHANGED = callOf(accountContract, "commandAccessChanged");
+// The peer's sharing switch flipping, kept the same way as
+// peerSharesData.
+const SHARING_CHANGED = callOf(sharingContract, "changed");
 
 // The slice of a hub connection the plane composes over, common to
 // the node connection (host/hub/connection.ts) and the browser one
@@ -151,6 +155,12 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
             handlers.setPeerAcceptsCommands(deviceId, accepts.data);
           }
         }
+        if (channel === channelOf(SHARING_CHANGED)) {
+          const shares = safeDecode(payloadOf(SHARING_CHANGED), payload);
+          if (shares.success) {
+            handlers.setPeerSharesData(deviceId, shares.data);
+          }
+        }
         deps.broadcastPeerPush({ deviceId, channel, payload });
       },
       dialableKinds: deps.dialableKinds,
@@ -172,6 +182,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       // derives connectedness from the keys).
       peerAppVersions: handlers.directPeerVersions(),
       peerAcceptsCommands: handlers.directPeerAccess(),
+      peerSharesData: handlers.directPeerSharing(),
       // THIS device's tunnel endpoint state. The
       // state only, never the hostname or token. Absent without a host
       // half (the web bridge runs no cloudflared). HubStatus is the

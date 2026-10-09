@@ -284,6 +284,9 @@ function buildQueryKeys(deviceId: string) {
     // fans out on commandAccessChanged) writes only this query and
     // never thrashes status or the device list.
     accountCommandAccess: () => ["accountCommandAccess"] as const,
+    // Host-scoped: whether this host shares with the account's other
+    // devices at all, written by the sharing:changed push.
+    sharing: () => host("sharing"),
 
     // Host-scoped: the update is a fact about the machine the app runs
     // on, and a peer's Settings tab shows that device's state under its
@@ -490,6 +493,17 @@ export function invalidateDeviceSession(
   deviceId: string,
 ): void {
   void queryClient.invalidateQueries({
+    predicate: (query) => hostKeyDeviceId(query.queryKey) === deviceId,
+  });
+}
+
+// Everything cached from one peer, gone: what a peer whose sharing
+// switch went off shared is not kept around to show.
+export function removeDeviceCache(
+  queryClient: QueryClient,
+  deviceId: string,
+): void {
+  queryClient.removeQueries({
     predicate: (query) => hostKeyDeviceId(query.queryKey) === deviceId,
   });
 }

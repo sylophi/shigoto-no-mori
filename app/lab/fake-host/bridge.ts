@@ -10,6 +10,7 @@
 // change the socket phase, navigate the memory router.
 import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import {
+  NotSharingError,
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
@@ -634,6 +635,14 @@ function hostHandlersFor(
       launchers: [],
     }),
     "portPool:isActive": () => true,
+    // The switch ?notSharing poses, which this device's account page
+    // flips.
+    "sharing:read": () => !notSharing.has(forest.deviceId),
+    "sharing:set": (on) => {
+      if (on) notSharing.delete(forest.deviceId);
+      else notSharing.add(forest.deviceId);
+      emit("sharing:changed", on);
+    },
     "globalConfig:read": () => fakeGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (none by default) have an
@@ -1461,6 +1470,9 @@ const directSessions = new Set<string>();
 // ?downloading=sm,tp,mini the ones fetching it.
 const stagedUpdates = new Set<string>();
 const downloadingUpdates = new Set<string>();
+// ?notSharing=tp,mini: the devices with sharing off, which then serve
+// this page nothing.
+const notSharing = new Set<string>();
 const FAKE_UPDATE_VERSION = "2.1.0";
 
 function initPresence(): void {
@@ -1478,6 +1490,7 @@ function initPresence(): void {
   }
   posedDevices(pose.get("updates") ?? "", stagedUpdates);
   posedDevices(pose.get("downloading") ?? "", downloadingUpdates);
+  posedDevices(pose.get("notSharing") ?? "", notSharing);
 }
 
 // ?crowd=<n>: that many more projects on Studio Mac, for the forest at
@@ -1623,15 +1636,18 @@ let socketPhase: HubStatus["socket"] = {
 function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};
   const peerAcceptsCommands: Record<string, boolean> = {};
+  const peerSharesData: Record<string, boolean> = {};
   for (const id of directSessions) {
     peerAppVersions[id] = FAKE_APP_VERSION;
     peerAcceptsCommands[id] = forests[id]?.grantsCaller ?? false;
+    peerSharesData[id] = !notSharing.has(id);
   }
   return {
     socket: socketPhase,
     onlineDeviceIds: [...roster],
     peerAppVersions,
     peerAcceptsCommands,
+    peerSharesData,
     tunnel: "up",
   };
 }
@@ -1821,6 +1837,10 @@ export function installFakeHostBridge(
         return Promise.reject(
           new Error(`[fake-host] unknown peer ${deviceId}`),
         );
+      }
+      // The peer's SharingGate.
+      if (notSharing.has(deviceId)) {
+        return Promise.reject(new NotSharingError());
       }
       return wire.transport.invoke(channel, input);
     },

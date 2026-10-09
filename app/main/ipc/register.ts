@@ -19,6 +19,7 @@ import { WebSocket as WsWebSocket } from "ws";
 import { type ContractModule, nameOf } from "@shigomori/contracts/contract";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { hubContract } from "@shigomori/contracts/modules/hub";
+import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
 import {
   broadcastAll as broadcastAllCore,
@@ -48,7 +49,8 @@ import * as TunnelService from "@host/direct/cloudflared";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import * as DeviceLink from "@host/socket/server";
-import { mirrorInviteAdmits } from "@host/mirror/invites";
+import { mirrorInviteAdmits, mirrorInviteSees } from "@host/mirror/invites";
+import * as Sharing from "@host/lib/sharing";
 import { dataDir } from "@host/lib/util/paths";
 import * as Loopback from "@host/socket/loopback";
 import { makeConnectInfo } from "@host/direct/connectInfo";
@@ -92,13 +94,14 @@ export function installShellPorts(): void {
 
 // The device link's listener (host/socket/server.ts). Its hello
 // consumes the single-use connect tickets connectInfo mints over the
-// device hub, and its gate runs every call not annotated gated:false
-// only under the host's live command switch (acceptsPeerCommands:
-// every ticketed peer is a device of this account, so the switch is
-// the whole verdict). That gate is the only enforcement; everything
-// else that shows the switch is a reading of it. The registrar records
-// the handlers at boot, while listening follows enrollment in
-// refreshDirectHost below.
+// device hub, and its gates serve a peer nothing while the host's
+// sharing switch is off (Sharing) and run every call not annotated
+// gated:false only under its command switch (acceptsPeerCommands):
+// every ticketed peer is a device of this account, so the switches
+// are the whole verdict. The gates are the only enforcement;
+// everything else that shows the switches is a reading of them. The
+// registrar records the handlers at boot, while listening follows
+// enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
 const linkRegistrar = DeviceLink.createLinkRegistrar();
 export const deviceLinkLayer = DeviceLink.adapter.pipe(
@@ -109,9 +112,21 @@ export const deviceLinkLayer = DeviceLink.adapter.pipe(
         matchTicket: (deviceId, arrivedAs, matches) =>
           directTickets.consumeProven(deviceId, arrivedAs, matches),
         isCommandGranted: acceptsPeerCommands,
-        // The switch's one exception: the mirrors this device asked for.
+        // The switches' one exception: the mirrors this device asked for.
         isInvited: mirrorInviteAdmits,
       },
+      // Not sharing, a mirror it asked for still follows its copy here.
+      seesPush: mirrorInviteSees,
+    }),
+  ),
+);
+
+// The sharing switch the link's gate reads. Its changes go to this
+// device's windows and, the push being remote, to every peer.
+export const sharingLayer = Sharing.adapter.pipe(
+  Layer.provideMerge(
+    Sharing.layer({
+      announce: (on) => broadcastAll(sharingContract, "changed", on),
     }),
   ),
 );
@@ -226,7 +241,7 @@ export const hubHandlers = directPlane.handlers;
 // The answer to a peer's connectInfo ask (host/direct/connectInfo.ts),
 // the one question the device hub carries, built from deps this module
 // owns: the listener's port, the ticket store and the tunnel runner,
-// plus the switch the listener's gate reads, reported to the asker.
+// plus the switches the listener's gates read, reported to the asker.
 const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
     const current = directLink.status();
@@ -237,6 +252,7 @@ const serveConnectInfo = makeConnectInfo({
   // the cloudflared child is currently healthy (probed routable).
   tunnelUrl: () => TunnelService.tunnel.tunnelUrl(),
   acceptsCommands: acceptsPeerCommands,
+  sharesData: Sharing.sharing.current,
 });
 
 // The hub connection, unconditional like the listener bindings:

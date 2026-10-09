@@ -69,6 +69,10 @@ the bridge's answers, the other device's window, and the disk.
   its switch is on: Allow control on its account page, or
   `window.api.account.setAcceptsCommands(true)`. Turn it off on one
   device to see the other's asks refused and what the UI says.
+- **Sharing.** Share with other devices off on one device's account
+  page (or `window.api.sharing.set(false)`) and the other shows it as
+  not sharing, with none of its projects, while mirrors it asked for
+  keep running.
 - **The CLI between them.** `smd` pointed at a profile's data dir runs
   the cross-device verbs against its running app (`bridge.md`, "From
   a terminal").

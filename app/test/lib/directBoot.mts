@@ -14,8 +14,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as HostPushes from "@host/lib/hostPushes";
+import * as Sharing from "@host/lib/sharing";
 import {
   createConnectTicketStore,
   type ConnectTicketStore,
@@ -30,6 +32,7 @@ import {
 import type { ContractModule } from "@shigomori/contracts/contract";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
+import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
@@ -70,6 +73,9 @@ export type DirectListenerOpts = {
     channel: string,
     input: unknown,
   ) => boolean;
+  // The pushes a peer still hears while sharing is off, beside
+  // sharing:changed (main's mirrorInviteSees). Absent, none.
+  seesPush?: (peerDeviceId: string, payload: unknown) => boolean;
   // What the listener's graph runs on beyond its own (a tracer).
   provide?: Layer.Layer<never>;
 };
@@ -79,16 +85,18 @@ export type DirectListener = {
   tickets: ConnectTicketStore;
   acceptsCommands(): boolean;
   setAccepts(next: boolean): void;
+  sharesData(): boolean;
+  setSharing(next: boolean): void;
   port: number;
   listenerPort(): number | null;
 };
 
 // A REAL direct listener on an ephemeral loopback port, with its
-// ticket store and a toggleable command-access switch (the host-wide
+// ticket store and toggleable switches: command access (the host-wide
 // "accepts commands from its account's devices" answer the real
-// binding reads from main). Flipping it pushes the switch to every
-// connected peer, as main's broadcastCommandAccessChanged does, so a
-// peer's bridge follows it live. `registerHandlers`, when
+// binding reads from main) and sharing (on, as a device starts).
+// Flipping either pushes it to every connected peer, as main does, so
+// a peer's bridge follows it live. `registerHandlers`, when
 // set, mounts the check's contracts or test channels on the binding
 // before it starts, and `start` overrides the start opts (the hello
 // and liveness seams, the admitted web origin).
@@ -98,6 +106,7 @@ export async function startDirectListener(
 ): Promise<DirectListener> {
   const tickets = createConnectTicketStore(opts.ticketOpts);
   let accepts = false;
+  const sharing = Effect.runSync(SubscriptionRef.make(true));
   const registrar = DeviceLink.createLinkRegistrar();
   const runtime = ManagedRuntime.make(
     Layer.provideMerge(
@@ -111,9 +120,18 @@ export async function startDirectListener(
             ? {}
             : { isInvited: opts.isInvited }),
         },
+        seesPush: opts.seesPush ?? (() => false),
       }),
       Layer.mergeAll(
         HostPushes.layer,
+        Layer.succeed(
+          Sharing.Sharing,
+          Sharing.Sharing.of({
+            current: SubscriptionRef.get(sharing),
+            changes: SubscriptionRef.changes(sharing),
+            set: (on) => SubscriptionRef.set(sharing, on),
+          }),
+        ),
         // The store says nothing here: the views a proof reads are
         // host-views.mts's.
         Layer.succeed(StoreChanges.StoreChanges, {
@@ -167,6 +185,11 @@ export async function startDirectListener(
       accepts = next;
       broadcastAll(accountContract, "commandAccessChanged", next, binding);
     },
+    sharesData: () => Effect.runSync(SubscriptionRef.get(sharing)),
+    setSharing: (next) => {
+      Effect.runSync(SubscriptionRef.set(sharing, next));
+      broadcastAll(sharingContract, "changed", next, binding);
+    },
     port,
     listenerPort: () => {
       const status = binding.status();
@@ -204,7 +227,7 @@ export function mintTicket(
 }
 
 export type BrokerListener = Pick<DirectListener, "tickets" | "listenerPort"> &
-  Partial<Pick<DirectListener, "acceptsCommands">>;
+  Partial<Pick<DirectListener, "acceptsCommands" | "sharesData">>;
 
 export type BrokeredPairOpts = {
   hostDeviceId?: string;
@@ -248,6 +271,7 @@ export async function bootBrokeredPair(
           // A bare broker stand-in (no real listener behind it)
           // reports the switch off.
           acceptsCommands: () => listener.acceptsCommands?.() ?? false,
+          sharesData: () => listener.sharesData?.() ?? true,
         }),
       },
       track,

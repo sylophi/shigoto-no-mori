@@ -8,6 +8,7 @@ import {
   isCommandRefusedError,
   isEntityGoneError,
   isNoDirectConnectionError,
+  isNotSharingError,
 } from "@shigomori/contracts/errors";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
@@ -48,11 +49,13 @@ export function createAppQueryClient(): QueryClient {
         // an in-flight query) is deterministic, so retrying only keeps the
         // page waiting on an answer that cannot change. A command refusal
         // is deterministic too: the grant moves on the host's push, never
-        // on a retry. Keep the default three retries for everything else.
+        // on a retry, and so is a peer not sharing. Keep the default three
+        // retries for everything else.
         retry: (failureCount, error) =>
           failureCount < 3 &&
           !isEntityGoneError(error) &&
-          !isCommandRefusedError(error),
+          !isCommandRefusedError(error) &&
+          !isNotSharingError(error),
       },
     },
     queryCache: new QueryCache({
@@ -63,6 +66,9 @@ export function createAppQueryClient(): QueryClient {
         // again. The registry shows that, and remoteDeviceSync refetches
         // on the landing, so a toast per query per focus would only shout.
         if (isNoDirectConnectionError(err)) return;
+        // A peer that just stopped sharing refuses whatever was still in
+        // flight. Its status says so, and its cache is already dropped.
+        if (isNotSharingError(err)) return;
         // A project or worktree deleted out from under an open page
         // (here, on the peer holding it, from the CLI) fails every
         // query the page had, each under its own title. Each page

@@ -50,6 +50,7 @@ import {
   deviceLinkLayer,
   loopbackLayer,
   refreshHubConnection,
+  sharingLayer,
   stopDirectHost,
   stopHubConnection,
   tunnelLayer,
@@ -265,6 +266,8 @@ export const layer = (options: {
     // The listener peers dial, which connected peers see go away
     // cleanly.
     Layer.provideMerge(deviceLinkLayer),
+    // The switch the listener's gate reads.
+    Layer.provideMerge(sharingLayer),
     Layer.provideMerge(gitWatcher),
     Layer.provideMerge(storeChanges),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),

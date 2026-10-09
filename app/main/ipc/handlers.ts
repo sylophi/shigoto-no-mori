@@ -40,6 +40,7 @@ import { hubContract } from "@shigomori/contracts/modules/hub";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
+import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { cliContract } from "@shigomori/contracts/modules/cli";
 import { controlContract } from "@shigomori/contracts/modules/control";
 import { releasesContract } from "@shigomori/contracts/modules/releases";
@@ -109,6 +110,7 @@ import {
 } from "@host/ipc/modules/sharedSettings";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
+import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
 import { controlHandlers, controlTransfers } from "@host/ipc/modules/control";
 import { setControlImpl } from "@host/lib/control/peers";
 import { releasesHandlers } from "./modules/releases";
@@ -710,6 +712,8 @@ export function registerIpcHandlers(): void {
   );
   registerContract(sharedSettingsContract, sharedSettingsHandlers);
   registerViews(sharedSettingsContract, sharedSettingsViews);
+  registerContract(sharingContract, sharingHandlers);
+  registerViews(sharingContract, sharingViews);
   registerContract(cliContract, cliHandlers);
   // The terminal's cross-device verbs, on the loopback alone
   // (packages/contracts/src/modules/control.ts). The device registry rides the
@@ -719,8 +723,20 @@ export function registerIpcHandlers(): void {
     listDevices: async () => [
       ...(await accountHandlers.listDevices(undefined, undefined)),
     ],
-    directPeers: async () =>
-      (await hubHandlers.status(undefined, undefined)).peerAcceptsCommands,
+    directPeers: async () => {
+      const status = await hubHandlers.status(undefined, undefined);
+      return Object.fromEntries(
+        Object.entries(status.peerAcceptsCommands).map(
+          ([deviceId, acceptsCommands]) => [
+            deviceId,
+            {
+              acceptsCommands,
+              sharesData: status.peerSharesData[deviceId] ?? true,
+            },
+          ],
+        ),
+      );
+    },
   });
   registerControlContract(controlContract, controlHandlers, controlTransfers);
   registerContract(shigomoriContract, shigomoriHandlers);

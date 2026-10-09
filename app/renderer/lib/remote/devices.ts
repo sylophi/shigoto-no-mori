@@ -21,13 +21,17 @@ import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 export type RemoteDeviceApi = RendererContractApi;
 
 // A remote device's derived status: the supervisor vocabulary the
-// hub socket reports, plus the one renderer-local phase the direct
+// hub socket reports, plus the two renderer-local phases the direct
 // data plane needs. "online" means the peer is in the hub roster but
 // no direct session is established (not dialed yet, or the dial
 // failed), so it is NOT rendered as connected (data is
 // direct or nothing, and a roster fact must not claim a data
-// wire).
-export type RemoteDeviceStatus = SupervisorStatus | { phase: "online" };
+// wire). "notSharing" means a direct session is up but the peer's
+// sharing switch is off, so it serves nothing and gets no api.
+export type RemoteDeviceStatus =
+  | SupervisorStatus
+  | { phase: "online" }
+  | { phase: "notSharing" };
 
 export type RemoteDevice = {
   // The remote host's device id, from the account registry (always
