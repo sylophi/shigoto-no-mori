@@ -102,7 +102,6 @@ const PENDING = [
   "visitors/",
   "worktreeDetail/flow/",
   "worktreeDetail/mirror/",
-  "worktreeDetail/pullRequests/",
   "worktreeDetail/transplant/",
   "worktreeDetail/MirrorConflicts.tsx",
   "worktreeDetail/MirrorPill.tsx",

@@ -13,15 +13,15 @@ import {
 } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
 import type { PullRequestDetail } from "@shigomori/contracts/schemas";
-import { CheckEntry } from "./CheckEntry";
-import { ChecksSummaryIcon } from "./ChecksSummaryIcon";
+import { CheckEntryView } from "./CheckEntryView";
+import { ChecksSummaryIconView } from "./ChecksSummaryIconView";
 
 // The PR's CI as one chip beside the merge state, with the run list in
 // a popover so a long list never pushes the merge box down the page.
-// `children` stands in for the chip's own words (MergeStatus, which is
+// `children` stands in for the chip's own words (MergeStatusView, which is
 // the merge box's one status with the run list still a click away),
 // and `tip` names the chip on hover when those leave out its words.
-export function ChecksPopover({
+export function ChecksPopoverView({
   pr,
   children,
   tip = null,
@@ -44,7 +44,7 @@ export function ChecksPopover({
             >
               {children ?? (
                 <>
-                  <ChecksSummaryIcon tone={summary.tone} />
+                  <ChecksSummaryIconView tone={summary.tone} />
                   {summary.label}
                 </>
               )}
@@ -62,7 +62,7 @@ export function ChecksPopover({
         <ul className="max-h-80 min-h-0 space-y-0.5 overflow-y-auto">
           {sortChecksWorstFirst(pr.checkList).map((check) => (
             <li key={`${check.name}::${check.url ?? ""}`}>
-              <CheckEntry check={check} />
+              <CheckEntryView check={check} />
             </li>
           ))}
         </ul>

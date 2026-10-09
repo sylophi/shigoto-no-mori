@@ -20,6 +20,7 @@ import {
   PhoneInboxScene,
   PhoneNotFoundScene,
 } from "./shell";
+import { PullRequestPartsScene } from "./pullRequests";
 import { SidebarPartsScene } from "./sidebarParts";
 import {
   WorktreePagePartsScene,
@@ -50,6 +51,7 @@ export const scenes = {
   worktreePage: { Scene: WorktreePageScene, ...DESKTOP },
   worktreePageParts: { Scene: WorktreePagePartsScene, size: [1100, 900] },
   worktreeSections: { Scene: WorktreeSectionsScene, size: [1400, 1000] },
+  pullRequestParts: { Scene: PullRequestPartsScene, size: [1100, 1300] },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

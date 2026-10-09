@@ -9,6 +9,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { ClosedPullRequestBox } from "./ClosedPullRequestBox";
 import { MergedPrimaryBranchBox } from "./MergedPrimaryBranchBox";
 import { MergeBox } from "./MergeBox";
+import { PullRequestBodyView } from "./PullRequestBodyView";
 
 // What to do about the PR: merge it, or clean up after it. What the
 // PR is comes before it, from whoever places it (PullRequestSection,
@@ -30,27 +31,34 @@ export function PullRequestBody({
   const { canCommand } = useCommandAccess();
 
   return (
-    <div className="space-y-4">
-      {isOpen && (
-        <MergeBox
-          worktree={worktree}
-          pr={pr}
-          repoConfig={repoConfig}
-          lastMergeMethod={lastMergeMethod}
-          stack={stack}
-        />
-      )}
-      {canCommand && !isOpen && !worktree.isPrimary && (
-        <ClosedPullRequestBox
-          // Its reach chosen afresh on another worktree's page.
-          key={worktree.id}
-          worktree={worktree}
-          stack={stack}
-        />
-      )}
-      {canCommand && pr.state === "MERGED" && worktree.isPrimary && (
-        <MergedPrimaryBranchBox worktree={worktree} />
-      )}
-    </div>
+    <PullRequestBodyView
+      mergeBox={
+        isOpen && (
+          <MergeBox
+            worktree={worktree}
+            pr={pr}
+            repoConfig={repoConfig}
+            lastMergeMethod={lastMergeMethod}
+            stack={stack}
+          />
+        )
+      }
+      closedBox={
+        canCommand &&
+        !isOpen &&
+        !worktree.isPrimary && (
+          <ClosedPullRequestBox
+            key={worktree.id}
+            worktree={worktree}
+            stack={stack}
+          />
+        )
+      }
+      mergedPrimaryBox={
+        canCommand &&
+        pr.state === "MERGED" &&
+        worktree.isPrimary && <MergedPrimaryBranchBox worktree={worktree} />
+      }
+    />
   );
 }

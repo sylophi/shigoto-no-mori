@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { PullRequestTone } from "@/lib/pullRequest";
 import { TONE_TEXT } from "./pullRequestShared";
 
-export function ChecksSummaryIcon({ tone }: { tone: PullRequestTone }) {
+export function ChecksSummaryIconView({ tone }: { tone: PullRequestTone }) {
   const Icon =
     tone === "rose"
       ? CircleAlert

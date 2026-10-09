@@ -10,9 +10,9 @@ import type {
   Worktree,
 } from "@shigomori/contracts/schemas";
 import { BranchTitle } from "./branch/BranchTitle";
-import { PullRequestStateLabel } from "./pullRequests/PullRequestStateLabel";
-import { StackList } from "./pullRequests/StackList";
-import { PullRequestTitleLink } from "./pullRequests/PullRequestIdentity";
+import { PullRequestStateLabelView } from "./pullRequests/PullRequestStateLabelView";
+import { StackListView } from "./pullRequests/StackListView";
+import { PullRequestTitleLinkView } from "./pullRequests/PullRequestTitleLinkView";
 import { MERGE_VERB } from "./pullRequests/pullRequestShared";
 import { WorktreeHeaderView } from "./WorktreeHeaderView";
 
@@ -57,16 +57,16 @@ function TitledHeader({
         pr
           ? {
               titleLink: (
-                <PullRequestTitleLink
+                <PullRequestTitleLinkView
                   pr={pr}
                   aria-label={`Open pull request #${pr.number} on GitHub`}
                   data-no-hit-area
                   className="shrink-0 font-normal text-muted-foreground/60"
                 >
                   #{pr.number}
-                </PullRequestTitleLink>
+                </PullRequestTitleLinkView>
               ),
-              stateLabel: <PullRequestStateLabel pr={pr} pill />,
+              stateLabel: <PullRequestStateLabelView pr={pr} pill />,
               base: pr.baseRefName,
               mergeVerb: MERGE_VERB[pr.state],
             }
@@ -77,7 +77,7 @@ function TitledHeader({
         stack
           ? {
               name: `Stack, ${stack.index + 1} of ${stack.entries.length}`,
-              list: <StackList worktree={worktree} stack={stack} />,
+              list: <StackListView worktree={worktree} stack={stack} />,
             }
           : undefined
       }

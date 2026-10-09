@@ -4,7 +4,7 @@
 // Without ?scene it lists them. The appearance poses apply (pose.ts:
 // ?theme, ?doubutsu, ?light, ?dark).
 import { createRoot } from "react-dom/client";
-import "@/index.css";
+import "./scenes.css";
 import "@/fonts.css";
 import { windowAttributes } from "../scenes/frame";
 import { type Scene, scenes } from "../scenes/index";

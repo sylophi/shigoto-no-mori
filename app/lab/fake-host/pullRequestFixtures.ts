@@ -90,15 +90,17 @@ const FAKE_PR_STATE_POSES: Record<
   behind: { mergeState: "BEHIND" },
 };
 
-function fakePrStatePose() {
-  const key = new URLSearchParams(location.search).get("prState");
+function prStatePose(params: URLSearchParams) {
+  const key = params.get("prState");
   return key ? FAKE_PR_STATE_POSES[key] : undefined;
 }
 
-function fakePosedPullRequests(): Record<string, typeof FAKE_PR_SLIM> {
-  const merged = new URLSearchParams(location.search).get("stack") === "merged";
+function posedPullRequestMap(
+  params: URLSearchParams,
+): Record<string, typeof FAKE_PR_SLIM> {
+  const merged = params.get("stack") === "merged";
   const prs = merged ? FAKE_PRS_MERGED : FAKE_PRS;
-  const pose = fakePrStatePose();
+  const pose = prStatePose(params);
   if (!pose) return prs;
   // The slim map carries no merge state.
   const { mergeState: _, ...slim } = pose;
@@ -112,21 +114,32 @@ export function unposedPullRequests(projectId: string) {
 }
 
 export function fakePullRequests(projectId: string) {
-  return FAKE_SM_PROJECT_IDS.has(projectId) ? fakePosedPullRequests() : {};
+  return FAKE_SM_PROJECT_IDS.has(projectId)
+    ? posedPullRequestMap(new URLSearchParams(location.search))
+    : {};
 }
 
+// A branch's PR as a query's poses (?checks=, ?reviews=, ?prState=,
+// ?stack=) give it, for a picture posed without a URL (../scenes).
 // The stacked PRs carry no checks, so the stack poses with and without
 // the checks chip. #148 carries whatever ?checks= poses.
-export function fakePullRequestDetail(branch: string) {
-  const slim = fakePosedPullRequests()[branch];
+export function posedPullRequestDetail(branch: string, query = "") {
+  const params = new URLSearchParams(query);
+  const slim = posedPullRequestMap(params)[branch];
   if (!slim) return null;
-  if (branch === FAKE_PR_BRANCH) return fakePosedDetail();
+  if (branch === FAKE_PR_BRANCH) return posedDetail(params);
   return {
     ...FAKE_PR_DETAIL,
     ...slim,
     body: FAKE_STACK_BODIES[slim.number] ?? "",
     ...fakeChecks([]),
   };
+}
+
+export function fakePullRequestDetail(branch: string) {
+  return branch === FAKE_PR_BRANCH
+    ? fakePosedDetail()
+    : posedPullRequestDetail(branch, location.search);
 }
 
 // The stacked PRs' own descriptions, so each page shows its PR's.
@@ -336,8 +349,7 @@ const FAKE_REVIEW_POSES: Record<string, PullRequestReviews> = {
   },
 };
 
-function fakePosedDetail() {
-  const params = new URLSearchParams(location.search);
+function posedDetail(params: URLSearchParams) {
   const variant = params.get("checks");
   const pose = variant ? FAKE_CHECK_POSES[variant] : undefined;
   const reviewVariant = params.get("reviews");
@@ -360,7 +372,15 @@ function fakePosedDetail() {
         mergeState: "BLOCKED" as const,
       }),
     }),
-    ...fakePrStatePose(),
+    ...prStatePose(params),
+  };
+}
+
+// #148 as the page's URL poses it, after whatever its merge button did.
+function fakePosedDetail() {
+  const posed = posedDetail(new URLSearchParams(location.search));
+  return {
+    ...posed,
     ...(fakeMerged && { state: "MERGED" as const }),
     autoMerge: fakeAutoMerge ? fakeAutoMerge.method : posed.autoMerge,
   };

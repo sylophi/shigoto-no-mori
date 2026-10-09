@@ -1,0 +1,4 @@
+/* The app's stylesheet, and the utilities only a scene's own layout
+   uses: ../scenes sits outside the app's sources. */
+@import "../../renderer/index.css";
+@source "../scenes";

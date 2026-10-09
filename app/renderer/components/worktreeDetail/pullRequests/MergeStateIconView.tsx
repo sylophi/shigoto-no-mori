@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { PullRequestTone } from "@/lib/pullRequest";
 import { TONE_TEXT } from "./pullRequestShared";
 
-export function MergeStateIcon({ tone }: { tone: PullRequestTone }) {
+export function MergeStateIconView({ tone }: { tone: PullRequestTone }) {
   const Icon =
     tone === "rose" || tone === "amber"
       ? CircleAlert

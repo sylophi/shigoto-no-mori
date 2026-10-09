@@ -32,8 +32,8 @@ export function WorktreeHeaderView({
   showBase = true,
 }: {
   title: string;
-  // The PR that names the work: its number linked (PullRequestTitleLink),
-  // its state (PullRequestStateLabel), and the base it lands on.
+  // The PR that names the work: its number linked (PullRequestTitleLinkView),
+  // its state (PullRequestStateLabelView), and the base it lands on.
   pr?: {
     titleLink: ReactNode;
     stateLabel: ReactNode;
@@ -42,7 +42,7 @@ export function WorktreeHeaderView({
   };
   // The branch's line (BranchTitle).
   branchTitle: ReactNode;
-  // Where the PR sits in a stack, and the stack's list (StackList).
+  // Where the PR sits in a stack, and the stack's list (StackListView).
   stack?: { name: string; list: ReactNode };
   // The PR's diff, once its lookup answers.
   diff?: {
