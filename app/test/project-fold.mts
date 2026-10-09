@@ -301,7 +301,7 @@ try {
         shut: () => false,
       }).rows.map(line);
       assert.equal(lichenRows.includes("v exp/ 1"), false);
-      assert.equal(lichenRows.at(-1), "shelved-toggle");
+      assert.equal(lichenRows.at(-1), "group-shelf");
     },
   );
 
@@ -361,8 +361,8 @@ try {
       "v lichen -",
       "main",
       "brave-badger",
-      "shelved-toggle",
-      "shelved-toggle",
+      "group-shelf",
+      "group-shelf",
       "v port-pool -",
       "main",
       "main",
@@ -477,8 +477,8 @@ try {
         "v lichen -",
         "main",
         "brave-badger",
-        "shelved-toggle",
-        "shelved-toggle",
+        "group-shelf",
+        "group-shelf",
         "v terrier -",
         "worktree-skeleton",
         "b",

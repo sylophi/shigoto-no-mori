@@ -239,7 +239,7 @@ function Forest({
   // rather than toggles, so a second call before the first lands is
   // harmless.
   const openFold = (row: SidebarRow): boolean => {
-    if (row.kind === "shelved-toggle" && !row.expanded) {
+    if (row.kind === "group-shelf" && !row.expanded) {
       const key = groupKeyOf(row.groupId);
       setShelfOpenKeys((prev) => ({
         ...prev,

@@ -152,9 +152,9 @@ export function SidebarList({
     const index = rows.findIndex((r) => r.key === key);
     const row = rows[index];
     if (!row) return;
-    // The shelf's toggle stood in for the row: open it, and reveal the
+    // The shelf's header stood in for the row: open it, and reveal the
     // row once it draws. Only a shut one opens, so a row the open shelf
-    // still lacks settles for its toggle, and once per worktree.
+    // still lacks settles for its header, and once per worktree.
     if (foldsOpenedForRef.current !== revealed && openFold(row)) return;
     lastRevealedRef.current = revealed;
     foldsOpenedForRef.current = revealed;

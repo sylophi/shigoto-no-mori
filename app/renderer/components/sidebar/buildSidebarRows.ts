@@ -290,8 +290,8 @@ export function buildSidebarRows({
   // owner sections move a project's worktrees with it.
   const chunks: SidebarRow[][] = [];
   let pinned: SidebarRow | undefined;
-  // The toggle (or group header) each row behind a shut fold stands
-  // behind, for revealKey.
+  // The header each row behind a shut fold stands behind, for
+  // revealKey.
   const shutFoldRows = new Map<string, string>();
   const hide = (
     local: readonly Worktree[],
@@ -436,7 +436,7 @@ export function buildSidebarRows({
         return item;
       });
     // A fold's rows: placed when it is open, else left out with the
-    // fold's own row (its toggle or header) standing in for each.
+    // fold's header standing in for each.
     const foldRows = (
       local: Worktree[],
       peers: RemoteRow[],
@@ -515,27 +515,24 @@ export function buildSidebarRows({
       const count = localShelves[shelf].length + remoteShelves[shelf].length;
       if (count === 0) continue;
       const shelfOpen = openShelves[shelf].has(groupId);
-      const toggleKey = `${shelf}:${groupId}`;
+      const shelfKey = `${shelf}:${groupId}`;
       rows.push(
+        {
+          kind: "group-shelf",
+          key: shelfKey,
+          groupId,
+          shelf,
+          count,
+          expanded: shelfOpen,
+        },
         ...foldRows(
           localShelves[shelf],
           remoteShelves[shelf],
           shelf,
           shelfOpen,
-          toggleKey,
+          shelfKey,
         ),
       );
-      // Always anchored at the bottom of the project's section:
-      // "N shelved" reveals, "Hide shelved" collapses (and the same
-      // for hidden).
-      rows.push({
-        kind: "shelved-toggle",
-        key: toggleKey,
-        groupId,
-        shelf,
-        count,
-        expanded: shelfOpen,
-      });
     }
   }
 
@@ -557,7 +554,7 @@ export function buildSidebarRows({
     emptyMessage: null,
     revealKey: (_projectId, worktreeId, deviceId) => {
       // A row behind a shut shelved or hidden fold, or a shut group:
-      // its toggle or header stands in for it. Inline, a folded project
+      // its header stands in for it. Inline, a folded project
       // can itself be behind a shut owner, whose header then does.
       const shown = (key: string): string | undefined => {
         if (drawn.some((r) => r.key === key)) return key;

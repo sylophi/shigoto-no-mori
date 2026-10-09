@@ -92,7 +92,7 @@ function projectIdForRow(row: SidebarRow): string | null {
   // peer's worktree keeps its project header's actions alive.
   if (
     row.kind === "remote-worktree" ||
-    row.kind === "shelved-toggle" ||
+    row.kind === "group-shelf" ||
     row.kind === "worktree-group"
   ) {
     return row.groupId;

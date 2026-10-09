@@ -3,8 +3,9 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 
-// The shelves the inbox view folds shut by default. The live box has
-// no header and no toggle, so it isn't in this union.
+// The shelves the inbox view folds shut by default, and the tree's
+// (GroupShelf) among them. The live box has no header, so it isn't in
+// this union.
 export type InboxShelf = "agentWorking" | "shelved" | "merged" | "hidden";
 
 // Each shelf's name, as its fold reads it.
@@ -160,7 +161,7 @@ export type SidebarRow =
       expanded: boolean;
     }
   | {
-      kind: "shelved-toggle";
+      kind: "group-shelf";
       key: string;
       // The shelf is the group's: a local project's, or a peer-only
       // group's (remoteGroupId).
@@ -203,7 +204,7 @@ export interface SidebarViewModel {
   // answer is still in flight is worse than a beat of blank space.
   emptyMessage: string | null;
   // Which row to scroll to when navigation lands on a worktree from
-  // outside the sidebar. Falls back to the fold's toggle when its own
+  // outside the sidebar. Falls back to the fold's header when its own
   // row is behind a shut shelf (the list opens it, SidebarList), and
   // null when the view can't place it at all, or not yet: the tree
   // opens the project of the page on screen itself (Sidebar), and the
@@ -228,7 +229,7 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "worktree-skeleton": 36,
   "worktree-error": 24,
   "worktree-group": 32,
-  "shelved-toggle": 24,
+  "group-shelf": 32,
   "inbox-worktree": 66,
   "inbox-shelf": 36,
   "inbox-group": 36,
@@ -274,7 +275,7 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   "worktree-skeleton": "px-2",
   "worktree-error": "px-2",
   "worktree-group": "px-2",
-  "shelved-toggle": "px-2",
+  "group-shelf": "px-2",
   "inbox-worktree": WORKTREE_ROW_GAP,
   "inbox-shelf": "px-2 pb-1",
   "inbox-group": "px-2 pb-1",
