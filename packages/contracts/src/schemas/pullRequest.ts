@@ -243,7 +243,7 @@ export const RepoMergeConfigSchema = Schema.Struct({
 });
 export type RepoMergeConfig = typeof RepoMergeConfigSchema.Type;
 
-// What became of a merge (cli/cmd_merge.go mergeOutcome): the PR
+// What became of a merge (the engine's Landing.ts): the PR
 // landed, a merge queue took it, or auto-merge was armed and GitHub
 // lands it once its requirements are met. "merged" leads so a
 // schema-derived stub picks it.

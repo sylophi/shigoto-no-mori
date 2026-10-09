@@ -275,6 +275,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.2(bufferutil@4.1.0)(effect@4.0.2)(redis@6.3.0)(utf-8-validate@6.0.6)
+      '@effect/sql-sqlite-node':
+        specifier: 'catalog:'
+        version: 4.0.2(effect@4.0.2)
       '@fontsource-variable/geist':
         specifier: ^5.2.9
         version: 5.2.9
@@ -287,6 +290,9 @@ importers:
       '@shigomori/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
+      '@shigomori/engine':
+        specifier: workspace:*
+        version: link:../packages/engine
       '@tanstack/react-query':
         specifier: ^5.101.2
         version: 5.101.2(react@19.2.7)

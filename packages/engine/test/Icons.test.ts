@@ -77,3 +77,54 @@ it("forgets a removed project's remembered miss, so a re-add looks again", async
   );
   assert.deepEqual(await icons(), [join(repo, "favicon.png")]);
 });
+
+it("finds each project's icon: conventional files, package roots, icon links", async () => {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#e33"/></svg>';
+  const atRoot = box.repo("at-root", { "public/favicon.svg": svg });
+  const inPackage = box.repo("in-package", {
+    "package.json": "{}",
+    "web/package.json": "{}",
+    "web/assets/icon.svg": svg,
+  });
+  const linked = box.repo("linked", {
+    "index.html": '<link rel="icon" href="/brand/mark.svg?v=2">',
+    "public/brand/mark.svg": svg,
+  });
+  const ignored = box.repo("ignored", {
+    ".gitignore": "dist\n",
+    "dist/favicon.svg": svg,
+  });
+  const none = box.repo("none");
+  box.write("registry.json", {
+    projects: [atRoot, inPackage, linked, ignored, none].map((path, index) => ({
+      id: `P${index}`,
+      name: `p${index}`,
+      path,
+    })),
+  });
+  const rows = (await box.engine(
+    Effect.flatMap(Effect.service(Registry.Registry), (r) => r.rows()),
+  )) as {
+    icon: { path: string } | null;
+  }[];
+  assert.deepEqual(
+    rows.map(({ icon }) => icon?.path.slice(box.home.length) ?? null),
+    [
+      "/at-root/public/favicon.svg",
+      "/in-package/web/assets/icon.svg",
+      "/linked/public/brand/mark.svg",
+      null,
+      null,
+    ],
+  );
+  assert.ok(
+    Option.isSome(
+      (await box.engine(
+        Effect.flatMap(Effect.service(Icons.Icons), (icons) =>
+          icons.bytes(linked),
+        ),
+      )) as Option.Option<unknown>,
+    ),
+  );
+});

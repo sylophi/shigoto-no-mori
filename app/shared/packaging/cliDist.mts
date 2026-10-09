@@ -27,11 +27,7 @@ export const APP_BUNDLE_ID = "com.sylophi.shigomori";
 
 // The update feed's repo, from its import-free home so the renderer
 // can read it too.
-export {
-  UPDATE_FEED_NAME,
-  UPDATE_FEED_OWNER,
-  UPDATE_FEED_REPO,
-} from "./updateFeed.mts";
+export { UPDATE_FEED_NAME, UPDATE_FEED_OWNER } from "./updateFeed.mts";
 
 export function cliBinaryName(flavor: CliFlavor): string {
   return flavor === "prod" ? "sm" : "smd";
@@ -52,19 +48,10 @@ export function cliDataDirName(flavor: CliFlavor): string {
   return flavor === "prod" ? ".sm" : ".smd";
 }
 
-// The data dir's name before 2.0 (the app name spelled out, visible
-// in $HOME). Boot adopts a legacy dir that still holds state, in
-// place, while the current name holds none (host/lib/util/paths.ts
-// initDataDir, mirrored by cli/state.go). The data-folder move in
-// Settings is what renames it (host/lib/dataDirMove.ts).
-export function legacyDataDirName(flavor: CliFlavor): string {
-  return flavor === "prod" ? "shigomori" : "shigomori-dev";
-}
-
 // The flavor's directory name under $XDG_CONFIG_HOME (default
 // ~/.config). Frozen: every user's pointer file lives under it, so it
 // must not follow a rename of the CLI alias it happens to match.
-export function cliConfigDirName(flavor: CliFlavor): string {
+function cliConfigDirName(flavor: CliFlavor): string {
   return flavor === "prod" ? "shigomori" : "shigomori-dev";
 }
 
@@ -76,14 +63,13 @@ function configDir(flavor: CliFlavor): string {
 // The data dir pointer file: one line holding an absolute path that
 // relocates the flavor's data dir away from ~/<dataDirName>. Lives
 // outside the data dir (its own config.json can't say where it is).
-// Read at boot by app main (lib/util/paths.ts) and the CLI (state.go,
-// which mirrors this policy), and written by the app when the user
-// moves the data folder. SHIGOMORI_DATA_DIR beats it on both sides.
-export const DATA_DIR_POINTER_FILE = "data-dir";
+// Read at boot by the engine (Paths.ts), and written by the app when
+// the user moves the data folder. SHIGOMORI_DATA_DIR beats it.
+const DATA_DIR_POINTER_FILE = "data-dir";
 // The pointer's filename before 2.0. Readers fall back to it only when
 // the current file is absent. Nothing writes it any more, and the
 // data-folder move deletes it.
-export const LEGACY_DATA_DIR_POINTER_FILE = "root";
+const LEGACY_DATA_DIR_POINTER_FILE = "root";
 
 export function dataDirPointerPath(flavor: CliFlavor): string {
   return join(configDir(flavor), DATA_DIR_POINTER_FILE);

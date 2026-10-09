@@ -2,22 +2,31 @@
 // launcher row finds by file name (components/shared/LauncherIcon.tsx).
 //
 // Asserts:
-// - every icon is named for an app in the CLI's launcher catalog
-//   (cli/embed/launcher-catalog.json), so none is misnamed or left
-//   behind by a removed launcher
+// - every icon is named for an app in the engine's launcher catalog
+//   (packages/engine/src/data/launcher-catalog.json), so none is
+//   misnamed or left behind by a removed launcher
 //
 // Run: pnpm test launcher-icons.
 //
-// covers: app/renderer/app-icons/** cli/embed/launcher-catalog.json
+// covers: app/renderer/app-icons/** packages/engine/src/data/launcher-catalog.json
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "vitest";
 import { appRoot, repoRoot } from "./lib/checkKit.mts";
 
-// The catalog is the CLI's embed, one level up from the app.
 const catalog: { id: string }[] = JSON.parse(
-  readFileSync(join(repoRoot, "cli", "embed", "launcher-catalog.json"), "utf8"),
+  readFileSync(
+    join(
+      repoRoot,
+      "packages",
+      "engine",
+      "src",
+      "data",
+      "launcher-catalog.json",
+    ),
+    "utf8",
+  ),
 );
 const ids = new Set(catalog.map((app) => app.id));
 const icons = readdirSync(join(appRoot, "renderer", "app-icons"));

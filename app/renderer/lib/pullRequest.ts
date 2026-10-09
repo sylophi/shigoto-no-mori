@@ -124,8 +124,8 @@ export interface MergeStateDescriptor {
   canMerge: boolean;
 }
 
-// The verdicts auto-merge is for: the same two as the CLI's
-// autoMergeArms (cli/cmd_merge.go), which says why.
+// The verdicts auto-merge is for: the same two as the engine's
+// autoMergeArms (Landing.ts), which says why.
 function autoMergeArms(state: PullRequestMergeState): boolean {
   return state === "BLOCKED" || state === "BEHIND";
 }
@@ -133,9 +133,9 @@ function autoMergeArms(state: PullRequestMergeState): boolean {
 // Whether the merge button arms auto-merge instead of merging: the
 // repo allows it, the PR is neither a draft nor in a stack (a stack
 // lands one PR at a time or through GitHub's stack merge, and neither
-// arms it, cli/stack.go), and the verdict is one waiting fixes. The
-// CLI decides the same way from the same inputs (cli/cmd_merge.go
-// execMerge). This only shapes the button.
+// arms it), and the verdict is one waiting fixes. The engine decides
+// the same way from the same inputs (Landing.merge). This only shapes
+// the button.
 export function armsAutoMerge(
   config: RepoMergeConfig | null,
   pr: PullRequestDetail,
@@ -466,7 +466,7 @@ export function resolveMergeMethod(
   // A null config means we couldn't read it. Assume every method is
   // allowed so the user isn't blocked by our missing data, and no
   // auto-merge, since GitHub refuses to arm it where the repo doesn't
-  // allow it (the CLI assumes the same, cli/cmd_merge.go).
+  // allow it (the engine's Landing assumes the same).
   const allowedMap: RepoMergeConfig = config ?? {
     merge: true,
     squash: true,

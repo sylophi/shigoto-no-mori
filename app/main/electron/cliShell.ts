@@ -1,32 +1,24 @@
-// Shell-integration management, delegated to the bundled CLI
-// (`sm shell status/install/uninstall`): the CLI owns the rc-file
+// Shell-integration management, on the engine's ShellIntegration, which
+// `sm shell status/install/uninstall` share: one owner of the rc-file
 // mechanics and the supported-shell list, so the app and a terminal
 // can never disagree about what the hook looks like, what counts as
-// ours, or which shells qualify. The app only contributes the login
-// shell's name. Each CLI command emits the resulting status document,
-// so every operation here is a single spawn.
+// ours, or which shells qualify. The app contributes the login shell
+// and where its config lives.
 //
-// The login shell is resolved here rather than by the CLI because a
+// The login shell is resolved here rather than by the engine because a
 // Finder-launched app inherits launchd's environment, where $SHELL is
 // unreliable, so os.userInfo() reads the user database instead.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import type {
-  ShellHookState,
-  ShellIntegrationStatus,
-} from "@shigomori/contracts/modules/cli";
-import { ShellHookStateSchema } from "@shigomori/contracts/modules/cli";
+import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
 import { CAPTURE_TIMEOUT_MS, loginShell } from "../core/shellEnv";
-import { cliFailureMessage, runCli } from "./cliRunner";
+import * as Engine from "@host/lib/engine";
+import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { envSetting } from "@shared/config";
 
 const execFileP = promisify(execFile);
-
-const decodeShellHookStates = Schema.decodeUnknownOption(
-  Schema.Array(ShellHookStateSchema),
-);
 
 // The CLI resolves rc locations from ZDOTDIR / XDG_CONFIG_HOME, which
 // a Finder-launched app doesn't have (launchd sources no shell
@@ -71,90 +63,75 @@ export function hookPathEnv(): Promise<Record<string, string>> {
   return (hookEnvPromise ??= captureHookPathEnv());
 }
 
-function runShellCli(
-  args: string[],
-): Promise<Awaited<ReturnType<typeof runCli>>> {
-  return hookPathEnv().then((env) => runCli(args, undefined, env));
+// The login shell as the engine's shell integration needs it: where
+// its config lives, and which shell it is.
+async function hookShell(): Promise<ShellIntegration.HookShell> {
+  const env = await hookPathEnv();
+  return {
+    zdotdir: env["ZDOTDIR"] ?? "",
+    configHome: env["XDG_CONFIG_HOME"],
+    loginShell: loginShell({ SHELL: envSetting("SHELL") }) ?? "",
+  };
 }
 
-function loginShellBase(): string | null {
-  const base =
-    loginShell({ SHELL: envSetting("SHELL") })
-      ?.split("/")
-      .pop() ?? "";
-  return base === "" ? null : base;
-}
+const onShell = <A, E>(
+  f: (
+    integration: ShellIntegration.ShellIntegration["Service"],
+    shell: ShellIntegration.HookShell,
+  ) => Effect.Effect<A, E>,
+): Promise<A> =>
+  hookShell().then((shell) =>
+    Engine.call(
+      Effect.gen(function* () {
+        return yield* f(yield* ShellIntegration.ShellIntegration, shell);
+      }),
+    ),
+  );
 
-// The `shells` array of the CLI's status document, which install and
-// uninstall also emit. Empty when the run produced none.
-function shellsFromDocs(
-  docs: { [key: string]: unknown }[],
-): readonly ShellHookState[] {
-  const doc = docs.find((d) => d["ok"] === true && d["shells"] !== undefined);
-  if (doc === undefined) return [];
-  return Option.getOrElse(decodeShellHookStates(doc["shells"]), () => []);
-}
-
-// `shells` enumerates exactly the kinds the CLI supports, so the login
+// `shells` enumerates exactly the kinds sm supports, so the login
 // shell is "supported" iff it appears there.
-function statusFrom(shells: readonly ShellHookState[]): ShellIntegrationStatus {
-  const base = loginShellBase();
-  const supported =
-    base !== null && shells.some((s) => s.shell === base) ? base : null;
-  return { loginShell: supported, shells };
-}
-
-// The status a shell subcommand answers with, or the failure it names.
-async function statusAfter(
-  args: string[],
-  fallback: string,
-): Promise<ShellIntegrationStatus> {
-  const result = await runShellCli(args);
-  const shells = shellsFromDocs(result.docs);
-  if (result.code !== 0 || shells.length === 0) {
-    throw new Error(cliFailureMessage(result, fallback));
-  }
-  return statusFrom(shells);
-}
+const statusNow = () =>
+  onShell((integration, shell) =>
+    Effect.map(
+      integration.status(shell),
+      ({ document }): ShellIntegrationStatus => ({
+        loginShell: document.loginShell === "" ? null : document.loginShell,
+        shells: document.shells,
+      }),
+    ),
+  );
 
 export function shellIntegrationStatus(): Promise<ShellIntegrationStatus> {
-  return statusAfter(
-    ["shell", "status"],
-    "Couldn't read the shell integration state",
-  );
+  return statusNow();
 }
 
-// The CLI validates the shell name, and an unsupported one surfaces its
-// error message. (Settings never gets here for one: the status it
-// renders already reported loginShell null.)
+// Settings never asks for an unsupported shell: the status it renders
+// already reported loginShell null.
 export async function installShellIntegration(): Promise<ShellIntegrationStatus> {
-  const base = loginShellBase();
-  if (base === null) {
-    throw new Error("Couldn't determine your login shell.");
-  }
-  return statusAfter(
-    ["shell", "install", base],
-    "Couldn't install shell integration",
+  const kind = await onShell((integration, shell) =>
+    integration.loginShell(shell),
   );
+  if (kind === "") throw new Error("Couldn't determine your login shell.");
+  await onShell((integration, shell) => integration.install(kind, shell));
+  return statusNow();
 }
 
-// Sweeps every supported shell. A partial removal (an edited block the
-// CLI refuses to touch) is not a failure: the CLI still emits the
-// resulting state, and the returned status shows the leftover as
-// "modified" for the UI to explain.
+// Sweeps every supported shell. A partial removal (an edited block
+// sm refuses to touch) is not a failure: the returned status shows
+// the leftover as "modified" for the UI to explain. A hook that stays
+// installed means removal genuinely failed (an unwritable rc), so that
+// is surfaced.
 export async function uninstallShellIntegration(): Promise<ShellIntegrationStatus> {
-  const result = await runShellCli(["shell", "uninstall"]);
-  const shells = shellsFromDocs(result.docs);
-  // Exit 1 with a hook still "installed" means removal genuinely
-  // failed (unwritable rc), so surface it. Exit 1 with only
-  // "modified"/"missing" is the deliberate partial case above.
+  const results = await onShell((integration, shell) =>
+    integration.uninstall(shell),
+  );
+  const status = await statusNow();
+  const failure = results.find(Result.isFailure);
   if (
-    shells.length === 0 ||
-    (result.code !== 0 && shells.some((s) => s.state === "installed"))
+    failure !== undefined &&
+    status.shells.some((hook) => hook.state === "installed")
   ) {
-    throw new Error(
-      cliFailureMessage(result, "Couldn't remove shell integration"),
-    );
+    throw new Error(failure.failure.message);
   }
-  return statusFrom(shells);
+  return status;
 }

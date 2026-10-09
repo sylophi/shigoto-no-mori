@@ -15,6 +15,6 @@ export const LOCAL_NETWORK_USAGE_DESCRIPTION =
 
 // The Automation prompt's sentence, shown the first time a terminal
 // tool (Claude Code, Neovim, …) opens in the user's terminal, which
-// the CLI drives over AppleScript (cli/terminals.go).
+// the engine drives over AppleScript (Open.ts).
 export const APPLE_EVENTS_USAGE_DESCRIPTION =
   "Shigoto no Mori opens terminal tools like Claude Code in a new window of your terminal.";

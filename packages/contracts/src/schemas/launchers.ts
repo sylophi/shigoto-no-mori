@@ -25,7 +25,7 @@ export const WEB_GITHUB_ID = "web:github";
 
 // A launcher id is "<kind>:<id>". Builder and parser live together so
 // the prefixes exist once, rather than being decoded by hand-counted
-// slices at each call site. Mirrored by cli/launchers.go.
+// slices at each call site.
 export type LauncherKind = "app" | "custom" | "web";
 
 export function launcherIdFor(kind: LauncherKind, id: string): string {
@@ -43,8 +43,7 @@ export function parseLauncherId(
 }
 
 // The terminals terminal tools open in (config.json's terminal), as
-// launcher catalog ids, in the order Settings lists them. Mirrors
-// cli/terminals.go terminalIDs.
+// launcher catalog ids, in the order Settings lists them.
 export const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
 export type TerminalId = (typeof TERMINAL_IDS)[number];
 

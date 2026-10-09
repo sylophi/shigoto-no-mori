@@ -1,8 +1,9 @@
 // Just enough semver 2.0.0 for the updater: parsing, precedence, and the
 // channel a prerelease belongs to. The update server compares full
 // releases itself, but it hides prereleases, so a prerelease build ranks
-// the release list on its own. Written to the Go sm's rules (cli/semver.go)
-// rather than taken from a library, so the two never disagree on a tag.
+// the release list on its own. Written to the rules 2.x
+// releases used rather than taken from a library, so a tag reads the
+// same as it did.
 
 export type Semver = {
   readonly major: bigint;

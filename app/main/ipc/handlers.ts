@@ -134,8 +134,7 @@ import { createGitFollower } from "@host/mirror/gitFollow";
 import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
-  withSchemaVersion,
-} from "@host/lib/util/jsonFile";
+} from "@host/lib/util/atomicJson";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
@@ -248,8 +247,7 @@ const mirrorHistory = createMirrorHistory({
     load: () =>
       readJsonOrNullSync(mirrorHistoryPath(), MirrorHistoryStoreSchema)
         ?.events ?? {},
-    save: (events) =>
-      atomicWriteJsonSync(mirrorHistoryPath(), withSchemaVersion({ events })),
+    save: (events) => atomicWriteJsonSync(mirrorHistoryPath(), { events }),
   },
   onChange: () => broadcastMirrorChanged(),
 });
@@ -360,8 +358,7 @@ const gitFollower = createGitFollower({
     load: () =>
       readJsonOrNullSync(gitFollowStorePath(), GitFollowStoreSchema)?.agreed ??
       {},
-    save: (agreed) =>
-      atomicWriteJsonSync(gitFollowStorePath(), withSchemaVersion({ agreed })),
+    save: (agreed) => atomicWriteJsonSync(gitFollowStorePath(), { agreed }),
   },
   onChange: () => {
     broadcastMirrorChanged();
@@ -533,8 +530,7 @@ export function registerIpcHandlers(): void {
     load: () =>
       readJsonOrNullSync(mirrorInvitesPath(), MirrorInviteStoreSchema)
         ?.invites ?? [],
-    save: (invites) =>
-      atomicWriteJsonSync(mirrorInvitesPath(), withSchemaVersion({ invites })),
+    save: (invites) => atomicWriteJsonSync(mirrorInvitesPath(), { invites }),
   });
   // A copy removed while the app was closed took no invitation with
   // it, so the boot checks the landed ones against the worktrees

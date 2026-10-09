@@ -61,10 +61,10 @@ import {
 } from "@shigomori/contracts/schemas";
 import { strict } from "@shigomori/contracts/schemas/strict";
 import {
-  bundleCreateViaCli,
-  bundleUnpackViaCli,
-  dirtyCaptureViaCli,
-} from "@host/ipc/cliDelegate";
+  bundleCreate,
+  bundleUnpack,
+  dirtyCapture,
+} from "@host/lib/engineCalls";
 import type { PeerSyncApi } from "@host/ipc/peerSync";
 import { refTip, treeOf } from "@host/lib/git/refs";
 import { listRemoteEntries } from "@host/lib/git/remotes";
@@ -398,7 +398,7 @@ export function localSource(project: Project, worktreeId: string): SourceFacts {
   return {
     tip: (branch) => refTip(project.path, `refs/heads/${branch}`),
     capture: async () => {
-      const capture = await dirtyCaptureViaCli(project, worktreeId);
+      const capture = await dirtyCapture(project, worktreeId);
       if (!capture.captured || capture.commit === undefined) {
         return { captured: false };
       }
@@ -428,12 +428,7 @@ async function sendBundle(
     // it resolved, but that list is computed against the repo AFTER
     // `git bundle create` silently dropped any have-covered ref, so it
     // can name refs the bundle lacks.
-    const { bytes } = await bundleCreateViaCli(
-      project,
-      path,
-      [...refs],
-      [...haves],
-    );
+    const { bytes } = await bundleCreate(project, path, [...refs], [...haves]);
     const file = await openFile(path, "r");
     try {
       await link.write({ bundle: { bytes } });
@@ -706,7 +701,7 @@ function askSource(linkOrOpen: Link | (() => Promise<Link>)): WorktreeSource {
         } finally {
           await file.close();
         }
-        return await bundleUnpackViaCli(into, path, refs.map(landingRefspec));
+        return await bundleUnpack(into, path, refs.map(landingRefspec));
       } finally {
         await rm(dir, { recursive: true, force: true }).catch(() => {});
       }

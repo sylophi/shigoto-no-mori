@@ -1,5 +1,5 @@
 // Durable proof for the package.json scripts' manual order
-// (host/lib/scripts/packageScriptStats.ts). The order is one per
+// (host/lib/scripts/packageScriptStats.ts, over the engine's Scripts). The order is one per
 // project while each worktree's package.json has its own scripts, so
 // arranging on one branch must not lose or shuffle another branch's.
 //
@@ -7,20 +7,18 @@
 // worktree lacks stays right behind the script it followed (and moves
 // with it), one with nothing before it keeps to the front, one whose
 // neighbors are all missing falls back to the nearest one present, and
-// the stored write merges against what is on disk, skipping the write
-// when nothing changed. The launch row's picks go on and off one script
-// at a time, per project, and dropping the last one drops the entry. The
+// the stored write merges against what is stored. The launch row's
+// picks go on and off one script at a time, per project. The
 // row keeps to the pinned scripts, in list order, only under the manual
 // sort and only when this worktree has one of them.
 //
 // Run: pnpm test script-order.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initDataDirAt } from "@host/lib/util/paths";
+import { mergeArrangedOrder } from "@shigomori/engine/Scripts";
 import {
-  mergeArrangedOrder,
   readLaunchRow,
   readScriptOrder,
   writeLaunchRowScript,
@@ -31,6 +29,7 @@ import {
   type SortableEntry,
 } from "@/components/worktreeDetail/scripts/sortPackageScripts";
 import { afterAll, beforeAll, it } from "vitest";
+import { hostEngine } from "./lib/smBinary.mts";
 
 const names = (entries: SortableEntry[] | null) =>
   entries?.map((entry) => entry.name) ?? null;
@@ -95,45 +94,36 @@ it("launch row: pins count under the manual sort only", () => {
 // One data dir for the store checks: it can only be set once per
 // process.
 let dir: string;
-let state: string;
-beforeAll(() => {
+let close: () => Promise<void>;
+beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "sm-script-order-"));
-  state = join(dir, "state.json");
-  initDataDirAt(dir);
+  ({ close } = await hostEngine(dir));
 });
-afterAll(() => {
+afterAll(async () => {
+  await close();
   rmSync(dir, { recursive: true, force: true });
 });
 
-it("store: merges against the stored order and skips a no-op write", () => {
-  writeScriptOrder("p1", ["dev", "deploy", "test", "lint"]);
-  writeScriptOrder("p1", ["lint", "dev", "test"]);
-  assert.deepEqual(readScriptOrder("p1"), ["lint", "dev", "deploy", "test"]);
-  assert.deepEqual(readScriptOrder("p2"), []);
-
-  const bytes = readFileSync(state, "utf8");
-  const before = statSync(state).mtimeMs;
-  writeScriptOrder("p1", ["lint", "dev", "test"]);
-  assert.equal(readFileSync(state, "utf8"), bytes);
-  assert.equal(statSync(state).mtimeMs, before);
+it("store: merges against the stored order", async () => {
+  await writeScriptOrder("p1", ["dev", "deploy", "test", "lint"]);
+  await writeScriptOrder("p1", ["lint", "dev", "test"]);
+  assert.deepEqual(await readScriptOrder("p1"), [
+    "lint",
+    "dev",
+    "deploy",
+    "test",
+  ]);
+  assert.deepEqual(await readScriptOrder("p2"), []);
 });
 
-it("store: launch row picks toggle one script at a time", () => {
-  writeLaunchRowScript("p1", "dev", true);
-  writeLaunchRowScript("p1", "test", true);
-  writeLaunchRowScript("p2", "build", true);
-  assert.deepEqual(readLaunchRow("p1"), ["dev", "test"]);
-
-  // A pick that changes nothing doesn't write.
-  const bytes = readFileSync(state, "utf8");
-  writeLaunchRowScript("p1", "dev", true);
-  writeLaunchRowScript("p1", "lint", false);
-  assert.equal(readFileSync(state, "utf8"), bytes);
-
-  writeLaunchRowScript("p1", "dev", false);
-  assert.deepEqual(readLaunchRow("p1"), ["test"]);
-  writeLaunchRowScript("p1", "test", false);
-  assert.deepEqual(readLaunchRow("p1"), []);
-  const stored = JSON.parse(readFileSync(state, "utf8"));
-  assert.deepEqual(stored.packageScriptLaunchRow, { p2: ["build"] });
+it("store: launch row picks toggle one script at a time", async () => {
+  await writeLaunchRowScript("p1", "dev", true);
+  await writeLaunchRowScript("p1", "test", true);
+  await writeLaunchRowScript("p2", "build", true);
+  assert.deepEqual(await readLaunchRow("p1"), ["dev", "test"]);
+  await writeLaunchRowScript("p1", "dev", false);
+  assert.deepEqual(await readLaunchRow("p1"), ["test"]);
+  await writeLaunchRowScript("p1", "test", false);
+  assert.deepEqual(await readLaunchRow("p1"), []);
+  assert.deepEqual(await readLaunchRow("p2"), ["build"]);
 });

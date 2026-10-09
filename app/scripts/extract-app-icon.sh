@@ -2,7 +2,7 @@
 # Extract a macOS .app's icon to a 128px PNG under renderer/app-icons/.
 # Usage: scripts/extract-app-icon.sh <path-to-.app> <id>
 # The launcher row finds an icon by file name, so <id> is the app's id
-# in cli/embed/launcher-catalog.json.
+# in packages/engine/src/data/launcher-catalog.json.
 set -euo pipefail
 
 APP="${1:-}"

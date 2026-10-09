@@ -33,7 +33,7 @@ lefthook passes them. A proof is reached through:
 
   A changed path that matches a covers glob hands the file declaring
   it to `vitest related` (`lib/covers.mts`), so a proof that builds
-  `sm` covers `cli/**` through `lib/smBinary.mts`. Add a line for a
+  `sm` covers `packages/cli/**` through `lib/smBinary.mts`. Add a line for a
   file the proof reads off disk, a directory it scans or a binary it
   builds. The globs are `path.matchesGlob`'s, so `**` skips dotfiles.
   `proof-selection` fails on a covers glob that matches no tracked

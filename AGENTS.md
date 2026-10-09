@@ -3,8 +3,8 @@
 `README.md` has the layout, and each folder documents itself.
 
 - pnpm for JavaScript, one workspace installed from the root
-  (`pnpm -C app …` or the root scripts for the app), Go for `cli/`,
-  `file-sync/` and `macfs/`.
+  (`pnpm -C app …` or the root scripts for the app), Go for `file-sync/`
+  and `macfs/`, Bun to compile the terminal `sm` (`packages/cli`).
 - On commit, lefthook runs lint, format, typecheck and the proofs the
   change touches, and CI runs every check on each pull request:
   `pnpm check`, each piece a `check:*` script in the root

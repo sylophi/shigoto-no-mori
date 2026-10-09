@@ -28,9 +28,3 @@ export function rendererSchemeName(flavor: CliFlavor): string {
 export function rendererSchemeOrigin(flavor: CliFlavor): string {
   return `${rendererSchemeName(flavor)}://${RENDERER_SCHEME_HOST}`;
 }
-
-// Where deep links start. The sm CLI gets it baked in at build time
-// (scripts/build-cli.mts) for `sm link`.
-export function deepLinkOrigin(flavor: CliFlavor): string {
-  return `${rendererSchemeName(flavor)}://${DEEP_LINK_HOST}`;
-}

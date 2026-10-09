@@ -3,7 +3,7 @@
 // character's face icon lives on Nookipedia, references only.
 //
 // Asserts:
-// - the worktree name pool (cli/embed/doubutsu-names.json) is exactly
+// - the worktree name pool (packages/engine/src/data/doubutsu-names.json) is exactly
 //   the characters in the manifest, so every pickable name has a face,
 //   and none of them is also listed missing
 // - each entry names a wiki page and a face file of a known game's
@@ -14,7 +14,7 @@
 //
 // Run: pnpm test villager-manifest.
 //
-// covers: app/shared/villagers/manifest.json cli/embed/doubutsu-names.json
+// covers: app/shared/villagers/manifest.json packages/engine/src/data/doubutsu-names.json
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,11 +31,13 @@ const manifest: VillagerManifest = readJson(
   "villagers",
   "manifest.json",
 );
-// The pool is the CLI's embed, one level up from the app.
+// The pool the engine picks names from.
 const { names }: { names: string[] } = readJson(
   repoRoot,
-  "cli",
-  "embed",
+  "packages",
+  "engine",
+  "src",
+  "data",
   "doubutsu-names.json",
 );
 const slugs = Object.keys(manifest.villagers);

@@ -6,7 +6,7 @@
 // all-git and fast enough to block the list render; `measureWorktreeDisk`
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
-import { diskUsageViaCli } from "@host/ipc/cliDelegate";
+import { diskUsage } from "@host/lib/engineCalls";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
@@ -356,7 +356,7 @@ const diskWalks = createLimiter(3);
 const diskCache = ttlMapCache(60_000, (key: string) => {
   // split always answers at least one part, so the default never applies.
   const [root = key, ...excluded] = key.split("\u0000");
-  return diskUsageViaCli(root, excluded);
+  return diskUsage(root, excluded);
 });
 
 export async function measureWorktreeDisk(

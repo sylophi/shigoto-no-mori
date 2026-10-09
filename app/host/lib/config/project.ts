@@ -1,65 +1,20 @@
-// Per-project on-disk state lives under <dataDir>/projects/<projectId>/:
-//   project.json                 project-wide settings (scripts, layout, ...)
-//   worktrees/<worktreeId>.json  per-worktree state (title, ports, ...)
-// Shigomori manages these itself; we don't touch the user's repo. Per-worktree
-// files exist for managed worktrees and the primary checkout (the main repo
-// root); other external worktrees deliberately have no persisted state.
-// project.json is the CLI's: read through `sm projects config read` and
-// written through `sm projects config write` (host/ipc/cliDelegate.ts).
-// The per-worktree files are shared: the app writes the custom ports,
-// and `sm describe` the title and description (cli/cmd_describe.go),
-// each under the file's lock and keeping the other's keys.
-import { join } from "node:path";
-import * as Schema from "effect/Schema";
-import {
-  type ShigomoriConfig,
-  type ShigomoriWorktreeData,
-  ShigomoriWorktreeDataSchema,
-  type WorktreeDescription,
+// A project's settings and a worktree's own data, in the store. The
+// project-wide settings (scripts, layout, ...) are read and written
+// through the engine's Config (host/lib/engineCalls.ts), as `sm projects
+// config` does. A worktree's data is the custom ports the app adds and
+// the title and description `sm describe` sets, each kept beside the
+// other.
+import * as WorktreeData from "@shigomori/engine/WorktreeData";
+import * as Effect from "effect/Effect";
+import type {
+  ShigomoriConfig,
+  ShigomoriWorktreeData,
+  WorktreeDescription,
 } from "@shigomori/contracts/schemas";
-import { shigomoriReadViaCli } from "@host/ipc/cliDelegate";
-import {
-  atomicWriteJsonSync,
-  readJsonOrNull,
-  readJsonOrNullSync,
-  withSchemaVersion,
-} from "../util/jsonFile";
-import { withFileLock } from "../util/lockFile";
-import { dataDir } from "../util/paths";
-import { ttlMapCache } from "../util/ttlCache";
+import * as Engine from "@host/lib/engine";
+import { readProjectConfig } from "@host/lib/engineCalls";
 
-function projectDir(projectId: string): string {
-  // Defense in depth: ids come from our own store, but refuse anything
-  // that could escape the projects directory.
-  if (/[\\/]/.test(projectId) || projectId.includes("..")) {
-    throw new Error(`Invalid project id: ${projectId}`);
-  }
-  return join(dataDir(), "projects", projectId);
-}
-
-function worktreeDataPath(projectId: string, worktreeId: string): string {
-  return join(projectDir(projectId), "worktrees", `${worktreeId}.json`);
-}
-
-// Failures aren't cached. A bad config should error every read so the
-// user notices and fixes it.
-const configCache = ttlMapCache<string, ShigomoriConfig | null>(
-  5_000,
-  shigomoriReadViaCli,
-);
-
-const worktreeCache = ttlMapCache<string, ShigomoriWorktreeData | null>(
-  5_000,
-  (key) => {
-    const { projectId, worktreeId } = parseWorktreeKey(key);
-    return readJsonOrNull(
-      worktreeDataPath(projectId, worktreeId),
-      ShigomoriWorktreeDataSchema,
-    );
-  },
-);
-
-// A worktree's cache key, for the caches keyed by one.
+// A worktree's key, for the caches keyed by one.
 export function worktreeKey(projectId: string, worktreeId: string): string {
   return `${projectId}:${worktreeId}`;
 }
@@ -70,87 +25,82 @@ export function parseWorktreeKey(key: string): {
 } {
   const [projectId, worktreeId, ...extra] = key.split(":");
   if (projectId === undefined || worktreeId === undefined || extra.length > 0) {
-    throw new Error(`worktree cache key ${key} is not projectId:worktreeId`);
+    throw new Error(`worktree key ${key} is not projectId:worktreeId`);
   }
   return { projectId, worktreeId };
 }
 
-export async function readShigomoriConfig(
+export function readShigomoriConfig(
   projectId: string,
 ): Promise<ShigomoriConfig | null> {
-  return configCache.get(projectId);
+  return readProjectConfig(projectId);
 }
 
+const onData = <A>(
+  f: (data: WorktreeData.WorktreeData["Service"]) => Effect.Effect<A>,
+): Promise<A> =>
+  Engine.run(
+    Effect.gen(function* () {
+      return yield* f(yield* WorktreeData.WorktreeData);
+    }),
+  );
+
+// The document as the renderer has always read it: each field present
+// only when set.
 export async function readWorktreeData(
   projectId: string,
   worktreeId: string,
 ): Promise<ShigomoriWorktreeData | null> {
-  return worktreeCache.get(worktreeKey(projectId, worktreeId));
+  const [described, ports] = await onData((data) =>
+    Effect.all([
+      data.description(projectId, worktreeId),
+      data.ports(projectId, worktreeId),
+    ]),
+  );
+  const doc: ShigomoriWorktreeData = {
+    ...(ports.length > 0 && { ports: [...ports] }),
+    ...(described.title !== "" && { title: described.title }),
+    ...(described.description !== "" && {
+      description: described.description,
+    }),
+    ...(described.describedAt > 0 && { describedAt: described.describedAt }),
+  };
+  return Object.keys(doc).length === 0 ? null : doc;
 }
 
-const decodeWorktreeData = Schema.decodeSync(ShigomoriWorktreeDataSchema);
-
-// One read-modify-write of the data file under the lock the CLI
-// takes, read fresh rather than through the cache: `sm describe` can
-// have written it a moment ago.
-function updateWorktreeData(
-  projectId: string,
-  worktreeId: string,
-  update: (current: ShigomoriWorktreeData) => ShigomoriWorktreeData,
-): void {
-  const path = worktreeDataPath(projectId, worktreeId);
-  withFileLock(`${path}.lock`, () => {
-    const current = readJsonOrNullSync(path, ShigomoriWorktreeDataSchema) ?? {};
-    // The decode strips anything it doesn't model, the marker
-    // included, so it is stamped back on at the write rather than
-    // carried through the schema.
-    atomicWriteJsonSync(
-      path,
-      withSchemaVersion(decodeWorktreeData(update(current))),
-    );
-  });
-  worktreeCache.invalidate(worktreeKey(projectId, worktreeId));
-}
-
-// The renderer's write: the custom ports, the rest of the document
+// The renderer's write: the custom ports, the title and description
 // kept.
 export async function writeWorktreeData(
   projectId: string,
   worktreeId: string,
   { ports }: Pick<ShigomoriWorktreeData, "ports">,
 ): Promise<void> {
-  updateWorktreeData(projectId, worktreeId, (current) => ({
-    ...current,
-    ports,
-  }));
+  await Engine.change(
+    Effect.gen(function* () {
+      yield* (yield* WorktreeData.WorktreeData).setPorts(
+        projectId,
+        worktreeId,
+        ports ?? [],
+      );
+    }),
+  );
 }
 
-// The title and description as a whole, the rest of the document kept:
-// what a worktree carries to its copy on another device. Only a pair
-// described after the one on disk lands, judged under the lock, so a
-// carry that read a stale side can't undo a newer describe.
+// The title and description as a whole: what a worktree carries to its
+// copy on another device. Only a pair described after the one stored
+// lands, so a carry that read a stale side can't undo a newer describe.
 export async function writeWorktreeDescription(
   projectId: string,
   worktreeId: string,
   { title, description, describedAt }: WorktreeDescription,
 ): Promise<void> {
-  updateWorktreeData(projectId, worktreeId, (current) =>
-    (describedAt ?? 0) > (current.describedAt ?? 0)
-      ? { ...current, title, description, describedAt }
-      : current,
+  await Engine.change(
+    Effect.gen(function* () {
+      yield* (yield* WorktreeData.WorktreeData).carry(projectId, worktreeId, {
+        title: title ?? "",
+        description: description ?? "",
+        describedAt: describedAt ?? 0,
+      });
+    }),
   );
-}
-
-// For delegated CLI writes of project.json, which the state watcher
-// suppresses as self-writes. The handler drops the cache itself.
-export function invalidateProjectConfigCache(projectId: string): void {
-  configCache.invalidate(projectId);
-}
-
-// External processes (the CLI) write these files too; the state
-// watcher calls this on any change under the data dir so the 5s TTL can't
-// serve stale config after a CLI write.
-export function invalidateAllProjectConfigCaches(): void {
-  configCache.clear();
-  worktreeCache.clear();
 }

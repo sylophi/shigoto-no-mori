@@ -2,8 +2,8 @@
 // carry-over and for the leave-out preset's picker, which unions this
 // listing across devices (renderer/hooks/remote/useRepoListing.ts).
 // Entries are root-relative, so the primary and each worktree
-// are all candidates. The CLI applies the same idea at creation
-// (carryOverSources in cli/carryover.go looks in the base ref's
+// are all candidates. The engine applies the same idea at creation
+// (CarryOver.ts looks in the base ref's
 // worktree, then the primary, then the rest). Checkouts are listed
 // primary first: when checkouts disagree on whether a name is a file
 // or a folder, the first one holding it decides.

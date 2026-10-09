@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { Flame } from "lucide-react";
 import type { NukeProgress } from "@shigomori/contracts/schemas";
 import { BlockingOverlay } from "@/components/ui/blocking-overlay";
@@ -16,7 +15,6 @@ import { tildify } from "@shared/projectPaths";
 import { notifyError } from "@/lib/toast";
 
 export function DangerZone() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
@@ -51,14 +49,9 @@ export function DangerZone() {
         // The sidebar's open project is kept outside the cache, and a
         // repo added back would open inside it. Back to the list.
         setOpenProject(null);
-        // A data dir that boot adopted under its pre-2.0 name is gone
-        // for good: the fresh install was seeded at the default
-        // location, which only a relaunch can pick up.
-        if (runtime?.dataDirSource === "legacy") {
-          void window.api.window.relaunch();
-          return;
-        }
-        await navigate({ to: "/" });
+        // The store went with the data dir: the app starts again on a
+        // fresh one.
+        void window.api.window.relaunch();
       } catch (err) {
         notifyError("Couldn't nuke shigomori data", err);
       }

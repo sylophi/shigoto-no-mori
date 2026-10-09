@@ -1,5 +1,5 @@
 // The control wire: the loopback listener the CLI reaches the running
-// app through (`sm worktrees send|bring|mirror`, cli/control.go). A
+// app through (`sm worktrees send|bring|mirror`, the engine's Control.ts). A
 // ServerTransport like the other wires, so the control contract
 // registers on it through the shared registrar.
 //
@@ -35,13 +35,13 @@ import {
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { mintHexId } from "@host/lib/hexId";
-import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
+import { atomicWriteJsonSync } from "@host/lib/util/atomicJson";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import { listenLoopback } from "../portForward/bridge";
 import { log } from "@shared/log";
 
-// cli/control.go reads this exact name and shape.
+// The engine's Control.ts reads this exact name and shape.
 export const CONTROL_FILE_NAME = "control.json";
 
 export type ControlFile = {
@@ -228,9 +228,7 @@ export function createControlServer(deps: {
   function publish(): void {
     if (file === null) return;
     const path = deps.filePath();
-    // selfWrite: false because this is control-plane plumbing the
-    // state watcher ignores, not user state.
-    atomicWriteJsonSync(path, file, { selfWrite: false, mode: 0o600 });
+    atomicWriteJsonSync(path, file, { mode: 0o600 });
     published = path;
   }
 

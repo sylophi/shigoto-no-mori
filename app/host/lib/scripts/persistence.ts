@@ -19,8 +19,7 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as Schema from "effect/Schema";
 import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
-import { atomicWriteJsonSync } from "../util/jsonFile";
-import { withFileLock } from "../util/lockFile";
+import { atomicWriteJsonSync } from "../util/atomicJson";
 import { isENOENT, dataDir } from "../util/paths";
 import * as Processes from "../util/processes";
 import { signalTree } from "./process";
@@ -76,25 +75,16 @@ function filePath(): string {
   return join(dataDir(), FILE);
 }
 
-function lockPath(): string {
-  return `${filePath()}.lock`;
-}
-
-// Replaces the file with our whole in-memory set. Sync and locked to
-// match config/store.ts: the payload is a handful of records, and the
-// settle path can run while the app is already tearing down, where a
-// pending async write would never land.
+// Replaces the file with our whole in-memory set. Sync: the payload is
+// a handful of records, and the settle path can run while the app is
+// already tearing down, where a pending async write would never land.
 export function persistRunningScripts(
   scripts: readonly PersistedScript[],
 ): void {
   const path = filePath();
   const snapshot: Snapshot = { ownerPid: process.pid, scripts };
   try {
-    // selfWrite: false because this is our own bookkeeping file, not
-    // state the watcher should echo back to the renderer.
-    withFileLock(lockPath(), () => {
-      atomicWriteJsonSync(path, snapshot, { selfWrite: false });
-    });
+    atomicWriteJsonSync(path, snapshot);
   } catch (error) {
     // Losing the record costs the next boot's sweep and nothing else.
     // A script run must not fail over it.

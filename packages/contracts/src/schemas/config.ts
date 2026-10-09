@@ -152,8 +152,7 @@ export function modeledKeyFields(
   return walkKeyFields(structFieldsOf(schema.ast) ?? [], []);
 }
 
-// The paths alone. The host's project write and the cli-reads key check
-// both walk it.
+// The paths alone, which the host's project write walks.
 export function modeledKeyPaths(schema: Schema.Top): string[][] {
   return modeledKeyFields(schema).map(({ path }) => path);
 }
@@ -231,7 +230,7 @@ export const CarryOverStatSchema = Schema.Struct({
 export type CarryOverStat = typeof CarryOverStatSchema.Type;
 
 // A worktree's title and description: what its work is, set by `sm
-// describe` (cli/cmd_describe.go) until a pull request's title and
+// describe` until a pull request's title and
 // body take over. describedAt (epoch ms) is when they were last set,
 // so a mirror's two sides keep the newer pair. Only `sm describe` and
 // the moves between devices write them (writeWorktreeDescription).
@@ -282,13 +281,13 @@ const GlobalConfigSchema = Schema.Struct({
   // the opt-out.
   launchScripts: Schema.optional(Schema.Boolean),
   // The terminal app terminal tools (Claude Code, Neovim, lazygit, …)
-  // open in, a launcher catalog id. Absent = Terminal. Mirrors the
-  // CLI's terminalIDs (cli/terminals.go), which launches them.
+  // open in, a launcher catalog id. Absent = Terminal. The
+  // engine's Open.ts launches them.
   terminal: Schema.optional(Schema.Literals(TERMINAL_IDS)),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
   // use by another worktree). ON by default. Unset means delete
-  // (cli/cmd_rm.go, which every removal runs through).
+  // (Worktrees.remove in the engine, which every removal runs through).
   deleteBranchOnRemove: Schema.optional(Schema.Boolean),
   // When true, adding a project with a package.json seeds its setup
   // script with `<detected-pm> install`. Only fires at project-add
@@ -296,8 +295,7 @@ const GlobalConfigSchema = Schema.Struct({
   autoPopulateInstall: Schema.optional(Schema.Boolean),
   // When true, a new worktree, and the primary checkout of a newly
   // added project, start out with auto-pull on (the mark `sm worktrees
-  // autopull` sets). Only fires at create and add time, in the CLI
-  // (cli/state.go markAutoPullIfNew). Existing
+  // autopull` sets). Only fires at create and add time, in the engine. Existing
   // worktrees keep their footer toggle as they are.
   autoPullNew: Schema.optional(Schema.Boolean),
   // When true, autoPullNew covers only the primary checkout of a newly
@@ -305,28 +303,28 @@ const GlobalConfigSchema = Schema.Struct({
   autoPullPrimaryOnly: Schema.optional(Schema.Boolean),
   // When true, auto-picked worktree names are Animal Crossing villager
   // and character names, the ones with a face on Nookipedia
-  // (cli/embed/doubutsu-names.json, e.g. `raymond`), instead of
-  // adjective + animal pairs (`snug-otter`). Picked by the CLI
-  // (cli/names.go), at create time and for the New Worktree form's
+  // (packages/engine/src/data/doubutsu-names.json, e.g. `raymond`),
+  // instead of adjective + animal pairs (`snug-otter`). Picked by the
+  // engine (names.ts), at create time and for the New Worktree form's
   // pre-pick (`sm worktrees destination`). Absent reads as off, so an
   // install from before it defaulted on keeps its names. A fresh
-  // install is seeded with `true` instead (host/lib/bootstrap.ts,
-  // cli/state.go seedFreshInstall).
+  // install is seeded with `true` instead (the store's first open,
+  // the engine's migrations/importJson.ts).
   doubutsuNames: Schema.optional(Schema.Boolean),
   // When true, an external worktree whose folder is just the repo's
   // name (Codex and other tools lay worktrees out as
   // <worktree-name>/<repo-name>) is named after the folder above it.
   // Off by default: a worktree that merely shares the repo's folder
   // name would take whatever folder it sits in. Applied wherever the
-  // CLI lists worktrees (cli/gitx.go), the app's rows included.
+  // engine lists worktrees, the app's rows included.
   codexWorktreeNames: Schema.optional(Schema.Boolean),
   // When true, a project on an external drive keeps its managed-layout
   // worktrees on that drive
   // (<volume>/<dataDirName>/worktrees/<projectName>/<worktreeName>)
   // instead of under the data dir. Nothing changes for a project on the
   // internal drive, one whose drive already holds the data dir, or one
-  // on another layout. Decided by the CLI wherever it places a worktree
-  // (cli/paths.go resolveWorktreeBase). Worktrees made before the
+  // on another layout. Decided by the engine wherever it places a
+  // worktree (worktreeBase in worktreeLayout.ts). Worktrees made before the
   // switch stay where they are until the project's Worktree location
   // page moves them. Off by default.
   managedOnProjectDrive: Schema.optional(Schema.Boolean),
@@ -340,7 +338,7 @@ const GlobalConfigSchema = Schema.Struct({
   // path registered in both is an ordinary removable project, and
   // removing its registry entry demotes it back to terrier-sourced. Off by
   // default, and only active while `terrier` is on PATH and `terrier ls
-  // --json` answers in the shape cli/terrier.go reads.
+  // --json` answers in the shape the engine's Terrier.ts reads.
   terrier: Schema.optional(Schema.Boolean),
   // When true, GitHub CLI features light up wherever they apply.
   // Activates only when `gh` is on PATH and authenticated. On by
@@ -405,9 +403,8 @@ export const WriteDeviceSettingsPayloadSchema = Schema.Struct({
 // decodes a missing key with it (fromConfig in
 // renderer/hooks/config/useSettingsSave.ts), and the host's patch
 // handler stores a key equal to its default by deleting it, so the file
-// stays tidy whichever device saved it. The CLI's key registry
-// (cli/cmd_config.go globalConfigKeys) mirrors these keys and
-// defaults, and the cli-reads proof holds the two together.
+// stays tidy whichever device saved it. The engine's Config
+// reads its defaults from here.
 export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   launchers: [],
   hiddenLaunchers: [],
@@ -577,7 +574,7 @@ export const WriteShigomoriPayloadSchema = Schema.Struct({
 // worktree list first). Constrain it to the exact 12-hex shape that
 // `worktreeIdFromPath` produces so a malformed id can't escape the
 // projects/<id>/worktrees/ directory.
-// The derived worktree id (worktreeIDFromPath in cli/paths.go): the
+// The derived worktree id (worktreeIdFromPath in the engine's worktreeLayout.ts): the
 // first 12 hex chars of the path's sha256. One schema for every
 // payload that names one.
 export const WorktreeIdSchema = Schema.String.check(

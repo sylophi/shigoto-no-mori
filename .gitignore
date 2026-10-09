@@ -56,8 +56,3 @@ file-sync/filesync
 # darwin helper compiled binary (scripts/build-macfs.mts)
 dist-macfs/
 macfs/macfs
-
-# go build artifacts in the module dir (compiled output belongs in dist-cli/)
-cli/sm
-cli/smd
-cli/cli

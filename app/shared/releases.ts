@@ -10,8 +10,8 @@ import type { Release } from "@shigomori/contracts/schemas";
 
 export const RELEASES_PAGE_URL = `https://github.com/${UPDATE_FEED_REPO}/releases`;
 
-// The API's page maximum, and the CLI's release list reads the same
-// one page (cli/updater.go). Older releases are a click away on GitHub.
+// The API's page maximum, and the engine's release list reads the
+// same one page (updateFeed.ts). Older releases are a click away on GitHub.
 const RELEASE_LIST_URL = `https://api.github.com/repos/${UPDATE_FEED_REPO}/releases?per_page=100`;
 
 // The fields read off each entry. Drafts never reach an
@@ -50,7 +50,7 @@ export async function fetchReleases(
   }
   // Unauthenticated calls get 60 an hour per address. GitHub spends
   // that budget with a 403 that says so, and 429 is its secondary
-  // limit (the same reading as cli/updater.go rateLimited).
+  // limit (the same reading as the engine's updateFeed.ts).
   if (
     response.status === 429 ||
     (response.status === 403 &&
@@ -79,7 +79,7 @@ export async function fetchReleases(
 // Semver precedence, as far as release tags need it: the core numbers,
 // then a prerelease sorts below its release, identifier by identifier
 // (numeric ones numerically and below any word). What parses is the
-// CLI's rule (cli/semver.go parseSemver): x.y.z without leading zeros,
+// engine's rule (parseSemver in semver.ts): x.y.z without leading zeros,
 // prerelease identifiers that are non-empty, alphanumeric or hyphens,
 // and numeric ones without a leading zero. Anything else sorts below
 // everything, so a stray tag can't pass for newest.

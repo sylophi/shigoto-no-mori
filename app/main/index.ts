@@ -9,9 +9,8 @@ import {
   devProfileUserData,
 } from "@shared/packaging/appName.mts";
 import { windowContract } from "@shigomori/contracts/modules/window";
-import { ensureDataDir } from "@host/lib/bootstrap";
-import { dropRemovedLanKeys } from "@host/lib/config/global";
-import { getDeviceId } from "@host/lib/config/deviceId";
+import { readDeviceId } from "@host/lib/config/deviceId";
+import { loadSharedSettings } from "@host/lib/sharedSettings/store";
 import {
   createDesktopClerkBridge,
   rendererSchemeUrl,
@@ -38,10 +37,6 @@ import {
   applyThemeSource,
   readClientConfigSync,
 } from "./electron/clientConfig";
-import {
-  seedClientConfigFromLegacy,
-  seedProjectsSortFromState,
-} from "./electron/clientConfigMigration";
 import { registerIpcHandlers } from "./ipc/handlers";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { installHostImpls } from "./electron/hostImpls";
@@ -51,6 +46,13 @@ import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { applyUserShellEnv } from "./core/shellEnv";
 import * as HostLayer from "./hostLayer";
+import { bundledBinaryPath } from "./electron/bundledBinary";
+import { storeFailureReport } from "./electron/storeFailure";
+import { cliBinaryName } from "@shared/packaging/cliDist.mts";
+import {
+  MACFS_BINARY_NAME,
+  MACFS_DIST_DIR,
+} from "@shared/packaging/macfsDist.mts";
 import * as Observability from "./observability";
 import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -178,8 +180,6 @@ if (platform() === "darwin") {
 // reclaims the bridge's IPC handlers wholesale anyway.
 createDesktopClerkBridge();
 
-initDataDir(app.isPackaged);
-
 // Electron-layer impls must be wired before registerIpcHandlers runs so
 // the first renderer call never lands on the throwing default.
 installMenuImpl();
@@ -187,12 +187,24 @@ installUpdaterImpl();
 installHostImpls();
 registerIpcHandlers();
 
+// The engine's build flavor and its darwin helper, for the graph and
+// for the doctor a store that won't open gets.
+const engineOptions = {
+  flavor: app.isPackaged ? ("prod" as const) : ("dev" as const),
+  macfs: bundledBinaryPath(MACFS_DIST_DIR, MACFS_BINARY_NAME),
+};
+
 // The process's one layer graph, built in the ready handler once the
 // window is up and closed by the quit below. Every subsystem with a
 // lifetime is in it, so its shutdown is the quit sequence.
 const runtime = ManagedRuntime.make(
   ShellLayer.layer.pipe(
-    Layer.provideMerge(HostLayer.layer({ hurried: isHurriedQuit })),
+    Layer.provideMerge(
+      HostLayer.layer({
+        hurried: isHurriedQuit,
+        engine: engineOptions,
+      }),
+    ),
     // The shell's, but below the host: the renderer asks for its Clerk
     // session as soon as it loads.
     Layer.provideMerge(ClerkTokenStorage.layer(app.getPath("userData"))),
@@ -216,6 +228,19 @@ let hasBooted = false;
 // the boot error dialog). createWindow only interpolates it. Never
 // empty by the time any window exists: getDeviceId mints or throws.
 let deviceId = "";
+
+// The data dir for the boot error, which may be that it couldn't be
+// found at all.
+function dataDirOrNone(): string {
+  try {
+    return dataDir();
+  } catch {
+    return "The data folder";
+  }
+}
+
+// The layer graph's build, started in the ready handler.
+let graph: Promise<unknown> = Promise.resolve();
 
 const createWindow = (restart: RestartVisibility | null = null) => {
   hasBooted = true;
@@ -439,10 +464,32 @@ app.on("ready", async () => {
   );
   // The rebuilt environment (module top), before the first spawn.
   await shellEnvReady;
+  // The graph starts here: its bottom opens the store, which the
+  // window's first paint needs the device id from. The rest comes up
+  // behind the window.
   try {
-    await ensureDataDir();
-    deviceId = getDeviceId();
+    await initDataDir(engineOptions.flavor);
+    graph = runtime.context();
+    deviceId = await Promise.race([
+      readDeviceId(),
+      graph.then(() => new Promise<never>(() => {})),
+    ]);
+    await loadSharedSettings();
   } catch (err) {
+    // A store the 2.x files couldn't be imported into, or that can't be
+    // read: the doctor's findings say which file and what to do.
+    const storeReport = await storeFailureReport(err, {
+      ...engineOptions,
+      version: app.getVersion(),
+    });
+    if (storeReport !== null) {
+      dialog.showErrorBox(
+        "Shigoto no Mori can't open its data",
+        `${storeReport}\n\nRun \`${cliBinaryName(engineOptions.flavor)} doctor\` in a terminal for the repairs it offers.`,
+      );
+      app.exit(1);
+      return;
+    }
     // A pointer file can aim the data dir somewhere that isn't reachable
     // right now (external drive unplugged, permissions changed). A
     // silent unhandled rejection here would leave the app running with
@@ -456,7 +503,7 @@ app.on("ready", async () => {
         : "Check the folder's permissions, or move it aside to start fresh.";
     dialog.showErrorBox(
       "Shigoto no Mori can't access its data folder",
-      `${dataDir()} could not be created or accessed.\n\n${recovery}\n\n` +
+      `${dataDirOrNone()} could not be created or accessed.\n\n${recovery}\n\n` +
         `${errorMessageOf(err)}`,
     );
     app.exit(1);
@@ -467,19 +514,6 @@ app.on("ready", async () => {
   // record file synchronously (before any script can spawn) and does
   // the killing in the background.
   startOrphanScriptSweep();
-  // Before the first createWindow, whose theme read must already see
-  // values migrated out of the pre-split device config, and whose
-  // sidebar must already see the sort moved out of state.json.
-  await seedClientConfigFromLegacy();
-  await seedProjectsSortFromState();
-  // Scrub the removed LAN listener's plaintext tokens off disk. An
-  // unreadable config must never block boot, and the drain retries
-  // next boot.
-  try {
-    dropRemovedLanKeys();
-  } catch (error) {
-    log.warn("[config] LAN key drain failed:", error);
-  }
   buildAppMenu();
   // Host liveness. Install the crash guards before
   // the window exists so an early fatal error is still caught, then
@@ -494,7 +528,7 @@ app.on("ready", async () => {
   rememberVisibilityAtShutdown();
   // The window is already up, so the graph delays only the background
   // machinery. A quit that came first has disposed it.
-  await runtime.context().catch((error: unknown) => {
+  await graph.catch((error: unknown) => {
     if (!quitting) log.error("[boot] the layer graph failed:", error);
   });
 });

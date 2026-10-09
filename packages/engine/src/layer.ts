@@ -25,6 +25,7 @@ import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
+import * as ShellIntegration from "./ShellIntegration.ts";
 import * as SharedSettings from "./SharedSettings.ts";
 import * as Store from "./Store.ts";
 import type * as SqlClient from "effect/sql/SqlClient";
@@ -61,6 +62,7 @@ const services = (options: EngineOptions) =>
       Layer.mergeAll(
         Launchers.layer,
         Layout.layer,
+        ShellIntegration.layer,
         Registry.layer,
         Scripts.layer,
         WorktreeData.layer,

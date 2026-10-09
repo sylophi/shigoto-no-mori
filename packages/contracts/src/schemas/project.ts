@@ -32,8 +32,7 @@ export const ProjectSchema = Schema.Struct({
   // only. `null` means the repo has none (or the probe failed), so it
   // never matches across devices. Other handlers don't set it.
   identity: Schema.optional(Schema.NullOr(Schema.String)),
-  // The primary remote as `host/owner/repo` (cli/repoidentity.go,
-  // primaryRemote), populated by ProjectsList only, for grouping the
+  // The primary remote as `host/owner/repo` (the engine's Identity.ts), populated by ProjectsList only, for grouping the
   // sidebar's projects by owner. `null` means the repo has no network
   // remote. Absent from a peer on an older build.
   remote: Schema.optional(Schema.NullOr(Schema.String)),
@@ -44,8 +43,8 @@ export const ProjectSchema = Schema.Struct({
   lastUsed: Schema.optional(Schema.Natural),
   recentCount: Schema.optional(Schema.Natural),
   // "terrier" marks a project merged from the terrier registry rather
-  // than registry.json. Never persisted: the CLI's merge decorates it
-  // at read time (cli/terrier.go), and the id is minted
+  // than registry.json. Never persisted: the engine's merge decorates
+  // it at read time (Terrier.ts), and the id is minted
   // deterministically from the path. Terrier-sourced projects can't be
   // removed.
   source: Schema.optional(Schema.Literal("terrier")),

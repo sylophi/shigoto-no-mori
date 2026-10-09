@@ -1,11 +1,8 @@
 // The default-ref half of repo identity (shared/git/repoIdentity.mts),
 // which peers compute for each other's repos: which branch keys the
-// identity's root commit. Pure module, the runner is injected, so the
-// parity harness (test/identity.mts) runs it under its own scrubbed
-// git. The CLI's resolver (pickDefaultRef in cli/gitx.go) makes the
-// same pick for identity and for the primary ref it measures rows
-// against, and test/identity.mts pins the identities the two compute
-// against each other.
+// identity's root commit. Pure module, the runner is injected. The
+// engine's resolver (pickDefaultRef in gitParse.ts) makes the same pick
+// for identity and for the primary ref it measures rows against.
 
 // Runs git in `cwd`, resolves stdout, rejects on non-zero exit.
 export type GitRunner = (cwd: string, args: string[]) => Promise<string>;

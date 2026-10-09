@@ -84,7 +84,7 @@ const MERGE_CONFIG_TTL = Duration.hours(1);
 // One GraphQL read: `gh repo view --json` has the three method flags
 // but not autoMergeAllowed. gh fills {owner} and {repo} from the
 // repo's remote in field values the way it does in REST paths. The
-// same query as the CLI's (cli/cmd_merge.go repoMergeQuery).
+// same query as the engine's (GitHub.mergeSettings).
 const REPO_MERGE_QUERY =
   "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
   "{ mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed } }";

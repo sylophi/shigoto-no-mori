@@ -72,7 +72,7 @@ import {
   readJsonOrNull,
   tempPathFor,
   unlinkIfExists,
-} from "./util/jsonFile";
+} from "./util/atomicJson";
 import { dataDir, isENOENT } from "./util/paths";
 
 // Villagers per API request (the API's cap on titles), and faces in
@@ -407,9 +407,7 @@ const make = ({
           Object.assign(profiles, yield* fetchProfiles(unknown));
           // Saved before its faces start.
           yield* disk(() =>
-            atomicWriteJson(join(folder, "profiles.json"), profiles, {
-              selfWrite: false,
-            }),
+            atomicWriteJson(join(folder, "profiles.json"), profiles),
           );
           yield* tally;
         }
@@ -435,9 +433,7 @@ const make = ({
         villagers: total,
       };
       yield* disk(async () => {
-        await atomicWriteJson(join(folder, "meta.json"), meta, {
-          selfWrite: false,
-        });
+        await atomicWriteJson(join(folder, "meta.json"), meta);
         await rm(readyDir(), { recursive: true, force: true });
         await rename(folder, readyDir());
       });

@@ -39,10 +39,9 @@ it("files reached only through covers lines pick their declarers", () => {
   // A path, and the files its covers lines must hand to vitest related.
   const expect: [string, string[]][] = [
     // A build of sm, through the module every proof that runs it loads.
-    ["cli/main.go", ["app/test/lib/smBinary.mts"]],
+    ["packages/cli/src/main.ts", ["app/test/lib/smBinary.mts"]],
     ["file-sync/engine.go", ["app/test/mirror.mts"]],
-    // A fixture read off disk, a directory scan, a lockfile read.
-    ["app/shared/fixtures/repo-identity-urls.json", ["app/test/identity.mts"]],
+    // A directory scan, a lockfile read.
     ["app/renderer/App.tsx", ["app/test/host-boundary.mts"]],
     ["pnpm-lock.yaml", ["app/test/theme-contract.mts", "app/test/dmg-art.mts"]],
     // The config every proof runs under.

@@ -1,7 +1,7 @@
 // A loopback listener that plays the running app on the control wire,
-// as cli/control_test.go's scripted server does: it reads the hello and
-// the request, then writes the frames `reply` answers with (one line
-// each) and hangs up. Both the Go sm and the engine dial it.
+// scripted: it reads the hello and the request, then writes the frames
+// `reply` answers with (one line each) and hangs up. The engine and the
+// terminal binary dial it.
 import { createServer, type Socket } from "node:net";
 
 export type Frame = Readonly<Record<string, unknown>>;

@@ -20,18 +20,13 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { ownBranchPullRequest, ownBranchPullRequests } from "@/lib/pullRequest";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import {
   getWorktreePullRequest,
   refreshProjectPullRequests,
 } from "@host/lib/githubCli/pullRequests";
 import { it } from "vitest";
-import {
-  cliFailureMessage,
-  sandboxGit,
-  scrubProcessGitEnv,
-  tempDir,
-} from "./lib/checkKit.mts";
+import { hostEngine } from "./lib/smBinary.mts";
+import { sandboxGit, scrubProcessGitEnv, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 scrubProcessGitEnv();
@@ -103,17 +98,9 @@ it("the host's reads skip a fork's PR of the same name", async () => {
     if (ghConfig === undefined) delete process.env["GH_CONFIG_DIR"];
     else process.env["GH_CONFIG_DIR"] = ghConfig;
   });
-  // The integration toggle is read through `sm config read`.
-  setCliRunnerImpl({
-    runCli: () =>
-      Promise.resolve({
-        code: 0,
-        docs: [{ ok: true, config: {} }],
-        stderrTail: "",
-      }),
-    requireCliBinary: () => "sm",
-    cliFailureMessage,
-  });
+  // The integration toggle is the store's: a fresh one has it on.
+  const engine = await hostEngine(join(root, "data"));
+  trackTest(engine.close);
   const repo = join(root, "repo");
   mkdirSync(repo);
   const git = sandboxGit();

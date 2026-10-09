@@ -16,7 +16,7 @@ import {
   listPullRequestCandidates,
   resolvePullRequestCheckout,
 } from "@host/lib/githubCli/pullRequestCheckout";
-import { mergeViaCli } from "../cliDelegate";
+import { mergePullRequest } from "@host/lib/engineCalls";
 import {
   getGithubCliReadiness,
   getRepoDescription,
@@ -69,7 +69,7 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   mergePullRequest: async ({ projectId, number, method, stack }) => {
     const project = await findProjectOrThrow(projectId);
     // The CLI runs the gh merge and persists lastMergeMethod itself.
-    const result = await mergeViaCli(project, number, method, { stack });
+    const result = await mergePullRequest(project, number, method, { stack });
     // A landed merge changes upstream refs and the sidebar PR cache:
     // evict so the next read sees the merged state. An armed or queued
     // PR is still open, and the slim map doesn't carry either flag, so

@@ -9,6 +9,6 @@ export const appRoot = join(
   "..",
 );
 
-// The repo (and worktree) root, one level up: where cli/ and
+// The repo (and worktree) root, one level up: where packages/ and
 // file-sync/ live.
 export const repoRoot = dirname(appRoot);

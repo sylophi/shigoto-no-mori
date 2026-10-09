@@ -7,7 +7,6 @@
 //      double-forked daemons) and SIGTERM those too.
 //   3. The caller escalates to SIGKILL through the same path after its
 //      grace period.
-import type { ChildProcess } from "node:child_process";
 import * as Effect from "effect/Effect";
 import * as Processes from "../util/processes";
 import { descendantsIn } from "./descendants";
@@ -59,37 +58,6 @@ export const signalPidTree = (pid: number, signal: NodeJS.Signals) =>
     }),
   );
 
-// SIGTERM one direct child, escalating to SIGKILL after graceMs unless
-// it exits first. For plain (non-detached) children whose whole work is
-// the one process, where the process-group walk above would be
-// overkill. `tree` signals the child's process
-// group instead (signalChildTree): a detached CLI child whose
-// lifecycle script must die with it. The group outlives the child, so
-// the escalation then stays armed past the child's own exit, for a
-// script that shrugged off the SIGTERM. The grace timer is unref'd so
-// a pending escalation never holds the app open at quit.
-export function killWithGrace(
-  child: ChildProcess,
-  graceMs: number,
-  { tree = false }: { tree?: boolean } = {},
-): void {
-  const signal = (name: NodeJS.Signals) => {
-    if (tree) {
-      signalChildTree(child, name);
-      return;
-    }
-    try {
-      child.kill(name);
-    } catch {
-      // Already gone.
-    }
-  };
-  signal("SIGTERM");
-  const killTimer = setTimeout(() => signal("SIGKILL"), graceMs);
-  killTimer.unref?.();
-  if (!tree) child.once("exit", () => clearTimeout(killTimer));
-}
-
 // Synchronous fire-and-forget variant for the update-install quit path,
 // where awaiting the kill chain would block the updater's handoff.
 // Descendants that escaped the group via setsid() get reparented to
@@ -99,19 +67,4 @@ export function signalTreeBestEffort(
   signal: NodeJS.Signals,
 ): void {
   safeKill(-pid, signal);
-}
-
-// The same for a child spawned detached (its own process group), or
-// the child alone when it never got a pid. Never throws: the tree is
-// usually already down by the time anyone signals it.
-export function signalChildTree(
-  child: ChildProcess,
-  signal: NodeJS.Signals,
-): void {
-  try {
-    if (child.pid !== undefined) signalTreeBestEffort(child.pid, signal);
-    else child.kill(signal);
-  } catch {
-    // Already gone.
-  }
 }

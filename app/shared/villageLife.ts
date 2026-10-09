@@ -3,10 +3,9 @@
 // doubutsuNames is a device setting (config.json), read by the CLI's
 // name pick. It reads as off when unset, which is what an install from
 // before it defaulted on has, so an upgrade never changes its names. A
-// fresh install is seeded with it on instead (host/lib/bootstrap.ts and
-// cli/state.go seedFreshInstall). It picks worktree names from the
-// Animal Crossing pool, in the CLI (cli/names.go doubutsuNamesEnabled,
-// the same default), at create time and for the New Worktree form's
+// fresh install is seeded with it on instead (the store's first open,
+// the engine's migrations/importJson.ts). It picks worktree names from
+// the Animal Crossing pool, in the engine (names.ts, the same default), at create time and for the New Worktree form's
 // pre-pick (`sm worktrees destination`).
 //
 // villageLife is a client setting (ClientConfig): the purely visual

@@ -146,8 +146,8 @@ async function sourceChangedSince(
 // Teardown failures never throw either -- by then the move succeeded
 // and the worktree simply exists on both sides. An external (adopted)
 // source worktree keeps its local branch after teardown because sm rm
-// skips branch deletion for externals (cli/gitx.go
-// deleteBranchAfterWorktreeRemoval), so the branch then exists on both
+// skips branch deletion for externals (Worktrees.remove in the
+// engine), so the branch then exists on both
 // devices, which is not lossy. `landed` is where the copy went, for
 // the refusal's wording.
 async function tearDown(
@@ -168,7 +168,7 @@ async function tearDown(
     // `git worktree remove --force`, which skips git's own dirty check
     // and so would silently destroy work a capture cannot carry
     // (submodule-only dirt captures as clean,
-    // see the cli/cmd_dirty.go header) or edits made after the
+    // see the engine's Dirty.ts) or edits made after the
     // capture. So on a capture that said clean, git's own pre-removal
     // check must independently agree before the source dies, and a
     // disagreement surfaces as sourceRemoved:false with the git
@@ -183,7 +183,8 @@ async function tearDown(
     if (removed.ok) return { sourceRemoved: true };
     // ok:false means the worktree was NOT removed: cleanup scripts
     // run before `git worktree remove` and a failure aborts the
-    // pipeline with the worktree left in place (cli/cmd_rm.go).
+    // pipeline with the worktree left in place (Worktrees.remove in the
+    // engine).
     return {
       sourceRemoved: false,
       sourceError: `cleanup failed on the source device (${removed.cleanupError.phase})`,

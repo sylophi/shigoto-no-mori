@@ -28,12 +28,11 @@ export type CliStatus = typeof CliStatusSchema.Type;
 // - missing: not installed (or no config file at all)
 // - modified: our markers with content we didn't write. The CLI never
 //   touches those, mirroring the foreign-link policy above
-export const ShellHookStateSchema = Schema.Struct({
+const ShellHookStateSchema = Schema.Struct({
   shell: Schema.String,
   path: Schema.String,
   state: Schema.Literals(["installed", "missing", "modified"]),
 });
-export type ShellHookState = typeof ShellHookStateSchema.Type;
 
 const ShellIntegrationStatusSchema = Schema.Struct({
   // The user's login shell when integration supports it, else null
