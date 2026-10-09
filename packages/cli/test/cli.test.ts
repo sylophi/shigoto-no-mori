@@ -755,3 +755,32 @@ describe("run", () => {
     }
   });
 });
+
+describe("worktrees link", () => {
+  it("prints the link that opens the worktree in the app, on this device", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    const printed = await runAt(alpha, "link");
+    assert.equal(printed.code, 0, printed.stderr);
+    assert.match(
+      printed.stdout,
+      /^shigomori-dev:\/\/open\/devices\/[0-9a-f-]{36}\/projects\/A\/worktrees\/[0-9a-f]+\n$/,
+    );
+    const asked = await runAt(
+      box.home,
+      "--json",
+      "wt",
+      "link",
+      "-p",
+      "alpha",
+      "root",
+    );
+    assert.deepEqual(asked.doc, {
+      ok: true,
+      url: printed.stdout.trim(),
+      worktree: "alpha",
+    });
+  });
+});
