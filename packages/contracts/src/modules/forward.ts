@@ -16,7 +16,7 @@ import { strict } from "../schemas/strict.ts";
 // backpressure end to end. The mirror stream is the other byte-stream
 // open (mirror:openStream), on the same channel layer. This is the HOST
 // side a remote peer drives. The client half is
-// main/core/portForward/bridge.ts.
+// host/portForward/bridge.ts.
 //
 // {remote:true, gated:true}: the surface rides the host's command
 // grant, fail-closed. open dials 127.0.0.1 only, because the feature IS

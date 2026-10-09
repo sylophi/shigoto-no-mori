@@ -8,7 +8,6 @@
 // landing) asks for a pass at that moment. Broadcasts refsRefreshed
 // and projectPullRequestsRefreshed when a pass changed something so
 // the renderer, local or peer, can invalidate.
-import { BrowserWindow } from "electron";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
@@ -21,8 +20,8 @@ import {
 import { loadProjects } from "@host/lib/projects";
 import { runningScriptWorktreeIds } from "@host/lib/scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
-import { announceProjectChanged } from "../ipc/handlers";
-import { broadcastAll } from "../ipc/register";
+import { announceProjectChanged } from "@host/process/handlers";
+import { broadcastAll } from "@host/process/wires";
 import { log } from "@shared/log";
 
 // Skip if a fetch finished within this window. Short enough that rapid
@@ -54,6 +53,8 @@ const failingProjects = new Set<string>();
 const failingAutoPulls = new Map<string, ReadonlySet<string>>();
 let sweepHandle: NodeJS.Timeout | null = null;
 let attendedUntil = 0;
+// Whether a window of this machine is focused, as the shell reports it.
+let windowFocused = false;
 
 // Resolves to whether a fetch ran (false inside the freshness window).
 function maybeFetchProject(
@@ -196,9 +197,15 @@ export function sweepForPeer(): { leaseMs: number } {
 }
 
 function sweepIfAttended(): void {
-  const attended =
-    BrowserWindow.getFocusedWindow() !== null || Date.now() < attendedUntil;
+  const attended = windowFocused || Date.now() < attendedUntil;
   if (attended) sweepProjects();
+}
+
+// A window here gained or lost focus. Gaining it asks for a pass at
+// once: whoever returns sees refs as fresh as the sweep keeps them.
+export function setWindowFocused(focused: boolean): void {
+  windowFocused = focused;
+  if (focused) sweepProjects();
 }
 
 export function startBackgroundFetch(): void {

@@ -1,46 +1,16 @@
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
-import type { UpdaterState } from "@shigomori/contracts/schemas";
+import { lastUpdaterState, shellCalls } from "@host/process/shell";
 
-// The electron layer owns the updater wiring (the CLI-driven pipeline
-// in main/electron/updater.ts) and injects the concrete state machine
-// at boot. Keeping these as setters lets the handler module stay free
-// of Electron imports, like every other host module.
-type UpdaterImpl = {
-  getState: () => UpdaterState;
-  check: () => void;
-  // `unattended` marks an install requested by another device: nobody
-  // is at this machine to answer a native prompt, so a busy host must
-  // refuse (the error rides back to the caller) instead of blocking
-  // the call on a dialog no one will see.
-  install: (unattended: boolean) => void | Promise<void>;
-  // Install the staged update, or, with none staged yet, fetch one and
-  // install it once it is. `unattended` as for install.
-  update: (unattended: boolean) => Promise<void>;
-};
-
-let impl: UpdaterImpl = {
-  getState: () => ({ kind: "idle" }),
-  check: () => {
-    throw new Error("updater handler invoked before electron registered impl");
-  },
-  install: () => {
-    throw new Error("updater handler invoked before electron registered impl");
-  },
-  update: () => {
-    throw new Error("updater handler invoked before electron registered impl");
-  },
-};
-
-export function setUpdaterImpl(next: UpdaterImpl): void {
-  impl = next;
-}
-
+// The updater lives in the shell (main/electron/updater.ts), which
+// reports its state here as it moves (host/process/session.ts). A
+// peer's Settings page reads it and, when granted, checks or restarts
+// into an update through the shell.
 export const updaterHandlers: Handlers<typeof updaterContract, HandlerContext> =
   {
-    get: () => impl.getState(),
-    check: () => impl.check(),
-    install: (_input, ctx) => impl.install(isRemoteCaller(ctx)),
-    update: (_input, ctx) => impl.update(isRemoteCaller(ctx)),
+    get: () => lastUpdaterState(),
+    check: () => shellCalls().updater.check(),
+    install: (_input, ctx) => shellCalls().updater.install(isRemoteCaller(ctx)),
+    update: (_input, ctx) => shellCalls().updater.update(isRemoteCaller(ctx)),
   };

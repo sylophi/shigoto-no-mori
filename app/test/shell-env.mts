@@ -1,4 +1,4 @@
-// Drives the packaged app's environment rebuild (main/core/shellEnv.ts)
+// Drives the packaged app's environment rebuild (host/lib/util/shellEnv.ts)
 // under plain node: the launchd base, the sentinel parse, the merge
 // order, and real zsh runs from a throwaway ZDOTDIR for the capture
 // itself: its banner and logout output, a startup file that leaves a
@@ -16,7 +16,7 @@ import {
   mergeShellEnv,
   parseShellEnv,
   replaceProcessEnv,
-} from "../main/core/shellEnv.ts";
+} from "../host/lib/util/shellEnv.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
@@ -65,7 +65,7 @@ const BASE = {
   SHELL: "/bin/zsh",
 };
 
-// When one fails: see main/core/shellEnv.ts: the packaged app's
+// When one fails: see host/lib/util/shellEnv.ts: the packaged app's
 // environment rebuild.
 it("the base is launchd's variables, PATH and the shell, nothing else", () => {
   assert.deepEqual(launchBaseEnv(LAUNCH, "/bin/zsh"), BASE);

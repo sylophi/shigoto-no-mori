@@ -315,7 +315,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     clientOnChange: () => onPlaneChange?.(),
   });
   // A's pushes on the session, as main's peer-push fan-out hands them
-  // on (main/ipc/register.ts onPeerPush), for the peer transport's
+  // on (host/process/wires.ts onPeerPush), for the peer transport's
   // subscribe.
   const pushListeners = new Set<(push: HubPeerPush) => void>();
   const { plane, bridge } = makeDirectBridge(client, {

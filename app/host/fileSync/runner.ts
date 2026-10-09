@@ -7,13 +7,13 @@ import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
 } from "@shared/packaging/fileSyncDist.mts";
-import * as FileSync from "@host/fileSync/FileSync";
-import { bundledBinaryResolver } from "./bundledBinary";
+import * as FileSync from "./FileSync";
+import { hostBinaryResolver } from "@host/process/facts";
 
 export const layer = FileSync.adapter.pipe(
   Layer.provideMerge(
     FileSync.layer(
-      bundledBinaryResolver(FILE_SYNC_DIST_DIR, FILE_SYNC_BINARY_NAME),
+      hostBinaryResolver(FILE_SYNC_DIST_DIR, () => FILE_SYNC_BINARY_NAME),
     ),
   ),
 );

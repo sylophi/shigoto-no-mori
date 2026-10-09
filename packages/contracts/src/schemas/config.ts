@@ -512,7 +512,7 @@ export const ClientConfigSchema = Schema.Struct({
   // by `${deviceId}:${remotePort}` (renderer/hooks/config/
   // useForwardLocalPort.ts is the only reader and writer). Keyed by
   // device and remote port rather than by worktree because that is the
-  // engine's own identity for a forward (main/core/portForward/engine.ts
+  // engine's own identity for a forward (host/portForward/engine.ts
   // dedupes on the same pair). Only preferences that differ from the
   // default (the remote port itself) are stored, so the map stays as
   // small as the user's overrides.

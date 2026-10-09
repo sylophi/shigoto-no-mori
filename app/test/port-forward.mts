@@ -23,7 +23,7 @@
 //     channel cap with "too-many-conns",
 //   - the surface still serves a fresh channel after full teardown.
 //
-// Then the CLIENT ENGINE (main/core/portForward/engine.ts), electron-free
+// Then the CLIENT ENGINE (host/portForward/engine.ts), electron-free
 // and driven here over the same session, so every engine scenario
 // exercises the full chain: a plain local TCP client -> engine
 // listener -> channel -> host handler -> loopback fixture. Asserts:
@@ -63,7 +63,7 @@ import {
   createPortForwardEngine,
   MAX_CONNS_PER_DEVICE,
   type PortForwardEngine,
-} from "../main/core/portForward/engine.ts";
+} from "../host/portForward/engine.ts";
 import {
   freeLoopbackPort,
   type LoopbackServer,
