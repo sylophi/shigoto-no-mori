@@ -4,7 +4,7 @@
 import type { RendererContractApi } from "@shared/ipc/client";
 import type { ElectronBridge } from "../main/preload";
 
-type RendererApi = Omit<ElectronBridge, "invoke" | "subscribe"> &
+type RendererApi = Omit<ElectronBridge, "requestShellPort"> &
   RendererContractApi;
 
 declare global {

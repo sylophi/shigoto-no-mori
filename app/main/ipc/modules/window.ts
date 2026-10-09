@@ -3,6 +3,7 @@ import type { Handlers } from "@shigomori/contracts/types";
 import { applyThemeSource } from "../../electron/clientConfig";
 import { showNotification } from "../../electron/notifications";
 import { relaunchApp } from "../../electron/relaunch";
+import { loopback } from "@host/socket/loopback";
 
 export const windowHandlers: Handlers<typeof windowContract> = {
   // Track the renderer's applied theme (including unsaved previews) so
@@ -20,4 +21,6 @@ export const windowHandlers: Handlers<typeof windowContract> = {
   notify: (input) => {
     showNotification(input);
   },
+
+  hostAddress: () => loopback.address(),
 };

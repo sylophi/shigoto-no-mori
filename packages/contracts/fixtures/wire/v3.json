@@ -2084,6 +2084,12 @@
   },
   "window:blurred": {},
   "window:focused": {},
+  "window:hostAddress": {
+    "success": {
+      "port": 12,
+      "token": "58127baad461bc036b32bcdf49597a77"
+    }
+  },
   "window:notify": {
     "payload": {
       "title": "😀",

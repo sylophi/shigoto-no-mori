@@ -1,9 +1,4 @@
 import type { ContractModule } from "@shigomori/contracts/contract";
-import {
-  type ErrorWire,
-  errorFromWire,
-  errorToWire,
-} from "@shigomori/contracts/errors";
 import type * as Tracer from "effect/Tracer";
 import type { LinkChannels } from "@shigomori/contracts/link";
 import type {
@@ -13,9 +8,9 @@ import type {
 
 // The client's one seam onto the wire. A transport carries invokes and
 // broadcast subscriptions for a single connection to a serving process.
-// The Electron binding wraps the renderer IPC bridge in the preload, a
-// remote binding would wrap a socket, and nothing above this type knows
-// which.
+// Effect RPC binds it on every wire (shared/remote/rpcTransport.ts), the
+// window's port to its shell and the device link alike, and nothing
+// above this type knows which.
 export type ClientTransport = {
   invoke(
     channel: string,
@@ -39,25 +34,6 @@ export type InvokeOptions = {
   readonly span?: Tracer.AnySpan | undefined;
 };
 
-// An invoke's outcome as a value, for a wire that keeps only an error's
-// message (Electron's IPC and its context bridge): the handler's
-// failure crosses as data and becomes an error again on the far side.
-export type Settled =
-  | { ok: true; value: unknown }
-  | ({ ok: false } & ErrorWire);
-
-export function settle(run: Promise<unknown>): Promise<Settled> {
-  return run.then(
-    (value) => ({ ok: true, value }),
-    (error: unknown) => ({ ok: false, ...errorToWire(error) }),
-  );
-}
-
-export function unsettle(settled: Settled): unknown {
-  if (settled.ok) return settled.value;
-  throw errorFromWire(settled);
-}
-
 // Context handed to every invoke handler. Deliberately Electron free:
 // minting a notifier bound to the calling connection lets a handler
 // stream broadcasts back to whoever invoked it, and the signal tells a
@@ -68,36 +44,33 @@ export type HandlerContext = {
     module: M,
     key: K,
   ): (payload: BroadcastProducerPayload<M, K>) => void;
-  // Aborts when the call is cancelled. On the device link that is the
-  // call itself: the peer interrupting it, or its link dropping. On the
-  // Electron transport it is the page generation, so a cross-document
-  // navigation (reload included) or window close, shared by every call
-  // from that page. Consumers that attach listeners should remove them
-  // when the call completes.
+  // Aborts when the call is cancelled: the caller interrupting it, or
+  // its link dropping (a window's page going, reload included).
+  // Consumers that attach listeners should remove them when the call
+  // completes.
   signal: AbortSignal;
-  // Aborts when the caller's connection is gone: the page generation on
-  // the Electron transport, the link on the device link. One per
-  // connection, so a stream a caller joins can tell a connection that
-  // already hears it from a new one.
+  // Aborts when the caller's link is gone. One per connection, so a
+  // stream a caller joins can tell a connection that already hears it
+  // from a new one.
   connection: AbortSignal;
   // The AUTHENTICATED deviceId of the calling peer, supplied only by a
   // wire that verified one: the device link (the connect ticket bound
-  // the hello to a deviceId). The Electron wire and
-  // in-page loopbacks leave it undefined, so a
+  // the hello to a deviceId). The shell's port and the loopback, where
+  // every caller is this machine's own, leave it undefined, so a
   // handler that needs a peer identity fails closed on absence.
   callerDeviceId?: string;
   // Byte channels on the calling link (shared/remote/channels.ts),
   // supplied only by the device link: a handler
   // that opens a byte stream for its caller (forward:open) attaches
   // the far end here under the client-minted channel id. Absent on
-  // wires without a binary lane (Electron, loopbacks), where such a
+  // wires without a binary lane (the shell's port), where such a
   // handler refuses.
   channels?: LinkChannels;
 };
 
 // Whether the calling peer is another device rather than this
 // machine's own window. Only a wire that authenticated a peer stamps
-// callerDeviceId (the direct listener) and the Electron wire never
+// callerDeviceId (the device link off the loopback) and no local wire
 // does, so the stamp is exactly "another device asked". One
 // definition next to the field it interprets, for every handler or
 // binding that branches on it.
