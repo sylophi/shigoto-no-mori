@@ -3,6 +3,7 @@ import { Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RelativeDate } from "@/components/ui/relative-date";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import {
   useStashChanges,
@@ -16,7 +17,8 @@ import type { Worktree } from "@shared/schemas";
 // The Git page's Stashes tab: the way to stash the uncommitted changes
 // (with a name, if they deserve one), then the stashes made on the
 // branch, newest first. Picking one shows what it holds beside the
-// list, with its moves there. A new stash is picked as it lands.
+// list, with its moves there. A new stash is picked as it lands. A peer
+// that takes no commands from here only lists them.
 export function StashList({
   worktree,
   selected,
@@ -28,6 +30,7 @@ export function StashList({
   const { data: stashes = [], refetch } = useWorktreeStashes(worktree);
   const stashChanges = useStashChanges();
   const say = useWorktreeSuccessToast();
+  const { canCommand } = useCommandAccess();
   const [message, setMessage] = useState("");
   const { projectId, id: worktreeId, changedCount } = worktree;
   const submit = () => {
@@ -47,33 +50,37 @@ export function StashList({
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <form
-        className="flex items-center gap-1.5 px-2 pb-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <Input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Name (optional)"
-          aria-label="Stash name"
-          disabled={changedCount === 0 || stashChanges.isPending}
-          className="min-w-0 flex-1 px-2.5 py-1.5 text-xs"
-        />
-        <Button
-          type="submit"
-          size="sm"
-          disabled={changedCount === 0 || stashChanges.isPending}
+      {canCommand && (
+        <form
+          className="flex items-center gap-1.5 px-2 pb-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
         >
-          <Archive />
-          Stash
-        </Button>
-      </form>
+          <Input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Name (optional)"
+            aria-label="Stash name"
+            disabled={changedCount === 0 || stashChanges.isPending}
+            className="min-w-0 flex-1 px-2.5 py-1.5 text-xs"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={changedCount === 0 || stashChanges.isPending}
+          >
+            <Archive />
+            Stash
+          </Button>
+        </form>
+      )}
       {stashes.length === 0 && (
         <p className="px-3 py-1 text-xs text-muted-foreground">
-          {changedCount > 0 ? "No stashes yet" : "Nothing to stash"}
+          {changedCount > 0 || !canCommand
+            ? "No stashes yet"
+            : "Nothing to stash"}
         </p>
       )}
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pb-3">

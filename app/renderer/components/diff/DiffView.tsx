@@ -418,7 +418,7 @@ export function DiffView({
                     // you asked for, and folding it away would leave
                     // the pane blank with nothing to unfold it from.
                     onToggle={singleFile ? undefined : setCollapsed}
-                    hunks={changes?.hunks}
+                    hunks={changes?.readOnly ? undefined : changes?.hunks}
                     busy={changes?.busy ?? false}
                   />
                 );

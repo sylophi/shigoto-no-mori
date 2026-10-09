@@ -88,6 +88,8 @@ export function DiffFileIndex({
 }) {
   const [query, setQuery] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  // The changes list's moves, unless it only reads.
+  const editable = changes && !changes.readOnly ? changes : undefined;
   const needle = query.trim().toLowerCase();
   const matches = needle
     ? entries.filter(
@@ -204,12 +206,14 @@ export function DiffFileIndex({
         <div className="flex items-center gap-2 pt-2 pr-2 pb-1 pl-3">
           {/* Nothing to tick or throw away on an empty list, so the
               header is just its line. */}
-          {changes.files.length > 0 && <SelectAllCheckbox changes={changes} />}
+          {editable && changes.files.length > 0 && (
+            <SelectAllCheckbox changes={editable} />
+          )}
           <span className="tabular min-h-5 min-w-0 flex-1 truncate text-xs leading-5 text-muted-foreground">
             {describeSelection(changes)}
           </span>
-          {changes.files.length > 0 && (
-            <DiscardMenu changes={changes} onPick={setPendingDiscard} />
+          {editable && changes.files.length > 0 && (
+            <DiscardMenu changes={editable} onPick={setPendingDiscard} />
           )}
         </div>
       )}
@@ -251,15 +255,15 @@ export function DiffFileIndex({
                   menuOpen={menu?.open === true && menu.key === entry.key}
                   onSelect={selectRow}
                   busy={changes?.busy ?? false}
-                  onSetStaged={changes?.onSetStaged}
-                  onDiscard={changes && requestDiscard}
+                  onSetStaged={editable?.onSetStaged}
+                  onDiscard={editable && requestDiscard}
                 />
               ))}
         </ContextMenuTrigger>
         {menuEntry && (
           <FileMenu
             entry={menuEntry}
-            changes={changes}
+            changes={editable}
             onDiscard={() => setPendingDiscard({ key: menuEntry.key })}
           />
         )}
@@ -272,14 +276,14 @@ export function DiffFileIndex({
       )}
 
       {changes &&
-        (pendingDiscard ? (
+        (editable && pendingDiscard ? (
           <DiscardConfirmStrip
             label={`Discard ${describeDiscard(pendingDiscard, changes.files)}?`}
             busy={changes.busy}
             onCancel={() => setPendingDiscard(null)}
             onConfirm={() => {
               const paths = discardPaths(pendingDiscard, changes.files);
-              if (paths.length > 0) changes.onDiscard(paths);
+              if (paths.length > 0) editable.onDiscard(paths);
               setPendingDiscard(null);
             }}
           />

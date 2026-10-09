@@ -6,6 +6,8 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import { CenteredMessage } from "@/components/ui/centered-message";
+import { peerOutputHiddenNote } from "@/lib/commandAccessCopy";
 import { assertNever } from "@/lib/utils";
 import { slotLabel, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
@@ -19,8 +21,11 @@ interface InnerProps {
 }
 
 export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
-  const { key, state, busy, canRun, disabledReason, start, stop, clear } =
-    useScriptRunner(worktree, slot, { follow: true });
+  const { key, state, busy, canRun, start, stop, clear } = useScriptRunner(
+    worktree,
+    slot,
+    { follow: true },
+  );
   const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
 
@@ -60,34 +65,42 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
               </p>
             )}
           </div>
-          <div className="shrink-0">
-            {busy ? (
-              <Button
-                variant="outline-destructive"
-                size="sm"
-                onClick={stop}
-                disabled={state.cancelling}
-              >
-                <Square />
-                {state.cancelling ? "Stopping…" : "Stop"}
-              </Button>
-            ) : (
-              <SimpleTooltip tip={disabledReason}>
-                <Button size="sm" onClick={start} disabled={!canRun}>
+          {/* A peer that takes no commands from here neither runs nor
+              stops scripts, nor shows their output (useScriptRunner). */}
+          {canRun && (
+            <div className="shrink-0">
+              {busy ? (
+                <Button
+                  variant="outline-destructive"
+                  size="sm"
+                  onClick={stop}
+                  disabled={state.cancelling}
+                >
+                  <Square />
+                  {state.cancelling ? "Stopping…" : "Stop"}
+                </Button>
+              ) : (
+                <Button size="sm" onClick={start}>
                   <Play />
                   {state.status === "idle" ? "Run" : "Run again"}
                 </Button>
-              </SimpleTooltip>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
-      <ConsoleBody
-        runKey={key}
-        state={state}
-        onClear={canClear ? clear : null}
-      />
+      {canRun ? (
+        <ConsoleBody
+          runKey={key}
+          state={state}
+          onClear={canClear ? clear : null}
+        />
+      ) : (
+        <CenteredMessage className="h-auto flex-1 px-6 text-center">
+          {peerOutputHiddenNote()}
+        </CenteredMessage>
+      )}
     </div>
   );
 }
