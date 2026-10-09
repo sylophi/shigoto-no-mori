@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CircleCheck } from "lucide-react";
 import { useSearch } from "@tanstack/react-router";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/hooks/worktrees/useGitHistory";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { isOverlayOpen } from "@/lib/dom";
 import { cn } from "@/lib/utils";
@@ -71,6 +73,8 @@ export function WorktreeDiff() {
 // GitHub-Desktop-style changes list (tick what goes in, discard what
 // doesn't) and the commit composer under it. Split from the route
 // component so the change hooks only mount once the worktree resolved.
+// On a peer that takes no commands from here, the list only reads and
+// the composer gives way to the read-only note.
 function ChangesView({
   worktree,
   onBack,
@@ -82,6 +86,7 @@ function ChangesView({
   amendRequested: boolean;
   setAmending: (on: boolean) => void;
 }) {
+  const { canCommand } = useCommandAccess();
   const { projectId, id: worktreeId } = worktree;
   const { data: files, error: statusError } = useWorktreeChanges(
     projectId,
@@ -98,7 +103,11 @@ function ChangesView({
   // changes (an addition, a removal, a rename) or a conflict.
   const hunkPath =
     picked?.kind === "modified" && !picked.conflicted ? picked.path : undefined;
-  const { data: hunkStates } = useFileHunks(projectId, worktreeId, hunkPath);
+  const { data: hunkStates } = useFileHunks(
+    projectId,
+    worktreeId,
+    canCommand ? hunkPath : undefined,
+  );
   const { mutate: stageHunks, isPending: stagingHunks } = useSetHunksStaged();
   const { mutate: discardHunks, isPending: discardingHunks } =
     useDiscardHunks();
@@ -201,12 +210,13 @@ function ChangesView({
   // The message box only has a job with something to commit, or a
   // commit to amend. A clean tree keeps the branch bar and the last
   // commit, which is where the next move (push, amend, undo) lives.
-  const showComposer = (loading || list.length > 0 || amending) && !failed;
+  const showComposer =
+    canCommand && (loading || list.length > 0 || amending) && !failed;
   // With nothing to commit, ⌘↵ sends the commits instead: the push (or
   // the publish) the branch bar offers.
   const sendShortcut = usePushShortcut(
     worktree,
-    !showComposer && !failed && list.length === 0,
+    canCommand && !showComposer && !failed && list.length === 0,
   );
 
   const controls: DiffChangesControls = {
@@ -214,6 +224,7 @@ function ChangesView({
     loading,
     failed,
     busy,
+    readOnly: !canCommand,
     selectedKey: picked ? changeKey(picked) : null,
     onSelect: setPickedKey,
     onSetStaged: (paths, staged) =>
@@ -307,6 +318,11 @@ function ChangesView({
           }
           onCommit={onCommit}
         />
+      )}
+      {!canCommand && (
+        <p className="px-3 pt-1 text-xs text-muted-foreground">
+          {peerReadOnlyNote()}
+        </p>
       )}
     </div>
   );

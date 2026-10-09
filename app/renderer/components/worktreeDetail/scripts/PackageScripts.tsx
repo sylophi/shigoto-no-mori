@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Check, ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useSetLaunchRowScript,
   useSetPackageScriptOrder,
@@ -46,13 +47,16 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   const setSortMode = useSetPackageScriptSort(worktree.projectId);
   const setOrder = useSetPackageScriptOrder(worktree.projectId);
   const setLaunchRow = useSetLaunchRowScript(worktree.projectId);
+  // The sort and arrangement live on the host, so a peer that takes no
+  // commands from here keeps its own.
+  const { canCommand } = useCommandAccess();
   const pinnedOf = (name: string) => pkg.launchRow.includes(name);
   const names = sorted.map((e) => e.name);
   // Drags write the stored order, so arranging only lasts while the list
   // shows it: a refused or failed switch to "manual" (or another device
   // switching away) drops out of it instead of dragging a list whose
   // order won't follow.
-  const arranging = arrangeRequested && sortMode === "manual";
+  const arranging = canCommand && arrangeRequested && sortMode === "manual";
   const filtered = rankByScore(query, sorted, (e) => e.name);
 
   // distance: 5 lets a quick click focus a cell without picking it up.
@@ -117,17 +121,19 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
               <span>Done</span>
             </button>
           ) : (
-            <SortMenu
-              value={sortMode}
-              onChange={(mode) => {
-                // Picking a sort ends a request that a failed or remote
-                // switch away from "manual" left standing, so choosing
-                // "Manual order" later doesn't land back in arranging.
-                setArrangeRequested(false);
-                setSortMode.mutate(mode);
-              }}
-              onArrange={startArranging}
-            />
+            canCommand && (
+              <SortMenu
+                value={sortMode}
+                onChange={(mode) => {
+                  // Picking a sort ends a request that a failed or remote
+                  // switch away from "manual" left standing, so choosing
+                  // "Manual order" later doesn't land back in arranging.
+                  setArrangeRequested(false);
+                  setSortMode.mutate(mode);
+                }}
+                onArrange={startArranging}
+              />
+            )
           ))}
       </div>
 

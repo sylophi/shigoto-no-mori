@@ -180,6 +180,15 @@ export function CommitMenuItems({
   const nav = useWorktreeNav();
   const { canAmend, undo, reword, squash } = rewrite;
   const busy = actions.pending;
+  const copyHash = (
+    <DropdownMenuItem
+      onClick={() => void navigator.clipboard.writeText(commit.hash)}
+    >
+      <Copy />
+      Copy hash
+    </DropdownMenuItem>
+  );
+  if (!actions.canCommand) return copyHash;
   return (
     <>
       {canAmend && (
@@ -256,12 +265,7 @@ export function CommitMenuItems({
         New worktree from here
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem
-        onClick={() => void navigator.clipboard.writeText(commit.hash)}
-      >
-        <Copy />
-        Copy hash
-      </DropdownMenuItem>
+      {copyHash}
     </>
   );
 }

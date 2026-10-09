@@ -5,6 +5,7 @@ import {
   useContinueOperation,
   useWorktreeOperation,
 } from "@/hooks/worktrees/useGitHistory";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,8 @@ const STOPPED: Record<string, string> = {
 // behind. Shown on the worktree page's Git section, where Resolve leads
 // to the Git page, and atop the Git page's Changes tab, where the
 // conflicted files are settled. Once none is left, the operation can be continued. Nothing
-// while the worktree is in none.
+// while the worktree is in none. Only says, on a peer that takes no
+// commands from here.
 export function OperationBanner({
   worktree,
   onGitPage = false,
@@ -38,6 +40,7 @@ export function OperationBanner({
   const { data: state } = useWorktreeOperation(worktree);
   const proceed = useContinueOperation();
   const abort = useAbortOperation();
+  const { canCommand } = useCommandAccess();
   if (!state || (state.operation === null && state.conflicted === 0)) {
     return null;
   }
@@ -82,39 +85,41 @@ export function OperationBanner({
           </>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        {state.operation !== null && (
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={busy}
-            onClick={() => abort.mutate(scope)}
-          >
-            Abort
-          </Button>
-        )}
-        {state.conflicted === 0
-          ? state.continuable && (
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={busy}
-                onClick={() => proceed.mutate(scope)}
-              >
-                Continue
-              </Button>
-            )
-          : !onGitPage && (
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() => nav.toDiff(worktree.projectId, worktree.id)}
-              >
-                Resolve
-                <ChevronRight />
-              </Button>
-            )}
-      </div>
+      {canCommand && (
+        <div className="flex shrink-0 items-center gap-1">
+          {state.operation !== null && (
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={busy}
+              onClick={() => abort.mutate(scope)}
+            >
+              Abort
+            </Button>
+          )}
+          {state.conflicted === 0
+            ? state.continuable && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={busy}
+                  onClick={() => proceed.mutate(scope)}
+                >
+                  Continue
+                </Button>
+              )
+            : !onGitPage && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => nav.toDiff(worktree.projectId, worktree.id)}
+                >
+                  Resolve
+                  <ChevronRight />
+                </Button>
+              )}
+        </div>
+      )}
     </div>
   );
 }
