@@ -32,12 +32,18 @@ export function useSidebarTakenOver(): boolean {
 // The sidebar's half: where the page's list lands. Shown by its own
 // content rather than by the claim, so the list is laid out from its
 // first commit and a reveal on mount (the open file's row) has a box
-// to scroll.
+// to scroll. The list arrives from the right, a step in, as the slot
+// is shown again, so it plays when a list replaces the tree. One page's
+// list replacing another's (the Git page's tabs, each a route of its
+// own) swaps in one commit, the slot never empty, so it stays still.
 export function SidebarTakeoverSlot() {
   return (
     <div
       ref={slot.publish}
-      className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto empty:hidden"
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto empty:hidden",
+        ARRIVE_FROM.right,
+      )}
     />
   );
 }
@@ -45,9 +51,8 @@ export function SidebarTakeoverSlot() {
 // The page's half. The tree is gone while this is up, so the way out
 // is the first row. It spans the row like the rows below it, so the
 // whole width is the target and not just the word, less what `actions`
-// (the list's own controls) take at its end. The list arrives
-// from the right, a step in. Its box passes the slot's flex column on,
-// so a list sized with flex-1 still fills it.
+// (the list's own controls) take at its end. Its box passes the slot's
+// flex column on, so a list sized with flex-1 still fills it.
 export function SidebarTakeover({
   back,
   actions,
@@ -66,7 +71,7 @@ export function SidebarTakeover({
   const target = useExternalStore(slot);
   if (phone || !target) return null;
   return createPortal(
-    <div className={cn("flex min-h-0 flex-1 flex-col", ARRIVE_FROM.right)}>
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-1 px-2 pb-1">
         <BackButton
           label={back.label}
