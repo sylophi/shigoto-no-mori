@@ -4,7 +4,7 @@ import type {
 } from "@shigomori/contracts/modules/cli";
 import { cliContract } from "@shigomori/contracts/modules/cli";
 import type { Handlers } from "@shigomori/contracts/types";
-import { doctorViaCli } from "@host/ipc/cliDelegate";
+import { runDoctor } from "@host/lib/engineCalls";
 import { loadProjects, refreshProjects } from "@host/lib/projects";
 import { killScriptsForProject } from "@host/lib/scripts";
 import { implSlot } from "@host/lib/util/implSlot";
@@ -22,6 +22,10 @@ type CliImpl = {
   uninstallShellIntegration: () => Promise<ShellIntegrationStatus>;
   // The login shell's ZDOTDIR / XDG_CONFIG_HOME.
   hookPathEnv: () => Promise<Record<string, string>>;
+  // The app's version, which the doctor compares the bundle against.
+  appVersion: () => string;
+  // The bundled `sm`.
+  binaryPath: () => string;
 };
 
 const { set: setCliImpl, get: cliImpl } = implSlot<CliImpl>(
@@ -29,12 +33,22 @@ const { set: setCliImpl, get: cliImpl } = implSlot<CliImpl>(
 );
 export { setCliImpl };
 
-// ZDOTDIR alone, for the shell-hook check's .zshrc. XDG_CONFIG_HOME
-// also places the CLI's data dir pointer, and the doctor must inspect
-// the data dir the app runs on, not the one a shell would find.
-async function doctorEnv(): Promise<Record<string, string>> {
+// What the doctor is told about this install: the app's version, the
+// bundled `sm`, and the login shell's ZDOTDIR alone for the shell-hook
+// check's .zshrc. XDG_CONFIG_HOME also places the data dir pointer, and
+// the doctor must inspect the data dir the app runs on, not the one a
+// shell would find.
+async function doctorInput(): Promise<{
+  version: string;
+  executable: string;
+  zdotdir?: string;
+}> {
   const { ZDOTDIR } = await cliImpl().hookPathEnv();
-  return ZDOTDIR === undefined ? {} : { ZDOTDIR };
+  return {
+    version: cliImpl().appVersion(),
+    executable: cliImpl().binaryPath(),
+    ...(ZDOTDIR === undefined ? {} : { zdotdir: ZDOTDIR }),
+  };
 }
 
 export const cliHandlers: Handlers<typeof cliContract> = {
@@ -50,7 +64,7 @@ export const cliHandlers: Handlers<typeof cliContract> = {
   shellStatus: () => cliImpl().shellIntegrationStatus(),
   shellInstall: () => cliImpl().installShellIntegration(),
   shellUninstall: () => cliImpl().uninstallShellIntegration(),
-  doctor: async () => doctorViaCli(false, await doctorEnv()),
+  doctor: async () => runDoctor(false, await doctorInput()),
   // A repair can unregister a project whose directory is gone. The
   // sync readers (the git watcher, the fetch sweep) hold the snapshot,
   // and, as with projects.remove, scripts still running in a project
@@ -58,7 +72,7 @@ export const cliHandlers: Handlers<typeof cliContract> = {
   // says: a repair that failed halfway can still have unregistered.
   doctorFix: async () => {
     const before = loadProjects();
-    const report = await doctorViaCli(true, await doctorEnv());
+    const report = await runDoctor(true, await doctorInput());
     const after = new Set((await refreshProjects()).map((p) => p.id));
     await Promise.all(
       before

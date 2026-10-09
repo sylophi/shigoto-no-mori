@@ -33,7 +33,7 @@ export async function fastForwardToUpstream(
 // `status.showUntrackedFiles = no`: the guards below decide whether a
 // tree can be overwritten or fast-forwarded, and an untracked file the
 // upstream now tracks is exactly what those would land on.
-// The row's change count (getWorkingTreeChanges in cli/gitx.go)
+// The row's change count (Git.workingTreeChanges in the engine)
 // deliberately does NOT pin it. It runs per worktree on every window
 // focus, and `-uno` is a
 // setting people choose to make exactly that scan cheap. The only cost

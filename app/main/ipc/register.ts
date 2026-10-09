@@ -310,9 +310,9 @@ const hostServer: ServerTransport = {
 const serverFor = (module: ContractModule): ServerTransport =>
   scopeOf(module) === "host" ? hostServer : electronServer;
 
-// App-driven host mutations never reach viewers through the fs
-// watcher: its self-write suppression exists precisely so the app's own
-// writes don't echo (stateWatcher.ts). So after any mutating host
+// App-driven host mutations never reach viewers through the store
+// watcher, which sees only other processes' commits
+// (host/lib/storeWatcher.ts). So after any mutating host
 // invoke resolves (whichever wire carried it), ping the direct
 // listener's peers with the existing git:externalChange broadcast, the
 // same signal a truly external write produces. The Electron wire is
@@ -368,12 +368,13 @@ export function registerContract<M extends ContractModule>(
     // the sidebar "most used" / "most recently used" sorts. Tell renderers
     // so a usage-sorted sidebar reorders live.
     onUsageTracked: (parsedInput) => {
-      const bumpedProjectId = recordProjectActionUsage(parsedInput);
-      if (bumpedProjectId) {
-        broadcastAll(projectsContract, "usageBumped", {
-          projectId: bumpedProjectId,
-        });
-      }
+      void recordProjectActionUsage(parsedInput).then((bumpedProjectId) => {
+        if (bumpedProjectId) {
+          broadcastAll(projectsContract, "usageBumped", {
+            projectId: bumpedProjectId,
+          });
+        }
+      });
     },
     // Only host-scoped modules can move host state a viewer caches.
     // Client-scoped calls are never gated anyway, so this gate is

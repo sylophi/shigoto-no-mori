@@ -286,35 +286,6 @@
       }
     ]
   },
-  "UpdateStageEventSchema": {
-    "accepts": [
-      {
-        "event": "downloading",
-        "version": "3.2.0"
-      },
-      {
-        "event": "verifying"
-      }
-    ],
-    "normalizes": [
-      {
-        "input": {
-          "event": "verifying",
-          "version": "3.2.0",
-          "ok": true
-        },
-        "output": {
-          "event": "verifying",
-          "version": "3.2.0"
-        }
-      }
-    ],
-    "rejects": [
-      {
-        "event": "extracting"
-      }
-    ]
-  },
   "UpdateStageResultSchema": {
     "accepts": [
       {

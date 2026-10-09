@@ -57,15 +57,20 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      # The forge prePackage hook compiles the bundled sm CLI (a Go
-      # module in cli/), and the macOS runner image doesn't ship Go.
+      # The forge prePackage hook compiles the file-sync engine and the
+      # darwin helper (Go modules), and the macOS runner image doesn't
+      # ship Go.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: cli/go.mod
+          go-version-file: file-sync/go.mod
           cache-dependency-path: |
-            cli/go.sum
             file-sync/go.sum
             macfs/go.sum
+
+      # It compiles the bundled sm (packages/cli) with Bun.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.0"
 
       - name: Install dependencies
         working-directory: .

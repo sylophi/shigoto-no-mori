@@ -103,3 +103,28 @@ it("carries a worktree's ports when it moves", async () => {
   );
   assert.deepEqual(ports, [[], [{ port: 3000 }]]);
 });
+
+it("carries a pair described elsewhere only when it is newer", async () => {
+  const stored = await run(
+    Effect.gen(function* () {
+      const data = yield* WorktreeData.WorktreeData;
+      yield* data.carry("A", "aaaaaaaaaaaa", {
+        title: "Newer",
+        description: "",
+        describedAt: 20,
+      });
+      const older = yield* data.carry("A", "aaaaaaaaaaaa", {
+        title: "Older",
+        description: "kept out",
+        describedAt: 10,
+      });
+      return { older, now: yield* data.description("A", "aaaaaaaaaaaa") };
+    }),
+  );
+  assert.equal(stored.older, false);
+  assert.deepEqual(stored.now, {
+    title: "Newer",
+    description: "",
+    describedAt: 20,
+  });
+});

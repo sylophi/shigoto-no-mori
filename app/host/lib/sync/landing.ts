@@ -19,12 +19,12 @@ import {
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { type Project, type Worktree } from "@shigomori/contracts/schemas";
+import { dirtyApply } from "@host/lib/engineCalls";
 import {
-  createViaCli,
-  dirtyApplyViaCli,
-  forceRemoveViaCli,
-  worktreeDestinationViaCli,
-} from "@host/ipc/cliDelegate";
+  createWorktree,
+  forceRemoveWorktree,
+  worktreeDestination,
+} from "@host/lib/engineCalls";
 import { deleteAnyLocalBranch, listBranches } from "@host/lib/git/branches";
 import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
@@ -64,8 +64,8 @@ class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
   }
 }
 
-// The ref the CLI's dirty capture lands a worktree's uncommitted state
-// under (cli/cmd_dirty.go owns the name on that side).
+// The ref the engine's dirty capture lands a worktree's uncommitted
+// state under (Dirty.ts owns the name on that side).
 const dirtyRefFor = (worktreeId: string) =>
   `refs/shigomori/dirty/${worktreeId}`;
 
@@ -104,10 +104,7 @@ async function refuseLandingCollision(
   // the create, after the bundle crossed. The CLI's destination read
   // makes the same two checks here, before a byte moves.
   if (worktreeName !== undefined) {
-    const { path, taken } = await worktreeDestinationViaCli(
-      project.id,
-      worktreeName,
-    );
+    const { path, taken } = await worktreeDestination(project.id, worktreeName);
     if (taken) throw new Error(pullFolderCollision(worktreeName, path));
   }
 }
@@ -399,14 +396,13 @@ const landIncoming = (
     // caller cannot subscribe by an id that does not exist yet.
     progress({ step: "create" });
     const notify = notifierFor(ctx);
-    // Acquired whole even under a cancel: the move's signal kills the
-    // create's CLI child (its setup script with it), and a create cut
-    // short still answers with its worktree (cliDelegate.ts,
-    // runStreamingCreate), which the release then removes. Released
+    // Acquired whole even under a cancel: the move's signal interrupts the
+    // create (its setup script with it), and a create cut short still
+    // answers with its worktree (engineCalls.ts, runStreamingCreate), which the release then removes. Released
     // with the move, and only when it was interrupted.
     const { worktree } = yield* Effect.acquireRelease(
       step(() =>
-        createViaCli(
+        createWorktree(
           project,
           {
             branchName: input.branch,
@@ -457,9 +453,7 @@ const landIncoming = (
       if (localDirtyRef !== sourceDirtyRef) {
         yield* step(() => deleteRef(project.path, sourceDirtyRef));
       }
-      dirtyApplied = yield* step(() =>
-        dirtyApplyViaCli(project, worktree.id),
-      ).pipe(
+      dirtyApplied = yield* step(() => dirtyApply(project, worktree.id)).pipe(
         Effect.withSpan("Landing.apply"),
         Effect.as(true),
         Effect.catchTags({
@@ -489,7 +483,7 @@ function rollBackLanded(
     "[sync] could not remove the worktree of a cancelled move",
     async () => {
       const project = await findProjectOrThrow(worktree.projectId);
-      await forceRemoveViaCli(project, worktree.id, {
+      await forceRemoveWorktree(project, worktree.id, {
         timeoutMs: ROLLBACK_CLEANUP_MS,
       });
       await deleteAnyLocalBranch(project.path, worktree.branch, true).catch(

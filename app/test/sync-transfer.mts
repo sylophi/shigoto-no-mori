@@ -4,8 +4,8 @@
 // brokered by the stub device hub exactly as production does
 // (test/lib/directBoot.mts). Nothing here is a double on the sync path
 // itself: device A registers the REAL sync contract and handlers on a
-// real direct listener, the handlers shell the REAL sm binary (built
-// from cli/ by this check), sm runs REAL git against fixture repos,
+// real direct listener, the handlers run the REAL engine in-process,
+// which runs REAL git against fixture repos,
 // and the receiver drives the REAL link helpers (host/lib/sync/
 // sourceLink.ts) through the real dialer and bridge cache. Asserts:
 //   - an ungranted peer is refused (typed CommandRefusedError) every
@@ -38,10 +38,9 @@
 // separates them is the direct wire between them, which is exactly the
 // surface this proof pins. The one exception is the send into an
 // empty device: there the sending side's CLI runs against a registry
-// of its own (see sendsAsOtherDevice). Run: pnpm test sync-transfer.
+// of its own (see asOtherDevice). Run: pnpm test sync-transfer.
 import assert from "node:assert/strict";
 import * as Schema from "effect/Schema";
-import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -51,7 +50,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { CommandRefusedError } from "@shigomori/contracts/errors";
 import { buildClient } from "@shared/ipc/buildClient";
@@ -63,14 +62,15 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { WorktreeSchema } from "@shigomori/contracts/schemas";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { type PeerChannels, setPeerReach } from "@host/ipc/peerSync";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import {
+  readShigomoriConfig,
   readWorktreeData,
+  writeWorktreeData,
   writeWorktreeDescription,
 } from "@host/lib/config/project";
 import {
@@ -92,7 +92,6 @@ import { findProjectOrThrow, listProjects } from "@host/lib/projects";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import {
-  cliFailureMessage,
   createCliRunner,
   handlerCtx,
   makeTracker,
@@ -101,16 +100,20 @@ import {
 } from "./lib/checkKit.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire, type DirectWire } from "./lib/directBoot.mts";
-import { addProject } from "./lib/smBinary.mts";
+import * as Engine from "@host/lib/engine";
+import { writeProjectConfig } from "@host/lib/engineCalls";
+import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
+import { addProject, secondEngine } from "./lib/smBinary.mts";
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
-// wrappers and the real CLI runner seam (test/lib/cliSandbox.mts).
+// wrappers, and the engine on the sandbox's data dir
+// (test/lib/cliSandbox.mts).
 const decodePullProgresses = Schema.decodeUnknownSync(
   Schema.Array(SyncPullProgressSchema),
 );
 
 const fixture = cliSandbox("sm-sync-check-");
-const { sandbox, dataDir, git, gitBytes, gitOut, runCli, sm } = fixture;
+const { sandbox, git, gitBytes, gitOut, runCli, sm } = fixture;
 const { commitFile, addWorktree } = fixture;
 
 async function refExists(repo: string, ref: string) {
@@ -281,13 +284,12 @@ beforeAll(async () => {
     "second feature",
   );
   feature2Tip = await gitOut(worktree2Path, "rev-parse", "HEAD");
-  // The real app derivation (host/lib/git/worktrees.ts, Go twin in
-  // cli/worktree.go), imported straight from its home now that
+  // The real app derivation (host/lib/git/worktrees.ts), imported straight from its home now that
   // tsAliasLoader handles the transitive JSON import. The capture ref
   // must land at refs/shigomori/dirty/<this id>, asserted below.
   worktreeId = worktreeIdFromPath(worktreePath);
 
-  fixture.useCli();
+  await fixture.useCli();
   const { projectIdOf } = fixture;
   // Target first: both fixture projects share one registry AND one repo
   // identity (target is a clone), and the pull handler's identity scan
@@ -330,7 +332,7 @@ afterAll(async () => {
     // the stub.
     await teardown();
   } finally {
-    fixture.remove();
+    await fixture.remove();
   }
 });
 
@@ -881,7 +883,7 @@ it("transplant (clean): the worktree lands here and the source worktree, its sm 
   // data, and the branch. A MANAGED worktree (sm create, the realistic
   // transplant source): `sm rm` only deletes the branch for managed
   // worktrees, and the sandbox's unset DeleteBranchOnRemove defaults
-  // to delete (cli/cmd_rm.go).
+  // to delete (Worktrees.remove in the engine).
   const wt3Create = await sm(
     "create",
     "--project-id",
@@ -896,17 +898,9 @@ it("transplant (clean): the worktree lands here and the source worktree, its sm 
   wt3Id = wt3.id;
   await commitFile(wt3Path, "third.txt", "third feature\n", "third feature");
   const feature3Tip = await gitOut(wt3Path, "rev-parse", "HEAD");
-  // Seed the app-written per-worktree data file (the CLI only ever
-  // deletes it), so the teardown's state sweep is observable.
-  const wt3DataPath = join(
-    dataDir,
-    "projects",
-    sourceProjectId,
-    "worktrees",
-    `${wt3Id}.json`,
-  );
-  mkdirSync(dirname(wt3DataPath), { recursive: true });
-  writeFileSync(wt3DataPath, "{}\n");
+  // Seed the worktree's own data (the ports the app keeps), so the
+  // teardown's sweep of it is observable.
+  await writeWorktreeData(sourceProjectId, wt3Id, { ports: [{ port: 4321 }] });
   const cleanTransplant = await transplant({
     sourceDeviceId: "A",
     sourceProjectId,
@@ -933,8 +927,8 @@ it("transplant (clean): the worktree lands here and the source worktree, its sm 
     "the source worktree directory must be gone",
   );
   assert.equal(
-    existsSync(wt3DataPath),
-    false,
+    await readWorktreeData(sourceProjectId, wt3Id),
+    null,
     "the source sm worktree data must be gone",
   );
   assert.equal(
@@ -1401,8 +1395,7 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
 // cancel as the link torn down under it, and for a caller that
 // goes away (the context's signal), which cancels like a click.
 describe("cancelMove", () => {
-  let targetConfigPath: string;
-  let targetConfigBefore: string | null;
+  let targetConfigBefore: ShigomoriConfig | null;
   const setupPidPath = join(sandbox, "setup.pid");
   // The setup script has started: its pid file is there, and it is
   // the sleep (exec'd, so the pid is the one process to watch).
@@ -1437,32 +1430,24 @@ describe("cancelMove", () => {
     assert.equal(existsSync(sourcePath), true, "the source must survive");
   };
   beforeAll(async () => {
-    targetConfigPath = join(
-      dataDir,
-      "projects",
-      targetProjectId,
-      "project.json",
-    );
-    targetConfigBefore = existsSync(targetConfigPath)
-      ? readFileSync(targetConfigPath, "utf8")
-      : null;
-    writeFileSync(
-      targetConfigPath,
-      `${JSON.stringify({
-        defaultBranch: "main",
-        scripts: {
-          setup: `echo $$ > '${setupPidPath}'; exec sleep 600`,
-        },
-      })}\n`,
-    );
+    targetConfigBefore = await readShigomoriConfig(targetProjectId);
+    await writeProjectConfig(targetProjectId, {
+      ...targetConfigBefore,
+      defaultBranch: "main",
+      scripts: {
+        setup: `echo $$ > '${setupPidPath}'; exec sleep 600`,
+      },
+    });
     // Branches kept on removal, so the rollback has to take the one
     // the move made itself, or a retry would meet it.
     await sm("config", "write", "--data", '{"deleteBranchOnRemove":false}');
   });
 
   afterAll(async () => {
-    if (targetConfigBefore === null) rmSync(targetConfigPath, { force: true });
-    else writeFileSync(targetConfigPath, targetConfigBefore);
+    await writeProjectConfig(
+      targetProjectId,
+      targetConfigBefore ?? { defaultBranch: "main" },
+    );
     await sm("config", "write", "--data", '{"deleteBranchOnRemove":true}');
   });
 
@@ -1617,25 +1602,15 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
   // send (the runner seam is process-wide), where the lone repo is
   // registered. The landing side (A, the shared registry) has never
   // seen it.
-  const sendsAsOtherDevice = new AsyncLocalStorage<boolean>();
   const otherDataDir = join(sandbox, "data-other");
   mkdirSync(otherDataDir);
   const otherCli = createCliRunner(fixture.smBinary, {
     ...fixture.smEnv,
     SHIGOMORI_DATA_DIR: otherDataDir,
   });
-  const asOtherDevice = <T,>(run: () => T) => sendsAsOtherDevice.run(true, run);
-  setCliRunnerImpl({
-    runCli: (args, onDoc, extraEnv, opts) =>
-      (sendsAsOtherDevice.getStore() === true ? otherCli : fixture).runCli(
-        args,
-        onDoc,
-        extraEnv,
-        opts,
-      ),
-    requireCliBinary: () => fixture.smBinary,
-    cliFailureMessage,
-  });
+  const asOtherDevice = <T,>(run: () => T) =>
+    Engine.runAside(otherEngine.runPromise, run);
+  const otherEngine = await secondEngine(otherDataDir);
   try {
     const loneRepo = join(sandbox, "lone-source");
     await git(sandbox, ["init", "-q", "-b", "main", "lone-source"]);
@@ -1726,10 +1701,6 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
     assert.equal(loneTorn.sourceRemoved, true, loneTorn.sourceError);
     assert.equal(existsSync(loneWtPath), false);
   } finally {
-    setCliRunnerImpl({
-      runCli: fixture.runCli,
-      requireCliBinary: () => fixture.smBinary,
-      cliFailureMessage,
-    });
+    await otherEngine.close();
   }
 });

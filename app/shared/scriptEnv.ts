@@ -1,5 +1,5 @@
 // Env vars injected into every user-written command: setup, teardown,
-// `sm run` and custom tools (the CLI's scriptEnv, cli/scripts.go).
+// `sm run` and custom tools (the engine's scriptEnv, Lifecycle.ts).
 // Centralized so the app's own injection (host/lib/scripts) and the
 // user-facing list (ScriptEnvPopover) can't drift apart.
 

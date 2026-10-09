@@ -5,13 +5,12 @@ import {
   type DeviceSettingsPatch,
 } from "@shigomori/contracts/schemas";
 import {
-  invalidateGlobalConfigCache,
+  globalConfigChanged,
   readGlobalConfig,
-  readGlobalConfigFresh,
   withGlobalConfigWriteLock,
 } from "@host/lib/config/global";
 import { invalidateTerrierReadiness } from "@host/lib/terrier";
-import { type ClearingWrite, globalConfigWriteViaCli } from "../cliDelegate";
+import { type ClearingWrite, writeGlobalConfig } from "@host/lib/engineCalls";
 
 // A patched value equal to the key's default is stored by omission, so
 // config.json stays tidy whichever device saved it. Values are plain
@@ -43,13 +42,12 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
     // Under the shared config write lock so two saves' read-modify-write
     // windows cannot interleave and lose an update.
     withGlobalConfigWriteLock(async () => {
-      // Cache-bypassing base: the CLI clears every registered key the
-      // payload omits, so a base up to the 5s TTL stale would write back
-      // a value a CLI `set` just changed. The fresh read is what makes
-      // the base authoritative for those registered keys. Only the
-      // managed settings ride in the payload, so a key this build
-      // doesn't model never does, and the merge keeps it as stored.
-      const stored = await readGlobalConfigFresh();
+      // The write clears every registered key the payload omits, so
+      // the base is read fresh, which makes it authoritative for those
+      // keys. Only the managed settings ride in the payload, so a key
+      // this build doesn't model never does, and the merge keeps it as
+      // stored.
+      const stored = await readGlobalConfig();
       const doc: ClearingWrite<DeviceSettingsPatch> = {};
       for (const key of MANAGED_KEYS) {
         if (stored[key] !== undefined)
@@ -58,16 +56,15 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
       for (const [name, value] of Object.entries(patch)) {
         if (value === undefined) continue;
         const key = name as keyof DeviceSettingsPatch;
-        // Null, not omitted, so the CLI clears it registered or not.
+        // Null, not omitted, so the write clears it registered or not.
         if (isDefault(key, value)) doc[key] = null;
         else Object.assign(doc, { [key]: value });
       }
-      await globalConfigWriteViaCli(doc);
-      // The watcher treats the delegated spawn as a self-write, so the
-      // TTL cache must be dropped here rather than by the fs event. This
-      // fans out to the config-change subscribers too, so the direct
-      // listener reconciles with the just-written document.
-      invalidateGlobalConfigCache();
+      await writeGlobalConfig(doc);
+      // The store watcher doesn't see the app's own writes, so the
+      // config-change subscribers hear it here: the direct listener
+      // reconciles with the just-written document.
+      globalConfigChanged();
       // The terrier toggle may have flipped: re-probe its readiness on
       // the next ask. (The merge itself is the CLI's, read fresh on
       // every project list.)

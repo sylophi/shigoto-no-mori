@@ -1,17 +1,14 @@
-// Durable proof for the shelf's auto-unshelve (cli/shelf.go, run by
-// `sm worktrees list`) against a REAL git repository, read the way the
-// app reads it: the host's listWorktreesViaCli over the sm binary
-// built from cli/. The first listing of a shelved worktree records a
-// snapshot in registry.json, a later listing leaves it shelved while
-// nothing moved (the changes it was shelved with included), and
-// unshelves it once it is worked in: an edit, a new file, a deleted
-// file, a commit, a new edit to an already changed file. The cheap
-// --identities form settles nothing. An auto-pull worktree that only
-// fast-forwards stays shelved, and a commit made in one still
-// unshelves it. A listing that read a snapshot before a reshelve
-// doesn't undo the reshelve, and a snapshot whose head couldn't be
-// read (the app's own, from before the CLI took the listing over)
-// doesn't count every later head as work.
+// Durable proof for the shelf's auto-unshelve (the engine's, run by a
+// full worktree listing) against a REAL git repository, read the way the
+// app reads it: the host's listWorktrees over the engine. The first
+// listing of a shelved worktree records a snapshot in the store, a
+// later listing leaves it shelved while nothing moved (the changes it
+// was shelved with included), and unshelves it once it is worked in: an
+// edit, a new file, a deleted file, a commit, a new edit to an already
+// changed file. The cheap identities form settles nothing. An auto-pull
+// worktree that only fast-forwards stays shelved, and a commit made in
+// one still unshelves it. A listing that read a snapshot before a
+// reshelve doesn't undo the reshelve.
 //
 // Run: pnpm test shelf.
 import assert from "node:assert/strict";
@@ -26,31 +23,47 @@ import { basename, join } from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
 import { delay, type Track, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
-import { cliSandbox, readRegistry } from "./lib/cliSandbox.mts";
+import { cliSandbox } from "./lib/cliSandbox.mts";
+import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
 
 // Scrubs this process's GIT_* (the pull below runs the app's git in
 // it) and pins the fixture identity.
 const fixture = cliSandbox("sm-shelf-");
 beforeAll(async () => {
   await fixture.buildSm();
-  fixture.useCli();
+  await fixture.useCli();
 });
 afterAll(() => fixture.remove());
 const { dataDir, git, gitOut, commitFile, sandbox } = fixture;
 
-const {
-  listWorktreeIdentitiesViaCli,
-  listWorktreesViaCli,
-  setAutoPullViaCli,
-  setShelvedViaCli,
-} = await import("../host/ipc/cliDelegate.ts");
+const { listWorktreeIdentities, listWorktrees, setAutoPull, setShelved } =
+  await import("../host/lib/engineCalls.ts");
+const Engine = await import("../host/lib/engine.ts");
 const { autoPullWorktree } =
   await import("../host/lib/worktrees/autoPullSweep.ts");
 
-const registryPath = join(dataDir, "registry.json");
-const snapshotOf = (id: string) => readRegistry(dataDir).shelfSnapshots?.[id];
-const markedShelved = (id: string) =>
-  readRegistry(dataDir).shelvedWorktrees?.[id] === true;
+// What the store holds for the shelf, read on the engine's own
+// connection.
+type Snapshot = { at: number; head: string | null; changed: number };
+const snapshotOf = (id: string): Promise<Snapshot | undefined> =>
+  Engine.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const [row] = yield* sql<Snapshot>`SELECT at, head, changed
+        FROM shelf_snapshots WHERE worktree_id = ${id}`;
+      return row === undefined ? undefined : { ...row };
+    }),
+  );
+const markedShelved = (id: string): Promise<boolean> =>
+  Engine.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`SELECT 1 FROM worktree_marks
+        WHERE worktree_id = ${id} AND mark = 'shelved'`;
+      return rows.length > 0;
+    }),
+  );
 
 // A bare origin, a project cloned from it and registered through the
 // CLI, and a linked worktree of it under the managed root (an external
@@ -78,7 +91,7 @@ async function makeSandbox(track: Track) {
   await git(project, ["worktree", "add", "-q", "-b", "feature", worktree]);
   await git(worktree, ["push", "-q", "-u", "origin", "feature"]);
   const projectId = await fixture.projectIdOf(project);
-  const rows = await listWorktreesViaCli(projectId);
+  const rows = await listWorktrees(projectId);
   const row = rows.find((w) => w.path === worktree);
   assert.ok(row, "the linked worktree is listed");
   assert.equal(row.isExternal, false, "the linked worktree is managed");
@@ -95,7 +108,7 @@ async function makeSandbox(track: Track) {
 type Box = Awaited<ReturnType<typeof makeSandbox>>;
 
 async function listedShelved(box: Box) {
-  const rows = await listWorktreesViaCli(box.projectRef.id);
+  const rows = await listWorktrees(box.projectRef.id);
   const row = rows.find((w) => w.id === box.id);
   assert.ok(row, "the linked worktree is listed");
   return row.shelved;
@@ -103,22 +116,30 @@ async function listedShelved(box: Box) {
 
 // Shelve, then the listing that records the snapshot.
 async function shelve(box: Box) {
-  await setShelvedViaCli(box.projectRef, box.id, true);
-  assert.equal(snapshotOf(box.id), undefined, "a shelve starts unsnapshotted");
+  await setShelved(box.projectRef, box.id, true);
+  assert.equal(
+    await snapshotOf(box.id),
+    undefined,
+    "a shelve starts unsnapshotted",
+  );
   assert.equal(await listedShelved(box), true, "shelved on first listing");
-  const snapshot = snapshotOf(box.id);
+  const snapshot = await snapshotOf(box.id);
   assert.ok(snapshot, "the listing took a snapshot");
   assert.deepEqual(Object.keys(snapshot).toSorted(), ["at", "changed", "head"]);
   assert.equal(await listedShelved(box), true, "unchanged stays shelved");
-  assert.deepEqual(snapshotOf(box.id), snapshot, "and keeps its snapshot");
+  assert.deepEqual(
+    await snapshotOf(box.id),
+    snapshot,
+    "and keeps its snapshot",
+  );
   // Past the snapshot's timestamp, so an edit reads as newer than it.
   await delay(20);
   return snapshot;
 }
 
-function assertUnshelved(box: Box) {
-  assert.equal(markedShelved(box.id), false, "the mark is gone");
-  assert.equal(snapshotOf(box.id), undefined, "the snapshot too");
+async function assertUnshelved(box: Box) {
+  assert.equal(await markedShelved(box.id), false, "the mark is gone");
+  assert.equal(await snapshotOf(box.id), undefined, "the snapshot too");
 }
 
 it("an edit to a clean shelved worktree unshelves it, on the full listing only", async () => {
@@ -130,15 +151,15 @@ it("an edit to a clean shelved worktree unshelves it, on the full listing only",
     await gitOut(box.worktree, "log", "-1", "--format=%h"),
   );
   writeFileSync(join(box.worktree, "a.txt"), "edited\n");
-  const [identity] = await listWorktreeIdentitiesViaCli({
+  const [identity] = await listWorktreeIdentities({
     projectId: box.projectRef.id,
     worktreeId: box.id,
   });
   assert.ok(identity !== undefined, "the worktree's identity is listed");
   assert.equal(identity.shelved, true, "--identities settles nothing");
-  assert.deepEqual(snapshotOf(box.id), snapshot);
+  assert.deepEqual(await snapshotOf(box.id), snapshot);
   assert.equal(await listedShelved(box), false);
-  assertUnshelved(box);
+  await assertUnshelved(box);
 });
 
 it("a new untracked file unshelves it", async () => {
@@ -146,7 +167,7 @@ it("a new untracked file unshelves it", async () => {
   await shelve(box);
   writeFileSync(join(box.worktree, "new.txt"), "new\n");
   assert.equal(await listedShelved(box), false);
-  assertUnshelved(box);
+  await assertUnshelved(box);
 });
 
 it("changes it was shelved with keep it shelved, a new edit to one of them doesn't", async () => {
@@ -157,7 +178,7 @@ it("changes it was shelved with keep it shelved, a new edit to one of them doesn
   assert.equal(await listedShelved(box), true);
   writeFileSync(join(box.worktree, "a.txt"), "dirtier\n");
   assert.equal(await listedShelved(box), false);
-  assertUnshelved(box);
+  await assertUnshelved(box);
 });
 
 it("a deleted file unshelves it", async () => {
@@ -173,7 +194,7 @@ it("a commit unshelves it, even one that leaves the tree clean", async () => {
   await shelve(box);
   await git(box.worktree, ["commit", "-q", "-am", "work"]);
   assert.equal(await listedShelved(box), false);
-  assertUnshelved(box);
+  await assertUnshelved(box);
 });
 
 it("a shelve after an unshelve starts from a fresh snapshot", async () => {
@@ -187,7 +208,7 @@ it("a shelve after an unshelve starts from a fresh snapshot", async () => {
 
 it("an auto-pull worktree stays shelved through a fast-forward, not through a commit", async () => {
   const box = await makeSandbox(trackTest);
-  await setAutoPullViaCli(box.projectRef, box.id, true);
+  await setAutoPull(box.projectRef, box.id, true);
   await shelve(box);
   await git(box.seed, ["fetch", "-q", "origin"]);
   await git(box.seed, ["checkout", "-q", "feature"]);
@@ -203,7 +224,7 @@ it("an auto-pull worktree stays shelved through a fast-forward, not through a co
   writeFileSync(join(box.worktree, "a.txt"), "local\n");
   await git(box.worktree, ["commit", "-q", "-am", "local"]);
   assert.equal(await listedShelved(box), false, "the commit is");
-  assertUnshelved(box);
+  await assertUnshelved(box);
 });
 
 it("a listing that read the snapshot before a reshelve leaves the reshelve alone", async () => {
@@ -227,36 +248,19 @@ it("a listing that read the snapshot before a reshelve leaves the reshelve alone
   );
   await git(box.project, ["config", "core.fsmonitor", hook]);
   writeFileSync(pause, "");
-  const stale = listWorktreesViaCli(box.projectRef.id);
+  const stale = listWorktrees(box.projectRef.id);
   trackTest(() => writeFileSync(resume, ""));
   await waitFor(() => existsSync(paused), "the listing to pause");
   // Unshelve, shelve again, and the listing that snapshots the new
   // shelf, all while the first listing holds the old snapshot.
-  await setShelvedViaCli(box.projectRef, box.id, false);
-  await setShelvedViaCli(box.projectRef, box.id, true);
+  await setShelved(box.projectRef, box.id, false);
+  await setShelved(box.projectRef, box.id, true);
   assert.equal(await listedShelved(box), true);
-  const fresh = snapshotOf(box.id);
+  const fresh = await snapshotOf(box.id);
   assert.ok(fresh, "the new shelf has its snapshot");
   writeFileSync(resume, "");
   const row = (await stale).find((w) => w.id === box.id);
   assert.equal(row?.shelved, true, "the stale listing kept it shelved");
-  assert.equal(markedShelved(box.id), true);
-  assert.deepEqual(snapshotOf(box.id), fresh);
-});
-
-it("a snapshot without a head doesn't read every head as work", async () => {
-  const box = await makeSandbox(trackTest);
-  await setShelvedViaCli(box.projectRef, box.id, true);
-  // The shape the app wrote before the CLI took the listing over,
-  // from a listing whose log came back empty.
-  const registry = readRegistry(dataDir);
-  registry.shelfSnapshots = {
-    ...registry.shelfSnapshots,
-    [box.id]: { at: Date.now(), head: null, changed: 0 },
-  };
-  writeFileSync(registryPath, JSON.stringify(registry));
-  const snapshot = snapshotOf(box.id);
-  assert.equal(await listedShelved(box), true);
-  assert.equal(markedShelved(box.id), true);
-  assert.deepEqual(snapshotOf(box.id), snapshot);
+  assert.equal(await markedShelved(box.id), true);
+  assert.deepEqual(await snapshotOf(box.id), fresh);
 });

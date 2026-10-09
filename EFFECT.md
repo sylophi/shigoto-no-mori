@@ -233,7 +233,7 @@ export const layer = Layer.effect(Registry, make);
 - `@effect/vitest` provides `it.effect` and layer sharing. A proof that
   spawns real git or the real `sm` keeps the forks pool and no file
   parallelism.
-- A boundary test (the parity harness, the differential clone test,
+- A boundary test (the differential clone test,
   the golden wire fixtures, the measurements) is a proof like any other
   and lives beside the code it guards.
 

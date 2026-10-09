@@ -39,6 +39,15 @@ export class WorktreeData extends Context.Service<
       worktreeId: string,
       change: { readonly title?: string; readonly description?: string },
     ) => Effect.Effect<Description>;
+    // A pair described elsewhere (the worktree's copy on another
+    // device), stored with its own time when it was described after the
+    // pair stored here, so a carry that read a stale side can't undo a
+    // newer describe. Answers whether it landed.
+    readonly carry: (
+      projectId: string,
+      worktreeId: string,
+      described: Description,
+    ) => Effect.Effect<boolean>;
     // The ports the user added beside port-pool's, empty when none.
     readonly ports: (
       projectId: string,
@@ -145,6 +154,30 @@ const make = Effect.gen(function* () {
     );
   }, Effect.orDie);
 
+  const carry = Effect.fn("WorktreeData.carry")(function* (
+    projectId: string,
+    worktreeId: string,
+    described: Description,
+  ) {
+    return yield* sql.withTransaction(
+      Effect.gen(function* () {
+        const stored = yield* read(projectId, worktreeId);
+        if (described.describedAt <= stored.describedAt) return false;
+        yield* sql`INSERT INTO worktree_data ${sql.insert({
+          project_id: projectId,
+          worktree_id: worktreeId,
+          title: orNull(described.title),
+          description: orNull(described.description),
+          described_at: described.describedAt,
+        })} ON CONFLICT (project_id, worktree_id) DO UPDATE SET
+          title = excluded.title,
+          description = excluded.description,
+          described_at = excluded.described_at`;
+        return true;
+      }),
+    );
+  }, Effect.orDie);
+
   // A column that doesn't parse reads as none, as a data file that
   // didn't did.
   const ports = Effect.fn("WorktreeData.ports")(function* (
@@ -219,6 +252,7 @@ const make = Effect.gen(function* () {
   return WorktreeData.of({
     description,
     describe,
+    carry,
     ports,
     setPorts,
     move,

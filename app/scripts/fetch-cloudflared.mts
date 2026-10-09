@@ -1,7 +1,7 @@
 // Fetches the pinned cloudflared release into dist-cloudflared/ so the
 // app ships the tunnel connector instead of asking the user to install
-// it. The same shape as build-cli.mts for the Go CLI, with a download
-// in place of a compile: forge's prePackage hook runs it for the
+// it. The same shape as build-file-sync.mts, with a download in
+// place of a compile: forge's prePackage hook runs it for the
 // target platform and ships the result via extraResource, and
 // `pnpm start` runs it best-effort so dev builds carry the binary too.
 //

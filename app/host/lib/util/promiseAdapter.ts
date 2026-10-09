@@ -5,37 +5,57 @@
 // services, logger and tracer included, and closing it turns every
 // later call away. A call made before the graph is up waits for it,
 // since the IPC handlers and a few module-level probes come first.
+import { AsyncLocalStorage } from "node:async_hooks";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 
+type RunPromise<I> = <A, E>(
+  effect: Effect.Effect<A, E, I>,
+  options?: { readonly signal?: AbortSignal | undefined },
+) => Promise<A>;
+
 export const make = <I>(name: string) => {
-  let open!: (context: Context.Context<I>) => void;
-  let context = new Promise<Context.Context<I>>((resolve) => {
+  let open!: (runPromise: RunPromise<I>) => void;
+  let runner = new Promise<RunPromise<I>>((resolve) => {
     open = resolve;
   });
   let current: Context.Context<I> | undefined;
+  // Each call runs in the layer's own fiber set, so the graph closing
+  // interrupts whatever is still under way, after turning new calls
+  // away.
   const layer = Layer.effectDiscard(
-    Effect.acquireRelease(
-      Effect.context<I>().pipe(
-        Effect.tap((ctx) =>
-          Effect.sync(() => {
-            open(ctx);
-            context = Promise.resolve(ctx);
-            current = ctx;
-          }),
-        ),
-      ),
-      () =>
+    Effect.gen(function* () {
+      const ctx = yield* Effect.context<I>();
+      const runPromise: RunPromise<I> = yield* FiberSet.makeRuntimePromise<I>();
+      yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           current = undefined;
-          context = Promise.reject(new Error(`${name} stopped with the app`));
-          context.catch(() => {});
+          runner = Promise.reject(new Error(`${name} stopped with the app`));
+          runner.catch(() => {});
         }),
-    ),
+      );
+      open(runPromise);
+      runner = Promise.resolve(runPromise);
+      current = ctx;
+    }),
   );
-  const run = <A, E>(effect: Effect.Effect<A, E, I>): Promise<A> =>
-    context.then((ctx) => Effect.runPromiseWith(ctx)(effect));
+  // Runs `body` with the calls made in it going to `runPromise` instead:
+  // a proof's second device, on a data dir of its own, in this process.
+  const aside = new AsyncLocalStorage<RunPromise<I>>();
+  // `signal` interrupts the run, as a caller's cancel.
+  const run = <A, E>(
+    effect: Effect.Effect<A, E, I>,
+    options?: { readonly signal?: AbortSignal | undefined },
+  ): Promise<A> => {
+    const elsewhere = aside.getStore();
+    return elsewhere === undefined
+      ? runner.then((runPromise) => runPromise(effect, options))
+      : elsewhere(effect, options);
+  };
+  const runAside = <A>(runPromise: RunPromise<I>, body: () => A): A =>
+    aside.run(runPromise, body);
   // A synchronous read for a caller that cannot wait, `orElse` while
   // the layer is not up.
   const runSyncOr = <A>(
@@ -49,7 +69,7 @@ export const make = <I>(name: string) => {
     current === undefined
       ? Promise.resolve()
       : Effect.runPromiseWith(current)(effect).catch(() => {});
-  return { layer, run, runSyncOr, runIfOpen };
+  return { layer, run, runSyncOr, runIfOpen, runAside };
 };
 
 // The adapter of one service, with `call` running a method of it:

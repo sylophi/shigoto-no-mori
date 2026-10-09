@@ -29,8 +29,9 @@ export interface PullRequestStack {
 
 // Cycles are impossible on GitHub, but the map is a snapshot of
 // possibly-stale rows, so the walks are bounded rather than trusted.
-// cli/stack.go walks down the same stacks for `sm merge --stack` and
-// `sm land --stack` under the same bound (maxStackDepth): change both.
+// The engine's Landing.ts walks down the same stacks for `sm merge
+// --stack` and `sm land --stack` under the same bound
+// (MAX_STACK_DEPTH): change both.
 const MAX_DEPTH = 64;
 
 // The stack `branch` is part of, or null when its PR stands alone.

@@ -1,6 +1,6 @@
-// What the parity harness runs the Go `sm` and the engine against: a
-// home directory holding a 2.x data dir, copied so each side gets its
-// own, and the two ways of asking it something.
+// What the engine's and the terminal's tests run against: a home
+// directory holding a 2.x data dir, copied so each side (the engine, a
+// binary) gets its own, and the ways of asking it something.
 import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -59,7 +59,7 @@ export type Engine =
   | Control.Control
   | Transfer.Transfer;
 
-const cliDir = join(import.meta.dirname, "..", "..", "..", "..", "cli");
+const macfsDir = join(import.meta.dirname, "..", "..", "..", "..", "macfs");
 
 // git's variables point a child at the repository a hook runs in, and
 // the user's git config would reach the sandbox's repos. The engine's
@@ -82,38 +82,6 @@ Object.assign(process.env, {
 
 const childEnv = (): NodeJS.ProcessEnv => ({ ...process.env, LC_ALL: "C" });
 
-// The Go sm as cli/ is now, built once per state of its sources (the
-// non-test Go files, the module files, the embedded data) and hashed
-// once per test process.
-let built: string | undefined;
-
-const goSources = (file: string) =>
-  file.startsWith("embed/") ||
-  file === "go.mod" ||
-  file === "go.sum" ||
-  (file.endsWith(".go") && !file.endsWith("_test.go") && !file.includes("/"));
-
-export function goSm(): string {
-  built ??= buildGo(cliDir, "sm", goSources);
-  return built;
-}
-
-// The Go sm as a release builds it, its version stamped in, for the verbs
-// a dev build refuses (`update`).
-const releaseBuilds = new Map<string, string>();
-
-export function goSmRelease(version: string): string {
-  const binary =
-    releaseBuilds.get(version) ??
-    buildGo(cliDir, "sm", goSources, [
-      "-X main.flavor=prod",
-      `-X main.version=${version}`,
-      "-X main.binaryName=sm",
-    ]);
-  releaseBuilds.set(version, binary);
-  return binary;
-}
-
 // A Go program built from `dir` into a folder named for the hash of its
 // sources (the files `include` takes) and its -ldflags, so a build is
 // reused until they change.
@@ -134,7 +102,7 @@ function buildGo(
   }
   const binary = join(
     tmpdir(),
-    `${name}-parity-${hash.digest("hex").slice(0, 16)}`,
+    `${name}-sandbox-${hash.digest("hex").slice(0, 16)}`,
     name,
   );
   if (existsSync(binary)) return binary;
@@ -163,25 +131,13 @@ type Run = {
   readonly stderr: string;
 };
 
-// Copies `names` from one folder to another as they are, links and
-// times included: worktrees name their repo by absolute path.
-const copyAll = (from: string, to: string, names: ReadonlyArray<string>) => {
-  for (const name of names) {
-    cpSync(join(from, name), join(to, name), {
-      recursive: true,
-      verbatimSymlinks: true,
-      preserveTimestamps: true,
-    });
-  }
-};
-
 // The darwin helper as macfs/ is now, built once per state of its
 // sources, for the Darwin service.
 let macfsBuilt: string | undefined;
 
 export function macfs(): string {
   macfsBuilt ??= buildGo(
-    join(cliDir, "..", "macfs"),
+    macfsDir,
     "macfs",
     (file) =>
       file === "go.mod" ||
@@ -199,8 +155,6 @@ export type Sandbox = {
   readonly side: (name: string) => string;
   // Writes a JSON file under the data dir.
   readonly write: (file: string, value: unknown) => void;
-  // A copy of the data dir for each side, taken when first asked for.
-  readonly go: (...args: string[]) => Promise<unknown>;
   // Any binary, against its own copy of the data dir named `side`.
   readonly runAt: (
     binary: string,
@@ -211,22 +165,8 @@ export type Sandbox = {
   // The environment a binary runs in against its own copy of the data
   // dir named `side`.
   readonly env: (side: string) => NodeJS.ProcessEnv;
-  // The same, run from `cwd`.
-  readonly goAt: (cwd: string, ...args: string[]) => Promise<unknown>;
-  // Every document the verb prints, in order.
-  readonly goDocs: (
-    cwd: string,
-    ...args: string[]
-  ) => Promise<ReadonlyArray<unknown>>;
-  // A verb that changes what both sides share (the repos, the
-  // worktrees): Go's side first, then the engine's against everything
-  // restored to how it was. Answers both.
-  readonly changeBoth: <A, B>(
-    go: () => Promise<A>,
-    engine: () => Promise<B>,
-  ) => Promise<[A, B]>;
-  // A git repository at `name` beside the data dirs, which both sides
-  // share, with `files` committed.
+  // A git repository at `name` beside the data dirs, which every side
+  // shares, with `files` committed.
   readonly repo: (name: string, files?: Record<string, string>) => string;
   // git in `cwd` with the sandbox's identity, answering its stdout.
   readonly git: (cwd: string, ...args: string[]) => string;
@@ -241,7 +181,7 @@ export type Sandbox = {
 
 export function sandbox(): Sandbox {
   const originalPath = process.env.PATH;
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-parity-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-sandbox-")));
   const seed = join(root, "seed");
   mkdirSync(seed);
   const sides = new Set<string>();
@@ -340,28 +280,6 @@ export function sandbox(): Sandbox {
       );
     });
 
-  // The verb's last document, as `sm --json` prints it.
-  const goAt = (cwd: string, ...args: string[]) =>
-    runAt(goSm(), "go", cwd, ["--json", ...args]).then(({ doc, stderr }) => {
-      if (doc === undefined) throw new Error(`no document: ${stderr}`);
-      return doc;
-    });
-
-  // Every document the verb prints, in order.
-  const goDocs = (cwd: string, ...args: string[]) =>
-    runAt(goSm(), "go", cwd, ["--json", ...args]).then(({ docs, stderr }) => {
-      if (docs.length === 0) throw new Error(`no document: ${stderr}`);
-      return docs;
-    });
-
-  // What the sides share in the home directory: everything but their
-  // data dirs, the seed and the fake commands.
-  const shared = () =>
-    readdirSync(root).filter(
-      (name) => !sides.has(name) && !["seed", "bin", ".before"].includes(name),
-    );
-  const before = join(root, ".before");
-
   return {
     home: root,
     side: sideDir,
@@ -369,24 +287,10 @@ export function sandbox(): Sandbox {
       mkdirSync(dirname(join(seed, file)), { recursive: true });
       writeFileSync(join(seed, file), JSON.stringify(value));
     },
-    go: (...args) => goAt(root, ...args),
-    goDocs,
-    changeBoth: async (goSide, engineSide) => {
-      rmSync(before, { recursive: true, force: true });
-      mkdirSync(before);
-      copyAll(root, before, shared());
-      const go = await goSide();
-      for (const name of shared()) {
-        rmSync(join(root, name), { recursive: true, force: true });
-      }
-      copyAll(before, root, readdirSync(before));
-      return [go, await engineSide()];
-    },
     runAt,
     env,
     git: (cwd, ...args) =>
       execFileSync("git", args, { cwd, env: gitEnv(), encoding: "utf8" }),
-    goAt,
     repo: (name, files = {}) => {
       const dir = join(root, name);
       mkdirSync(dir);

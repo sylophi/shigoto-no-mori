@@ -48,14 +48,22 @@ const CHECK = process.argv.includes("--check");
 const initLicenseChecker = promisify(licenseChecker.init);
 const execFileP = promisify(execFile);
 
-// The Go modules whose binaries ship inside the app (the CLI, the
-// file-sync engine and the darwin helper), each walked for the modules
+// The Bun the release workflow compiles the terminal sm with
+// (.github/workflows/release.yml, setup-bun).
+const BUN_VERSION = "1.4.0";
+
+// Where license-checker starts: the app's production dependencies, and
+// the terminal sm's, which Bun compiles into its binary.
+const NPM_ROOTS = [appRoot, join(repoRoot, "packages", "cli")];
+
+// The Go modules whose binaries ship inside the app (the file-sync
+// engine and the darwin helper), each walked for the modules
 // ACTUALLY LINKED into its default build: `go list -deps` over the main
 // package, with the default build tags, so a dependency reachable only
 // through a build tag this project never sets (Mutagen's
 // source-available parts behind `mutagensspl`) is neither compiled in
 // nor listed.
-const GO_MODULES = ["cli", "file-sync", "macfs"];
+const GO_MODULES = ["file-sync", "macfs"];
 
 // License file names Go modules use, in lookup order.
 const LICENSE_FILE_NAMES = [
@@ -230,6 +238,20 @@ function normalizeEntry([key, value]: [string, LicenseInfo]): LicenseEntry {
 // the same pinned metadata the fetch script reads, through the same
 // normalizer as every npm entry so the record shape has one owner.
 const BUNDLED_BINARIES = [
+  // The runtime the terminal sm is compiled with (packages/cli), the
+  // version the release workflow installs.
+  normalizeEntry([
+    `bun@${BUN_VERSION}`,
+    {
+      licenses: "MIT",
+      repository: "https://github.com/oven-sh/bun",
+      publisher: "Oven",
+      licenseText:
+        "MIT License. Bun statically links JavaScriptCore and WebKit's WTF " +
+        "(LGPL-2.0), and other libraries under their own licenses. Full " +
+        `text: https://github.com/oven-sh/bun/blob/bun-v${BUN_VERSION}/LICENSE.md`,
+    },
+  ]),
   normalizeEntry([
     `cloudflared@${CLOUDFLARED_VERSION}`,
     {
@@ -241,13 +263,13 @@ const BUNDLED_BINARIES = [
   ]),
 ];
 
-// Data the CLI and the app embed: the doubutsu worktree names, taken
+// Data the engine and the app embed: the doubutsu worktree names, taken
 // from Nookipedia's character lists (scripts/fetch-doubutsu-names.mts).
 // The entry opens with the Animal Crossing notice the Settings page
 // shows beside Village life (shared/acNotice.json), so the two never
 // drift, then gives the CC BY-SA attribution.
 const doubutsuSource: { retrieved: string; url: string; name: string } =
-  require("../../cli/embed/doubutsu-names.json").source;
+  require("../../packages/engine/src/data/doubutsu-names.json").source;
 const acNotice: string = require("../shared/acNotice.json").notice;
 const BUNDLED_DATA = [
   normalizeEntry([
@@ -301,9 +323,10 @@ function renderText(entries: LicenseEntry[]): string {
     "Third-Party Licenses",
     "====================",
     "",
-    "This file is generated from production npm dependencies with license-checker,",
-    "the Go modules linked into the bundled sm CLI, file-sync engine and darwin",
-    "helper, and the other binaries the packaged app bundles.",
+    "This file is generated from production npm dependencies with license-checker",
+    "(the app's and the bundled sm's), the Go modules linked into the bundled",
+    "file-sync engine and darwin helper, and the other binaries the packaged app",
+    "bundles.",
     `Packages: ${entries.length}`,
     "",
   ];
@@ -332,23 +355,29 @@ function renderText(entries: LicenseEntry[]): string {
 }
 
 async function main() {
-  const packages = await initLicenseChecker({
-    start: appRoot,
-    production: true,
-    excludePrivatePackages: true,
-    relativeLicensePath: true,
-    customFormat: {
-      name: "",
-      version: "",
-      licenses: "",
-      repository: "",
-      publisher: "",
-      url: "",
-      licenseFile: "",
-      licenseText: "",
-      copyright: "",
-    },
-  });
+  const npm = await Promise.all(
+    NPM_ROOTS.map((start) =>
+      initLicenseChecker({
+        start,
+        production: true,
+        excludePrivatePackages: true,
+        relativeLicensePath: true,
+        customFormat: {
+          name: "",
+          version: "",
+          licenses: "",
+          repository: "",
+          publisher: "",
+          url: "",
+          licenseFile: "",
+          licenseText: "",
+          copyright: "",
+        },
+      }),
+    ),
+  );
+  // One entry per package version: both roots share most of Effect.
+  const packages = Object.assign({}, ...npm) as Record<string, LicenseInfo>;
 
   const goEntries = (
     await Promise.all(GO_MODULES.map((dir) => goModuleEntries(dir)))

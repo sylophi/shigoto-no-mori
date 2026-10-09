@@ -3,8 +3,8 @@
 // ANY tool (an agent in a terminal, an editor, plain git) shows up in
 // the app within a debounce, on this machine and on every device
 // viewing it, instead of on the next focus or the minute sweep. The
-// state watcher (stateWatcher.ts) covers the managed root, which is
-// where sm's own bookkeeping lives. The git facts a worktree row shows
+// store watcher (host/lib/storeWatcher.ts) covers sm's own bookkeeping.
+// The git facts a worktree row shows
 // (branch, tip, ahead/behind) live in the PROJECT's git directory, and
 // a linked worktree's metadata lives under its `worktrees/<name>/`
 // there too, so one recursive watch per project covers every worktree

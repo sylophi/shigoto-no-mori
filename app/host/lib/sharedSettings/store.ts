@@ -1,42 +1,55 @@
 // This device's copy of the shared settings
-// (packages/contracts/src/schemas/sharedSettings.ts), one key in registry.json beside
-// the rest of what the user has set up and cannot rebuild by using the
-// app. The CLI never reads it and carries it through its own registry
-// writes untouched, like the device id.
+// (packages/contracts/src/schemas/sharedSettings.ts), kept in the
+// store. The app is its one writer (the terminal never reads it), so
+// the copy lives in memory, read from the store once at launch, and
+// every change is written back behind it in the order it was made.
 //
 // The rule a copy keeps (store and announce only what changed) is
 // shared/sharedSettings.ts's createSharedSettingsCopy. This file is its
-// storage: every write goes through updateKey, so the copy a merge is
-// computed from is read under the registry lock and two writers (this
-// window's pick, a peer's push) can never overwrite each other's
-// entries.
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+// storage.
+import * as SharedSettings from "@shigomori/engine/SharedSettings";
+import * as Effect from "effect/Effect";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
-import {
-  SharedSettingsDocSchema,
-  type SharedSettingsDoc,
-} from "@shigomori/contracts/schemas/sharedSettings";
+import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
 import { getDeviceId } from "../config/deviceId";
-import { registryStore, SHARED_SETTINGS_KEY } from "../config/store";
+import * as Engine from "../engine";
 import { log } from "@shared/log";
 
-// registry.json is hand-editable, so the stored value is parsed rather
-// than trusted. A mangled one reads as empty, and the next merge from
-// any peer fills it back in.
-const decodeSharedSettings = Schema.decodeUnknownOption(
-  SharedSettingsDocSchema,
-);
+let held: SharedSettingsDoc = EMPTY_SHARED_SETTINGS;
+let written: Promise<unknown> = Promise.resolve();
 
-function parse(stored: unknown): SharedSettingsDoc {
-  return Option.getOrElse(
-    decodeSharedSettings(stored),
-    () => EMPTY_SHARED_SETTINGS,
+// At launch, once the store is open.
+export async function loadSharedSettings(): Promise<void> {
+  held = await Engine.run(
+    Effect.gen(function* () {
+      return yield* (yield* SharedSettings.SharedSettings).read;
+    }),
   );
+}
+
+// Settles once every change made so far is in the store.
+export function sharedSettingsStored(): Promise<unknown> {
+  return written;
+}
+
+function persist(doc: SharedSettingsDoc): void {
+  written = written
+    .then(() =>
+      Engine.run(
+        Effect.gen(function* () {
+          yield* (yield* SharedSettings.SharedSettings).update(() => doc);
+        }),
+      ),
+    )
+    .catch((error: unknown) => {
+      log.warn(
+        `[sharedSettings] the copy wasn't stored: ${errorMessageOf(error)}`,
+      );
+    });
 }
 
 type ChangeListener = (doc: SharedSettingsDoc) => void;
@@ -52,17 +65,13 @@ export function onSharedSettingsChange(listener: ChangeListener): () => void {
 
 export const sharedSettingsCopy = createSharedSettingsCopy(
   {
-    // A hint read: an unreadable registry answers empty rather than
-    // failing a peer's pull or this window's view. Nothing is written
-    // from it, since a write reads again, strictly, under the lock.
-    read: () =>
-      parse(registryStore.readHint<unknown>(SHARED_SETTINGS_KEY, undefined)),
-    transact: (next) =>
-      registryStore.updateKey<unknown>(
-        SHARED_SETTINGS_KEY,
-        undefined,
-        (stored) => next(parse(stored)),
-      ),
+    read: () => held,
+    transact: (next) => {
+      const changed = next(held);
+      if (changed === undefined) return;
+      held = changed;
+      persist(changed);
+    },
   },
   {
     deviceId: getDeviceId,

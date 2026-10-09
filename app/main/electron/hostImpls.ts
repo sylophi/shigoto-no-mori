@@ -4,9 +4,9 @@
 // Electron-backed capability they need arrives through a setter here.
 // Must run before registerIpcHandlers so the first renderer call never
 // lands on a throwing default.
+import { app } from "electron";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { onGlobalConfigChange } from "@host/lib/config/global";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
 import { setCliImpl } from "@host/ipc/modules/cli";
@@ -23,7 +23,7 @@ import {
   installCliLinks,
   uninstallCliEverything,
 } from "./cliInstall";
-import { cliFailureMessage, requireCliBinary, runCli } from "./cliRunner";
+import { requireCliBinary } from "./cliBinary";
 import {
   hookPathEnv,
   installShellIntegration,
@@ -33,7 +33,7 @@ import {
 import { busyActionRemoteRefusal } from "./busyPrompt";
 import { refreshProject, sweepForPeer } from "./fetch";
 import { relaunchAppUnattended } from "./relaunch";
-import { stopStateWatcher } from "./stateWatcher";
+import { stopStoreWatcher } from "@host/lib/storeWatcher";
 import { stopUpdaterBridge } from "./updaterBridge";
 
 export function installHostImpls(): void {
@@ -45,11 +45,13 @@ export function installHostImpls(): void {
     installShellIntegration,
     uninstallShellIntegration,
     hookPathEnv,
+    appVersion: () => app.getVersion(),
+    binaryPath: requireCliBinary,
   });
   setGitImpl({ refreshProject, sweepForPeer });
   // Reconcile the direct listener on every config change, whatever
   // the path: the IPC write handler, an external CLI write picked up
-  // by the state watcher, and nuke wiping config.json all fan out
+  // by the store watcher, and nuke wiping config.json all fan out
   // through invalidateGlobalConfigCache to this one subscriber, so the
   // directConnections opt-out applies without a relaunch. Registered
   // once here, and the refresh never rejects, so fire and forget is
@@ -60,7 +62,7 @@ export function installHostImpls(): void {
   });
   setRuntimeImpl({
     uninstallCliEverything,
-    stopStateWatcher,
+    stopStoreWatcher,
     stopUpdaterBridge,
     stopControlHost,
     broadcastNukeProgress: (progress) =>
@@ -69,7 +71,6 @@ export function installHostImpls(): void {
     relaunchAppUnattended,
     unattendedMoveRefusal: () => busyActionRemoteRefusal("move"),
   });
-  setCliRunnerImpl({ runCli, requireCliBinary, cliFailureMessage });
   // This device's copy of the shared settings moved (a pick here, or a
   // peer's entries merged in): every window re-reads it off the
   // broadcast, and every peer's window folds it into its own copy.

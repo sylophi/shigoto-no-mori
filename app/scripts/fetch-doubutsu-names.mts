@@ -4,7 +4,7 @@
 //   shared/villagers/manifest.json     where each character's page and
 //                                      face icon live on the wiki
 //                                      (references only)
-//   cli/embed/doubutsu-names.json      the slugged names the worktree
+//   packages/engine/src/data/doubutsu-names.json  the slugged names the worktree
 //                                      name picker draws from: the
 //                                      characters with a face
 //
@@ -338,7 +338,14 @@ const names = Object.keys(withFace);
 // ---- writing ----
 
 const today = new Date().toISOString().slice(0, 10);
-const namesPath = join(repoRoot, "cli", "embed", "doubutsu-names.json");
+const namesPath = join(
+  repoRoot,
+  "packages",
+  "engine",
+  "src",
+  "data",
+  "doubutsu-names.json",
+);
 const manifestPath = join(appRoot, "shared", "villagers", "manifest.json");
 
 // A file's retrieved date moves only when what it records did, so a

@@ -2,7 +2,7 @@
 // git follower. Every argument that reaches argv here is either a
 // schema-pinned hex hash / worktree id or an app-built refs/... path;
 // --end-of-options pins them to the revision slot anyway, matching the
-// house argv discipline (see captureDirtyState in cli/cmd_dirty.go).
+// house argv discipline (see the engine's Dirty.ts).
 import { run } from "./core";
 
 // The ref must not exist, in update-ref's compare-and-set vocabulary.

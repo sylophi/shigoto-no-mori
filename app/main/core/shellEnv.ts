@@ -51,7 +51,7 @@ export const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 // set: a Finder launch never saw a profile's SHIGOMORI_* and still
 // doesn't, or an export left over from sandboxing the CLI would send
 // the app's children (which resolve the data dir themselves,
-// cli/state.go) somewhere the app isn't, and put back an update feed
+// the engine's Paths.ts) somewhere the app isn't, and put back an update feed
 // stand-in that electron/updateEndpoints.ts took out.
 const APP_CONTRACT_PREFIX = "SHIGOMORI_";
 

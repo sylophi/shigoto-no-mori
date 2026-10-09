@@ -5,6 +5,7 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Paths from "@shigomori/engine/Paths";
+import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -119,7 +120,11 @@ const sm = Command.make("sm").pipe(
     configCommand.pipe(Command.provide(services)),
     projectsCommand.pipe(Command.provide(services)),
     launchersCommand.pipe(Command.provide(services)),
-    shellCommand.pipe(Command.provide(Paths.layer(flavor))),
+    shellCommand.pipe(
+      Command.provide(
+        ShellIntegration.layer.pipe(Layer.provideMerge(Paths.layer(flavor))),
+      ),
+    ),
     cdCommand.pipe(Command.provide(services)),
     runCommand.pipe(Command.provide(services)),
     worktreesCommand.pipe(Command.provide(services)),

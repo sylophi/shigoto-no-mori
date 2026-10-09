@@ -298,7 +298,7 @@ beforeAll(async () => {
   writeFileSync(join(rootB, "from-b.txt"), "from B\n");
   worktreeIdB = worktreeIdFromPath(rootB);
 
-  fixture.useCli();
+  await fixture.useCli();
   projectIdA = await fixture.projectIdOf(repoA);
   projectIdB = await fixture.projectIdOf(repoB);
 
@@ -328,7 +328,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await teardown();
-  fixture.remove();
+  await fixture.remove();
 });
 
 it("gateway bound and the real mirror daemon reported ready", async () => {

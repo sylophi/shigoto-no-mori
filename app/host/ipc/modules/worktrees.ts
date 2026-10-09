@@ -60,18 +60,18 @@ import {
 } from "@host/mirror/registry";
 import { scriptEventNotifier } from "../scriptRun";
 import {
-  adoptViaCli,
-  createViaCli,
-  deleteStackViaCli,
-  deleteViaCli,
-  doneViaCli,
-  moveViaCli,
-  setAutoPullViaCli,
-  setAgentWorkingViaCli,
-  setShelvedViaCli,
-} from "../cliDelegate";
+  adoptWorktree,
+  createWorktree,
+  deleteStack,
+  deleteWorktree,
+  finishWorktree,
+  moveWorktree,
+  setAutoPull,
+  setAgentWorking,
+  setShelved,
+} from "@host/lib/engineCalls";
 
-// Exported for the sync module's pull orchestration, whose createViaCli
+// Exported for the sync module's pull orchestration, whose createWorktree
 // call streams the same lifecycle events.
 export function notifierFor(ctx: HandlerContext) {
   return {
@@ -112,14 +112,19 @@ export const worktreesHandlers: Handlers<
   ) => {
     const project = await findProjectOrThrow(projectId);
     const input = { worktreeName, branchName, base, checkout, cloneFiles };
-    return createViaCli(project, input, notifierFor(ctx));
+    return createWorktree(project, input, notifierFor(ctx));
   },
 
   // A renderer from before the field sends none and expects the force
   // it always got, so only an explicit false runs unforced.
   convertExternal: async ({ projectId, worktreeId, force }, ctx) => {
     const project = await findProjectOrThrow(projectId);
-    return adoptViaCli(project, worktreeId, force !== false, notifierFor(ctx));
+    return adoptWorktree(
+      project,
+      worktreeId,
+      force !== false,
+      notifierFor(ctx),
+    );
   },
 
   // `sm worktrees move` moves the checkout and carries what is keyed by
@@ -143,7 +148,7 @@ export const worktreesHandlers: Handlers<
     return withDeleteInflight(
       worktreeId,
       "This worktree is already being removed or moved.",
-      () => moveViaCli(project, worktreeId, destinationPath),
+      () => moveWorktree(project, worktreeId, destinationPath),
       // The id is path derived, so the moved worktree is a new one to
       // the engine: its mirror re-opens on the new path.
       (moved) => moveMirrorsOfWorktree(worktreeId, moved),
@@ -190,7 +195,7 @@ export const worktreesHandlers: Handlers<
         worktreeId,
         "This worktree is already being removed.",
         () =>
-          deleteViaCli(
+          deleteWorktree(
             project,
             { worktreeId, force, skipCleanup },
             notifierFor(ctx),
@@ -248,7 +253,7 @@ export const worktreesHandlers: Handlers<
         ids,
         busy,
         () =>
-          deleteStackViaCli(
+          deleteStack(
             project,
             { worktreeId: cleanup.target.id, force, skipCleanup },
             notifierFor(ctx),
@@ -275,7 +280,7 @@ export const worktreesHandlers: Handlers<
 
   setShelved: ({ projectId, worktreeId, shelved }) =>
     mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
-      setShelvedViaCli(project, worktreeId, shelved),
+      setShelved(project, worktreeId, shelved),
     ),
 
   // A flag flip only, like setShelved, answered with the refreshed row.
@@ -284,14 +289,10 @@ export const worktreesHandlers: Handlers<
   // git:refreshProject so the first pull happens right away, through
   // the same path as every later one.
   setAutoPull: async ({ projectId, worktreeId, autoPull }) =>
-    setAutoPullViaCli(
-      await findProjectOrThrow(projectId),
-      worktreeId,
-      autoPull,
-    ),
+    setAutoPull(await findProjectOrThrow(projectId), worktreeId, autoPull),
 
   setAgentWorking: async ({ projectId, worktreeId, agentWorking }) =>
-    setAgentWorkingViaCli(
+    setAgentWorking(
       await findProjectOrThrow(projectId),
       worktreeId,
       agentWorking,
@@ -389,7 +390,7 @@ export const worktreesHandlers: Handlers<
     }),
   switchToPrimaryAndDeleteBranch: async (input) => {
     const project = await findProjectOrThrow(input.projectId);
-    return doneViaCli(project, input.worktreeId);
+    return finishWorktree(project, input.worktreeId);
   },
 };
 

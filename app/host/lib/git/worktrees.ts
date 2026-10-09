@@ -1,7 +1,7 @@
 // The worktree reads the host makes. The rows and identities come from
-// the CLI, which owns the data model (`sm worktrees list`, see
-// host/ipc/cliDelegate.ts). What stays here is plain git the CLI has no
-// verb for: the paged commit history, the upstream counts the
+// the engine, which owns the data model (Worktrees.list, see
+// host/lib/engineCalls.ts). What stays here is plain git the engine
+// has no service for: the paged commit history, the upstream counts the
 // auto-pull sweep decides on right before it pulls, and the prune
 // after a data dir wipe.
 import { createHash } from "node:crypto";
@@ -12,11 +12,7 @@ import {
   type Worktree,
   type WorktreeIdentity,
 } from "@shigomori/contracts/schemas";
-import {
-  describeWorktreeViaCli,
-  listWorktreeIdentitiesViaCli,
-  listWorktreesViaCli,
-} from "@host/ipc/cliDelegate";
+import * as EngineCalls from "@host/lib/engineCalls";
 import { createLimiter } from "@shared/util/limit";
 import { run } from "./core";
 
@@ -30,7 +26,7 @@ const rowLists = createLimiter(2);
 
 // A project's rows, primary first.
 export function listWorktrees(projectId: string): Promise<readonly Worktree[]> {
-  return rowLists(() => listWorktreesViaCli(projectId));
+  return rowLists(() => EngineCalls.listWorktrees(projectId));
 }
 
 // One row, freshly probed.
@@ -38,7 +34,7 @@ export function describeWorktree(
   projectId: string,
   worktreeId: string,
 ): Promise<Worktree> {
-  return describeWorktreeViaCli(projectId, worktreeId);
+  return EngineCalls.describeWorktree(projectId, worktreeId);
 }
 
 // A project's checkouts without git probes. `primaryRef` also resolves
@@ -47,7 +43,7 @@ export function listWorktreeIdentities(
   projectId: string,
   opts: { primaryRef?: boolean } = {},
 ): Promise<readonly WorktreeIdentity[]> {
-  return listWorktreeIdentitiesViaCli({ projectId }, opts);
+  return EngineCalls.listWorktreeIdentities({ projectId }, opts);
 }
 
 // The checkout `worktreeId` names, or the entity-gone error.
@@ -56,7 +52,7 @@ export async function findWorktreeIdentityOrThrow(
   worktreeId: string,
   opts: { primaryRef?: boolean } = {},
 ): Promise<WorktreeIdentity> {
-  const [identity] = await listWorktreeIdentitiesViaCli(
+  const [identity] = await EngineCalls.listWorktreeIdentities(
     { projectId, worktreeId },
     opts,
   );
@@ -64,11 +60,10 @@ export async function findWorktreeIdentityOrThrow(
   return identity;
 }
 
-// The CLI's id rule (worktreeIDFromPath in cli/paths.go), for the few
+// The engine's id rule (worktreeIdFromPath in worktreeLayout.ts), for the few
 // places that key something by a checkout path rather than by a listed
 // identity (the mirror's scratch index dir). sha256 of the absolute
 // path, 12 hex chars: the same path produces the same id anywhere.
-// test/cli-reads.mts pins it against the ids the CLI prints.
 export function worktreeIdFromPath(path: string): string {
   return createHash("sha256").update(path).digest("hex").slice(0, 12);
 }
@@ -99,8 +94,8 @@ export async function getUpstreamCounts(
 // on its own line after each commit's formatted output. A SOH (\x01)
 // sentinel between records keeps parsing robust against subjects that
 // contain tabs or newlines, and NUL between fields against an author
-// name with a tab (git keeps those). The CLI reads its own `git log` the
-// same way (cli/gitx.go), and both are held to
+// name with a tab (git keeps those). The engine reads its own `git log` the
+// same way (gitParse.ts), and both are held to
 // shared/fixtures/git-log.json.
 const LOG_SENTINEL = "\x01";
 export const LOG_FORMAT = `${LOG_SENTINEL}%h%x00%an%x00%aI%x00%s`;

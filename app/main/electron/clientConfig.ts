@@ -2,9 +2,7 @@
 // Client config is how this app instance looks (theme, palettes).
 // Device config in the shigomori root gates what a machine can do and
 // stays with the host and the CLI. This file is owned by the main
-// process alone and the CLI never touches it. Seeding from the
-// pre-split device config lives in clientConfigMigration.ts, so this
-// store stays a pure userData read/write.
+// process alone and the CLI never touches it.
 //
 // Reads are synchronous because the boot path needs the saved theme
 // before the BrowserWindow exists (main/index.ts applies it via
@@ -22,11 +20,10 @@ import {
   atomicWriteJson,
   readJsonOrNull,
   readJsonOrNullSync,
-  withSchemaVersion,
-} from "@host/lib/util/jsonFile";
+} from "@host/lib/util/atomicJson";
 import { log } from "@shared/log";
 
-export function clientConfigPath(): string {
+function clientConfigPath(): string {
   return join(app.getPath("userData"), "clientConfig.json");
 }
 
@@ -70,14 +67,12 @@ export function readClientConfigSync(): ClientConfig {
 
 // Merge-on-write, matching the downgrade-safety rule the device store
 // documents: read the on-disk doc loosely, drop only the keys this
-// build models, overlay the incoming ones, restamp, write atomically.
+// build models, overlay the incoming ones, write atomically.
 // A full replace would erase keys a newer build wrote. Omission of a
 // modeled key still clears it (the omit-on-default serialization).
 // Corruption merges over {} instead (warned once above), the same
 // default reset the read side applies. Async so saves stop blocking
-// the main thread. Only the boot read above stays sync. selfWrite is
-// about the state watcher over the shigomori root, and this file lives
-// outside it.
+// the main thread. Only the boot read above stays sync.
 export async function writeClientConfig(config: ClientConfig): Promise<void> {
   let onDisk: Record<string, unknown>;
   try {
@@ -95,9 +90,7 @@ export async function writeClientConfig(config: ClientConfig): Promise<void> {
   for (const [key, value] of Object.entries(config)) {
     if (value !== undefined) merged[key] = value;
   }
-  await atomicWriteJson(clientConfigPath(), withSchemaVersion(merged), {
-    selfWrite: false,
-  });
+  await atomicWriteJson(clientConfigPath(), merged);
   memo = config;
 }
 

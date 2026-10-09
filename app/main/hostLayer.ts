@@ -20,6 +20,9 @@ import {
   signalAllScriptsBestEffort,
 } from "@host/lib/scripts";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
+import * as Engine from "@host/lib/engine";
+import * as StoreWatcher from "@host/lib/storeWatcher";
+import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
 import * as Ports from "@host/lib/ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
@@ -29,9 +32,7 @@ import * as Processes from "@host/lib/util/processes";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import * as GitWatcher from "./core/gitWatcher";
 import { gitDirOf, reconcileGitWatchers } from "./core/gitWatcher";
-import { cliChildCount, killAllCli } from "./electron/cliRunner";
 import { startBackgroundFetch } from "./electron/fetch";
-import * as StateWatcher from "./electron/stateWatcher";
 import * as MirrorDaemon from "./core/mirror/daemon";
 import * as FileSyncRunner from "./electron/fileSyncRunner";
 import {
@@ -84,10 +85,6 @@ const scripts = (hurried: () => boolean) =>
     }),
   );
 
-// The CLI's children run in their own process groups, and a lifecycle
-// script one spawned follows it down.
-const cliChildren = onQuit("the CLI children", Effect.sync(killAllCli));
-
 // The sweeps and watchers read the project list synchronously, from the
 // snapshot host/lib/projects keeps of the CLI's list.
 const firstProjectList = Layer.effectDiscard(
@@ -100,13 +97,18 @@ const firstProjectList = Layer.effectDiscard(
 // broadcast. Window focus will not do: React Query refetches only on a
 // blur to focus transition, and the window may be focused the whole
 // time an agent works in a terminal beside it.
-function onExternalStateChange(worktreeDataProjects: ReadonlySet<string>) {
+function onExternalStateChange() {
   broadcastAll(gitContract, "externalChange", undefined);
   // A title `sm describe` wrote, announced like a git change so a
   // mirror of the worktree carries it now (host/mirror/gitFollow.ts).
-  for (const projectId of worktreeDataProjects) {
-    announceProjectChanged(projectId);
-  }
+  // Which worktree it was is not told, so every mirrored project is.
+  const mirrored = new Set(
+    MirrorDaemon.mirrorDaemon
+      .sessions()
+      .map((session) => session.labels[MIRROR_LABEL_LOCAL_PROJECT])
+      .filter((projectId) => projectId !== undefined),
+  );
+  for (const projectId of mirrored) announceProjectChanged(projectId);
   // The CLI may have added or removed a project: re-read the list,
   // then follow it with the git-directory watches.
   void refreshProjects()
@@ -143,10 +145,10 @@ const logged = <R>(name: string, layer: Layer.Layer<never, never, R>) =>
     ),
   );
 
-const stateWatcher = logged(
-  "the state watcher",
-  StateWatcher.adapter.pipe(
-    Layer.provide(StateWatcher.layer(onExternalStateChange)),
+const storeWatcher = logged(
+  "the store watcher",
+  StoreWatcher.adapter.pipe(
+    Layer.provide(StoreWatcher.layer(onExternalStateChange)),
   ),
 );
 
@@ -159,17 +161,15 @@ const gitWatcher = logged(
       GitWatcher.layer({
         onChange: announceProjectChanged,
         // The app's own git commands move refs the same way an agent's
-        // do, and their callers already invalidate their targets, so a
-        // running sm child and an app-run mutating git command in flight
-        // or just done in that repository are skipped, as the state
-        // watcher skips the app's own data dir writes.
+        // do, and their callers already invalidate their targets, so an
+        // app-run mutating git command (the host's or the engine's) in
+        // flight or just done in that repository is skipped.
         suppressed: (gitDir) =>
-          cliChildCount() > 0 ||
           gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
       }),
     ),
-    // An app-side project add or remove runs as a CLI child whose
-    // registry write the state watcher drops as the app's own.
+    // An app-side project add or remove is the app's own store write,
+    // which the store watcher doesn't see.
     Layer.tap(() =>
       Effect.sync(() => onHostMutationSettled(reconcileGitWatchers)),
     ),
@@ -241,9 +241,28 @@ const toolAnswers = Layer.mergeAll(
   ),
 );
 
+// The bottom of the graph, closed last.
+const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
+  toolAnswers.pipe(
+    // A villager download under way stops here, and resumes next launch.
+    Layer.provideMerge(Villagers.adapter),
+    Layer.provideMerge(Villagers.deviceLayer),
+    // The engine and its store, which everything above reads and
+    // writes the projects, worktrees and settings through.
+    Layer.provideMerge(Engine.adapter),
+    Layer.provideMerge(Engine.layer(engine)),
+    // The Promise face of the platform's child processes for the code
+    // that is not Effect yet. Last to go, so every finalizer above can
+    // still spawn.
+    Layer.provideMerge(Processes.adapter),
+  );
+
 // Built from the bottom up, so the scope closes from the top down: read
 // downward, this is the quit sequence.
-export const layer = (options: { readonly hurried: () => boolean }) =>
+export const layer = (options: {
+  readonly hurried: () => boolean;
+  readonly engine: Parameters<typeof Engine.layer>[0];
+}) =>
   scriptGate.pipe(
     Layer.provideMerge(portForwards),
     Layer.provideMerge(controlHost),
@@ -254,10 +273,9 @@ export const layer = (options: { readonly hurried: () => boolean }) =>
     // The cloudflared child, fronting the direct listener above.
     Layer.provideMerge(tunnelLayer),
     Layer.provideMerge(gitWatcher),
-    Layer.provideMerge(stateWatcher),
+    Layer.provideMerge(storeWatcher),
     Layer.provideMerge(starts("the background fetch", startBackgroundFetch)),
     Layer.provideMerge(firstProjectList),
-    Layer.provideMerge(cliChildren),
     // Every file-sync child, the daemon and the serve children a peer's
     // streams opened.
     Layer.provideMerge(FileSyncRunner.layer),
@@ -266,12 +284,5 @@ export const layer = (options: { readonly hurried: () => boolean }) =>
     // already closed or shortened.
     Layer.provideMerge(ScriptRuns.adapter),
     Layer.provideMerge(ScriptRuns.layer),
-    Layer.provideMerge(toolAnswers),
-    // A villager download under way stops here, and resumes next launch.
-    Layer.provideMerge(Villagers.adapter),
-    Layer.provideMerge(Villagers.deviceLayer),
-    // The Promise face of the platform's child processes for the code
-    // that is not Effect yet. Last to go, so every finalizer above can
-    // still spawn.
-    Layer.provideMerge(Processes.adapter),
+    Layer.provideMerge(foundation(options.engine)),
   );
