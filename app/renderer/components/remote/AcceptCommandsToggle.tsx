@@ -1,152 +1,20 @@
-// "Allow control from other devices": whether THIS machine runs the
-// commands the account's other devices send it. The decision sits on the
-// machine being driven, in its own registry row, because that is the
-// machine whose owner is exposing something. There is nothing to
-// configure per peer: every device on the account is the same
-// person's, so the only question is whether this one takes orders at
-// all. Off, the machine is still browsable from everywhere, since
-// reads were never gated.
-//
-// It is the loudest switch in the app (a peer holding it can edit the
-// setup script and then run it, which is any command as the user, over
-// the tunnel from anywhere), so its row sits in a panel of its own that
-// spells out what the grant covers and tints while it is on.
-//
-// Written immediately through the host store, never staged in a form:
-// flipping it is the whole action. The registry mounts the watcher
-// that follows a flip made in another window.
-import {
-  Cable,
-  Eye,
-  FolderSearch,
-  GitBranch,
-  Settings2,
-  ShieldAlert,
-  SquareTerminal,
-  type LucideIcon,
-} from "lucide-react";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import { TONE_PILL, TONE_TEXT } from "@/components/ui/status-dot";
+// This machine's control switch (AcceptCommandsToggleView), written
+// immediately through the host store.
 import {
   useAcceptsCommands,
   useSetAcceptsCommands,
 } from "@/hooks/account/useAccount";
-import { cn } from "@/lib/utils";
-import { GRANTS, type GrantId } from "@shigomori/contracts/grants";
-
-// The consent lines are the contract's (packages/contracts/src/grants.ts),
-// each the line a remote gated call names. The icons are this panel's.
-const GRANT_ICONS: Record<GrantId, LucideIcon> = {
-  runCommands: SquareTerminal,
-  changeCode: GitBranch,
-  browseFiles: FolderSearch,
-  reachServers: Cable,
-  changeApp: Settings2,
-};
-
-const GRANT_LINES = Object.entries(GRANTS).map(([id, { title, detail }]) => ({
-  icon: GRANT_ICONS[id as GrantId],
-  title,
-  detail,
-}));
-
-// What the panel says about the switch's current state. Unknown (the
-// read is in flight or failed) claims nothing: the switch reads off
-// then, and calling the machine read-only on that basis could be false.
-const STATE_COPY = {
-  on: {
-    description:
-      "Every device signed in to your account can act on this machine as you, from anywhere.",
-    heading: "Other devices can now",
-  },
-  off: {
-    description:
-      "Your other devices can see this machine but can't change anything on it.",
-    heading: "Turning this on lets them",
-  },
-  unknown: {
-    description:
-      "Lets every device signed in to your account act on this machine as you, from anywhere.",
-    heading: "When on, other devices can",
-  },
-} as const;
+import { AcceptCommandsToggleView } from "./AcceptCommandsToggleView";
 
 export function AcceptCommandsToggle() {
   const { data: enabled, isError } = useAcceptsCommands();
   const setAcceptsCommands = useSetAcceptsCommands();
-  const on = enabled === true;
-  const state = enabled === undefined ? "unknown" : on ? "on" : "off";
-
   return (
-    <section
-      data-slot="accept-commands-panel"
-      className={cn(
-        // Filled as well as outlined: doubutsu strips borders and lets
-        // the fill carry the panel.
-        "flex flex-col gap-3 rounded-md border p-3 transition-colors",
-        on
-          ? "border-amber-500/40 bg-amber-500/10"
-          : "border-border bg-muted/40",
-      )}
-    >
-      <ToggleRowView
-        checked={on}
-        onCheckedChange={(next) => setAcceptsCommands.mutate(next)}
-        // Inert until the first read lands, so the switch never shows a
-        // false "off" that a click would then turn into a real write. A
-        // read that FAILED is a different case: the switch stays live,
-        // reading off, so a click is the retry (a successful write fans
-        // out and the read runs again).
-        disabled={
-          (enabled === undefined && !isError) || setAcceptsCommands.isPending
-        }
-        switchClassName="data-[checked]:bg-amber-500"
-        label={
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            Allow control from other devices
-            {state !== "unknown" && <AccessBadge on={on} />}
-          </span>
-        }
-        description={STATE_COPY[state].description}
-      />
-
-      <div className="flex flex-col gap-2 pl-11">
-        <p className="text-2xs font-medium tracking-wide text-muted-foreground uppercase">
-          {STATE_COPY[state].heading}
-        </p>
-        <ul className="flex flex-col gap-2">
-          {GRANT_LINES.map(({ icon: Icon, title, detail }) => (
-            <li key={title} className="flex items-start gap-2.5">
-              <Icon
-                aria-hidden
-                className={cn(
-                  "mt-0.5 size-3.5 shrink-0",
-                  TONE_TEXT[on ? "amber" : "slate"],
-                )}
-              />
-              <p className="min-w-0 text-xs">
-                <span className="font-medium">{title}.</span>{" "}
-                <span className="text-muted-foreground">{detail}</span>
-              </p>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-function AccessBadge({ on }: { on: boolean }) {
-  const Icon = on ? ShieldAlert : Eye;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-3xs font-medium",
-        TONE_PILL[on ? "amber" : "slate"],
-      )}
-    >
-      <Icon aria-hidden className="size-3" />
-      {on ? "Full control" : "Read-only"}
-    </span>
+    <AcceptCommandsToggleView
+      enabled={enabled}
+      isError={isError}
+      pending={setAcceptsCommands.isPending}
+      onChange={(next) => setAcceptsCommands.mutate(next)}
+    />
   );
 }

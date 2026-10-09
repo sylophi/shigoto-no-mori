@@ -11,8 +11,6 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import { Button } from "@/components/ui/button";
-import { CenteredMessage } from "@/components/ui/centered-message";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -21,6 +19,12 @@ import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { NotSharingView } from "./NotSharingView";
+import {
+  OpenDevicesButtonView,
+  RemoteScopeFrameView,
+  UnreachableBannerView,
+  UnreachableDeviceView,
+} from "./RemoteScopeView";
 
 function RemoteScopeGate({
   deviceId,
@@ -57,15 +61,18 @@ function RemoteScopeGate({
 
   return (
     <HostScopeProvider deviceId={deviceId} api={api}>
-      <div className="flex h-full min-h-0 flex-col">
-        {device?.api === undefined && <UnreachableBanner device={device} />}
-        {/* The page keeps this slot whether or not the banner is up,
-            so a blip re-renders it in place instead of remounting it,
-            which is the entire point of holding the api. */}
-        <div className="flex min-h-0 flex-1 flex-col">
-          <Page />
-        </div>
-      </div>
+      <RemoteScopeFrameView
+        banner={
+          device.api === undefined && (
+            <UnreachableBannerView
+              label={unreachableLabel(device)}
+              action={<OpenDevicesButton />}
+            />
+          )
+        }
+      >
+        <Page />
+      </RemoteScopeFrameView>
     </HostScopeProvider>
   );
 }
@@ -91,40 +98,20 @@ function unreachableLabel(
 function UnreachableDevice({ device }: { device: RemoteDevice | undefined }) {
   const { data: status } = useAccountStatus();
   return (
-    <CenteredMessage className="flex-col gap-3">
-      {unreachableLabel(device, status?.signedIn === true)}
-      <OpenDevicesButton />
-    </CenteredMessage>
+    <UnreachableDeviceView
+      label={unreachableLabel(device, status?.signedIn === true)}
+      action={<OpenDevicesButton />}
+    />
   );
 }
 
-// The same message over a page that is still standing: what is on
-// screen is the last thing the device sent, and anything acted on it
-// will fail until the session is back.
-function UnreachableBanner({ device }: { device: RemoteDevice | undefined }) {
-  return (
-    <div className="flex shrink-0 items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-700 dark:text-amber-300">
-      <span className="min-w-0 flex-1 select-text">
-        {unreachableLabel(device)} Showing the last state it sent.
-      </span>
-      <OpenDevicesButton />
-    </div>
-  );
-}
-
-// The account page lists every device with its state. A hostless
-// client calls it Devices: there it is the home page, not a section of
-// Settings.
 function OpenDevicesButton() {
   const navigate = useNavigate();
   return (
-    <Button
-      variant="outline"
-      size="sm"
+    <OpenDevicesButtonView
+      desktop={hasLocalHost}
       onClick={() => void navigate({ to: "/account" })}
-    >
-      {hasLocalHost ? "Open account page" : "Open Devices"}
-    </Button>
+    />
   );
 }
 
