@@ -6,24 +6,17 @@
 // folder come from the DESTINATION project's config, not the source's,
 // and so does the pre-flight: a branch that device already holds fails
 // the pull at step 2, so the review says so here and keeps Start off.
-import { Check } from "lucide-react";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { DiffStats } from "@/components/ui/diff-stats";
-import { RowTag } from "@/components/ui/row-tag";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { changeEntries } from "@/lib/patchFiles";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
-import { cn } from "@/lib/utils";
 import { useCarryOverRows } from "../flow/createPlan";
 import { type PullReviewProps, PullReviewStep } from "../flow/PullReview";
 import {
-  CARD_NOTE,
-  CardListView,
-  CardSkeletonView,
-  MAX_LIST_ROWS as MAX_ROWS,
-} from "../flow/FlowChromeView";
+  CarryOverListView,
+  ChangedFilesView,
+  TransplantDetailsView,
+} from "./TransplantReviewView";
 
 export function TransplantReview(props: PullReviewProps) {
   const { worktree, project, target, sourceDeviceLabel, thisDeviceLabel } =
@@ -39,27 +32,21 @@ export function TransplantReview(props: PullReviewProps) {
       startLabel="Start transplant"
       details={
         (dirty || target?.project) && (
-          <>
-            {dirty && (
-              <section className="space-y-2">
-                <SectionHeading>
-                  Uncommitted changes
-                  <span className="ml-1.5 font-normal tracking-normal normal-case">
-                    (re-applied on arrival)
-                  </span>
-                </SectionHeading>
-                <ChangedFiles worktree={worktree} project={project} />
-              </section>
-            )}
-            {target?.project && (
-              <DestinationScope>
-                <CarryOverList
-                  localProject={target.project}
-                  thisDeviceLabel={thisDeviceLabel}
-                />
-              </DestinationScope>
-            )}
-          </>
+          <TransplantDetailsView
+            changes={
+              dirty && <ChangedFiles worktree={worktree} project={project} />
+            }
+            carryOver={
+              target?.project && (
+                <DestinationScope>
+                  <CarryOverList
+                    localProject={target.project}
+                    thisDeviceLabel={thisDeviceLabel}
+                  />
+                </DestinationScope>
+              )
+            }
+          />
         )
       }
     />
@@ -83,50 +70,16 @@ function ChangedFiles({
   } = useWorktreeChanges(project.id, worktree.id, {
     refetchOnWindowFocus: false,
   });
-  if (isPending) return <CardSkeletonView rows={2} />;
-  if (isError) {
-    return (
-      <p className={CARD_NOTE}>
-        The diff could not be read right now. The changes travel all the same.
-      </p>
-    );
-  }
-  const files = changeEntries(changed ?? []);
-  if (files.length === 0) {
-    return <p className={CARD_NOTE}>No uncommitted changes to list.</p>;
-  }
   return (
-    <CardListView total={files.length}>
-      {files.slice(0, MAX_ROWS).map((entry) => {
-        const { mark, stats } = entry;
-        return (
-          <li key={entry.key} className="flex items-center gap-2">
-            <SimpleTooltip tip={mark.label}>
-              <span
-                aria-label={mark.label}
-                className={cn("w-3 shrink-0 font-semibold", mark.className)}
-              >
-                {mark.mark}
-              </span>
-            </SimpleTooltip>
-            <SimpleTooltip whenTruncated tip={entry.path}>
-              <span className="min-w-0 flex-1 truncate">{entry.path}</span>
-            </SimpleTooltip>
-            {stats && (
-              <DiffStats
-                additions={stats.additions}
-                deletions={stats.deletions}
-              />
-            )}
-          </li>
-        );
-      })}
-    </CardListView>
+    <ChangedFilesView
+      files={changeEntries(changed ?? [])}
+      isPending={isPending}
+      isError={isError}
+    />
   );
 }
 
-// The landing project's carry-over (../flow/createPlan.ts), as the
-// review's card. Under DestinationScope by the caller.
+// Under DestinationScope by the caller.
 function CarryOverList({
   localProject,
   thisDeviceLabel,
@@ -136,33 +89,11 @@ function CarryOverList({
 }) {
   const { rows, isPending } = useCarryOverRows(localProject);
   return (
-    <section className="space-y-2">
-      <SectionHeading>
-        Carry-over files
-        <span className="ml-1.5 font-normal tracking-normal normal-case">
-          (from {localProject.name} on {thisDeviceLabel})
-        </span>
-      </SectionHeading>
-      {isPending ? (
-        <CardSkeletonView />
-      ) : rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground">None configured.</p>
-      ) : (
-        <CardListView total={rows.length}>
-          {rows.slice(0, MAX_ROWS).map((row) => (
-            <li key={row.path} className="flex items-center gap-2">
-              <Check
-                aria-hidden
-                className="size-3 shrink-0 text-muted-foreground"
-              />
-              <SimpleTooltip whenTruncated tip={row.path}>
-                <span className="min-w-0 flex-1 truncate">{row.path}</span>
-              </SimpleTooltip>
-              <RowTag>{row.tag}</RowTag>
-            </li>
-          ))}
-        </CardListView>
-      )}
-    </section>
+    <CarryOverListView
+      projectName={localProject.name}
+      thisDeviceLabel={thisDeviceLabel}
+      rows={rows}
+      isPending={isPending}
+    />
   );
 }

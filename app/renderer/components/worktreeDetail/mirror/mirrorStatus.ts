@@ -63,7 +63,7 @@ export type MirrorLook = {
   detail: string;
   spinning: boolean;
   // Set only by the conflict branch, which is the one chip with a
-  // list behind it (MirrorConflicts.tsx).
+  // list behind it (MirrorConflictsView.tsx).
   showConflicts?: boolean;
 };
 

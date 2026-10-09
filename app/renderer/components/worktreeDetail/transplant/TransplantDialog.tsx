@@ -26,12 +26,18 @@ import {
 } from "@/hooks/remote/useMoveWorktree";
 import { DestinationProvider } from "@/hooks/remote/useHostScope";
 import { modeOf, selectionSummary } from "../flow/ignoreChoice";
-import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
-import type { DestinationPick } from "../flow/PullReview";
-import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
+import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
+import type { DestinationPick, PeerTarget } from "../flow/PullReviewView";
+import { usePeerDestination } from "../flow/peerTargets";
+import { TransplantHeadlineView } from "./TransplantDialogView";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantReview } from "./TransplantReview";
-import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
+import {
+  type FlowStage,
+  type Landing,
+  LANDS_HERE,
+  stepHeadline,
+} from "../flow/pullSteps";
 
 const STEPS = [
   "Review & destination",
@@ -200,26 +206,14 @@ function TransplantFlow({
       }}
       onClose={onClose}
       headline={
-        <>
-          {stage === "review" && (
-            <>
-              Move <span className="font-mono">{worktree.branch}</span>{" "}
-              {landing.onPeer ? landing.to : `off ${sourceDeviceLabel}`},
-              uncommitted work included.
-            </>
-          )}
-          {stage === "running" &&
-            `${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`}
-          {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
-          {stage === "cancelled" &&
-            `Stopped where you asked. Nothing on ${sourceDeviceLabel} changed.`}
-          {stage === "done" && (
-            <>
-              <span className="font-mono">{worktree.branch}</span> now lives on{" "}
-              {thisDeviceLabel}. What about the copy on {sourceDeviceLabel}?
-            </>
-          )}
-        </>
+        <TransplantHeadlineView
+          stage={stage}
+          branch={worktree.branch}
+          sourceDeviceLabel={sourceDeviceLabel}
+          thisDeviceLabel={thisDeviceLabel}
+          away={landing.onPeer ? landing.to : `off ${sourceDeviceLabel}`}
+          running={`${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`}
+        />
       }
     >
       {stage === "review" && (

@@ -7,64 +7,30 @@
 // and the controls live in the dialog behind the footer's Mirror
 // button (mirror/MirrorAction.tsx), which drives the session through
 // the device running it.
-// Built on the shared chip (ui/chip-button.tsx) and the status tones
-// (ui/status-dot.tsx): emerald for a live mirror, sky while files or
-// git state move (mirror/mirrorStatus.ts), amber for conflicts and
-// reconnects, rose for a halt or an error, slate for paused.
-import { RefreshCw } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { Chip } from "@/components/ui/chip-button";
-import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
+import { MirrorConflictsChipView } from "@/components/worktreeDetail/MirrorConflictsView";
 import { useMirrorView } from "@/components/worktreeDetail/mirror/useMirrorView";
 import {
   useWorktreeMirrorLinks,
   type WorktreeMirrorLink,
 } from "@/hooks/remote/useMirrors";
 import { useDeviceProperName } from "@/hooks/remote/useRemoteDevices";
-import { cn } from "@/lib/utils";
-
-type IconType = ComponentType<SVGProps<SVGSVGElement>>;
-
-// A read-only status chip in one of the status tones.
-function StatusChip({
-  tone,
-  icon: Icon,
-  label,
-  tip,
-  spinning = false,
-}: {
-  tone: StatusTone;
-  icon: IconType;
-  label: string;
-  tip?: string;
-  spinning?: boolean;
-}) {
-  return (
-    <SimpleTooltip tip={tip}>
-      <Chip className={cn("tabular shrink-0", TONE_TEXT[tone])}>
-        <Icon
-          aria-hidden
-          className={cn("size-3.5", spinning && "animate-spin")}
-        />
-        {label}
-      </Chip>
-    </SimpleTooltip>
-  );
-}
+import {
+  MirrorLineView,
+  MirrorPillView,
+  MirrorStatusChipView,
+} from "./MirrorPillView";
 
 export function MirrorPill({ worktree }: { worktree: Worktree }) {
   const links = useWorktreeMirrorLinks(worktree);
   if (links.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1 text-xs">
-      {links.map((link) => (
+    <MirrorPillView
+      lines={links.map((link) => (
         <SessionLine key={link.runnerDeviceId} link={link} />
       ))}
-    </div>
+    />
   );
 }
 
@@ -73,10 +39,10 @@ function SessionLine({ link }: { link: WorktreeMirrorLink }) {
   const { session } = link;
   if (session === undefined) {
     return (
-      <>
-        <StatusChip tone="emerald" icon={RefreshCw} label="Mirrored" />
-        <span className="text-muted-foreground">with {other}</span>
-      </>
+      <MirrorLineView
+        chip={<MirrorStatusChipView tone="emerald" label="Mirrored" />}
+        other={other}
+      />
     );
   }
   return <SessionChip link={link} session={session} />;
@@ -91,25 +57,26 @@ function SessionChip({
 }) {
   const { view, names, revealUnder } = useMirrorView(link, session);
   return (
-    <>
-      {view.showConflicts ? (
-        <MirrorConflictsChip
-          session={session}
-          tone={view.tone}
-          label={view.label}
-          names={names}
-          revealUnder={revealUnder}
-        />
-      ) : (
-        <StatusChip
-          tone={view.tone}
-          icon={RefreshCw}
-          label={view.label}
-          tip={view.detail}
-          spinning={view.spinning}
-        />
-      )}
-      <span className="text-muted-foreground">with {names.other}</span>
-    </>
+    <MirrorLineView
+      chip={
+        view.showConflicts ? (
+          <MirrorConflictsChipView
+            session={session}
+            tone={view.tone}
+            label={view.label}
+            names={names}
+            revealUnder={revealUnder}
+          />
+        ) : (
+          <MirrorStatusChipView
+            tone={view.tone}
+            label={view.label}
+            tip={view.detail}
+            spinning={view.spinning}
+          />
+        )
+      }
+      other={names.other}
+    />
   );
 }

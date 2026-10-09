@@ -12,27 +12,15 @@ import { only } from "@shared/util/only";
 import { useState } from "react";
 import type { Project } from "@shigomori/contracts/schemas";
 import { useDeviceTabs } from "@/components/shared/DeviceTabs";
-import {
-  type DeviceTarget,
-  isHolder,
-  useDeviceTargets,
-} from "@/components/shared/deviceTargets";
+import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
-import type { HostApi } from "@/hooks/remote/useHostScope";
-import type { DestinationPick } from "./PullReview";
+import {
+  type DestinationPick,
+  isReadyTarget,
+  type PeerTarget,
+  type ReadyPeerTarget,
+} from "./PullReviewView";
 import { type Landing, landsOnPeer } from "./pullSteps";
-
-// A peer that could take the worktree, with its checkout of the repo
-// when it has one. Its `block` says why it cannot take the worktree
-// right now (asleep, or not granting this device control).
-export type PeerTarget = DeviceTarget & {
-  block: "offline" | "no-grant" | undefined;
-};
-type ReadyPeerTarget = PeerTarget & { api: HostApi };
-
-export function isReadyTarget(target: PeerTarget): target is ReadyPeerTarget {
-  return target.block === undefined && target.api !== undefined;
-}
 
 export function usePeerTargets(project: Project): PeerTarget[] {
   // A device without a checkout reads "no-project" among the targets,
