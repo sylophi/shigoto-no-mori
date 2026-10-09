@@ -29,7 +29,7 @@ import type {
   RunningScript,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
+import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
 import { Button } from "@/components/ui/button";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
@@ -87,7 +87,7 @@ function DeviceName({ deviceId }: { deviceId: string }) {
   const name = useDeviceProperName(deviceId);
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
-      <DeviceGlyph icon={icon} className="size-3.5" />
+      <DeviceGlyphView icon={icon} className="size-3.5" />
       <SimpleTooltip whenTruncated tip={name}>
         <span className="truncate">{name}</span>
       </SimpleTooltip>

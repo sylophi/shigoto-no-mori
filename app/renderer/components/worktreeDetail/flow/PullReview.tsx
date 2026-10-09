@@ -26,7 +26,7 @@ import {
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
+import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { Button } from "@/components/ui/button";
 import {
@@ -462,7 +462,7 @@ function SourceCard({
       heading={heading}
       head={
         <>
-          <DeviceGlyph
+          <DeviceGlyphView
             icon={useDeviceIcon(deviceId)}
             className="size-4 text-muted-foreground"
           />
@@ -520,7 +520,10 @@ function DestinationCard({
       heading={heading}
       head={
         <>
-          <DeviceGlyph icon={icon} className="size-4 text-muted-foreground" />
+          <DeviceGlyphView
+            icon={icon}
+            className="size-4 text-muted-foreground"
+          />
           {toPeer ? (
             <DevicePick
               toPeer={toPeer}
@@ -718,7 +721,7 @@ function DevicePick({
               value={candidate.deviceId}
               disabled={!isReadyTarget(candidate)}
             >
-              <DeviceGlyph
+              <DeviceGlyphView
                 icon={candidate.icon}
                 className="size-4 text-muted-foreground"
               />

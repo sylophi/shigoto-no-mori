@@ -1,23 +1,14 @@
-// The device tab bar, and the body under it. Every page that shows one
-// device's view of something several devices hold (a project's pages,
-// the tidy page) leads its header with one tab per device and mounts
-// its body under the picked device's HostScope, so the page needs no
-// remote-awareness of its own. Each tab is the pill the worktree
-// header marks a device with (DeviceChip, with its connection on the
-// dot, which this device has no need of), the picked one in the accent fill
-// every selection in the app wears. One row that scrolls sideways when
-// the devices outnumber the width, never wrapping, so the title row
-// below keeps its place however many machines there are. Left and
-// right arrows move the pick, as tabs do. A page with something that
-// belongs to the devices as a group (Configure's shared settings) leads
-// the row with one tab for it, ahead of the machines it spans.
-import { Fragment, useState, type ReactNode } from "react";
-import { ArrowRight, MonitorSmartphone } from "lucide-react";
+// The device tabs' pick, and the body under it. Every page that shows
+// one device's view of something several devices hold (a project's
+// pages, the tidy page) leads its header with one tab per device
+// (DeviceTabBarView) and mounts its body under the picked device's
+// HostScope, so the page needs no remote-awareness of its own.
+import { useState, type ReactNode } from "react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
-import { DeviceLead } from "@/components/shared/DeviceGlyph";
-import { EmptyPanel } from "@/components/ui/empty-panel";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  DeviceTabNoteView,
+  StaleDeviceNoteView,
+} from "@/components/shared/DeviceTabBarView";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import {
@@ -26,7 +17,6 @@ import {
   type HostApi,
 } from "@/hooks/remote/useHostScope";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
-import { useRovingPick } from "@/hooks/ui/useRovingPick";
 import {
   useHostDevices,
   useRemoteDevice,
@@ -39,13 +29,12 @@ import {
   deviceStatusView,
   type DeviceStatusView,
 } from "@/lib/remote/deviceStatus";
-import { cn, dragRegion } from "@/lib/utils";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
 
 export interface DeviceRosterEntry {
   deviceId: string;
   label: string;
-  // What it looks like (DeviceGlyph), so every pick draws it.
+  // What it looks like (DeviceGlyphView), so every pick draws it.
   icon: DeviceIcon;
   isThisDevice: boolean;
   // Null for this device, which has no connection to describe.
@@ -167,161 +156,6 @@ export function useHostDevicePick<T extends { deviceId: string }>(
   return resolvePick(tabs, useExternalStore(hostPick), localDeviceId);
 }
 
-// The id the all-devices tab is picked by. Not a device id (those are
-// UUIDs), so it can share onSelect with them.
-export const ALL_DEVICES_TAB_ID = "all-devices";
-
-// What the bar draws of a device: a roster entry, plus what a page
-// may say about it beyond its name.
-export type DeviceBarTab = Pick<
-  DeviceRosterEntry,
-  "deviceId" | "label" | "icon" | "status"
-> & {
-  // A word after the name (a mirror's "original" and "copy").
-  note?: string;
-  // An arrow ahead of the pill, from the tab before it (a mirror's
-  // original to its copy).
-  arrowBefore?: boolean;
-  // A mark after the name (Settings' UpdateMark on a device holding a
-  // staged update).
-  badge?: ReactNode;
-};
-
-export function DeviceTabBar({
-  tabs,
-  selectedId,
-  onSelect,
-  allDevicesTab = false,
-  trailing,
-  className,
-}: {
-  tabs: readonly DeviceBarTab[];
-  selectedId: string;
-  onSelect: (deviceId: string) => void;
-  // Leads the row with the tab for what every device shares, picked
-  // as ALL_DEVICES_TAB_ID.
-  allDevicesTab?: boolean;
-  // An action for every tab at once (Settings' Update all), after the
-  // last tab in the same scrolling row, so it never covers one. It
-  // keeps to the row's end while the tabs leave room, and takes their
-  // height.
-  trailing?: ReactNode;
-  // Overrides the page inset for a bar that sits in a dialog instead.
-  className?: string;
-}) {
-  // One list for the row, so the roving order and the rendered order
-  // cannot disagree.
-  const pills = [
-    ...(allDevicesTab
-      ? [
-          {
-            id: ALL_DEVICES_TAB_ID,
-            lead: <MonitorSmartphone className="size-3.5 shrink-0" />,
-            label: "All devices",
-            note: undefined,
-            arrowBefore: false,
-            badge: undefined,
-          },
-        ]
-      : []),
-    ...tabs.map((tab) => ({
-      id: tab.deviceId,
-      // The device's connection dot, then its glyph: this device has
-      // no connection to show and wears the glyph alone.
-      lead: <DeviceLead icon={tab.icon} tone={tab.status?.tone} />,
-      label: tab.label,
-      note: tab.note,
-      arrowBefore: tab.arrowBefore === true,
-      badge: tab.badge,
-    })),
-  ];
-  const { listRef, onKeyDown } = useRovingPick({
-    ids: pills.map((pill) => pill.id),
-    selectedId,
-    onSelect,
-    pickedSelector: '[aria-selected="true"]',
-  });
-
-  // The row scrolls as one, a trailing action with it, while only the
-  // tabs are the tablist. The page inset is padding rather than the
-  // header's, so a long row scrolls out under the header's edge (which
-  // cancels the inset with a matching negative margin) instead of
-  // clipping.
-  return (
-    <div
-      ref={listRef}
-      className={cn(
-        "flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto px-6 phone:px-4",
-        className,
-      )}
-    >
-      <div
-        role="tablist"
-        aria-label="Device"
-        className="flex items-center gap-1.5"
-      >
-        {pills.map((pill) => {
-          const selected = pill.id === selectedId;
-          return (
-            <Fragment key={pill.id}>
-              {pill.arrowBefore && (
-                <ArrowRight
-                  aria-hidden
-                  className="size-3.5 shrink-0 text-muted-foreground"
-                />
-              )}
-              <button
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                tabIndex={selected ? 0 : -1}
-                data-slot="device-chip"
-                onClick={() => onSelect(pill.id)}
-                onKeyDown={onKeyDown}
-                // A page header puts the row under the window's drag strip
-                // (AppShell): each pill carves its own click out of it.
-                style={dragRegion("no-drag")}
-                className={cn(
-                  DEVICE_PILL_CLASS,
-                  "transition-colors",
-                  selected
-                    ? "border-transparent bg-accent text-accent-foreground"
-                    : "hover:text-foreground",
-                )}
-              >
-                {pill.lead}
-                <SimpleTooltip whenTruncated tip={pill.label}>
-                  <span className="max-w-40 truncate">{pill.label}</span>
-                </SimpleTooltip>
-                {pill.note !== undefined && (
-                  <span
-                    className={cn(
-                      "text-2xs",
-                      selected ? "opacity-70" : "text-muted-foreground/70",
-                    )}
-                  >
-                    {pill.note}
-                  </span>
-                )}
-                {pill.badge}
-              </button>
-            </Fragment>
-          );
-        })}
-      </div>
-      {trailing !== undefined && (
-        // Under the drag strip like the pills (AppShell).
-        <div
-          style={dragRegion("no-drag")}
-          className="ml-auto flex shrink-0 self-stretch"
-        >
-          {trailing}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // The body under the picked tab: the page itself under that device's
 // scope, or a note where the page can't be. An offline peer keeps its
 // tab and says so, rather than vanishing and leaving "where did the
@@ -363,21 +197,13 @@ export function DeviceTabPanel({
       ? peerReadOnlyNote(tab.label)
       : null;
   if (note !== null && (!offline || kept === undefined)) {
-    return (
-      <div className="p-6 phone:p-4">
-        <EmptyPanel>{note}</EmptyPanel>
-      </div>
-    );
+    return <DeviceTabNoteView note={note} />;
   }
   const api = tab.api ?? kept;
   if (api === undefined) return null;
   return (
     <HostScopeProvider key={tab.deviceId} deviceId={tab.deviceId} api={api}>
-      {offline && (
-        <p className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-700 dark:text-amber-300">
-          {note} Showing the last state it sent.
-        </p>
-      )}
+      {offline && note !== null && <StaleDeviceNoteView note={note} />}
       {children}
     </HostScopeProvider>
   );

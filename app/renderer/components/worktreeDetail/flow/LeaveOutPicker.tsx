@@ -24,7 +24,7 @@ import {
   PathPickerModal,
   type PathPickerModalProps,
 } from "@/components/shared/PathPickerModal";
-import type { PickerEntry } from "@/components/shared/PickerRow";
+import type { PickerEntry } from "@/components/shared/PickerRowView";
 import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { SectionHeading } from "@/components/ui/section-heading";

@@ -6,7 +6,7 @@ import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { projectDriveBaseFor } from "@shared/git/worktreeLayout";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ExternalLink } from "@/components/ui/external-link";
@@ -48,13 +48,13 @@ export function WorktreeToggles({ form, setForm }: ToggleProps) {
 
   return (
     <section className="space-y-3">
-      <ToggleRow
+      <ToggleRowView
         checked={form.deleteBranchOnRemove}
         onCheckedChange={setField("deleteBranchOnRemove")}
         label="Delete branch when removing worktree"
         description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
       />
-      <ToggleRow
+      <ToggleRowView
         checked={form.autoPullNew}
         onCheckedChange={setField("autoPullNew")}
         label="Start new worktrees with auto-pull on"
@@ -64,7 +64,7 @@ export function WorktreeToggles({ form, setForm }: ToggleProps) {
             the nesting reads without the disabled state doing the
             talking. pl-11 is the switch width plus the row gap. */}
       <div className="pl-11">
-        <ToggleRow
+        <ToggleRowView
           checked={form.autoPullNew && form.autoPullPrimaryOnly}
           onCheckedChange={setField("autoPullPrimaryOnly")}
           disabled={!form.autoPullNew}
@@ -72,7 +72,7 @@ export function WorktreeToggles({ form, setForm }: ToggleProps) {
           description="Only the primary checkout of a newly added project starts with auto-pull on. Other new worktrees start with it off."
         />
       </div>
-      <ToggleRow
+      <ToggleRowView
         checked={form.autoShelveDays !== null}
         onCheckedChange={(on) =>
           setField("autoShelveDays")(on ? DEFAULT_AUTO_SHELVE_DAYS : null)
@@ -86,19 +86,19 @@ export function WorktreeToggles({ form, setForm }: ToggleProps) {
           onChange={setField("autoShelveDays")}
         />
       )}
-      <ToggleRow
+      <ToggleRowView
         checked={form.doubutsuNames}
         onCheckedChange={setField("doubutsuNames")}
         label="Doubutsu names"
         description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
       />
-      <ToggleRow
+      <ToggleRowView
         checked={form.codexWorktreeNames}
         onCheckedChange={setField("codexWorktreeNames")}
         label="Name Codex-style worktrees by their parent folder"
         description="Codex and some other tools create worktrees as worktree-name/repo-name. When an external worktree's folder is just the repo's name, show the folder above it instead."
       />
-      <ToggleRow
+      <ToggleRowView
         checked={form.managedOnProjectDrive}
         onCheckedChange={setField("managedOnProjectDrive")}
         label="Keep worktrees on the project's drive"
@@ -200,20 +200,20 @@ export function IntegrationToggles({ form, setForm }: ToggleProps) {
 
   return (
     <section className="space-y-3">
-      <ToggleRow
+      <ToggleRowView
         checked={form.githubCli && ghReady}
         onCheckedChange={setField("githubCli")}
         disabled={!ghReady}
         label="Use GitHub CLI"
         description={ghDescription(ghInstalled, ghAuthed)}
       />
-      <ToggleRow
+      <ToggleRowView
         checked={form.autoPopulateInstall}
         onCheckedChange={setField("autoPopulateInstall")}
         label="Auto-populate install command"
         description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
       />
-      <ToggleRow
+      <ToggleRowView
         checked={form.portPool && portPoolInstalled}
         onCheckedChange={setField("portPool")}
         disabled={!portPoolInstalled}
@@ -231,7 +231,7 @@ export function IntegrationToggles({ form, setForm }: ToggleProps) {
           </>
         }
       />
-      <ToggleRow
+      <ToggleRowView
         // Shows the persisted truth and stays operable while on:
         // when terrier vanishes or its output stops parsing, the
         // CLI warns "turn the toggle off in the

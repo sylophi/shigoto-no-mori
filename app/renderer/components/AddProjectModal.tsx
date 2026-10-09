@@ -4,11 +4,11 @@ import { EmptyPanel } from "@/components/ui/empty-panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import {
-  DeviceTabBar,
   DeviceTabPanel,
   useDeviceTabs,
   usePickedDevice,
 } from "@/components/shared/DeviceTabs";
+import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -105,7 +105,7 @@ function AddProjectDialog() {
           className="mx-3 self-start"
         />
         {tabs.length > 1 && picked && (
-          <DeviceTabBar
+          <DeviceTabBarView
             tabs={tabs}
             selectedId={picked.deviceId}
             onSelect={pick}

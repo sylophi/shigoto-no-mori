@@ -4,8 +4,8 @@ import {
   PAGE_HEADER_PADDING,
   PAGE_HEADER_TABS_PADDING,
   PAGE_HEADER_TABS_ROW,
-} from "@/components/shared/PageHeader";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+} from "@/components/shared/PageHeaderView";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
 import { SimpleTooltip } from "@/components/ui/tooltip";

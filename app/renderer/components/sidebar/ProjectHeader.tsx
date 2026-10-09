@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Project } from "@shigomori/contracts/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { PinnedMark } from "@/components/shared/PinnedMark";
+import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
 import { TerrierMark } from "./TerrierMark";
 
 interface ProjectHeaderProps {
@@ -141,7 +141,7 @@ export function ProjectHeader({
     >
       {lead}
       {name}
-      {pinned && <PinnedMark />}
+      {pinned && <PinnedMarkView />}
       <TerrierMark terrier={terrier} />
       {badges}
     </div>
@@ -181,7 +181,7 @@ export function ProjectHeader({
       )}
       {lead}
       {name}
-      {pinned && <PinnedMark />}
+      {pinned && <PinnedMarkView />}
       {folded === false && (
         <>
           <TerrierMark terrier={terrier} />

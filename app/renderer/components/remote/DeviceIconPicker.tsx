@@ -18,7 +18,10 @@ import {
   DEVICE_SHAPES,
   type DeviceIcon,
 } from "@shigomori/contracts/deviceIcon";
-import { DeviceGlyph, DeviceMark } from "@/components/shared/DeviceGlyph";
+import {
+  DeviceGlyphView,
+  DeviceMarkView,
+} from "@/components/shared/DeviceGlyphView";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,7 +67,7 @@ export function DeviceIconPicker({
         disabled={setDeviceIcon.isPending}
         className="group relative -m-1 shrink-0 rounded-xl p-1 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60 dark:hover:bg-muted/50"
       >
-        <DeviceMark icon={icon} tone={tone} size="lg" />
+        <DeviceMarkView icon={icon} tone={tone} size="lg" />
         {/* A small cue that the mark opens something, kept off the
               marks that open nothing. */}
         <span className="absolute right-0 bottom-0 flex size-3.5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground">
@@ -128,7 +131,7 @@ function IconTiles({
               option === picked && "bg-accent text-accent-foreground",
             )}
           >
-            <DeviceGlyph icon={option} className="size-4" />
+            <DeviceGlyphView icon={option} className="size-4" />
           </DropdownMenuItem>
         );
       })}

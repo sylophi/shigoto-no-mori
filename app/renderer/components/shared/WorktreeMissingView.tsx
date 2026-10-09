@@ -1,4 +1,4 @@
-import { SubPageNotFound } from "@/components/shared/SubPageNotFound";
+import { SubPageNotFoundView } from "@/components/shared/SubPageNotFoundView";
 import { WORKTREE_DELETED_MESSAGE } from "@/hooks/worktrees/useWorktreeWasDeleted";
 
 // The shared "resolve a worktree out of the list query" fallback.
@@ -8,7 +8,7 @@ import { WORKTREE_DELETED_MESSAGE } from "@/hooks/worktrees/useWorktreeWasDelete
 // error (the sidebar owns that toast) and would otherwise read as a
 // deleted worktree. Only a resolved list may claim the target is gone,
 // and one that dropped it while the page was open says it was deleted.
-export function WorktreeMissing({
+export function WorktreeMissingView({
   isPending,
   isError,
   deleted,
@@ -26,7 +26,7 @@ export function WorktreeMissing({
   if (isPending) return null;
   if (isError) {
     return (
-      <SubPageNotFound
+      <SubPageNotFoundView
         onBack={onBack}
         message="Couldn't load worktrees."
         action={{ label: "Retry", onClick: () => void refetch() }}
@@ -34,7 +34,7 @@ export function WorktreeMissing({
     );
   }
   return (
-    <SubPageNotFound
+    <SubPageNotFoundView
       onBack={onBack}
       message={deleted ? WORKTREE_DELETED_MESSAGE : message}
     />

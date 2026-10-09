@@ -10,7 +10,7 @@ interface ToggleRowProps {
   switchClassName?: string;
 }
 
-export function ToggleRow({
+export function ToggleRowView({
   checked,
   onCheckedChange,
   label,

@@ -1,5 +1,5 @@
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
+import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -135,7 +135,7 @@ export function ProjectRemoveMenuItem({
   // every other list that names one.
   const deviceRow = device && (
     <>
-      <DeviceGlyph icon={device.icon} className="size-3.5" />
+      <DeviceGlyphView icon={device.icon} className="size-3.5" />
       {device.label}
     </>
   );

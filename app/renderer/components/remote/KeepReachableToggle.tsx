@@ -8,7 +8,7 @@
 // Written immediately through the client store, never staged in a form:
 // flipping it is the whole action.
 import { keepReachableOn } from "@shigomori/contracts/schemas/config";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useKeepReachableUpdate } from "@/hooks/config/useKeepReachableUpdate";
 
@@ -26,7 +26,7 @@ export function KeepReachableToggle() {
   const keepReachable = keepReachableOn(clientConfig ?? {});
 
   return (
-    <ToggleRow
+    <ToggleRowView
       checked={keepReachable}
       onCheckedChange={(next) => keepReachableUpdate.mutate(next)}
       disabled={keepReachableUpdate.isPending}

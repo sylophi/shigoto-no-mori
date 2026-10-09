@@ -6,7 +6,7 @@ import {
   useLaunch,
   useLauncherForProject,
 } from "@/hooks/launchers/useLaunchers";
-import { LauncherIcon } from "@/components/shared/LauncherIcon";
+import { LauncherIconView } from "@/components/shared/LauncherIconView";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
@@ -107,7 +107,7 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
             {pending ? (
               <Loader2 className="animate-spin" />
             ) : (
-              <LauncherIcon entry={entry} />
+              <LauncherIconView entry={entry} />
             )}
             <span>{entry.label}</span>
           </Button>

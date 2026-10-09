@@ -9,7 +9,7 @@ import {
   type LightTheme,
   type ThemeOption,
 } from "@shared/themes";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
 import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
@@ -81,7 +81,7 @@ export function AppearanceSection({
         options={options}
         optionClassName="px-3 py-1.5 text-xs"
       />
-      <ToggleRow
+      <ToggleRowView
         checked={doubutsu}
         onCheckedChange={onDoubutsuChange}
         label="Doubutsu theme"
@@ -113,7 +113,7 @@ export function AppearanceSection({
       {/* A browser without the Battery Status API has nothing to pause
           on, and neither does the plain look: the wallpaper is doubutsu's. */}
       {batterySupported && (
-        <ToggleRow
+        <ToggleRowView
           checked={pauseAnimationsOnBattery}
           onCheckedChange={onPauseAnimationsOnBatteryChange}
           disabled={!doubutsu}

@@ -1,4 +1,4 @@
-import { VillagerFace } from "@/components/shared/VillagerSays";
+import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Resident } from "@/hooks/villagers/useResident";
 import { PartyFace } from "./BirthdayFace";
@@ -25,7 +25,7 @@ export function ResidentFace({
         {party ? (
           <PartyFace face={face} rarity={rarity} className="size-8" />
         ) : (
-          <VillagerFace face={face} className="size-8" />
+          <VillagerFaceView face={face} className="size-8" />
         )}
       </span>
     </SimpleTooltip>

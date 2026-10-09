@@ -6,7 +6,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBranches } from "@/hooks/git/useBranches";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
-import { type BranchEntry } from "@/components/shared/BranchCombobox";
+import { type BranchEntry } from "@/components/shared/BranchComboboxView";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";

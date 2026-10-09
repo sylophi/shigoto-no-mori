@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/shared/PageShell";
+import { PageShellView } from "@/components/shared/PageShellView";
 import { hasLocalHost } from "@/lib/localHost";
 import { AccountSection } from "./AccountSection";
 
@@ -20,8 +20,8 @@ const HEADER = hasLocalHost
 
 export function DevicesPage() {
   return (
-    <PageShell page="devices" {...HEADER}>
+    <PageShellView page="devices" {...HEADER}>
       <AccountSection />
-    </PageShell>
+    </PageShellView>
   );
 }

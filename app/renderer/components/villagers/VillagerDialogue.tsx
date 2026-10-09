@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useState } from "react";
-import { VillagerFace } from "@/components/shared/VillagerSays";
+import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { cn } from "@/lib/utils";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
 import { MovingBox } from "./MovingBox";
@@ -101,7 +101,7 @@ export function VillagerDialogue({
     >
       {speaker.face && (
         <span className="relative size-11 shrink-0">
-          <VillagerFace face={speaker.face} className="size-11" />
+          <VillagerFaceView face={speaker.face} className="size-11" />
           {news.kind === "out" && (
             <MovingBox className="villager-pack absolute -bottom-2 left-1/2 w-10 -translate-x-1/2" />
           )}

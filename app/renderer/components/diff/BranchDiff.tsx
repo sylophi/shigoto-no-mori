@@ -1,4 +1,4 @@
-import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
+import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useBranchDiff } from "@/hooks/worktrees/useWorktreeDiff";
@@ -20,7 +20,7 @@ export function BranchDiff() {
   );
 
   if (!worktree) {
-    return <WorktreeMissing {...missing} />;
+    return <WorktreeMissingView {...missing} />;
   }
 
   const commits = history?.commits.length;

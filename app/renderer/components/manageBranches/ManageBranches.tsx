@@ -16,7 +16,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import { BranchRow } from "./BranchRow";
 import { NewBranchForm } from "./NewBranchForm";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 export function ManageBranches() {
   return (

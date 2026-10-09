@@ -33,6 +33,11 @@
    instead of a cursor, the way `dark:` follows the theme class. */
 @custom-variant phone (&:is([data-layout="phone"] *));
 
+/* The desktop window (index.html marks <html> with data-shell="desktop"):
+   `desktop:` utilities place what sits on the title bar's line, beside
+   the traffic lights, which a browser tab has none of. */
+@custom-variant desktop (&:is([data-shell="desktop"] *));
+
 /* Disabled controls keep pointer events so the not-allowed cursor and
    title tooltips work (see the base-layer cursor rule below). In turn,
    `hover:` must never style a disabled element, or dead controls light

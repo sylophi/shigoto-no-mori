@@ -6,7 +6,10 @@ import {
   Toaster,
   toast,
 } from "sonner";
-import { VillagerFace, VillagerSays } from "@/components/shared/VillagerSays";
+import {
+  VillagerFaceView,
+  VillagerSaysView,
+} from "@/components/shared/VillagerSaysView";
 import { cn } from "@/lib/utils";
 import {
   MOVE_TOAST_MS,
@@ -98,7 +101,7 @@ export function toastVillagerSuccess(
   }
   const line = villagerLine(speaker, message);
   const faces = faceOptions([speaker]);
-  toast.success(line === null ? message : <VillagerSays line={line} />, {
+  toast.success(line === null ? message : <VillagerSaysView line={line} />, {
     ...options,
     ...faces,
     classNames: { ...options?.classNames, ...faces.classNames },
@@ -143,7 +146,7 @@ export function toastVillagerMove(
     return;
   }
   const title =
-    news.line === null ? news.title : <VillagerSays line={news.line} />;
+    news.line === null ? news.title : <VillagerSaysView line={news.line} />;
   toast.success(
     !joined?.size ? (
       title
@@ -208,7 +211,7 @@ function faceOptions(
               joined.has(speaker.slug) && "villager-join",
             )}
           >
-            <VillagerFace
+            <VillagerFaceView
               face={speaker.face}
               className="size-8"
               badge={index === faces.length - 1 ? badge : undefined}

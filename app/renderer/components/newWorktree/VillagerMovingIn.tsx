@@ -1,5 +1,8 @@
 import { isBirthdayOn } from "@/lib/villagers/birthdays";
-import { VillagerFace, VillagerSays } from "@/components/shared/VillagerSays";
+import {
+  VillagerFaceView,
+  VillagerSaysView,
+} from "@/components/shared/VillagerSaysView";
 import { BirthdayFace } from "@/components/villagers/BirthdayFace";
 import { useToday } from "@/hooks/ui/useToday";
 import {
@@ -40,9 +43,9 @@ export function VillagerMovingIn({ folderName }: { folderName: string }) {
         (birthday ? (
           <BirthdayFace face={face} className={cn(faceClass, "mt-1")} />
         ) : (
-          <VillagerFace face={face} className={faceClass} />
+          <VillagerFaceView face={face} className={faceClass} />
         ))}
-      {line === null ? `${message}!` : <VillagerSays line={line} />}
+      {line === null ? `${message}!` : <VillagerSaysView line={line} />}
     </>
   );
 }

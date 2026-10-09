@@ -148,7 +148,7 @@ Rules that keep that working:
 - **`phone:` is for layout, not size.** Hiding a column, restacking a
   row, showing a hover-only action, and the page gutters, which narrow
   on a phone while everything else grows (`PAGE_BODY` in
-  `shared/PageShell.tsx` and `PAGE_HEADER_PADDING` carry them, so a
+  `shared/PageShellView.tsx` and `PAGE_HEADER_PADDING` carry them, so a
   page reuses those). A `phone:` utility that only makes a control or
   its text bigger belongs in phone.css as a scale or control change.
 - **A button shows a fill at rest on a phone.** Nothing hovers there,
@@ -199,9 +199,9 @@ itself takes its own from the hub on each registry read
 
 Rules that keep a machine looking like itself everywhere:
 
-- **Every mark for a device goes through `shared/DeviceGlyph.tsx`.**
-  `DeviceGlyph` is the bare glyph, `DeviceLead` the connection dot and
-  glyph that leads a name, `DeviceMark` the glyph on a tile in the
+- **Every mark for a device goes through `shared/DeviceGlyphView.tsx`.**
+  `DeviceGlyphView` is the bare glyph, `DeviceLeadView` the connection dot and
+  glyph that leads a name, `DeviceMarkView` the glyph on a tile in the
   device's connection tone. Never a lucide laptop or monitor picked at
   a call site, and never a mark derived from the name.
 - **The icon comes off the device record**, never guessed: a
@@ -283,7 +283,7 @@ on screen longer.
 
 Rules that keep it consistent as features arrive:
 
-- **A villager shows through `VillagerFace`**, never a bare
+- **A villager shows through `VillagerFaceView`**, never a bare
   `VillagerIcon` on a product surface, and a tier's moment is never
   re-inlined at a call site: it comes from `components/villagers`.
 - **Only success speaks.** Warnings, errors and neutral notices stay

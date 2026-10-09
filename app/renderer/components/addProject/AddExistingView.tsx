@@ -20,9 +20,9 @@ import { ChipButton } from "@/components/ui/chip-button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { FileManagerIcon } from "@/components/ui/file-manager";
 import {
-  BrowseKeyHints,
-  BrowseUpItem,
-} from "@/components/shared/BrowseListParts";
+  BrowseKeyHintsView,
+  BrowseUpItemView,
+} from "@/components/shared/BrowseListPartsView";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { fsIsGitRepoQueryOptions } from "@/hooks/fs/useFsIsGitRepo";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -359,7 +359,7 @@ export function AddExistingView({
         onMouseDown={keepFocusInInput}
         className="overflow-y-auto p-2"
       >
-        {canBrowseUp && <BrowseUpItem onSelect={browseUp} />}
+        {canBrowseUp && <BrowseUpItemView onSelect={browseUp} />}
 
         {filtered.map((entry) => {
           const entryPath = `${browseDir}${entry.name}`;
@@ -427,7 +427,7 @@ export function AddExistingView({
         className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
       >
         <div className="flex items-center gap-3">
-          <BrowseKeyHints enterFolder={hasHighlighted} goUp={canBrowseUp} />
+          <BrowseKeyHintsView enterFolder={hasHighlighted} goUp={canBrowseUp} />
         </div>
         <div className="flex items-center gap-3">
           {terrierOptIn}

@@ -1,12 +1,12 @@
 // Compact device attribution for the merged tree: one mark per
 // contributing device on project headers, and the single-mark form on
 // remote worktree rows. The mark is the device's glyph on a tile in
-// its connection tone (shared/DeviceGlyph.tsx DeviceMark), the same
+// its connection tone (shared/DeviceGlyphView.tsx DeviceMarkView), the same
 // tile its row wears on the account page, so a badge and a dot can
 // never disagree about a machine, and the name rides the tooltip.
 import { RefreshCw } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceMark } from "@/components/shared/DeviceGlyph";
+import { DeviceMarkView } from "@/components/shared/DeviceGlyphView";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
@@ -49,7 +49,7 @@ export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
       tip={`${badge.label}${badge.reachable ? "" : " (not reachable right now, last known state)"}`}
     >
       <span className="inline-flex shrink-0" aria-label={`On ${badge.label}`}>
-        <DeviceMark icon={badge.icon} tone={badge.tone} />
+        <DeviceMarkView icon={badge.icon} tone={badge.tone} />
       </span>
     </SimpleTooltip>
   );

@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { SectionIntro } from "@/components/ui/section-heading";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
 
@@ -21,13 +21,13 @@ export function NotificationsSection({
         Sent while this window is in the background, about the coding agents in
         the worktrees it shows.
       </SectionIntro>
-      <ToggleRow
+      <ToggleRowView
         checked={form.notifyAgentWaiting}
         onCheckedChange={setField("notifyAgentWaiting")}
         label="When an agent needs you"
         description="A permission prompt or a question, with what it asks."
       />
-      <ToggleRow
+      <ToggleRowView
         checked={form.notifyAgentDone}
         onCheckedChange={setField("notifyAgentDone")}
         label="When an agent finishes its turn"

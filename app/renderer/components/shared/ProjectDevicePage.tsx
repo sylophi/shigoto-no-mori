@@ -13,7 +13,6 @@
 // of the devices, for what belongs to all of them at once (`renderAllDevices`).
 import { useState, type ReactNode } from "react";
 import { DeviceChip } from "@/components/shared/DeviceChip";
-import { TerrierPaw } from "@/components/shared/TerrierPaw";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import {
@@ -27,13 +26,15 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import type { Project } from "@shigomori/contracts/schemas";
 import {
-  ALL_DEVICES_TAB_ID,
-  DeviceTabBar,
   DeviceTabPanel,
   usePickedDevice,
   type DeviceTab,
-} from "./DeviceTabs";
-import { PageHeader } from "./PageHeader";
+} from "@/components/shared/DeviceTabs";
+import {
+  ALL_DEVICES_TAB_ID,
+  DeviceTabBarView,
+} from "@/components/shared/DeviceTabBarView";
+import { ProjectDevicePageView } from "./ProjectDevicePageView";
 
 export function ProjectDevicePage({
   title,
@@ -97,72 +98,48 @@ export function ProjectDevicePage({
       };
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        eyebrow={
-          parent ? (
-            <>
-              {project.name}
-              <span aria-hidden className="mx-1.5 text-muted-foreground/40">
-                /
-              </span>
-              {/* Each device's copy of the project has an id of its own,
-                  so the link takes the picked copy's with its device. */}
-              <button
-                type="button"
-                onClick={() =>
-                  toProjectPage(
-                    parent.page,
-                    tabbed ? picked.project.id : project.id,
-                    shown.deviceId,
-                  )
-                }
-                className="-mx-1 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
-              >
-                {parent.label}
-              </button>
-            </>
-          ) : (
-            project.name
-          )
+    <ProjectDevicePageView
+      projectName={project.name}
+      title={title}
+      parent={
+        parent && {
+          label: parent.label,
+          // Each device's copy of the project has an id of its own, so
+          // the link takes the picked copy's with its device.
+          onOpen: () =>
+            toProjectPage(
+              parent.page,
+              tabbed ? picked.project.id : project.id,
+              shown.deviceId,
+            ),
         }
-        title={title}
-        tabs={
-          tabbed ? (
-            <DeviceTabBar
-              tabs={holders}
-              selectedId={showAllDevices ? ALL_DEVICES_TAB_ID : picked.deviceId}
-              onSelect={(id) => {
-                setAllDevicesPicked(id === ALL_DEVICES_TAB_ID);
-                if (id !== ALL_DEVICES_TAB_ID) pick(id);
-              }}
-              allDevicesTab={renderAllDevices !== undefined}
-            />
-          ) : undefined
-        }
-        trailing={
-          <>
-            {/* A terrier-sourced project is otherwise indistinguishable
-                from a registered one, and the difference shows up in
-                what you can do to it (no remove). */}
-            {project.source === "terrier" && <TerrierPaw className="size-4" />}
-            {/* With tabs they name the device. Without them the chip
-                does, for a peer's project (nothing locally). */}
-            {!tabbed && <DeviceChip />}
-          </>
-        }
-      />
-      {/* The device body stays mounted under the all-devices tab, so a
-          form's unsaved edits survive the visit. */}
-      <div className={showAllDevices ? "hidden" : "contents"}>
+      }
+      tabs={
+        tabbed ? (
+          <DeviceTabBarView
+            tabs={holders}
+            selectedId={showAllDevices ? ALL_DEVICES_TAB_ID : picked.deviceId}
+            onSelect={(id) => {
+              setAllDevicesPicked(id === ALL_DEVICES_TAB_ID);
+              if (id !== ALL_DEVICES_TAB_ID) pick(id);
+            }}
+            allDevicesTab={renderAllDevices !== undefined}
+          />
+        ) : undefined
+      }
+      terrier={project.source === "terrier"}
+      // With tabs they name the device.
+      chip={tabbed ? undefined : <DeviceChip />}
+      showAllDevices={showAllDevices}
+      body={
         <DeviceTabPanel tab={shown} subject="its copy of this project">
           {children(
             tabbed ? picked.project : project,
             tabbed ? picked : undefined,
           )}
         </DeviceTabPanel>
-      </div>
-      {showAllDevices && renderAllDevices(project)}
-    </div>
+      }
+      allDevices={showAllDevices ? renderAllDevices(project) : undefined}
+    />
   );
 }

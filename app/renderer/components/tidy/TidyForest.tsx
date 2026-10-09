@@ -4,15 +4,15 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import type { RowStatus } from "@/components/ui/row-status";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import {
-  DeviceTabBar,
   DeviceTabPanel,
   pickHostDevice,
   useDeviceTabs,
   useHostDevicePick,
   type DeviceTab,
 } from "@/components/shared/DeviceTabs";
+import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {
@@ -43,7 +43,7 @@ import { TidyGroupHeading } from "./TidyGroupHeading";
 import { TidyRow } from "./TidyRow";
 import { TidyStat } from "./TidyStat";
 import { withToggled } from "@/lib/toggleSet";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 // One shared object for every un-started row: a fresh literal per render
 // would give all 40 rows a new `status` prop each time a disk walk
@@ -81,13 +81,13 @@ export function TidyForest() {
   };
   return (
     <div data-doubutsu-page="tidy" className="flex h-full flex-col">
-      <PageHeader
+      <PageHeaderView
         eyebrow="Settings"
         title="Tidy the forest"
         watermark="掃除"
         tabs={
           tabbed ? (
-            <DeviceTabBar
+            <DeviceTabBarView
               tabs={tabs}
               selectedId={picked.deviceId}
               onSelect={pickHostDevice}

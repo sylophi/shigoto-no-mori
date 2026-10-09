@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 import { HOST_TABS, type HostTab, settingsPanelId } from "./settingsNav";
 
 // Mounts its children on the first visit and keeps them mounted, so a

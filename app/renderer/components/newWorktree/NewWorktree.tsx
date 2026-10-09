@@ -4,7 +4,7 @@ import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { VillagerMovingIn } from "./VillagerMovingIn";
@@ -42,7 +42,7 @@ import {
   type Worktree,
 } from "@shigomori/contracts/schemas";
 import { PullRequestSource } from "./PullRequestPicker";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 import { cn } from "@/lib/utils";
 
 type Mode = "branch-from" | "checkout" | "pull-request";
@@ -507,7 +507,7 @@ function NewWorktreeForm({
         </p>
       </div>
 
-      <ToggleRow
+      <ToggleRowView
         checked={cloneFiles}
         onCheckedChange={setCloneFiles}
         label="Clone files from an existing checkout"

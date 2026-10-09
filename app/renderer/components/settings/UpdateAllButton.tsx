@@ -23,7 +23,7 @@ export function UpdateAllButton({ outdated }: { outdated: Outdated }) {
       aria-pressed={confirm.armed}
       onClick={() => confirm.trigger(() => install.mutate())}
       // The loud fill of each device's own Restart to update, in the
-      // tabs' pill shape at the row's height (DeviceTabBar's trailing
+      // tabs' pill shape at the row's height (DeviceTabBarView's trailing
       // slot stretches it), so it matches the tabs at either density.
       className="h-auto rounded-full px-2.5"
     >

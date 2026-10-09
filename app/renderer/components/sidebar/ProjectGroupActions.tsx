@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
+import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useSetProjectPinned } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
@@ -297,7 +297,7 @@ function RemoveSubmenu({
               variant="destructive"
               disabled
             >
-              <DeviceGlyph icon={member.deviceIcon} className="size-3.5" />
+              <DeviceGlyphView icon={member.deviceIcon} className="size-3.5" />
               {member.deviceLabel}
             </DropdownMenuItem>
           ) : (

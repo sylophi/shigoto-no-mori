@@ -10,9 +10,10 @@
         "host/process/host.ts",
         "vite.*.config.ts",
         // The fake host (lab/fake-host/README.md): its pages load their
-        // scripts by root-relative path, and clerkStub.tsx stands in for
-        // Clerk through a Vite alias in vite.base.ts.
-        "lab/fake-host/{web-main,villager-icons,clerkStub}.tsx",
+        // scripts by root-relative path (scenes.tsx is the scene
+        // viewer's), and clerkStub.tsx stands in for Clerk through a
+        // Vite alias in vite.base.ts.
+        "lab/fake-host/{web-main,villager-icons,clerkStub,scenes}.tsx",
         // The proofs, which vitest runs, and the bench, a script run by hand.
         "test/*.mts",
         "test/bench/*.mts",

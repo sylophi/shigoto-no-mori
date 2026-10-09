@@ -8,7 +8,11 @@ interface ErrorFallbackProps {
   action: { label: string; onClick: () => void };
 }
 
-export function ErrorFallback({ error, scope, action }: ErrorFallbackProps) {
+export function ErrorFallbackView({
+  error,
+  scope,
+  action,
+}: ErrorFallbackProps) {
   const isApp = scope === "app";
   const copy = () => {
     void navigator.clipboard?.writeText(

@@ -16,7 +16,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { ErrorFallback } from "@/components/ErrorFallback";
+import { ErrorFallbackView } from "@/components/ErrorFallbackView";
 import { EmptyState } from "@/components/EmptyState";
 import { ForestPage } from "@/components/ForestPage";
 import { NotFoundPage } from "@/components/NotFoundPage";
@@ -348,7 +348,7 @@ function RouteErrorFallback({
     void router.invalidate();
   };
   return (
-    <ErrorFallback
+    <ErrorFallbackView
       error={error}
       scope="view"
       action={{ label: "Try again", onClick: retry }}

@@ -16,7 +16,7 @@ import { ChevronDown, Files, Loader2, WrapText } from "lucide-react";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
-import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
+import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeaderView";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";

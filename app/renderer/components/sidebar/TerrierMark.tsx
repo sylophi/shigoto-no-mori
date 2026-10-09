@@ -1,4 +1,4 @@
-import { TerrierPaw } from "@/components/shared/TerrierPaw";
+import { TerrierPawView } from "@/components/shared/TerrierPawView";
 import {
   useMarkTerrierProjects,
   useTerrierMarksHere,
@@ -11,5 +11,5 @@ import {
 export function TerrierMark({ terrier }: { terrier: boolean }) {
   const mark = useMarkTerrierProjects();
   const here = useTerrierMarksHere();
-  return mark && here && terrier ? <TerrierPaw className="size-3" /> : null;
+  return mark && here && terrier ? <TerrierPawView className="size-3" /> : null;
 }

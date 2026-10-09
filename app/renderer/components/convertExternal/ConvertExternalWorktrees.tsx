@@ -15,7 +15,7 @@ import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { layoutInputsFor, worktreePathFor } from "@shared/git/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 import { isConvertRefusedError } from "@shigomori/contracts/errors";
 
 // For detached HEADs `worktree.branch` is a short SHA. Pass it

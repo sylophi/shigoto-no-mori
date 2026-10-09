@@ -14,7 +14,7 @@ import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 // a chevron, since it shows a reference and picks nothing. Copying a row copies it as a quoted shell reference,
 // since every one of those fields is a shell command and the values
 // are paths and free text.
-export function ScriptEnvPopover() {
+export function ScriptEnvPopoverView() {
   return (
     <Popover>
       <PopoverTrigger

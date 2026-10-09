@@ -1,5 +1,5 @@
 import { FileDiff } from "lucide-react";
-import { WorktreeMoveDetails } from "@/components/shared/WorktreeMoveDetails";
+import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetailsView";
 import { Checkbox } from "@/components/ui/checkbox";
 import { type RowStatus } from "@/components/ui/row-status";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -45,7 +45,7 @@ export function ConvertRow({
         disabled={!interactive}
         className="mt-1"
       />
-      <WorktreeMoveDetails
+      <WorktreeMoveDetailsView
         branch={worktree.branch}
         detached={detached}
         fromPath={oldPath}

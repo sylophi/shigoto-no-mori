@@ -19,7 +19,7 @@ import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import type { CreatePhase, Worktree } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
+import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
 import {
   DestinationScope,
   useDestinationScope,
@@ -381,7 +381,7 @@ function DeviceEnd({
         align === "end" && "flex-row-reverse text-right",
       )}
     >
-      <DeviceGlyph icon={icon} className="size-4 text-muted-foreground" />
+      <DeviceGlyphView icon={icon} className="size-4 text-muted-foreground" />
       <div className="leading-tight">
         <p className="text-sm font-medium">{name}</p>
         <p className="text-2xs text-muted-foreground">{part}</p>
