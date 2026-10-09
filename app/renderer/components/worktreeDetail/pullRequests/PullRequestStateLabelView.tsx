@@ -5,7 +5,7 @@ import { STATE_LABEL, TONE_FILL, TONE_TEXT } from "./pullRequestShared";
 
 // The PR's state in its tone: as text in a row, or as a pill that
 // stands on its own beside a heading.
-export function PullRequestStateLabel({
+export function PullRequestStateLabelView({
   pr,
   pill = false,
 }: {

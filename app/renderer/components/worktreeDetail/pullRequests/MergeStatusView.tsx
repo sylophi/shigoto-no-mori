@@ -3,19 +3,19 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { describeChecks, type MergeVerdict } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
 import type { PullRequestDetail } from "@shigomori/contracts/schemas";
-import { ChecksPopover } from "./ChecksPopover";
-import { ChecksSummaryIcon } from "./ChecksSummaryIcon";
-import { MergeStateIcon } from "./MergeStateIcon";
+import { ChecksPopoverView } from "./ChecksPopoverView";
+import { ChecksSummaryIconView } from "./ChecksSummaryIconView";
+import { MergeStateIconView } from "./MergeStateIconView";
 import { TONE_TEXT } from "./pullRequestShared";
 
 // The merge box's one status (describeMergeVerdict): its words, with
 // the checks' spinner while they run and its tone's mark otherwise,
-// and the run list a click away (ChecksPopover). With no checks to
+// and the run list a click away (ChecksPopoverView). With no checks to
 // list it is the words alone. One line. `compact` keeps the icon alone, its words in
 // the tooltip and for screen readers only, for a row with no room
 // (MergeBox). Words that show carry data-status-label for that
 // measuring.
-export function MergeStatus({
+export function MergeStatusView({
   pr,
   verdict,
   compact,
@@ -31,9 +31,9 @@ export function MergeStatus({
       {/* Running checks spin. Otherwise the mark takes the status's
           tone (a failing check GitHub doesn't require warns). */}
       {verdict.by === "checks" && summary?.tone === "amber" ? (
-        <ChecksSummaryIcon tone="amber" />
+        <ChecksSummaryIconView tone="amber" />
       ) : (
-        <MergeStateIcon tone={verdict.tone} />
+        <MergeStateIconView tone={verdict.tone} />
       )}
       {compact ? (
         <span className="sr-only">{verdict.label}</span>
@@ -55,8 +55,8 @@ export function MergeStatus({
     );
   }
   return (
-    <ChecksPopover pr={pr} tip={tip} className="text-sm">
+    <ChecksPopoverView pr={pr} tip={tip} className="text-sm">
       {content}
-    </ChecksPopover>
+    </ChecksPopoverView>
   );
 }

@@ -1,7 +1,6 @@
 // A worktree's page over the fixtures: happy-hummingbird with its PR
 // open, in a window beside the sidebar, and the states its footer and
-// header go through. The sections the later parts of the split draw
-// (git, ports, scripts, the PR's boxes) are left empty here until then.
+// header go through.
 import type { ReactNode } from "react";
 import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
 import { StaticMenu } from "@/components/ui/dropdown-menu";
@@ -21,7 +20,8 @@ import { LABEL_RANK } from "@/components/worktreeDetail/FooterVerbView";
 import { LaunchSectionView } from "@/components/worktreeDetail/LaunchSectionView";
 import { LauncherRowView } from "@/components/worktreeDetail/LauncherRowView";
 import { NoIdentityNoteView } from "@/components/worktreeDetail/NoIdentityNoteView";
-import { PullRequestStateLabel } from "@/components/worktreeDetail/pullRequests/PullRequestStateLabel";
+import { PullRequestTitleLinkView } from "@/components/worktreeDetail/pullRequests/PullRequestTitleLinkView";
+import { PullRequestStateLabelView } from "@/components/worktreeDetail/pullRequests/PullRequestStateLabelView";
 import {
   ScriptLaunchButtonView,
   ScriptLaunchRowView,
@@ -49,6 +49,7 @@ import type {
 import { LOCAL_DEVICE_ID } from "../fake-host/fixtures";
 import { unposedPullRequests } from "../fake-host/pullRequestFixtures";
 import { SceneWindowFrame } from "./frame";
+import { pullRequestLead } from "./pullRequests";
 import { SceneSidebar } from "./sidebar";
 import {
   gitSection,
@@ -185,11 +186,16 @@ export function WorktreePageScene() {
               title={PR.title}
               pr={{
                 titleLink: (
-                  <span className="shrink-0 font-normal text-muted-foreground/60">
+                  <PullRequestTitleLinkView
+                    pr={PR}
+                    aria-label={`Open pull request #${PR.number} on GitHub`}
+                    data-no-hit-area
+                    className="shrink-0 font-normal text-muted-foreground/60"
+                  >
                     #{PR.number}
-                  </span>
+                  </PullRequestTitleLinkView>
                 ),
-                stateLabel: <PullRequestStateLabel pr={PR} pill />,
+                stateLabel: <PullRequestStateLabelView pr={PR} pill />,
                 base: PR.baseRefName,
                 mergeVerb: "Merges into",
               }}
@@ -206,6 +212,7 @@ export function WorktreePageScene() {
         mirrorPill={null}
         banner={null}
         locked={false}
+        prLead={pullRequestLead()}
         description={
           <DescriptionSectionView
             description={DESCRIPTION}

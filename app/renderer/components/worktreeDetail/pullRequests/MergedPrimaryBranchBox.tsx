@@ -4,7 +4,7 @@ import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useSwitchToPrimaryAndDeleteBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";
-import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
+import { MergedPrimaryBranchBoxView } from "./MergedPrimaryBranchBoxView";
 
 // Primary-worktree analog of ClosedPullRequestBox's "Delete worktree":
 // the repo root can't be removed, so once its branch is merged we offer
@@ -42,14 +42,11 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   };
 
   return (
-    <div className="flex justify-end">
-      <ConfirmDestructiveButton
-        armed={armed}
-        pending={cleanup.isPending}
-        pendingLabel={`Switching to ${target}…`}
-        idleLabel={`Delete branch and switch to ${target}`}
-        onClick={() => trigger(run)}
-      />
-    </div>
+    <MergedPrimaryBranchBoxView
+      target={target}
+      armed={armed}
+      pending={cleanup.isPending}
+      onClick={() => trigger(run)}
+    />
   );
 }

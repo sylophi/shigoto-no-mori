@@ -31,7 +31,7 @@ const SUMMARY_ICON: Partial<Record<PullRequestTone, typeof UserRound>> = {
 // icon alone, its words in the tooltip and for screen readers only,
 // for a row with no room (MergeBox). Words that show carry
 // data-reviews-label for that measuring.
-export function ReviewsPopover({
+export function ReviewsPopoverView({
   pr,
   compact = false,
 }: {
