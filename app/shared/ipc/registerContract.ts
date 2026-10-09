@@ -9,8 +9,8 @@ import {
   Grant,
   inputOf,
   isBroadcast,
+  isInvoke,
   keyOf,
-  MovesHostState,
   outputOf,
   payloadOf,
   Remote,
@@ -25,7 +25,7 @@ import type {
   Handlers,
 } from "@shigomori/contracts/types";
 
-type RegisterContractOpts<Ctx = HandlerContext> = {
+type RegisterContractOpts = {
   // Gates OUTPUT validation only, never input parsing. Bindings pass a
   // dev-build flag here so handler drift (or schemas whose encoded and
   // decoded shapes diverge) surfaces at the registrar instead of as a
@@ -38,23 +38,6 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
   // forgets the hook fails at startup instead of silently freezing the
   // usage sorts.
   onUsageTracked?: (parsedInput: unknown) => void;
-  // Runs after a handler whose call is annotated Gated true resolves
-  // (before output validation, which only dev builds run: the mutation
-  // happened either way), whichever wire carried the call, with the
-  // calling peer's context so the binding can tell which wire that was
-  // (the Electron binding pings its own windows only for a mutation a
-  // REMOTE peer drove, since the acting local renderer already
-  // invalidated its targets). The Electron binding hangs the
-  // remote-viewer cache ping here: an app-driven mutation never trips
-  // the fs watcher (its self-write suppression exists to keep the
-  // app's own writes from echoing), so without this a remote viewer
-  // would never learn the host's state moved. Optional, since bindings
-  // with no remote push surface (the web bridge) omit it. A call annotated
-  // movesHostState:false skips the hook: it is still a command on the
-  // grant axis, but its effects are invisible to viewers (forward's
-  // byte shuttling), so pinging on it would re-invalidate a peer's
-  // whole cached view on every poll or send.
-  onMutationResolved?: (ctx: Ctx) => void;
 };
 
 // The per-call wrapper: ONE definition of what serving a contract call
@@ -62,31 +45,22 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
 // registrar loop below serves. Input parsing is
 // UNCONDITIONAL, never gated by build type: the moment handlers are
 // reachable over a socket, this parse is the wall between a malformed
-// payload and git argv. The hooks are resolved once here (an untracked
-// ungated call pays nothing per call): onUsageTracked runs only
-// for a call opting in via TracksProjectUsage, and onMutationResolved
-// only for an explicit gated:true call not opted out via
-// movesHostState:false, exactly the rules RegisterContractOpts
-// documents.
+// payload and git argv. The hook is resolved once here (an untracked
+// call pays nothing per call): onUsageTracked runs only for a call
+// opting in via TracksProjectUsage.
 function wrapContractCall<Ctx>(
   call: ContractCall,
   handler: (input: unknown, ctx: Ctx) => unknown,
-  opts: RegisterContractOpts<Ctx>,
+  opts: RegisterContractOpts,
 ): (ctx: Ctx, raw: unknown) => Promise<unknown> {
   const onSuccess =
     annotation(call, TracksProjectUsage) === true
       ? opts.onUsageTracked
       : undefined;
-  const onMutated =
-    annotation(call, Gated) === true &&
-    annotation(call, MovesHostState) !== false
-      ? opts.onMutationResolved
-      : undefined;
   return async (ctx, raw) => {
     const input = decode(inputOf(call), raw);
     const result = await handler(input, ctx);
     onSuccess?.(input);
-    onMutated?.(ctx);
     return opts.validateOutputs ? encode(outputOf(call), result) : result;
   };
 }
@@ -144,7 +118,7 @@ export function registerContract<M extends ContractModule>(
   >;
   // Every call checked before any is mounted, so a module either
   // serves whole or not at all.
-  const invokes = calls.filter((call) => !isBroadcast(call));
+  const invokes = calls.filter(isInvoke);
   for (const call of invokes) {
     const gap = classificationGap(call);
     if (gap !== null) throw new Error(`registerContract: ${gap}`);
