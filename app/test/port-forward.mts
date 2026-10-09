@@ -1,7 +1,7 @@
 // Durable proof for port forwarding over byte channels (binary
 // channel frames): TCP bytes cross a REAL DIRECT
 // websocket between the two fixtures as channel frames
-// (shared/ipc/socket/channels.ts), brokered by the stub device hub
+// (shared/remote/channels.ts), brokered by the stub device hub
 // exactly as production does (test/lib/directBoot.mts). Nothing
 // here is a double on the forward path: device A registers the REAL
 // forward contract and handlers on a real direct listener, B
@@ -53,7 +53,7 @@ import type { EventEmitter } from "node:events";
 import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, it } from "vitest";
 import { CommandRefusedError } from "@shigomori/contracts/errors";
-import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
+import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
 import type { Client } from "@shigomori/contracts/types";
@@ -300,7 +300,7 @@ it("server-initiated bytes arrive with no write first", async () => {
 
 it("large transfer: ~1.5 MB crosses in data frames with the device hub flat, byte-identical", async () => {
   // (4) A ~1.5 MB transfer, echoed back: it crosses as many data
-  // frames (bounded by CHANNEL_MAX_FRAME_BYTES), byte-identical, and
+  // frames (bounded by CHANNEL_MAX_WRITE_BYTES), byte-identical, and
   // the stub device hub stays COMPLETELY flat (it only ever saw the
   // one-time broker exchange).
   big = randomBytes(1_500_000);
@@ -312,7 +312,7 @@ it("large transfer: ~1.5 MB crosses in data frames with the device hub flat, byt
     Buffer.compare(big, returned) === 0,
     "echoed bytes differ byte-for-byte",
   );
-  const minFrames = Math.ceil(big.length / CHANNEL_MAX_FRAME_BYTES);
+  const minFrames = Math.ceil(big.length / CHANNEL_MAX_WRITE_BYTES);
   assert.ok(
     bulk.frames() >= minFrames,
     `expected >= ${minFrames} data frames, saw ${bulk.frames()}`,
@@ -340,14 +340,16 @@ it("server close: tail bytes, then the peer's end, and ending here completes the
   assert.equal(closing.wasReset(), false);
   assert.equal(closing.handle.open, true, "still open for this side");
   closing.end();
-  assert.equal(closing.handle.open, false, "both ends done: channel gone");
+  // The end is sent behind any bytes still going out, and the channel
+  // goes once the host has it.
+  await waitFor(() => !closing.handle.open, "both ends done: channel gone");
   await closer.close();
 });
 
 it("a large response followed by a server close arrives complete", async () => {
   // (5b) A large response then a close: a server that writes far more
-  // than one credit window and hangs up must still deliver every
-  // byte. The bytes the channel holds while waiting for credit
+  // than one channel window and hangs up must still deliver every
+  // byte. The bytes the channel holds while the reader catches up
   // outlive the socket's close.
   const dumper = await startLoopbackServer((socket) => {
     socket.end(big);

@@ -6,7 +6,6 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { noHandlerMessage } from "@shared/ipc/socket/frames";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
@@ -239,9 +238,9 @@ export function useUpdateAll(
         outcomes.flatMap((entry) =>
           "outcome" in entry && entry.outcome === wanted ? [entry.label] : [],
         );
-      return { armed: labelsOf("armed"), fetching: labelsOf("fetching") };
+      return { armed: labelsOf("armed") };
     },
-    onSuccess: ({ armed, fetching }) => {
+    onSuccess: ({ armed }) => {
       if (armed.length > 0) {
         toast.success(
           `${sentenceStart(names.format(armed))} ${
@@ -251,27 +250,15 @@ export function useUpdateAll(
           }`,
         );
       }
-      if (fetching.length > 0) {
-        toast.success(
-          `${sentenceStart(names.format(fetching))} ${
-            fetching.length === 1 ? "is" : "are"
-          } downloading the update. Restart from Settings once it's ready.`,
-        );
-      }
     },
     meta: { errorTitle: "Couldn't update every device" },
   });
 }
 
-// How a device took its update: restarting into the staged one, armed
-// to restart once it has fetched it, or only fetching it.
-type UpdateOutcome = "installed" | "armed" | "fetching";
+// How a device took its update: restarting into the staged one, or
+// armed to restart once it has fetched it.
+type UpdateOutcome = "installed" | "armed";
 
-// A staged update goes through install, which a peer on an older build
-// answers too. One not staged yet is armed with updater:update, which a
-// peer on a build from before it doesn't serve: that one is asked to
-// fetch it instead (a check), and restarting stays a click in its
-// Settings.
 async function updateDevice(
   target: UpdateTarget,
   device: OutdatedDevice,
@@ -280,16 +267,8 @@ async function updateDevice(
     await target.api.updater.install();
     return "installed";
   }
-  try {
-    await target.api.updater.update();
-    return "armed";
-  } catch (error) {
-    if (!errorMessageOf(error).includes(noHandlerMessage("updater:update"))) {
-      throw error;
-    }
-    await target.api.updater.check();
-    return "fetching";
-  }
+  await target.api.updater.update();
+  return "armed";
 }
 
 // "this device and Thinkpad" as the start of a sentence.

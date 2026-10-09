@@ -53,7 +53,6 @@ import {
   peerWorktreesApiFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
-import { onAbort } from "@host/lib/util/abort";
 import { within } from "@host/lib/util/within";
 import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
@@ -275,9 +274,9 @@ export async function startMirrorFrom(
   try {
     // A move like the others (runMove), so the dialog's and the
     // CLI's cancel (sync:cancelMove, by the source worktree) and a
-    // caller going away both reach it, and are forwarded to the peer
-    // running the send. The invitation is made inside, once the move
-    // holds its key: a second ask for the same worktree is refused
+    // caller going away both reach it, and interrupt the peer's send
+    // over the device link. The invitation is made inside, once the
+    // move holds its key: a second ask for the same worktree is refused
     // without touching the first's.
     return await runMove(ctx, worktreeId, async (signal) => {
       const invite = inviteMirror({
@@ -286,14 +285,9 @@ export async function startMirrorFrom(
         identity,
         cloneInto: rule.cloneInto,
       });
-      const offCancel = onAbort(signal, () => {
-        void peerSync
-          .cancelMove({ sourceWorktreeId: worktreeId })
-          .catch(() => {});
-      });
       try {
         return decodeMirrorStartToResult(
-          await peerMirrorApiFor(sourceDeviceId).startTo({
+          await peerMirrorApiFor(sourceDeviceId, { signal }).startTo({
             targetDeviceId: thisDeviceId(),
             projectId,
             worktreeId,
@@ -303,8 +297,6 @@ export async function startMirrorFrom(
       } catch (error) {
         invite.withdraw();
         throw error;
-      } finally {
-        offCancel();
       }
     });
   } finally {

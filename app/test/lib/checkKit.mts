@@ -324,8 +324,10 @@ export function entryAt<T>(list: readonly T[], index: number): T {
 export function handlerCtx(
   overrides: Partial<HandlerContext> = {},
 ): HandlerContext {
+  const signal = new AbortController().signal;
   return {
-    signal: new AbortController().signal,
+    signal,
+    connection: signal,
     notifier: () => () => {},
     ...overrides,
   };
