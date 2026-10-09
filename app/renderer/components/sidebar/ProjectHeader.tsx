@@ -82,16 +82,11 @@ export function ProjectHeader({
     />
   );
   const name = (
-    <SimpleTooltip whenTruncated tip={project.name}>
-      <span
-        className={cn(
-          "min-w-0 truncate",
-          missing && "line-through decoration-1",
-        )}
-      >
-        {project.name}
-      </span>
-    </SimpleTooltip>
+    <span
+      className={cn("min-w-0 truncate", missing && "line-through decoration-1")}
+    >
+      {project.name}
+    </span>
   );
   const missingBody = (
     <>
@@ -102,7 +97,7 @@ export function ProjectHeader({
       </span>
     </>
   );
-  return arrangeMode ? (
+  const trigger = arrangeMode ? (
     <div
       {...listeners}
       onContextMenu={onContextMenu}
@@ -194,5 +189,11 @@ export function ProjectHeader({
         </>
       )}
     </button>
+  );
+
+  return (
+    <SimpleTooltip whenTruncated tip={project.name}>
+      {trigger}
+    </SimpleTooltip>
   );
 }
