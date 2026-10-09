@@ -94,7 +94,7 @@ type TooltipChild = ReactElement<
 // on mousemove, but a wrapper's still run, and the span adds no box.
 // (So a child that turns disabled is remounted into the span.)
 // Newlines in string tips are preserved like multiline titles were.
-// `delay` overrides the provider's opening delay for this trigger.
+// `delay` overrides the 500ms opening delay for this trigger.
 // `whenTruncated` is for a tip that only repeats text on screen in
 // full: it opens only while that text is cut off. `lazy` is for such a
 // tip on every row of a long list (the file tree, the palette), where
@@ -191,7 +191,7 @@ function withoutOpenState(child: TooltipChild) {
 function overflows(trigger: Element | undefined): boolean {
   if (!trigger) return false;
   return [trigger, ...trigger.querySelectorAll("*")].some(
-    (el) => getComputedStyle(el).overflow !== "visible" && isTruncated(el),
+    (el) => isTruncated(el) && getComputedStyle(el).overflow !== "visible",
   );
 }
 
