@@ -47,7 +47,7 @@ import {
   SquashCommitPayloadSchema,
   StashChangesPayloadSchema,
   StashEntrySchema,
-  UnbindAgentPayloadSchema,
+  AgentSessionPayloadSchema,
   WorktreeCarryOverCompleteSchema,
   WorktreeFileSchema,
   WorktreeLifecyclePhaseSchema,
@@ -141,9 +141,18 @@ export const worktreesContract = defineContract("host", {
   // One agent session stops being bound to the worktree.
   unbindAgent: invoke(
     "worktrees:unbindAgent",
-    UnbindAgentPayloadSchema,
+    AgentSessionPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  // One agent session picks up again in its harness's CLI, in a
+  // terminal on this machine, so like a launch it isn't served to
+  // other devices.
+  resumeAgent: invoke(
+    "worktrees:resumeAgent",
+    AgentSessionPayloadSchema,
+    z.void(),
+    { tracksProjectUsage: true, remote: false },
   ),
   checkoutBranch: invoke(
     "worktrees:checkoutBranch",

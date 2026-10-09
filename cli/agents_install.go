@@ -48,7 +48,7 @@ type hookInstall struct {
 const hookTimeout = 3
 
 var harnesses = []harness{
-	{id: "claude", label: "Claude Code", sessionEnv: "CLAUDE_CODE_SESSION_ID", install: hookInstall{
+	{id: "claude", label: "Claude Code", sessionEnv: "CLAUDE_CODE_SESSION_ID", resume: "claude --resume", install: hookInstall{
 		dir:  func() string { return homeOr("CLAUDE_CONFIG_DIR", ".claude") },
 		file: "settings.json",
 		hooks: []hookSpec{
@@ -62,7 +62,7 @@ var harnesses = []harness{
 			{event: "SessionEnd"},
 		},
 	}},
-	{id: "codex", label: "Codex", sessionEnv: "CODEX_THREAD_ID", subagentIDs: true, install: hookInstall{
+	{id: "codex", label: "Codex", sessionEnv: "CODEX_THREAD_ID", subagentIDs: true, resume: "codex resume", install: hookInstall{
 		dir:      func() string { return homeOr("CODEX_HOME", ".codex") },
 		file:     "hooks.json",
 		trust:    true,

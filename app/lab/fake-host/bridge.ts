@@ -457,6 +457,7 @@ function hostHandlersFor(
         worktree.agentSessions?.some((s) => s.state === "working") ?? false;
       return worktree;
     },
+    "worktrees:resumeAgent": () => undefined,
     "agents:status": () => agentHarnesses,
     "agents:setHooks": async ({ harness, install }) => {
       await sleep(400);

@@ -97,6 +97,7 @@ import {
   moveViaCli,
   setAutoPullViaCli,
   idleAgentsViaCli,
+  resumeAgentViaCli,
   setShelvedViaCli,
   unbindAgentViaCli,
 } from "../cliDelegate";
@@ -326,6 +327,14 @@ export const worktreesHandlers: Handlers<
   unbindAgent: ({ projectId, worktreeId, harness, session }) =>
     mutateAndDescribe({ projectId, worktreeId }, () =>
       unbindAgentViaCli(harness, session),
+    ),
+
+  resumeAgent: async ({ projectId, worktreeId, harness, session }) =>
+    resumeAgentViaCli(
+      await findProjectOrThrow(projectId),
+      worktreeId,
+      harness,
+      session,
     ),
 
   renameBranch: (input) =>
