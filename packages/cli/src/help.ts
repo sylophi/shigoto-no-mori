@@ -421,7 +421,7 @@ export const documentedCommands = (names: Names) =>
       }),
     );
 
-export function wrapText(text: string, columns: number): string[] {
+function wrapText(text: string, columns: number): string[] {
   const lines: string[] = [];
   let line = "";
   for (const word of text.split(/\s+/).filter((w) => w !== "")) {
