@@ -20,7 +20,7 @@
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { RefreshCw, Shovel } from "lucide-react";
 import type { TransferPartProps } from "./PeerTransferActions";
-import { OptionAction } from "./WorktreeOptions";
+import { OptionActionView } from "./WorktreeOptionsView";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -30,9 +30,9 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { FooterActionButton } from "./FooterActionButton";
-import { LABEL_RANK } from "./footerFit";
+import { FooterActionButtonView } from "./FooterActionButtonView";
+import { NoIdentityNoteView } from "./NoIdentityNoteView";
+import { LABEL_RANK } from "./FooterVerbView";
 import { MirrorDialog } from "./mirror/MirrorDialog";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 
@@ -63,7 +63,7 @@ function TransferActions(props: ButtonsProps) {
   // without a word reads as a bug, and the cause (the repo, not the
   // app) is fixable by the person looking at it.
   if (project.identity == null) {
-    return part === "footer" && <NoIdentityNote />;
+    return part === "footer" && <NoIdentityNoteView />;
   }
   // Identified, and either held here or not: with no checkout on this
   // machine the dialogs clone the repo first (over the device link, so
@@ -83,19 +83,6 @@ function TransferActions(props: ButtonsProps) {
 // branch names spell out DEFAULT_BRANCH_CANDIDATES in
 // shared/git/defaultBranch.mts (the renderer bundle cannot import .mts),
 // so a change there changes this sentence.
-const NO_IDENTITY_NOTE =
-  "No shared identity for this repo (no common remote, and no main, master, dev or remote HEAD branch), so it can't be mirrored or transplanted.";
-
-function NoIdentityNote() {
-  return (
-    <SimpleTooltip whenTruncated tip={NO_IDENTITY_NOTE}>
-      <span className="min-w-0 truncate text-xs text-muted-foreground">
-        {NO_IDENTITY_NOTE}
-      </span>
-    </SimpleTooltip>
-  );
-}
-
 function TransferButtons({
   worktree,
   project,
@@ -121,7 +108,7 @@ function TransferButtons({
       buttons &&
       !worktree.isPrimary &&
       !mirrored && (
-        <OptionAction
+        <OptionActionView
           icon={<Shovel />}
           label="Transplant"
           description="Move this worktree to this device."
@@ -150,7 +137,7 @@ function TransferButtons({
           starts is what withdraws it, and the dialog's last step (the
           report) must stay up. */}
       {buttons && canForwardPorts && !mirrored && (
-        <FooterActionButton
+        <FooterActionButtonView
           rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
           label="Mirror"

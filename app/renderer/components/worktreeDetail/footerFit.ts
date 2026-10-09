@@ -2,41 +2,15 @@
 // labels one at a time, in LABEL_RANK order, until the row fits, and
 // get them back in reverse as the pane widens. A bare icon then says
 // what it is in a tooltip. The footer measures (useFittedLabels) and
-// shares how far it collapsed. Each verb (FooterVerb) hides its own
+// shares how far it collapsed. Each verb (FooterVerbView) hides its own
 // label and turns its tooltip on.
-import {
-  type ComponentProps,
-  createContext,
-  type ReactNode,
-  type RefObject,
-  useContext,
-  useLayoutEffect,
-  useState,
-} from "react";
-import { Button } from "@/components/ui/button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-
-// First to lose its label, first. The transfer to start a mirror goes
-// first. The verbs whose label carries state (a running mirror's peer,
-// an agent at work) or guards a delete go last.
-export const LABEL_RANK = {
-  mirrorTo: 1,
-  files: 2,
-  options: 3,
-  mirror: 4,
-  agents: 5,
-  delete: 6,
-} as const;
+import { type RefObject, useLayoutEffect, useState } from "react";
 
 const rankOf = (label: HTMLElement) => Number(label.dataset.labelRank);
 // A pixel of slack: the leading row shrinks to a fractional width, and
 // the two widths round apart without anything visibly overflowing.
 const overflows = (el: HTMLElement | null) =>
   el !== null && el.scrollWidth > el.clientWidth + 1;
-
-// Every label ranked at or below this is collapsed. 0: none.
-const CollapsedThrough = createContext(0);
-export const CollapsedThroughProvider = CollapsedThrough.Provider;
 
 // Collapses labels in rank order until nothing overflows. Two places
 // can: the footer itself (its rows can't shrink), and the leading row,
@@ -107,36 +81,4 @@ export function useFittedLabels(
     };
   }, [footerRef, leadingRef]);
   return through;
-}
-
-// A footer verb: an icon and a label that can collapse. Collapsed, the
-// label stays for screen readers (sr-only) and shows as the tooltip,
-// ahead of the tip (a longer hint) when there is one. Expanded, the tip
-// shows alone. No rank: the label never collapses (an armed delete
-// asking for its second click).
-export function FooterVerb({
-  rank,
-  icon,
-  label,
-  tip,
-  ...props
-}: Omit<ComponentProps<typeof Button>, "children"> & {
-  rank: number | undefined;
-  icon: ReactNode;
-  label: string;
-  tip?: string;
-}) {
-  const through = useContext(CollapsedThrough);
-  const collapsed = rank !== undefined && rank <= through;
-  const shown = collapsed ? (tip ? `${label}: ${tip}` : label) : tip;
-  return (
-    <SimpleTooltip tip={shown}>
-      <Button size="xs" {...props}>
-        {icon}
-        <span data-label-rank={rank} className="data-collapsed:sr-only">
-          {label}
-        </span>
-      </Button>
-    </SimpleTooltip>
-  );
 }

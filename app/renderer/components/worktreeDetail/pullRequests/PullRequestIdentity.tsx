@@ -9,7 +9,7 @@ import type {
   PullRequestDetail,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { DiffButton } from "../DiffButton";
+import { DiffButtonView } from "../DiffButtonView";
 import { PullRequestStateLabel } from "./PullRequestStateLabel";
 import { MERGE_VERB, openPullRequest } from "./pullRequestShared";
 
@@ -66,7 +66,7 @@ export function PullRequestIdentity({
         trailing={trailing}
       />
       {pr.changedFiles > 0 && (
-        <DiffButton
+        <DiffButtonView
           changedFiles={pr.changedFiles}
           additions={pr.additions}
           deletions={pr.deletions}

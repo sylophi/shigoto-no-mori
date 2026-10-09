@@ -1,16 +1,6 @@
 import { useState } from "react";
 import { DeviceChip } from "@/components/shared/DeviceChip";
-import {
-  PAGE_HEADER_PADDING,
-  PAGE_HEADER_TABS_PADDING,
-  PAGE_HEADER_TABS_ROW,
-} from "@/components/shared/PageHeaderView";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { PathSpan } from "@/components/ui/path-span";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
@@ -34,14 +24,10 @@ import {
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import {
-  BirthdayParty,
-  PARTY_HOST,
-} from "@/components/villagers/BirthdayParty";
+import { BirthdayParty } from "@/components/villagers/BirthdayParty";
 import { ResidentFace } from "@/components/villagers/ResidentFace";
 import { useResident } from "@/hooks/villagers/useResident";
 import { LaunchSection } from "./LaunchSection";
-import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
 import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorCopyTabs, useMirrorCopies } from "./mirror/MirrorCopyTabs";
@@ -55,11 +41,12 @@ import { RemoteTransferActions } from "./RemoteWorktreeActions";
 import { PullRequestLead } from "./pullRequests/PullRequestLead";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
-import {
-  WorktreeDetailFooter,
-  type WorktreeFooterActions,
-  type WorktreeFooterState,
-} from "./WorktreeDetailFooter";
+import { WorktreeDetailFooter } from "./WorktreeDetailFooter";
+import type {
+  WorktreeFooterActions,
+  WorktreeFooterState,
+} from "./WorktreeDetailFooterView";
+import { WorktreeDetailView } from "./WorktreeDetailView";
 import { WorktreeHeader } from "./WorktreeHeader";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { GitSection } from "./git/GitSection";
@@ -236,126 +223,64 @@ export function WorktreeDetailInner({
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <header
-        className={cn(
-          "flex flex-col gap-2 border-b border-border",
-          PAGE_HEADER_PADDING,
-          "pb-5 phone:pb-4",
-          mirrorCopies && PAGE_HEADER_TABS_PADDING,
-          party && PARTY_HOST,
-        )}
-      >
-        {party && <BirthdayParty villager={party} />}
-        {mirrorCopies && (
-          <div className={cn("mb-1", PAGE_HEADER_TABS_ROW)}>
-            <MirrorCopyTabs copies={mirrorCopies} />
-          </div>
-        )}
-        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <SimpleTooltip tip={`Configure ${project.name}`}>
-            <button
-              type="button"
-              onClick={() => toProjectPage("configure", worktree.projectId)}
-              className="-mx-1 shrink-0 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
-            >
-              {project.name}
-            </button>
-          </SimpleTooltip>
-          {/* A phone has no room for the path (it shortens to noise
-              at that width), so the breadcrumb stops at the project
-              and the trailing marks push themselves to the edge. */}
-          <span aria-hidden className="text-muted-foreground/40 phone:hidden">
-            /
-          </span>
-          <PathSpan
-            path={worktree.path}
-            home={home}
-            className="min-w-0 flex-1 font-mono phone:hidden"
-            copyable
+    <WorktreeDetailView
+      party={party && <BirthdayParty villager={party} />}
+      copyTabs={mirrorCopies && <MirrorCopyTabs copies={mirrorCopies} />}
+      projectName={project.name}
+      onConfigure={() => toProjectPage("configure", worktree.projectId)}
+      path={worktree.path}
+      home={home}
+      marks={
+        <>
+          <WorktreeActivityIndicator worktree={worktree} />
+          <WorktreeKindIcon worktree={worktree} />
+          {/* With the copies' tabs, they name the device. */}
+          {!mirrorCopies && <DeviceChip />}
+        </>
+      }
+      face={<ResidentFace resident={resident} party={party !== null} />}
+      header={
+        <WorktreeHeader worktree={worktree} title={title} pr={pullRequest} />
+      }
+      mirrorPill={<MirrorPill worktree={worktree} />}
+      banner={bannerLabel}
+      locked={locked}
+      description={
+        description !== null && (
+          <DescriptionSection
+            // Folded again for another worktree or a new text.
+            key={`${worktree.id}:${description}`}
+            description={description}
           />
-          {/* Held at the text line's height: the device chip overhangs
-              it, so a peer's header is as tall as a local one. */}
-          <span className="flex h-4 shrink-0 items-center gap-1.5 phone:ml-auto">
-            <WorktreeActivityIndicator worktree={worktree} />
-            <WorktreeKindIcon worktree={worktree} />
-            {/* With the copies' tabs, they name the device. */}
-            {!mirrorCopies && <DeviceChip />}
-          </span>
-        </div>
-        {/* The face centered on the lines beside it. */}
-        <div className="flex min-w-0 items-center gap-3">
-          <ResidentFace resident={resident} party={party !== null} />
-          <div className="min-w-0 flex-1">
-            <WorktreeHeader
-              worktree={worktree}
-              title={title}
-              pr={pullRequest}
-            />
-          </div>
-        </div>
-        <MirrorPill worktree={worktree} />
-      </header>
-
-      {bannerLabel && <LifecycleBanner label={bannerLabel} />}
-
-      <div
-        className={cn(
-          PAGE_BODY,
-          "phone:py-5",
-          locked && "pointer-events-none opacity-50",
-        )}
-        aria-disabled={locked}
-      >
-        <div className="flex flex-col gap-10 phone:gap-8">
-          {/* What the work is leads the page, and under a PR's header
-              what to do about the PR. Hidden while neither has come,
-              so it takes no gap. */}
-          <div className="space-y-5 empty:hidden">
-            {description !== null && (
-              <DescriptionSection
-                // Folded again for another worktree or a new text.
-                key={`${worktree.id}:${description}`}
-                description={description}
-              />
-            )}
-            {pullRequest && <PullRequestLead worktree={worktree} />}
-          </div>
-
-          <LaunchSection worktree={worktree} />
-
-          {!pullRequest && <PullRequestSection worktree={worktree} />}
-
-          <GitSection worktree={worktree} />
-
-          {/* Keyed so an open add or edit form stays with its worktree. */}
-          <PortsSection key={worktree.id} worktree={worktree} />
-
-          <section className="space-y-3">
-            <SectionHeading>Scripts</SectionHeading>
-            <ScriptsSection worktree={worktree} />
-          </section>
-        </div>
-      </div>
-
-      <WorktreeDetailFooter
-        worktree={worktree}
-        state={footerState}
-        actions={footerActions}
-        canMutate={granted}
-        // The same verbs on either page: Files and the running mirror's
-        // button, then the transfers. Transplant, used far less, is a
-        // row of the footer's Options popover.
-        leading={
-          <>
-            <FilesButton worktree={worktree} />
-            <MirrorAction worktree={worktree} />
-            <Transfers part="footer" {...transfers} />
-          </>
-        }
-        options={<Transfers part="option" {...transfers} />}
-      />
-    </div>
+        )
+      }
+      prLead={pullRequest && <PullRequestLead worktree={worktree} />}
+      launch={<LaunchSection worktree={worktree} />}
+      prSection={!pullRequest && <PullRequestSection worktree={worktree} />}
+      git={<GitSection worktree={worktree} />}
+      // Keyed so an open add or edit form stays with its worktree.
+      ports={<PortsSection key={worktree.id} worktree={worktree} />}
+      scripts={<ScriptsSection worktree={worktree} />}
+      footer={
+        <WorktreeDetailFooter
+          worktree={worktree}
+          state={footerState}
+          actions={footerActions}
+          canMutate={granted}
+          // The same verbs on either page: Files and the running mirror's
+          // button, then the transfers. Transplant, used far less, is a
+          // row of the footer's Options popover.
+          leading={
+            <>
+              <FilesButton worktree={worktree} />
+              <MirrorAction worktree={worktree} />
+              <Transfers part="footer" {...transfers} />
+            </>
+          }
+          options={<Transfers part="option" {...transfers} />}
+        />
+      }
+    />
   );
 }
 
