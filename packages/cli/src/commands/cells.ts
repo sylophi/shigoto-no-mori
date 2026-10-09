@@ -1,4 +1,4 @@
-// The cells a worktree's table row and status card share.
+// The cells a worktree's table row, status card and menu share.
 import type * as Worktrees from "@shigomori/engine/Worktrees";
 import type { Styles } from "../output.ts";
 
@@ -40,3 +40,24 @@ export const flagNames = (
     row.autoPull ? "auto-pull" : "",
     row.agentWorking ? "agent working" : "",
   ].filter((flag) => flag !== "");
+
+// A title cut to fit a terminal line.
+export const titleCell = (title: string | undefined) =>
+  truncate(title ?? "", 50);
+
+export const syncCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
+  row.detached
+    ? paint.yellow("detached")
+    : row.hasUpstream
+      ? divergenceCell(paint, row.ahead, row.behind, "synced")
+      : paint.dim("local");
+
+export const changesCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
+  row.changedCount > 0
+    ? paint.yellow(`${row.changedCount} changed`)
+    : paint.dim("clean");
+
+export const flagsCell = (
+  paint: Styles,
+  row: Parameters<typeof flagNames>[0],
+) => paint.dim(flagNames(row).join(", "));
