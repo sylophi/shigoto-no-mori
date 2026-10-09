@@ -24,6 +24,7 @@ import * as Engine from "@host/lib/engine";
 import * as StoreWatcher from "@host/lib/storeWatcher";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
+import * as HostPushes from "@host/lib/hostPushes";
 import * as Ports from "@host/lib/ports";
 import * as ScriptRuns from "@host/lib/scripts/pty";
 import * as Terrier from "@host/lib/terrier";
@@ -247,6 +248,9 @@ const foundation = (engine: Parameters<typeof Engine.layer>[0]) =>
     // A villager download under way stops here, and resumes next launch.
     Layer.provideMerge(Villagers.adapter),
     Layer.provideMerge(Villagers.deviceLayer),
+    // Every push the host makes, which the wires and the views read.
+    Layer.provideMerge(HostPushes.adapter),
+    Layer.provideMerge(HostPushes.layer),
     // The engine and its store, which everything above reads and
     // writes the projects, worktrees and settings through.
     Layer.provideMerge(Engine.adapter),

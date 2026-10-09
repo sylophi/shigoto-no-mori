@@ -49,6 +49,7 @@ import { mirrorInviteAdmits } from "@host/mirror/invites";
 import { dataDir } from "@host/lib/util/paths";
 import { CONTROL_FILE_NAME, createControlServer } from "../core/control/server";
 import { makeConnectInfo } from "@host/direct/connectInfo";
+import { publishPush } from "@host/lib/hostPushes";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import {
   acceptsPeerCommands,
@@ -304,6 +305,7 @@ const hostServer: ServerTransport = {
   broadcastAll(channel, payload, opts) {
     electronServer.broadcastAll(channel, payload);
     if (opts?.remote === true) directWsServer.broadcastAll(channel, payload);
+    publishPush({ channel, payload, remote: opts?.remote === true });
   },
 };
 
