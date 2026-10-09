@@ -9,7 +9,7 @@
 // is a read, so any member with a session can answer it, including a
 // peer that won't take commands from here: bringing its repo to THIS
 // machine needs nothing of it but the URL.
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
+import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
 import {
   DropdownMenuItem,
   DropdownMenuSub,
@@ -86,7 +86,7 @@ export function AddToDeviceSubmenu({
             disabled={tab.block !== undefined}
             onClick={() => void addTo(tab)}
           >
-            <DeviceGlyph icon={tab.icon} className="size-3.5" />
+            <DeviceGlyphView icon={tab.icon} className="size-3.5" />
             {tab.label}
           </DropdownMenuItem>
         ))}

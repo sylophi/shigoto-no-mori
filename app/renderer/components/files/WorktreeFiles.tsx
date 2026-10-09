@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { EyeOff, Files, RotateCw } from "lucide-react";
-import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
+import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeaderView";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
-import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
+import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 import { BackButton } from "@/components/ui/back-button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ChipButton } from "@/components/ui/chip-button";
@@ -30,7 +30,7 @@ const HIDE_IGNORED_STORAGE_KEY = "files.hideIgnored";
 export function WorktreeFiles() {
   const { worktree, goBack, missing } = useRouteWorktree();
   if (!worktree) {
-    return <WorktreeMissing {...missing} />;
+    return <WorktreeMissingView {...missing} />;
   }
   return <FilesView worktree={worktree} onBack={goBack} />;
 }

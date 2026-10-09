@@ -44,7 +44,7 @@ export type RemoteDevice = {
   // surface can leave out a browser without a second registry read.
   platform: string;
   // What it looks like, off the registry row (every row has one), so
-  // every mark for it draws through DeviceGlyph with no second resolve.
+  // every mark for it draws through DeviceGlyphView with no second resolve.
   icon: DeviceIcon;
   status: RemoteDeviceStatus;
   // The remote host app's version, "" until the direct session's

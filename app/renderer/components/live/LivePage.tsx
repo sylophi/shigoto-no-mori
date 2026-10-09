@@ -10,8 +10,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { Radio, Square } from "lucide-react";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
-import { PAGE_BODY } from "@/components/shared/PageShell";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import {
   type HostScripts,
   useLiveMirrors,
@@ -64,7 +64,7 @@ export function LivePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
+      <PageHeaderView
         eyebrow={
           summary !== ""
             ? summary

@@ -25,7 +25,7 @@ import {
   SquareTerminal,
   type LucideIcon,
 } from "lucide-react";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { TONE_PILL, TONE_TEXT } from "@/components/ui/status-dot";
 import {
   useAcceptsCommands,
@@ -89,7 +89,7 @@ export function AcceptCommandsToggle() {
           : "border-border bg-muted/40",
       )}
     >
-      <ToggleRow
+      <ToggleRowView
         checked={on}
         onCheckedChange={(next) => setAcceptsCommands.mutate(next)}
         // Inert until the first read lands, so the switch never shows a

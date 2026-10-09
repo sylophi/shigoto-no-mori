@@ -12,7 +12,7 @@
 // machine it is showing. A radio group: one pick at a time, arrows
 // move it, the way the device tabs do.
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceLead } from "@/components/shared/DeviceGlyph";
+import { DeviceLeadView } from "@/components/shared/DeviceGlyphView";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@/components/ui/button";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -99,7 +99,7 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
             )}
           >
             {pill.icon && (
-              <DeviceLead icon={pill.icon} tone={pill.tone} size="xs" />
+              <DeviceLeadView icon={pill.icon} tone={pill.tone} size="xs" />
             )}
             <SimpleTooltip whenTruncated tip={pill.label}>
               <span className="max-w-32 truncate">{pill.label}</span>

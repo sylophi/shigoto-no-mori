@@ -17,7 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { DeviceMark } from "@/components/shared/DeviceGlyph";
+import { DeviceMarkView } from "@/components/shared/DeviceGlyphView";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,7 +66,7 @@ export function DeviceHeading({
   const status = device ? deviceStatusView(device.status) : THIS_DEVICE_VIEW;
   return (
     <div className="flex items-center gap-2">
-      <DeviceMark icon={icon} tone={status.tone} />
+      <DeviceMarkView icon={icon} tone={status.tone} />
       <SimpleTooltip whenTruncated tip={name}>
         <h2 className="truncate text-sm font-medium">{name}</h2>
       </SimpleTooltip>

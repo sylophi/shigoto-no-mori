@@ -24,7 +24,7 @@ interface PickerRowProps {
   trailing: ReactNode;
 }
 
-export function PickerRow({
+export function PickerRowView({
   entry,
   index,
   highlighted,

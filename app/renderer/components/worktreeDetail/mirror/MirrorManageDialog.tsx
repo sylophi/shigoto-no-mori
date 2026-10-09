@@ -37,7 +37,7 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
+import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -378,7 +378,7 @@ function PairEnd({
       )}
     >
       <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
-        <DeviceGlyph
+        <DeviceGlyphView
           icon={useDeviceIcon(deviceId)}
           className="size-3.5 shrink-0 text-muted-foreground"
         />

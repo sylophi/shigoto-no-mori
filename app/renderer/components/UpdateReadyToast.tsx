@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { ChangelogDialog } from "@/components/settings/ChangelogDialog";
 import { useOnSettingsPages } from "@/components/settings/SettingsSidebarNav";
 import { Button } from "@/components/ui/button";
+import { WhatsNewLinkView } from "@/components/WhatsNewLinkView";
 import { useOutdatedDevices, useUpdateAll } from "@/hooks/system/useUpdater";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -75,14 +76,7 @@ export function UpdateReadyToast() {
       duration: Number.POSITIVE_INFINITY,
       description:
         latest === null ? undefined : (
-          <button
-            type="button"
-            data-no-hit-area
-            onClick={() => setPreviewOpen(true)}
-            className="underline underline-offset-2 hover:text-foreground"
-          >
-            What&apos;s new
-          </button>
+          <WhatsNewLinkView onOpen={() => setPreviewOpen(true)} />
         ),
       onDismiss: () => {
         if (wanted) seen.add(release);

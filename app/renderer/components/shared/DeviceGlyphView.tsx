@@ -1,7 +1,7 @@
-// The one way a device is drawn: its icon as a glyph (DeviceGlyph),
-// that glyph after its connection dot to lead a name (DeviceLead), and
+// The one way a device is drawn: its icon as a glyph (DeviceGlyphView),
+// that glyph after its connection dot to lead a name (DeviceLeadView), and
 // that glyph on a tinted tile in the device's connection tone
-// (DeviceMark). Every surface that stands for a machine (the sidebar's
+// (DeviceMarkView). Every surface that stands for a machine (the sidebar's
 // badges, the filter pills, the device tabs and chips, the settings
 // list, the account page, the pull flow's two ends) draws through
 // these, so a machine looks the same everywhere and a picked icon
@@ -118,7 +118,7 @@ const GLYPH: Record<DeviceIcon, ComponentType<LucideProps>> = {
 // The bare glyph, sized by the caller like any lucide icon. Decorative
 // by default: the name beside it carries the meaning, and a mark that
 // stands alone labels itself.
-export function DeviceGlyph({
+export function DeviceGlyphView({
   icon,
   className,
   ...props
@@ -133,7 +133,7 @@ export function DeviceGlyph({
 // so the row scans as state, identity, name, the order a list of rows
 // is read down. No tone (this device, which has no connection to
 // show) is the bare glyph.
-export function DeviceLead({
+export function DeviceLeadView({
   icon,
   tone,
   size = "sm",
@@ -152,7 +152,7 @@ export function DeviceLead({
       )}
     >
       {tone && <StatusDot tone={tone} />}
-      <DeviceGlyph
+      <DeviceGlyphView
         icon={icon}
         className={size === "xs" ? "size-3" : "size-3.5"}
       />
@@ -164,7 +164,7 @@ export function DeviceLead({
 // through the shared TONE_PILL table so a mark and a dot can never
 // disagree about a machine. Two sizes: the row badge the sidebar wears
 // and the avatar that anchors a row on the account page.
-export function DeviceMark({
+export function DeviceMarkView({
   icon,
   tone,
   size = "sm",
@@ -181,7 +181,7 @@ export function DeviceMark({
         TONE_PILL[tone],
       )}
     >
-      <DeviceGlyph
+      <DeviceGlyphView
         icon={icon}
         className={size === "sm" ? "size-3" : "size-5"}
       />

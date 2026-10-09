@@ -3,7 +3,7 @@
 // query, and know the way back. `worktree` is undefined while the list
 // is pending, when it failed, and when the target is gone (or was
 // deleted while the page was open). `missing` carries what
-// WorktreeMissing needs to tell those apart, so a page's guard is one
+// WorktreeMissingView needs to tell those apart, so a page's guard is one
 // line.
 import { useWorktreeWasDeleted } from "@/hooks/worktrees/useWorktreeWasDeleted";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";

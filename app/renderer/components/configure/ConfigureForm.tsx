@@ -3,7 +3,7 @@ import { FolderOpen, Plus } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { Button } from "@/components/ui/button";
-import { EditorFooter } from "@/components/shared/EditorFooter";
+import { EditorFooterView } from "@/components/shared/EditorFooterView";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
@@ -20,17 +20,17 @@ import {
   PROJECT_CONFIG_DEFAULTS,
   type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { CarryOverSection } from "./CarryOverSection";
-import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
-import { ScriptEnvPopover } from "@/components/shared/ScriptEnvPopover";
+import { CustomLauncherInputView } from "@/components/shared/CustomLauncherInputView";
+import { ScriptEnvPopoverView } from "@/components/shared/ScriptEnvPopoverView";
 import { ScriptField } from "./ScriptField";
 import { WorktreeLocationField } from "./WorktreeLocationField";
 import {
   LAUNCH_TAB,
   selectSettingsTab,
 } from "@/components/settings/settingsNav";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 interface FormState {
   defaultBranch: string;
@@ -251,7 +251,7 @@ export function ConfigureForm({
 
           <section className="space-y-3">
             <SectionHeading className="mb-1">Primary checkout</SectionHeading>
-            <ToggleRow
+            <ToggleRowView
               checked={form.showPrimaryInInbox}
               onCheckedChange={setField("showPrimaryInInbox")}
               label="Show in the inbox"
@@ -271,7 +271,7 @@ export function ConfigureForm({
           />
 
           <section className="space-y-4">
-            <SectionIntro title="Scripts" action={<ScriptEnvPopover />}>
+            <SectionIntro title="Scripts" action={<ScriptEnvPopoverView />}>
               Run inside the worktree directory.
             </SectionIntro>
             <ScriptField
@@ -292,7 +292,10 @@ export function ConfigureForm({
             {/* The Settings link opens THIS machine's launch tools, which
                 say nothing about a peer's. A remote project's tools run
                 from the window on that device, so say that instead. */}
-            <SectionIntro title="Custom tools" action={<ScriptEnvPopover />}>
+            <SectionIntro
+              title="Custom tools"
+              action={<ScriptEnvPopoverView />}
+            >
               {remote ? (
                 <>
                   Tools specific to this project, launched from {deviceLabel}
@@ -325,7 +328,7 @@ export function ConfigureForm({
             ) : (
               <div className="space-y-2">
                 {form.launchers.map((launcher) => (
-                  <CustomLauncherInput
+                  <CustomLauncherInputView
                     key={launcher.id}
                     launcher={launcher}
                     onChange={(patch) => updateLauncher(launcher.id, patch)}
@@ -348,7 +351,7 @@ export function ConfigureForm({
           )}
         </div>
       </div>
-      <EditorFooter
+      <EditorFooterView
         isDirty={isDirty}
         canSave={canSave}
         isPending={write.isPending}

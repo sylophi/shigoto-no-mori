@@ -1,5 +1,5 @@
 import { Info } from "lucide-react";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useVillagerDataStatus } from "@/hooks/villagers/useVillagerData";
 import { villageLifeShows } from "@shared/villageLife";
@@ -37,7 +37,7 @@ export function VillageLifeSetting({
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
       <div className="min-w-0 flex-1 space-y-3">
-        <ToggleRow
+        <ToggleRowView
           checked={shows}
           onCheckedChange={onVillageLifeChange}
           disabled={view.locked}
@@ -62,7 +62,7 @@ export function VillageLifeSetting({
           description={view.description}
         />
         <div className="pl-11">
-          <ToggleRow
+          <ToggleRowView
             checked={shows && villageNews}
             onCheckedChange={onVillageNewsChange}
             disabled={!shows}

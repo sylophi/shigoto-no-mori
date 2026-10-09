@@ -4,10 +4,8 @@
 // routed page, minus its footer (the tab bar carries that cluster) and
 // with the view pinned by the route (the preference follows it,
 // below), so a worktree row reads the same whichever layout draws it.
-// The page marker lets doubutsu lift the rail's mint off it
-// (doubutsu.css), so the page wears the canvas and its leaves like
-// every other room. On a wide viewport the forest is the sidebar, so
-// the page has nothing to show but a pointer to it. It stays put
+// On a wide viewport the forest is the sidebar, so the page has
+// nothing to show but a pointer to it (ForestPageView). It stays put
 // rather than redirecting: a phone turned to landscape crosses the
 // breakpoint, and turning back should find the forest where it was.
 import * as Schema from "effect/Schema";
@@ -15,7 +13,7 @@ import { useEffect } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { SidebarViewSchema } from "@shigomori/contracts/schemas";
 import { Sidebar } from "@/components/sidebar/Sidebar";
-import { CenteredMessage } from "@/components/ui/centered-message";
+import { ForestPageView } from "@/components/ForestPageView";
 import {
   useSetSidebarView,
   useSidebarView,
@@ -39,12 +37,10 @@ export function ForestPage() {
     if (phone && preferred !== view) setView(view);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setView is a fresh closure per render; the write keys off the three values that matter.
   }, [phone, preferred, view]);
-  if (!phone) {
-    return <CenteredMessage>Pick a worktree from the sidebar.</CenteredMessage>;
-  }
   return (
-    <div data-doubutsu-page="forest" className="flex h-full flex-col">
-      <Sidebar footer={false} view={view} />
-    </div>
+    <ForestPageView
+      phone={phone}
+      sidebar={<Sidebar footer={false} view={view} />}
+    />
   );
 }

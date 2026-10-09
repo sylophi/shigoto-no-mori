@@ -3,7 +3,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 
 // The pin after a pinned project's name, in the sidebar and on the
 // home page's tiles.
-export function PinnedMark() {
+export function PinnedMarkView() {
   return (
     <SimpleTooltip tip="Pinned">
       <span className="inline-flex shrink-0">

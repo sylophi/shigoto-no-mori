@@ -7,7 +7,7 @@ import { isBareKeyEvent } from "@/lib/dom";
 // where there is one, and the window's where there isn't.
 // isBareKeyEvent keeps it out of text fields, the terminal and any open
 // menu or dialog, which spend Escape on themselves. A page holding
-// unsaved changes (EditorFooter's data-hold-escape) keeps it too: a
+// unsaved changes (EditorFooterView's data-hold-escape) keeps it too: a
 // slip of the key would drop the draft, and the button is still there
 // for a deliberate exit.
 export function useEscapeGoesBack(): void {

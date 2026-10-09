@@ -6,17 +6,17 @@ import {
   type DetectedLauncher,
 } from "@shigomori/contracts/schemas";
 import { Button } from "@/components/ui/button";
-import { LauncherIcon } from "@/components/shared/LauncherIcon";
+import { LauncherIconView } from "@/components/shared/LauncherIconView";
 import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
-import { ScriptEnvPopover } from "@/components/shared/ScriptEnvPopover";
+import { CustomLauncherInputView } from "@/components/shared/CustomLauncherInputView";
+import { ScriptEnvPopoverView } from "@/components/shared/ScriptEnvPopoverView";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { DetectedToolsSection } from "./DetectedToolsSection";
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 
 // The Launch tools tab: what the Launch section on THIS machine offers.
 // The keys it edits (launchers, hiddenLaunchers, launchScripts,
@@ -46,7 +46,7 @@ export function LaunchToolsPanel({
         value: id,
         label: (
           <>
-            <LauncherIcon entry={d} className="size-3.5" />
+            <LauncherIconView entry={d} className="size-3.5" />
             {d.label}
           </>
         ),
@@ -104,7 +104,7 @@ export function LaunchToolsPanel({
       )}
 
       <section className="space-y-3">
-        <SectionIntro title="Custom tools" action={<ScriptEnvPopover />}>
+        <SectionIntro title="Custom tools" action={<ScriptEnvPopoverView />}>
           Custom commands available in every worktree (e.g.{" "}
           <span className="font-mono">gh pr view --web</span>,{" "}
           <span className="font-mono">open .</span>
@@ -118,7 +118,7 @@ export function LaunchToolsPanel({
         ) : (
           <div className="space-y-2">
             {form.launchers.map((launcher) => (
-              <CustomLauncherInput
+              <CustomLauncherInputView
                 key={launcher.id}
                 launcher={launcher}
                 onChange={(patch) => updateLauncher(launcher.id, patch)}
@@ -135,7 +135,7 @@ export function LaunchToolsPanel({
 
       <section className="space-y-3">
         <SectionHeading className="mb-1">Scripts</SectionHeading>
-        <ToggleRow
+        <ToggleRowView
           checked={form.launchScripts}
           onCheckedChange={(v) =>
             setForm((prev) => ({ ...prev, launchScripts: v }))
@@ -154,7 +154,7 @@ function ToolPill({ entry }: { entry: DetectedLauncher }) {
   return (
     <SimpleTooltip tip="Not installed">
       <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60">
-        <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
+        <LauncherIconView entry={entry} className="size-3.5 opacity-60" />
         {entry.label}
       </span>
     </SimpleTooltip>

@@ -1,9 +1,9 @@
 import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
-import { SubPageNotFound } from "@/components/shared/SubPageNotFound";
+import { SubPageNotFoundView } from "@/components/shared/SubPageNotFoundView";
 import { DiffView } from "./DiffView";
-import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
+import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 import { DiffStats } from "@/components/ui/diff-stats";
 import { pluralize } from "@/lib/pluralize";
 
@@ -19,7 +19,7 @@ export function PullRequestDiff() {
   const diff = usePullRequestDiff(projectId, pr?.number);
 
   if (!worktree) {
-    return <WorktreeMissing {...missing} />;
+    return <WorktreeMissingView {...missing} />;
   }
   if (!pr) {
     // Same story for the PR lookup: pending or failed both leave `pr`
@@ -27,7 +27,7 @@ export function PullRequestDiff() {
     // lookup shells out to `gh`, which can hang on a slow network, so
     // the pending state keeps the back button instead of a blank pane.
     return (
-      <SubPageNotFound
+      <SubPageNotFoundView
         onBack={goBack}
         message={
           prPending

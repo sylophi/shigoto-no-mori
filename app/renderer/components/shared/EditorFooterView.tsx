@@ -12,7 +12,7 @@ interface EditorFooterProps {
 }
 
 // react-doctor-disable-next-line react-doctor/no-many-boolean-props -- flags are orthogonal: isDirty is form-vs-saved, isPending/isSuccess come from React Query mutation state, can coexist
-export function EditorFooter({
+export function EditorFooterView({
   isDirty,
   isPending,
   isSuccess,

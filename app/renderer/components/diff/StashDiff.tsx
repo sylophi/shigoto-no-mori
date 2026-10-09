@@ -1,5 +1,5 @@
 import { RelativeDate } from "@/components/ui/relative-date";
-import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
+import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { StashMoves } from "@/components/worktreeDetail/git/StashMoves";
@@ -18,7 +18,7 @@ export function StashDiff() {
   const { data: stashes = [] } = useWorktreeStashes(worktree);
 
   if (!worktree) {
-    return <WorktreeMissing {...missing} />;
+    return <WorktreeMissingView {...missing} />;
   }
   const index = stashes.findIndex((s) => s.hash === hash);
   const stash = stashes[index];

@@ -9,7 +9,7 @@ import type { VillagerLine } from "@/lib/villagerVoice";
 // A line in a villager's voice (lib/villagerVoice.ts): the message as
 // written, then the catchphrase, set a step quieter so the news still
 // reads first. Inline, so it sits in a toast title or a sentence.
-export function VillagerSays({ line }: { line: VillagerLine }) {
+export function VillagerSaysView({ line }: { line: VillagerLine }) {
   return (
     <>
       {line.lead}
@@ -26,7 +26,7 @@ export function VillagerSays({ line }: { line: VillagerLine }) {
 // of bare icons on a colored surface (an inbox row), where the tint
 // reads as a smudge. `badge` sits on the bottom corner, which the faces
 // leave empty. Size it with `className` (a size-* utility).
-export function VillagerFace({
+export function VillagerFaceView({
   face,
   tint = true,
   badge,

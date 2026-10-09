@@ -18,7 +18,7 @@ import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { pluralize } from "@/lib/pluralize";
 import { LayoutOptionItem } from "./LayoutOptionItem";
 import { LAYOUT_OPTIONS } from "./layoutOptions";
-import { WorktreeMoveDetails } from "@/components/shared/WorktreeMoveDetails";
+import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetailsView";
 import { tildify } from "@shared/projectPaths";
 
 interface LocationFormProps {
@@ -215,7 +215,7 @@ export function LocationForm({
                 key={wt.id}
                 className="flex items-start gap-3 px-3 py-3 text-sm"
               >
-                <WorktreeMoveDetails
+                <WorktreeMoveDetailsView
                   branch={wt.branch}
                   detached={wt.detached}
                   fromPath={tildify(wt.path, home)}

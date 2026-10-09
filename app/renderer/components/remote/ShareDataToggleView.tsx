@@ -1,4 +1,4 @@
-import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ToggleRowView } from "@/components/shared/ToggleRowView";
 
 // "Share with other devices": whether THIS machine serves the account's
 // other devices anything at all.
@@ -13,7 +13,7 @@ export function ShareDataToggleView({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <ToggleRow
+    <ToggleRowView
       checked={on === true}
       onCheckedChange={onChange}
       disabled={disabled}

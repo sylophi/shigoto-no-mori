@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollText } from "lucide-react";
-import { EditorFooter } from "@/components/shared/EditorFooter";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { EditorFooterView } from "@/components/shared/EditorFooterView";
+import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
@@ -11,12 +11,12 @@ import {
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
 import {
-  DeviceTabBar,
   pickHostDevice,
   useDeviceRoster,
   useHostDevicePick,
   type DeviceRosterEntry,
 } from "@/components/shared/DeviceTabs";
+import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
 import { UpdateMark } from "@/components/ui/status-dot";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import {
@@ -64,7 +64,7 @@ import {
 } from "./useSettingsEditors";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { BuildVersionLine, ChangelogButton } from "./VersionSection";
-import { PAGE_BODY } from "@/components/shared/PageShell";
+import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 // The Settings page: one panel per section, picked from the app
 // sidebar (SettingsSidebarNav takes the project tree's place while this
@@ -242,7 +242,7 @@ export function SettingsForm({
       data-doubutsu-page={heading.page ?? "settings"}
       className="flex h-full flex-col"
     >
-      <PageHeader
+      <PageHeaderView
         eyebrow={heading.eyebrow}
         title={heading.title}
         watermark={heading.watermark ?? "設定"}
@@ -354,7 +354,7 @@ export function SettingsForm({
         </div>
       )}
 
-      <EditorFooter
+      <EditorFooterView
         isDirty={anyDirty}
         isPending={anyPending}
         isSuccess={anySuccess}
@@ -425,7 +425,7 @@ function HostTabBar({
 }) {
   const { outdated } = useOutdatedDevices();
   return (
-    <DeviceTabBar
+    <DeviceTabBarView
       tabs={roster.map((entry) => {
         const version = updates?.[entry.deviceId];
         return {

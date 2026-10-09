@@ -6,10 +6,8 @@
 // is. Null when there is no other side to pick: no mirror, or the
 // other side's ids not yet known (only a served stream says so, which
 // names no project).
-import type {
-  DeviceBarTab,
-  DeviceRosterEntry,
-} from "@/components/shared/DeviceTabs";
+import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
+import type { DeviceBarTab } from "@/components/shared/DeviceTabBarView";
 import type {
   MirrorCopyAt,
   WorktreeMirrorLink,

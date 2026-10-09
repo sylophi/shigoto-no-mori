@@ -9,7 +9,7 @@ import { KbdHint } from "@/components/ui/kbd";
 
 // The `..` row at the top of a cmdk browse list, one folder up. Its
 // value carries the lists' "browse:" row prefix.
-export function BrowseUpItem({ onSelect }: { onSelect: () => void }) {
+export function BrowseUpItemView({ onSelect }: { onSelect: () => void }) {
   return (
     <Command.Item
       value="browse:up"
@@ -25,7 +25,7 @@ export function BrowseUpItem({ onSelect }: { onSelect: () => void }) {
 
 // The footer's key hints: ↩ into the highlighted folder, and ← up out
 // of this one. The arrows go without saying.
-export function BrowseKeyHints({
+export function BrowseKeyHintsView({
   enterFolder,
   goUp,
 }: {

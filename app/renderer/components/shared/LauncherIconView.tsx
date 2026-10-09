@@ -74,7 +74,7 @@ const SVG_ICON = new Map<string, ComponentType<{ className: string }>>([
   ["pi", Pi],
 ]);
 
-export function LauncherIcon({
+export function LauncherIconView({
   entry,
   className = "size-4",
 }: LauncherIconProps) {

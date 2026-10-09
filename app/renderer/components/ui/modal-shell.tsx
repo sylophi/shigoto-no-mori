@@ -18,6 +18,14 @@ function fadeOut(ghost: HTMLElement) {
   );
 }
 
+// The backdrop a dialog hangs from, over the window it fills. The
+// before: is the 10vh a short dialog hangs from, so it doesn't jump as
+// it grows. A taller dialog eats that gap first, then caps at the
+// window, where its scrolling body takes the rest (any wrappers above
+// that body need min-h-0).
+export const MODAL_BACKDROP =
+  "inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] before:h-[calc(10vh-1rem)]";
+
 interface ModalShellProps {
   // Called when the user clicks the backdrop or (default) presses Escape.
   onClose: () => void;
@@ -133,22 +141,43 @@ export function ModalShell({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      // The before: is the 10vh a short dialog hangs from, so it doesn't
-      // jump as it grows. A taller dialog eats that gap first, then caps
-      // at the window, where its scrolling body takes the rest (any
-      // wrappers above that body need min-h-0).
-      className="group/modal fixed inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] duration-200 ease-(--ease-out-quart) before:h-[calc(10vh-1rem)] data-closed:animate-out data-closed:duration-150 data-closed:fade-out-0 data-closed:fill-mode-forwards motion-safe:animate-in motion-safe:fade-in-0"
+      className={cn(
+        "group/modal fixed duration-200 ease-(--ease-out-quart) data-closed:animate-out data-closed:duration-150 data-closed:fade-out-0 data-closed:fill-mode-forwards motion-safe:animate-in motion-safe:fade-in-0",
+        MODAL_BACKDROP,
+      )}
     >
-      <div
-        data-slot="modal-shell"
+      <ModalBox
         className={cn(
-          "flex max-h-full w-full max-w-xl shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5 duration-200 ease-(--ease-out-quart) group-data-closed/modal:duration-150 group-data-closed/modal:fill-mode-forwards motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:slide-in-from-top-2 group-data-closed/modal:animate-out group-data-closed/modal:zoom-out-95",
+          "duration-200 ease-(--ease-out-quart) group-data-closed/modal:duration-150 group-data-closed/modal:fill-mode-forwards motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:slide-in-from-top-2 group-data-closed/modal:animate-out group-data-closed/modal:zoom-out-95",
           popoverClassName,
         )}
       >
         {children}
-      </div>
+      </ModalBox>
     </div>,
     document.body,
+  );
+}
+
+// The dialog's box, where ModalShell hangs it over the window. A scene
+// (lab/scenes) draws a dialog's view in it inline, since a portal draws
+// nothing on a server.
+export function ModalBox({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-slot="modal-shell"
+      className={cn(
+        "flex max-h-full w-full max-w-xl shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }

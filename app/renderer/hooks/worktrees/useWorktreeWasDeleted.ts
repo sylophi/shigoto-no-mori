@@ -9,7 +9,7 @@ export const WORKTREE_DELETED_MESSAGE = "This worktree was deleted.";
 // Its queries then fail as entity-gone, which the query client keeps
 // quiet, so the page is what says so. A cold route to a missing id
 // never saw it and stays "not found". Read it only past the list's
-// pending and error guards, which WorktreeMissing already has.
+// pending and error guards, which WorktreeMissingView already has.
 export function useWorktreeWasDeleted(
   worktreeId: string,
   worktree: Worktree | undefined,

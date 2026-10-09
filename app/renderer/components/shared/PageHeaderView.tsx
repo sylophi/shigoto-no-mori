@@ -5,7 +5,6 @@
 // so the header chrome, the inset and the tab wiring live in exactly
 // one place.
 import type React from "react";
-import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
@@ -24,12 +23,10 @@ export const PAGE_HEADER_PADDING =
 // inset so the bar (which carries it as padding) scrolls out under the
 // header's edge. On the desktop, 10px centers the 26px pills on the
 // traffic lights' y=23 (main/index.ts). A browser has no lights.
-export const PAGE_HEADER_TABS_PADDING = hasLocalHost
-  ? "pt-2.5"
-  : "pt-4 phone:pt-3";
+export const PAGE_HEADER_TABS_PADDING = "pt-4 phone:pt-3 desktop:pt-2.5";
 export const PAGE_HEADER_TABS_ROW = "-mx-6 phone:-mx-4";
 
-export function PageHeader({
+export function PageHeaderView({
   eyebrow,
   title,
   trailing,
