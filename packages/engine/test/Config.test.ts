@@ -69,7 +69,7 @@ it("keeps a project's default branch through every write", async () => {
     {
       ok: false,
       error:
-        "Set the project's default branch first: `smd projects config set defaultBranch <ref>`.",
+        "Can't determine P's default branch. Set it first: smd projects config set defaultBranch <ref> -p P",
     },
   );
 });
