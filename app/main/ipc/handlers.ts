@@ -109,7 +109,7 @@ import {
 } from "@host/ipc/modules/sharedSettings";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
-import { controlHandlers } from "@host/ipc/modules/control";
+import { controlHandlers, controlTransfers } from "@host/ipc/modules/control";
 import { setControlImpl } from "@host/lib/control/peers";
 import { releasesHandlers } from "./modules/releases";
 import { shellHandlers } from "./modules/shell";
@@ -711,7 +711,7 @@ export function registerIpcHandlers(): void {
   registerContract(sharedSettingsContract, sharedSettingsHandlers);
   registerViews(sharedSettingsContract, sharedSettingsViews);
   registerContract(cliContract, cliHandlers);
-  // The CLI's cross-device verbs, on the control wire alone
+  // The terminal's cross-device verbs, on the loopback alone
   // (packages/contracts/src/modules/control.ts). The device registry rides the
   // stored credential, and the peers are reached through the seam
   // above.
@@ -722,7 +722,7 @@ export function registerIpcHandlers(): void {
     directPeers: async () =>
       (await hubHandlers.status(undefined, undefined)).peerAcceptsCommands,
   });
-  registerControlContract(controlContract, controlHandlers);
+  registerControlContract(controlContract, controlHandlers, controlTransfers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(worktreeDataContract, worktreeDataHandlers);
   registerContract(syncContract, syncHandlers);

@@ -48,9 +48,8 @@ import { stopAllPortForwards } from "./ipc/modules/portForward";
 import {
   broadcastAll,
   deviceLinkLayer,
+  loopbackLayer,
   refreshHubConnection,
-  startControlHost,
-  stopControlHost,
   stopDirectHost,
   stopHubConnection,
   tunnelLayer,
@@ -201,15 +200,6 @@ const mirrorGateway = lifetime(
   stopMirrorGateway,
 );
 
-// The control wire the CLI's cross-device verbs ride. Stopping it
-// unpublishes the address first, so a CLI run during the quit reads
-// "not running" instead of dialing a closing listener.
-const controlHost = lifetime(
-  "the control host",
-  Effect.promise(startControlHost),
-  stopControlHost,
-);
-
 // New scripts are refused from the moment the quit begins, so none
 // starts after the reap at the end has looked.
 const scriptGate = onQuit("the script gate", Effect.sync(markShuttingDown));
@@ -262,7 +252,10 @@ export const layer = (options: {
 }) =>
   scriptGate.pipe(
     Layer.provideMerge(portForwards),
-    Layer.provideMerge(controlHost),
+    // The loopback the terminal reaches the app on. It unpublishes its
+    // address first as it stops, so a terminal run during the quit
+    // reads "not running" instead of dialing a closing listener.
+    Layer.provideMerge(loopbackLayer),
     Layer.provideMerge(mirrorFollower),
     Layer.provideMerge(mirrorDaemon),
     Layer.provideMerge(mirrorGateway),

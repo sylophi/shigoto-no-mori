@@ -1,4 +1,4 @@
-// The cross-device verbs against a scripted app on the control wire:
+// The cross-device verbs against a scripted app on the loopback:
 // what each sends, what it makes of each answer, and each way the app
 // can fail to be there.
 import assert from "node:assert/strict";
@@ -207,7 +207,7 @@ const serve = async (
   busy = false,
 ) => {
   app = await fakeApp(reply, { busy });
-  box.write("control.json", app.file());
+  box.write("loopback.json", app.file());
   return app;
 };
 
@@ -245,8 +245,40 @@ const outcome = <A, E>(
     ),
   );
 
+// A worktree row as the contract has it, `fields` over a plain one.
+const ROW_ID = "0123456789ab";
+const row = (fields: Record<string, unknown> = {}) => ({
+  id: ROW_ID,
+  projectId: "P9",
+  name: "fox",
+  branch: "fox",
+  path: "/there/fox",
+  ahead: 0,
+  behind: 0,
+  hasUpstream: false,
+  hasRemote: false,
+  divergedClean: false,
+  behindPrimary: 0,
+  unpushedCount: 0,
+  mergedIntoPrimary: false,
+  changedCount: 0,
+  recentCommits: [],
+  isPrimary: false,
+  isExternal: false,
+  detached: false,
+  shelved: false,
+  autoPull: false,
+  ...fields,
+});
+
+// A step of a move's progress, as the app pushes it.
+const step = (fields: Record<string, unknown>) => ({
+  sourceWorktreeId: ROW_ID,
+  ...fields,
+});
+
 const transferAnswer = {
-  worktree: { id: "w9", name: "fox", branch: "fox", path: "/there/fox" },
+  worktree: row(),
   captured: true,
   dirtyApplied: false,
   device: { deviceId: "d1", name: "Studio Mac" },
@@ -259,15 +291,11 @@ describe("send, bring and mirror", () => {
   it("sends with the options asked, reporting progress and what didn't hold", async () => {
     const { fox } = seed();
     const served = await serve((request) => [
-      progress({ step: "capture", worktreeId: "x" }),
-      // Another call's answer on the same socket is not ours.
-      { t: "res", id: 99, ok: true, result: "someone else's" },
-      progress({ step: "transfer", sent: 1 }),
-      progress({ step: "transfer", sent: 2 }),
-      progress({ step: "create", createPhase: "checkout" }),
-      progress({ step: "create", createPhase: "idle" }),
-      { t: "push", channel: "other", payload: { step: "nope" } },
-      progress("not a document"),
+      progress(step({ step: "capture" })),
+      progress(step({ step: "transfer", bytes: 1 })),
+      progress(step({ step: "transfer", bytes: 2 })),
+      progress(step({ step: "create", createPhase: "setup" })),
+      progress(step({ step: "create" })),
       success(request, transferAnswer),
     ]);
     const seen: Transfer.Progress[] = [];
@@ -281,10 +309,7 @@ describe("send, bring and mirror", () => {
     );
     assert.deepEqual(served.received(), [
       {
-        hello: { t: "hello", token: TOKEN },
         request: {
-          t: "req",
-          id: 1,
           channel: "control:send",
           input: {
             device: "Studio",
@@ -298,30 +323,34 @@ describe("send, bring and mirror", () => {
     ]);
     assert.deepEqual(seen, [
       {
-        document: { step: "capture", worktreeId: "x", event: "progress" },
+        document: { ...step({ step: "capture" }), event: "progress" },
         line: "capturing uncommitted changes",
       },
       {
-        document: { step: "transfer", sent: 1, event: "progress" },
+        document: {
+          ...step({ step: "transfer", bytes: 1 }),
+          event: "progress",
+        },
         line: "transferring commits",
       },
       {
-        document: { step: "transfer", sent: 2, event: "progress" },
+        document: {
+          ...step({ step: "transfer", bytes: 2 }),
+          event: "progress",
+        },
         line: undefined,
       },
       {
         document: {
-          step: "create",
-          createPhase: "checkout",
+          ...step({ step: "create", createPhase: "setup" }),
           event: "progress",
         },
-        line: "creating the worktree (checkout)",
+        line: "creating the worktree (setup)",
       },
       {
-        document: { step: "create", createPhase: "idle", event: "progress" },
+        document: { ...step({ step: "create" }), event: "progress" },
         line: "creating the worktree",
       },
-      { document: undefined, line: undefined },
     ]);
     const caveat =
       "the uncommitted changes did not apply on the copy, so they exist only on the source";
@@ -341,63 +370,13 @@ describe("send, bring and mirror", () => {
     });
   });
 
-  it("reads an explicit null as absent, as Go does, and a wrong type as unreadable", async () => {
-    seed();
-    let answered: unknown = null;
-    await serve((request) => [success(request, answered)]);
-    const sent = () =>
-      outcome((transfer, here) =>
-        transfer.send(here, { ref: "fox" }, {}, noProgress),
-      );
-    const zero = {
-      worktree: { name: "", path: "" },
-      captured: false,
-      dirtyApplied: false,
-      device: { deviceId: "", name: "" },
-      copySide: "",
-      alreadyMirrored: false,
-    };
-    assert.deepEqual(await sent(), {
-      document: { ok: true, caveats: [] },
-      headline: 'sent  to ""',
-      result: zero,
-    });
-    answered = {
-      worktree: { name: "fox", path: null },
-      copySide: null,
-      cloned: null,
-      files: null,
-      source: { fate: "keep", done: false, error: null },
-    };
-    assert.deepEqual(await sent(), {
-      document: {
-        ...(answered as object),
-        ok: true,
-        caveats: ["the source was not : "],
-      },
-      headline: 'sent fox to ""',
-      result: {
-        ...zero,
-        worktree: { name: "fox", path: "" },
-        source: { fate: "keep", done: false, error: "" },
-      },
-    });
-    answered = { captured: "yes" };
-    assert.deepEqual(await sent(), {
-      ok: false,
-      error:
-        "The app answered control:send with something this CLI can't read. The two may be different versions.",
-      usage: false,
-    });
-  });
-
   it("brings a peer's worktree by the name given, and mirrors either way", async () => {
     seed();
     const served = await serve((request) => [
       success(request, {
         ...transferAnswer,
         copySide: "local",
-        cloned: { name: "repo", path: "/there/repo" },
+        cloned: { id: "P7", name: "repo", path: "/there/repo" },
       }),
     ]);
     const brought = await outcome((transfer, here) =>
@@ -434,8 +413,6 @@ describe("send, bring and mirror", () => {
       served.received().map(({ request }) => request),
       [
         {
-          t: "req",
-          id: 1,
           channel: "control:bring",
           input: {
             device: "Studio",
@@ -445,8 +422,6 @@ describe("send, bring and mirror", () => {
           },
         },
         {
-          t: "req",
-          id: 1,
           channel: "control:bring",
           input: {
             device: "Studio",
@@ -456,8 +431,6 @@ describe("send, bring and mirror", () => {
           },
         },
         {
-          t: "req",
-          id: 1,
           channel: "control:send",
           input: {
             mirror: true,
@@ -539,10 +512,14 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
     const mirror = {
       session: "sync_1",
       device: { deviceId: "d1", name: "Studio Mac" },
+      localProjectId: "P1",
+      localWorktreeId: worktreeIdFromPath(fox),
       localRoot: fox,
+      remoteRoot: "/there/fox",
       copySide: "remote",
       paused: false,
       status: "watching",
+      statusText: "Watching for changes",
       conflicts: 0,
     };
     let unconfirmed = false;
@@ -580,8 +557,6 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
       served.received().map(({ request }) => request),
       [
         {
-          t: "req",
-          id: 1,
           channel: "control:mirrorStop",
           input: {
             projectId: "P1",
@@ -590,8 +565,6 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
           },
         },
         {
-          t: "req",
-          id: 1,
           channel: "control:mirrorStop",
           input: { projectId: "P1", worktreeId: worktreeIdFromPath(fox) },
         },
@@ -647,17 +620,13 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
     assert.deepEqual(
       served.received().map(({ request }) => request),
       [
-        { t: "req", id: 1, channel: "control:mirrors" },
-        { t: "req", id: 1, channel: "control:devices", input: {} },
+        { channel: "control:mirrors" },
+        { channel: "control:devices", input: {} },
         {
-          t: "req",
-          id: 1,
           channel: "control:devices",
           input: { projectId: "P1" },
         },
         {
-          t: "req",
-          id: 1,
           channel: "control:devices",
           input: { projectId: "P1" },
         },
@@ -671,14 +640,14 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
       success(request, {
         worktrees: [
           {
-            device: { deviceId: "d1", name: "Studio", extra: 1 },
+            device: { deviceId: "d1", name: "Studio" },
             projectId: "Q1",
-            worktree: {
+            worktree: row({
               id: "w1",
               name: "owl",
               branch: "owl-b",
               path: "/s/owl",
-            },
+            }),
           },
         ],
         unreachable: ["Laptop"],
@@ -691,10 +660,7 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
       {
         document: [
           {
-            id: "w1",
-            name: "owl",
-            branch: "owl-b",
-            path: "/s/owl",
+            ...row({ id: "w1", name: "owl", branch: "owl-b", path: "/s/owl" }),
             device: { deviceId: "d1", name: "Studio" },
           },
         ],
@@ -717,8 +683,6 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
       served.received().map(({ request }) => request),
       [
         {
-          t: "req",
-          id: 1,
           channel: "control:peerWorktrees",
           input: { projectId: "P1", device: "Studio" },
         },
@@ -727,7 +691,7 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
   });
 });
 
-describe("the control wire", () => {
+describe("the loopback", () => {
   const mirrors = () => outcome((transfer) => transfer.mirrors);
   const notRunning = {
     ok: false,
@@ -736,13 +700,13 @@ describe("the control wire", () => {
     code: "app-not-running",
     usage: false,
   };
-  // control.json in the engine's own data dir, which exists once the
+  // loopback.json in the engine's own data dir, which exists once the
   // engine has run.
   const publish = (content: unknown) => {
     const dir = join(box.home, "engine");
     mkdirSync(dir, { recursive: true });
     writeFileSync(
-      join(dir, "control.json"),
+      join(dir, "loopback.json"),
       typeof content === "string" ? content : JSON.stringify(content),
     );
   };
@@ -763,9 +727,7 @@ describe("the control wire", () => {
     app = await fakeApp(() => []);
     publish(app.file("stale-token"));
     assert.deepEqual(await mirrors(), notRunning);
-    assert.deepEqual(app.received(), [
-      { hello: { t: "hello", token: "stale-token" } },
-    ]);
+    assert.deepEqual(app.received(), []);
   });
 
   it("tells a busy app from an absent one", async () => {
@@ -789,16 +751,9 @@ describe("the control wire", () => {
     });
   });
 
-  it("carries the app's own words and code, and refuses an answer it can't read", async () => {
-    let refusing = true;
+  it("carries the app's own words and code", async () => {
     await serve((request) => [
-      refusing
-        ? refusal(
-            request,
-            "Several devices could take part.",
-            "ambiguous-device",
-          )
-        : success(request, { daemon: 5 }),
+      refusal(request, "Several devices could take part.", "ambiguous-device"),
     ]);
     assert.deepEqual(await mirrors(), {
       ok: false,
@@ -806,42 +761,31 @@ describe("the control wire", () => {
       code: "ambiguous-device",
       usage: false,
     });
-    refusing = false;
-    assert.deepEqual(await mirrors(), {
-      ok: false,
-      error:
-        "The app answered control:mirrors with something this CLI can't read. The two may be different versions.",
-      usage: false,
-    });
-  });
-
-  it("says the connection was lost, in the write's words, when the request can't be sent", () => {
-    assert.equal(
-      new Control.RequestUnsent({ cause: new Error("write EPIPE") }).message,
-      "Lost the connection to the app: write EPIPE",
-    );
   });
 
   it("hands each push to the caller before the result", async () => {
     await serve((request) => [
-      progress({ step: "capture" }),
-      progress({ step: "transfer" }),
-      success(request, { session: "sync_1" }),
+      progress(step({ step: "capture" })),
+      progress(step({ step: "transfer" })),
+      success(request, { ...transferAnswer, session: "sync_1" }),
     ]);
     const pushes: string[] = [];
     const called = await box.engine(
       Effect.flatMap(Effect.service(Control.Control), (control) =>
-        control.call("control:send", { projectId: "p" }, (channel, payload) =>
-          Effect.sync(
-            () =>
-              void pushes.push(
-                `${channel}/${(payload as { step: string }).step}`,
-              ),
-          ),
+        control.call(
+          "control:send",
+          { projectId: "p", worktreeId: ROW_ID },
+          (channel, payload) =>
+            Effect.sync(
+              () =>
+                void pushes.push(
+                  `${channel}/${(payload as { step: string }).step}`,
+                ),
+            ),
         ),
       ),
     );
-    assert.deepEqual(called, { session: "sync_1" });
+    assert.equal((called as { session: string }).session, "sync_1");
     assert.deepEqual(pushes, [
       "sync:pullProgress/capture",
       "sync:pullProgress/transfer",

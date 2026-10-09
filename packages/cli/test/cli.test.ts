@@ -28,7 +28,12 @@ import {
   it,
 } from "vitest";
 import { macfs, type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
-import { type FakeApp, fakeApp } from "../../engine/test/lib/fakeApp.ts";
+import {
+  type FakeApp,
+  fakeApp,
+  refusal,
+  success,
+} from "../../engine/test/lib/fakeApp.ts";
 import { flavorNames } from "@shigomori/engine/flavor";
 import { documentedCommands } from "../src/help.ts";
 
@@ -331,7 +336,7 @@ describe("transfer", () => {
 
   it("refuses a command line it can't use before asking the app", async () => {
     app = await fakeApp(() => []);
-    box.write("control.json", app.file());
+    box.write("loopback.json", app.file());
     const alpha = box.repo("alpha");
     const fox = `${box.home}/fox`;
     box.git(alpha, "worktree", "add", "-q", "-b", "fox", fox);
@@ -357,6 +362,58 @@ describe("transfer", () => {
       assert.equal(run.code, 2, refused[index]?.join(" "));
     }
     assert.deepStrictEqual(app.received(), []);
+  });
+
+  it("asks the app over the loopback, printing and exiting as Go did", async () => {
+    const notRunning = await runAt(box.home, "devices");
+    assert.equal(notRunning.code, 1);
+    assert.match(
+      notRunning.stderr,
+      /^smd: The Shigoto no Mori app isn't running/,
+    );
+    app = await fakeApp((request) => [
+      request["channel"] === "control:devices"
+        ? success(request, {
+            thisDevice: { deviceId: "B", name: "Laptop" },
+            devices: [
+              { deviceId: "A", name: "Studio", platform: "darwin" },
+              {
+                deviceId: "C",
+                name: "Away",
+                platform: "darwin",
+                block: "offline",
+              },
+            ],
+          })
+        : refusal(request, "No mirror runs for that worktree.", "no-mirror"),
+    ]);
+    // Into the binary's own copy of the data dir, which the run above
+    // made.
+    writeFileSync(
+      join(box.side("cli"), "loopback.json"),
+      JSON.stringify(app.file()),
+    );
+    const listed = await runAt(box.home, "devices");
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.match(listed.stdout, /^This device is "Laptop"\.\n/);
+    assert.match(listed.stdout, /\nStudio +darwin +connected\n/);
+    assert.match(listed.stdout, /\nAway +darwin +not connected\n/);
+    const asked = await runAt(box.home, "--json", "devices");
+    assert.deepEqual(asked.doc, {
+      ok: true,
+      thisDevice: { deviceId: "B", name: "Laptop" },
+      devices: [
+        { deviceId: "A", name: "Studio", platform: "darwin" },
+        { deviceId: "C", name: "Away", platform: "darwin", block: "offline" },
+      ],
+    });
+    const refusedStop = await runAt(box.home, "--json", "worktrees", "mirrors");
+    assert.equal(refusedStop.code, 1);
+    assert.deepEqual(refusedStop.doc, {
+      ok: false,
+      error: "No mirror runs for that worktree.",
+      code: "no-mirror",
+    });
   });
 });
 
@@ -635,6 +692,27 @@ describe("cd", () => {
     // with no directive file to write.
     assert.equal((await runAt(repo, "--json", "cd", "w")).code, 2);
     assert.equal((await start(repo, ["cd", "w"]).ended).code, 2);
+  });
+
+  it("switches within the project, by name or as `worktrees <name>`", async () => {
+    const { repo, worktree } = scripted();
+    for (const args of [
+      ["worktrees", "switch", "w"],
+      ["wt", "w"],
+    ]) {
+      const cdFile = join(box.home, "cd");
+      writeFileSync(cdFile, "");
+      // oxlint-disable-next-line no-await-in-loop -- one directive file, one run at a time
+      const ended = await start(repo, args, {
+        SHIGOMORI_CD_FILE: cdFile,
+      }).ended;
+      assert.equal(ended.code, 0, args.join(" "));
+      assert.equal(readFileSync(cdFile, "utf8"), `${worktree}\n`);
+    }
+    // Bare, it asks which worktree, which takes a terminal.
+    const bare = await start(repo, ["worktrees", "switch"]).ended;
+    assert.equal(bare.code, 2);
+    assert.match(bare.stderr, /needs an interactive terminal/);
   });
 
   // The wrapper as a shell evals it, around this build.
