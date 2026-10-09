@@ -19,6 +19,7 @@
 // Pure aside from the injected deps (no electron, no node builtins),
 // like the pieces it composes.
 
+import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import { callOf, channelOf, payloadOf } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
@@ -75,6 +76,8 @@ export type DirectPlaneDeps = {
   // web bridge declares ["tunnel"], the app takes the dialer's
   // race-everything default.
   dialableKinds?: ReadonlyArray<DirectCandidateKind>;
+  // What this device is (directDial.ts): the web bridge says "web".
+  deviceKind?: DeviceKind;
   // The candidate sockets' constructor (directDial.ts). The Electron
   // main process injects the `ws` package so a failed dial names its
   // errno. The web bridge and the checks take the platform global.
@@ -164,6 +167,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
         deps.broadcastPeerPush({ deviceId, channel, payload });
       },
       dialableKinds: deps.dialableKinds,
+      deviceKind: deps.deviceKind,
       openSocket: deps.openSocket,
       deadlineMs: deps.deadlineMs,
     });

@@ -67,7 +67,7 @@ import {
   fakePullRequests,
 } from "./pullRequestFixtures";
 import { createFakeChanges } from "./changesFixtures";
-import { invokeIndexFor } from "../../web/ipc/loopback";
+import { invokeIndexFor } from "../../web/ipc/localRegistrar";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../../web/ipc/stubDefaults";
 import {
   type DeviceForest,

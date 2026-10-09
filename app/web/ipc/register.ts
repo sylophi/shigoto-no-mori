@@ -1,17 +1,12 @@
-// The browser binding's composition root: the twin of main/ipc/register.ts
-// (which registers the handlers on the Electron and remote wires and
-// assembles the direct plane) and renderer/electronApi.ts (which builds
-// window.api over the preload's bridge) in one, since a browser has no
-// process boundary to split them across. It builds the SAME window.api
-// surface the desktop does, by the same means: the scalar facts
-// (deviceId, appVersion, isDev, isElectron) plus buildApi over one
-// ClientTransport per scope.
-// The transports are in-page loopback wires (loopback.ts) instead of
-// the desktop's links, with the
-// browser-servable client modules (clientConfig, account, hub, shell,
-// releases) registered through the shared registrar and every OS-bound
-// channel answered by a typed stub default. Renderer components therefore
-// mount unmodified: they cannot tell this bridge from the desktop's.
+// The browser binding's composition root: the web client is a device
+// with no host of its own (decision 6 of V3.md), so it reaches every
+// host as a peer, over the device link through the hub (the direct
+// plane below), and serves only itself, in the page: the client modules
+// (clientConfig, account, hub, shell, releases) and its copy of the
+// shared settings, on the tab's local registrar (localRegistrar.ts). It
+// builds the SAME window.api surface the desktop does: the scalar facts
+// (deviceId, appVersion, isDev, isElectron) plus buildApi over that
+// registrar, so renderer components mount unmodified.
 //
 // Every platform fact arrives through WebBridgeDeps rather than a
 // browser global read at module scope, so the headless bridge check
@@ -63,7 +58,7 @@ import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { defaultWebDeviceShape } from "../account/deviceIcon";
 import { createWebAccountStore } from "../account/store";
 import { readJsonKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
-import { createLoopbackWire } from "./loopback";
+import { createLocalRegistrar } from "./localRegistrar";
 
 export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
@@ -81,6 +76,10 @@ export type WebBridgeDeps = {
   isDev: boolean;
   appVersion: string;
   fetchImpl?: typeof fetch;
+  // Test seam: the candidate kinds the tab dials. A browser page dials
+  // the wss tunnel only (mixed content forbids ws:// under https), which
+  // a proof cannot serve, so a proof dials the listener's lan candidate.
+  dialableKinds?: ReadonlyArray<"lan" | "tunnel">;
 };
 
 export type WebBridge = {
@@ -96,7 +95,7 @@ export type WebBridge = {
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so
-  // the local loopback broadcast and this never double-fire.
+  // the tab's own push and this never double-fire.
   notifyAccountChanged(): void;
   // Reconciles the hub socket with the current account state.
   refreshHub(): Promise<void>;
@@ -122,8 +121,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     baseUrl: config.hubUrl,
     fetchImpl: deps.fetchImpl,
   });
-  const clientWire = createLoopbackWire("client");
-  const hostWire = createLoopbackWire("host");
+  const tab = createLocalRegistrar();
   const registrarOpts = { validateOutputs: deps.isDev };
   // A sign-out whose revoke never reached the hub is delivered at the
   // next boot (enroll.ts retryParkedRevoke), the desktop's rule too.
@@ -134,7 +132,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // The direct plane's shared composition (shared/hub/directPlane.ts),
   // the same assembly main/ipc/register.ts uses. The browser
   // differences are exactly the declared deps: identity facts from
-  // this bridge, fan-out over the loopback wire, dialableKinds
+  // this bridge, fan-out on the tab's registrar, dialableKinds
   // ["tunnel"] (an https page cannot dial ws:// interface candidates,
   // mixed content, so peers are asked for wss tunnel candidates only
   // and mint no lan ticket for this caller), no connectInfo server
@@ -145,10 +143,13 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     localDeviceId: () => deviceId,
     localAppVersion: () => deps.appVersion,
     broadcastStatus: (status) =>
-      broadcastAll(hubContract, "statusChanged", status, clientWire.server),
+      broadcastAll(hubContract, "statusChanged", status, tab.server),
     broadcastPeerPush: (push) =>
-      broadcastAll(hubContract, "peerPush", push, clientWire.server),
-    dialableKinds: ["tunnel"],
+      broadcastAll(hubContract, "peerPush", push, tab.server),
+    dialableKinds: deps.dialableKinds ?? ["tunnel"],
+    // One device per browser profile, a link per tab (V3.md, "The web
+    // client's tabs").
+    deviceKind: "web",
   });
   const hubHandlers = directPlane.handlers;
 
@@ -258,7 +259,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         ),
       );
     }
-    broadcastAll(accountContract, "changed", { accountId }, clientWire.server);
+    broadcastAll(accountContract, "changed", { accountId }, tab.server);
     void refreshHub();
   }
 
@@ -406,7 +407,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     {
       deviceId: () => deviceId,
       announce: (doc) =>
-        broadcastAll(sharedSettingsContract, "changed", doc, hostWire.server),
+        broadcastAll(sharedSettingsContract, "changed", doc, tab.server),
     },
   );
 
@@ -427,35 +428,25 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     showItemInFolder: () => {},
   };
 
-  registerContract(
-    accountContract,
-    accountHandlers,
-    clientWire.server,
-    registrarOpts,
-  );
+  registerContract(accountContract, accountHandlers, tab.server, registrarOpts);
   registerContract(
     clientConfigContract,
     clientConfigHandlers,
-    clientWire.server,
+    tab.server,
     registrarOpts,
   );
-  registerContract(hubContract, hubHandlers, clientWire.server, registrarOpts);
+  registerContract(hubContract, hubHandlers, tab.server, registrarOpts);
   registerContract(
     sharedSettingsContract,
     sharedSettingsHandlers,
-    hostWire.server,
+    tab.server,
     registrarOpts,
   );
-  registerContract(
-    shellContract,
-    shellHandlers,
-    clientWire.server,
-    registrarOpts,
-  );
+  registerContract(shellContract, shellHandlers, tab.server, registrarOpts);
   registerContract(
     releasesContract,
     { list: () => fetchReleases(deps.fetchImpl) },
-    clientWire.server,
+    tab.server,
     registrarOpts,
   );
 
@@ -467,10 +458,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     clerkPublishableKey: config.publishableKey,
     isDev: deps.isDev,
     // App-only UI (the port-forward controls) gates its mount on this:
-    // a browser cannot bind a local TCP listener, and the loopback wire
+    // a browser cannot bind a local TCP listener, and the tab's registrar
     // rejects the client-scoped portForward channels anyway.
     isElectron: false,
-    ...buildApi({ host: hostWire.client, client: clientWire.client }),
+    ...buildApi(() => tab.client),
   };
 
   return {

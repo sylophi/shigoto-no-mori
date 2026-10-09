@@ -132,6 +132,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: resolve(__dirname, "web"),
+    // Its own prebundle cache: the desktop renderer's dev server shares
+    // the app's node_modules, and one re-optimizing would leave the
+    // other's pages asking for deps it has replaced.
+    cacheDir: resolve(__dirname, "node_modules/.vite-web"),
     // Vite matches envPrefix entries as prefixes, so the full key names
     // from ACCOUNT_ENV_KEYS expose exactly those vars and nothing else
     // that happens to share a prefix. Every value is a public endpoint

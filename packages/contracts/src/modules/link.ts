@@ -32,9 +32,20 @@ const AppVersionSchema = Schema.String.check(Schema.isMaxLength(64));
 
 const ChallengeSchema = strict(Schema.Struct({ nonce: NonceSchema }));
 
+// What kind of device dials: a desktop app, which holds one link to a
+// host (a second supersedes the first: two app instances on one root),
+// or a web client, one per browser profile, which holds a link per tab.
+const DeviceKindSchema = Schema.Literals(["desktop", "web"]);
+export type DeviceKind = typeof DeviceKindSchema.Type;
+
 const HelloSchema = strict(
   Schema.Struct({
     deviceId: DeviceIdSchema,
+    deviceKind: DeviceKindSchema,
+    // Minted by the dialer for this connection, so a host tells a web
+    // device's tabs apart, and a connection dialing again replaces its
+    // own stale link and no other.
+    connectionId: HexId32Schema,
     appVersion: AppVersionSchema,
     protocolVersion: Schema.Int,
     nonce: NonceSchema,

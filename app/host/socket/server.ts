@@ -14,13 +14,17 @@
 // as a call the host itself invited (CommandGate). Above both sits the
 // sharing switch: off, every call is refused that was not invited, reads
 // included, and a push reaches a peer only where the host still lets it
-// (SharingGate). One link per device: a second hello from the same
-// device supersedes the first.
+// (SharingGate). A desktop device holds one link: a second hello from it
+// supersedes the first (two app instances on one root). A web device
+// holds one per connection its tabs dial, each with its own pushes and
+// views. Either way a hello with a connection id already held replaces
+// that connection, its own redial.
 //
 // The listener sits on every interface (and behind the tunnel), so it
 // is written to be hostile-safe: an inbound frame cap, an Origin gate,
 // connection and in-flight caps, a failed-auth lockout, and hard
 // termination on every rejection and shutdown.
+import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import {
@@ -362,6 +366,7 @@ type Connection = {
   hostNonce: string | null;
   helloSeen: boolean;
   deviceId: string | null;
+  connectionId: string | null;
   inFlight: number;
   lastInboundAt: number;
   dead: boolean;
@@ -418,7 +423,7 @@ export const make = (options: {
     let current: {
       readonly opts: WsServerStartOpts;
       readonly scope: Scope.Closeable;
-      readonly byDevice: Map<string, Connection>;
+      readonly byDevice: Map<string, Map<string, Connection>>;
     } | null = null;
 
     const isLockedOut = (ip: string): boolean => {
@@ -446,7 +451,8 @@ export const make = (options: {
     // and every connection, all in `scope`.
     const listen = (opts: WsServerStartOpts, scope: Scope.Scope) =>
       Effect.gen(function* () {
-        const byDevice = new Map<string, Connection>();
+        // Each device's connections, by the id its dialer minted.
+        const byDevice = new Map<string, Map<string, Connection>>();
         const connections = new Map<number, Connection>();
         let nextClientId = 0;
         let preAuth = 0;
@@ -511,6 +517,8 @@ export const make = (options: {
         const hello = (
           payload: {
             readonly deviceId: string;
+            readonly deviceKind: DeviceKind;
+            readonly connectionId: string;
             readonly appVersion: string;
             readonly protocolVersion: number;
             readonly nonce: string;
@@ -561,17 +569,26 @@ export const make = (options: {
             }
             failedAuth.delete(connection.ip);
             preAuth -= 1;
-            // One link per device: the older one ends now, so nothing it
-            // still delivers runs.
-            // On the loopback every caller is its own, and none is a
-            // device the hub vouched for.
+            // The links this one replaces end now, so nothing they still
+            // deliver runs: a desktop device's every other, a web
+            // device's own stale one. On the loopback every caller is
+            // its own, and none is a device the hub vouched for.
             if (!local) {
-              byDevice
-                .get(payload.deviceId)
-                ?.kill(CLOSE_GOING_AWAY, "superseded");
-              byDevice.set(payload.deviceId, connection);
+              const held =
+                byDevice.get(payload.deviceId) ?? new Map<string, Connection>();
+              for (const [connectionId, other] of held) {
+                if (
+                  payload.deviceKind === "desktop" ||
+                  connectionId === payload.connectionId
+                ) {
+                  other.kill(CLOSE_GOING_AWAY, "superseded");
+                }
+              }
+              held.set(payload.connectionId, connection);
+              byDevice.set(payload.deviceId, held);
             }
             connection.deviceId = payload.deviceId;
+            connection.connectionId = payload.connectionId;
             return {
               deviceId: opts.deviceId,
               appVersion: opts.appVersion,
@@ -958,6 +975,7 @@ export const make = (options: {
                 hostNonce: null,
                 helloSeen: false,
                 deviceId: null,
+                connectionId: null,
                 inFlight: 0,
                 lastInboundAt: Date.now(),
                 dead: false,
@@ -965,8 +983,13 @@ export const make = (options: {
                   if (connection.dead) return;
                   connection.dead = true;
                   if (connection.deviceId === null) preAuth -= 1;
-                  else if (byDevice.get(connection.deviceId) === connection) {
-                    byDevice.delete(connection.deviceId);
+                  else {
+                    const held = byDevice.get(connection.deviceId);
+                    const id = connection.connectionId;
+                    if (id !== null && held?.get(id) === connection) {
+                      held.delete(id);
+                      if (held.size === 0) byDevice.delete(connection.deviceId);
+                    }
                   }
                   connection.channels.closeAll();
                   connection.closed.abort();
@@ -1105,8 +1128,9 @@ export const make = (options: {
       closePeersNotIn: (online) =>
         Effect.sync(() => {
           const live = new Set(online);
-          for (const [deviceId, connection] of current?.byDevice ?? []) {
-            if (!live.has(deviceId)) {
+          for (const [deviceId, held] of current?.byDevice ?? []) {
+            if (live.has(deviceId)) continue;
+            for (const connection of held.values()) {
               connection.kill(
                 CLOSE_GOING_AWAY,
                 "no longer in the account roster",

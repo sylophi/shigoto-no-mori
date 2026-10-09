@@ -8,6 +8,7 @@
 // tickets are single use, so redials live one layer up in the direct
 // keeper (shared/hub/directKeeper.ts), which is the single owner of
 // retry.
+import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import {
   errorMessageOf,
   isProtocolVersionMismatchError,
@@ -89,6 +90,10 @@ export type DeviceLinkOptions = {
   deadlineMs: number;
   // Test seam: the protocol version the hello claims. This build's.
   protocolVersion?: number;
+  // What this device is (contracts' link.ts, DeviceKindSchema), which
+  // decides whether a second link of its supersedes the first. A
+  // desktop app unless said otherwise.
+  deviceKind?: DeviceKind;
   // The calls the far end serves: a peer's device link (LinkGroup, the
   // default), or this machine's own host on the loopback
   // (LoopbackGroup), whose token stands in for the ticket.
@@ -234,6 +239,8 @@ export function openDevice(
     );
     const welcome = (yield* call("link:hello", {
       deviceId: options.localDeviceId,
+      deviceKind: options.deviceKind ?? "desktop",
+      connectionId: newConnectionId(),
       appVersion: options.appVersion,
       protocolVersion: options.protocolVersion ?? PROTOCOL_VERSION,
       nonce: clientNonce,
@@ -357,4 +364,14 @@ export function openDevice(
     },
     abandon: close,
   };
+}
+
+// This connection's id, which the host tells it apart by: 16 random
+// bytes as hex.
+function newConnectionId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }

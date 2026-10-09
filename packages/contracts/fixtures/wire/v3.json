@@ -663,10 +663,12 @@
   "link:hello": {
     "payload": {
       "deviceId": "LE",
-      "appVersion": "",
-      "protocolVersion": 2,
-      "nonce": "66588ad2db51677716fe0b8cdc437a13",
-      "proof": "da93f2657981b83be2142c3d11ccb763fa0533ef61a28424cb36a2c92deb2a7d"
+      "deviceKind": "web",
+      "connectionId": "7b66588ad2db51677716fe0b8cdc437a",
+      "appVersion": "20",
+      "protocolVersion": -2,
+      "nonce": "e3ebcb1123466353e60bd9ce4df1a77f",
+      "proof": "0b1fc786f5d17dc21700e19a8aff162926e814f4e09078869db4f61566c21134"
     },
     "success": {
       "deviceId": "0",

@@ -62,6 +62,7 @@
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
 // global WebSocket serves openDevice).
+import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import * as Schema from "effect/Schema";
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
@@ -159,6 +160,9 @@ export type DirectDialerDeps = {
   // dial ws:// under https, mixed content), the app takes the default
   // and races everything.
   dialableKinds?: ReadonlyArray<DirectCandidateKind>;
+  // What this device is: a web client holds a link per tab to a host,
+  // a desktop app one (deviceLink.ts).
+  deviceKind?: DeviceKind;
   // The candidate sockets' constructor, defaulting to the platform
   // global WebSocket. The Electron main process injects the `ws`
   // package so a failed candidate names its errno instead of a bare
@@ -311,6 +315,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             ticket: candidate.ticket,
             appVersion: deps.localAppVersion,
             localDeviceId: deps.localDeviceId,
+            deviceKind: deps.deviceKind,
             // Identity pin: a welcome from any other deviceId fails
             // the handshake and closes the socket.
             expectedDeviceId: deviceId,
