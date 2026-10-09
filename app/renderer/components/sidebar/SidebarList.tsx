@@ -1,11 +1,17 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { useLocation } from "@tanstack/react-router";
 import {
   matchRoutePath,
   rowDeviceId,
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import {
   rowSizeHint,
   type SidebarRow,
@@ -128,6 +134,10 @@ export function SidebarList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level]);
 
+  const items = virtualizer.getVirtualItems();
+  const listRef = useRef<HTMLDivElement>(null);
+  useSlideOnReorder(listRef, rows, items, handlers.arrangeMode);
+
   // Reveal the selection when navigation comes from outside the sidebar
   // (a ⌘K jump, a deep link) by scrolling the virtualized
   // list to whichever row the active view says stands for it. A row
@@ -163,6 +173,7 @@ export function SidebarList({
 
   return (
     <div
+      ref={listRef}
       // Remounted per level so the arrival plays again: going into a
       // project and back out in the sidebar is a move between two
       // places, so the rows arrive from the side they were gone to, a
@@ -178,7 +189,7 @@ export function SidebarList({
       )}
       style={{ height: `${virtualizer.getTotalSize()}px` }}
     >
-      {virtualizer.getVirtualItems().map((vi) => {
+      {items.map((vi) => {
         const row = rows[vi.index];
         if (!row) return null;
         return (
@@ -196,4 +207,73 @@ export function SidebarList({
       })}
     </div>
   );
+}
+
+const MOVE = { duration: 200, easing: "ease-out" } as const;
+
+// Rows slide from where they were to where they are when the list
+// reorders in place (a worktree filed onto a shelf or back off it as an
+// agent starts or stops, new work raising it to the top), and a row new
+// to the screen fades in, rather than the list redrawing in a blink. A
+// new level is a different list (the node is remounted), not a move,
+// and the first rows to arrive have nowhere to move from. Nor while
+// arranging, where the drag has already moved the rows by the time the
+// order lands.
+//
+// Played on the drawn rows after the commit (FLIP) rather than as a CSS
+// transition on their transform: React moves a reordered row's node in
+// the DOM, and a moved node starts no transition.
+function useSlideOnReorder(
+  listRef: RefObject<HTMLDivElement | null>,
+  rows: SidebarRow[],
+  items: VirtualItem[],
+  arranging: boolean,
+) {
+  const placedRef = useRef<{
+    list: HTMLDivElement | null;
+    keys: string;
+    items: VirtualItem[];
+  } | null>(null);
+  useLayoutEffect(() => {
+    const placed = placedRef.current;
+    const list = listRef.current;
+    const keys = rows.map((row) => row.key).join("\n");
+    placedRef.current = { list, keys, items };
+    if (
+      placed === null ||
+      placed.list !== list ||
+      placed.keys === keys ||
+      placed.keys === "" ||
+      arranging ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    const starts = new Map(placed.items.map((item) => [item.key, item.start]));
+    for (const item of items) {
+      const node = list?.querySelector<HTMLElement>(
+        `:scope > [data-index="${item.index}"]`,
+      );
+      if (!node) continue;
+      const from = starts.get(item.key);
+      if (from === undefined) {
+        node.animate({ opacity: [0, 1] }, MOVE);
+        continue;
+      }
+      if (from === item.start) continue;
+      // A row still sliding from the last move goes on from where it is.
+      const sliding = node.getAnimations().length > 0;
+      node.animate(
+        {
+          transform: [
+            sliding
+              ? getComputedStyle(node).transform
+              : `translateY(${from}px)`,
+            `translateY(${item.start}px)`,
+          ],
+        },
+        MOVE,
+      );
+    }
+  });
 }
