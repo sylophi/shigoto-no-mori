@@ -20,7 +20,7 @@ import type {
   ShigomoriWorktreeData,
   Worktree,
 } from "@shared/schemas";
-import { repoNameFromUrl } from "@shared/cloneUrl";
+import { cloneFolderName } from "@shared/cloneUrl";
 import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
 import {
   createSharedSettingsCopy,
@@ -332,7 +332,7 @@ function hostHandlersFor(
       const parent = resolveOnDisk(disk, parentDir);
       const entries = disk.dirs[parent];
       if (entries === undefined) throw new Error(`${parent} is not a folder`);
-      const folder = name ?? repoNameFromUrl(url) ?? "repo";
+      const folder = name ?? cloneFolderName(url) ?? "repo";
       if (entries.some((entry) => entry.name === folder)) {
         throw new Error(`${parent}/${folder} already exists`);
       }
@@ -688,6 +688,13 @@ function hostHandlersFor(
       };
     },
     "githubCli:owners": () => ["rin", "sylophi", "dittofleet"],
+    "githubCli:repos": () => [
+      "sylophi/shigoto-no-mori",
+      "dittofleet/terrier",
+      "rin/dotfiles",
+      "dittofleet/port-pool",
+      "rin/notes",
+    ],
     // Takes the push's moment, and gives the project the remote it
     // would have.
     "githubCli:publish": async ({ projectId, owner = "rin" }) => {

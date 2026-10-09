@@ -29,6 +29,11 @@ export const githubCliContract = defineContract("host", {
     remote: true,
     gated: false,
   }),
+  // What the add-project dialog offers to clone, as `owner/repo`.
+  repos: invoke("githubCli:repos", z.void(), z.array(z.string()), {
+    remote: true,
+    gated: false,
+  }),
   // Runs for as long as the push does, under the device's own gh login.
   publish: invoke("githubCli:publish", PublishRepoPayloadSchema, z.void(), {
     tracksProjectUsage: true,

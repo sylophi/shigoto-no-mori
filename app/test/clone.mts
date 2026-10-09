@@ -20,8 +20,14 @@ const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
 
 const { cloneRepo } = await import("../host/lib/git/clone.ts");
-const { pickCloneUrl, repoNameFromUrl, stripUrlCredentials } =
-  await import("../shared/cloneUrl.ts");
+const { githubHostOf } = await import("../host/lib/githubCli/remote.ts");
+const {
+  cloneFolderName,
+  cloneUrlOf,
+  pickCloneUrl,
+  repoNameFromUrl,
+  stripUrlCredentials,
+} = await import("../shared/cloneUrl.ts");
 const { CloneProjectPayloadSchema } =
   await import("../shared/schemas/project.ts");
 
@@ -58,11 +64,52 @@ async function main() {
         "-u",
         "",
         "repo",
+        "-o/repo",
+        "owner/..",
+        "owner/repo/extra",
+        "../repo",
       ]) {
         assert.ok(!accepts({ url, parentDir: "~/dev" }), url);
       }
     },
   );
+
+  await check(
+    "a GitHub owner/repo is accepted, and names the repo's https URL",
+    () => {
+      for (const url of [
+        "owner/repo",
+        "my-org/repo.v2",
+        "owner/.github",
+        "alice_acme/tools",
+      ]) {
+        assert.ok(accepts({ url, parentDir: "~/dev" }), url);
+      }
+      assert.equal(cloneUrlOf(" owner/repo "), "https://github.com/owner/repo");
+      assert.equal(cloneUrlOf("/srv/repo"), "/srv/repo");
+      assert.equal(cloneFolderName("owner/repo"), "repo");
+      assert.equal(cloneFolderName("owner/repo.git"), "repo");
+      assert.equal(cloneFolderName("git@github.com:owner/repo.git"), "repo");
+    },
+  );
+
+  await check("a GitHub remote is told from the rest", async () => {
+    const urls = [
+      "https://github.com/owner/repo.git",
+      "git@github.com:owner/repo.git",
+      "ssh://git@ssh.github.com:443/owner/repo",
+      "https://gitlab.com/owner/repo.git",
+      "/srv/owner/repo",
+    ];
+    const hosts = await Promise.all(urls.map(githubHostOf));
+    assert.deepEqual(hosts, [
+      "github.com",
+      "github.com",
+      "github.com",
+      null,
+      null,
+    ]);
+  });
 
   await check("the folder name is held to one path segment", () => {
     const url = "git@github.com:owner/repo.git";
