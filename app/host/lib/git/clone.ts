@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cloneUrlOf } from "@shared/cloneUrl";
 import { ghReady } from "@host/lib/githubCli/readiness";
-import { isGithubRemoteUrl } from "@host/lib/githubCli/remote";
+import { githubHostOf } from "@host/lib/githubCli/remote";
 import { isENOENT, pathExists } from "@host/lib/util/paths";
 import { run } from "./core";
 
@@ -40,18 +40,20 @@ export async function cloneRepo(
 ): Promise<string> {
   const dest = await checkNewCheckoutDestination(parentDir, name);
   const url = cloneUrlOf(source);
-  // Where the device's gh is signed in, it is git's credential helper
-  // for a GitHub remote, the way `gh auth setup-git` would set it up,
-  // so a private repository clones over https without that setup. Only
-  // for this clone: the URL stays as pasted, and the checkout's config
-  // is left alone.
+  // Over https to a GitHub host, with the device's gh signed in, gh is
+  // git's credential helper, so a private repository clones without
+  // `gh auth setup-git` having been run. `clone -c` writes the helper
+  // into the new checkout's config too, scoped to that host the way
+  // setup-git scopes it, so the app's later fetches and pushes sign in
+  // the same way. The URL stays as given.
+  const host = /^https:\/\//i.test(url) ? await githubHostOf(url) : null;
   const ghCredentials =
-    (await isGithubRemoteUrl(url)) && (await ghReady())
+    host !== null && (await ghReady())
       ? [
           "-c",
-          "credential.helper=",
+          `credential.https://${host}.helper=`,
           "-c",
-          "credential.helper=!gh auth git-credential",
+          `credential.https://${host}.helper=!gh auth git-credential`,
         ]
       : [];
   // Nobody is at this process's terminal to answer a credential prompt,
@@ -63,7 +65,7 @@ export async function cloneRepo(
   // packaged app has no terminal for ssh to ask on, so it fails there
   // too, and the clone has no timeout beyond that.
   // `--` ends the options: the URL and name come from the caller.
-  await run(parentDir, [...ghCredentials, "clone", "--", url, name], {
+  await run(parentDir, ["clone", ...ghCredentials, "--", url, name], {
     env: { GIT_TERMINAL_PROMPT: "0" },
   }).catch((error: unknown) => {
     // Refusing to prompt, git names the URL it wanted a password for,

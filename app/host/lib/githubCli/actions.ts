@@ -190,10 +190,6 @@ const GhViewerReposSchema = z.object({
 // pushed first. The first hundred: one further back can still be typed
 // in as `owner/repo`.
 export async function listGithubRepos(): Promise<string[]> {
-  // An organization whose SAML gh's token isn't authorized for answers
-  // with an error beside the rest of the list. gh exits non-zero on it,
-  // with the response on stdout, and the repositories that did come
-  // are still the ones to offer.
   const stdout = await runGh(
     [
       "api",
@@ -203,15 +199,34 @@ export async function listGithubRepos(): Promise<string[]> {
     ],
     { fallback: "Couldn't list your GitHub repositories" },
   ).catch((err: unknown) => {
+    // An organization whose SAML gh's token isn't authorized for answers
+    // with an error beside the rest of the list. gh exits non-zero on
+    // it, with the response on stdout, and the repositories that did
+    // come are still the ones to offer. Any other failure stands.
     const cause = (err as { cause?: { stdout?: unknown } }).cause;
-    if (typeof cause?.stdout === "string" && cause.stdout.trim()) {
-      return cause.stdout;
-    }
-    throw err;
+    const partial = typeof cause?.stdout === "string" ? cause.stdout : "";
+    if (reposOf(partial) === null) throw err;
+    return partial;
   });
-  const { nodes } = GhViewerReposSchema.parse(JSON.parse(stdout)).data.viewer
-    .repositories;
-  return nodes.flatMap((node) => (node ? [node.nameWithOwner] : []));
+  const repos = reposOf(stdout);
+  if (repos === null) throw new Error("Couldn't list your GitHub repositories");
+  return repos;
+}
+
+// The `owner/repo`s in a viewer-repositories response, or null when it
+// carries none (no data, or not JSON at all).
+function reposOf(stdout: string): string[] | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  const parsed = GhViewerReposSchema.safeParse(json);
+  if (!parsed.success) return null;
+  return parsed.data.data.viewer.repositories.nodes.flatMap((node) =>
+    node ? [node.nameWithOwner] : [],
+  );
 }
 
 // Creates `owner/<folder name>` on GitHub from the repo at `cwd` (no

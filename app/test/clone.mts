@@ -20,7 +20,7 @@ const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
 
 const { cloneRepo } = await import("../host/lib/git/clone.ts");
-const { isGithubRemoteUrl } = await import("../host/lib/githubCli/remote.ts");
+const { githubHostOf } = await import("../host/lib/githubCli/remote.ts");
 const {
   cloneFolderName,
   cloneUrlOf,
@@ -101,8 +101,14 @@ async function main() {
       "https://gitlab.com/owner/repo.git",
       "/srv/owner/repo",
     ];
-    const github = await Promise.all(urls.map(isGithubRemoteUrl));
-    assert.deepEqual(github, [true, true, true, false, false]);
+    const hosts = await Promise.all(urls.map(githubHostOf));
+    assert.deepEqual(hosts, [
+      "github.com",
+      "github.com",
+      "github.com",
+      null,
+      null,
+    ]);
   });
 
   await check("the folder name is held to one path segment", () => {

@@ -39,8 +39,10 @@ export function ActionInputRow({
   const inputProps = {
     ref: inputRef,
     value,
-    // ↩ is the button's, never a highlighted row's.
     onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+      // Home and End move the caret, never a list's highlight.
+      if (e.key === "Home" || e.key === "End") e.stopPropagation();
+      // ↩ is the button's, never a highlighted row's.
       if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
       e.preventDefault();
       if (canSubmit) onSubmit();

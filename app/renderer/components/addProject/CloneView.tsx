@@ -126,6 +126,8 @@ export function CloneView({
         // Only a click or ↑↓ picks a row: a pointer passing over the
         // list on its way to the button would otherwise pick for it.
         disablePointerSelection
+        // Ctrl+N/P move the caret in a text field on macOS.
+        vimBindings={false}
         value={highlighted}
         onValueChange={setHighlighted}
         className={MODAL_COMMAND_CLASS}
