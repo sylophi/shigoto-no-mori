@@ -129,6 +129,7 @@ it("imports what the JSON files hold, and leaves them in place", async () => {
       aaaaaaaaaaaa: { at: 5, head: null, changed: 2 },
       dddddddddddd: { at: "bad" },
     },
+    unshelvedAt: { bbbbbbbbbbbb: 7 },
     deviceId: "D3V1C3",
     sharedSettings: {
       entries: {
@@ -177,6 +178,9 @@ it("imports what the JSON files hold, and leaves them in place", async () => {
   ]);
   assert.deepEqual(await rows("shelf_snapshots"), [
     { worktree_id: "aaaaaaaaaaaa", at: 5, head: null, changed: 2 },
+  ]);
+  assert.deepEqual(await rows("unshelved_at"), [
+    { worktree_id: "bbbbbbbbbbbb", at: 7 },
   ]);
   assert.deepEqual(await rows("device"), [{ id: 1, device_id: "D3V1C3" }]);
   assert.deepEqual(await rows("shared_settings"), [

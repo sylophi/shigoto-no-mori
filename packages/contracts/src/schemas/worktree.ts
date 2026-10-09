@@ -272,7 +272,9 @@ export function canRewriteCommits(
 // haven't touched since. So does an agent session changing state (a
 // turn starting or ending, a prompt waiting on you), whether or not it
 // touched a file. 0 when nothing is known, like a clean worktree with
-// no commits yet.
+// no commits yet. The engine's idle shelf reads activity the same way
+// (packages/engine/src/shelf.ts lastTouchedAt), so a change here goes
+// there too.
 export function worktreeLastActivityAt(
   worktree: Pick<Worktree, "lastChangeAt" | "recentCommits" | "agentSessions">,
 ): number {

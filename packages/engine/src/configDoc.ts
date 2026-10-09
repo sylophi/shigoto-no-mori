@@ -77,7 +77,15 @@ export function settingKeys(
     const ast = byName.get(name) as SchemaAST.AST;
     const members = SchemaAST.isUnion(ast) ? ast.types : [ast];
     const present = members.filter((member) => !SchemaAST.isUndefined(member));
-    const kind = kindOf(name, present);
+    // A null clears its key like an absent value does.
+    const kind = kindOf(
+      name,
+      present
+        .flatMap((member) =>
+          SchemaAST.isUnion(member) ? member.types : [member],
+        )
+        .filter((member) => !SchemaAST.isNull(member)),
+    );
     const choices = kind === "enum" ? literalsOf(ast) : [];
     return {
       name,

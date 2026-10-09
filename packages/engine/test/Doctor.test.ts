@@ -308,11 +308,12 @@ describe("the data dir", () => {
       shelfSnapshots: {
         ba9876543210: { at: 1, head: "abc", changed: 0 },
       },
+      unshelvedAt: { fedcba987654: 1 },
     });
     box.write(`projects/A1/worktrees/${primary}.json`, { title: "t" });
     box.write("projects/A1/worktrees/cafecafecafe.json", { title: "t" });
     const finding = only(await run(), "bookkeeping", "warn");
-    assert.match(finding.detail, /^2 marks and 1 data file /);
+    assert.match(finding.detail, /^3 marks and 1 data file /);
     assert.equal(finding.repairable, undefined);
   });
 

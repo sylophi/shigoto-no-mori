@@ -24,6 +24,8 @@ export const RegistryFileSchema = Schema.Struct({
   autoPullWorktrees: Schema.Record(Schema.String, Schema.Boolean),
   // Each entry decoded on its own: one that doesn't parse reads as absent.
   shelfSnapshots: Schema.Record(Schema.String, Schema.Unknown),
+  // When each worktree last came off the shelf, epoch ms.
+  unshelvedAt: Schema.Record(Schema.String, Schema.Int),
   deviceId: Schema.String,
   // Each entry kept as it is, readable or not.
   sharedSettings: Schema.Struct({

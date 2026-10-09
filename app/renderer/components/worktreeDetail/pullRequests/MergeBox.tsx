@@ -10,6 +10,7 @@ import {
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import { cn } from "@/lib/utils";
 import { describeMergeVerdict, MERGE_METHOD_LABEL } from "@/lib/pullRequest";
@@ -62,11 +63,13 @@ export function MergeBox({
     runDisableAutoMerge,
   } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod, stack });
   const canMerge = primary !== null && activeMethod !== null;
+  // A peer that takes no commands from here gets the status alone.
+  const { canCommand } = useCommandAccess();
   const rowRef = useRef<HTMLDivElement>(null);
   const verdict = describeMergeVerdict(pr, status, mode === "armed");
   // The reviews' words would only repeat a status that names them.
   const reviewsSaid = verdict.by === "reviews";
-  const compact = useCompactChips(rowRef, reviewsSaid, canMerge);
+  const compact = useCompactChips(rowRef, reviewsSaid, canMerge && canCommand);
 
   // The merge box's one status (or why there's no merge button, with
   // the checks beside it), then the reviews. Items of the row they sit
@@ -89,7 +92,7 @@ export function MergeBox({
     </>
   );
 
-  if (!primary || !activeMethod) {
+  if (!primary || !activeMethod || !canCommand) {
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {statusItems}

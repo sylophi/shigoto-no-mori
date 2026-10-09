@@ -222,6 +222,7 @@ const deviceKeys = settingKeys(
     "autoPopulateInstall",
     "autoPullNew",
     "autoPullPrimaryOnly",
+    "autoShelveDays",
     "doubutsuNames",
     "codexWorktreeNames",
     "managedOnProjectDrive",

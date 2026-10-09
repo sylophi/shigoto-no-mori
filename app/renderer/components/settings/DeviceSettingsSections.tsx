@@ -1,4 +1,5 @@
-import type { Dispatch, SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useState } from "react";
+import { digitsOnly } from "@shigomori/contracts/schemas";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
@@ -6,6 +7,8 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { projectDriveBaseFor } from "@shared/git/worktreeLayout";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { ToggleRow } from "@/components/shared/ToggleRow";
+import { Input } from "@/components/ui/input";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ExternalLink } from "@/components/ui/external-link";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
 
@@ -70,6 +73,20 @@ export function WorktreeToggles({ form, setForm }: ToggleProps) {
         />
       </div>
       <ToggleRow
+        checked={form.autoShelveDays !== null}
+        onCheckedChange={(on) =>
+          setField("autoShelveDays")(on ? DEFAULT_AUTO_SHELVE_DAYS : null)
+        }
+        label="Shelve idle worktrees"
+        description="Shelves a worktree once nothing has happened in it for a while: no commits, edits or agent turns. Working in it brings it back."
+      />
+      {form.autoShelveDays !== null && (
+        <AutoShelveDaysField
+          days={form.autoShelveDays}
+          onChange={setField("autoShelveDays")}
+        />
+      )}
+      <ToggleRow
         checked={form.doubutsuNames}
         onCheckedChange={setField("doubutsuNames")}
         label="Doubutsu names"
@@ -104,6 +121,68 @@ export function WorktreeToggles({ form, setForm }: ToggleProps) {
         }
       />
     </section>
+  );
+}
+
+const DEFAULT_AUTO_SHELVE_DAYS = 14;
+
+const AUTO_SHELVE_PRESETS = [
+  { value: "1", label: "1 day" },
+  { value: "3", label: "3 days" },
+  { value: "7", label: "1 week" },
+  { value: "14", label: "2 weeks" },
+] as const;
+
+// The idle shelf's day count, a sub-option indented like the one under
+// auto-pull: a preset, or Custom with a field of its own. A count no
+// preset names reads as Custom. The field's draft holds what is typed
+// until it is a count, and the saved count shows again once the field
+// is left.
+function AutoShelveDaysField({
+  days,
+  onChange,
+}: {
+  days: number;
+  onChange: (days: number) => void;
+}) {
+  const isPreset = AUTO_SHELVE_PRESETS.some((p) => p.value === String(days));
+  const [customPicked, setCustomPicked] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const custom = customPicked || !isPreset;
+  return (
+    <div className="flex flex-wrap items-center gap-2 pl-11 text-sm">
+      <SegmentedControl
+        aria-label="Shelve after"
+        value={custom ? "custom" : String(days)}
+        onChange={(next) => {
+          setCustomPicked(next === "custom");
+          if (next !== "custom") onChange(Number(next));
+        }}
+        options={[...AUTO_SHELVE_PRESETS, { value: "custom", label: "Custom" }]}
+      />
+      {custom && (
+        <>
+          <Input
+            inputMode="numeric"
+            maxLength={3}
+            value={draft ?? String(days)}
+            aria-label="Days"
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => {
+              const next = digitsOnly(event.target.value);
+              setDraft(next);
+              if (Number(next) > 0) onChange(Number(next));
+            }}
+            onBlur={() => setDraft(null)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+            className="tabular h-7 w-12 px-1.5 text-center"
+          />
+          {days === 1 ? "day" : "days"}
+        </>
+      )}
+    </div>
   );
 }
 

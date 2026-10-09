@@ -105,8 +105,9 @@ export function WorktreeDetailInner({
     setOpen: setTransferDialog,
   };
   const scriptRuns = useScriptRuns();
-  // Always true locally (the local device is granted by contract), so
-  // this alone carries the read-only mirror.
+  // Always true locally (the local device is granted by contract). The
+  // footer's verbs give way to the read-only note on it, and each
+  // section's controls read the same verdict themselves.
   // While the verdict is still in flight, assume granted rather than
   // flashing a read-only page that turns editable a moment later (the
   // same rule PeerDeviceSettings and VersionSection follow).

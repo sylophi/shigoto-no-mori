@@ -1,3 +1,5 @@
+import { type AgentSession, anyActive } from "./agentSessions.ts";
+
 // A shelved worktree comes back off the shelf on its own once it is
 // worked in: an edit, a new or deleted file, or a commit. Changes it was
 // shelved with don't count, and neither does an auto-pull fast-forward.
@@ -58,3 +60,68 @@ export const shelfWorked = (
     !seen.followsUpstream) ||
   seen.changed !== snapshot.changed ||
   seen.lastChangeAt > snapshot.at;
+
+// The idle shelf: with the autoShelveDays setting on, the same listings
+// shelve a managed worktree nothing has touched for that many days,
+// its snapshot taken in the same write. A touch is a commit or other
+// move of HEAD, an edit, an agent session changing state, the
+// worktree's creation, or an unshelve, by hand or by work. A pull into
+// an auto-pull worktree isn't one, as above.
+
+// Past a century the count means never.
+const MAX_IDLE_SHELF_DAYS = 36500;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// How long a worktree may go untouched, ms, from the autoShelveDays
+// setting's value: 0 while it is off.
+export const idleShelfAfter = (days: unknown): number =>
+  typeof days === "number" && Number.isInteger(days) && days > 0
+    ? Math.min(days, MAX_IDLE_SHELF_DAYS) * DAY_MS
+    : 0;
+
+// What the idle shelf reads of a row.
+export type TouchedRow = {
+  readonly isPrimary: boolean;
+  readonly isExternal: boolean;
+  readonly lastChangeAt?: number | undefined;
+  readonly createdAt?: number | undefined;
+  readonly autoPull: boolean;
+  readonly unpushedCount: number;
+  readonly recentCommits: ReadonlyArray<{ readonly date: string }>;
+  readonly agentSessions?: ReadonlyArray<AgentSession> | undefined;
+};
+
+// The newest touch the row shows (the app's worktreeLastActivityAt,
+// plus its creation), HEAD's last move (`headMovedAt`, the mtime of its
+// HEAD reflog), or the unshelve, epoch ms. 0 when nothing is known. A
+// commit's own date can be old (a rebase or a checkout keeps it), so
+// the reflog stands in for the move itself. Neither counts where HEAD
+// only follows its upstream.
+export const lastTouchedAt = (
+  row: TouchedRow,
+  headMovedAt: number,
+  unshelvedAt: number,
+): number => {
+  const followsUpstream = row.autoPull && row.unpushedCount === 0;
+  const committed = Date.parse(row.recentCommits[0]?.date ?? "");
+  return Math.max(
+    row.lastChangeAt ?? 0,
+    row.createdAt ?? 0,
+    unshelvedAt,
+    followsUpstream || Number.isNaN(committed) ? 0 : committed,
+    followsUpstream ? 0 : headMovedAt,
+    ...(row.agentSessions ?? []).map((session) => session.at),
+  );
+};
+
+// Whether the idle shelf could take an unshelved row at all: a managed
+// worktree with no agent session mid-turn, whose time is when the turn
+// started (or when it began waiting on the user).
+export const idleShelfCandidate = (row: TouchedRow) =>
+  !row.isPrimary && !row.isExternal && !anyActive(row.agentSessions ?? []);
+
+// Whether the idle shelf takes a candidate probed at `at`: its newest
+// touch is older than `after` allows. One with no touch known is left
+// out.
+export const idleShelfTakes = (touched: number, at: number, after: number) =>
+  after > 0 && touched > 0 && touched < at - after;

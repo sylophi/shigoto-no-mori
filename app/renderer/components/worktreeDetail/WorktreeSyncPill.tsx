@@ -6,6 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import {
@@ -28,6 +29,7 @@ interface WorktreeSyncPillProps {
 }
 
 // The remote-sync action(s) for a worktree, as lib/syncState says.
+// None on a peer that takes no commands from here.
 export function WorktreeSyncPill({
   worktree,
   compact = false,
@@ -41,7 +43,9 @@ export function WorktreeSyncPill({
   const pushForce = usePushForceWorktree();
   const overwrite = useOverwriteWorktree();
   const mergeUpstream = useMergeUpstreamWorktree();
+  const { canCommand } = useCommandAccess();
 
+  if (!canCommand) return null;
   if (waiting) {
     // Never the move while it waits.
     if (!held) return null;

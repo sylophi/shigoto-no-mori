@@ -129,8 +129,8 @@ export class Registry extends Context.Service<
     ) => Effect.Effect<void>;
     // Clears what is kept under an id that is going away.
     readonly forgetWorktree: (worktreeId: string) => Effect.Effect<void>;
-    // Carries the marks and agent sessions of a moved checkout to its
-    // new id. The shelf
+    // Carries the marks, the unshelve time and the agent sessions of a
+    // moved checkout to its new id. The shelf
     // snapshot stays behind: a move can give every file a fresh mtime.
     readonly moveWorktree: (from: string, to: string) => Effect.Effect<void>;
     // The id this data dir goes by, minted on first ask.
@@ -372,14 +372,23 @@ const make = Effect.gen(function* () {
   ) {
     yield* sql.withTransaction(
       Effect.gen(function* () {
-        yield* on
+        const unmarked = yield* on
           ? sql`INSERT INTO worktree_marks (worktree_id, mark)
                 VALUES (${worktreeId}, ${mark}) ON CONFLICT DO NOTHING`
           : sql`DELETE FROM worktree_marks
-                WHERE worktree_id = ${worktreeId} AND mark = ${mark}`;
-        // A fresh shelf starts from a fresh snapshot.
-        if (mark === "shelved") {
-          yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${worktreeId}`;
+                WHERE worktree_id = ${worktreeId} AND mark = ${mark}
+                RETURNING worktree_id`;
+        if (mark !== "shelved") return;
+        // A fresh shelf starts from a fresh snapshot, and an unshelve
+        // records when it happened (the idle shelf's touch).
+        yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${worktreeId}`;
+        if (on) {
+          yield* sql`DELETE FROM unshelved_at WHERE worktree_id = ${worktreeId}`;
+        } else if (unmarked.length > 0) {
+          const now = yield* Clock.currentTimeMillis;
+          yield* sql`INSERT INTO unshelved_at (worktree_id, at)
+            VALUES (${worktreeId}, ${now})
+            ON CONFLICT (worktree_id) DO UPDATE SET at = excluded.at`;
         }
       }),
     );
@@ -495,6 +504,7 @@ const make = Effect.gen(function* () {
   ) {
     yield* sql`DELETE FROM worktree_marks WHERE worktree_id = ${worktreeId}`;
     yield* sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${worktreeId}`;
+    yield* sql`DELETE FROM unshelved_at WHERE worktree_id = ${worktreeId}`;
     yield* sql`DELETE FROM agent_sessions WHERE worktree_id = ${worktreeId}`;
   }, Effect.orDie);
 
@@ -508,6 +518,8 @@ const make = Effect.gen(function* () {
             AND mark IN (SELECT mark FROM worktree_marks WHERE worktree_id = ${from})`,
         sql`UPDATE worktree_marks SET worktree_id = ${to} WHERE worktree_id = ${from}`,
         sql`DELETE FROM shelf_snapshots WHERE worktree_id = ${from}`,
+        sql`DELETE FROM unshelved_at WHERE worktree_id = ${to}`,
+        sql`UPDATE unshelved_at SET worktree_id = ${to} WHERE worktree_id = ${from}`,
         sql`UPDATE agent_sessions SET worktree_id = ${to} WHERE worktree_id = ${from}`,
       ]),
     );

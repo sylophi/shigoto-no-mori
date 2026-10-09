@@ -17,6 +17,7 @@ import {
 import { agentSessions } from "./migrations/agentSessions.ts";
 import { changes } from "./migrations/changes.ts";
 import { tables } from "./migrations/tables.ts";
+import { unshelvedAt } from "./migrations/unshelvedAt.ts";
 import * as Paths from "./Paths.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
@@ -71,6 +72,7 @@ export const layer = (
             "2_import_json": Effect.provideContext(importJson, platform),
             "3_agent_sessions": agentSessions,
             "4_changes": changes,
+            "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
           }),
         }).pipe(Effect.provideService(SqlClient.SqlClient, client));
         return client;
@@ -116,6 +118,7 @@ export const fromFiles = (
           "2_import_json": Effect.provideContext(importFiles(true), platform),
           "3_agent_sessions": agentSessions,
           "4_changes": changes,
+          "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
         }),
       }).pipe(
         Effect.provideService(SqlClient.SqlClient, client),

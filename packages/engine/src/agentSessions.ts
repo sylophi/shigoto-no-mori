@@ -176,6 +176,10 @@ export function clipLine(line: string, max: number): string {
 export const anyWorking = (sessions: ReadonlyArray<AgentSession>) =>
   sessions.some(({ state }) => state === "working");
 
+// Whether any session is mid-turn: working, or waiting on the user.
+export const anyActive = (sessions: ReadonlyArray<AgentSession>) =>
+  sessions.some(({ state }) => state !== "idle");
+
 const sameList = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
   a.length === b.length && a.every((entry, index) => entry === b[index]);
 

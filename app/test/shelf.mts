@@ -8,7 +8,9 @@
 // changed file. The cheap identities form settles nothing. An auto-pull
 // worktree that only fast-forwards stays shelved, and a commit made in
 // one still unshelves it. A listing that read a snapshot before a
-// reshelve doesn't undo the reshelve.
+// reshelve doesn't undo the reshelve. With autoShelveDays set, a
+// worktree untouched for longer goes on the shelf by itself, and one
+// unshelved by hand stays off it.
 //
 // Run: pnpm test shelf.
 import assert from "node:assert/strict";
@@ -17,6 +19,7 @@ import {
   mkdirSync,
   rmSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
@@ -35,7 +38,7 @@ beforeAll(async () => {
   await fixture.useCli();
 });
 afterAll(() => fixture.remove());
-const { dataDir, git, gitOut, commitFile, sandbox } = fixture;
+const { dataDir, git, gitOut, commitFile, sandbox, sm } = fixture;
 
 const { listWorktreeIdentities, listWorktrees, setAutoPull, setShelved } =
   await import("../host/lib/engineCalls.ts");
@@ -263,4 +266,48 @@ it("a listing that read the snapshot before a reshelve leaves the reshelve alone
   assert.equal(row?.shelved, true, "the stale listing kept it shelved");
   assert.equal(await markedShelved(box.id), true);
   assert.deepEqual(await snapshotOf(box.id), fresh);
+});
+
+it("with autoShelveDays set, an untouched worktree goes on the shelf, and an unshelve or a move of HEAD counts as a touch", async () => {
+  const box = await makeSandbox(trackTest);
+  await sm("config", "set", "autoShelveDays", "1");
+  trackTest(() => sm("config", "unset", "autoShelveDays"));
+  assert.equal(await listedShelved(box), false, "a new worktree is fresh");
+  // Its newest commit, HEAD's last move and its creation two days back.
+  const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  await git(box.worktree, [
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "old",
+    `--date=${old.toISOString()}`,
+  ]);
+  const adminDir = await gitOut(box.worktree, "rev-parse", "--git-dir");
+  const age = () => {
+    utimesSync(join(adminDir, "commondir"), old, old);
+    utimesSync(join(adminDir, "logs", "HEAD"), old, old);
+  };
+  age();
+  assert.equal(await listedShelved(box), true, "idle goes on the shelf");
+  assert.equal(await markedShelved(box.id), true);
+  assert.ok(await snapshotOf(box.id), "with its snapshot");
+  await setShelved(box.projectRef, box.id, false);
+  assert.equal(await listedShelved(box), false, "the unshelve is a touch");
+  await shelve(box);
+  writeFileSync(join(box.worktree, "a.txt"), "edited\n");
+  assert.equal(await listedShelved(box), false, "work still unshelves it");
+  // Clean and old again, as if that work were long past, then a switch
+  // to a new branch on the same old commit: the move of HEAD is the
+  // touch.
+  await git(box.worktree, ["checkout", "-q", "--", "a.txt"]);
+  await Engine.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`DELETE FROM unshelved_at WHERE worktree_id = ${box.id}`;
+    }),
+  );
+  age();
+  await git(box.worktree, ["checkout", "-q", "-b", "old"]);
+  assert.equal(await listedShelved(box), false, "a branch switch is a touch");
 });

@@ -63,6 +63,10 @@ import {
 import * as Registry from "./Registry.ts";
 import type { RegisteredProject } from "./Registry.ts";
 import {
+  idleShelfAfter,
+  idleShelfCandidate,
+  idleShelfTakes,
+  lastTouchedAt,
   type ShelfObservation,
   type ShelfSnapshot,
   shelfWorked,
@@ -831,6 +835,8 @@ export class Worktrees extends Context.Service<
     >;
     // The ids the shelf holds a snapshot for.
     readonly snapshotted: Effect.Effect<ReadonlySet<string>>;
+    // The ids with an unshelve time on file.
+    readonly unshelved: Effect.Effect<ReadonlySet<string>>;
   }
 >()("sm/engine/Worktrees") {}
 
@@ -1069,17 +1075,22 @@ const make = Effect.gen(function* () {
     return { remotes, primaryRef, primaryBranch, settings };
   });
 
-  // The marks, and with any worktree shelved the shelf's snapshots, read
-  // before the probes: a snapshot taken after a row's probes started
-  // must not be compared against them.
+  // The marks, with any worktree shelved the shelf's snapshots, and with
+  // the idle shelf on the unshelve times, read before the probes: a
+  // snapshot taken after a row's probes started must not be compared
+  // against them, and an unshelve after them wins over the idle shelf.
   const marks = Effect.gen(function* () {
-    const [shelved, autoPull, agentSessions] = yield* Effect.all(
+    const [shelved, autoPull, agentSessions, idleAfter] = yield* Effect.all(
       [
         registry.marked("shelved"),
         registry.marked("autoPull"),
         registry.agentSessions,
+        config.get({ kind: "device" }, "autoShelveDays").pipe(
+          Effect.map((setting) => idleShelfAfter(setting.value)),
+          Effect.orElseSucceed(() => 0),
+        ),
       ],
-      { concurrency: 3 },
+      { concurrency: 4 },
     );
     const snapshots = new Map<string, ShelfSnapshot>(
       shelved.size === 0
@@ -1089,7 +1100,22 @@ const make = Effect.gen(function* () {
             Effect.orElseSucceed(() => []),
           )).map(({ worktree_id, ...snapshot }) => [worktree_id, snapshot]),
     );
-    return { shelved, autoPull, agentSessions, snapshots };
+    const unshelvedAt = new Map<string, number>(
+      idleAfter === 0
+        ? []
+        : (yield* sql<{ worktree_id: string; at: number }>`
+            SELECT worktree_id, at FROM unshelved_at`.pipe(
+            Effect.orElseSucceed(() => []),
+          )).map(({ worktree_id, at }) => [worktree_id, at]),
+    );
+    return {
+      shelved,
+      autoPull,
+      agentSessions,
+      snapshots,
+      idleAfter,
+      unshelvedAt,
+    };
   });
 
   // What every row of one project is built against, read once.
@@ -1197,26 +1223,49 @@ const make = Effect.gen(function* () {
     });
   type Probed = Effect.Success<ReturnType<typeof probe>>;
 
-  // Settles every shelved row of one listing in one transaction: a row
-  // without a snapshot gets one, and one worked in since comes back
-  // unshelved. The listing read the marks before its probes and acts
-  // after them, so each write checks again: a shelve or unshelve in
-  // between (which drops the snapshot) wins over the listing's stale
-  // view. A seed lands only while the worktree is still marked and has
-  // none, a retire only while the snapshot is the one compared against.
+  // When HEAD last moved in a linked worktree, epoch ms: the mtime of
+  // its admin dir's HEAD reflog, which every commit, checkout, rebase and
+  // reset appends to. 0 when there is none to read.
+  const headMovedAt = (worktreePath: string) =>
+    Effect.gen(function* () {
+      const admin = yield* git.adminDirOf(worktreePath);
+      if (Option.isNone(admin)) return 0;
+      const info = yield* fs.stat(path.join(admin.value, "logs", "HEAD"));
+      return Math.max(
+        Option.match(info.mtime, {
+          onNone: () => 0,
+          onSome: (date) => date.getTime(),
+        }),
+        0,
+      );
+    }).pipe(Effect.orElseSucceed(() => 0));
+
+  // Settles every row of one listing against the shelf its marks read,
+  // in one transaction: a shelved row without a snapshot gets one, a
+  // shelved row worked in since comes back unshelved, and a row the idle
+  // shelf takes goes on the shelf with its snapshot. A row whose status
+  // failed is left alone. The listing read the marks before its probes
+  // and acts after them, so each write checks again: a shelve or
+  // unshelve in between (which drops the snapshot) wins over the
+  // listing's stale view. An idle shelve lands only while the worktree
+  // is still unmarked and hasn't been unshelved since the listing read
+  // the unshelve times, a seed only while the worktree is still marked
+  // and has none, and a retire only while the snapshot is the one
+  // compared against. A retire counts as an unshelve.
   const settle = (
     probed: ReadonlyArray<Probed>,
-    stored: ReadonlyMap<string, ShelfSnapshot>,
+    marked: Pick<
+      Effect.Success<typeof marks>,
+      "snapshots" | "idleAfter" | "unshelvedAt"
+    >,
   ) => {
     const rows = probed.map(({ row }) => row);
     return Effect.gen(function* () {
-      const shelved = probed.filter(
-        ({ row, statusOk }) => row.shelved && statusOk,
-      );
-      if (shelved.length === 0) return rows;
       const seeds: Array<[string, ShelfSnapshot]> = [];
       const retires: Array<[string, number]> = [];
-      for (const { row, at } of shelved) {
+      const shelves: Array<[string, ShelfSnapshot]> = [];
+      for (const { row, at, statusOk } of probed) {
+        if (!statusOk) continue;
         const seen: ShelfObservation = {
           at,
           head: row.recentCommits[0]?.hash ?? "",
@@ -1224,15 +1273,43 @@ const make = Effect.gen(function* () {
           lastChangeAt: row.lastChangeAt ?? 0,
           followsUpstream: row.autoPull && row.unpushedCount === 0,
         };
-        const snapshot = stored.get(row.id);
+        if (!row.shelved) {
+          if (marked.idleAfter === 0 || !idleShelfCandidate(row)) continue;
+          const touched = lastTouchedAt(
+            row,
+            yield* headMovedAt(row.path),
+            marked.unshelvedAt.get(row.id) ?? 0,
+          );
+          if (idleShelfTakes(touched, at, marked.idleAfter)) {
+            shelves.push([row.id, snapshotOf(seen)]);
+          }
+          continue;
+        }
+        const snapshot = marked.snapshots.get(row.id);
         if (snapshot === undefined) seeds.push([row.id, snapshotOf(seen)]);
         else if (shelfWorked(snapshot, seen))
           retires.push([row.id, snapshot.at]);
       }
-      if (seeds.length === 0 && retires.length === 0) return rows;
-      const unshelved = new Set<string>();
+      if (seeds.length === 0 && retires.length === 0 && shelves.length === 0)
+        return rows;
+      const flipped = new Map<string, boolean>();
       yield* sql.withTransaction(
         Effect.gen(function* () {
+          for (const [id, { at, head, changed }] of shelves) {
+            const read = marked.unshelvedAt.get(id) ?? null;
+            const shelved =
+              yield* sql`INSERT INTO worktree_marks (worktree_id, mark)
+              SELECT ${id}, 'shelved'
+              WHERE (SELECT at FROM unshelved_at WHERE worktree_id = ${id}) IS ${read}
+              ON CONFLICT DO NOTHING RETURNING worktree_id`;
+            if (shelved.length === 0) continue;
+            yield* sql`DELETE FROM unshelved_at WHERE worktree_id = ${id}`;
+            yield* sql`INSERT INTO shelf_snapshots (worktree_id, at, head, changed)
+              VALUES (${id}, ${at}, ${head}, ${changed})
+              ON CONFLICT (worktree_id) DO UPDATE SET at = excluded.at,
+                head = excluded.head, changed = excluded.changed`;
+            flipped.set(id, true);
+          }
           for (const [id, { at, head, changed }] of seeds) {
             yield* sql`INSERT INTO shelf_snapshots (worktree_id, at, head, changed)
               SELECT ${id}, ${at}, ${head}, ${changed}
@@ -1240,24 +1317,28 @@ const make = Effect.gen(function* () {
                 WHERE worktree_id = ${id} AND mark = 'shelved')
               ON CONFLICT (worktree_id) DO NOTHING`;
           }
+          const now = yield* Clock.currentTimeMillis;
           for (const [id, at] of retires) {
             const retired = yield* sql`DELETE FROM shelf_snapshots
               WHERE worktree_id = ${id} AND at = ${at} RETURNING worktree_id`;
             if (retired.length === 0) continue;
             yield* sql`DELETE FROM worktree_marks
               WHERE worktree_id = ${id} AND mark = 'shelved'`;
-            unshelved.add(id);
+            yield* sql`INSERT INTO unshelved_at (worktree_id, at)
+              VALUES (${id}, ${now})
+              ON CONFLICT (worktree_id) DO UPDATE SET at = excluded.at`;
+            flipped.set(id, false);
           }
         }),
       );
-      return rows.map((row) =>
-        unshelved.has(row.id)
-          ? Object.assign({}, row, { shelved: false })
-          : row,
-      );
+      return rows.map((row) => {
+        const shelved = flipped.get(row.id);
+        return shelved === undefined
+          ? row
+          : Object.assign({}, row, { shelved });
+      });
     }).pipe(
-      // A failed write leaves every row shelved: the next listing tries
-      // again.
+      // A failed write changes no row: the next listing tries again.
       Effect.catchTags({ SqlError: () => Effect.succeed(rows) }),
     );
   };
@@ -1275,7 +1356,7 @@ const make = Effect.gen(function* () {
       (worktree) => probe(worktree, context),
       { concurrency: ROW_SLOTS },
     );
-    return yield* settle(probed, context.snapshots);
+    return yield* settle(probed, context);
   });
 
   const list = Effect.fn("Worktrees.list")(function* (
@@ -1292,7 +1373,7 @@ const make = Effect.gen(function* () {
     const context = yield* contextOf(located.project, yield* marks);
     const probed = yield* probe(located.worktree, context);
     if (!options.settle) return probed.row;
-    const [settled] = yield* settle([probed], context.snapshots);
+    const [settled] = yield* settle([probed], context);
     return settled ?? probed.row;
   });
 
@@ -2935,6 +3016,12 @@ const make = Effect.gen(function* () {
       Effect.map((rows) => new Set(rows.map(({ worktree_id }) => worktree_id))),
       Effect.orDie,
       Effect.withSpan("Worktrees.snapshotted"),
+    ),
+    unshelved: sql<{ worktree_id: string }>`
+      SELECT worktree_id FROM unshelved_at`.pipe(
+      Effect.map((rows) => new Set(rows.map(({ worktree_id }) => worktree_id))),
+      Effect.orDie,
+      Effect.withSpan("Worktrees.unshelved"),
     ),
     checkRemovable: (located, force) => removable(located.worktree, force),
     primaryTarget: (project) =>
