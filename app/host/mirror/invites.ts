@@ -29,7 +29,7 @@ import * as Schema from "effect/Schema";
 import type * as Types from "effect/Types";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
-import { allContractModules } from "@shared/ipc/client";
+import { allContractModules } from "@shigomori/contracts/allModules";
 import {
   annotation,
   callsOf,

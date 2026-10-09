@@ -72,7 +72,7 @@ import { safeDecode } from "@shigomori/contracts/codec";
 import { classificationGap } from "@shared/ipc/registerContract";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { accountContract } from "@shigomori/contracts/modules/account";
-import { allContractModules } from "@shared/ipc/client";
+import { allContractModules } from "@shigomori/contracts/allModules";
 import { cliContract } from "@shigomori/contracts/modules/cli";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
@@ -92,10 +92,11 @@ import {
   openDevice,
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
-import { LinkGroup, MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
-import { handshakeProof, newHandshakeNonce } from "@shared/remote/proof";
+import { LinkGroup } from "@shigomori/contracts/link";
+import { handshakeProof, newHandshakeNonce } from "@shigomori/contracts/proof";
+import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
-import type { ChannelHandle } from "@shared/remote/channels";
+import type { ChannelHandle } from "@shigomori/contracts/link";
 import { type Track, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import {

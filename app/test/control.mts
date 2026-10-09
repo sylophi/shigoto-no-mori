@@ -1,19 +1,20 @@
 // Durable proof for the CLI's cross-device verbs (`sm devices`, `sm
 // worktrees send|bring|mirror|unmirror|mirrors`) end to end: the REAL sm
-// binary (built from packages/cli by this check) finds the REAL control server
-// (main/core/control/server.ts) through control.json in a sandboxed
-// data dir, the server dispatches the REAL control handlers
-// (host/ipc/modules/control.ts), and those run the REAL send and pull
+// binary (built from packages/cli by this check) finds the REAL loopback
+// (host/socket/loopback.ts) through loopback.json in a sandboxed data
+// dir, proves the token in the link's handshake, and the loopback
+// serves the REAL control handlers (host/ipc/modules/control.ts), which
+// run the REAL send and pull
 // orchestrators over a REAL direct websocket to device A, which run
 // the engine for every git step against real fixture repos.
 // The account's device registry is the one double (it is an HTTP read
 // of the hub), and the mirror engine is a recording stand-in: its real
 // runs are test/mirror.mts's, while what is pinned here is what the
 // control layer asks of it. Asserts:
-//   - with no control.json, a dead pid, a dead port or a wrong token,
+//   - with no loopback.json, a dead pid, a dead port or a wrong token,
 //     the CLI says the app isn't running (coded app-not-running), and
-//     the server refuses a bad hello and serves nothing before one.
-//   - a control.json wiped under the running app comes back.
+//     the loopback serves nothing before a hello.
+//   - a loopback.json wiped under the running app comes back.
 //   - `devices` names the peers, leaves a browser out, and reports
 //     offline, no-grant and ready per device for the repo.
 //   - `send` lands a dirty worktree on the peer with its commit and its
@@ -62,7 +63,6 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
@@ -71,6 +71,7 @@ import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
   ControlPeerWorktreeSchema,
+  ControlTransferResultSchema,
   controlContract,
 } from "@shigomori/contracts/modules/control";
 import {
@@ -95,7 +96,12 @@ import {
 import { loose } from "@shigomori/contracts/schemas/loose";
 import { strict } from "@shigomori/contracts/schemas/strict";
 import { only } from "@shared/util/only";
-import { controlHandlers } from "@host/ipc/modules/control";
+import {
+  controlHandlers,
+  controlTransfers,
+  followTransfer,
+} from "@host/ipc/modules/control";
+import { bring, send } from "@host/lib/control/ops";
 import { setControlImpl } from "@host/lib/control/peers";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import {
@@ -117,11 +123,21 @@ import {
 import { setPeerReach } from "@host/ipc/peerSync";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { listMirrorInvites } from "@host/mirror/invites";
-import {
-  CONTROL_FILE_NAME,
-  createControlServer,
-  type ControlFile,
-} from "../main/core/control/server.ts";
+import * as Loopback from "@host/socket/loopback";
+import { createLinkRegistrar } from "@host/socket/server";
+import * as HostPushes from "@host/lib/hostPushes";
+import * as StoreChanges from "@shigomori/engine/StoreChanges";
+import { LinkUnauthenticatedError } from "@shigomori/contracts/errors";
+import { LoopbackGroup } from "@shigomori/contracts/link";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import type * as Stream from "effect/Stream";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Socket from "effect/socket/Socket";
 import {
   cliFailureMessage,
   type CliResult,
@@ -137,7 +153,77 @@ import { bootDirectWire } from "./lib/directBoot.mts";
 const fixture = cliSandbox("sm-control-check-");
 const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
 const { addWorktree, projectIdOf } = fixture;
-const controlFile = join(dataDir, CONTROL_FILE_NAME);
+const loopbackFile = join(dataDir, Loopback.LOOPBACK_FILE);
+
+type View = (input: unknown) => Stream.Stream<unknown, unknown, never>;
+
+// The REAL loopback on `file`, serving the control contract's `handlers`
+// and `transfers`, built on `run`'s engine: this device's, or a second
+// one's.
+async function startLoopback(options: {
+  readonly file: string;
+  readonly handlers: Handlers<typeof controlContract, HandlerContext>;
+  readonly transfers: Readonly<Record<string, View>>;
+  readonly run: <A, E>(effect: Effect.Effect<A, E, never>) => Promise<A>;
+}) {
+  const registrar = createLinkRegistrar();
+  registerContract(
+    controlContract,
+    options.handlers,
+    {
+      handle: (channel, fn) => registrar.handle(channel, fn),
+      broadcastAll: () => {},
+    },
+    { validateOutputs: true },
+  );
+  for (const [key, transfer] of Object.entries(options.transfers)) {
+    registrar.view(`control:${key}`, transfer);
+  }
+  const scope = Effect.runSync(Scope.make());
+  const context = await options.run(
+    Layer.buildWithScope(
+      Loopback.layer({
+        registrar,
+        deviceId: () => "B",
+        appVersion: "9.9.9",
+        file: () => options.file,
+      }).pipe(
+        Layer.provide(Layer.mergeAll(StoreChanges.layer, HostPushes.layer)),
+      ),
+      scope,
+    ) as Effect.Effect<Context.Context<Loopback.Loopback>, never, never>,
+  );
+  return {
+    loopback: Context.get(context, Loopback.Loopback),
+    stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
+  };
+}
+
+// A call on the loopback with no handshake before it, as a stranger to
+// the token would make: its failure.
+const callWithoutHello = (port: number) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const socket = yield* Socket.makeWebSocket(`ws://127.0.0.1:${port}`);
+      const protocol = yield* RpcClient.makeProtocolSocket().pipe(
+        Effect.provideService(Socket.Socket, socket),
+        Effect.provide(RpcSerialization.layerSchemaBinary()),
+      );
+      // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
+      const client = (yield* RpcClient.make(LoopbackGroup, {
+        flatten: true,
+      }).pipe(
+        Effect.provideService(RpcClient.Protocol, protocol),
+      )) as unknown as (
+        tag: string,
+        payload: unknown,
+      ) => Effect.Effect<unknown, unknown>;
+      return yield* Effect.flip(client("control:devices", {}));
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Socket.layerWebSocketConstructorGlobal),
+    ),
+  );
 
 // The final {ok} document of a run, and its progress events.
 const finalDoc = (result: CliResult) =>
@@ -157,7 +243,7 @@ const DevicesDocSchema = strict(
 );
 const TransferDocSchema = strict(
   Schema.Struct({
-    ...callOf(controlContract, "send").successSchema.struct.fields,
+    ...ControlTransferResultSchema.struct.fields,
     ...caveatFields,
   }),
 );
@@ -211,38 +297,6 @@ async function refused(
   assert.equal(doc.code, code, `sm ${args.join(" ")}: ${doc.error}`);
   if (pattern !== undefined) assert.match(doc.error, pattern);
   return doc;
-}
-
-type RawFrame = { t: string; ok?: boolean; message?: string };
-
-// One raw line-delimited exchange with the control server, for the
-// hostile paths the CLI itself never takes.
-function rawExchange(
-  port: number,
-  lines: object[],
-  waitMs = 300,
-): Promise<RawFrame[]> {
-  return new Promise((resolve, reject) => {
-    const socket = createConnection({ host: "127.0.0.1", port });
-    let received = "";
-    socket.setEncoding("utf8");
-    socket.on("data", (chunk) => {
-      received += chunk;
-    });
-    socket.on("error", reject);
-    socket.on("connect", () => {
-      for (const line of lines) socket.write(`${JSON.stringify(line)}\n`);
-      setTimeout(() => socket.destroy(), waitMs);
-    });
-    socket.on("close", () =>
-      resolve(
-        received
-          .split("\n")
-          .filter((line) => line !== "")
-          .map((line) => JSON.parse(line)),
-      ),
-    );
-  });
 }
 
 // One row of the account's device registry, as the hub lists it.
@@ -359,8 +413,8 @@ let peerOwns: string;
 let removalsOf: (
   worktreeId: string,
 ) => (WorktreeRemoval & { endedThen: string[] })[];
-let control: ReturnType<typeof createControlServer>;
-let published: ControlFile;
+let control: Awaited<ReturnType<typeof startLoopback>>;
+let published: Record<string, unknown>;
 let mirrorsCreated: () => MirrorCreateInput[];
 
 beforeAll(async () => {
@@ -399,23 +453,23 @@ beforeAll(async () => {
   sourceProjectId = await projectIdOf(sourceRepo);
 });
 
-it("no control.json, a dead pid and a dead port all read as app-not-running", async () => {
-  // ---- (1) No app: every way control.json can be wrong reads as
+it("no loopback.json, a dead pid and a dead port all read as app-not-running", async () => {
+  // ---- (1) No app: every way loopback.json can be wrong reads as
   // "the app isn't running", before any server exists.
   await refused(["devices"], "app-not-running", /isn't running/);
   writeFileSync(
-    controlFile,
+    loopbackFile,
     JSON.stringify({ pid: 2 ** 22 - 3, port: 1, token: "x", appVersion: "1" }),
   );
   await refused(["devices"], "app-not-running");
   writeFileSync(
-    controlFile,
+    loopbackFile,
     JSON.stringify({ pid: process.pid, port: 1, token: "x", appVersion: "1" }),
   );
   await refused(["devices"], "app-not-running");
 });
 
-it("control.json is owner-only, a bad or missing hello is refused, only the control contract is served, and a stale token reads as app-not-running", async () => {
+it("loopback.json is owner-only, a call before the hello is refused, and a stale token reads as app-not-running", async () => {
   // Each device's mirror engine. B's is the slot's own. The peer
   // runs the mirrors whose original it holds (mirror --from), on its
   // own engine: the slot is process-wide, so a mirror call on A's
@@ -540,58 +594,34 @@ it("control.json is owner-only, a bad or missing hello is refused, only the cont
   removalsOf = (worktreeId: string) =>
     removals.filter((entry) => entry.worktreeId === worktreeId);
 
-  control = createControlServer({
-    appVersion: () => "9.9.9",
-    filePath: () => controlFile,
-    log: () => {},
+  control = await startLoopback({
+    file: loopbackFile,
+    handlers: controlHandlers,
+    transfers: controlTransfers,
+    run: Engine.run,
   });
-  registerContract(controlContract, controlHandlers, control.transport, {
-    validateOutputs: true,
-  });
-  await control.start();
-  track(() => control.stop());
+  track(control.stop);
 
-  // ---- (2) The published file and the hello gate.
-  published = JSON.parse(readFileSync(controlFile, "utf8"));
-  assert.equal(published.pid, process.pid);
-  assert.equal(published.appVersion, "9.9.9");
+  // ---- (2) The published file and the handshake.
+  published = JSON.parse(readFileSync(loopbackFile, "utf8"));
+  assert.equal(published["pid"], process.pid);
+  assert.equal(published["appVersion"], "9.9.9");
   assert.equal(
-    statSync(controlFile).mode & 0o077,
+    statSync(loopbackFile).mode & 0o077,
     0,
-    "control.json must be owner-only: it carries the token",
+    "loopback.json must be owner-only: it carries the token",
   );
-  const badHello = await rawExchange(published.port, [
-    { t: "hello", token: "not-the-token" },
-    { t: "req", id: 1, channel: "control:devices", input: {} },
-  ]);
-  assert.deepEqual(
-    badHello.map((frame) => frame.t),
-    ["refused"],
-    "a bad token is refused and its request never answered",
+  assert.ok(
+    (await callWithoutHello(published["port"] as number)) instanceof
+      LinkUnauthenticatedError,
+    "a call before any hello is refused",
   );
-  const noHello = await rawExchange(published.port, [
-    { t: "req", id: 1, channel: "control:devices", input: {} },
-  ]);
-  assert.deepEqual(
-    noHello.map((frame) => frame.t),
-    ["refused"],
-    "a request before any hello is refused",
-  );
-  const offSurface = await rawExchange(published.port, [
-    { t: "hello", token: published.token },
-    { t: "req", id: 7, channel: "worktrees:delete", input: {} },
-  ]);
-  const [welcome, answer] = offSurface;
-  assert.equal(welcome?.t, "welcome");
-  assert.ok(answer !== undefined, "the off-surface request is answered");
-  assert.equal(answer.ok, false);
-  assert.match(answer.message ?? "", /No handler registered/);
   writeFileSync(
-    controlFile,
+    loopbackFile,
     JSON.stringify({ ...published, token: "stale-token" }),
   );
   await refused(["devices"], "app-not-running");
-  writeFileSync(controlFile, JSON.stringify(published));
+  writeFileSync(loopbackFile, JSON.stringify(published));
 });
 
 it("devices: names the peers, skips the browser, and reports offline, no-grant and ready for the repo", async () => {
@@ -1124,30 +1154,27 @@ it("send to a peer with no checkout: devices says it takes a send, a bring from 
     SHIGOMORI_DATA_DIR: otherDataDir,
   });
   const otherEngine = await secondEngine(otherDataDir);
-  const otherControl = createControlServer({
-    appVersion: () => "9.9.9",
-    filePath: () => join(otherDataDir, CONTROL_FILE_NAME),
-    log: () => {},
-  });
   const asOther =
     <I, O>(run: (input: I, ctx: HandlerContext) => O) =>
     (input: I, ctx: HandlerContext) =>
       Engine.runAside(otherEngine.runPromise, () => run(input, ctx));
-  registerContract(
-    controlContract,
-    {
+  const otherControl = await startLoopback({
+    file: join(otherDataDir, Loopback.LOOPBACK_FILE),
+    handlers: {
       devices: asOther(controlHandlers.devices),
       peerWorktrees: asOther(controlHandlers.peerWorktrees),
-      send: asOther(controlHandlers.send),
-      bring: asOther(controlHandlers.bring),
       mirrors: asOther(controlHandlers.mirrors),
       mirrorStop: asOther(controlHandlers.mirrorStop),
     },
-    otherControl.transport,
-    { validateOutputs: true },
-  );
-  await otherControl.start();
-  track(() => otherControl.stop());
+    transfers: {
+      send: followTransfer(asOther(send)),
+      bring: followTransfer(asOther(bring)),
+    },
+    run: otherEngine.runPromise as <A, E>(
+      effect: Effect.Effect<A, E, never>,
+    ) => Promise<A>,
+  });
+  track(otherControl.stop);
   // Deep in the sandbox, outside the home folder: the default place
   // is then where the peer keeps its repos (the sandbox, beside its
   // two), under the repo's own folder name.
@@ -1232,18 +1259,18 @@ it("a peer with no session is reported offline", async () => {
   );
 });
 
-it("a control.json removed under the running app is republished", async () => {
-  // ---- (9) A data wipe takes control.json with the rest of the data
+it("a loopback.json removed under the running app is republished", async () => {
+  // ---- (9) A data wipe takes loopback.json with the rest of the data
   // dir while the app lives on. The wipe's last step puts it back.
-  rmSync(controlFile);
-  control.republish();
-  assert.deepEqual(JSON.parse(readFileSync(controlFile, "utf8")), published);
+  rmSync(loopbackFile);
+  await Effect.runPromise(control.loopback.publish);
+  assert.deepEqual(JSON.parse(readFileSync(loopbackFile, "utf8")), published);
   finalDoc(await sm("worktrees", "mirrors"));
 });
 
-it("stopping the server unpublishes it", async () => {
+it("stopping the loopback unpublishes it", async () => {
   // ---- (10) Stop unpublishes, and the CLI reads that as not running.
-  control.stop();
-  assert.equal(existsSync(controlFile), false, "stop removes control.json");
+  await control.stop();
+  assert.equal(existsSync(loopbackFile), false, "stop removes loopback.json");
   await refused(["worktrees", "mirrors"], "app-not-running");
 });

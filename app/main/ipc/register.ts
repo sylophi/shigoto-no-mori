@@ -51,7 +51,7 @@ import { createHubConnection } from "@host/hub/connection";
 import * as DeviceLink from "@host/socket/server";
 import { mirrorInviteAdmits } from "@host/mirror/invites";
 import { dataDir } from "@host/lib/util/paths";
-import { CONTROL_FILE_NAME, createControlServer } from "../core/control/server";
+import * as Loopback from "@host/socket/loopback";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { publishPush } from "@host/lib/hostPushes";
 import { createDirectPlane } from "@shared/hub/directPlane";
@@ -209,15 +209,21 @@ export const tunnelLayer = TunnelService.adapter.pipe(
   ),
 );
 
-// The control wire: the loopback listener the CLI drives the
-// cross-device verbs through (main/core/control/server.ts). A wire of
-// its own, outside hostServer's fan: it serves the control contract
-// and nothing else, so no app channel is reachable from a terminal
-// unless that contract names an op for it.
-const controlServer = createControlServer({
-  appVersion: () => app.getVersion(),
-  filePath: () => join(dataDir(), CONTROL_FILE_NAME),
-});
+// The device link again, on loopback, for the processes on this
+// machine (host/socket/loopback.ts): the terminal's control ops, and
+// every host call beside them. Its registrar records the handlers at
+// boot; it listens from the host's start.
+const loopbackRegistrar = DeviceLink.createLinkRegistrar();
+export const loopbackLayer = Loopback.adapter.pipe(
+  Layer.provideMerge(
+    Loopback.layer({
+      registrar: loopbackRegistrar,
+      deviceId: () => getDeviceId(),
+      appVersion: app.getVersion(),
+      file: () => join(dataDir(), Loopback.LOOPBACK_FILE),
+    }),
+  ),
+);
 
 // Main-side consumers of peer pushes (the mirror's git follower reacts
 // to a peer's git:projectChanged and mirror:gitChanged), beside the
@@ -311,6 +317,7 @@ const hostServer: ServerTransport = {
   // direct sessions alone.
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
+    loopbackRegistrar.handle(channel, fn);
     // The link's gate reads each call's own annotations
     // (host/socket/server.ts, CommandGate).
     if (opts?.remote === true) linkRegistrar.handle(channel, fn);
@@ -346,51 +353,40 @@ export function registerContract<M extends ContractModule>(
   });
 }
 
+type View = (input: unknown) => Stream.Stream<unknown, unknown, Views.Services>;
+
 // A module's views (contract.ts, view), served on the device link to
-// the peers its annotations admit.
+// the peers its annotations admit, and on the loopback.
 export function registerViews<M extends ContractModule>(
   module: M,
   views: ViewHandlers<M, Views.Services>,
 ): void {
   for (const [key, view] of Object.entries(views)) {
-    linkRegistrar.view(
-      `${nameOf(module)}:${key}`,
-      view as (
-        input: unknown,
-      ) => Stream.Stream<unknown, unknown, Views.Services>,
-    );
+    const channel = `${nameOf(module)}:${key}`;
+    linkRegistrar.view(channel, view as View);
+    loopbackRegistrar.view(channel, view as View);
   }
 }
 
-// The control contract's registration, on the control wire alone.
+// The control contract, on the loopback alone: its ops as calls, and
+// its transfers as the streams of their progress and answer.
 export function registerControlContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext>,
+  transfers: Readonly<Record<string, View>>,
 ): void {
-  registerContractCore(module, handlers, controlServer.transport, {
-    validateOutputs: VALIDATE_OUTPUTS,
-  });
-}
-
-// Binds the control listener and publishes it in the data dir. Never
-// throws: the app works without the CLI's cross-device verbs, which
-// then report the app as unreachable.
-export function startControlHost(): Promise<void> {
-  return logFailure("[control] listener failed to start", () =>
-    controlServer.start(),
+  registerContractCore(
+    module,
+    handlers,
+    {
+      handle: (channel, fn) => loopbackRegistrar.handle(channel, fn),
+      broadcastAll: () => {},
+    },
+    { validateOutputs: VALIDATE_OUTPUTS },
   );
-}
-
-// Synchronous, for every quit path: unpublishes first, so a CLI run
-// that starts during the quit reads "not running" instead of dialing
-// a closing listener.
-export function stopControlHost(): void {
-  controlServer.stop();
-}
-
-// After a data wipe took control.json along with the data dir.
-export function republishControlHost(): void {
-  controlServer.republish();
+  for (const [key, transfer] of Object.entries(transfers)) {
+    loopbackRegistrar.view(`${nameOf(module)}:${key}`, transfer);
+  }
 }
 
 // Single-window broadcast for client-scoped window and menu events. A

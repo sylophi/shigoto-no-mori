@@ -23,9 +23,10 @@ type RuntimeImpl = {
   uninstallCliEverything: () => Promise<void>;
   releaseStore: () => Promise<void>;
   stopUpdaterBridge: () => void;
-  // Unpublishes control.json, so the moved data dir never carries the
-  // address of this pre-move process to a CLI that resolved the new one.
-  stopControlHost: () => void;
+  // Unpublishes loopback.json, so the moved data dir never carries the
+  // address of this pre-move process to a terminal that resolved the
+  // new one.
+  unpublishLoopback: () => Promise<void>;
   broadcastNukeProgress: (progress: NukeProgress) => void;
   // The data dir was wiped and reseeded under the running app: put back
   // the plumbing files this process keeps there.
@@ -77,7 +78,7 @@ export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
             watchersStopped = true;
             await runtimeImpl().releaseStore();
             runtimeImpl().stopUpdaterBridge();
-            runtimeImpl().stopControlHost();
+            await runtimeImpl().unpublishLoopback();
           },
         });
       } catch (err) {

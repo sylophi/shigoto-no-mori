@@ -50,7 +50,7 @@ import {
   SyncPullWorktreePayloadSchema,
 } from "@shigomori/contracts/modules/sync";
 import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
-import type { ChannelEndpoint, ChannelHandle } from "@shared/remote/channels";
+import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
   CommitHashSchema,
