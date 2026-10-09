@@ -1491,7 +1491,27 @@ function initPresence(): void {
   posedDevices(pose.get("updates") ?? "", stagedUpdates);
   posedDevices(pose.get("downloading") ?? "", downloadingUpdates);
   posedDevices(pose.get("notSharing") ?? "", notSharing);
+  // ?hubBlocked=update-required: this device's hub socket blocked for
+  // that reason, with the words the hub or the supervisor gives it.
+  const blocked = pose.get("hubBlocked");
+  if (blocked !== null && blocked in BLOCK_MESSAGES) {
+    const reason = blocked as keyof typeof BLOCK_MESSAGES;
+    socketPhase = {
+      phase: "blocked",
+      reason,
+      message: BLOCK_MESSAGES[reason],
+    };
+  }
 }
+
+const BLOCK_MESSAGES = {
+  "update-required":
+    "This version of Shigoto no Mori is too old for the device hub. Update it to connect.",
+  refused:
+    "ticket mint failed: The device hub no longer accepts this device's credential.",
+  revoked: "this device was removed from the account, sign in again",
+  superseded: "another instance of this device took over the device hub",
+};
 
 // ?crowd=<n>: that many more projects on Studio Mac, for the forest at
 // the size where finding a project gets hard. Most hold their primary
