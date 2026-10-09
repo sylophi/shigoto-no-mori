@@ -90,7 +90,7 @@ export function builtSm(): string {
 }
 
 // The darwin helper beside the built binary.
-export function builtMacfs(): string {
+function builtMacfs(): string {
   return join(builtSm(), "..", "macfs");
 }
 

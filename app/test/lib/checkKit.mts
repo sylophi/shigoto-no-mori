@@ -364,7 +364,7 @@ export function fileEquals(path: string, want: string | null): boolean {
 
 // One NDJSON document the terminal sm printed with --json, and a run's
 // documents, exit code and stderr tail.
-export interface CliDoc {
+interface CliDoc {
   event?: string;
   [key: string]: unknown;
 }

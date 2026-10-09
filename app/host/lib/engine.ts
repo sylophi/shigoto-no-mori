@@ -47,7 +47,6 @@ export type Services = Layer.Success<ReturnType<typeof layer>>;
 export const {
   layer: adapter,
   run,
-  runSyncOr,
   runAside,
 } = PromiseAdapter.make<Services>("The engine");
 

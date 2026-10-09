@@ -23,7 +23,7 @@ import {
 } from "@host/lib/util/atomicJson";
 import { log } from "@shared/log";
 
-export function clientConfigPath(): string {
+function clientConfigPath(): string {
   return join(app.getPath("userData"), "clientConfig.json");
 }
 

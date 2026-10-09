@@ -397,8 +397,7 @@ export type Running = {
   readonly pid: number;
 };
 
-// Where a run has got to, for a spinner or the --json event stream
-// (UpdateStageEventSchema has the downloading and verifying events).
+// Where a run has got to, for a spinner or the --json event stream.
 export type Progress =
   | { readonly phase: "checking" }
   | {
@@ -508,7 +507,7 @@ export class Updater extends Context.Service<
 
 // --- the pipeline -------------------------------------------------------------
 
-// The repo behind the feeds (shared/packaging/cliDist.mts UPDATE_FEED_REPO).
+// The repo behind the feeds (shared/packaging/updateFeed.mts UPDATE_FEED_REPO).
 const FEED_REPO = "sylophi/shigoto-no-mori";
 
 // CFBundleExecutable of the app, which survives bundle moves and renames,

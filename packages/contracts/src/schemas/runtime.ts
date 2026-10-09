@@ -108,15 +108,8 @@ export const StagedManifestSchema = Schema.Struct({
 });
 export type StagedManifest = typeof StagedManifestSchema.Type;
 
-// What `sm update --stage --json` streams: phase events while the
-// pipeline runs, then one result document (the engine's Updater emits
-// both). The app's check validates against these so drift between the
-// two fails loudly instead of degrading to a blank state.
-export const UpdateStageEventSchema = Schema.Struct({
-  event: Schema.Literals(["downloading", "verifying"]),
-  // The release the pipeline found. Absent from an older CLI.
-  version: Schema.optional(Schema.String),
-});
+// The result document `sm update --stage --json` ends with, which the
+// app's stage reads.
 export const UpdateStageResultSchema = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("up-to-date"),
