@@ -140,6 +140,12 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Logger from "effect/Logger";
 import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
+import * as Rpc from "effect/rpc/Rpc";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import { callOf } from "@shigomori/contracts/contract";
+import { linkContract } from "@shigomori/contracts/modules/link";
 import * as Deferred from "effect/Deferred";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import { it } from "vitest";
@@ -375,24 +381,61 @@ async function delayProxy(track: Track, targetPort: number, delayMs: number) {
   return proxy.port;
 }
 
+// The device link's frames, as both ends write them (shared/remote/
+// link.ts): Effect's binary layout, an envelope around each call's own
+// encoded payload or outcome.
+const linkFrames = Effect.runSync(
+  RpcSerialization.RpcSerialization.pipe(
+    Effect.provide(RpcSerialization.layerSchemaBinary()),
+  ),
+);
+const challengeCall = callOf(linkContract, "challenge");
+const helloCall = callOf(linkContract, "hello");
+const challengeRequest = () =>
+  linkFrames.makeUnsafe().encode({
+    _tag: "Request",
+    id: "0",
+    tag: "link:challenge",
+    payload: Schema.encodeUnknownSync(
+      linkFrames.codecFor(challengeCall.payloadSchema),
+    )(undefined),
+    headers: [],
+  }) as Uint8Array;
+
 // A stub host answers the link's challenge the way a real listener
-// does (an RPC Exit for the request), so the client goes on to say
-// hello. Every other frame it only hands to `heard`.
-function answerChallenges(socket: WsClient, heard: (frame: string) => void) {
+// does, so the client goes on to say hello. Every other message it
+// hands to `heard`, decoded: a request's tag, and its payload.
+function answerChallenges(
+  socket: WsClient,
+  heard: (request: { tag: string; payload: unknown; frame: Buffer }) => void,
+) {
+  const parser = linkFrames.makeUnsafe();
   socket.on("message", (data) => {
-    const frame = String(data);
-    const request = JSON.parse(frame) as Record<string, unknown>;
-    if (request["_tag"] === "Request" && request["tag"] === "link:challenge") {
-      socket.send(
-        JSON.stringify({
-          _tag: "Exit",
-          requestId: request["id"],
-          exit: { _tag: "Success", value: { nonce: newHandshakeNonce() } },
-        }),
-      );
-      return;
+    const frame = Buffer.from(data as Buffer);
+    for (const message of parser.decode(frame) as Record<string, unknown>[]) {
+      if (message["_tag"] !== "Request") continue;
+      if (message["tag"] === "link:challenge") {
+        socket.send(
+          parser.encode({
+            _tag: "Exit",
+            requestId: message["id"],
+            exit: Schema.encodeUnknownSync(
+              linkFrames.codecFor(Rpc.exitSchema(challengeCall)),
+            )(Exit.succeed({ nonce: newHandshakeNonce() })),
+          }) as Uint8Array,
+        );
+        continue;
+      }
+      if (message["tag"] === "link:hello") {
+        heard({
+          tag: "link:hello",
+          payload: Schema.decodeUnknownSync(
+            linkFrames.codecFor(helloCall.payloadSchema),
+          )(message["payload"]),
+          frame,
+        });
+      }
     }
-    heard(frame);
   });
 }
 
@@ -884,10 +927,10 @@ it("the ticket never travels: a machine that answers at an advertised LAN addres
   // The impostor: whoever holds that private address on the network
   // the dialer happens to be on. It challenges like a real host so
   // the client will talk to it at all, then keeps what it is told.
-  const heard: string[] = [];
+  const heard: { tag: string; payload: unknown; frame: Buffer }[] = [];
   const impostor = new WebSocketServer({ host: "127.0.0.1", port: 0 });
   impostor.on("connection", (socket) => {
-    answerChallenges(socket, (frame) => heard.push(frame));
+    answerChallenges(socket, (request) => heard.push(request));
   });
   await new Promise((resolve) => impostor.on("listening", resolve));
   trackTest(
@@ -903,16 +946,15 @@ it("the ticket never travels: a machine that answers at an advertised LAN addres
       }),
     "the client accepted a host that never proved it holds the ticket",
   );
-  const captured = heard.find((frame) => frame.includes("link:hello"));
+  const captured = heard.find((request) => request.tag === "link:hello");
   assert.ok(captured !== undefined, "the impostor saw no hello at all");
-  const hello = JSON.parse(captured) as { payload: Record<string, unknown> };
   assert.equal(
-    hello.payload["ticket"],
+    (captured.payload as Record<string, unknown>)["ticket"],
     undefined,
     "the connect ticket was sent to whoever answered first",
   );
   assert.equal(
-    captured.includes(ticket),
+    captured.frame.includes(ticket),
     false,
     "the connect ticket appeared on the wire",
   );
@@ -920,32 +962,31 @@ it("the ticket never travels: a machine that answers at an advertised LAN addres
   // What the impostor did capture, replayed verbatim at the real
   // listener after its own challenge, links nothing: the proof answers
   // a nonce that listener never issued.
-  const replay = await new Promise<string>((resolve) => {
+  const replay = await new Promise<unknown>((resolve) => {
     const socket = new WsClient(`ws://127.0.0.1:${listener.port}`);
-    socket.on("open", () => {
-      socket.send(
-        JSON.stringify({
-          _tag: "Request",
-          id: "0",
-          tag: "link:challenge",
-          payload: null,
-          headers: [],
-        }),
-      );
-    });
+    const parser = linkFrames.makeUnsafe();
+    socket.on("open", () => socket.send(challengeRequest()));
     socket.on("message", (data) => {
-      const frame = JSON.parse(String(data)) as Record<string, unknown>;
-      if (frame["_tag"] !== "Exit") return;
-      if (frame["requestId"] === "0") {
-        socket.send(captured);
-        return;
+      for (const message of parser.decode(
+        Buffer.from(data as Buffer),
+      ) as Record<string, unknown>[]) {
+        if (message["_tag"] !== "Exit") continue;
+        if (message["requestId"] === "0") {
+          socket.send(captured.frame);
+          continue;
+        }
+        socket.close();
+        resolve(
+          Schema.decodeUnknownSync(
+            linkFrames.codecFor(Rpc.exitSchema(helloCall)),
+          )(message["exit"]),
+        );
       }
-      socket.close();
-      resolve(String(data));
     });
     socket.on("error", () => {});
   });
-  assert.match(replay, /"_tag":"LinkRefusedError"/);
+  assert.ok(Exit.isExit(replay) && Exit.isFailure(replay));
+  assert.ok(Cause.squash(replay.cause) instanceof LinkRefusedError);
   // The ticket was never spent by any of that, so the honest dial
   // it belongs to still works.
   assert.equal(

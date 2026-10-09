@@ -1,6 +1,8 @@
 // The device link: one websocket between two devices, carrying Effect
 // RPC for every contract call a peer may make (the calls annotated
-// `remote`), the pushes as streams, and the byte channels. Both ends
+// `remote`), the pushes as streams, and the byte channels, each frame in
+// Effect's binary layout (RpcSerialization.layerSchemaBinary) on both
+// ends, so bytes cross as bytes. Both ends
 // build it from this one group, so a call, its middleware and its
 // errors are described once: the host serves it (host/socket/), and
 // the dialer (shared/remote/deviceLink.ts) and the web client call it.

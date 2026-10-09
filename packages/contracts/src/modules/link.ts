@@ -60,22 +60,23 @@ export const CHANNEL_MAX_WRITE_BYTES = 256 * 1024;
 
 // A writer keeps several writes in flight, numbered from 0 per
 // channel, and the far end takes them in that order.
-const WriteSchema = strict(
-  Schema.Struct({
-    channelId: HexId32Schema,
-    seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    data: Schema.Uint8ArrayFromBase64.check(
-      Schema.makeFilter((bytes) => bytes.byteLength <= CHANNEL_MAX_WRITE_BYTES),
-    ),
-  }),
-);
+// A plain struct, where the link's other calls are strict: the binary
+// layout carries only the fields it declares, and bytes have no JSON
+// form a strict struct's could pass through.
+const WriteSchema = Schema.Struct({
+  channelId: HexId32Schema,
+  seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  data: Schema.Uint8Array.check(
+    Schema.makeFilter((bytes) => bytes.byteLength <= CHANNEL_MAX_WRITE_BYTES),
+  ),
+});
 
 // The far end's bytes, pulled: the next piece goes out once the reader
 // has taken the last, so a slow reader holds the far end back. Ends
 // with the far end's direction.
 const read = Rpc.make("read", {
   payload: ChannelSchema,
-  success: Schema.Uint8ArrayFromBase64,
+  success: Schema.Uint8Array,
   error: CallFailureSchema,
   stream: true,
 })

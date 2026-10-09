@@ -275,7 +275,7 @@ async function rawLink(
         retryPolicy: Schedule.recurs(0),
       }).pipe(
         Effect.provideService(Socket.Socket, socket),
-        Effect.provide(RpcSerialization.layerJson),
+        Effect.provide(RpcSerialization.layerSchemaBinary()),
       );
       return yield* RpcClient.make(LinkGroup, { flatten: true }).pipe(
         Effect.provideService(RpcClient.Protocol, protocol),

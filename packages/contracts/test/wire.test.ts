@@ -6,12 +6,15 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
+import * as SchemaBinary from "effect/encoding/SchemaBinary";
+import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
 import type { ContractSchema } from "../src/codec.ts";
 import {
   callsOf,
   channelOf,
+  type ContractCall,
   type ContractModule,
   inputOf,
   isBroadcast,
@@ -41,12 +44,16 @@ const modules = (await Promise.all(
   readdirSync(modulesDir).map((name) => import(join(modulesDir, name))),
 )) as Record<string, unknown>[];
 const calls = new Map<string, [Part, ContractSchema][]>();
+// The whole of each call as the device link carries it, for the binary
+// layout check below.
+const rpcs: ContractCall[] = [];
 for (const module of modules) {
   for (const [exported, value] of Object.entries(module)) {
     if (!exported.endsWith("Contract")) continue;
     for (const call of callsOf(value as ContractModule)) {
       const channel = channelOf(call);
       assert.ok(!calls.has(channel), `${channel} is defined twice`);
+      rpcs.push(call);
       const parts: [Part, ContractSchema][] = isBroadcast(call)
         ? [["payload", payloadOf(call)]]
         : [
@@ -135,6 +142,29 @@ it(`every call has wire samples for protocol v${PROTOCOL_VERSION}, and every sam
     [],
     "samples of calls that are gone: run pnpm -F @shigomori/contracts wire-fixtures",
   );
+});
+
+// The device link writes every call in Effect's binary layout, which
+// refuses some schemas a JSON codec takes (a union of members it cannot
+// tell apart). Compiled here, every part and every outcome, so such a
+// schema fails this proof instead of its call.
+it("every call's payload and outcome have a binary layout", () => {
+  for (const call of rpcs) {
+    assert.doesNotThrow(
+      () => SchemaBinary.toCodec(call.payloadSchema),
+      `${channelOf(call)}'s payload`,
+    );
+    assert.doesNotThrow(
+      () => SchemaBinary.toCodec(Rpc.exitSchema(call)),
+      `${channelOf(call)}'s outcome`,
+    );
+    if (!isInvoke(call)) {
+      assert.doesNotThrow(
+        () => SchemaBinary.toCodec(payloadOf(call)),
+        `${channelOf(call)}'s values`,
+      );
+    }
+  }
 });
 
 describe.each([...calls])("%s", (channel, parts) => {

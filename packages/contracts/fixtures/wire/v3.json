@@ -159,7 +159,7 @@
           "id": "\udc00",
           "title": "-1",
           "status": "ok",
-          "detail": "😀"
+          "detail": "\ud83d\ude00"
         },
         {
           "group": "",
@@ -310,7 +310,7 @@
       },
       "devices": [
         {
-          "deviceId": "😀",
+          "deviceId": "\ud83d\ude00",
           "name": "\udc00",
           "platform": "0"
         },
@@ -370,7 +370,7 @@
       "worktree": {
         "id": "$O",
         "projectId": "~*",
-        "name": "😀",
+        "name": "\ud83d\ude00",
         "branch": "",
         "path": "\u0000",
         "ahead": 2,
@@ -445,7 +445,7 @@
           "isGitRepo": true
         },
         {
-          "name": "😀",
+          "name": "\ud83d\ude00",
           "isGitRepo": false
         }
       ]
@@ -453,7 +453,7 @@
   },
   "fs:scanForGitRepos": {
     "payload": {
-      "path": "😀"
+      "path": "\ud83d\ude00"
     },
     "success": ["-1", ""]
   },
@@ -486,7 +486,7 @@
   },
   "githubCli:disablePullRequestAutoMerge": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "number": 3
     }
   },
@@ -564,7 +564,7 @@
       "number": 3
     },
     "success": {
-      "branch": "😀"
+      "branch": "\ud83d\ude00"
     }
   },
   "githubCli:setPullRequestDraft": {
@@ -662,7 +662,7 @@
   },
   "launchers:forProject": {
     "payload": {
-      "projectId": "😀"
+      "projectId": "\ud83d\ude00"
     },
     "success": {
       "entries": [
@@ -677,7 +677,7 @@
   },
   "launchers:launch": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "\ud800",
       "launcherId": "-1"
     }
@@ -711,7 +711,7 @@
     "payload": {
       "channelId": "49f1c16a9e40610b8eb75db553ec394b"
     },
-    "success": ""
+    "success": "AQID"
   },
   "link:reset": {
     "payload": {
@@ -932,7 +932,7 @@
           "name": "",
           "labels": {
             "=y": " ",
-            "😀": "😀"
+            "\ud83d\ude00": "\ud83d\ude00"
           },
           "localRoot": "",
           "localProjectId": "%1",
@@ -1027,7 +1027,7 @@
   },
   "mirror:release": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "347ee37ffaee"
     }
   },
@@ -1353,7 +1353,7 @@
   },
   "packageScripts:list": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "n)"
     },
     "success": {
@@ -1494,7 +1494,7 @@
         "isDirectory": false,
         "ignored": false,
         "inPrimary": false,
-        "worktrees": ["😀"]
+        "worktrees": ["\ud83d\ude00"]
       }
     ]
   },
@@ -1509,7 +1509,7 @@
         "inPrimary": true,
         "worktrees": ["", ".K"]
       },
-      "😀": {
+      "\ud83d\ude00": {
         "isDirectory": true,
         "inPrimary": true,
         "worktrees": ["\u0000", "\ud800"]
@@ -1518,7 +1518,7 @@
   },
   "projects:clone": {
     "payload": {
-      "url": "霬衬ɹ:b睚᪨",
+      "url": "\u972c\u886c\u0279:b\u775a\u1aa8",
       "parentDir": "0"
     },
     "success": {
@@ -1563,7 +1563,7 @@
     "success": [
       {
         "id": "\udc00",
-        "name": "😀",
+        "name": "\ud83d\ude00",
         "path": ".u"
       },
       {
@@ -1575,7 +1575,7 @@
   },
   "projects:listBranches": {
     "payload": {
-      "projectId": "😀"
+      "projectId": "\ud83d\ude00"
     },
     "success": {
       "local": ["\u0000", ""],
@@ -1584,7 +1584,7 @@
   },
   "projects:pickWorktreeName": {
     "payload": {
-      "projectId": "😀"
+      "projectId": "\ud83d\ude00"
     },
     "success": "\udc00"
   },
@@ -1891,7 +1891,7 @@
         "recentCommits": [
           {
             "hash": "7a10",
-            "subject": "😀",
+            "subject": "\ud83d\ude00",
             "author": "6",
             "date": "",
             "additions": 0,
@@ -2124,7 +2124,7 @@
   "window:focused": {},
   "window:notify": {
     "payload": {
-      "title": "😀",
+      "title": "\ud83d\ude00",
       "body": "0",
       "route": "["
     }
@@ -2137,7 +2137,7 @@
   "window:relaunch": {},
   "worktreeData:describe": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "6157da39cfbe",
       "description": {}
     }
@@ -2167,7 +2167,7 @@
       "id": "",
       "projectId": "-1",
       "name": "",
-      "branch": "😀",
+      "branch": "\ud83d\ude00",
       "path": "\ud800",
       "ahead": 2,
       "behind": 4,
@@ -2191,7 +2191,7 @@
           "hash": "d29a",
           "subject": "wH",
           "author": "ma",
-          "date": "😀",
+          "date": "\ud83d\ude00",
           "additions": 2,
           "deletions": 0
         }
@@ -2213,7 +2213,7 @@
     "success": {
       "id": "\n",
       "projectId": "%\"",
-      "name": "😀",
+      "name": "\ud83d\ude00",
       "branch": "0",
       "path": "",
       "ahead": 3,
@@ -2228,7 +2228,7 @@
       "recentCommits": [
         {
           "hash": "2438",
-          "subject": "😀",
+          "subject": "\ud83d\ude00",
           "author": "F",
           "date": ">?",
           "additions": 1,
@@ -2288,7 +2288,7 @@
         },
         {
           "hash": "2387",
-          "subject": "😀",
+          "subject": "\ud83d\ude00",
           "author": "",
           "date": "",
           "additions": 1,
@@ -2322,7 +2322,7 @@
   },
   "worktrees:changeStatus": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "\n"
     },
     "success": [
@@ -2447,7 +2447,7 @@
           },
           {
             "hash": "ba9d",
-            "subject": "😀",
+            "subject": "\ud83d\ude00",
             "author": "0",
             "date": "41",
             "additions": 0,
@@ -2528,14 +2528,14 @@
   },
   "worktrees:convertExternal": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "Y"
     },
     "success": {
       "worktree": {
         "id": "0",
         "projectId": "6",
-        "name": "😀",
+        "name": "\ud83d\ude00",
         "branch": "P2",
         "path": "",
         "ahead": 3,
@@ -2646,7 +2646,7 @@
   },
   "worktrees:discardChanges": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "n",
       "paths": ["\udc00"]
     },
@@ -2834,7 +2834,7 @@
       {
         "id": "\t",
         "projectId": " ",
-        "name": "😀",
+        "name": "\ud83d\ude00",
         "branch": "_`",
         "path": "0",
         "ahead": 0,
@@ -2904,7 +2904,7 @@
     "success": [
       {
         "hash": "61b1",
-        "subject": "😀",
+        "subject": "\ud83d\ude00",
         "author": "\u0000",
         "date": "",
         "additions": 1,
@@ -3195,7 +3195,7 @@
       "id": "",
       "projectId": "0",
       "name": "",
-      "branch": "😀",
+      "branch": "\ud83d\ude00",
       "path": "[h",
       "ahead": 1,
       "behind": 1,
@@ -3268,7 +3268,7 @@
       "id": "&",
       "projectId": "AW",
       "name": "-1",
-      "branch": "😀",
+      "branch": "\ud83d\ude00",
       "path": "\n",
       "ahead": 2,
       "behind": 2,
@@ -3473,7 +3473,7 @@
         {
           "hash": "64db",
           "subject": "\udc00",
-          "author": "😀",
+          "author": "\ud83d\ude00",
           "date": "\udc00",
           "additions": 2,
           "deletions": 3
@@ -3520,7 +3520,7 @@
           "hash": "bdd1",
           "subject": " ",
           "author": "-1",
-          "date": "😀",
+          "date": "\ud83d\ude00",
           "additions": 4,
           "deletions": 0
         }
@@ -3534,7 +3534,7 @@
   },
   "worktrees:restoreStash": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "-1",
       "hash": "1d30",
       "message": "",
@@ -3556,7 +3556,7 @@
       "hash": "c637"
     },
     "success": {
-      "id": "😀",
+      "id": "\ud83d\ude00",
       "projectId": "n",
       "name": "G ",
       "branch": "",
@@ -3597,10 +3597,10 @@
   },
   "worktrees:rewordCommit": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "B{",
       "hash": "6f4c",
-      "summary": "鱨",
+      "summary": "\u9c68",
       "expectHead": "3c39"
     },
     "success": {
@@ -3653,7 +3653,7 @@
       "id": "-1",
       "projectId": "30",
       "name": "e)",
-      "branch": "😀",
+      "branch": "\ud83d\ude00",
       "path": "<%",
       "ahead": 0,
       "behind": 4,
@@ -3719,7 +3719,7 @@
   },
   "worktrees:setShelved": {
     "payload": {
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "worktreeId": "_",
       "shelved": true
     },
@@ -3798,7 +3798,7 @@
     },
     "success": {
       "id": "tm",
-      "projectId": "😀",
+      "projectId": "\ud83d\ude00",
       "name": "=0",
       "branch": "e",
       "path": "",
@@ -3839,7 +3839,7 @@
   "worktrees:stashes": {
     "payload": {
       "projectId": "\u0000",
-      "worktreeId": "😀"
+      "worktreeId": "\ud83d\ude00"
     },
     "success": []
   },
@@ -3936,7 +3936,7 @@
       "id": "F",
       "projectId": "} ",
       "name": "",
-      "branch": "😀",
+      "branch": "\ud83d\ude00",
       "path": "\t",
       "ahead": 3,
       "behind": 2,

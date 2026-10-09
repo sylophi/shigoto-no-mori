@@ -192,10 +192,19 @@ export type WorktreeIncludeStatus = typeof WorktreeIncludeStatusSchema.Type;
 // The carry-over picker reads a union of the primary and every
 // worktree: entries are root-relative, so any checkout can hold them
 // and the CLI copies from whichever has the file at creation.
+const isCarryOverPath = Schema.is(CarryOverPathSchema);
+
 export const CarryOverListingPayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,
-  // Folder being browsed, root-relative, with "" for the root.
-  relative: Schema.Union([Schema.Literal(""), CarryOverPathSchema]),
+  // Folder being browsed, root-relative, with "" for the root. One
+  // string rather than a union of two, which a binary codec could not
+  // tell apart.
+  relative: Schema.String.check(
+    Schema.makeFilter(
+      (relative) => relative === "" || isCarryOverPath(relative),
+      { expected: 'a root-relative path, or "" for the root' },
+    ),
+  ),
   // Also call a folder ignored when a rule names it though it holds a
   // force-added file (what a mirror leaves out, where carry-over needs
   // git's own verdict). A peer from before the flag drops it and
