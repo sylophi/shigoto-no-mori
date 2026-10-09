@@ -29,10 +29,11 @@ import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { ExitCode, UsageError } from "../errors.ts";
-import { given, here, projectFlags } from "../here.ts";
+import { given, here, projectAt, projectFlags } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 import { interactive } from "../prompt.ts";
 import { handOver } from "../handOver.ts";
+import { pickProject, pickWorktree } from "../pickers.ts";
 
 // A hook install or uninstall won't touch, or a config file it couldn't
 // read or write. `path` is home-collapsed.
@@ -370,6 +371,13 @@ export const enter = (name: string, target: string, cdFile: string) =>
     });
   });
 
+// Bare `sm cd` goes anywhere: the project menu first, the current
+// project highlighted, unless -p names one or there is only one.
+const menuProject = (at: Worktrees.Here, project: string | undefined) =>
+  project === undefined && at.projects.length > 1
+    ? pickProject(at, at.current?.project.id)
+    : projectAt(at, project);
+
 export const cdCommand = Command.make(
   "cd",
   {
@@ -391,17 +399,16 @@ export const cdCommand = Command.make(
           problem: `This command opens a subshell and needs an interactive terminal. In scripts use cd "$(${binaryName} path <name>)".`,
         });
       }
-      // The worktree menu waits for the terminal's menus.
-      if (Option.isNone(input.name)) {
-        return yield* new UsageError({
-          problem: `Name the worktree to enter (see \`${binaryName} list\`).`,
-        });
-      }
       const at = yield* here;
-      const { worktree } = yield* (yield* Worktrees.Worktrees).resolve(at, {
-        ref: input.name.value,
-        project: Option.getOrUndefined(given(input.project)),
-      });
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = Option.getOrUndefined(given(input.project));
+      const { worktree } = Option.isSome(input.name)
+        ? yield* worktrees.resolve(at, { ref: input.name.value, project })
+        : yield* pickWorktree(at, yield* menuProject(at, project), {
+            // Entering where you stand isn't a destination.
+            excludeId: at.current?.worktree.id,
+            primaryOk: true,
+          });
       if (at.current?.worktree.id === worktree.id) {
         const { cyan, dim } = styles(stderrColor);
         return yield* note(

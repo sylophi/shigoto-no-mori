@@ -7,7 +7,9 @@ import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { UsageError } from "../errors.ts";
-import { given, here, worktreeFlags } from "../here.ts";
+import { given, here, projectAt, worktreeFlags } from "../here.ts";
+import { pickLauncher, pickWorktree } from "../pickers.ts";
+import { interactive } from "../prompt.ts";
 import { emit, out, Output } from "../output.ts";
 
 export const open = Command.make(
@@ -33,7 +35,7 @@ export const open = Command.make(
             "--project-id scopes --worktree-id; pass both (or -p <project> with a name).",
         });
       }
-      // The worktree and launcher menus wait for the terminal's menus.
+      const asking = yield* interactive;
       const located = Option.isSome(worktreeId)
         ? yield* worktrees.resolve(at, {
             worktreeId: worktreeId.value,
@@ -46,15 +48,25 @@ export const open = Command.make(
             })
           : at.current !== undefined && Option.isNone(project)
             ? at.current
-            : yield* new UsageError({
-                problem: `Not inside a worktree; pass one: ${binaryName} open <tool> <name>.`,
-              });
-      if (tool === "") {
+            : asking
+              ? yield* pickWorktree(
+                  at,
+                  yield* projectAt(at, Option.getOrUndefined(project)),
+                  { primaryOk: true },
+                )
+              : yield* new UsageError({
+                  problem: `Not inside a worktree; pass one: ${binaryName} open <tool> <name>.`,
+                });
+      if (tool === "" && !asking) {
         return yield* new UsageError({
           problem: `Pass a tool to open (see the menu by running \`${binaryName} open\` in a terminal).`,
         });
       }
-      const opened = yield* (yield* Open.Open).open(located, tool);
+      const chosen =
+        tool === ""
+          ? (yield* pickLauncher(located.project, located.worktree.name)).id
+          : tool;
+      const opened = yield* (yield* Open.Open).open(located, chosen);
       yield* json
         ? emit({
             ok: true,

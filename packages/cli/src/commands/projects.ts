@@ -22,6 +22,7 @@ import {
   warnTerrier,
 } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
+import { pickProject } from "../pickers.ts";
 import { confirm, interactive } from "../prompt.ts";
 import { configVerbs, type Settings } from "./config.ts";
 
@@ -225,14 +226,15 @@ const remove = Command.make(
       const { json, binaryName } = yield* Effect.service(Output);
       const at = yield* here;
       const projectId = given(input.projectId);
-      // The project picker waits for the terminal's menus.
       const project = Option.isSome(projectId)
         ? yield* worktrees.resolveProjectById(at, projectId.value)
         : Option.isSome(input.name)
           ? yield* worktrees.resolveProject(at, input.name.value)
-          : yield* new UsageError({
-              problem: `Specify a project to remove (see \`${binaryName} projects list\`).`,
-            });
+          : (yield* interactive)
+            ? yield* pickProject(at)
+            : yield* new UsageError({
+                problem: `Specify a project to remove (see \`${binaryName} projects list\`).`,
+              });
       if (!input.yes) {
         const left = yield* projects.leftovers(project);
         if (!(yield* interactive)) {
