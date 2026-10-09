@@ -40,7 +40,7 @@ import {
   send,
   unmirror,
 } from "./transfer.ts";
-import { cdCommand } from "./shell.ts";
+import { cdCommand, switchCommand } from "./shell.ts";
 import { autopull, shelve, unshelve } from "./marks.ts";
 import { status } from "./status.ts";
 
@@ -333,6 +333,7 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     setup,
     rekey,
     cdCommand,
+    switchCommand,
     pr,
     merge,
     land,
