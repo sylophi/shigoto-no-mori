@@ -7,11 +7,11 @@ import { flavorNames } from "@shigomori/engine/flavor";
 import * as Paths from "@shigomori/engine/Paths";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Cause from "effect/Cause";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as CliConfig from "effect/cli/CliConfig";
 import * as Command from "effect/cli/Command";
-import * as GlobalFlag from "effect/cli/GlobalFlag";
 import { configCommand } from "./commands/config.ts";
 import { launchersCommand } from "./commands/launchers.ts";
 import { projectsCommand } from "./commands/projects.ts";
@@ -44,6 +44,8 @@ import { autopull, shelve, unshelve } from "./commands/marks.ts";
 import { agentsCommand } from "./commands/agents.ts";
 import { status } from "./commands/status.ts";
 import { doctor, engine } from "./engine.ts";
+import { canonical } from "./aliases.ts";
+import { helpPages } from "./help.ts";
 import { Killed, report } from "./errors.ts";
 import { Output } from "./output.ts";
 
@@ -63,49 +65,6 @@ function globalFlags(args: ReadonlyArray<string>) {
   };
 }
 
-// Go's aliases, folded before parsing, since effect/cli takes one per
-// command: a namespace's, a worktree verb's (at the top level and after
-// `worktrees`), and a project verb's, which differ: `rm` alone removes
-// a worktree, after `projects` a project.
-const VERBS: Readonly<Record<string, string>> = {
-  ls: "list",
-  l: "list",
-  st: "status",
-  "auto-pull": "autopull",
-  new: "create",
-  n: "create",
-  remove: "rm",
-  mv: "move",
-  c: "cd",
-  o: "open",
-};
-const PROJECT_VERBS: Readonly<Record<string, string>> = {
-  ls: "list",
-  rm: "remove",
-};
-const NAMESPACES: Readonly<Record<string, string>> = {
-  worktree: "worktrees",
-  wt: "worktrees",
-  w: "worktrees",
-  project: "projects",
-  p: "projects",
-  launcher: "launchers",
-  agent: "agents",
-};
-
-function canonical(args: ReadonlyArray<string>) {
-  const [first, ...more] = args;
-  if (first === undefined) return args;
-  const command = NAMESPACES[first] ?? VERBS[first] ?? first;
-  const [verb, ...after] = more;
-  if (verb === undefined) return [command];
-  if (command === "worktrees") return [command, VERBS[verb] ?? verb, ...after];
-  if (command === "projects") {
-    return [command, PROJECT_VERBS[verb] ?? verb, ...after];
-  }
-  return [command, ...more];
-}
-
 const {
   version: askedVersion,
   json,
@@ -113,6 +72,16 @@ const {
 } = globalFlags(process.argv.slice(2));
 const plain =
   json || process.env.NO_COLOR !== undefined || process.env.TERM === "dumb";
+const columns = Math.min(
+  Math.max(process.stdout.columns || process.stderr.columns || 80, 60),
+  110,
+);
+const help = helpPages({
+  names: flavorNames(flavor),
+  dev: flavor !== "prod",
+  color: !plain && process.stdout.isTTY === true,
+  columns,
+});
 
 // Provided per command group, so help and usage errors open no store.
 const services = engine(flavor);
@@ -166,27 +135,27 @@ const sm = Command.make("sm").pipe(
 const program = Command.runWith(sm, { version, renderErrors: false })(
   canonical(rest),
 ).pipe(
-  // Only --help of effect/cli's built-in flags, as Go has no others.
+  // None of effect/cli's built-in flags: the help is the catalog's
+  // (help.ts), answered before parsing, and a command line the parser
+  // refuses reports as Go's did, without the parser's help page.
   Effect.provide(
-    Layer.merge(
-      BunServices.layer,
-      CliConfig.layer({ builtIns: [GlobalFlag.Help] }),
-    ),
+    Layer.merge(BunServices.layer, CliConfig.layer({ builtIns: [] })),
   ),
+  Effect.provideService(Console.Console, { ...console, log: () => {} }),
   Effect.as({ code: 0, error: undefined as unknown }),
   // A defect reports like any failure, so --json still ends in a document.
   Effect.catchCause((cause) => {
     const error = Cause.squash(cause);
-    return Effect.map(report(error), (code) => ({ code, error }));
+    return Effect.map(report(error, help.usageOf), (code) => ({
+      code,
+      error,
+    }));
   }),
   Effect.provideService(Output, {
     json,
     stdoutColor: !plain && process.stdout.isTTY === true,
     stderrColor: !plain && process.stderr.isTTY === true,
-    width: Math.min(
-      Math.max(process.stdout.columns || process.stderr.columns || 80, 60),
-      110,
-    ),
+    width: columns,
     binaryName: flavorNames(flavor).binaryName,
   }),
   Effect.flatMap(({ code, error }) =>
@@ -202,9 +171,13 @@ const program = Command.runWith(sm, { version, renderErrors: false })(
   ),
 );
 
-// The version alone, whatever else was asked.
+// The version alone, whatever else was asked, then the help.
+const asked = askedVersion ? undefined : help.asked(rest);
 if (askedVersion) {
   process.stdout.write(`${version}\n`);
+} else if (asked !== undefined) {
+  process.stdout.write(`${asked.text}\n`);
+  process.exitCode = asked.code;
 } else {
   BunRuntime.runMain(program);
 }
