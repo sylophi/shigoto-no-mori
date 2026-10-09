@@ -1,38 +1,21 @@
+// The worktree page's header (WorktreeHeaderView): the title the work
+// goes by, or its branch alone when it has none.
 import { useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, Layers2 } from "lucide-react";
-import { IconButton } from "@/components/ui/icon-button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import { cn } from "@/lib/utils";
 import type {
   PullRequest,
   PullRequestDetail,
   Worktree,
 } from "@shigomori/contracts/schemas";
 import { BranchTitle } from "./branch/BranchTitle";
-import { DiffButton } from "./DiffButton";
 import { PullRequestStateLabel } from "./pullRequests/PullRequestStateLabel";
 import { StackList } from "./pullRequests/StackList";
 import { PullRequestTitleLink } from "./pullRequests/PullRequestIdentity";
 import { MERGE_VERB } from "./pullRequests/pullRequestShared";
+import { WorktreeHeaderView } from "./WorktreeHeaderView";
 
-// The worktree page's header: what the work is called (useWorktreeTitle),
-// then one line with its branch (renamed and switched from one menu).
-// Untitled work is called by its branch alone. While a PR names the
-// work, the page names it once and the PR fills in the same two lines:
-// its number and state beside the title, and on the branch's line
-// where it lands, where it sits in a stack (its list in a popover),
-// and its diff. That line never wraps: the base gives way first, then
-// the branch. What the work is and what to do about its PR follow
-// under the header. The project map's slim PR draws all of it but the
-// diff at once, so the header doesn't grow when the lookup answers.
 export function WorktreeHeader({
   worktree,
   title,
@@ -67,106 +50,51 @@ function TitledHeader({
   const lineRef = useRef<HTMLDivElement>(null);
   const branchRef = useRef<HTMLDivElement>(null);
   const showBase = useBaseFits(lineRef, branchRef, worktree.branch);
-  const stackName = stack
-    ? `Stack, ${stack.index + 1} of ${stack.entries.length}`
-    : undefined;
   return (
-    <>
-      {/* One line too: the title truncates beside its number, and the
-          state keeps its place at the end. */}
-      <div className="mb-1 flex min-w-0 items-center gap-3">
-        <h1 className="flex min-w-0 items-baseline gap-1.5 text-2xl font-medium tracking-tight select-text">
-          <SimpleTooltip whenTruncated tip={title}>
-            <span className="min-w-0 truncate">{title}</span>
-          </SimpleTooltip>
-          {pr && (
-            <PullRequestTitleLink
-              pr={pr}
-              aria-label={`Open pull request #${pr.number} on GitHub`}
-              data-no-hit-area
-              className="shrink-0 font-normal text-muted-foreground/60"
-            >
-              #{pr.number}
-            </PullRequestTitleLink>
-          )}
-        </h1>
-        {/* At the row's end, where a status sits. */}
-        {pr && (
-          <span className="ml-auto inline-flex shrink-0">
-            <PullRequestStateLabel pr={pr} pill />
-          </span>
-        )}
-      </div>
-      {/* One line however narrow. The base gives way first, and goes
-          altogether before the branch would have to; then the branch.
-          The stack and the diff keep their place. */}
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <div
-          ref={lineRef}
-          className="flex min-w-0 grow items-center gap-1.5 text-sm text-muted-foreground"
-        >
-          {pr && showBase && (
-            <>
-              <SimpleTooltip whenTruncated tip={pr.baseRefName}>
-                <span
-                  data-pr-base
-                  className="min-w-6 shrink-[1000] truncate font-mono text-foreground/80"
+    <WorktreeHeaderView
+      title={title}
+      pr={
+        pr
+          ? {
+              titleLink: (
+                <PullRequestTitleLink
+                  pr={pr}
+                  aria-label={`Open pull request #${pr.number} on GitHub`}
+                  data-no-hit-area
+                  className="shrink-0 font-normal text-muted-foreground/60"
                 >
-                  {pr.baseRefName}
-                </span>
-              </SimpleTooltip>
-              <ArrowLeft
-                aria-label={MERGE_VERB[pr.state]}
-                className="size-3.5 shrink-0 opacity-60"
-              />
-            </>
-          )}
-          {/* Room to the diff, so the rename field isn't squeezed to
-              the name's width. Whole while the base shows: the base
-              takes all the squeeze (a fraction of a pixel shared would
-              cut the branch). */}
-          <div
-            ref={branchRef}
-            className={cn("flex min-w-0 grow", pr && showBase && "shrink-0")}
-          >
-            <BranchTitle worktree={worktree} subtitle />
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {stack && (
-            <Popover>
-              <SimpleTooltip tip={stackName}>
-                <PopoverTrigger
-                  render={
-                    <IconButton
-                      aria-label={stackName}
-                      className="data-[popup-open]:bg-accent data-[popup-open]:text-foreground"
-                    >
-                      <Layers2 aria-hidden className="size-3.5" />
-                    </IconButton>
-                  }
-                />
-              </SimpleTooltip>
-              <PopoverContent align="end" className="w-96 space-y-1.5">
-                <p className="px-1.5 pt-1 text-xs text-muted-foreground">
-                  {stackName}
-                </p>
-                <StackList worktree={worktree} stack={stack} />
-              </PopoverContent>
-            </Popover>
-          )}
-          {detail && detail.changedFiles > 0 && (
-            <DiffButton
-              changedFiles={detail.changedFiles}
-              additions={detail.additions}
-              deletions={detail.deletions}
-              onClick={() => nav.toPrDiff(worktree.projectId, worktree.id)}
-              words={false}
-            />
-          )}
-        </div>
-      </div>
-    </>
+                  #{pr.number}
+                </PullRequestTitleLink>
+              ),
+              stateLabel: <PullRequestStateLabel pr={pr} pill />,
+              base: pr.baseRefName,
+              mergeVerb: MERGE_VERB[pr.state],
+            }
+          : undefined
+      }
+      branchTitle={<BranchTitle worktree={worktree} subtitle />}
+      stack={
+        stack
+          ? {
+              name: `Stack, ${stack.index + 1} of ${stack.entries.length}`,
+              list: <StackList worktree={worktree} stack={stack} />,
+            }
+          : undefined
+      }
+      diff={
+        detail
+          ? {
+              changedFiles: detail.changedFiles,
+              additions: detail.additions,
+              deletions: detail.deletions,
+              onClick: () => nav.toPrDiff(worktree.projectId, worktree.id),
+            }
+          : undefined
+      }
+      lineRef={lineRef}
+      branchRef={branchRef}
+      showBase={showBase}
+    />
   );
 }
 

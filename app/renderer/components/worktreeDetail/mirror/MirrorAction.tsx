@@ -26,8 +26,8 @@ import {
 } from "@/hooks/remote/useMirrors";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { localDeviceId } from "@/lib/queryKeys";
-import { FooterActionButton } from "../FooterActionButton";
-import { LABEL_RANK } from "../footerFit";
+import { FooterActionButtonView } from "../FooterActionButtonView";
+import { LABEL_RANK } from "../FooterVerbView";
 import { TONE_TEXT } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 import { MirrorManageDialog } from "./MirrorManageDialog";
@@ -74,7 +74,7 @@ function MirrorLinkAction({
   const runnerApi = link.runnerApi;
   return (
     <>
-      <FooterActionButton
+      <FooterActionButtonView
         rank={LABEL_RANK.mirror}
         icon={
           <RefreshCw

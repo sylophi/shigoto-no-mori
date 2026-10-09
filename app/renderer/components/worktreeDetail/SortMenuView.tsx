@@ -21,7 +21,7 @@ const SORT_OPTIONS: ReadonlyArray<{
   { value: "manual", label: "Manual order" },
 ];
 
-export function SortMenu({
+export function SortMenuView({
   value,
   onChange,
   onArrange,

@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 
-export function LifecycleBanner({ label }: { label: string }) {
+export function LifecycleBannerView({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
       <Loader2

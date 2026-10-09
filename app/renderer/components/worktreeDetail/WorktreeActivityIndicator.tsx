@@ -1,23 +1,13 @@
 import { only } from "@shared/util/only";
-import { RefreshCw } from "lucide-react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { IconButton } from "@/components/ui/icon-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useProjectGitFetching } from "@/hooks/git/useProjectGitFetching";
-import { cn } from "@/lib/utils";
 import type { Worktree } from "@shigomori/contracts/schemas";
+import { WorktreeActivityIndicatorView } from "./WorktreeActivityIndicatorView";
 
-// The page's one refresh, in the header's top row. It spins through
-// whatever the page is waiting on (a ref fetch, the worktree or branch
-// lists, the PR), the automatic ones included, and says which in its
-// tooltip (idle, the icon says enough). A click fetches the project's
-// refs, as opening the page does and only on this device, and re-asks
-// GitHub for the PR: the page refetches on focus and when refs move,
-// but checks finishing or mergeability moving on GitHub's side reach
-// none of that. Always there, so nothing beside it in the row moves
-// when it starts or stops.
+// The page's one refresh (WorktreeActivityIndicatorView), spinning
+// through whatever the page is waiting on.
 export function WorktreeActivityIndicator({
   worktree,
 }: {
@@ -52,18 +42,11 @@ export function WorktreeActivityIndicator({
     }
   };
   return (
-    <SimpleTooltip tip={tip}>
-      <IconButton
-        onClick={refresh}
-        aria-label={tip ?? "Refresh"}
-        className="-my-1 text-muted-foreground/70"
-      >
-        <RefreshCw
-          aria-hidden
-          className={cn("size-3.5", spinning && "animate-spin")}
-        />
-      </IconButton>
-    </SimpleTooltip>
+    <WorktreeActivityIndicatorView
+      tip={tip}
+      spinning={spinning}
+      onRefresh={refresh}
+    />
   );
 }
 

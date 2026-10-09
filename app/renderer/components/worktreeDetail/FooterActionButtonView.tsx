@@ -4,9 +4,9 @@
 // place). Each gives up its label on a narrow footer at its own rank
 // (footerFit.tsx).
 import type { ReactNode } from "react";
-import { FooterVerb } from "./footerFit";
+import { FooterVerbView } from "./FooterVerbView";
 
-export function FooterActionButton({
+export function FooterActionButtonView({
   rank,
   icon,
   label,
@@ -23,7 +23,7 @@ export function FooterActionButton({
   onClick: () => void;
 }) {
   return (
-    <FooterVerb
+    <FooterVerbView
       rank={rank}
       icon={icon}
       label={label}

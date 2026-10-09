@@ -34,7 +34,7 @@ import type {
 import { ArrangeScriptRow, ScriptDragPreview } from "./ArrangeScriptRow";
 import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";
-import { SortMenu } from "../SortMenu";
+import { SortMenuView } from "../SortMenuView";
 
 interface PackageScriptsProps {
   worktree: Worktree;
@@ -125,7 +125,7 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
             </button>
           ) : (
             canCommand && (
-              <SortMenu
+              <SortMenuView
                 value={sortMode}
                 onChange={(mode) => {
                   // Picking a sort ends a request that a failed or remote
