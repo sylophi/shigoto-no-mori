@@ -50,7 +50,7 @@ export const STABLE_CONNECTION_MS = 30_000;
 export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
 
 // Defined by the hub contract, whose schema validates it on the
-// Electron wire.
+// loopback.
 export type SupervisorStatus = HubStatus["socket"];
 
 // The part of an established connection the supervisor and its owner

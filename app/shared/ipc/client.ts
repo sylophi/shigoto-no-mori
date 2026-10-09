@@ -1,5 +1,6 @@
 import { buildClient } from "@shared/ipc/buildClient";
 import {
+  type ContractModule,
   type ContractScope,
   nameOf,
   scopeOf,
@@ -27,13 +28,19 @@ export type AllChannelHandlers = Partial<ChannelHandlers<AllContractModule>>;
 export type RendererContractApi = Api<AllContractModule>;
 
 export function buildApi(
-  transports: Record<ContractScope, ClientTransport>,
+  transports:
+    | Record<ContractScope, ClientTransport>
+    | ((module: ContractModule) => ClientTransport),
 ): RendererContractApi {
+  const transportOf =
+    typeof transports === "function"
+      ? transports
+      : (module: ContractModule) => transports[scopeOf(module)];
   const api: Record<string, unknown> = {};
   for (const module of allContractModules) {
     const name = nameOf(module);
     if (name in api) throw new Error(`two contract modules are named ${name}`);
-    api[name] = buildClient(module, transports[scopeOf(module)]);
+    api[name] = buildClient(module, transportOf(module));
   }
   return api as RendererContractApi;
 }

@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import { repairCliLinks } from "./electron/cliInstall";
 import { startUpdater } from "./electron/updater";
 import { retryParkedSignOut } from "./ipc/modules/account";
-import { probeRemoteConnections } from "./ipc/register";
+import { probeRemoteConnections, shellLinkLayer } from "./ipc/register";
 import { lifetime, starts } from "./lifetimes";
 
 // Sleep is the one event that reliably kills every remote socket
@@ -32,4 +32,6 @@ export const layer = Layer.mergeAll(
   // an installed link whose target moved (an app update, another
   // checkout).
   starts("the CLI link repair", () => void repairCliLinks()),
+  // The windows' links to the shell (ipc/shellLink.ts).
+  shellLinkLayer,
 );

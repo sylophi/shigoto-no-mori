@@ -24,8 +24,8 @@
 //      that fails too.
 //   4. Canary: the `isRemote` identifier must not appear under host/,
 //      shared/, renderer/ or the contracts package.
-//   5. ipcRenderer appears only in main/preloadTransport.ts, the one
-//      sanctioned ClientTransport binding.
+//   5. ipcRenderer appears only in main/preloadPort.ts, which asks
+//      main for the window's port to its shell and nothing more.
 //   6. main/core is the Electron-free half of the desktop binding: the
 //      pure cores (stores, engines, rate limiters) the node proofs in
 //      test/ drive directly. No electron import there, and no import
@@ -59,7 +59,7 @@ const mainDir = join(appRoot, "main");
 const mainCoreDir = join(mainDir, "core");
 const contractsDir = join(repoRoot, "packages", "contracts", "src");
 const modulesDir = join(contractsDir, "modules");
-const IPC_RENDERER_ALLOWLIST = new Set(["main/preloadTransport.ts"]);
+const IPC_RENDERER_ALLOWLIST = new Set(["main/preloadPort.ts"]);
 
 const isElectronSpecifier = (spec: string) =>
   spec === "electron" ||
@@ -174,10 +174,10 @@ for (const { dir, root, contractLayer } of LAYERS) {
       );
     }
 
-    // 5. Everything above the preload transport speaks ClientTransport.
+    // 5. Everything above the port speaks ClientTransport.
     if (!IPC_RENDERER_ALLOWLIST.has(rel) && IPC_RENDERER.test(src)) {
       failures.push(
-        `${rel} references ipcRenderer -- the one sanctioned consumer is main/preloadTransport.ts`,
+        `${rel} references ipcRenderer -- the one sanctioned consumer is main/preloadPort.ts`,
       );
     }
   }

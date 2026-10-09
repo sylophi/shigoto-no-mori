@@ -9,16 +9,7 @@
 // keeper (shared/hub/directKeeper.ts), which is the single owner of
 // retry.
 import {
-  channelOf,
-  type ContractCall,
-  isBroadcast,
-  isInvoke,
-} from "@shigomori/contracts/contract";
-import { type ContractSchema, decode } from "@shigomori/contracts/codec";
-import {
   errorMessageOf,
-  isContractError,
-  isRemoteCallError,
   isProtocolVersionMismatchError,
   LinkRefusedError,
 } from "@shigomori/contracts/errors";
@@ -26,11 +17,9 @@ import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
-import * as Predicate from "effect/Predicate";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
@@ -39,6 +28,7 @@ import * as Stream from "effect/Stream";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { type ChannelMux, createChannelMux } from "./channels";
+import { type FlatClient, rpcTransport } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
 import { LinkGroup } from "@shigomori/contracts/link";
 import {
@@ -73,15 +63,6 @@ export class RemoteConnectError extends Error {
   }
 }
 
-// The link dropped while calls were in flight, or a call came after it
-// did: a disconnect, distinct from the handler's own failure.
-class RemoteDisconnectedError extends Error {
-  constructor() {
-    super("remote device disconnected");
-    this.name = "RemoteDisconnectedError";
-  }
-}
-
 // What a link is opened with: the browser's WebSocket, or the `ws`
 // package in main, which names the errno a failed dial died of where
 // the platform global reports a bare 1006.
@@ -108,6 +89,10 @@ export type DeviceLinkOptions = {
   deadlineMs: number;
   // Test seam: the protocol version the hello claims. This build's.
   protocolVersion?: number;
+  // The calls the far end serves: a peer's device link (LinkGroup, the
+  // default), or this machine's own host on the loopback
+  // (LoopbackGroup), whose token stands in for the ticket.
+  group?: typeof LinkGroup;
 };
 
 export type DeviceConnection = {
@@ -140,19 +125,11 @@ export type PendingDeviceConnection = {
 
 // The pushes a peer serves, which every link subscribes to as it opens
 // (the bridge fans them out by channel).
-const pushChannels = [...LinkGroup.requests.values()]
-  .filter((call) => isBroadcast(call) && channelOf(call) !== "link:read")
-  .map(channelOf);
-
-type Flat = (
-  tag: string,
-  payload: unknown,
-  options?: object,
-) => Effect.Effect<unknown, unknown> | Stream.Stream<unknown, unknown>;
 
 export function openDevice(
   options: DeviceLinkOptions,
 ): PendingDeviceConnection {
+  const group = options.group ?? LinkGroup;
   const opened = Deferred.makeUnsafe<string, RemoteConnectError>();
   const helloAsked = Deferred.makeUnsafe<void>();
   const welcomed = Deferred.makeUnsafe<DeviceConnection, RemoteConnectError>();
@@ -230,9 +207,9 @@ export function openDevice(
     // so its client knows each call only as some call: one with a tag,
     // a payload and an Effect or a Stream back.
     // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
-    const client = (yield* RpcClient.make(LinkGroup, { flatten: true }).pipe(
+    const client = (yield* RpcClient.make(group, { flatten: true }).pipe(
       Effect.provideService(RpcClient.Protocol, protocol),
-    )) as unknown as Flat;
+    )) as unknown as FlatClient;
     const call = (tag: string, payload: unknown) =>
       client(tag, payload) as Effect.Effect<unknown, unknown>;
     const runFork = yield* FiberSet.makeRuntime<never>();
@@ -291,27 +268,12 @@ export function openDevice(
       );
     }
 
-    const subscribers = new Map<string, Set<(payload: unknown) => void>>();
-    for (const channel of pushChannels) {
-      runFork(
-        Stream.runForEach(
-          client(channel, undefined) as Stream.Stream<unknown, unknown>,
-          (payload) =>
-            Effect.sync(() => {
-              options.onPush?.(channel, payload);
-              for (const handler of subscribers.get(channel) ?? []) {
-                try {
-                  handler(payload);
-                } catch (error) {
-                  log.warn(
-                    `[link] a ${channel} subscriber threw: ${errorMessageOf(error)}`,
-                  );
-                }
-              }
-            }),
-        ).pipe(Effect.ignore),
-      );
-    }
+    const transport = rpcTransport({
+      client,
+      group,
+      fork: (effect) => runFork(effect),
+      onPush: options.onPush,
+    });
 
     // A round trip behind the subscriptions, so the link counts as open
     // only once the host hears it for its pushes: the host serves a
@@ -330,39 +292,6 @@ export function openDevice(
       fork: (effect) => runFork(effect),
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => channels.closeAll()));
-
-    const transport: ClientTransport = {
-      invoke(channel, input, invokeOptions) {
-        const rpc = LinkGroup.requests.get(channel) as ContractCall | undefined;
-        if (rpc === undefined || !isInvoke(rpc)) {
-          return Promise.reject(
-            new Error(`No handler registered for channel "${channel}"`),
-          );
-        }
-        const called = Effect.suspend(() =>
-          call(channel, decode(rpc.payloadSchema as ContractSchema, input)),
-        );
-        const span = invokeOptions?.span;
-        return Effect.runPromiseExit(
-          span === undefined ? called : Effect.withParentSpan(called, span),
-          { signal: invokeOptions?.signal },
-        ).then((exit) => {
-          if (Exit.isSuccess(exit)) return exit.value;
-          throw failureOf(exit.cause);
-        });
-      },
-      subscribe(channel, handler) {
-        let handlers = subscribers.get(channel);
-        if (handlers === undefined) {
-          handlers = new Set();
-          subscribers.set(channel, handlers);
-        }
-        handlers.add(handler);
-        return () => {
-          handlers.delete(handler);
-        };
-      },
-    };
 
     established = true;
     yield* Deferred.succeed(welcomed, {
@@ -428,18 +357,4 @@ export function openDevice(
     },
     abandon: close,
   };
-}
-
-// A call's failure as its Promise caller sees it: the contract error it
-// was sent as (RemoteCallError for a plain one, carrying its message
-// and code), or the link gone.
-function failureOf(cause: Cause.Cause<unknown>): unknown {
-  const error = Cause.squash(cause);
-  if (isContractError(error) || isRemoteCallError(error)) return error;
-  if (Cause.hasInterruptsOnly(cause))
-    return new Error("the call was cancelled");
-  if (Predicate.isTagged(error, "RpcClientError")) {
-    return new RemoteDisconnectedError();
-  }
-  return error instanceof Error ? error : new Error(String(error));
 }

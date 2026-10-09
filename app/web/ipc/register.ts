@@ -6,8 +6,8 @@
 // surface the desktop does, by the same means: the scalar facts
 // (deviceId, appVersion, isDev, isElectron) plus buildApi over one
 // ClientTransport per scope.
-// The transports are in-page loopback wires (loopback.ts, the twin of
-// main/preloadTransport.ts) instead of the IPC bridge, with the
+// The transports are in-page loopback wires (loopback.ts) instead of
+// the desktop's links, with the
 // browser-servable client modules (clientConfig, account, hub, shell,
 // releases) registered through the shared registrar and every OS-bound
 // channel answered by a typed stub default. Renderer components therefore

@@ -106,7 +106,7 @@ export const accountContract = defineContract(
   invoke("setAcceptsCommands", Schema.Boolean, VoidSchema),
   // Fan-out after any sign-in, sign-out or rename so every window
   // re-reads status and the device list. Client-scoped, so it stays on
-  // the Electron wire only. Carries the account now signed in (null
+  // the windows' shell ports. Carries the account now signed in (null
   // when signed out) so a listener can tell a rename from a sign-out
   // or an account switch without a status read of its own.
   broadcast(

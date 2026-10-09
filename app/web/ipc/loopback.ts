@@ -1,10 +1,9 @@
-// The web bridge's in-page wire, the twin of main/preloadTransport.ts:
-// one ServerTransport and one ClientTransport joined back to back, so
+// The web bridge's in-page wire: one ServerTransport and one ClientTransport joined back to back, so
 // the shared registrar
 // (shared/ipc/registerContract.ts) mounts real browser-backed handlers
 // exactly the way the Electron and socket bindings mount theirs, and
-// buildApi consumes the client half exactly the way the preload consumes
-// its IPC bridge. Nothing above or below this seam knows the wire is a
+// buildApi consumes the client half exactly the way the desktop window
+// consumes its links. Nothing above or below this seam knows the wire is a
 // Map.
 //
 // Channels no handler was registered for are answered FAIL-CLOSED:

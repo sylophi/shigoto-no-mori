@@ -42,7 +42,7 @@ import { registerIpcHandlers } from "./ipc/handlers";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { broadcast } from "./ipc/register";
+import { broadcast, installShellPorts } from "./ipc/register";
 import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { applyUserShellEnv } from "./core/shellEnv";
@@ -192,6 +192,7 @@ installMenuImpl();
 installUpdaterImpl();
 installHostImpls();
 registerIpcHandlers();
+installShellPorts();
 
 // The engine's build flavor and its darwin helper, for the graph and
 // for the doctor a store that won't open gets.

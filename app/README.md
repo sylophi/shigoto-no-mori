@@ -22,7 +22,7 @@ is the binding underneath, and the two bindings are parallel:
 | Concern | Desktop (Electron) | Web (browser) |
 | --- | --- | --- |
 | Composition root: handlers on the wires, the direct plane, `window.api` | `main/ipc/register.ts` + `main/preload.ts` + `renderer/electronApi.ts` | `web/ipc/register.ts` + `web/preload.ts` |
-| Transport under `window.api` | `main/preloadTransport.ts` (IPC) | `web/ipc/loopback.ts` (in-page) |
+| Transport under `window.api` | `shared/ipc/shell.ts` (the shell, over a port) + `renderer/hostLink.ts` (the host, over the loopback) | `web/ipc/loopback.ts` (in-page) |
 | Account: credential store, enroll, device name | `main/core/account/` | `web/account/` |
 | Device hub socket | `host/hub/connection.ts` (node) | `web/hub/connection.ts` (browser) |
 | Page entry | `index.html` → `renderer/index.tsx` | `web/index.html` → `web/main.tsx` → `web/boot.tsx` |

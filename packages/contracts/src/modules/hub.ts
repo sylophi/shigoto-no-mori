@@ -13,7 +13,7 @@ import { VoidSchema } from "../schemas/index.ts";
 
 // A connection's status: the shared supervisor's SupervisorStatus is
 // this schema's type, and the bridge validates what crosses the
-// Electron wire with it. On "connected" the remote identity fields are
+// loopback with it. On "connected" the remote identity fields are
 // empty strings: the hub socket has no sm welcome of its own.
 const HubSocketStatusSchema = Schema.Union([
   Schema.Struct({ phase: Schema.Literal("idle") }),
