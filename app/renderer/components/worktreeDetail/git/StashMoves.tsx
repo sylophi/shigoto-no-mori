@@ -5,6 +5,7 @@ import {
   useDropStash,
   useRestoreStash,
 } from "@/hooks/worktrees/useGitHistory";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { StashEntry, Worktree } from "@shigomori/contracts/schemas";
@@ -12,7 +13,7 @@ import type { StashEntry, Worktree } from "@shigomori/contracts/schemas";
 // Under a stash's title on the Stashes tab: put it back (and drop it,
 // or keep it), or drop it. A restore lands on the changes it went back
 // into. A drop moves on to the next stash, or to the tab's empty state
-// once none is left.
+// once none is left. None on a peer that takes no commands from here.
 export function StashMoves({
   worktree,
   stash,
@@ -27,6 +28,8 @@ export function StashMoves({
   const apply = useApplyStash();
   const drop = useDropStash();
   const restore = useRestoreStash();
+  const { canCommand } = useCommandAccess();
+  if (!canCommand) return null;
   const scope = { projectId: worktree.projectId, worktreeId: worktree.id };
   const busy = apply.isPending || drop.isPending;
   const toChanges = () =>

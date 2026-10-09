@@ -109,6 +109,52 @@ describe("a command line", () => {
     assert.equal((await runAt(box.home, "--help")).code, 0);
   });
 
+  it("sets, reads and clears autoShelveDays, off while unset", async () => {
+    const get = () =>
+      runAt(box.home, "--json", "config", "get", "autoShelveDays");
+    assert.deepEqual((await get()).doc, {
+      ok: true,
+      key: "autoShelveDays",
+      value: null,
+      set: false,
+    });
+    const refused = await runAt(
+      box.home,
+      "--json",
+      "config",
+      "set",
+      "autoShelveDays",
+      "0",
+    );
+    assert.equal(refused.code, 2);
+    assert.deepEqual(refused.doc, {
+      ok: false,
+      error: "autoShelveDays must be a positive integer.",
+    });
+    assert.deepEqual(
+      (await runAt(box.home, "--json", "config", "set", "autoShelveDays", "14"))
+        .doc,
+      { ok: true, key: "autoShelveDays", value: 14 },
+    );
+    assert.deepEqual((await get()).doc, {
+      ok: true,
+      key: "autoShelveDays",
+      value: 14,
+      set: true,
+    });
+    const listed = (
+      (await runAt(box.home, "--json", "config", "list")).doc as {
+        settings: ReadonlyArray<{ key: string }>;
+      }
+    ).settings.map(({ key }) => key);
+    assert.equal(
+      listed.indexOf("autoShelveDays"),
+      listed.indexOf("autoPullPrimaryOnly") + 1,
+    );
+    await runAt(box.home, "--json", "config", "unset", "autoShelveDays");
+    assert.equal(((await get()).doc as { set: boolean }).set, false);
+  });
+
   it("refuses a command line in the Go sm's words, with no help page", async () => {
     const refusals: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
       [["nosuch"], 'Unknown command "nosuch". Run `smd --help`.'],

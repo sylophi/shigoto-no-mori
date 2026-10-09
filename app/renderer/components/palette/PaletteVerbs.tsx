@@ -15,6 +15,7 @@ import { openPullRequest } from "@/components/worktreeDetail/pullRequests/pullRe
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
@@ -295,6 +296,7 @@ function SyncVerbs({
           label: move.label,
           icon: iconOf(move.Icon),
           disabled: !canCommand,
+          tip: canCommand ? undefined : peerReadOnlyNote(),
           run: () => {
             mutations[move.key].mutate({
               projectId: worktree.projectId,

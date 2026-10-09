@@ -544,6 +544,7 @@
         "autoPopulateInstall": true,
         "autoPullNew": true,
         "autoPullPrimaryOnly": true,
+        "autoShelveDays": 14,
         "doubutsuNames": true,
         "codexWorktreeNames": true,
         "managedOnProjectDrive": true,
@@ -572,6 +573,9 @@
       },
       {
         "githubCli": "yes"
+      },
+      {
+        "autoShelveDays": 0
       }
     ]
   },
@@ -592,6 +596,7 @@
         "autoPopulateInstall": true,
         "autoPullNew": true,
         "autoPullPrimaryOnly": true,
+        "autoShelveDays": 14,
         "doubutsuNames": true,
         "codexWorktreeNames": true,
         "managedOnProjectDrive": true,
@@ -599,11 +604,20 @@
         "terrier": true,
         "githubCli": false
       },
-      {}
+      {},
+      {
+        "autoShelveDays": null
+      }
     ],
     "rejects": [
       {
         "directConnections": false
+      },
+      {
+        "autoShelveDays": 0
+      },
+      {
+        "autoShelveDays": 1.5
       },
       {
         "terminal": "xterm"

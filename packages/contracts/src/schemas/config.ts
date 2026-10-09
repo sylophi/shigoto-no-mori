@@ -310,6 +310,14 @@ const GlobalConfigSchema = Schema.Struct({
   // When true, autoPullNew covers only the primary checkout of a newly
   // added project. Nothing on its own.
   autoPullPrimaryOnly: Schema.optional(Schema.Boolean),
+  // The idle shelf: a managed worktree nothing has touched for this
+  // many days (no commit, edit, agent session, creation or unshelve)
+  // goes on the shelf, where working in it brings it back as before.
+  // Kept by the engine's full listing (Worktrees.ts, shelf.ts). Absent
+  // is off, and a patch turns it off with null.
+  autoShelveDays: Schema.optional(
+    Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
+  ),
   // When true, auto-picked worktree names are Animal Crossing villager
   // and character names, the ones with a face on Nookipedia
   // (packages/engine/src/data/doubutsu-names.json, e.g. `raymond`),
@@ -400,6 +408,7 @@ export const DeviceSettingsPatchSchema = strict(
     autoPopulateInstall: GlobalConfigSchema.fields.autoPopulateInstall,
     autoPullNew: GlobalConfigSchema.fields.autoPullNew,
     autoPullPrimaryOnly: GlobalConfigSchema.fields.autoPullPrimaryOnly,
+    autoShelveDays: GlobalConfigSchema.fields.autoShelveDays,
     doubutsuNames: GlobalConfigSchema.fields.doubutsuNames,
     codexWorktreeNames: GlobalConfigSchema.fields.codexWorktreeNames,
     managedOnProjectDrive: GlobalConfigSchema.fields.managedOnProjectDrive,
@@ -430,6 +439,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   autoPopulateInstall: false,
   autoPullNew: false,
   autoPullPrimaryOnly: false,
+  autoShelveDays: null,
   doubutsuNames: false,
   codexWorktreeNames: false,
   managedOnProjectDrive: false,

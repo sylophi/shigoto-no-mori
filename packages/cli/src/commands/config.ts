@@ -275,6 +275,7 @@ const device: Settings = {
       "Start new worktrees (and added projects' primaries) with auto-pull on",
     autoPullPrimaryOnly:
       "autoPullNew applies to added projects' primaries only",
+    autoShelveDays: "Shelve worktrees untouched for this many days",
     doubutsuNames:
       "Name new worktrees after Animal Crossing characters (on for new installs)",
     codexWorktreeNames:

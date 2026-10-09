@@ -555,6 +555,7 @@
   "globalConfig:writeDeviceSettings": {
     "payload": {
       "patch": {
+        "autoShelveDays": 14,
         "portPool": false
       }
     }

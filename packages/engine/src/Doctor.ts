@@ -1220,11 +1220,12 @@ const make = Effect.gen(function* () {
       ];
     });
 
-  // Everything kept by worktree id: the marks, the shelf snapshots and
-  // each worktree's data. Removing a worktree clears them, so ids that
-  // match nothing mean worktrees were removed outside sm. Harmless, so
-  // reported and never cleared. With the project list short, every mark
-  // of a missing project would read as a leftover, so it stands down.
+  // Everything kept by worktree id: the marks, the shelf snapshots, the
+  // unshelve times and each worktree's data. Removing a worktree clears
+  // them, so ids that match nothing mean worktrees were removed outside
+  // sm. Harmless, so reported and never cleared. With the project list
+  // short, every mark of a missing project would read as a leftover, so
+  // it stands down.
   const checkBookkeeping = (
     projects: ReadonlyArray<ListedProject>,
     complete: boolean,
@@ -1261,6 +1262,7 @@ const make = Effect.gen(function* () {
         yield* registry.marked("autoPull"),
         new Set((yield* registry.agentSessions).keys()),
         yield* worktrees.snapshotted,
+        yield* worktrees.unshelved,
       ];
       const marked = new Set<string>();
       let leftover = 0;

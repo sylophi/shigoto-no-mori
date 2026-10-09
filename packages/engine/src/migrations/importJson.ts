@@ -333,3 +333,40 @@ export const importFiles = (lenient: boolean) =>
 
 // The store's import migration.
 export const importJson = importFiles(false);
+
+// One key of registry.json read as a hint, for a migration that comes
+// after the import: the file stays where it is, so a table added later
+// takes its key from it the way the import took the others. Absent,
+// unreadable or unparsable reads as `fallback`.
+export const registryHint = <K extends keyof typeof RegistryFileSchema.fields>(
+  key: K,
+  fallback: (typeof RegistryFileSchema.fields)[K]["Type"],
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { dataDir } = yield* Paths.Paths;
+    const file = path.join(dataDir, "registry.json");
+    const text = yield* fs.readFileString(file).pipe(
+      Effect.map(Option.some),
+      Effect.catchIf(isAbsent, () => Effect.succeed(Option.none<string>())),
+      Effect.catchTags({
+        PlatformError: () => skipped(file, "the file", Option.none<string>()),
+      }),
+    );
+    if (Option.isNone(text)) return fallback;
+    const doc = yield* Schema.decodeUnknownEffect(JsonObjectText)(
+      text.value,
+    ).pipe(
+      Effect.catchTags({
+        SchemaError: () => skipped(file, "the file", {} as JsonObject),
+      }),
+    );
+    return yield* lenientKey(
+      file,
+      key,
+      RegistryFileSchema.fields[key],
+      doc[key],
+      fallback,
+    );
+  });

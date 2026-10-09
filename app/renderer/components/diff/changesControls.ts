@@ -29,6 +29,9 @@ export interface DiffChangesControls {
   // A commit or discard is in flight: checkboxes and discard controls
   // hold still until the tree settles.
   busy: boolean;
+  // A peer that takes no commands from here: the list only reads, with
+  // no ticks, discards, stash or conflict moves.
+  readOnly: boolean;
 }
 
 // The working-tree paths a row stands for, for staging and discarding.

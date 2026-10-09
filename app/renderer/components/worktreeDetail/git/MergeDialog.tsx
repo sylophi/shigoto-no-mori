@@ -7,6 +7,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import {
   useMergeBranch,
@@ -32,8 +33,11 @@ const METHODS: { value: IntegrateMethod; label: string }[] = [
 ];
 
 // The Git page's way to bring another branch in, opening the dialog.
+// None on a peer that takes no commands from here.
 export function MergeButton({ worktree }: { worktree: Worktree }) {
   const [open, setOpen] = useState(false);
+  const { canCommand } = useCommandAccess();
+  if (!canCommand) return null;
   return (
     <>
       <Button variant="ghost" size="xs" onClick={() => setOpen(true)}>

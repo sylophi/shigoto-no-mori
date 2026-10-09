@@ -1,4 +1,5 @@
 import { ArrowDown } from "lucide-react";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useMergePrimaryWorktree,
   useSyncWithPrimaryWorktree,
@@ -17,7 +18,8 @@ import { SyncActionButton } from "./SyncActionButton";
 //
 // A sync that conflicts changes nothing, and its toast offers the way
 // on: merge anyway and settle the conflicts here (the Git section's
-// banner takes it from there).
+// banner takes it from there). None on a peer that takes no commands
+// from here.
 export function WorktreePrimarySyncPill({
   worktree,
   label,
@@ -32,6 +34,8 @@ export function WorktreePrimarySyncPill({
   const sync = useSyncWithPrimaryWorktree();
   const merge = useMergePrimaryWorktree();
   const nav = useWorktreeNav();
+  const { canCommand } = useCommandAccess();
+  if (!canCommand) return null;
   const branchName = worktree.primaryRef ?? "primary";
   const scope = { projectId: worktree.projectId, worktreeId: worktree.id };
   return (

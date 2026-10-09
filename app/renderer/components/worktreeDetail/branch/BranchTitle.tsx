@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { InlineError } from "@/components/ui/inline-error";
 import { Input } from "@/components/ui/input";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { sanitizeBranchName } from "@shared/git/branches";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -160,7 +161,8 @@ export function BranchTitle({
   );
 }
 
-// Rename, switch and copy behind one button.
+// Rename, switch and copy behind one button. Only copy on a peer that
+// takes no commands from here.
 function BranchMenu({
   worktree,
   anchorRef,
@@ -171,6 +173,7 @@ function BranchMenu({
   onRename: () => void;
 }) {
   const [switching, setSwitching] = useState(false);
+  const { canCommand } = useCommandAccess();
   // Set when an item hands focus on (the rename field, the switcher),
   // so the closing menu doesn't take it back to its button.
   const handedOff = useRef(false);
@@ -202,14 +205,16 @@ function BranchMenu({
         >
           {/* A detached head has no branch to rename, but can switch
               onto one. */}
-          {!worktree.detached && (
+          {canCommand && !worktree.detached && (
             <DropdownMenuItem onClick={handOff(onRename)}>
               Rename branch
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={handOff(() => setSwitching(true))}>
-            Switch branch…
-          </DropdownMenuItem>
+          {canCommand && (
+            <DropdownMenuItem onClick={handOff(() => setSwitching(true))}>
+              Switch branch…
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onClick={() => void navigator.clipboard.writeText(worktree.branch)}
           >
