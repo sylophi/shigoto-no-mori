@@ -3,23 +3,22 @@ import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { Project } from "@shigomori/contracts/schemas";
-import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
-import { TerrierMark } from "./TerrierMark";
+import { TerrierPawView } from "@/components/shared/TerrierPawView";
 
 interface ProjectHeaderProps {
   project: Project;
-  // Whose icon to show when it isn't this scope's own `project`: a
-  // project only peers hold reads it off one of them.
-  iconFrom?: { projectId: string; deviceId: string };
+  // The project's icon (ProjectIcon): a project only peers hold reads
+  // it off one of them.
+  icon: React.ReactNode;
   // The merged tree's device badge cluster, rendered after the name of
   // the open (or inline, an unfolded) project only: the list's rows are
   // names alone, since every row wearing them made the list a wall of
   // icons.
   badges?: React.ReactNode;
-  // Some checkout in the header's group is terrier-sourced, which puts
-  // the paw after the open project's name while Mark terrier projects
-  // is on.
+  // Some checkout in the header's group is terrier-sourced and Mark
+  // terrier projects is on (useSidebarMarks), which puts the paw after
+  // the open project's name.
   terrier?: boolean;
   // Pinned to the top of the list, which puts the pin after the name.
   pinned?: boolean;
@@ -53,9 +52,9 @@ const baseClass =
 // Header row shared by the healthy and missing-project branches. The
 // project name is `truncate`d, and its tooltip only opens while it is
 // cut off.
-export function ProjectHeader({
+export function ProjectHeaderView({
   project,
-  iconFrom,
+  icon,
   badges,
   terrier = false,
   pinned = false,
@@ -75,11 +74,7 @@ export function ProjectHeader({
   const lead = missing ? (
     <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
   ) : (
-    <ProjectIcon
-      projectId={iconFrom?.projectId ?? project.id}
-      name={project.name}
-      deviceId={iconFrom?.deviceId}
-    />
+    icon
   );
   const name = (
     <span
@@ -142,7 +137,7 @@ export function ProjectHeader({
       {lead}
       {name}
       {pinned && <PinnedMarkView />}
-      <TerrierMark terrier={terrier} />
+      {terrier && <TerrierPawView className="size-3" />}
       {badges}
     </div>
   ) : (
@@ -184,7 +179,7 @@ export function ProjectHeader({
       {pinned && <PinnedMarkView />}
       {folded === false && (
         <>
-          <TerrierMark terrier={terrier} />
+          {terrier && <TerrierPawView className="size-3" />}
           {badges}
         </>
       )}

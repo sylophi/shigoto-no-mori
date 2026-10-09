@@ -43,6 +43,7 @@ import { WorktreeMoveDetailsView } from "@/components/shared/WorktreeMoveDetails
 import type { ScriptRunState } from "@/store/scriptRuns";
 import { LOCAL_DEVICE_ID, MINI_ID, THINKPAD_ID } from "../fake-host/fixtures";
 import { SceneDialog, SceneWindowFrame } from "./frame";
+import { SceneSidebar } from "./sidebar";
 import {
   deviceById,
   deviceTabs,
@@ -74,7 +75,7 @@ const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 // lead the header, this device picked, over a form of the shared parts.
 export function ProjectPageScene() {
   return (
-    <SceneWindowFrame>
+    <SceneWindowFrame sidebar={<SceneSidebar view="projects" open />}>
       <ProjectDevicePageView
         projectName={SM.name}
         title="Configure"
@@ -138,7 +139,14 @@ export function ProjectPageScene() {
 export function PeerProjectPageScene() {
   const thinkpad = deviceById(THINKPAD_ID);
   return (
-    <SceneWindowFrame>
+    <SceneWindowFrame
+      sidebar={
+        <SceneSidebar
+          view="inbox"
+          selected={worktreeNamed(SM, "happy-hummingbird").id}
+        />
+      }
+    >
       <ProjectDevicePageView
         projectName={SM.name}
         title="Manage branches"
@@ -163,7 +171,7 @@ export function PeerProjectPageScene() {
 // A page of its own (PageShellView) for a worktree that's gone.
 export function MissingWorktreeScene() {
   return (
-    <SceneWindowFrame>
+    <SceneWindowFrame sidebar={<SceneSidebar view="projects" open />}>
       <PageShellView eyebrow={SM.name} title="happy-hummingbird" watermark="木">
         <WorktreeMissingView
           isPending={false}

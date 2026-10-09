@@ -1,10 +1,11 @@
 import { useLayoutEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { BackButton } from "@/components/ui/back-button";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
-import { cn } from "@/lib/utils";
-import { ARRIVE_FROM } from "./sidebarChrome";
+import {
+  SidebarTakeoverSlotView,
+  SidebarTakeoverView,
+} from "./SidebarTakeoverView";
 
 // A page's own navigation, drawn in the app sidebar in the project
 // tree's place: Settings' section list, the diff pages' file list (with
@@ -37,15 +38,7 @@ export function useSidebarTakenOver(): boolean {
 // list replacing another's (the Git page's tabs, each a route of its
 // own) swaps in one commit, the slot never empty, so it stays still.
 export function SidebarTakeoverSlot() {
-  return (
-    <div
-      ref={slot.publish}
-      className={cn(
-        "flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto empty:hidden",
-        ARRIVE_FROM.right,
-      )}
-    />
-  );
+  return <SidebarTakeoverSlotView slotRef={slot.publish} />;
 }
 
 // The page's half. The tree is gone while this is up, so the way out
@@ -71,17 +64,9 @@ export function SidebarTakeover({
   const target = useExternalStore(slot);
   if (phone || !target) return null;
   return createPortal(
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 px-2 pb-1">
-        <BackButton
-          label={back.label}
-          onClick={back.onClick}
-          className="ml-0 min-w-0 flex-1 justify-start"
-        />
-        {actions}
-      </div>
+    <SidebarTakeoverView back={back} actions={actions}>
       {children}
-    </div>,
+    </SidebarTakeoverView>,
     target,
   );
 }

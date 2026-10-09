@@ -27,7 +27,7 @@ interface StatusPillProps {
 
 // Compact icon-and-optional-count badge. Numeric children get tabular
 // figures so adjacent pills don't shift width as counts change.
-export function StatusPill({
+export function StatusPillView({
   icon: Icon,
   tone,
   tip,

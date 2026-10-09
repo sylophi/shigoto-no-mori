@@ -19,7 +19,7 @@ import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { localDeviceId } from "@/lib/queryKeys";
 import { sortProjects } from "@/lib/sortProjects";
 import { projectGroupOrder } from "./buildSidebarRows";
-import { useDeviceBadges } from "./DeviceBadge";
+import { useDeviceBadges } from "./deviceBadges";
 import { useDeviceFilter } from "./deviceFilter";
 
 export function useForestSources({

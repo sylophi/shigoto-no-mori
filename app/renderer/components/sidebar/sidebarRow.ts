@@ -5,7 +5,7 @@ import type {
   PullRequest,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import type { SidebarDeviceBadge } from "./DeviceBadge";
+import type { SidebarDeviceBadge } from "./DeviceBadgeView";
 
 // The shelves the inbox view folds shut by default, and the tree's
 // (GroupShelf) among them. The live box has no header, so it isn't in

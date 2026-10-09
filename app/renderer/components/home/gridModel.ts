@@ -16,7 +16,7 @@ import {
   projectGroupKey,
   type ProjectGroupOrder,
 } from "@/components/sidebar/buildSidebarRows";
-import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadge";
+import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadgeView";
 import {
   projectListSections,
   type ProjectSection,

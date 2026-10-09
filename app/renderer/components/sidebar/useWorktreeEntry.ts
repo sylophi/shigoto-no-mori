@@ -1,8 +1,15 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
+import {
+  type SidebarMarks,
+  useSidebarMarks,
+} from "@/hooks/config/useSidebarMarks";
+import { useWorktreeForwardTip } from "@/hooks/remote/usePortForwards";
+import { type Resident, useResident } from "@/hooks/villagers/useResident";
+import type { SidebarDeviceBadge } from "./DeviceBadgeView";
+import type { WorktreeRowLook } from "./rowLook";
 import {
   fillRoutePath,
   matchRoutePath,
@@ -10,26 +17,31 @@ import {
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
 
-export interface WorktreeRowState {
-  isSelected: boolean;
+export interface WorktreeEntry {
+  look: WorktreeRowLook;
   open: () => void;
-  activity: ScriptActivityKind | null;
-  isDeleting: boolean;
+  // The villager whose home the worktree is, under Village life.
+  resident: Resident | null;
+  // This machine's forwards of a peer's worktree, for its mark.
+  forwardTip: string | undefined;
+  marks: SidebarMarks;
 }
 
 // What the two sidebar rows share in behaviour (their shared look is
-// WorktreeEntry): "am I the open one", "what's running here" and
-// "where does a click go" have the same answers in the tree and the
-// inbox, and answering them twice is how the two silently drift.
+// WorktreeEntryView): "am I the open one", "what's running here",
+// "where does a click go" and which marks it wears have the same
+// answers in the tree and the inbox, and answering them twice is how
+// the two silently drift.
 // `deviceId` names the peer a remote row belongs to. Absent, the row
 // is this machine's. `mirror` names the peer's copy a local row stands
 // for too: its page (reached by the copies' tabs on the worktree page)
 // selects the row as well.
-export function useWorktreeRowState(
+export function useWorktreeEntry(
   worktree: Worktree,
-  deviceId?: string,
+  device?: SidebarDeviceBadge,
   mirror: { deviceId?: string; worktreeId?: string } = {},
-): WorktreeRowState {
+): WorktreeEntry {
+  const deviceId = device?.deviceId;
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const running = useWorktreeScriptActivity(worktree.id, deviceId);
@@ -62,20 +74,14 @@ export function useWorktreeRowState(
     pathname === detailPath || pathname.startsWith(`${detailPath}/`);
   const activity = running === "failed" && onScreen ? null : running;
 
+  const resident = useResident(worktree);
+  const forwardTip = useWorktreeForwardTip(deviceId ?? "", worktree);
   return {
-    isSelected,
+    look: { isSelected, activity, isDeleting },
     open: () => void navigate({ to: route, params }),
-    activity,
-    isDeleting,
+    resident,
+    // Only a peer's worktree is forwarded from here.
+    forwardTip: device ? forwardTip : undefined,
+    marks: useSidebarMarks(),
   };
-}
-
-// What is happening in a worktree right now, if anything. A delete in
-// flight outranks a running script: it spans the cleanup scripts and
-// the final git remove, while the script activity covers only cleanup,
-// so the trash stays up for the whole mutation.
-export function activityMark(
-  state: Pick<WorktreeRowState, "activity" | "isDeleting">,
-): ScriptActivityKind | null {
-  return state.isDeleting ? "teardown" : state.activity;
 }

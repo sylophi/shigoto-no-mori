@@ -6,7 +6,7 @@ interface ProjectDragPreviewProps {
 
 // Matches the arrange-mode ProjectHeader layout so the preview lines
 // up exactly with the row the cursor grabbed.
-export function ProjectDragPreview({ project }: ProjectDragPreviewProps) {
+export function ProjectDragPreviewView({ project }: ProjectDragPreviewProps) {
   return (
     <div className="py-0.5">
       <div className="flex cursor-grabbing items-center rounded-md bg-card px-2 py-1 text-xs font-medium text-muted-foreground shadow-md outline -outline-offset-1 outline-foreground/25">

@@ -105,6 +105,12 @@ function fakePosedPullRequests(): Record<string, typeof FAKE_PR_SLIM> {
   return { ...prs, [FAKE_PR_BRANCH]: { ...FAKE_PR_SLIM, ...slim } };
 }
 
+// A project's pull requests as they stand unposed, for a picture with
+// no URL to pose by (../scenes).
+export function unposedPullRequests(projectId: string) {
+  return FAKE_SM_PROJECT_IDS.has(projectId) ? FAKE_PRS : {};
+}
+
 export function fakePullRequests(projectId: string) {
   return FAKE_SM_PROJECT_IDS.has(projectId) ? fakePosedPullRequests() : {};
 }

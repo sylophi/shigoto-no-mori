@@ -1,11 +1,11 @@
 // The phone layout's primary navigation: the sidebar's two views and
 // Devices and Settings, as thumb-sized tabs along the bottom edge. The
 // footer's Live button has no tab, so a phone reaches Live only by its
-// URL. A tab lights on its page exactly (the rule NavIconButton
-// follows), and for everything else the forest tab the layout
-// preference names lights, since every other page (Live aside) is
-// reached from one of them (the forest page keeps that preference in
-// step with its route). v1 draws a card band with an accent pill on
+// URL. A tab lights on its page exactly (the rule the sidebar's nav
+// buttons follow, SidebarNavActionsView), and for everything else the
+// forest tab the layout preference names lights, since every other page
+// (Live aside) is reached from one of them (the forest page keeps that
+// preference in step with its route). v1 draws a card band with an accent pill on
 // the current tab. The data-slot hooks let doubutsu restyle the bar as
 // a cream tray with a leaf-green sticker on the current tab
 // (doubutsu.css).
@@ -81,7 +81,7 @@ export function PhoneTabBarView({
   pathname: string;
   view: SidebarView;
   // The Settings tab is the phone's Settings icon, so it wears the
-  // sidebar's update dot (SidebarNavActions).
+  // sidebar's update dot (SidebarNavActionsView).
   updateReady: boolean;
   onNavigate: (to: Tab["to"]) => void;
 }) {

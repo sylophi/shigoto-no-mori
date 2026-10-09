@@ -33,7 +33,8 @@ import { pluralize } from "@/lib/pluralize";
 import { readWorktreeVisits } from "@/lib/recentWorktrees";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
-import { DeviceBadgeCluster } from "@/components/sidebar/DeviceBadge";
+import { DeviceBadgeClusterView } from "@/components/sidebar/DeviceBadgeView";
+import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
 import { useForestSources } from "@/components/sidebar/forestSources";
 import {
   ProjectGroupActions,
@@ -41,7 +42,7 @@ import {
   useIconMember,
 } from "@/components/sidebar/ProjectGroupActions";
 import { useLocateProject } from "@/components/sidebar/LocateProjectPicker";
-import { StatusPill } from "@/components/sidebar/StatusPill";
+import { StatusPillView } from "@/components/sidebar/StatusPillView";
 import type {
   ProjectListRow,
   ProjectSection,
@@ -202,6 +203,7 @@ function ProjectTile({
   work: GroupWork | undefined;
   onOpen: () => void;
 }) {
+  const showBadges = useShowDeviceBadges();
   const { project, local, devices, members, branches, pinned } = row;
   const [hovered, setHovered] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -287,7 +289,7 @@ function ProjectTile({
                 </span>
               </SimpleTooltip>
               {pinned && <PinnedMarkView />}
-              <DeviceBadgeCluster devices={devices} />
+              {showBadges && <DeviceBadgeClusterView devices={devices} />}
             </span>
             {/* Two lines tall even when shorter or empty, so a repo
                 with a short About (or none) lines its stats up with
@@ -316,14 +318,14 @@ function ProjectTile({
             </span>
           )}
           {work !== undefined && work.openPullRequests > 0 && (
-            <StatusPill
+            <StatusPillView
               icon={GitPullRequest}
               tone="emerald"
               tip={pluralize(work.openPullRequests, "open pull request")}
               aria-label={pluralize(work.openPullRequests, "open pull request")}
             >
               {work.openPullRequests}
-            </StatusPill>
+            </StatusPillView>
           )}
         </span>
       </button>

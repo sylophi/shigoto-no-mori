@@ -1,7 +1,7 @@
 import { describePullRequest } from "@/lib/pullRequest";
 import type { StackPosition } from "@shared/pullRequestStack";
 import type { PullRequest } from "@shigomori/contracts/schemas";
-import { StatusPill } from "./StatusPill";
+import { StatusPillView } from "./StatusPillView";
 
 interface PullRequestPillProps {
   // Resolved by the caller: the inbox builder already looked it up to
@@ -18,7 +18,7 @@ interface PullRequestPillProps {
   hidePosition?: boolean;
 }
 
-export function PullRequestPill({
+export function PullRequestPillView({
   pr,
   stack,
   hidePosition,
@@ -33,8 +33,8 @@ export function PullRequestPill({
   const text =
     position && !hidePosition ? `#${pr.number} ${position}` : `#${pr.number}`;
   return (
-    <StatusPill icon={Icon} tone={tone} tip={title} aria-label={title}>
+    <StatusPillView icon={Icon} tone={tone} tip={title} aria-label={title}>
       {text}
-    </StatusPill>
+    </StatusPillView>
   );
 }

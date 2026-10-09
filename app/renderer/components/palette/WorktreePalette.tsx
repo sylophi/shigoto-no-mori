@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/cmdk-classes";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { DeviceBadge, useDeviceBadges } from "@/components/sidebar/DeviceBadge";
+import { DeviceBadgeView } from "@/components/sidebar/DeviceBadgeView";
+import { useDeviceBadges } from "@/components/sidebar/deviceBadges";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { rowDeviceId } from "@/lib/routePaths";
@@ -644,7 +645,7 @@ function PickedLabel({ row }: { row: PaletteRow }) {
               detached={worktree.detached}
             />
           </span>
-          {device && <DeviceBadge badge={device} />}
+          {device && <DeviceBadgeView badge={device} />}
         </>
       );
     }

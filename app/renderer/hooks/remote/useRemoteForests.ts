@@ -33,10 +33,8 @@ import type {
   Worktree,
 } from "@shigomori/contracts/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
-import {
-  shigomoriConfigQueryOptions,
-  showPrimaryInInbox,
-} from "@/hooks/config/useShigomoriConfig";
+import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
+import { showPrimaryInInbox } from "@/lib/showPrimaryInInbox";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";

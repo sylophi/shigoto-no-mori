@@ -4,23 +4,27 @@ import { worktreeTitle } from "@/lib/worktreeTitle";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
-import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
+import { WorktreeKindIconView } from "@/components/shared/WorktreeKindIconView";
 import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
-import { useResident } from "@/hooks/villagers/useResident";
+import type { SidebarMarks } from "@/hooks/config/useSidebarMarks";
+import type { Resident } from "@/hooks/villagers/useResident";
 import type { StackPosition } from "@shared/pullRequestStack";
 import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
-import { ActivityIcon } from "./ActivityIcon";
-import { AgentWaitingMark } from "./AgentWaitingMark";
+import { ActivityIconView } from "./ActivityIconView";
+import { AgentWaitingMarkView } from "./AgentWaitingMarkView";
 import {
-  MirrorBadge,
-  RowDeviceBadge,
+  DeviceBadgeView,
+  MirrorBadgeView,
   type SidebarDeviceBadge,
-} from "./DeviceBadge";
-import { ForwardMark } from "./ForwardMark";
-import { PullRequestPill } from "./PullRequestPill";
+} from "./DeviceBadgeView";
+import { ForwardMarkView } from "./ForwardMarkView";
+import { PullRequestPillView } from "./PullRequestPillView";
 import type { InboxShelf } from "./sidebarRow";
-import { ChangedFilesPill, RemoteSyncPill } from "./StatusIndicator";
-import { activityMark, type WorktreeRowState } from "./useWorktreeRowState";
+import {
+  ChangedFilesPillView,
+  RemoteSyncPillView,
+} from "./StatusIndicatorView";
+import { activityMark, type WorktreeRowLook } from "./rowLook";
 
 interface WorktreeEntryProps extends ComponentProps<"button"> {
   worktree: Worktree;
@@ -32,7 +36,13 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
   // the peer a local one is mirrored with.
   device: SidebarDeviceBadge | undefined;
   mirror: SidebarDeviceBadge | undefined;
-  state: WorktreeRowState;
+  look: WorktreeRowLook;
+  onOpen: () => void;
+  // The villager whose home it is, and this machine's forwards of a
+  // peer's worktree (useWorktreeEntry).
+  resident: Resident | null;
+  forwardTip: string | undefined;
+  marks: SidebarMarks;
   // The fold or shelf the row was filed behind (sidebarRow), null for
   // the open rows.
   shelf: InboxShelf | null;
@@ -43,8 +53,8 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
   context?: ReactNode;
 }
 
-// A worktree in the sidebar, the tree's row (WorktreeRow) and the
-// inbox's (InboxRow) alike: what the work is called (its PR's title,
+// A worktree in the sidebar, the tree's row (WorktreeRowView) and the
+// inbox's (InboxRowView) alike: what the work is called (its PR's title,
 // or the one `sm describe` gave it, else the branch) across the row's
 // full width, over the worktree's own name and every status pill.
 //
@@ -57,14 +67,18 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
 // the trash standing alone reads as "destroying". Children lead the
 // button (the tree's stack rail). Props pass through to the
 // button, so a menu trigger can render it as its own element.
-export function WorktreeEntry({
+export function WorktreeEntryView({
   worktree,
   pr,
   stack,
   hideStackPosition,
   device,
   mirror,
-  state,
+  look,
+  onOpen,
+  resident,
+  forwardTip,
+  marks,
   shelf,
   context,
   className,
@@ -72,10 +86,10 @@ export function WorktreeEntry({
   onClick,
   ...button
 }: WorktreeEntryProps) {
-  const { isSelected, isDeleting } = state;
+  const { isSelected, isDeleting } = look;
   // The tree's row, which has no context line to carry these marks.
   const inline = context === undefined;
-  const mark = inline ? activityMark(state) : null;
+  const mark = inline ? activityMark(look) : null;
   const title = worktreeTitle(worktree, pr);
   return (
     <button
@@ -83,7 +97,7 @@ export function WorktreeEntry({
       {...button}
       onClick={(event) => {
         onClick?.(event);
-        state.open();
+        onOpen();
       }}
       className={cn(
         "relative flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors",
@@ -138,28 +152,34 @@ export function WorktreeEntry({
             (EntryName) plus its marks, and that is what the line
             wraps the pills at. */}
         <span className="flex flex-1 items-center gap-1">
-          <EntryName worktree={worktree} />
+          <EntryName
+            worktree={worktree}
+            resident={resident}
+            allowAgentWorking={marks.allowAgentWorking}
+          />
           {/* Pulled in vertically: the device tile stands taller than
               the line, and letting it set the line's height would make
               a peer's row taller than a local one. The forward mark
               rides here on either row: it is about this worktree, not
               where it lives, which the inbox's context line says. */}
           <span className="-my-1 inline-flex shrink-0 items-center gap-1">
-            {device && (
-              <ForwardMark deviceId={device.deviceId} worktree={worktree} />
+            {forwardTip !== undefined && <ForwardMarkView tip={forwardTip} />}
+            {inline && mirror && (
+              <MirrorBadgeView mirror={mirror} showBadge={marks.deviceBadges} />
             )}
-            {inline && mirror && <MirrorBadge mirror={mirror} />}
-            {inline && device && <RowDeviceBadge badge={device} />}
+            {inline && device && marks.deviceBadges && (
+              <DeviceBadgeView badge={device} />
+            )}
           </span>
         </span>
         <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 empty:hidden">
-          <AgentWaitingMark worktree={worktree} />
-          {mark && <ActivityIcon kind={mark} />}
+          {marks.agentsWaiting && <AgentWaitingMarkView worktree={worktree} />}
+          {mark && <ActivityIconView kind={mark} />}
           {!(inline && isDeleting) && (
             <>
-              <ChangedFilesPill worktree={worktree} />
-              <RemoteSyncPill worktree={worktree} />
-              <PullRequestPill
+              <ChangedFilesPillView worktree={worktree} />
+              <RemoteSyncPillView worktree={worktree} />
+              <PullRequestPillView
                 pr={pr}
                 stack={stack}
                 hidePosition={hideStackPosition}
@@ -179,12 +199,22 @@ export function WorktreeEntry({
 // life, the villager whose home this is sits beside the name, as their
 // face sits beside the title on the worktree page. It's decoration
 // here, so it stays out of the row's label.
-function EntryName({ worktree }: { worktree: Worktree }) {
-  const resident = useResident(worktree);
+function EntryName({
+  worktree,
+  resident,
+  allowAgentWorking,
+}: {
+  worktree: Worktree;
+  resident: Resident | null;
+  allowAgentWorking: boolean;
+}) {
   return (
     <>
       {(worktree.isPrimary || worktree.isExternal) && (
-        <WorktreeKindIcon worktree={worktree} />
+        <WorktreeKindIconView
+          worktree={worktree}
+          allowAgentWorking={allowAgentWorking}
+        />
       )}
       {resident?.face && (
         <VillagerFaceView
