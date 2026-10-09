@@ -9,7 +9,7 @@ import {
 // Host lifecycle of the shigomori data dir. The client-side calls
 // that used to ride along here live in the client-scoped modules now:
 // theme preview and relaunch on window, appearance on clientConfig.
-// nuke stays on the Electron wire (remote false): wiping a machine is
+// nuke stays on the loopback (remote false): wiping a machine is
 // for whoever sits at it. moveDataDir rides the wire behind the command
 // grant, so a peer's Settings page can relocate that device's data
 // folder. The host relaunches itself after such a call, since the peer

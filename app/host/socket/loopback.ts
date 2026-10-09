@@ -56,6 +56,9 @@ const make = (options: {
   // Where loopback.json goes: the data dir's, resolved late because the
   // data dir is a boot-time fact.
   readonly file: () => string;
+  // The one page origin the listener admits beside an origin-less dial:
+  // the desktop window's (its renderer scheme), which dials it too.
+  readonly allowedOrigin?: string;
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -77,6 +80,9 @@ const make = (options: {
         bindAddress: "127.0.0.1",
         deviceId: options.deviceId(),
         appVersion: options.appVersion,
+        ...(options.allowedOrigin === undefined
+          ? {}
+          : { allowedOrigin: options.allowedOrigin }),
       })),
     );
     const status = yield* link.status;
@@ -121,6 +127,7 @@ const promiseAdapter = PromiseAdapter.forService(Loopback, "The loopback");
 export const adapter = promiseAdapter.layer;
 
 export const loopback = {
+  address: () => promiseAdapter.call((it) => it.address),
   unpublish: () =>
     promiseAdapter.runIfOpen(Effect.flatMap(Loopback, (it) => it.unpublish)),
   publish: () =>

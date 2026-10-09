@@ -727,7 +727,7 @@ export function registerIpcHandlers(): void {
   registerContract(worktreeDataContract, worktreeDataHandlers);
   registerContract(syncContract, syncHandlers);
   // Host side of the port-forward wire: host-scoped, so it mounts on
-  // the Electron wire and the direct listener, whose command-access
+  // the loopback and the direct listener, whose command-access
   // gate covers every verb (all gated).
   registerContract(forwardContract, forwardHandlers);
   // Host-scoped: a peer's Settings page reads this device's update

@@ -41,6 +41,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     resolve: {
+      // One effect for the app and the contracts, which reach it through
+      // their own node_modules link: the binary codecs of one copy cannot
+      // read the schemas another built.
+      dedupe: ["effect"],
       alias: {
         "@": resolve(__dirname, "renderer"),
         "@shared": resolve(__dirname, "shared"),
@@ -61,12 +65,11 @@ export default defineConfig(({ mode }) => {
     // Scope the dep scanner to the real entry; its default **/*.html
     // glob picks up LICENSES.chromium.html inside out/ packaged builds
     // and fails the scan with noisy (harmless) errors at dev boot.
-    // The contracts package is served as source. Prebundled, it carries a
-    // copy of effect's Schema of its own, and the renderer's Schema calls
-    // fail on schemas built by that copy.
+    // The contracts package is served as source, and effect with it, as
+    // the contracts import it: prebundled, either is a second copy.
     optimizeDeps: {
       entries: ["index.html"],
-      exclude: ["@shigomori/contracts"],
+      exclude: ["@shigomori/contracts", "effect"],
     },
     define: {
       __APP_VERSION__: JSON.stringify(version),
