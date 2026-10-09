@@ -42,16 +42,8 @@ export function setAccountFacts(
   return previous;
 }
 
-export function accountFacts(): AccountFacts | null {
-  return facts;
-}
-
 export function accountSignedIn(): boolean {
   return facts !== null;
-}
-
-export function currentAccountId(): string | null {
-  return facts?.accountId ?? null;
 }
 
 // The predicate the device link's gate consults live on every gated

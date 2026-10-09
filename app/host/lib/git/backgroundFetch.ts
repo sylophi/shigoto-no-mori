@@ -179,7 +179,7 @@ async function sweepProjectPullRequests(
 // One pass over every project. The timer and the window-focus handler
 // take the fetch freshness default. A peer's request passes the sweep
 // interval: what it wants is the timer's guarantee, not a fresh fetch.
-export function sweepProjects(refsMaxAgeMs = FRESHNESS_MS): void {
+function sweepProjects(refsMaxAgeMs = FRESHNESS_MS): void {
   // The last-read project list (host/lib/projects): the sweeps run from
   // callbacks (a timer, the window-focus handler) that want no CLI round
   // trip of their own, and every list the UI reads refreshes it.

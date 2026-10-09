@@ -30,7 +30,7 @@ function pluralize(n: number, singular: string, plural: string): string {
   return n === 1 ? singular : plural;
 }
 
-export function isBusy(busy: BusyOperations): boolean {
+function isBusy(busy: BusyOperations): boolean {
   return busy.runningScripts > 0 || busy.inflightDeletes > 0;
 }
 
