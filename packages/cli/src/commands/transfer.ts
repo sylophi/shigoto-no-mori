@@ -243,6 +243,7 @@ export const mirrors = Command.make(
 
 const BLOCKS: Readonly<Record<string, string>> = {
   offline: "not connected",
+  "not-sharing": "doesn't share with other devices",
   "no-project": "no checkout yet; a send clones the repo there",
   "no-grant": "doesn't accept commands",
 };

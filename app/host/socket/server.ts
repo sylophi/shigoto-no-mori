@@ -11,8 +11,11 @@
 // its protocol version must be this build's. Until then every other
 // call is refused (PeerAuth). Then a call annotated gated:false runs for
 // the peer, and any other only under the host's live command switch, or
-// as a call the host itself invited (CommandGate). One link per device:
-// a second hello from the same device supersedes the first.
+// as a call the host itself invited (CommandGate). Above both sits the
+// sharing switch: off, every call is refused that was not invited, reads
+// included, and a push reaches a peer only where the host still lets it
+// (SharingGate). One link per device: a second hello from the same
+// device supersedes the first.
 //
 // The listener sits on every interface (and behind the tunnel), so it
 // is written to be hostile-safe: an inbound frame cap, an Origin gate,
@@ -22,6 +25,7 @@ import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   annotation,
+  callOf,
   channelOf,
   type ContractCall,
   Gated,
@@ -36,10 +40,13 @@ import {
   isContractError,
   LinkRefusedError,
   LinkUnauthenticatedError,
+  NotSharingError,
   ProtocolVersionMismatchError,
   RemoteCallError,
 } from "@shigomori/contracts/errors";
 import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
+import { accountContract } from "@shigomori/contracts/modules/account";
+import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -66,6 +73,7 @@ import {
   LinkPeer,
   type LoopbackGroup,
   PeerAuth,
+  SharingGate,
 } from "@shigomori/contracts/link";
 import {
   handshakeProof,
@@ -78,6 +86,7 @@ import {
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/remote/link";
 import * as HostPushes from "@host/lib/hostPushes";
+import * as Sharing from "@host/lib/sharing";
 import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 import { withParentSpan } from "@host/lib/util/trace";
 import type * as Views from "@host/lib/views";
@@ -107,6 +116,20 @@ export type WsServerTicketAuth = {
   // channel such a call attaches survives the switch turning off.
   isInvited?(peerDeviceId: string, channel: string, input: unknown): boolean;
 };
+
+// The sharing switch as the device link reads it (SharingGate). The
+// loopback has none: its callers are this machine's own.
+type LinkSharing = Pick<Sharing.Sharing["Service"], "current" | "changes"> & {
+  // The pushes a peer still hears while it is off, beside
+  // sharing:changed: what a mirror this host invited follows.
+  readonly seesPush: (peerDeviceId: string, payload: unknown) => boolean;
+};
+
+// The host's word on its switches, which a peer hears either way.
+const SWITCHES = new Set([
+  channelOf(callOf(sharingContract, "changed")),
+  channelOf(callOf(accountContract, "commandAccessChanged")),
+]);
 
 export type WsServerStartOpts = {
   port: number;
@@ -372,11 +395,14 @@ export const make = (options: {
   readonly auth: WsServerTicketAuth;
   readonly group?: typeof LinkGroup | typeof LoopbackGroup;
   readonly local?: boolean;
+  readonly sharing?: LinkSharing;
 }) =>
   Effect.gen(function* () {
-    const { registrar, auth } = options;
+    const { registrar, auth, sharing } = options;
     const group = (options.group ?? LinkGroup) as typeof LinkGroup;
     const local = options.local === true;
+    const sharingNow =
+      sharing === undefined ? Effect.succeed(true) : sharing.current;
     // What the views read, and the pushes every peer hears.
     const services = yield* Effect.context<Views.Services>();
     const hostPushes = yield* HostPushes.HostPushes;
@@ -555,11 +581,14 @@ export const make = (options: {
             };
           });
 
-        // The bytes the command switch gave: gone the moment it is off,
+        // The bytes the switches gave: gone the moment either is off,
         // the ones an invited call opened aside.
         const underSwitch = (connection: Connection) =>
-          Effect.sync(() => {
-            if (!auth.isCommandGranted()) connection.channels.dropUninvited();
+          Effect.gen(function* () {
+            const shared = yield* sharingNow;
+            if (!shared || !auth.isCommandGranted()) {
+              connection.channels.dropUninvited();
+            }
           });
 
         type Options = { readonly client: { readonly id: number } };
@@ -615,6 +644,22 @@ export const make = (options: {
             ),
         };
 
+        // What of the host's pushes on `channel` this peer hears while
+        // sharing is off: the switches, and what a mirror the host
+        // invited follows.
+        const heard = (connection: Connection, channel: string) =>
+          sharing === undefined || SWITCHES.has(channel)
+            ? (pushes: Stream.Stream<unknown>) => pushes
+            : Stream.filterEffect((payload: unknown) =>
+                Effect.map(
+                  sharing.current,
+                  (on) =>
+                    on ||
+                    (connection.deviceId !== null &&
+                      sharing.seesPush(connection.deviceId, payload)),
+                ),
+              );
+
         // A push: the host's own when it is one every peer may hear
         // (annotated `remote`), and the ones for this peer alone.
         const push =
@@ -623,7 +668,11 @@ export const make = (options: {
             Stream.unwrap(
               Effect.map(connectionOf(client.id), (connection) =>
                 Stream.merge(
-                  toEveryPeer ? hostPushes.stream(channel) : Stream.empty,
+                  toEveryPeer
+                    ? hostPushes
+                        .stream(channel)
+                        .pipe(heard(connection, channel))
+                    : Stream.empty,
                   Stream.fromPubSub(connection.pushes).pipe(
                     Stream.filter((entry) => entry.channel === channel),
                     Stream.map((entry) => entry.payload),
@@ -750,6 +799,33 @@ export const make = (options: {
             }),
         );
 
+        const sharingGate = Layer.succeed(
+          SharingGate,
+          (effect, { rpc, payload }) =>
+            Effect.gen(function* () {
+              const peer = yield* LinkPeer;
+              const tag = channelOf(rpc);
+              if (
+                tag.startsWith("link:") ||
+                isBroadcast(rpc as ContractCall) ||
+                (peer.deviceId !== undefined &&
+                  auth.isInvited?.(peer.deviceId, tag, payload) === true)
+              ) {
+                return yield* effect;
+              }
+              if (sharing === undefined || !(yield* sharing.current)) {
+                return yield* new NotSharingError();
+              }
+              // A call or a view under way ends as the switch turns off.
+              const off = sharing.changes.pipe(
+                Stream.filter((on) => !on),
+                Stream.runHead,
+                Effect.andThen(Effect.fail(new NotSharingError())),
+              );
+              return yield* Effect.raceFirst(effect, off);
+            }),
+        );
+
         yield* RpcServer.make(group, {
           spanPrefix: "DeviceLink",
           // A handler's defect fails its own call, not every call on
@@ -760,6 +836,7 @@ export const make = (options: {
             Layer.mergeAll(
               group.toLayer(Effect.succeed(handlers as never)),
               peerAuth,
+              sharingGate,
               commandGate,
               Layer.succeed(RpcServer.Protocol, protocol),
             ),
@@ -1043,7 +1120,23 @@ export const make = (options: {
 export const layer = (options: {
   readonly registrar: LinkRegistrar;
   readonly auth: WsServerTicketAuth;
-}) => Layer.effect(DeviceLink, make(options));
+  readonly seesPush: LinkSharing["seesPush"];
+}) =>
+  Layer.effect(
+    DeviceLink,
+    Effect.gen(function* () {
+      const sharing = yield* Sharing.Sharing;
+      return yield* make({
+        registrar: options.registrar,
+        auth: options.auth,
+        sharing: {
+          current: sharing.current,
+          changes: sharing.changes,
+          seesPush: options.seesPush,
+        },
+      });
+    }),
+  );
 
 const promiseAdapter = PromiseAdapter.forService(DeviceLink, "The device link");
 export const adapter = promiseAdapter.layer;

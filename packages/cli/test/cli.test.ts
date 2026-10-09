@@ -383,6 +383,12 @@ describe("transfer", () => {
                 platform: "darwin",
                 block: "offline",
               },
+              {
+                deviceId: "D",
+                name: "Private",
+                platform: "linux",
+                block: "not-sharing",
+              },
             ],
           })
         : refusal(request, "No mirror runs for that worktree.", "no-mirror"),
@@ -398,6 +404,10 @@ describe("transfer", () => {
     assert.match(listed.stdout, /^This device is "Laptop"\.\n/);
     assert.match(listed.stdout, /\nStudio +darwin +connected\n/);
     assert.match(listed.stdout, /\nAway +darwin +not connected\n/);
+    assert.match(
+      listed.stdout,
+      /\nPrivate +linux +doesn't share with other devices\n/,
+    );
     const asked = await runAt(box.home, "--json", "devices");
     assert.deepEqual(asked.doc, {
       ok: true,
@@ -405,6 +415,12 @@ describe("transfer", () => {
       devices: [
         { deviceId: "A", name: "Studio", platform: "darwin" },
         { deviceId: "C", name: "Away", platform: "darwin", block: "offline" },
+        {
+          deviceId: "D",
+          name: "Private",
+          platform: "linux",
+          block: "not-sharing",
+        },
       ],
     });
     const refusedStop = await runAt(box.home, "--json", "worktrees", "mirrors");

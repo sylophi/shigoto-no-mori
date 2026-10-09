@@ -1,5 +1,6 @@
 // Durable proof for the mirror invitations (host/mirror/invites.ts):
-// what an ask admits past the command-access switch, and when. Drives
+// what an ask admits past the command-access and sharing switches, and
+// when. Drives
 // the store's own surface against the gate predicate the direct
 // listener consults, with the persistence seam a recording double.
 // Asserts:
@@ -14,7 +15,8 @@
 //   - landed, it admits the copy-scoped calls on that one copy and the
 //     project-scoped ones in its project, and no longer a landing. A
 //     landing nobody asked for lands nothing, and an input that does
-//     not parse admits nothing,
+//     not parse admits nothing. The pushes it lets a peer hear while
+//     sharing is off are the ones naming its copy's project,
 //   - it is dropped with the copy, withdrawn by a failed ask, gone with
 //     a peer that left the account, and gone when the boot finds the
 //     copy missing,
@@ -28,6 +30,7 @@ import {
   dropMirrorInvitesWithPeers,
   forgetMirrorInvitesOf,
   invitableChannels,
+  mirrorInviteSees,
   inviteMirror,
   landInvitedMirror,
   listMirrorInvites,
@@ -73,8 +76,13 @@ const COPY_CALLS = [
   "sync:openSource",
   "worktrees:delete",
   "worktreeData:describe",
+  "worktreeData:read",
 ];
-const PROJECT_CALLS = ["sync:receiveBundle", "sync:hasCommits"];
+const PROJECT_CALLS = [
+  "sync:receiveBundle",
+  "sync:hasCommits",
+  "worktrees:list",
+];
 
 // A store whose disk says no, either way.
 function brokenDisk(): never {
@@ -109,7 +117,9 @@ it("the invited surface is the contracts' invitable calls", () => {
     "sync:openSource": "copy",
     "sync:receiveBundle": "project",
     "worktreeData:describe": "copy",
+    "worktreeData:read": "copy",
     "worktrees:delete": "copy",
+    "worktrees:list": "project",
   });
 });
 
@@ -215,6 +225,12 @@ it("landed: the copy-scoped calls on that copy, the project-scoped ones in its p
     "the landing is done",
   );
   assert.equal(admits("worktrees:create", COPY), false, "an unrelated call");
+  // The pushes it follows: its copy's project, to that peer alone.
+  assert.equal(mirrorInviteSees(PEER, COPY), true);
+  assert.equal(mirrorInviteSees(PEER, { projectId: COPY.projectId }), true);
+  assert.equal(mirrorInviteSees(PEER, { projectId: "elsewhere" }), false);
+  assert.equal(mirrorInviteSees(OTHER_PEER, COPY), false);
+  assert.equal(mirrorInviteSees(PEER, undefined), false);
   assert.deepEqual(
     saved.at(-1),
     [{ ...ASK, copy: COPY }],

@@ -131,7 +131,10 @@ export interface RemoteProjectPair {
 export function useRemoteProjects(
   refetch: { staleTime?: number; refetchOnMount?: boolean } = CALM_REFETCH,
 ): { pairs: RemoteProjectPair[]; loading: boolean } {
-  const devices = useRemoteDevices();
+  // A peer that isn't sharing lists nothing.
+  const devices = useRemoteDevices().filter(
+    (device) => device.status.phase !== "notSharing",
+  );
   const projectQueries = useQueries({
     queries: devices.map((device) => ({
       ...remoteProjectsQueryOptions(device.deviceId, device.api),

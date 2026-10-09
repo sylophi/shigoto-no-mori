@@ -6,9 +6,9 @@
 //
 // The link's own calls open every connection: the handshake, which no
 // middleware guards, then the rest, which PeerAuth guards (a call before
-// an accepted hello is refused) and CommandGate classifies (a gated call
-// runs only under the host's command switch, or as a call the host
-// invited).
+// an accepted hello is refused), SharingGate holds to the host's sharing
+// switch, and CommandGate classifies (a gated call runs only under the
+// host's command switch, or as a call the host invited).
 import * as Context from "effect/Context";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
@@ -26,6 +26,7 @@ import {
 import {
   CommandRefusedError,
   LinkUnauthenticatedError,
+  NotSharingError,
   RemoteCallError,
 } from "./errors.ts";
 import { controlContract } from "./modules/control.ts";
@@ -119,16 +120,26 @@ export class CommandGate extends RpcMiddleware.Service<
   { requires: LinkPeer }
 >()("sm/remote/CommandGate", { error: CommandRefusedError }) {}
 
+// The sharing switch (modules/sharing.ts): off, every call is refused,
+// reads included, but the link's own and the ones the host invited the
+// peer to make, and a call or view under way when it turns off ends
+// there. A push passes, and carries only what the host still lets this
+// peer hear. Only on the device link: the loopback's callers are this
+// machine's own.
+export class SharingGate extends RpcMiddleware.Service<
+  SharingGate,
+  { requires: LinkPeer }
+>()("sm/remote/SharingGate", { error: NotSharingError }) {}
+
 const handshake = new Set(["link:challenge", "link:hello"]);
 
-const groupOf = (calls: ReturnType<typeof callsOf>) =>
-  RpcGroup.make(
-    ...calls.filter((call) => handshake.has(channelOf(call))),
-  ).merge(
-    RpcGroup.make(...calls.filter((call) => !handshake.has(channelOf(call))))
-      .middleware(CommandGate)
-      .middleware(PeerAuth),
-  );
+type Calls = ReturnType<typeof callsOf>;
+
+const handshakeOf = (calls: Calls) =>
+  RpcGroup.make(...calls.filter((call) => handshake.has(channelOf(call))));
+
+const restOf = (calls: Calls) =>
+  RpcGroup.make(...calls.filter((call) => !handshake.has(channelOf(call))));
 
 // Every call a peer may make, each module's calls annotated `remote`
 // and the link's own, and every host push: one not annotated `remote`
@@ -142,17 +153,26 @@ const remoteCalls = [linkContract, ...allContractModules].flatMap((module) =>
   ),
 );
 
-export const LinkGroup = groupOf(remoteCalls);
+export const LinkGroup = handshakeOf(remoteCalls).merge(
+  restOf(remoteCalls)
+    .middleware(CommandGate)
+    .middleware(SharingGate)
+    .middleware(PeerAuth),
+);
 
 // The loopback: the same link on this machine, for the processes the
 // app's own credential admits (the terminal `sm`, the app's own
 // windows). It serves the link's own calls, every call of every
 // host-scope module, remote or not, with its pushes and views, and the
 // control contract's ops.
-export const LoopbackGroup = groupOf([
+const loopbackCalls = [
   ...callsOf(linkContract),
   ...allContractModules
     .filter((module) => scopeOf(module) === "host")
     .flatMap((module) => callsOf(module)),
   ...callsOf(controlContract),
-]);
+];
+
+export const LoopbackGroup = handshakeOf(loopbackCalls).merge(
+  restOf(loopbackCalls).middleware(CommandGate).middleware(PeerAuth),
+);

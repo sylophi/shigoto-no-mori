@@ -584,6 +584,9 @@
       "peerAcceptsCommands": {
         "": false,
         "\udc00": false
+      },
+      "peerSharesData": {
+        "": false
       }
     }
   },
@@ -597,6 +600,9 @@
       "peerAcceptsCommands": {
         "": true,
         "\t": false
+      },
+      "peerSharesData": {
+        "\t": true
       }
     }
   },
@@ -1760,6 +1766,18 @@
         }
       }
     }
+  },
+  "sharing:changed": {
+    "payload": true
+  },
+  "sharing:read": {
+    "success": true
+  },
+  "sharing:set": {
+    "payload": true
+  },
+  "sharing:watch": {
+    "success": false
   },
   "shell:openExternal": {
     "payload": {
