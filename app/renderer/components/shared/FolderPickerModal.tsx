@@ -13,15 +13,14 @@ import { ensureTrailingSep } from "@shared/projectPaths";
 
 export function FolderPickerModal({
   initialPath,
+  title = "Pick a folder",
+  confirmLabel = "Use this folder",
   ...props
-}: FolderPickerProps & { initialPath?: string }) {
-  const {
-    title = "Pick a folder",
-    confirmLabel = "Use this folder",
-    hint,
-    onPick,
-    onClose,
-  } = props;
+}: Partial<Pick<FolderPickerProps, "title" | "confirmLabel">> &
+  Omit<FolderPickerProps, "title" | "confirmLabel"> & {
+    initialPath?: string;
+  }) {
+  const { hint, onPick, onClose } = props;
   // Seed the input value with the caller's path; otherwise drop into ~/.
   // When an initialPath is provided we append a separator (matching the
   // path's own style) so the listing fires immediately rather than
@@ -59,6 +58,8 @@ export function FolderPickerModal({
     <ModalShell onClose={onClose} closeOnEscape={false}>
       <FolderPickerView
         {...props}
+        title={title}
+        confirmLabel={confirmLabel}
         query={query}
         setQuery={setQuery}
         highlighted={highlighted}

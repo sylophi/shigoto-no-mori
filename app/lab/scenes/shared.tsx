@@ -298,6 +298,8 @@ export function FolderPickerScene() {
       overlays={
         <SceneDialog>
           <FolderPickerView
+            title="Pick a folder"
+            confirmLabel="Use this folder"
             hint="Where new worktrees of this project go."
             onPick={noop}
             onClose={noop}

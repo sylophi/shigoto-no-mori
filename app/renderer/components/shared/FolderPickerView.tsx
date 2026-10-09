@@ -25,8 +25,8 @@ import { BrowseKeyHintsView, BrowseUpItemView } from "./BrowseListPartsView";
 export const BROWSE_VALUE_PREFIX = "browse:";
 
 export interface FolderPickerProps {
-  title?: string;
-  confirmLabel?: string;
+  title: string;
+  confirmLabel: string;
   // One line under the input explaining what the picked folder is for.
   // Also shown by the native dialog (its message) when Finder is used.
   hint?: string;
@@ -40,8 +40,8 @@ export interface FolderPickerProps {
 // the highlighted entry. The dialog's content: FolderPickerModal
 // holds the query and the listing, and puts it in a ModalShell.
 export function FolderPickerView({
-  title = "Pick a folder",
-  confirmLabel = "Use this folder",
+  title,
+  confirmLabel,
   hint,
   onPick,
   onClose,
