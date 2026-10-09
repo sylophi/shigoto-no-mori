@@ -24,7 +24,7 @@ import {
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { NO_REWRITE, type CommitRewrite } from "@/lib/commitRewrite";
+import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActions";
@@ -67,8 +67,7 @@ export function CommitDetails({
       rewritten.recentCommits[index]?.hash ?? rewritten.recentCommits[0]?.hash;
     if (next) nav.toCommit(worktree.projectId, worktree.id, next, true);
   });
-  const { canCommand } = actions;
-  const { canAmend, undo, reword, squash } = canCommand ? rewrite : NO_REWRITE;
+  const { canAmend, undo, reword, squash } = rewrite;
   const busy = actions.pending;
 
   return (
@@ -133,7 +132,7 @@ export function CommitDetails({
               : `Undo the ${pluralize(undo.count, "commit")} after it`}
           </Button>
         )}
-        {canCommand && !onlyOn && actions.canRevert && (
+        {!onlyOn && actions.canRevert && (
           <Button
             variant="outline"
             size="xs"
@@ -144,7 +143,7 @@ export function CommitDetails({
             Revert
           </Button>
         )}
-        {canCommand && actions.pickTargets.length > 0 && (
+        {actions.pickTargets.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -176,7 +175,7 @@ export function CommitDetails({
             }
           />
           <DropdownMenuContent align="start" sideOffset={4}>
-            {canCommand && (
+            {actions.canCommand && (
               <DropdownMenuItem
                 disabled={busy}
                 onClick={() => actions.newWorktreeFrom(commit)}

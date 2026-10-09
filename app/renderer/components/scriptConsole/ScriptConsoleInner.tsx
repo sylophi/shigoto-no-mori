@@ -21,8 +21,11 @@ interface InnerProps {
 }
 
 export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
-  const { key, state, busy, canRun, disabledReason, start, stop, clear } =
-    useScriptRunner(worktree, slot, { follow: true });
+  const { key, state, busy, canRun, start, stop, clear } = useScriptRunner(
+    worktree,
+    slot,
+    { follow: true },
+  );
   const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
 
@@ -62,11 +65,11 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
               </p>
             )}
           </div>
-          <div className="shrink-0">
-            {/* A peer that takes no commands from here neither stops
-                its runs nor shows their output (useScriptRunner). */}
-            {busy ? (
-              canRun && (
+          {/* A peer that takes no commands from here neither runs nor
+              stops scripts, nor shows their output (useScriptRunner). */}
+          {canRun && (
+            <div className="shrink-0">
+              {busy ? (
                 <Button
                   variant="outline-destructive"
                   size="sm"
@@ -76,16 +79,14 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
                   <Square />
                   {state.cancelling ? "Stopping…" : "Stop"}
                 </Button>
-              )
-            ) : (
-              <SimpleTooltip tip={disabledReason}>
-                <Button size="sm" onClick={start} disabled={!canRun}>
+              ) : (
+                <Button size="sm" onClick={start}>
                   <Play />
                   {state.status === "idle" ? "Run" : "Run again"}
                 </Button>
-              </SimpleTooltip>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 

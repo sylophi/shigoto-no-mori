@@ -24,8 +24,9 @@ import type { CommitSummary, Worktree } from "@shared/schemas";
 // surface (the Git timeline, a commit's page) rather than a
 // subscription per row. `dialog` is the reword dialog, rendered by the
 // surface. `onRewritten` hears a reword or squash land, after which the
-// commits from there up have new hashes. `canCommand` is false on a
-// peer that takes no commands from here, where only copying is left.
+// commits from there up have new hashes. On a peer that takes no
+// commands from here, nothing is offered (`canCommand` for the moves
+// with no flag of their own), and only copying is left.
 export function useCommitActions(
   worktree: Worktree,
   onRewritten?: (worktree: Worktree) => void,
@@ -50,12 +51,14 @@ export function useCommitActions(
     undoTo: undo.undoTo,
     // A revert is a commit of its own, which waits while a merge,
     // rebase or squash does.
-    canRevert: operation?.operation == null,
+    canRevert: canCommand && operation?.operation == null,
     // The worktrees a commit can be cherry-picked onto: the project's
     // others on this device that hold a branch.
-    pickTargets: (siblings ?? []).filter(
-      (other) => other.id !== worktreeId && !other.detached,
-    ),
+    pickTargets: canCommand
+      ? (siblings ?? []).filter(
+          (other) => other.id !== worktreeId && !other.detached,
+        )
+      : [],
     pending:
       undo.pending ||
       revert.isPending ||

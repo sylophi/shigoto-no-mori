@@ -105,7 +105,11 @@ function ChangesView({
   // changes (an addition, a removal, a rename) or a conflict.
   const hunkPath =
     picked?.kind === "modified" && !picked.conflicted ? picked.path : undefined;
-  const { data: hunkStates } = useFileHunks(projectId, worktreeId, hunkPath);
+  const { data: hunkStates } = useFileHunks(
+    projectId,
+    worktreeId,
+    canCommand ? hunkPath : undefined,
+  );
   const { mutate: stageHunks, isPending: stagingHunks } = useSetHunksStaged();
   const { mutate: discardHunks, isPending: discardingHunks } =
     useDiscardHunks();
@@ -131,7 +135,7 @@ function ChangesView({
   // another window ends it).
   const lastCommit = worktree.recentCommits[0];
   const rewrite = useCommitRewrites(worktree, worktree.recentCommits)(0);
-  const amending = canCommand && amendRequested && rewrite.canAmend;
+  const amending = amendRequested && rewrite.canAmend;
   const busy =
     commit.isPending ||
     discarding ||
@@ -242,7 +246,7 @@ function ChangesView({
       stage({ projectId, worktreeId, paths, staged }),
     onDiscard,
     hunks:
-      canCommand && hunkPath && hunkStates
+      hunkPath && hunkStates
         ? {
             states: hunkStates,
             onSetStaged: (changes, staged) =>
@@ -299,7 +303,7 @@ function ChangesView({
       )}
     >
       <BranchBar worktree={worktree} />
-      {canCommand && lastCommit && rewrite.canAmend && (
+      {lastCommit && rewrite.canAmend && (
         <LastCommitStrip
           commit={lastCommit}
           amending={amending}

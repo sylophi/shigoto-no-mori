@@ -4,7 +4,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
-import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
+import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import {
@@ -76,8 +76,7 @@ export function InboxRow({
     worktreeId: mirrorWorktreeId,
   });
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
-  const commandableApi = useCommandableApi();
-  const peerApi = device && commandableApi(device.deviceId);
+  const peerApi = useCommandableDeviceApi(device?.deviceId);
 
   // An element for the trigger to `render`, so it wraps no extra div.
   const row = (

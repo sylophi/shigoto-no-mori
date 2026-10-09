@@ -2,7 +2,11 @@ import { useSyncExternalStore } from "react";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { type RemoteDevice, remoteDeviceStore } from "@/lib/remote/devices";
+import {
+  type RemoteDevice,
+  type RemoteDeviceApi,
+  remoteDeviceStore,
+} from "@/lib/remote/devices";
 
 // Whether THIS device may command a device: the other machine's own
 // "allow control from other devices" switch, as its connectInfo answer
@@ -77,4 +81,22 @@ export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
       ? device?.api
       : undefined;
   };
+}
+
+// The same for one peer, as a selector (useRemoteDeviceApi's), so a row
+// drawn per worktree doesn't re-render on every other peer's churn.
+// Undefined for undefined.
+export function useCommandableDeviceApi(
+  deviceId: string | undefined,
+): RemoteDeviceApi | undefined {
+  const select = () => {
+    if (deviceId === undefined) return undefined;
+    const device = remoteDeviceStore
+      .getSnapshot()
+      .find((entry) => entry.deviceId === deviceId);
+    return commandAccessOf(deviceId, device).canCommand
+      ? device?.api
+      : undefined;
+  };
+  return useSyncExternalStore(remoteDeviceStore.subscribe, select, select);
 }
