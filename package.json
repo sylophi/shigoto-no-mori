@@ -32,7 +32,7 @@
     "check:cli": "pnpm -F @shigomori/cli test",
     "check:proofs": "pnpm -C app test",
     "check:hub": "pnpm -C hub run check",
-    "check:go": "go test -C cli ./... && CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./... && go test -C macfs ./..."
+    "check:go": "CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./... && go test -C macfs ./..."
   },
   "devDependencies": {
     "@effect/language-service": "0.87.4",

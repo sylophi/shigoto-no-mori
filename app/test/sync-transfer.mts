@@ -4,8 +4,8 @@
 // brokered by the stub device hub exactly as production does
 // (test/lib/directBoot.mts). Nothing here is a double on the sync path
 // itself: device A registers the REAL sync contract and handlers on a
-// real direct listener, the handlers shell the REAL sm binary (built
-// from cli/ by this check), sm runs REAL git against fixture repos,
+// real direct listener, the handlers run the REAL engine in-process,
+// which runs REAL git against fixture repos,
 // and the receiver drives the REAL link helpers (host/lib/sync/
 // sourceLink.ts) through the real dialer and bridge cache. Asserts:
 //   - an ungranted peer is refused (typed CommandRefusedError) every

@@ -31,7 +31,7 @@ import type { KeyValueStorage } from "../../web/lib/kvStorage.ts";
 // under test/lib/.
 export const appRoot = join(import.meta.dirname, "..", "..");
 
-// The repo root, one level up: where cli/ and file-sync/ live.
+// The repo root, one level up: where packages/ and file-sync/ live.
 export const repoRoot = dirname(appRoot);
 
 const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g;

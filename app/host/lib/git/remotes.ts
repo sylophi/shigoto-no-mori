@@ -6,9 +6,9 @@ import {
 } from "@shared/git/defaultBranch.mts";
 import { run } from "./core";
 
-// The ref probes the repo identity shares with its parity harness
-// (shared/git/defaultBranch.mts), bound to the app's git runner. The
-// primary ref a worktree row is measured against is the CLI's.
+// The ref probes the repo identity shares with
+// shared/git/defaultBranch.mts, bound to the app's git runner. The
+// primary ref a worktree row is measured against is the engine's.
 export function localBranchExists(
   projectPath: string,
   branch: string,

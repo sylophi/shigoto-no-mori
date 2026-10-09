@@ -1,4 +1,4 @@
-// The updater's semver: the Go sm's table cases (cli/updater_test.go),
+// The updater's semver: the 2.x table cases,
 // then properties over generated versions and generated junk.
 import assert from "node:assert/strict";
 import * as Arbitrary from "effect/Arbitrary";

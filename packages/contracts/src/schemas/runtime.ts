@@ -39,8 +39,8 @@ export const NukeProgressSchema = Schema.Union([
 ]);
 export type NukeProgress = typeof NukeProgressSchema.Type;
 
-// In-app updater state. The CLI owns the update pipeline
-// (cli/updater.go), and the app mirrors its progress into this machine.
+// In-app updater state. The engine owns the update pipeline
+// (Updater.ts), and the app mirrors its progress into this machine.
 // `downloading` covers both "found an update" and "still pulling
 // bytes". The CLI streams no byte progress, so we collapse them.
 // `ready` carries the version we'll restart into. `unsupported` means
@@ -73,8 +73,8 @@ export type UpdaterState = typeof UpdaterStateSchema.Type;
 // live instance must be restarted around the bundle swap, and consumes
 // updater-request.json (UpdateRequest) dropped by the CLI. Both sides
 // of the bridge live in main/electron/updaterBridge.ts. The only
-// reader of updater.json is the Go CLI, so UpdaterStatusSchema exists
-// to pin the published shape. cli/cmd_update.go mirrors the subset it
+// reader of updater.json is the engine's Updater, so UpdaterStatusSchema
+// exists to pin the published shape. Updater.ts reads the subset it
 // needs (pid, appVersion, and the state's error kind).
 const UpdaterStatusSchema = Schema.Struct({
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -97,8 +97,8 @@ export const UpdateRequestSchema = Schema.Struct({
 export type UpdateRequest = typeof UpdateRequestSchema.Type;
 
 // Manifest the CLI writes beside a verified staged update
-// (<dataDir>/updates/staged/manifest.json). Mirrors cli/updater.go
-// stagedManifest. The app reads it to seed "ready" at boot and to know
+// (<dataDir>/updates/staged/manifest.json). Mirrors the engine's
+// Updater.ts. The app reads it to seed "ready" at boot and to know
 // whether "restart to update" has anything to restart into.
 export const StagedManifestSchema = Schema.Struct({
   version: Schema.NonEmptyString,
@@ -109,9 +109,9 @@ export const StagedManifestSchema = Schema.Struct({
 export type StagedManifest = typeof StagedManifestSchema.Type;
 
 // What `sm update --stage --json` streams: phase events while the
-// pipeline runs, then one result document (cli/cmd_update.go emits
+// pipeline runs, then one result document (the engine's Updater emits
 // both). The app's check validates against these so drift between the
-// Go and TS sides fails loudly instead of degrading to a blank state.
+// two fails loudly instead of degrading to a blank state.
 export const UpdateStageEventSchema = Schema.Struct({
   event: Schema.Literals(["downloading", "verifying"]),
   // The release the pipeline found. Absent from an older CLI.

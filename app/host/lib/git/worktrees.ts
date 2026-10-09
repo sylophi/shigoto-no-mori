@@ -64,7 +64,6 @@ export async function findWorktreeIdentityOrThrow(
 // places that key something by a checkout path rather than by a listed
 // identity (the mirror's scratch index dir). sha256 of the absolute
 // path, 12 hex chars: the same path produces the same id anywhere.
-// test/cli-reads.mts pins it against the ids the CLI prints.
 export function worktreeIdFromPath(path: string): string {
   return createHash("sha256").update(path).digest("hex").slice(0, 12);
 }

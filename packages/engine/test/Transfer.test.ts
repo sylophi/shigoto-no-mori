@@ -1,7 +1,6 @@
 // The cross-device verbs against a scripted app on the control wire:
 // what each sends, what it makes of each answer, and each way the app
-// can fail to be there. The Go sm's own cases (cli/control_test.go) are
-// here too, and parity.test.ts holds the two side by side.
+// can fail to be there.
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

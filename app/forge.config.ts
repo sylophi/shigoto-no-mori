@@ -145,7 +145,7 @@ const config: ForgeConfig = {
       // it), so remote access needs nothing installed.
       `${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
       // The file-sync engine (continuous worktree mirroring), compiled
-      // by the prePackage hook like the CLI and spawned only by main.
+      // by the prePackage hook and spawned only by main.
       `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
       // The darwin helper (the filesystem calls Node lacks), compiled by
       // the prePackage hook the same way.
@@ -190,20 +190,18 @@ const config: ForgeConfig = {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
-      // Compile the CLI (requires Go on the build machine).
-      execFileSync("node", ["scripts/build-cli.mts"], {
-        cwd: import.meta.dirname,
-        stdio: "inherit",
-      });
-      // And the file-sync engine and the darwin helper, the same way.
-      execFileSync("node", ["scripts/build-file-sync.mts"], {
-        cwd: import.meta.dirname,
-        stdio: "inherit",
-      });
-      execFileSync("node", ["scripts/build-macfs.mts"], {
-        cwd: import.meta.dirname,
-        stdio: "inherit",
-      });
+      // Compile the file-sync engine and the darwin helper (Go), then
+      // the terminal sm (Bun).
+      for (const script of [
+        "build-file-sync.mts",
+        "build-macfs.mts",
+        "build-cli.mts",
+      ]) {
+        execFileSync("node", [`scripts/${script}`], {
+          cwd: import.meta.dirname,
+          stdio: "inherit",
+        });
+      }
       // Fetch the pinned cloudflared for the TARGET platform, not the
       // build machine's: a cross-arch package must ship the arch it
       // runs on.

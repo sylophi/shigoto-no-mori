@@ -88,7 +88,7 @@ export const WorktreeSchema = Schema.Struct({
   // out when it cannot be.
   primaryBranch: Schema.optional(Schema.String),
   // True when this branch's work is already in the primary branch. See
-  // landedOnPrimary in cli/gitx.go for what does and doesn't count. Notably a local fast-forward merge doesn't, since
+  // the engine's Worktrees.ts for what does and doesn't count. Notably a local fast-forward merge doesn't, since
   // its history is indistinguishable from a worktree that never
   // committed. False for the primary worktree and for detached HEAD.
   mergedIntoPrimary: Schema.Boolean,

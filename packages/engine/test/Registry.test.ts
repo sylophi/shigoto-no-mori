@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
@@ -121,4 +124,63 @@ it("keeps a device id once minted, and replaces one that isn't UUID-shaped", asy
   )) as [string, string];
   assert.match(first, /^[0-9a-f]{8}-/);
   assert.equal(second, first);
+});
+
+// The scenarios the repo-identity fixture pins, each repo built with
+// fixed dates so its root commit's sha is the fixture's literal.
+it("gives each identity scenario's repo the fixture's identity", async () => {
+  type Scenario = {
+    name: string;
+    repos: { dir: string; git: string[][] }[];
+    checks: { dir: string; expected: string | null }[];
+  };
+  const scenarios = JSON.parse(
+    readFileSync(
+      join(
+        import.meta.dirname,
+        "../../../app/shared/fixtures/repo-identity-scenarios.json",
+      ),
+      "utf8",
+    ),
+  ) as Scenario[];
+  const env = {
+    ...process.env,
+    GIT_AUTHOR_NAME: "t",
+    GIT_AUTHOR_EMAIL: "t@t",
+    GIT_COMMITTER_NAME: "t",
+    GIT_COMMITTER_EMAIL: "t@t",
+    GIT_AUTHOR_DATE: "2005-04-07T22:13:13+0000",
+    GIT_COMMITTER_DATE: "2005-04-07T22:13:13+0000",
+    LC_ALL: "C",
+  };
+  const checks = scenarios.flatMap((scenario) => {
+    const root = join(box.home, scenario.name.replace(/[^\w-]+/g, "-"));
+    for (const repo of scenario.repos) {
+      const dir = join(root, repo.dir);
+      mkdirSync(dir, { recursive: true });
+      for (const args of repo.git) {
+        execFileSync(
+          "git",
+          args.map((arg) => arg.replaceAll("{{root}}", root)),
+          { cwd: dir, env, stdio: "ignore" },
+        );
+      }
+    }
+    return scenario.checks.map(({ dir, expected }) => ({
+      path: join(root, dir),
+      expected,
+    }));
+  });
+  box.write("registry.json", {
+    projects: checks.map(({ path }, index) => ({
+      id: `P${index}`,
+      name: `p${index}`,
+      path,
+    })),
+  });
+  const rows = (await run((r) => r.rows())) as { identity: string | null }[];
+  assert.deepEqual(
+    rows.map((row) => row.identity),
+    checks.map(({ expected }) => expected),
+  );
 });

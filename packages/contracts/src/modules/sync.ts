@@ -59,12 +59,12 @@ import { strict } from "../schemas/strict.ts";
 
 // The refs a peer may request into a bundle, fail-closed: a branch
 // (refs/heads/<name>), a dirty-state capture
-// (refs/shigomori/dirty/<worktreeId>, see cli/cmd_dirty.go) or a
+// (refs/shigomori/dirty/<worktreeId>, see the engine's Dirty.ts) or a
 // mirror's index snapshot (refs/shigomori/index/<worktreeId>, see
 // host/mirror/gitState.ts). The
 // charset is deliberately conservative -- these strings cross the
-// device boundary into git argv on the host. This gate and the CLI's
-// (bundleRefRe in cli/cmd_bundle.go) are deliberately DIFFERENT, not a
+// device boundary into git argv on the host. This gate and the engine's
+// (Bundle.ts) are deliberately DIFFERENT, not a
 // mirror: this one pins the exact namespaces but still admits a
 // trailing "/" or ".lock", while the CLI admits any refs/* yet bans
 // those tails. Two complementary sieves, defense in depth -- their
@@ -97,7 +97,7 @@ export const SyncLandingRefSchema = Schema.String.check(
 );
 
 // A capture of a worktree's uncommitted state: its commit under
-// refs/shigomori/dirty/<worktreeId> (cli/cmd_dirty.go), and that
+// refs/shigomori/dirty/<worktreeId> (the engine's Dirty.ts), and that
 // commit's tree, which is what a teardown compares (capture commits
 // are not deterministic, their trees are).
 export const SyncCaptureSchema = strict(
@@ -110,7 +110,7 @@ export const SyncCaptureSchema = strict(
 export type SyncCapture = typeof SyncCaptureSchema.Type;
 
 // What a capture leaves behind. The dirty capture has `git add -A`
-// semantics (cli/cmd_dirty.go), so ignored files never cross a
+// semantics (the engine's Dirty.ts), so ignored files never cross a
 // transfer, and a teardown removes them with the source. Near every
 // real worktree carries ignored content (build output, node_modules),
 // so refusing the teardown over it would make the teardown

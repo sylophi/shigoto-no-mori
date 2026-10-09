@@ -1,11 +1,11 @@
 // Durable proof for the CLI's cross-device verbs (`sm devices`, `sm
 // worktrees send|bring|mirror|unmirror|mirrors`) end to end: the REAL sm
-// binary (built from cli/ by this check) finds the REAL control server
+// binary (built from packages/cli by this check) finds the REAL control server
 // (main/core/control/server.ts) through control.json in a sandboxed
 // data dir, the server dispatches the REAL control handlers
 // (host/ipc/modules/control.ts), and those run the REAL send and pull
-// orchestrators over a REAL direct websocket to device A, which shell
-// the same sm binary for every git step against real fixture repos.
+// orchestrators over a REAL direct websocket to device A, which run
+// the engine for every git step against real fixture repos.
 // The account's device registry is the one double (it is an HTTP read
 // of the hub), and the mirror engine is a recording stand-in: its real
 // runs are test/mirror.mts's, while what is pinned here is what the
