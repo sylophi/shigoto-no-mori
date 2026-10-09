@@ -5,7 +5,7 @@
 // to their account's Durable Object is hubProtocol.ts.
 //
 // Auth is two bearer tiers. Enrolling takes the Clerk session token
-// the app's embedded sign-in minted (LoginAuth); every other route
+// the app's embedded sign-in minted (LoginAuth). Every other route
 // takes the long-lived device credential enrolling returned
 // (DeviceAuth). The only secret allowed in a URL is the single-use
 // ticket on GET /connect, since a websocket client cannot set headers.

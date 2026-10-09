@@ -9,6 +9,7 @@
 // Durable Objects, Clerk). It cannot stop the Worker invocation itself
 // from being billed, only a WAF rule at the zone can, see README.md
 // (Abuse limits).
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -100,7 +101,7 @@ const loginAuth = Layer.effect(
           const login =
             token === ""
               ? null
-              : yield* Effect.promise(() => verify(token)).pipe(
+              : yield* Effect.tryPromise(() => verify(token)).pipe(
                   Effect.orElseSucceed(() => null),
                 );
           if (login === null) return yield* new HubLoginRejectedError();
@@ -255,8 +256,7 @@ const handlers = Effect.gen(function* () {
         // stored.
         const credential = DEVICE_CREDENTIAL_PREFIX + randomBase64url(32);
         const createdAt =
-          existing?.created_at ??
-          (yield* Effect.clockWith((clock) => clock.currentTimeMillis));
+          existing?.created_at ?? (yield* Clock.currentTimeMillis);
         const [wrote, online] = yield* Effect.all(
           [
             Effect.flatMap(
