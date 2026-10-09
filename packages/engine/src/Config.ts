@@ -129,13 +129,18 @@ export class StructuredConfigKey extends Schema.TaggedError<StructuredConfigKey>
 }
 
 // A project's settings must name its default branch, which a write
-// would leave out.
+// would leave out and git couldn't name. `project` is its name, or its
+// id when it has none.
 export class MissingDefaultBranch extends Schema.TaggedError<MissingDefaultBranch>()(
   "MissingDefaultBranch",
-  { projectId: Schema.String, binaryName: Schema.String },
+  {
+    projectId: Schema.String,
+    project: Schema.String,
+    binaryName: Schema.String,
+  },
 ) {
   override get message(): string {
-    return `Set the project's default branch first: \`${this.binaryName} projects config set defaultBranch <ref>\`.`;
+    return `Can't determine ${this.project}'s default branch. Set it first: ${this.binaryName} projects config set defaultBranch <ref> -p ${this.project}`;
   }
 }
 
@@ -408,8 +413,11 @@ const make = Effect.gen(function* () {
           change(next);
           if (scope.kind === "project" && missingBranch(next)) {
             if (Option.isNone(fallbackBranch)) {
+              const [row] = yield* sql<{ readonly name: string }>`
+                SELECT name FROM projects WHERE id = ${scope.projectId}`;
               return yield* new MissingDefaultBranch({
                 projectId: scope.projectId,
+                project: row?.name ?? scope.projectId,
                 binaryName,
               });
             }
