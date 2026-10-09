@@ -133,8 +133,8 @@ function SessionRow({
     harness: session.harness,
     session: session.session,
   };
-  // Resuming a session that isn't idle would run it twice, the second
-  // copy beside one still mid-turn wherever it runs.
+  // Only between turns: resuming a session mid-turn would start a
+  // second copy while the first is still working.
   const resumable =
     session.state === "idle" && canResume(session.harness) && !remote;
   return (

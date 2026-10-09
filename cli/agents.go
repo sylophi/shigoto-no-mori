@@ -367,7 +367,7 @@ func cmdAgentsResume(ctx cliContext, args []string) (int, error) {
 		return 2, usageErrf("--harness and --session are required.")
 	}
 	h := lookupHarness(harnessID)
-	if h == nil {
+	if h == nil || h.resume == "" {
 		return 1, errf("Don't know how to resume a %s session", harnessID)
 	}
 	if err := launchInTerminal(h.resume+" "+shellQuote(session), target.worktree.Path); err != nil {

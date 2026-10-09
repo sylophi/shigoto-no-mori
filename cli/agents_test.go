@@ -162,12 +162,12 @@ func TestAgentBindRefusesPrimaryAndRmDrops(t *testing.T) {
 // resume types the harness's own resume into the terminal, in the
 // worktree, and refuses a harness it can't resume.
 func TestAgentResumeTypesTheHarnessResume(t *testing.T) {
-	proj := autoPullSandbox(t)
-	fox := createViaCmd(t, proj, "fox")
-	ctx := resolveContext(proj.Path, []project{proj})
 	if !launcherAvailable(catalogEntry(t, "terminal")) {
 		t.Skip("no Terminal.app here")
 	}
+	proj := autoPullSandbox(t)
+	fox := createViaCmd(t, proj, "fox")
+	ctx := resolveContext(proj.Path, []project{proj})
 	bin := fakeBin(t, "osascript")
 
 	if code, err := cmdAgentsResume(ctx, []string{"fox", "--harness", "codex", "--session", "s4"}); code != 0 || err != nil {
