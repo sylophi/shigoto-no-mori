@@ -5,7 +5,7 @@ import type { PullRequestCheck } from "@shigomori/contracts/schemas";
 import { CHECK_BUCKET_ICON, TONE_TEXT } from "./pullRequestShared";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
-export function CheckEntry({ check }: { check: PullRequestCheck }) {
+export function CheckEntryView({ check }: { check: PullRequestCheck }) {
   const { Icon, tone, label } = CHECK_BUCKET_ICON[check.bucket];
   const isPending = check.bucket === "pending";
   const Body = (

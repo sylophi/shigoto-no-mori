@@ -9,11 +9,11 @@ import { describePullRequest } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { PullRequestTitleLink } from "./PullRequestIdentity";
+import { PullRequestTitleLinkView } from "./PullRequestTitleLinkView";
 import { TONE_TEXT } from "./pullRequestShared";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
-export function StackList({
+export function StackListView({
   worktree,
   stack,
 }: {
@@ -46,7 +46,7 @@ export function StackList({
               />
             </SimpleTooltip>
             <SimpleTooltip whenTruncated tip={entry.pr.title}>
-              <PullRequestTitleLink
+              <PullRequestTitleLinkView
                 pr={entry.pr}
                 className="min-w-0 truncate"
               />

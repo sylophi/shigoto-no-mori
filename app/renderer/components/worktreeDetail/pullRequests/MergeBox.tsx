@@ -1,29 +1,15 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { ChevronDown, CircleSlash, Layers2, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import type { PullRequestStack } from "@shared/pullRequestStack";
-import { cn } from "@/lib/utils";
-import { describeMergeVerdict, MERGE_METHOD_LABEL } from "@/lib/pullRequest";
+import { describeMergeVerdict } from "@/lib/pullRequest";
 import type {
   MergeMethod,
   PullRequestDetail,
   RepoMergeConfig,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { ChecksPopover } from "./ChecksPopover";
-import { MergeStatus } from "./MergeStatus";
-import { ReviewsPopover } from "./ReviewsPopover";
-import { STACK_REACH_OPTIONS, useMergeBox } from "./useMergeBox";
+import { MergeBoxView } from "./MergeBoxView";
+import { useMergeBox } from "./useMergeBox";
 
 export function MergeBox({
   worktree,
@@ -67,7 +53,6 @@ export function MergeBox({
   const { canCommand } = useCommandAccess();
   const rowRef = useRef<HTMLDivElement>(null);
   const verdict = describeMergeVerdict(pr, status, mode === "armed");
-  // The reviews' words would only repeat a status that names them.
   const reviewsSaid = verdict.by === "reviews";
   const compact = useCompactChips(rowRef, reviewsSaid, canMerge && canCommand);
 
@@ -75,185 +60,44 @@ export function MergeBox({
   // the checks beside it), then the reviews. Items of the row they sit
   // in, so a chip that doesn't fit wraps beside the buttons rather than
   // onto a line of its own.
-  const statusItems = (
-    <>
-      {canMerge ? (
-        <MergeStatus pr={pr} verdict={verdict} compact={compact.status} />
-      ) : (
-        <>
-          <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <CircleSlash aria-hidden className="size-3.5 shrink-0" />
-            No merge methods are enabled for this repo.
-          </p>
-          <ChecksPopover pr={pr} />
-        </>
-      )}
-      <ReviewsPopover pr={pr} compact={reviewsSaid || compact.reviews} />
-    </>
-  );
-
-  if (!primary || !activeMethod || !canCommand) {
-    return (
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {statusItems}
-      </div>
-    );
-  }
-
-  // Auto-merge is armed: GitHub merges the PR the moment its
-  // requirements are met, so the one thing left to offer is calling
-  // that off. Reversible, so no two-step confirm.
-  const disableButton = (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      disabled={disableAutoMerge.isPending}
-      onClick={runDisableAutoMerge}
-    >
-      {disableAutoMerge.isPending ? (
-        <>
-          <Loader2 aria-hidden className="size-3.5 animate-spin" />
-          Disabling…
-        </>
-      ) : (
-        "Disable auto-merge"
-      )}
-    </Button>
-  );
-
-  const mergeButton = (
-    <Button
-      type="button"
-      size="sm"
-      variant={armed ? "default" : "outline"}
-      disabled={disabled}
-      onClick={() => trigger(() => runMerge(activeMethod))}
-      className={cn(others.length > 0 && "rounded-r-none border-r-0")}
-    >
-      {merge.isPending ? (
-        <>
-          <Loader2 aria-hidden className="size-3.5 animate-spin" />
-          {pendingLabel}
-        </>
-      ) : armed ? (
-        "Click again to confirm"
-      ) : (
-        <>
-          {landsStack && <Layers2 aria-hidden className="size-3.5" />}
-          {label}
-        </>
-      )}
-    </Button>
-  );
-
   return (
-    <div className="space-y-2">
-      <div ref={rowRef} className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {statusItems}
-        {/* Wraps on a narrow pane, staying at the row's end. The merge
-            button and its method menu are one item, so they wrap
-            together. */}
-        <div className="ml-auto inline-flex flex-wrap items-center justify-end gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={setDraft.isPending || merge.isPending}
-            onClick={toggleDraft}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            {setDraft.isPending ? (
-              <>
-                <Loader2 aria-hidden className="size-3.5 animate-spin" />
-                Updating…
-              </>
-            ) : pr.isDraft ? (
-              "Mark as ready"
-            ) : (
-              "Convert to draft"
-            )}
-          </Button>
-          {showReach && (
-            <SegmentedControl
-              value={reach}
-              onChange={pickReach}
-              options={STACK_REACH_OPTIONS}
-              disabled={merge.isPending}
-              aria-label="How far up the stack to merge"
-              optionClassName="px-2 py-0.5 text-xs"
-            />
-          )}
-          <div className="inline-flex items-stretch">
-            {mode === "armed" ? (
-              disableButton
-            ) : (
-              <SimpleTooltip tip={blocked}>{mergeButton}</SimpleTooltip>
-            )}
-            {others.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={disabled}
-                      aria-label="Choose merge method"
-                      className="rounded-l-none px-1.5"
-                    >
-                      <ChevronDown aria-hidden className="size-3.5" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end" sideOffset={4}>
-                  {others.map((method) => (
-                    <DropdownMenuItem
-                      key={method}
-                      onClick={() => pickMethod(method)}
-                    >
-                      {MERGE_METHOD_LABEL[method]}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        </div>
-      </div>
-      {merge.error && (
-        <ErrorBanner
-          message={merge.error.message}
-          title={
-            mode === "arm"
-              ? "Couldn't enable auto-merge"
-              : "Couldn't merge the pull request"
-          }
-        />
-      )}
-      {disableAutoMerge.error && (
-        <ErrorBanner
-          message={disableAutoMerge.error.message}
-          title="Couldn't disable auto-merge"
-        />
-      )}
-      {setDraft.error && (
-        <ErrorBanner
-          message={setDraft.error.message}
-          title="Couldn't change the draft state"
-        />
-      )}
-    </div>
+    <MergeBoxView
+      pr={pr}
+      hasMethod={canMerge}
+      verdict={verdict}
+      compact={compact}
+      rowRef={rowRef}
+      merge={
+        primary && activeMethod && canCommand
+          ? {
+              mode,
+              label,
+              pendingLabel,
+              landsStack,
+              blocked,
+              disabled,
+              pending: merge.isPending,
+              armed,
+              onMerge: () => trigger(() => runMerge(activeMethod)),
+              others,
+              onPickMethod: pickMethod,
+              reach: showReach
+                ? { value: reach, onPick: pickReach }
+                : undefined,
+              draftPending: setDraft.isPending,
+              onToggleDraft: toggleDraft,
+              disablePending: disableAutoMerge.isPending,
+              onDisableAutoMerge: runDisableAutoMerge,
+              error: merge.error?.message,
+              disableError: disableAutoMerge.error?.message,
+              draftError: setDraft.error?.message,
+            }
+          : null
+      }
+    />
   );
 }
 
-// Which chips keep their icon alone, their words in the tooltip: when
-// the row can't hold everything on one line with them, the reviews'
-// words go first, then the status's. Each one's width is kept from
-// when it last showed, so the answer doesn't flip back and forth as
-// the words come and go. `reviewsSaid`: the reviews show no words
-// anyway (the status says them), so they make no room. `present`: the
-// row is drawn (the box has a merge button), so there is one to watch.
 function useCompactChips(
   rowRef: React.RefObject<HTMLElement | null>,
   reviewsSaid: boolean,

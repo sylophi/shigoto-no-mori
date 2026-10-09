@@ -1,4 +1,3 @@
-import { SectionHeading } from "@/components/ui/section-heading";
 import { useRepoMergeConfig } from "@/hooks/githubCli/useRepoMergeConfig";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
@@ -7,7 +6,8 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { PullRequestBody } from "./PullRequestBody";
 import { PullRequestIdentity } from "./PullRequestIdentity";
-import { StackList } from "./StackList";
+import { PullRequestSectionView } from "./PullRequestSectionView";
+import { StackListView } from "./StackListView";
 
 export function PullRequestSection({ worktree }: { worktree: Worktree }) {
   // Skip the PR query on detached HEAD. There's no branch to ask gh
@@ -37,20 +37,19 @@ export function PullRequestSection({ worktree }: { worktree: Worktree }) {
     Object.hasOwn(projectPrs, worktree.branch);
   if (!pr && !holdPlace) return null;
   return (
-    <section className="space-y-3">
-      <SectionHeading>Pull request</SectionHeading>
-      {pr && (
-        <div className="space-y-4">
-          <PullRequestIdentity worktree={worktree} pr={pr} />
-          {stack && <StackList worktree={worktree} stack={stack} />}
+    <PullRequestSectionView
+      identity={pr && <PullRequestIdentity worktree={worktree} pr={pr} />}
+      stackList={stack && <StackListView worktree={worktree} stack={stack} />}
+      body={
+        pr && (
           <PullRequestBody
             worktree={worktree}
             pr={pr}
             repoConfig={repoConfig ?? null}
             lastMergeMethod={shigomori?.lastMergeMethod}
           />
-        </div>
-      )}
-    </section>
+        )
+      }
+    />
   );
 }
