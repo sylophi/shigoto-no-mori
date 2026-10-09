@@ -1,5 +1,5 @@
 // Crash recovery for spawned scripts. `runningScripts` in ./index.ts is
-// memory only, so the quit's reap in main/hostLayer.ts covers a clean quit
+// memory only, so the quit's reap in host/process/layer.ts covers a clean quit
 // and nothing else: a force quit, a crash, or an OOM leaves every dev
 // server running, reparented to launchd, still holding its port, with
 // no UI left to stop it.

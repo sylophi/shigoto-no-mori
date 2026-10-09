@@ -4,8 +4,9 @@
 import type { RendererContractApi } from "@shared/ipc/client";
 import type { ElectronBridge } from "../main/preload";
 
-type RendererApi = Omit<ElectronBridge, "requestShellPort"> &
-  RendererContractApi;
+type RendererApi = Omit<ElectronBridge, "requestShellPort"> & {
+  readonly deviceId: string;
+} & RendererContractApi;
 
 declare global {
   interface Window {

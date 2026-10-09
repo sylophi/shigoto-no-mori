@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { broadcast, defineContract, invoke } from "../contract.ts";
+import { DeviceIdSchema } from "../hubProtocol.ts";
 import { HexId32Schema } from "../schemas/hexId.ts";
 import { strict } from "../schemas/strict.ts";
 import {
@@ -9,8 +10,15 @@ import {
   VoidSchema,
 } from "../schemas/index.ts";
 
-const HostAddressSchema = strict(
-  Schema.Struct({ port: PortNumberSchema, token: HexId32Schema }),
+// Where this machine's host listens on the loopback, the token its
+// handshake proves, and the device it is: the window's id comes from
+// here, since the host's store holds it.
+export const HostAddressSchema = strict(
+  Schema.Struct({
+    port: PortNumberSchema,
+    token: HexId32Schema,
+    deviceId: DeviceIdSchema,
+  }),
 );
 
 // The this-window / app-instance surface: focus signals from the

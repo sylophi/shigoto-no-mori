@@ -4,9 +4,6 @@
 // main/preload.ts reads) so they can't disagree on a spelling. The
 // preload bundle imports this, so it stays free of imports.
 
-// The device id.
-export const DEVICE_ID_FLAG = "--sm-device-id=";
-
 // This build's app version. The renderer needs its own version
 // synchronously: it rides in the socket hello frame and is compared
 // against a remote host's welcome to flag a version skew.

@@ -290,6 +290,13 @@ const config: ForgeConfig = {
           config: "vite.node.config.ts",
           target: "preload",
         },
+        {
+          // The host's utility process (main/hostProcess.ts forks it),
+          // built beside main as host.js.
+          entry: "host/process/host.ts",
+          config: "vite.node.config.ts",
+          target: "main",
+        },
       ],
       renderer: [
         {

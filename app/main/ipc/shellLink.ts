@@ -17,6 +17,8 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
+import type * as Rpc from "effect/rpc/Rpc";
+import type * as RpcGroup from "effect/rpc/RpcGroup";
 import type * as RpcMessage from "effect/rpc/RpcMessage";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
@@ -79,12 +81,20 @@ export class ShellLink extends Context.Service<
 type Connection = {
   readonly socket: Socket.WebSocketLike;
   readonly parser: RpcSerialization.Parser;
-  readonly webContents: WebContents;
+  readonly webContents: WebContents | null;
   readonly pushes: PubSub.PubSub<Push>;
   readonly closed: AbortController;
 };
 
-const make = (registrar: ShellRegistrar) =>
+// A port's far end, as Electron's main process holds it.
+type MainPort = Pick<MessagePortMain, "postMessage" | "close" | "on" | "start">;
+
+type Group = RpcGroup.RpcGroup<Rpc.AnyWithProps>;
+
+// Serves `group`'s calls from `registrar` on every port attached, until
+// it closes: the windows' shell ports (ShellLink below), and the port
+// the shell hands its host (main/hostProcess.ts).
+export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
   Effect.gen(function* () {
     const runFork = yield* FiberSet.makeRuntime<never>();
     const serialization = yield* RpcSerialization.RpcSerialization.pipe(
@@ -185,7 +195,7 @@ const make = (registrar: ShellRegistrar) =>
         );
 
     const handlers: Record<string, unknown> = {};
-    for (const call of ShellGroup.requests.values()) {
+    for (const call of group.requests.values()) {
       const channel = channelOf(call);
       if (isBroadcast(call)) {
         handlers[channel] = push(channel);
@@ -203,13 +213,13 @@ const make = (registrar: ShellRegistrar) =>
           : serve(fn);
     }
 
-    yield* RpcServer.make(ShellGroup, {
+    yield* RpcServer.make(group, {
       spanPrefix: "Shell",
       disableFatalDefects: true,
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          ShellGroup.toLayer(Effect.succeed(handlers as never)),
+          group.toLayer(Effect.succeed(handlers as never)),
           Layer.succeed(RpcServer.Protocol, protocol),
         ),
       ),
@@ -241,8 +251,8 @@ const make = (registrar: ShellRegistrar) =>
         ),
       );
 
-    return ShellLink.of({
-      attach: (port, webContents) => {
+    return {
+      attach: (port: MainPort, webContents: WebContents | null) => {
         const closed = new AbortController();
         return Effect.gen(function* () {
           const clientId = nextClientId++;
@@ -268,7 +278,7 @@ const make = (registrar: ShellRegistrar) =>
           runFork(serveSocket(clientId, connection));
         });
       },
-      pushTo: (webContents, entry) =>
+      pushTo: (webContents: WebContents, entry: Push) =>
         Effect.sync(() => {
           for (const connection of connections.values()) {
             if (connection.webContents === webContents) {
@@ -276,7 +286,7 @@ const make = (registrar: ShellRegistrar) =>
             }
           }
         }),
-    });
+    };
   });
 
 // One malformed frame is dropped rather than taking down the window's
@@ -294,7 +304,10 @@ function decodeFrame(
 }
 
 export const layer = (registrar: ShellRegistrar) =>
-  Layer.effect(ShellLink, make(registrar));
+  Layer.effect(
+    ShellLink,
+    Effect.map(makePortServer(registrar, ShellGroup), ShellLink.of),
+  );
 
 const promiseAdapter = PromiseAdapter.forService(ShellLink, "The shell link");
 export const adapter = promiseAdapter.layer;

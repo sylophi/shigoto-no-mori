@@ -31,6 +31,8 @@ import {
   RemoteCallError,
 } from "./errors.ts";
 import { controlContract } from "./modules/control.ts";
+import { sessionContract } from "./modules/session.ts";
+import { shellCallsContract } from "./modules/shellCalls.ts";
 import { linkContract } from "./modules/link.ts";
 import type { BroadcastKeys, BroadcastProducerPayload } from "./types.ts";
 
@@ -172,18 +174,23 @@ export const LinkGroup = handshakeOf(remoteCalls).merge(
 );
 
 // The loopback: the same link on this machine, for the processes the
-// app's own credential admits (the terminal `sm`, the app's own
-// windows). It serves the link's own calls, every call of every
-// host-scope module, remote or not, with its pushes and views, and the
-// control contract's ops.
+// app's own credential admits (the terminal `sm`, the app's windows and
+// its shell). It serves the link's own calls, every call of every
+// host-scope module, remote or not, with its pushes and views, the
+// control contract's ops and the shell's session.
 const loopbackCalls = [
   ...callsOf(linkContract),
   ...allContractModules
     .filter((module) => isHostSide(module))
     .flatMap((module) => callsOf(module)),
   ...callsOf(controlContract),
+  ...callsOf(sessionContract),
 ];
 
 export const LoopbackGroup = handshakeOf(loopbackCalls).merge(
   restOf(loopbackCalls).middleware(CommandGate).middleware(PeerAuth),
 );
+
+// The host's calls to the shell that started it, over the port the
+// shell hands its utility process.
+export const ShellCallsGroup = RpcGroup.make(...callsOf(shellCallsContract));

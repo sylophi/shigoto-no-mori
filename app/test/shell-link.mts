@@ -28,7 +28,11 @@ import {
 import { openShellLink } from "@shared/ipc/shell";
 import type { HandlerContext } from "@shared/ipc/transport";
 
-const ADDRESS = { port: 62_814, token: "a".repeat(32) };
+const ADDRESS = {
+  port: 62_814,
+  token: "a".repeat(32),
+  deviceId: "20007c1a-3639-4b52-b39f-92b19bcccc0d",
+};
 
 const scopes: Scope.Closeable[] = [];
 afterEach(async () => {

@@ -3,21 +3,33 @@
 // asks Electron nothing (decision 6 of V3.md), so its version, where
 // its binaries are and the page origin its loopback admits all come
 // from here.
+import * as Schema from "effect/Schema";
 import {
-  type AppPlace,
   bundledBinaryPath,
   bundledBinaryResolver,
 } from "@shared/packaging/bundledBinary.mts";
 import { implSlot } from "@host/lib/util/implSlot";
 
-export type HostFacts = AppPlace & {
-  readonly appVersion: string;
+export const HostFactsSchema = Schema.Struct({
+  packaged: Schema.Boolean,
+  // The app's own directory, where a dev build's dist folders are, and
+  // Resources/ in a packaged build.
+  appPath: Schema.String,
+  resourcesPath: Schema.String,
+  appVersion: Schema.String,
   // The shell's own data, where the host keeps the files a crash must
   // not orphan (cloudflared.pid).
-  readonly userDataPath: string;
+  userDataPath: Schema.String,
+  // The app's log folder, where the host writes its trace file.
+  logsPath: Schema.String,
   // The desktop window's page origin, which the loopback admits.
-  readonly rendererOrigin: string;
-};
+  rendererOrigin: Schema.String,
+});
+export type HostFacts = typeof HostFactsSchema.Type;
+
+// The command-line flag the facts ride, as JSON, into the host's
+// process.
+export const HOST_FACTS_FLAG = "--sm-host-facts=";
 
 const { set: setHostFacts, get: hostFacts } = implSlot<HostFacts>(
   "the host was asked a fact before its shell handed them over",

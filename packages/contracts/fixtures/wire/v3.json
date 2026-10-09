@@ -1697,6 +1697,38 @@
       "data": "A!"
     }
   },
+  "session:account": {
+    "payload": {
+      "hubUrl": "C'",
+      "accountId": "",
+      "credential": "",
+      "webOrigin": "\u0000",
+      "acceptsCommands": false
+    }
+  },
+  "session:accountDevices": {
+    "payload": []
+  },
+  "session:busy": {
+    "success": {
+      "runningScripts": 3,
+      "inflightDeletes": 1
+    }
+  },
+  "session:quit": {
+    "payload": {
+      "hurried": false
+    }
+  },
+  "session:updaterState": {
+    "payload": {
+      "kind": "unsupported"
+    }
+  },
+  "session:wake": {},
+  "session:windowFocused": {
+    "payload": true
+  },
   "sharedSettings:changed": {
     "payload": {
       "entries": {
@@ -1787,6 +1819,32 @@
   "shell:showItemInFolder": {
     "payload": {
       "path": "\ud800"
+    }
+  },
+  "shellCalls:failed": {
+    "payload": {
+      "message": "0",
+      "storeReport": "e"
+    }
+  },
+  "shellCalls:ready": {
+    "payload": {
+      "port": 3369,
+      "token": "88fcac20d24e7d5e65b787879fea76c6",
+      "deviceId": "😀"
+    }
+  },
+  "shellCalls:relaunch": {},
+  "shellCalls:stopUpdaterBridge": {},
+  "shellCalls:updaterCheck": {},
+  "shellCalls:updaterInstall": {
+    "payload": {
+      "unattended": true
+    }
+  },
+  "shellCalls:updaterUpdate": {
+    "payload": {
+      "unattended": false
     }
   },
   "shigomori:read": {
@@ -2105,7 +2163,8 @@
   "window:hostAddress": {
     "success": {
       "port": 12,
-      "token": "58127baad461bc036b32bcdf49597a77"
+      "token": "58127baad461bc036b32bcdf49597a77",
+      "deviceId": "-1"
     }
   },
   "window:notify": {
