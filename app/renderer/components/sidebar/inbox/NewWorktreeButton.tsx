@@ -1,20 +1,4 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Command } from "cmdk";
-import { Loader2, Plus, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  EMPTY_CLASS,
-  HEADING_CLASS,
-  INPUT_CLASS,
-  ITEM_CLASS,
-  MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
-import { KbdHint } from "@/components/ui/kbd";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
@@ -25,10 +9,9 @@ import {
   wantsCreateForm,
 } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { rankByScore } from "@/lib/fuzzyMatch";
-import { cn } from "@/lib/utils";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { ProjectGroupOrder } from "../buildSidebarRows";
-import { DeviceBadge } from "../DeviceBadge";
+import { DeviceBadgeView } from "../DeviceBadgeView";
 import {
   useGroupCreator,
   useGroupMembers,
@@ -38,6 +21,12 @@ import {
 } from "../ProjectGroupActions";
 import type { ProjectListRow, ProjectSection } from "../projectListSections";
 import { buildCreateSections } from "./createTargets";
+import {
+  CreateMenuListView,
+  CreateMenuView,
+  CreateTargetItemView,
+  NewWorktreeButtonView,
+} from "./NewWorktreeButtonView";
 
 interface NewWorktreeButtonProps {
   projects: readonly Project[];
@@ -77,10 +66,7 @@ export function NewWorktreeButton({
   if (only === undefined) {
     return (
       <SimpleTooltip tip="Nowhere to create a worktree yet">
-        <Button variant="outline" size="sm" disabled className="w-full">
-          <Plus aria-hidden />
-          New worktree
-        </Button>
+        <NewWorktreeButtonView disabled />
       </SimpleTooltip>
     );
   }
@@ -132,21 +118,12 @@ function SingleCreateButton({
     : `${target.project.name} on ${creator.deviceLabel}`;
   return (
     <SimpleTooltip tip={`New worktree in ${where} (hold ⇧ to pick a base)`}>
-      <Button
-        variant="outline"
-        size="sm"
+      <NewWorktreeButtonView
+        pending={isPending}
         disabled={isPending}
         aria-busy={isPending}
         onClick={(event) => createFrom(event, creator.project.id)}
-        className="w-full"
-      >
-        {isPending ? (
-          <Loader2 aria-hidden className="animate-spin" />
-        ) : (
-          <Plus aria-hidden />
-        )}
-        {isPending ? "Creating worktree…" : "New worktree"}
-      </Button>
+      />
     </SimpleTooltip>
   );
 }
@@ -214,95 +191,36 @@ function CreateMenu({
     : sections;
 
   return (
-    <Popover
+    <CreateMenuView
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (next) setQuery("");
       }}
-    >
-      <PopoverTrigger
-        render={
-          <Button variant="outline" size="sm" className="w-full">
-            <Plus aria-hidden />
-            New worktree
-          </Button>
-        }
-      />
-      <PopoverContent
-        // The search, for typing straight away, but not under a finger,
-        // where focusing it would bring up the keyboard over the list.
-        initialFocus={(openType) =>
-          openType === "touch" ? false : inputRef.current
-        }
-        sideOffset={6}
-        className="flex w-(--anchor-width) flex-col overflow-hidden p-0"
-      >
-        <Command
-          label="New worktree in"
-          loop
-          shouldFilter={false}
-          onKeyDownCapture={noteModifier}
-          onClickCapture={noteModifier}
-          className={MODAL_COMMAND_CLASS}
-        >
-          <div
-            data-slot="search-row"
-            className="flex items-center gap-2 border-b border-border px-3 py-1.5"
-          >
-            <Search
-              aria-hidden
-              className="size-3.5 shrink-0 text-muted-foreground"
-            />
-            <Command.Input
-              ref={inputRef}
-              value={query}
-              onValueChange={setQuery}
-              placeholder="New worktree in…"
-              className={INPUT_CLASS}
-            />
-          </div>
-          <Command.List className="max-h-80 min-h-0 overflow-y-auto p-1">
-            {shown.map((section) => (
-              <Command.Group
-                key={section.key}
-                heading={
-                  section.label === null ? undefined : (
-                    <div className={cn(HEADING_CLASS, "truncate")}>
-                      {section.label}
-                    </div>
-                  )
-                }
-              >
-                {section.rows.map((target) => (
-                  <CreatorScope key={target.key} target={target}>
-                    {(creator, icon) => (
-                      <TargetItem
-                        target={target}
-                        creator={creator}
-                        icon={icon}
-                        creating={creating}
-                        onPick={pick}
-                      />
-                    )}
-                  </CreatorScope>
-                ))}
-              </Command.Group>
-            ))}
-            <Command.Empty className={EMPTY_CLASS}>
-              No projects match.
-            </Command.Empty>
-          </Command.List>
-          <div
-            data-slot="footer-row"
-            className="flex items-center border-t border-border px-3 py-2 text-2xs text-muted-foreground phone:hidden"
-          >
-            {/* ↩ creating goes without saying. ⇧ is for a click too. */}
-            <KbdHint keys={["⇧"]} label="Pick a base" />
-          </div>
-        </Command>
-      </PopoverContent>
-    </Popover>
+      inputRef={inputRef}
+      list={
+        <CreateMenuListView
+          query={query}
+          onQueryChange={setQuery}
+          inputRef={inputRef}
+          sections={shown}
+          onModifier={noteModifier}
+          renderRow={(target) => (
+            <CreatorScope key={target.key} target={target}>
+              {(creator, icon) => (
+                <TargetItem
+                  target={target}
+                  creator={creator}
+                  icon={icon}
+                  creating={creating}
+                  onPick={pick}
+                />
+              )}
+            </CreatorScope>
+          )}
+        />
+      }
+    />
   );
 }
 
@@ -340,25 +258,20 @@ function TargetItem({
       () => openCreateForm(project.id),
     );
   return (
-    <Command.Item
+    <CreateTargetItemView
       value={target.key}
-      onSelect={onSelect}
+      name={target.project.name}
+      busy={busy}
       disabled={creating !== null}
-      className={ITEM_CLASS}
-    >
-      {busy ? (
-        <Loader2 aria-hidden className="size-4 shrink-0 animate-spin" />
-      ) : (
+      onSelect={onSelect}
+      icon={
         <ProjectIcon
           projectId={icon?.project.id ?? target.project.id}
           name={target.project.name}
           deviceId={icon?.deviceId}
         />
-      )}
-      <SimpleTooltip whenTruncated tip={target.project.name}>
-        <span className="min-w-0 flex-1 truncate">{target.project.name}</span>
-      </SimpleTooltip>
-      {badge && <DeviceBadge badge={badge} />}
-    </Command.Item>
+      }
+      badge={badge && <DeviceBadgeView badge={badge} />}
+    />
   );
 }

@@ -8,6 +8,7 @@ import { ForestPageView } from "@/components/ForestPageView";
 import { NotFoundPageView } from "@/components/NotFoundPageView";
 import { WhatsNewLinkView } from "@/components/WhatsNewLinkView";
 import { SceneWindowFrame } from "./frame";
+import { SceneSidebar } from "./sidebar";
 
 const noop = () => {};
 
@@ -23,8 +24,21 @@ export function FirstRunScene() {
 // The forest's tab on a wide window, which points at the sidebar.
 export function ForestPageScene() {
   return (
-    <SceneWindowFrame>
+    <SceneWindowFrame sidebar={<SceneSidebar view="projects" />}>
       <ForestPageView phone={false} sidebar={null} />
+    </SceneWindowFrame>
+  );
+}
+
+// The web shell on a phone: the inbox tab, every forest a peer of the
+// browser, over the tab bar.
+export function PhoneInboxScene() {
+  return (
+    <SceneWindowFrame window="phone">
+      <ForestPageView
+        phone
+        sidebar={<SceneSidebar shell="web" view="inbox" footer={false} />}
+      />
     </SceneWindowFrame>
   );
 }

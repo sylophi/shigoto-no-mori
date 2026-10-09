@@ -5,7 +5,7 @@ import {
   Hammer,
   type LucideIcon,
 } from "lucide-react";
-import { FoldHeader } from "./FoldHeader";
+import { FoldHeaderView } from "./FoldHeaderView";
 import { SHELF_LABELS, type InboxShelf } from "./sidebarRow";
 
 const ICONS: Record<InboxShelf, LucideIcon> = {
@@ -25,9 +25,14 @@ interface ShelfRowProps {
 // A shelf header, the inbox's and a tree group's alike. Collapsed, the
 // count is the shelf's whole footprint. That's the point, since every
 // shelf holds work the user has already decided not to look at.
-export function ShelfRow({ shelf, count, expanded, onToggle }: ShelfRowProps) {
+export function ShelfRowView({
+  shelf,
+  count,
+  expanded,
+  onToggle,
+}: ShelfRowProps) {
   return (
-    <FoldHeader
+    <FoldHeaderView
       label={SHELF_LABELS[shelf]}
       count={count}
       expanded={expanded}

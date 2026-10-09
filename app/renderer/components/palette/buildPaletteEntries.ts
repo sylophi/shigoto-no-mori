@@ -23,7 +23,7 @@ import {
   projectGroupKey,
   worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
-import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadge";
+import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadgeView";
 import { worktreeTitle } from "@/lib/worktreeTitle";
 
 // One worktree the palette can land on, wherever it lives.

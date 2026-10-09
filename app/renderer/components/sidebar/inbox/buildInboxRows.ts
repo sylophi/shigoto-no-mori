@@ -1,9 +1,7 @@
 import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
 import { groupPrefixOf } from "@shared/sharedSettings";
-import {
-  showPrimaryInInbox,
-  type ProjectShigomoriConfigQueries,
-} from "@/hooks/config/useShigomoriConfig";
+import type { ProjectShigomoriConfigQueries } from "@/hooks/config/useShigomoriConfig";
+import { showPrimaryInInbox } from "@/lib/showPrimaryInInbox";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
@@ -21,7 +19,7 @@ import {
   remoteWorktreeKey,
   worktreeRowKey,
 } from "../buildSidebarRows";
-import type { SidebarDeviceBadge } from "../DeviceBadge";
+import type { SidebarDeviceBadge } from "../DeviceBadgeView";
 import type { StackPosition } from "@shared/pullRequestStack";
 import type { InboxShelf, SidebarRow, SidebarViewModel } from "../sidebarRow";
 import { byInboxRank, inboxRank, type InboxRank } from "./inboxRank";

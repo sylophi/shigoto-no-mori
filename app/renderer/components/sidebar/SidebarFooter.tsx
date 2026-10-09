@@ -1,40 +1,62 @@
+// The sidebar's footer (SidebarFooterView): the layout toggle, and the
+// app-level actions. A hostless client has no local tree to arrange,
+// so its bar carries the toggle and the page-nav cluster.
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useMarkAgentsWaiting } from "@/hooks/config/useSidebarMarks";
+import { useLiveCount } from "@/hooks/live/useLiveActivity";
+import {
+  useSetSidebarView,
+  useSidebarView,
+} from "@/hooks/projects/useSidebarView";
+import { useStagedUpdates } from "@/hooks/system/useUpdater";
+import { agentsNeedYou } from "@/lib/agentNeeds";
+import { useWaitingAgents } from "@/lib/agentWatch";
 import { hasLocalHost } from "@/lib/localHost";
-import { SidebarNavActions } from "./SidebarNavActions";
-import { SidebarViewToggle } from "./SidebarViewToggle";
-import { SIDEBAR_FOOTER_BAR } from "./sidebarChrome";
-import { cn } from "@/lib/utils";
+import {
+  SidebarFooterView,
+  SidebarNavActionsView,
+  SidebarViewToggleView,
+} from "./SidebarFooterView";
 
 interface SidebarFooterProps {
   arrangeMode: boolean;
   onToggleArrange: () => void;
 }
 
-// What both views share: the layout toggle, and the app-level actions.
-// Anything that only answers a question the project tree asks lives in
-// SidebarToolbar, above the tree. A hostless client has no local tree
-// to arrange, so its bar carries the toggle and the page-nav cluster.
 export function SidebarFooter({
   arrangeMode,
   onToggleArrange,
 }: SidebarFooterProps) {
-  if (hasLocalHost && arrangeMode) {
-    return (
-      <div className={cn(SIDEBAR_FOOTER_BAR, "justify-end")}>
-        <button
-          type="button"
-          onClick={onToggleArrange}
-          className="rounded-md px-2 py-1 text-2xs font-semibold tracking-wide text-foreground uppercase transition-colors hover:bg-accent"
-        >
-          Done arranging
-        </button>
-      </div>
-    );
-  }
+  const view = useSidebarView();
+  const { mutate: setView } = useSetSidebarView();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const updateReady = Object.keys(useStagedUpdates()).length > 0;
+  const running = useLiveCount();
+  const waiting = useWaitingAgents().length;
+  const needsYou = useMarkAgentsWaiting() && waiting > 0;
   return (
-    <div className={SIDEBAR_FOOTER_BAR}>
-      <SidebarViewToggle />
-      <div className="flex-1" />
-      <SidebarNavActions />
-    </div>
+    <SidebarFooterView
+      onDoneArranging={
+        hasLocalHost && arrangeMode ? onToggleArrange : undefined
+      }
+      toggle={<SidebarViewToggleView view={view} onChange={setView} />}
+      actions={
+        <SidebarNavActionsView
+          hasLocalHost={hasLocalHost}
+          pathname={pathname}
+          live={{
+            label: needsYou
+              ? `Live (${agentsNeedYou(waiting)})`
+              : running > 0
+                ? `Live (${running} running)`
+                : "Live",
+            dot: needsYou ? "amber" : running > 0 ? "emerald" : null,
+          }}
+          updateReady={updateReady}
+          onNavigate={(to) => void navigate({ to })}
+        />
+      }
+    />
   );
 }

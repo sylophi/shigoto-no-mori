@@ -1,5 +1,5 @@
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
+import { DeviceMenuRowView } from "./DeviceMenuRowView";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -134,10 +134,7 @@ export function ProjectRemoveMenuItem({
   // The row is the device, so it leads with the device's glyph, like
   // every other list that names one.
   const deviceRow = device && (
-    <>
-      <DeviceGlyphView icon={device.icon} className="size-3.5" />
-      {device.label}
-    </>
+    <DeviceMenuRowView icon={device.icon} label={device.label} />
   );
   const removeProject = useRemoveProject();
   const armed = removeArm.armedKey === armKey;
@@ -149,8 +146,11 @@ export function ProjectRemoveMenuItem({
       <DropdownMenuItem disabled>Registered via terrier</DropdownMenuItem>
     ) : (
       <DropdownMenuItem variant="destructive" disabled>
-        {deviceRow}
-        <span className="ml-auto pl-3">via terrier</span>
+        <DeviceMenuRowView
+          icon={device.icon}
+          label={device.label}
+          note="via terrier"
+        />
       </DropdownMenuItem>
     );
   }

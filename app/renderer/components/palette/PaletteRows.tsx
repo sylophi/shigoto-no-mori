@@ -2,12 +2,18 @@ import { Fragment, type ReactNode } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
+import {
+  useAllowAgentWorking,
+  useShowDeviceBadges,
+} from "@/hooks/config/useSidebarMarks";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import { DeviceBadge, MirrorBadge } from "@/components/sidebar/DeviceBadge";
+import {
+  DeviceBadgeView,
+  MirrorBadgeView,
+} from "@/components/sidebar/DeviceBadgeView";
 import { ownerOf } from "@/components/sidebar/buildSidebarRows";
-import { PullRequestPill } from "@/components/sidebar/PullRequestPill";
-import { StatusIndicator } from "@/components/sidebar/StatusIndicator";
+import { PullRequestPillView } from "@/components/sidebar/PullRequestPillView";
+import { StatusIndicatorView } from "@/components/sidebar/StatusIndicatorView";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { matchPositions } from "@/lib/fuzzyMatch";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -79,6 +85,7 @@ function WorktreeRow({
 }) {
   const { worktree, project, device, mirror, pr } = entry;
   const allowAgentWorking = useAllowAgentWorking();
+  const showBadge = useShowDeviceBadges();
   const activeAt = worktreeLastActivityAt(worktree);
   // The sidebar's line: what the work is called, the branch without.
   const title = worktreeTitle(worktree, pr);
@@ -129,11 +136,11 @@ function WorktreeRow({
         </>
       }
     >
-      <PullRequestPill pr={pr} />
-      <StatusIndicator worktree={worktree} />
+      <PullRequestPillView pr={pr} />
+      <StatusIndicatorView worktree={worktree} />
       <WorktreeKindIcon worktree={worktree} />
-      {device && <DeviceBadge badge={device} />}
-      {mirror && <MirrorBadge mirror={mirror} />}
+      {device && <DeviceBadgeView badge={device} />}
+      {mirror && <MirrorBadgeView mirror={mirror} showBadge={showBadge} />}
     </RowLayout>
   );
 }
@@ -168,7 +175,7 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
         </>
       }
     >
-      {device && <DeviceBadge badge={device} />}
+      {device && <DeviceBadgeView badge={device} />}
     </RowLayout>
   );
 }

@@ -19,26 +19,21 @@
 // member with no session gets no actions, the same as a missing local
 // project.
 import { useState } from "react";
-import { MoreHorizontal } from "lucide-react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
+import { DeviceMenuRowView } from "./DeviceMenuRowView";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useSetProjectPinned } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { localDeviceId } from "@/lib/queryKeys";
-import { cn } from "@/lib/utils";
 import type { Project } from "@shigomori/contracts/schemas";
 import { AddToDeviceSubmenu } from "./AddToDeviceSubmenu";
 import { WorktreeSortSubmenu } from "./SidebarToolbar";
@@ -50,10 +45,7 @@ import {
   type ProjectMenuRemoveArm,
 } from "./ProjectMenuItems";
 import { QuickCreateButton } from "./QuickCreateButton";
-import {
-  PROJECT_ACTION_HOOKS,
-  PROJECT_MENU_TRIGGER_CLASS,
-} from "./sidebarChrome";
+import { ProjectActionsView } from "./ProjectActionsView";
 import type { RemoteProjectMember } from "./sidebarRow";
 
 export interface GroupMember {
@@ -195,34 +187,24 @@ export function ProjectGroupActions({
   if (primary === undefined) return null;
 
   return (
-    <>
-      {creator !== undefined && (
-        <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
-          <QuickCreateButton
-            project={creator.project}
-            isHovered={isHovered}
-            deviceLabel={spansDevices ? creator.deviceLabel : undefined}
-          />
-        </MaybeHostScope>
-      )}
-      <DropdownMenu onOpenChange={onOpenChange}>
-        <DropdownMenuTrigger
-          render={
-            <button
-              ref={triggerRef}
-              type="button"
-              aria-label={`More actions for ${name}`}
-              {...PROJECT_ACTION_HOOKS}
-              className={cn(
-                PROJECT_MENU_TRIGGER_CLASS,
-                isHovered ? "opacity-100" : "opacity-0",
-              )}
-            >
-              <MoreHorizontal className="size-3.5" />
-            </button>
-          }
-        />
-        <DropdownMenuContent align="end" sideOffset={2}>
+    <ProjectActionsView
+      name={name}
+      isHovered={isHovered}
+      triggerRef={triggerRef}
+      onOpenChange={onOpenChange}
+      quickCreate={
+        creator !== undefined && (
+          <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
+            <QuickCreateButton
+              project={creator.project}
+              isHovered={isHovered}
+              deviceLabel={spansDevices ? creator.deviceLabel : undefined}
+            />
+          </MaybeHostScope>
+        )
+      }
+      menu={
+        <>
           {creator !== undefined && (
             <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
               <ProjectCreateMenuItems
@@ -263,9 +245,9 @@ export function ProjectGroupActions({
               onOpenChange={onOpenChange}
             />
           )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
+        </>
+      }
+    />
   );
 }
 
@@ -297,8 +279,10 @@ function RemoveSubmenu({
               variant="destructive"
               disabled
             >
-              <DeviceGlyphView icon={member.deviceIcon} className="size-3.5" />
-              {member.deviceLabel}
+              <DeviceMenuRowView
+                icon={member.deviceIcon}
+                label={member.deviceLabel}
+              />
             </DropdownMenuItem>
           ) : (
             <MaybeHostScope
