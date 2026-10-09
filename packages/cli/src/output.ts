@@ -1,7 +1,6 @@
 // How a command prints: one JSON document per line under --json, lines
 // for a person otherwise, notes and errors on stderr. Color only on a
 // terminal, never under --json, NO_COLOR or TERM=dumb.
-import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
@@ -19,9 +18,14 @@ export class Output extends Context.Service<
   }
 >()("sm/cli/Output") {}
 
-export const emit = (doc: unknown) => Console.log(JSON.stringify(doc));
+// Written as they are, since the parser runs with a console that says
+// nothing (main.ts).
+export const out = (line: string) =>
+  Effect.sync(() => {
+    process.stdout.write(`${line}\n`);
+  });
 
-export const out = (line: string) => Console.log(line);
+export const emit = (doc: unknown) => out(JSON.stringify(doc));
 
 // Written as it is: Bun's console.error paints a terminal's lines red.
 export const note = (line: string) =>

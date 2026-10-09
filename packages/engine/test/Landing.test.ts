@@ -389,3 +389,52 @@ it("reads what a PR needs", () => {
   assert.equal(mergeProblem(queue, "main", true), "");
   assert.equal(mergeWaitingOn(queue), "it is in the merge queue");
 });
+
+const mergedPr = (number: number, head: string, base: string) =>
+  `{"number":${number},"title":"${head}","state":"MERGED","isDraft":false,"url":"u${number}","baseRefName":"${base}","headRefName":"${head}"}`;
+
+// The primary checkout on a layer the stack landed stays, and the land
+// says how it gets back on the trunk.
+it("a stack land says when the primary checkout sits on a landed branch", async () => {
+  const upstream = box.repo("upstream", { "README.md": "hi\n" });
+  const repo = join(box.home, "repo");
+  execFileSync("git", ["clone", "-q", upstream, repo]);
+  box.git(repo, "checkout", "-q", "-b", "low");
+  box.fakeBin(
+    "gh",
+    `case "$*" in
+  "pr list --state all --head fox "*) echo '[${mergedPr(5, "fox", "low")}]';;
+  "pr list --state all --limit 200 "*) echo '[${mergedPr(4, "low", "main")},${mergedPr(5, "fox", "low")}]';;
+  "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":true}}}';;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac`,
+  );
+  const notes: string[] = [];
+  const doc = (await box.engine(
+    Effect.gen(function* () {
+      const project = yield* (yield* Registry.Registry).register({
+        name: "repo",
+        path: repo,
+      });
+      const worktrees = yield* Worktrees.Worktrees;
+      const { worktree } = yield* worktrees.create(
+        project,
+        { name: "fox", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      );
+      const located = yield* worktrees.resolve(yield* worktrees.here("/"), {
+        projectId: project.id,
+        worktreeId: worktree.id,
+      });
+      return yield* (yield* Landing.Landing).land(
+        located,
+        { force: false, keepBranch: false, skipCleanup: true, stack: true },
+        { ...silent, note: (line) => Effect.sync(() => void notes.push(line)) },
+      );
+    }),
+  )) as Record<string, unknown>;
+  assert.equal(doc["ok"], true);
+  assert.deepEqual(notes, [
+    "the primary checkout is on landed branch low. `smd done` lands it back on main",
+  ]);
+});

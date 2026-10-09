@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -28,6 +29,8 @@ import {
 } from "vitest";
 import { macfs, type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
 import { type FakeApp, fakeApp } from "../../engine/test/lib/fakeApp.ts";
+import { flavorNames } from "@shigomori/engine/flavor";
+import { documentedCommands } from "../src/help.ts";
 
 let built: string;
 let buildDir: string;
@@ -99,6 +102,76 @@ describe("a command line", () => {
       assert.equal((run.doc as { ok?: unknown }).ok, false, run.stdout);
     }
     assert.equal((await runAt(box.home, "--help")).code, 0);
+  });
+
+  it("refuses a command line in the Go sm's words, with no help page", async () => {
+    const refusals: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
+      [["nosuch"], 'Unknown command "nosuch". Run `smd --help`.'],
+      [["list", "--bogus"], 'Unknown option "--bogus".'],
+      [["create", "--base"], 'Option "--base" requires a value.'],
+      [["shell", "init"], "Usage: smd shell init <zsh|bash|fish>"],
+      [
+        ["shell", "bogus"],
+        'Unknown subcommand "bogus". Usage: smd shell <install|uninstall|status|init>',
+      ],
+    ];
+    const runs = await Promise.all(
+      refusals.map(([args]) => start(box.home, args).ended),
+    );
+    runs.forEach((run, i) => {
+      const [args, said] = refusals[i] as (typeof refusals)[number];
+      assert.equal(run.code, 2, args.join(" "));
+      assert.equal(run.stdout, "", args.join(" "));
+      assert.equal(run.stderr, `smd: ${said}\n`);
+    });
+  });
+
+  it("answers help from the catalog, and bare as a usage error", async () => {
+    const [bare, page, rm, wtRm, namespace, asked] = await Promise.all(
+      [
+        [],
+        ["--help"],
+        ["rm", "--help"],
+        ["wt", "rm", "-h"],
+        ["projects"],
+        ["help", "describe"],
+      ].map((args) => start(box.home, args).ended),
+    );
+    assert.equal(bare?.code, 2);
+    assert.equal(bare?.stdout, page?.stdout);
+    assert.equal(page?.code, 0);
+    assert.match(
+      page?.stdout ?? "",
+      /^smd: Shigoto no Mori CLI \(dev: targets ~\/\.smd\)\n/,
+    );
+    assert.match(
+      page?.stdout ?? "",
+      /\n {2}worktrees <command> {2,}Worktree commands\n/,
+    );
+    assert.match(
+      rm?.stdout ?? "",
+      /^Usage: smd worktrees rm \[<name>\] \[--stack\] \[-f\] \[--keep-branch\]\n {2}Remove a worktree\n/,
+    );
+    assert.equal(wtRm?.stdout, rm?.stdout);
+    assert.match(namespace?.stdout ?? "", /^smd projects \(p for short\)\n/);
+    assert.match(asked?.stdout ?? "", /^Usage: smd worktrees describe /);
+    // -h past `--` is the command's own.
+    const passed = await start(box.home, ["nosuch", "--", "-h"]).ended;
+    assert.equal(passed.code, 2);
+  });
+
+  it("documents only the commands it has", async () => {
+    // `help` is the help's own, never parsed.
+    const commands = documentedCommands(flavorNames("dev")).filter(
+      ([first]) => first !== "help",
+    );
+    const runs = await Promise.all(
+      commands.map((words) => start(box.home, [...words, "--zzz"]).ended),
+    );
+    const missing = commands.filter(
+      (_, i) => runs[i]?.stderr !== 'smd: Unknown option "--zzz".\n',
+    );
+    assert.deepEqual(missing, []);
   });
 
   it("refuses the variables the stand-in flags replaced", async () => {
@@ -681,5 +754,63 @@ describe("run", () => {
     } else {
       assert.equal(ended.signal, signal);
     }
+  });
+});
+
+describe("projects relocate", () => {
+  it("points a project at its moved repo, as the Go sm did", async () => {
+    const alpha = box.repo("alpha");
+    const beta = box.repo("beta");
+    box.write("registry.json", {
+      projects: [
+        { id: "A", name: "alpha", path: alpha },
+        { id: "B", name: "beta", path: beta },
+      ],
+    });
+    const usage = await runAt(box.home, "projects", "relocate");
+    assert.equal(usage.code, 2);
+    assert.equal(
+      usage.stderr,
+      "smd: Usage: smd projects relocate [<name-or-path>] <new-path>\n",
+    );
+    const stillThere = await runAt(
+      box.home,
+      "projects",
+      "relocate",
+      "alpha",
+      beta,
+    );
+    assert.equal(stillThere.code, 1);
+    assert.equal(
+      stillThere.stderr,
+      `smd: ${alpha} is still there. Relocate is for a repo that was moved or renamed by hand.\n`,
+    );
+    const moved = join(box.home, "gamma");
+    renameSync(alpha, moved);
+    const relocated = await runAt(
+      box.home,
+      "projects",
+      "relocate",
+      "alpha",
+      moved,
+    );
+    assert.equal(relocated.code, 0, relocated.stderr);
+    assert.equal(relocated.stdout, `relocated gamma to ${moved}\n`);
+    const again = await runAt(
+      box.home,
+      "--json",
+      "projects",
+      "relocate",
+      "--project-id",
+      "A",
+      moved,
+    );
+    const doc = again.doc as {
+      ok: boolean;
+      project: { id: string; path: string };
+    };
+    assert.equal(doc.ok, true);
+    assert.equal(doc.project.id, "A");
+    assert.equal(doc.project.path, moved);
   });
 });
