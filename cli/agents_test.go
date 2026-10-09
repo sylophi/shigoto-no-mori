@@ -369,6 +369,51 @@ func TestAgentWaitsTrackEachPrompt(t *testing.T) {
 	}
 }
 
+// A session keeps its title (its first prompt, until a custom title
+// takes over), what its newest prompt asks, and the message its turn
+// ended on. A question's PostToolUse, which adds the answers to its
+// input, still closes it.
+func TestAgentSessionText(t *testing.T) {
+	proj := autoPullSandbox(t)
+	sandboxClaude(t, true)
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "s6")
+	fox := createViaCmd(t, proj, "fox")
+	ctx := resolveContext(proj.Path, []project{proj})
+	question := `,"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Cats or dogs?","header":"Pet","options":[{"label":"Cats"},{"label":"Dogs"}]}]}`
+	answered := `,"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Cats or dogs?","header":"Pet","options":[{"label":"Cats"},{"label":"Dogs"}]}],"answers":{"Cats or dogs?":"Cats"},"annotations":{}}`
+	steps := []struct {
+		event, extra string
+		want         agentSession
+	}{
+		{"UserPromptSubmit", `,"prompt":"Fix the\n  flaky   test"`, agentSession{State: agentWorking, Title: "Fix the flaky test"}},
+		{"PermissionRequest", `,"tool_name":"Bash","tool_input":{"command":"pnpm test"}`, agentSession{State: agentWaiting, Title: "Fix the flaky test", Tool: "Bash", Need: "pnpm test"}},
+		{"PostToolUse", `,"tool_name":"Bash","tool_input":{"command":"pnpm test"}`, agentSession{State: agentWorking, Title: "Fix the flaky test"}},
+		{"PermissionRequest", question, agentSession{State: agentWaiting, Title: "Fix the flaky test", Tool: "AskUserQuestion", Need: "Cats or dogs?"}},
+		{"PostToolUse", answered, agentSession{State: agentWorking, Title: "Fix the flaky test"}},
+		// Two open at once, the newer answered first: the older one speaks again.
+		{"PermissionRequest", `,"tool_name":"Bash","tool_input":{"command":"pnpm lint"}`, agentSession{State: agentWaiting, Title: "Fix the flaky test", Tool: "Bash", Need: "pnpm lint"}},
+		{"PermissionRequest", question, agentSession{State: agentWaiting, Title: "Fix the flaky test", Tool: "AskUserQuestion", Need: "Cats or dogs?"}},
+		{"PostToolUse", answered, agentSession{State: agentWaiting, Title: "Fix the flaky test", Tool: "Bash", Need: "pnpm lint"}},
+		{"PostToolUse", `,"tool_name":"Bash","tool_input":{"command":"pnpm lint"}`, agentSession{State: agentWorking, Title: "Fix the flaky test"}},
+		{"PermissionRequest", `,"cwd":"/w/fox","tool_name":"Edit","tool_input":{"file_path":"/w/fox/app/lease.ts"}`, agentSession{State: agentWaiting, Title: "Fix the flaky test", Tool: "Edit", Need: "app/lease.ts"}},
+		{"PostToolUse", `,"cwd":"/w/fox","tool_name":"Edit","tool_input":{"file_path":"/w/fox/app/lease.ts"}`, agentSession{State: agentWorking, Title: "Fix the flaky test"}},
+		{"Stop", `,"last_assistant_message":"Cats it is."`, agentSession{State: agentIdle, Title: "Fix the flaky test", Message: "Cats it is."}},
+		{"UserPromptSubmit", `,"prompt":"Now the next one"`, agentSession{State: agentWorking, Title: "Fix the flaky test"}},
+		{"UserPromptSubmit", `,"prompt":"go","session_title":"flaky-tests"`, agentSession{State: agentWorking, Title: "flaky-tests"}},
+	}
+	for _, step := range steps {
+		sendEvent(t, ctx, step.event, "s6", step.extra)
+		got := sessionsOf(t, fox.ID)
+		if len(got) != 1 || got[0].State != step.want.State || got[0].Title != step.want.Title ||
+			got[0].Tool != step.want.Tool || got[0].Need != step.want.Need || got[0].Message != step.want.Message {
+			t.Fatalf("after %s%s: %+v, want %+v", step.event, step.extra, got, step.want)
+		}
+	}
+	if got := clipLine(strings.Repeat("a", 500), agentMessageMax); len([]rune(got)) != agentMessageMax {
+		t.Fatalf("clipLine kept %d runes, want %d", len([]rune(got)), agentMessageMax)
+	}
+}
+
 // A Codex subagent binds under its own thread id, its events name it
 // by agent_id beside the parent's session_id, and its SubagentStop
 // unbinds it alone.

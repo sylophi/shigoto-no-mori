@@ -19,4 +19,11 @@ export const windowContract = defineContract("client", {
   // this only after the moveDataDir reply resolves guarantees the reply
   // was delivered before the app quits. No timing guesses.
   relaunch: invoke("window:relaunch", z.void(), z.void()),
+  // A system notification that opens `route` (a deep link's path) when
+  // clicked.
+  notify: invoke(
+    "window:notify",
+    z.object({ title: z.string(), body: z.string(), route: z.string() }),
+    z.void(),
+  ),
 });

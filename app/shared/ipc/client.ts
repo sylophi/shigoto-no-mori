@@ -420,6 +420,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       onBlurred: windowClient.blurred,
       previewTheme: (theme: Theme) => windowClient.previewTheme({ theme }),
       relaunch: windowClient.relaunch,
+      notify: windowClient.notify,
     },
 
     worktreeData: {

@@ -36,6 +36,7 @@ import { hasLocalHost } from "./lib/localHost";
 import { watchHost } from "./lib/hostWatch";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import { startVillagerMoves } from "./lib/villagers/moves";
+import { startAgentWatch } from "./lib/agentWatch";
 import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
@@ -145,6 +146,10 @@ export function bootApp({
   // Villagers moving in and out of any device's worktrees, told in
   // their voice whoever moved them (Village life).
   startVillagerMoves(queryClient);
+
+  // Agent sessions on any device: the waiting ones for the Live page,
+  // and on the desktop the notifications.
+  startAgentWatch(queryClient);
 
   const rootElement = document.getElementById("root");
   if (!rootElement) {

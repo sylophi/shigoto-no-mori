@@ -42,12 +42,19 @@ export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 // working through a turn, waiting on the user mid-turn (a permission
 // prompt), or idle once the turn ended. harness is "claude", "codex",
 // or whatever a harness without built-in support calls itself. at is
-// when the state last changed, in ms.
+// when the state last changed, in ms. title is what the session is
+// about (its custom title, else its first prompt), tool and need what
+// it waits on (the prompt's tool, and its question, command, file or
+// URL), and message the one its last turn ended on.
 export const AgentSessionSchema = z.object({
   harness: z.string(),
   session: z.string(),
   state: z.enum(["working", "waiting", "idle"]),
   at: z.number(),
+  title: z.string().optional(),
+  tool: z.string().optional(),
+  need: z.string().optional(),
+  message: z.string().optional(),
 });
 export type AgentSession = z.infer<typeof AgentSessionSchema>;
 
@@ -259,15 +266,18 @@ export function canRewriteCommits(
 // When the worktree last saw work, epoch ms, for recency sorting.
 // Uncommitted edits count: a worktree you were typing in five minutes
 // ago should outrank one whose last commit is newer but that you
-// haven't touched since. 0 when nothing is known, like a clean
-// worktree with no commits yet.
+// haven't touched since. So does an agent session changing state (a
+// turn starting or ending, a prompt waiting on you), whether or not it
+// touched a file. 0 when nothing is known, like a clean worktree with
+// no commits yet.
 export function worktreeLastActivityAt(
-  worktree: Pick<Worktree, "lastChangeAt" | "recentCommits">,
+  worktree: Pick<Worktree, "lastChangeAt" | "recentCommits" | "agentSessions">,
 ): number {
   const committed = Date.parse(worktree.recentCommits[0]?.date ?? "");
   return Math.max(
     worktree.lastChangeAt ?? 0,
     Number.isNaN(committed) ? 0 : committed,
+    ...(worktree.agentSessions ?? []).map((s) => s.at),
   );
 }
 

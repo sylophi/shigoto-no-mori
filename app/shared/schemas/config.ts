@@ -430,6 +430,16 @@ export const ClientConfigSchema = z.object({
   // every device this window shows. Off by default (absent = off),
   // explicit `true` is the opt-in.
   allowAgentWorking: z.boolean().optional(),
+  // Mark the worktrees whose agent session waits on the user (a
+  // permission prompt or a question), on every device this window
+  // shows. On by default (absent = on), explicit `false` hides it.
+  markAgentsWaiting: z.boolean().optional(),
+  // The desktop's notifications about agent sessions, on every device
+  // this window shows (renderer/lib/agentWatch.ts): one when a
+  // session starts waiting on the user (on by default, absent = on),
+  // and one when a turn ends (off by default, absent = off).
+  notifyAgentWaiting: z.boolean().optional(),
+  notifyAgentDone: z.boolean().optional(),
   // Show every project's worktrees under it on the sidebar's list of
   // projects, each project folding in place, rather than one project
   // at a time. Off by default (absent = off), explicit `true` is the
