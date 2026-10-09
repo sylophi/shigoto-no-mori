@@ -4,6 +4,7 @@ import {
   errorFromWire,
   errorToWire,
 } from "@shigomori/contracts/errors";
+import type * as Tracer from "effect/Tracer";
 import type { LinkChannels } from "@shared/remote/link";
 import type {
   BroadcastKeys,
@@ -16,12 +17,10 @@ import type {
 // remote binding would wrap a socket, and nothing above this type knows
 // which.
 export type ClientTransport = {
-  // `signal` cancels the call: on the device link, the host's handler
-  // is interrupted.
   invoke(
     channel: string,
     input: unknown,
-    options?: { readonly signal?: AbortSignal },
+    options?: InvokeOptions,
   ): Promise<unknown>;
   subscribe(channel: string, handler: (payload: unknown) => void): () => void;
   // True when the far end is this machine's own serving side, the same
@@ -30,6 +29,14 @@ export type ClientTransport = {
   // every result and push with the call's schema (buildClient.ts), the
   // check the serving side makes of its inputs.
   readonly local?: boolean;
+};
+
+// What a caller may hand an invoke on the device link: `signal`
+// cancels it, interrupting the host's handler, and `span` is the span
+// the call continues, so the peer's work joins the caller's trace.
+export type InvokeOptions = {
+  readonly signal?: AbortSignal | undefined;
+  readonly span?: Tracer.AnySpan | undefined;
 };
 
 // An invoke's outcome as a value, for a wire that keeps only an error's

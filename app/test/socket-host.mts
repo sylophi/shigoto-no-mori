@@ -956,7 +956,3 @@ it("golden read surface: the ungated read channels match read-surface.golden.jso
     ].join("\n"),
   ).toMatchFileSnapshot(goldenPath);
 });
-
-// Deflated frames (shared/ipc/socket/deflatedFrame.ts). The host
-// deflates a large text frame only for a tunnel-borne connection
-// (loopback plus the connector's CF-Connecting-IP) whose hello asked.

@@ -1,7 +1,7 @@
 // Durable proof for port forwarding over byte channels (binary
 // channel frames): TCP bytes cross a REAL DIRECT
 // websocket between the two fixtures as channel frames
-// (shared/ipc/socket/channels.ts), brokered by the stub device hub
+// (shared/remote/channels.ts), brokered by the stub device hub
 // exactly as production does (test/lib/directBoot.mts). Nothing
 // here is a double on the forward path: device A registers the REAL
 // forward contract and handlers on a real direct listener, B
@@ -348,8 +348,8 @@ it("server close: tail bytes, then the peer's end, and ending here completes the
 
 it("a large response followed by a server close arrives complete", async () => {
   // (5b) A large response then a close: a server that writes far more
-  // than one credit window and hangs up must still deliver every
-  // byte. The bytes the channel holds while waiting for credit
+  // than one channel window and hangs up must still deliver every
+  // byte. The bytes the channel holds while the reader catches up
   // outlive the socket's close.
   const dumper = await startLoopbackServer((socket) => {
     socket.end(big);

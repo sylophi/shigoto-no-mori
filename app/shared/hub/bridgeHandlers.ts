@@ -32,6 +32,7 @@
 // rather than a bare "not connected".
 import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
 import type { ChannelMux } from "@shared/remote/channels";
+import type { InvokeOptions } from "@shared/ipc/transport";
 import type { Handlers } from "@shigomori/contracts/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
 import { NoDirectConnectionError } from "@shigomori/contracts/errors";
@@ -68,6 +69,14 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // production caller, which is what makes sessions desired state
   // instead of use-triggered.
   dialPeer(deviceId: string): Promise<void>;
+  // invokePeer for this device's own callers, who may cancel the call
+  // and hand it the span it continues (InvokeOptions).
+  invokeOnPeer(
+    deviceId: string,
+    channel: string,
+    input: unknown,
+    options?: InvokeOptions,
+  ): Promise<unknown>;
   // The appVersion each ESTABLISHED direct session's welcome
   // confirmed, keyed by deviceId. This is the whole per-peer data
   // surface: the owner folds it into HubStatus.peerAppVersions, and
@@ -98,7 +107,7 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // tick. In-flight dials are left alone: their handshake deadline is
   // already their verdict.
   probeDirectPeers(): void;
-  // The peer's direct session's byte channels (shared/ipc/socket/
+  // The peer's direct session's byte channels (shared/remote/
   // channels.ts), for a caller that attaches its end under a minted id
   // BEFORE opening the far end with forward:open / mirror:openStream. Same
   // session rules as invokePeer: joins an in-flight keeper dial,
@@ -231,6 +240,11 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
 
     dialPeer: async (deviceId) => {
       await openPeer(deviceId);
+    },
+
+    invokeOnPeer: async (deviceId, channel, input, options) => {
+      const peer = await requirePeer(deviceId);
+      return peer.transport.invoke(channel, input, options);
     },
 
     invokePeer: async ({ deviceId, channel, input }) => {

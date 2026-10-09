@@ -154,7 +154,7 @@ function listPayload(count: number) {
 // A bundle's bytes, cut from incompressible bytes like the packed
 // objects a real one is made of, moved the way a source link moves one
 // (host/lib/sync/sourceLink.ts): a header line, then raw bytes on a
-// byte channel, the channel's credit the only flow control.
+// byte channel, the channel's window the only flow control.
 const BUNDLE_BYTES = 10_000_000 + 12_345;
 const bundle = randomBytes(BUNDLE_BYTES);
 async function sendPieces(link: Link): Promise<void> {
@@ -163,7 +163,7 @@ async function sendPieces(link: Link): Promise<void> {
     offset < BUNDLE_BYTES;
     offset += CHANNEL_MAX_WRITE_BYTES
   ) {
-    // oxlint-disable-next-line no-await-in-loop -- the channel's credit
+    // oxlint-disable-next-line no-await-in-loop -- the channel's window
     await link.writeBytes(
       bundle.subarray(offset, offset + CHANNEL_MAX_WRITE_BYTES),
     );

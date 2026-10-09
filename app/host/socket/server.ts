@@ -76,6 +76,7 @@ import {
 } from "@shared/remote/proof";
 import * as HostPushes from "@host/lib/hostPushes";
 import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
+import { withParentSpan } from "@host/lib/util/trace";
 import type * as Views from "@host/lib/views";
 import { type HostChannels, makeHostChannels } from "./channels";
 
@@ -276,17 +277,23 @@ export function createLinkRegistrar(): LinkRegistrar {
 const serve = (channel: string, fn: Served) => (payload: unknown) =>
   Effect.gen(function* () {
     const peer = yield* LinkPeer;
+    // The call's span: what the handler's own spans and peer calls
+    // continue, so the caller's trace goes on here.
+    const span = yield* Effect.option(Effect.currentSpan);
     return yield* Effect.tryPromise({
       try: (signal) =>
-        fn(
-          {
-            signal,
-            connection: peer.closed,
-            callerDeviceId: peer.deviceId,
-            channels: peer.channels,
-            notifier: (module, key) => (push) => peer.notify(module, key, push),
-          },
-          payload,
+        withParentSpan(span, () =>
+          fn(
+            {
+              signal,
+              connection: peer.closed,
+              callerDeviceId: peer.deviceId,
+              channels: peer.channels,
+              notifier: (module, key) => (push) =>
+                peer.notify(module, key, push),
+            },
+            payload,
+          ),
         ),
       catch: (error) =>
         isContractError(error)

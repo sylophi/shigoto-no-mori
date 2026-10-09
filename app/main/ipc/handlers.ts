@@ -178,10 +178,8 @@ import { log, logFailure } from "@shared/log";
 // remote-forest query is riding, since the host keeps one authed
 // socket per device.
 const peerTransportFor = (deviceId: string): ClientTransport => ({
-  invoke: (channel: string, input: unknown) =>
-    Promise.resolve(
-      hubHandlers.invokePeer({ deviceId, channel, input }, undefined),
-    ),
+  invoke: (channel, input, options) =>
+    hubHandlers.invokeOnPeer(deviceId, channel, input, options),
   // One channel of the peer's pushes, off the same session's fan-out
   // (onPeerPush): what a start the peer runs for this device streams
   // back, which the control ops relay to the CLI.

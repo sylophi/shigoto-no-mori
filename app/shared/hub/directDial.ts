@@ -23,13 +23,12 @@
 // junk candidate opening first (Docker bridges, VPN interfaces) costs
 // only its own open, never the race.
 //
-// BLOCKED VERDICTS: what makes a verdict terminal is the CLOSE CODE,
-// and it has to be, because this side has no other honest source. The
-// host refuses a bad ticket with CLOSE_AUTH_FAILED (blocked) and
-// refuses a locked-out client with CLOSE_AUTH_LOCKED_OUT (retryable),
-// and only the host can tell those apart: the lockout fires before any
-// hello is read, keys on client IP, and benches whoever dials next
-// even with a perfect ticket.
+// BLOCKED VERDICTS: what makes a verdict terminal is the host's answer,
+// because this side has no other honest source. The host refuses a bad
+// ticket's hello with LinkRefusedError (blocked) and closes on a
+// locked-out client before its hello (retryable), and only the host can
+// tell those apart: the lockout keys on client IP, and benches whoever
+// dials next even with a perfect ticket.
 //
 // A blocked verdict is terminal, but it does NOT end the race: a
 // refusing far end has proved nothing, and a plaintext LAN address may

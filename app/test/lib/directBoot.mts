@@ -392,11 +392,9 @@ function bridgePeerTransport(
   const counts = new Map<string, number>();
   return {
     transport: {
-      invoke: (channel, input) => {
+      invoke: (channel, input, options) => {
         counts.set(channel, (counts.get(channel) ?? 0) + 1);
-        return Promise.resolve(
-          bridge.invokePeer({ deviceId, channel, input }, undefined),
-        );
+        return bridge.invokeOnPeer(deviceId, channel, input, options);
       },
       subscribe: (channel, handler) => {
         const listener = (push: HubPeerPush) => {
@@ -409,7 +407,7 @@ function bridgePeerTransport(
       },
     },
     invokeCount: (channel) => counts.get(channel) ?? 0,
-    // The session's byte channels (shared/ipc/socket/channels.ts),
+    // The session's byte channels (shared/remote/channels.ts),
     // resolving like invokePeer does.
     channels: () => bridge.peerChannels(deviceId),
   };

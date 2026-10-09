@@ -12,6 +12,7 @@ import {
   channelOf,
   type ContractCall,
   isBroadcast,
+  isInvoke,
 } from "@shigomori/contracts/contract";
 import { type ContractSchema, decode } from "@shigomori/contracts/codec";
 import {
@@ -333,15 +334,17 @@ export function openDevice(
     const transport: ClientTransport = {
       invoke(channel, input, invokeOptions) {
         const rpc = LinkGroup.requests.get(channel) as ContractCall | undefined;
-        if (rpc === undefined || isBroadcast(rpc)) {
+        if (rpc === undefined || !isInvoke(rpc)) {
           return Promise.reject(
             new Error(`No handler registered for channel "${channel}"`),
           );
         }
+        const called = Effect.suspend(() =>
+          call(channel, decode(rpc.payloadSchema as ContractSchema, input)),
+        );
+        const span = invokeOptions?.span;
         return Effect.runPromiseExit(
-          Effect.suspend(() =>
-            call(channel, decode(rpc.payloadSchema as ContractSchema, input)),
-          ),
+          span === undefined ? called : Effect.withParentSpan(called, span),
           { signal: invokeOptions?.signal },
         ).then((exit) => {
           if (Exit.isSuccess(exit)) return exit.value;

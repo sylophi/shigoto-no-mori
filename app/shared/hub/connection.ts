@@ -89,8 +89,7 @@ type HubConnectionCoreDeps = {
   // listener (the web), whose link then answers every ask with the
   // no-listener refusal.
   serveConnectInfo?: ServeConnectInfo;
-  // Test seams for the liveness heartbeat (shared/ipc/socket/heartbeat.ts,
-  // the rule the direct sockets follow too).
+  // Test seams for the liveness heartbeat (shared/hub/heartbeat.ts).
   heartbeat?: HeartbeatOptions;
 };
 
@@ -273,7 +272,7 @@ export function createHubConnectionCore(
           nextLink.teardown();
         };
 
-        // Liveness (shared/ipc/socket/heartbeat.ts), armed at the accept.
+        // Liveness (shared/hub/heartbeat.ts), armed at the accept.
         // Enforced from the first ping on purpose (no "seen a pong yet"
         // latch): a socket that dies right after the accept must still
         // be found, and the cost of that is only that a Worker

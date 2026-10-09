@@ -1,14 +1,34 @@
 // Spans for code that is not Effect yet: the Promise adapter of the
 // process's tracer (EFFECT.md, section 3). The observability layer fills
 // the context while the graph lives (main/observability.ts). With none
-// (a proof, or before boot) a traced run just runs. Promise code has no
-// ambient span, so a step names its parent: the span handed to `run`.
-// The adapter goes once the last caller is an effect.
+// (a proof, or before boot) a traced run just runs. A step names its
+// parent (the span handed to `run`); otherwise the parent is the span a
+// caller ran the Promise code under (withParentSpan): a move's step, or
+// the device link serving a peer's call, so one move is one trace on
+// every device it touches. The adapter goes once the last caller is an
+// effect.
+import { AsyncLocalStorage } from "node:async_hooks";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type * as Tracer from "effect/Tracer";
 
 let context: Context.Context<never> | null = null;
+
+const ambient = new AsyncLocalStorage<Tracer.AnySpan>();
+
+// Runs `run` with `span` as the parent of the spans it makes, and of
+// the calls it makes on a peer.
+export function withParentSpan<A>(
+  span: Option.Option<Tracer.AnySpan>,
+  run: () => A,
+): A {
+  return Option.isNone(span) ? run() : ambient.run(span.value, run);
+}
+
+export function parentSpan(): Tracer.AnySpan | undefined {
+  return ambient.getStore();
+}
 
 export function setTraceContext(next: Context.Context<never> | null): void {
   context = next;
@@ -46,7 +66,7 @@ function inSpan<A>(
     Effect.currentSpan.pipe(
       Effect.orDie,
       Effect.flatMap((span) => Effect.promise(() => run(handle(span)))),
-      Effect.withSpan(name, { attributes, parent }),
+      Effect.withSpan(name, { attributes, parent: parent ?? parentSpan() }),
     ),
   );
 }
@@ -56,10 +76,14 @@ function inSpan<A>(
 export const runTraced = <A, E>(
   effect: Effect.Effect<A, E>,
   options?: { readonly signal?: AbortSignal | undefined },
-): Promise<A> =>
-  context === null
-    ? Effect.runPromise(effect, options)
-    : Effect.runPromiseWith(context)(effect, options);
+): Promise<A> => {
+  const parent = parentSpan();
+  const traced =
+    parent === undefined ? effect : Effect.withParentSpan(effect, parent);
+  return context === null
+    ? Effect.runPromise(traced, options)
+    : Effect.runPromiseWith(context)(traced, options);
+};
 
 // A root span: `run` gets it to hang its steps on.
 export const traced = <A>(

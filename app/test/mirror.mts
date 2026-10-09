@@ -8,7 +8,7 @@
 // device hub exactly as production does, test/lib/directBoot.mts),
 // A's handler spawns a REAL `file-sync serve` for a REAL registered
 // worktree. Bytes cross as binary channel frames on the direct socket
-// (shared/ipc/socket/channels.ts, bridged by
+// (shared/remote/channels.ts, bridged by
 // main/core/portForward/bridge.ts). The sm CLI is built too, only to
 // register the fixture project the way the app would. Asserts:
 //   - an ungranted peer: the gateway's open is refused, the daemon's

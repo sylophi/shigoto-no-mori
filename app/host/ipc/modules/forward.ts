@@ -3,10 +3,10 @@
 // loopback port and attaches the socket under that id on the calling
 // connection (the open guard and attach live in host/socket/
 // channelStreams.ts, shared with the mirror stream's open). From then
-// on the bytes ride the channel
-// (shared/ipc/socket/channels.ts) with credit-based backpressure, and
-// the far end lives exactly as long as the channel: a peer reset, a
-// clean end from both sides, or the socket dying tears it down. No
+// on the bytes ride the channel (shared/remote/channels.ts), each side
+// pulled as fast as the other takes it, and the far end lives exactly
+// as long as the channel: a peer reset, a clean end from both sides,
+// or the link dropping tears it down. No
 // registry, no idle sweep, nothing to leak past the connection.
 import type { Socket } from "node:net";
 import { errorMessageOf } from "@shigomori/contracts/errors";
