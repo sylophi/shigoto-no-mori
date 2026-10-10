@@ -6,7 +6,6 @@
 // port forwards) to the same peer sessions the windows use, and
 // registers the lot in registerHostHandlers, once at start. The
 // account's changes arrive from the shell (applyAccount).
-import * as Captures from "./captures";
 import { join } from "node:path";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { branchesContract } from "@shigomori/contracts/modules/branches";
@@ -160,6 +159,7 @@ import {
   onPeerPush,
 } from "./wires";
 import { log, logFailure } from "@shared/log";
+import * as Captures from "./captures";
 
 // The pull/transplant orchestrations' and the port-forward engine's
 // peer reach, routed through the SAME invokePeer path (and so the same
