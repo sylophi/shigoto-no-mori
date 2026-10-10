@@ -217,6 +217,8 @@ function consumeRelaunchBudget(now: number): boolean {
 // once at boot.
 export function installFatalRecovery(deps: {
   isShuttingDown: () => boolean;
+  // The windows to bring back, as a quit remembers them.
+  rememberWindows: () => void;
 }): void {
   // Best-effort, opt-in, rate-limited relaunch. Returns true when it has
   // scheduled a relaunch (the caller then exits so the fresh instance
@@ -241,6 +243,7 @@ export function installFatalRecovery(deps: {
       // Mark relaunching first so a quit that somehow starts is a
       // hurried one, with no busy-action prompt.
       scheduleRelaunch();
+      deps.rememberWindows();
       rememberVisibilityForRestart();
     } catch (error) {
       log.error(

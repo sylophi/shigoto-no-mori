@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   Copy,
   FileDiff,
   Folder,
@@ -8,7 +9,10 @@ import {
 } from "lucide-react";
 import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
+import { hasLocalHost } from "@/lib/localHost";
+import { openWorktreeInNewWindow } from "@/lib/newWindow";
 import { openExternalUrl } from "@/lib/openExternal";
+import { routeDeviceId } from "@/lib/routePaths";
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -128,6 +132,21 @@ function WorktreeVerbs({
       run: () => actions.go(entry, "diff"),
     },
   ];
+  if (hasLocalHost) {
+    opens.push({
+      key: "new-window",
+      label: "Open in new window",
+      icon: iconOf(AppWindow),
+      run: () => {
+        actions.close();
+        openWorktreeInNewWindow({
+          deviceId: routeDeviceId(deviceId),
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+        });
+      },
+    });
+  }
   if (pr) {
     opens.push({
       key: "pr",

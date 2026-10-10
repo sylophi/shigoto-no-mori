@@ -77,6 +77,8 @@ type Connection = {
   readonly socket: Socket.WebSocketLike;
   readonly parser: RpcSerialization.Parser;
   readonly webContents: WebContents | null;
+  // Its id, kept: a window's calls still settle as it is destroyed.
+  readonly windowId: number | null;
   readonly pushes: PubSub.PubSub<Push>;
   readonly closed: AbortController;
 };
@@ -149,6 +151,9 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
                 {
                   signal,
                   connection: connection.closed.signal,
+                  ...(connection.windowId === null
+                    ? {}
+                    : { windowId: connection.windowId }),
                   notifier: (module, key) => (push) => {
                     const { channel, parsed } = resolveBroadcast(
                       module,
@@ -260,6 +265,7 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
             }),
             parser: serialization.makeUnsafe(),
             webContents,
+            windowId: webContents?.id ?? null,
             pushes: yield* PubSub.sliding<Push>(1024),
             closed,
           };

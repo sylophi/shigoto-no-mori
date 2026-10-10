@@ -14,6 +14,10 @@ export const APP_VERSION_FLAG = "--sm-app-version=";
 // the build is unconfigured.
 export const CLERK_PK_FLAG = "--sm-clerk-publishable-key=";
 
+// The page the window opens on (main/electron/windows.ts), which the
+// renderer's memory history starts at.
+export const ROUTE_FLAG = "--sm-route=";
+
 // A presence flag, appended on unpackaged builds so the preload can
 // expose `api.isDev` synchronously. isDev is a client fact: dev-only
 // affordances (theme hotkeys, the dev badge) must key off the build
