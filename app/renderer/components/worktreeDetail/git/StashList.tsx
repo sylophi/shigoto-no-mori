@@ -4,13 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import {
   useStashChanges,
   useWorktreeStashes,
 } from "@/hooks/worktrees/useGitHistory";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { Worktree } from "@shared/schemas";
 
@@ -29,7 +27,6 @@ export function StashList({
   const nav = useWorktreeNav();
   const { data: stashes = [], refetch } = useWorktreeStashes(worktree);
   const stashChanges = useStashChanges();
-  const say = useWorktreeSuccessToast();
   const { canCommand } = useCommandAccess();
   const [message, setMessage] = useState("");
   const { projectId, id: worktreeId, changedCount } = worktree;
@@ -40,7 +37,6 @@ export function StashList({
       {
         onSuccess: async () => {
           setMessage("");
-          say(worktree, `Stashed ${pluralize(changedCount, "file")}`);
           const { data } = await refetch();
           const newest = data?.[0]?.hash;
           if (newest) nav.toStash(projectId, worktreeId, newest, true);

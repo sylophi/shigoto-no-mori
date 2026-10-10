@@ -12,7 +12,6 @@ import {
   useRestoreDiscard,
   useWorktreeChanges,
 } from "@/hooks/worktrees/useWorktreeChanges";
-import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
 import {
   useResolveConflict,
@@ -166,8 +165,6 @@ function ChangesView({
     setDraft,
   });
 
-  const say = useWorktreeSuccessToast();
-
   const onCommit = () => {
     const wasAmend = amending;
     commit.mutate(
@@ -201,11 +198,7 @@ function ChangesView({
             duration: UNDO_TOAST_MS,
             action: {
               label: "Undo",
-              onClick: () =>
-                restore(
-                  { projectId, worktreeId, snapshot },
-                  { onSuccess: () => say(worktree, "Changes restored") },
-                ),
+              onClick: () => restore({ projectId, worktreeId, snapshot }),
             },
           });
         },
@@ -266,12 +259,7 @@ function ChangesView({
                       action: {
                         label: "Undo",
                         onClick: () =>
-                          restore(
-                            { projectId, worktreeId, snapshot },
-                            {
-                              onSuccess: () => say(worktree, "Change restored"),
-                            },
-                          ),
+                          restore({ projectId, worktreeId, snapshot }),
                       },
                     }),
                 },
@@ -280,15 +268,7 @@ function ChangesView({
         : undefined,
     onResolve: (path, side) =>
       resolve.mutate({ projectId, worktreeId, path, side }),
-    onStash: () => {
-      const count = list.length;
-      stash.mutate(
-        { projectId, worktreeId },
-        {
-          onSuccess: () => say(worktree, `Stashed ${pluralize(count, "file")}`),
-        },
-      );
-    },
+    onStash: () => stash.mutate({ projectId, worktreeId }),
   };
 
   const footer = (
