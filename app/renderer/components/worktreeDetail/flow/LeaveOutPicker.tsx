@@ -13,7 +13,7 @@ import {
   leaveOutEdit,
   LeaveOutPickerView,
   LeaveOutTrailingView,
-} from "./LeaveOutPickerView";
+} from "@shigomori/ui/views/worktreeDetail/flow/LeaveOutPickerView.tsx";
 
 // What the picker browses: the folder browser's own props, less the
 // row control and the close, which are the picker's.

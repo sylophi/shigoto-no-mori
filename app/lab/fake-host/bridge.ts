@@ -31,7 +31,7 @@ import { cloneFolderName } from "@shared/cloneUrl";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import {
   type ContractScope,
   inputOf,

@@ -8,7 +8,7 @@
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
-import { withToggled } from "@/lib/toggleSet";
+import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 
 const NONE: ReadonlySet<string> = new Set();
 

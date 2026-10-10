@@ -13,7 +13,7 @@ import type { PortForwardSummary } from "@shigomori/contracts/modules/portForwar
 import type { RunningScript, Worktree } from "@shigomori/contracts/schemas";
 import { RunnerScope } from "@/components/worktreeDetail/mirror/MirrorAction";
 import { MirrorManageDialog } from "@/components/worktreeDetail/mirror/MirrorManageDialog";
-import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
+import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 import { useMirrorView } from "@/components/worktreeDetail/mirror/useMirrorView";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import type { LiveMirror } from "@/hooks/live/useLiveActivity";

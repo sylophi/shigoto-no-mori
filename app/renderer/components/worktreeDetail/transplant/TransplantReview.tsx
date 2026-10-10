@@ -16,7 +16,7 @@ import {
   CarryOverListView,
   ChangedFilesView,
   TransplantDetailsView,
-} from "./TransplantReviewView";
+} from "@shigomori/ui/views/worktreeDetail/transplant/TransplantReviewView.tsx";
 
 export function TransplantReview(props: PullReviewProps) {
   const { worktree, project, target, sourceDeviceLabel, thisDeviceLabel } =

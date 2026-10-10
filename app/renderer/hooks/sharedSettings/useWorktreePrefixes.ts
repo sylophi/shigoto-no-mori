@@ -8,7 +8,7 @@ import {
   parseWorktreePrefixes,
   sharedSettingKeys,
   worktreePrefixesValue,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import {
   useSetSharedSetting,
   useSharedStringSetting,

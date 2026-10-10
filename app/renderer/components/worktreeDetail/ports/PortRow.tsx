@@ -4,7 +4,10 @@ import type { ComponentProps } from "react";
 import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { ForwardControl } from "./ForwardControl";
-import { forwardBandClass, PortRowView } from "./PortRowView";
+import {
+  forwardBandClass,
+  PortRowView,
+} from "@shigomori/ui/views/worktreeDetail/ports/PortRowView.tsx";
 
 export function PortRow({
   deviceId,

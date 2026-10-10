@@ -11,7 +11,7 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { peerFilesHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { readStored, writeStored } from "@/lib/localStorage";
-import { withMember } from "@/lib/toggleSet";
+import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { FileTree } from "./FileTree";
 import { ancestorsOf } from "./treePaths";

@@ -34,13 +34,13 @@ import {
   resolveIgnores,
   selectionOfPreset,
   setupDefaultFor,
-} from "@shared/leaveOutRule";
+} from "@shigomori/contracts/leaveOutRule";
 import { type Project } from "@shigomori/contracts/schemas";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
   sharedStringSetting,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import {
   peerSyncApiFor,
   peerWorktreeOrUndefined,

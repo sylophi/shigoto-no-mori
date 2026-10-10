@@ -6,6 +6,7 @@
 // reads this machine, so callers sit under LocalHostScope. Under a
 // project not there yet (the pull clones it first) every answer is
 // empty: nobody has configured the checkout its create goes into.
+import type { CreatePlan } from "@shigomori/ui/views/worktreeDetail/flow/PullProgressView.tsx";
 import {
   PROJECT_CONFIG_DEFAULTS,
   type Project,
@@ -64,13 +65,6 @@ function useProvisionsPorts(localProject: Project | undefined): boolean {
   );
   return active === true;
 }
-
-export type CreatePlan = {
-  carryOverCount: number;
-  // "" when the project has no setup script.
-  setupCommand: string;
-  provisionsPorts: boolean;
-};
 
 // Every answer empty for a project that is not there yet: the pull
 // that clones the repo first creates into a checkout nobody has

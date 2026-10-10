@@ -43,7 +43,7 @@ import {
 } from "@shigomori/ui/views/tidy/TidyForestView.tsx";
 import { TidyGroupHeadingView } from "@shigomori/ui/views/tidy/TidyGroupHeadingView.tsx";
 import { TidyRow } from "./TidyRow";
-import { withToggled } from "@/lib/toggleSet";
+import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 
 // One shared object for every un-started row: a fresh literal per render
 // would give all 40 rows a new `status` prop each time a disk walk

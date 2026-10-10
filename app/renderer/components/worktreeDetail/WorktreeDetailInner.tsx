@@ -42,8 +42,8 @@ import { WorktreeDetailFooter } from "./WorktreeDetailFooter";
 import type {
   WorktreeFooterActions,
   WorktreeFooterState,
-} from "./WorktreeDetailFooterView";
-import { WorktreeDetailView } from "./WorktreeDetailView";
+} from "@shigomori/ui/views/worktreeDetail/WorktreeDetailFooterView.tsx";
+import { WorktreeDetailView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
 import { TerminalButton } from "./TerminalButton";
 import { TerminalDrawer } from "@/components/terminal/TerminalDrawer";
 import { WorktreeHeader } from "./WorktreeHeader";

@@ -27,7 +27,7 @@ import {
 } from "./ArrangeScriptRowView";
 import { ScriptListView } from "./ScriptListView";
 import type { SortableEntry } from "./sortPackageScripts";
-import { SortMenuView } from "../SortMenuView";
+import { SortMenuView } from "@shigomori/ui/views/worktreeDetail/SortMenuView.tsx";
 
 // The package.json scripts (PackageScripts binds them): folded under
 // their heading, searchable, sorted, and arranged by hand under the
