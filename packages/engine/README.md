@@ -8,6 +8,8 @@ The data model and the store, git, worktrees, landing, the cross-device verbs, d
 - `src/data/`: the data the engine ships with: the launcher catalog and the worktree name pools.
 - `test/`: the tests, run by vitest (`pnpm run check:engine` from the root). `test/lib/sandbox.ts` gives each test a home holding a 2.x data dir, and the engine on its own copy.
 
+Worktrees live under `wt/`: `<dataDir>/wt/<project>`, `<project>/.shigomori/wt`, or the drive's `<dataDirName>/wt/<project>` (`src/worktreeLayout.ts`). Why `wt`: a short folder keeps the paths agents and people read and type all day short. The v2 roots, named `worktrees/`, stay managed until they empty, since what lives there is keyed by its path.
+
 The store is one SQLite database in the data dir (`store.db`, WAL), opened by the engine only and by one connection per process. Its first open imports the JSON files a 2.x data dir keeps and leaves them in place.
 
 The engine runs in the host under Node and in the terminal binary under Bun, so it imports Node's APIs, `effect`, `@effect/*` and `@shigomori/contracts`, and nothing else: no Electron, nothing from the app, no Bun global. `test/boundary.test.ts` holds that for its sources.
