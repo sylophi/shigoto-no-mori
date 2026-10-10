@@ -230,7 +230,7 @@ function LineRows({
           }
           action={
             state.kind === "synced" ? (
-              <span className="text-xs text-muted-foreground">Up to date</span>
+              <span className="text-2xs text-muted-foreground">Up to date</span>
             ) : (
               pill
             )
@@ -432,7 +432,7 @@ function RefLine({
   return (
     <div className="flex min-h-8 items-center gap-2 px-2 py-1">
       <SimpleTooltip tip={tip}>
-        <span className="flex min-w-0 shrink items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="flex min-w-0 shrink items-center gap-1.5 text-2xs text-muted-foreground">
           <span className="shrink-0">{icon}</span>
           <span className={cn("truncate", mono && "font-mono")}>{name}</span>
         </span>
@@ -476,8 +476,8 @@ function BranchChangesRow({
         className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm">All branch changes</span>
-        <span className="block truncate text-xs text-muted-foreground">
+        <span className="block truncate text-xs">All branch changes</span>
+        <span className="block truncate text-2xs text-muted-foreground">
           {more ? `${own}+ commits` : pluralize(own, "commit")} since {base}
         </span>
       </span>
