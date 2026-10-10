@@ -33,9 +33,12 @@
 import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
 import type { ChannelMux } from "@shared/remote/channels";
 import type { InvokeOptions } from "@shared/ipc/transport";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { Handlers, ViewObserver } from "@shigomori/contracts/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
 import { NoDirectConnectionError } from "@shigomori/contracts/errors";
+
+// A view not started yet stops nothing.
+const noop = (): void => {};
 
 type HubHandlerDeps = {
   status(): HubStatus;
@@ -77,6 +80,12 @@ export type HubHandlers = Handlers<typeof hubContract> & {
     input: unknown,
     options?: InvokeOptions,
   ): Promise<unknown>;
+  // hub:watchPeer: a peer's view over its session, until the returned
+  // stop. No session ends it at once with the keeper's reason.
+  watchPeer(
+    input: { deviceId: string; channel: string; input?: unknown },
+    observer: ViewObserver<unknown>,
+  ): () => void;
   // The appVersion each ESTABLISHED direct session's welcome
   // confirmed, keyed by deviceId. This is the whole per-peer data
   // surface: the owner folds it into HubStatus.peerAppVersions, and
@@ -261,6 +270,22 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
       // Disconnect and no-session errors reject through here, and a
       // peer's contract error reaches the renderer as its class.
       return peer.transport.invoke(channel, input);
+    },
+
+    watchPeer: ({ deviceId, channel, input }, observer) => {
+      let stopped = false;
+      let stop = noop;
+      requirePeer(deviceId).then(
+        (peer) => {
+          if (stopped) return;
+          stop = peer.transport.watch?.(channel, input, observer) ?? stop;
+        },
+        (error: unknown) => observer.end(error),
+      );
+      return () => {
+        stopped = true;
+        stop();
+      };
     },
 
     peerChannels: async (deviceId) => (await requirePeer(deviceId)).channels,

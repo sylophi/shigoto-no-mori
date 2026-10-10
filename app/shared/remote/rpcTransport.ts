@@ -18,7 +18,7 @@ import {
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import type * as Fiber from "effect/Fiber";
+import * as Fiber from "effect/Fiber";
 import * as Predicate from "effect/Predicate";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as Stream from "effect/Stream";
@@ -99,6 +99,38 @@ export function rpcTransport(options: {
         if (Exit.isSuccess(exit)) return exit.value;
         throw failureOf(exit.cause);
       });
+    },
+    watch(channel, input, observer) {
+      const rpc = group.requests.get(channel);
+      if (rpc === undefined || isInvoke(rpc) || isBroadcast(rpc)) {
+        observer.end(new Error(`No view registered for channel "${channel}"`));
+        return () => {};
+      }
+      let stopped = false;
+      const fiber = options.fork(
+        Stream.suspend(
+          () =>
+            client(
+              channel,
+              decode(rpc.payloadSchema as ContractSchema, input),
+            ) as Stream.Stream<unknown, unknown>,
+        ).pipe(
+          Stream.runForEach((value) =>
+            Effect.sync(() => observer.value(value)),
+          ),
+          Effect.exit,
+          Effect.map((exit) => {
+            if (stopped) return;
+            observer.end(
+              Exit.isSuccess(exit) ? undefined : failureOf(exit.cause),
+            );
+          }),
+        ),
+      );
+      return () => {
+        stopped = true;
+        Effect.runFork(Fiber.interrupt(fiber));
+      };
     },
     subscribe(channel, handler) {
       let handlers = subscribers.get(channel);

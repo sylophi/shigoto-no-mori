@@ -61,6 +61,14 @@ export function createHubClientTransport(deviceId: string): ClientTransport {
           : { deviceId, channel, input },
       );
     },
+    watch(channel, input, observer) {
+      return window.api.hub.watchPeer(
+        input === undefined
+          ? { deviceId, channel }
+          : { deviceId, channel, input },
+        observer,
+      );
+    },
     subscribe(channel: string, handler: PushHandler): () => void {
       const unsubscribe = registry.subscribe(
         keyFor(deviceId, channel),

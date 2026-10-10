@@ -63,6 +63,7 @@ import { SidebarToolbar } from "./SidebarToolbar";
 import { AddProjectButton } from "./AddProjectButton";
 import { useWorktreeSorts } from "@/hooks/sharedSettings/useWorktreeSort";
 import { SidebarList } from "./SidebarList";
+import { SidebarTerminals } from "./SidebarTerminals";
 import { RowContent } from "./RowContent";
 import type { RowHandlers } from "./VirtualRow";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
@@ -106,6 +107,7 @@ export function Sidebar({
           onArrange={() => setArrangeMode(true)}
           pinnedView={view}
         />
+        <SidebarTerminals />
         {footer && !takenOver && (
           <SidebarFooter
             arrangeMode={arrangeMode}

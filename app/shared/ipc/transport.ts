@@ -4,6 +4,7 @@ import type { LinkChannels } from "@shigomori/contracts/link";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
+  ViewObserver,
 } from "@shigomori/contracts/types";
 
 // The client's one seam onto the wire. A transport carries invokes and
@@ -18,6 +19,14 @@ export type ClientTransport = {
     options?: InvokeOptions,
   ): Promise<unknown>;
   subscribe(channel: string, handler: (payload: unknown) => void): () => void;
+  // A view (contract.ts): its values as they come, until the returned
+  // stop, or `end` when the far side ends it, fails, or the link drops.
+  // Only a wire that carries views has it.
+  watch?(
+    channel: string,
+    input: unknown,
+    observer: ViewObserver<unknown>,
+  ): () => void;
   // True when the far end is this machine's own serving side, the same
   // build: the client hands its results through as they are. Any other
   // transport may reach a peer on another build, so the client decodes

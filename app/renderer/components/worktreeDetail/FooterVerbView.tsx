@@ -15,10 +15,11 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 export const LABEL_RANK = {
   mirrorTo: 1,
   files: 2,
-  options: 3,
-  mirror: 4,
-  agents: 5,
-  delete: 6,
+  terminal: 3,
+  options: 4,
+  mirror: 5,
+  agents: 6,
+  delete: 7,
 } as const;
 
 // Every label ranked at or below this is collapsed. 0: none.
