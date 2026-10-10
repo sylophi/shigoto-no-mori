@@ -13,6 +13,7 @@ import {
 import {
   isCommandRefusedError,
   isContractError,
+  isNoDirectConnectionError,
   isNotSharingError,
 } from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
@@ -46,11 +47,27 @@ const clientAtoms = Atom.runtime((get) => {
     : Layer.succeed(ClientLinks, links);
 });
 
+// How many sessions to each peer have landed, which the boot counts
+// (onSessionLanded). A peer's views start again on each new session,
+// since one riding a session this side closed (a probe that found it
+// dead) is never told it ended.
+export const peerSessionAtom = Atom.family((_deviceId: string) =>
+  Atom.keepAlive(Atom.make(0)),
+);
+
 // A device's refusal is a switch that may flip back (its command access
 // off, its sharing off), so the view is asked again. The device's other
 // failures (an unknown project) end the view.
 const isRefusal = (error: unknown) =>
   isCommandRefusedError(error) || isNotSharingError(error);
+
+// What ends a view for good: the device's own failure (an unknown
+// project). A refusal is asked again, and so is finding no session to
+// the peer, which is the link between dials, not an answer from it.
+const endsView = (error: unknown) =>
+  isContractError(error) &&
+  !isRefusal(error) &&
+  !isNoDirectConnectionError(error);
 
 // When a view is asked again, while anyone still reads it (its readers
 // gone, the stream ends with them, and a peer gone from the account has
@@ -85,8 +102,9 @@ const hostLinkOf = (deviceId: string, localDeviceId: string) =>
 // A host view's values, decoded where they may come from another build
 // (a peer's), as an atom. The device's own failure (an unknown project,
 // a refused call) is what the view ends with; a dropped link is asked
-// again. Kept a while after its last reader goes, so a page that comes
-// back finds it streaming.
+// again, and a peer's view starts again on a new session to it. Kept a
+// while after its last reader goes, so a page that comes back finds it
+// streaming.
 export function hostViewAtom<R extends ContractCall>(options: {
   readonly deviceId: string;
   readonly localDeviceId: string;
@@ -116,16 +134,17 @@ export function hostViewAtom<R extends ContractCall>(options: {
           ),
     ),
   ).pipe(
-    Stream.catchIf(
-      (error) => isContractError(error) && !isRefusal(error),
-      (error) => Stream.die(error),
-    ),
+    Stream.catchIf(endsView, (error) => Stream.die(error)),
     Stream.retry(REDIAL),
     Stream.tap((value) => Effect.sync(() => options.onValue?.(value))),
     Stream.ensuring(Effect.sync(() => options.onStop?.())),
   );
+  const remote = options.deviceId !== options.localDeviceId;
   return clientAtoms
-    .atom(values)
+    .atom((get) => {
+      if (remote) get(peerSessionAtom(options.deviceId));
+      return values;
+    })
     .pipe(Atom.setIdleTTL("1 minute")) as Atom.Atom<
     AsyncResult.AsyncResult<A, unknown>
   >;
