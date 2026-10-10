@@ -9,7 +9,7 @@ import { queryKeysFor } from "@/lib/queryKeys";
 
 // One folder of a project, unioned across the primary and every
 // worktree on one device (host/lib/worktrees/carryOver.ts). Scope rule
-// as worktreesQueryOptions: a peer's listing caches under its own
+// as resolveForestScope's: a peer's listing caches under its own
 // device id, and a device with no session never fetches. Shared by the
 // carry-over picker below and the leave-out preset's picker, which
 // fans it out to every device holding the repo (useRepoListing) and

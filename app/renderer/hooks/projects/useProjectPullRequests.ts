@@ -99,7 +99,7 @@ export async function syncProjectPullRequests(
 // broadcast. The open worktree page reads its PR through
 // useWorktreePullRequest, and checks this map only to decide whether to
 // hold the section's place while that loads.
-// Scope rule as worktreesQueryOptions: a peer's map caches under its
+// Scope rule as resolveForestScope's: a peer's map caches under its
 // own device id, and a device with no session never fetches.
 export function projectPullRequestsQueryOptions(
   projectId: string,
@@ -135,8 +135,8 @@ export function useProjectPullRequests(projectId: string) {
 // handler would just throw on the missing repo.
 //
 // Positionally aligned with `projects`, like useAllProjectWorktrees, so
-// a caller walking both indexes them the same way.
-// Same combine as useAllProjectWorktrees, and for the same reason.
+// a caller walking both indexes them the same way, through combineFanOut
+// so the array keeps its identity while nothing changed.
 export function useAllProjectPullRequests(projects: readonly Project[]) {
   const scope = useHostScope();
   return useQueries({

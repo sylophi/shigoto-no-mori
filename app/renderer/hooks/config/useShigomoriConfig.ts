@@ -8,7 +8,7 @@ import {
 } from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
-// Scope rule as worktreesQueryOptions: a peer's config caches under its
+// Scope rule as resolveForestScope's: a peer's config caches under its
 // own device id, and a device with no session never fetches.
 export function shigomoriConfigQueryOptions(
   projectId: string | null,
@@ -32,7 +32,8 @@ export function useShigomoriConfig(projectId: string | null) {
 }
 
 // Every project's config at once, for the inbox's per-project display
-// options. Fan-out shape and combine rationale: useAllProjectWorktrees.
+// options, aligned with `projects` and combined (combineFanOut) like
+// useAllProjectPullRequests.
 // Shares the cache key with useShigomoriConfig, so a Configure save
 // reaches the sidebar through the same invalidation. That is also why
 // these never refetch on their own: every writer invalidates the key,
