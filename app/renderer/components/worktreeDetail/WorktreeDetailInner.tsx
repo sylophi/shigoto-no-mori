@@ -24,8 +24,8 @@ import {
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { BirthdayParty } from "@/components/villagers/BirthdayParty";
-import { ResidentFace } from "@/components/villagers/ResidentFace";
+import { BirthdayPartyView } from "@/components/villagers/BirthdayPartyView";
+import { ResidentFaceView } from "@/components/villagers/ResidentFaceView";
 import { useResident } from "@/hooks/villagers/useResident";
 import { LaunchSection } from "./LaunchSection";
 import { MirrorPill } from "./MirrorPill";
@@ -224,7 +224,7 @@ export function WorktreeDetailInner({
 
   return (
     <WorktreeDetailView
-      party={party && <BirthdayParty villager={party} />}
+      party={party && <BirthdayPartyView villager={party} />}
       copyTabs={mirrorCopies && <MirrorCopyTabs copies={mirrorCopies} />}
       projectName={project.name}
       onConfigure={() => toProjectPage("configure", worktree.projectId)}
@@ -238,7 +238,7 @@ export function WorktreeDetailInner({
           {!mirrorCopies && <DeviceChip />}
         </>
       }
-      face={<ResidentFace resident={resident} party={party !== null} />}
+      face={<ResidentFaceView resident={resident} party={party !== null} />}
       header={
         <WorktreeHeader worktree={worktree} title={title} pr={pullRequest} />
       }

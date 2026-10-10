@@ -1,13 +1,13 @@
 import type { Dispatch, SetStateAction } from "react";
 import { SectionIntro } from "@/components/ui/section-heading";
 import { ToggleRowView } from "@/components/shared/ToggleRowView";
-import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
+import type { SettingsFormState } from "@/hooks/config/settingsForm";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
 
 // The desktop's notices about agent sessions (lib/agentWatch.ts), in
 // Appearance: settings of this window, saved with the rest of the local
 // form. Only the desktop has a system to notify through.
-export function NotificationsSection({
+export function NotificationsSectionView({
   form,
   setForm,
 }: {

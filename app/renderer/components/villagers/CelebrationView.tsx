@@ -1,8 +1,8 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
-// The trimmings of a villager's birthday (BirthdayParty.tsx, and
-// PartyFace's confetti): bunting, confetti and balloons, drawn flat in
+// The trimmings of a villager's birthday (BirthdayPartyView.tsx, and
+// PartyFaceView's confetti): bunting, confetti and balloons, drawn flat in
 // the families doubutsu remaps.
 // Every bit moves once or drifts slowly (keyframes in index.css), and
 // all of it holds still under reduced motion.
@@ -17,7 +17,7 @@ const PENNANT_COLORS = [
 // A garland along the top edge: a string and a row of triangular
 // pennants hanging off it, dropping in left to right. `color` makes it
 // one villager's own.
-export function Bunting({
+export function BuntingView({
   count = 24,
   color,
 }: {
@@ -69,7 +69,7 @@ const BITS: { dx: number; dy: number; spin: number; delay: number }[] = [
 ];
 
 // `burst` scales the throw, for a bigger party.
-export function Confetti({ burst = 1 }: { burst?: number }) {
+export function ConfettiView({ burst = 1 }: { burst?: number }) {
   const bits =
     burst > 1
       ? [
@@ -126,7 +126,7 @@ const BALLOONS = [
   { right: "40%", color: "fill-violet-400", delay: "3.2s", sway: "1s" },
 ];
 
-export function Balloons() {
+export function BalloonsView() {
   return (
     <div
       aria-hidden

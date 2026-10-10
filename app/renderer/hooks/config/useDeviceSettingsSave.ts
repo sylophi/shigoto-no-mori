@@ -4,9 +4,9 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   changesWorktreeRows,
   invalidateDeviceSettingsQueries,
-  type SettingsFormState,
   toDeviceSettingsPatch,
 } from "./useSettingsSave";
+import type { SettingsFormState } from "./settingsForm";
 
 // Save for the device-managed keys of whichever device the surrounding
 // HostScope names: one idempotent patch of every key it edits through

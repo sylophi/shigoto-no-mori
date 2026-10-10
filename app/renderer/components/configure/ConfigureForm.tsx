@@ -26,10 +26,8 @@ import { CustomLauncherInputView } from "@/components/shared/CustomLauncherInput
 import { ScriptEnvPopoverView } from "@/components/shared/ScriptEnvPopoverView";
 import { ScriptField } from "./ScriptField";
 import { WorktreeLocationField } from "./WorktreeLocationField";
-import {
-  LAUNCH_TAB,
-  selectSettingsTab,
-} from "@/components/settings/settingsNav";
+import { selectSettingsTab } from "@/components/settings/settingsNav";
+import { LAUNCH_TAB } from "@/components/settings/settingsSections";
 import { PAGE_BODY } from "@/components/shared/PageShellView";
 
 interface FormState {

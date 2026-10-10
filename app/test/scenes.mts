@@ -95,10 +95,7 @@ const PENDING = [
   "newWorktree/",
   "palette/",
   "scriptConsole/",
-  "settings/",
   "tidy/",
-  "villagers/",
-  "visitors/",
   "worktreeLocation/",
 ];
 

@@ -2,9 +2,9 @@ import { type CSSProperties, type ReactNode, useState } from "react";
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { cn } from "@/lib/utils";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
-import { MovingBox } from "./MovingBox";
-import { NextArrow } from "./NextArrow";
-import { TypedWords } from "./TypedWords";
+import { MovingBoxView } from "./MovingBoxView";
+import { NextArrowView } from "./NextArrowView";
+import { TypedWordsView } from "./TypedWordsView";
 
 // The look a character's words take on screen: their color as
 // --villager-ink (a face with no clear one takes amber, and their
@@ -20,7 +20,7 @@ const DIALOGUE_BOX =
 
 // A character's name on a plate in their own color (--villager-ink),
 // leaning. The caller places and sizes it.
-export function Nameplate({
+export function NameplateView({
   children,
   className,
 }: {
@@ -42,9 +42,9 @@ export function Nameplate({
 
 // The dialogue box itself: the cream box in the character's color,
 // their name plate leaning over its top edge, and their face and words
-// inside, laid out by the caller. VillagerDialogue's, and anywhere else
+// inside, laid out by the caller. VillagerDialogueView's, and anywhere else
 // a character speaks in their own box.
-export function DialogueFrame({
+export function DialogueFrameView({
   name,
   color,
   className,
@@ -61,9 +61,9 @@ export function DialogueFrame({
       style={villagerInk(color)}
       className={cn("relative max-w-full pt-3.5 font-sans", className)}
     >
-      <Nameplate className="absolute top-0 left-6 z-10 px-3 text-sm">
+      <NameplateView className="absolute top-0 left-6 z-10 px-3 text-sm">
         {name}
-      </Nameplate>
+      </NameplateView>
       <div
         data-slot="villager-dialogue-box"
         className={cn(
@@ -83,7 +83,7 @@ export function DialogueFrame({
 // letter at a time, and the little arrow bobbing once the line is out.
 // Moving out, they sit packed in a moving box. A toast of its own
 // (toastVillagerMove), so it draws its whole card.
-export function VillagerDialogue({
+export function VillagerDialogueView({
   news,
   speaker,
   words,
@@ -94,7 +94,7 @@ export function VillagerDialogue({
 }) {
   const [done, setDone] = useState(false);
   return (
-    <DialogueFrame
+    <DialogueFrameView
       name={speaker.profile.name}
       color={speaker.color}
       className="w-[var(--width)]"
@@ -103,27 +103,33 @@ export function VillagerDialogue({
         <span className="relative size-11 shrink-0">
           <VillagerFaceView face={speaker.face} className="size-11" />
           {news.kind === "out" && (
-            <MovingBox className="villager-pack absolute -bottom-2 left-1/2 w-10 -translate-x-1/2" />
+            <MovingBoxView className="villager-pack absolute -bottom-2 left-1/2 w-10 -translate-x-1/2" />
           )}
         </span>
       )}
       <div className="min-w-0 flex-1 pr-3">
         <p className="text-[15px] leading-snug font-medium">
-          <TypedWords words={words} onDone={() => setDone(true)} />
+          <TypedWordsView words={words} onDone={() => setDone(true)} />
         </p>
-        <MoveCaption news={news} ink="text-(--villager-ink)" />
+        <MoveCaptionView news={news} ink="text-(--villager-ink)" />
       </div>
-      <NextArrow
+      <NextArrowView
         shown={done}
         className="absolute right-4 bottom-2.5 text-(--villager-ink)"
       />
-    </DialogueFrame>
+    </DialogueFrameView>
   );
 }
 
 // "Moved in on Thinkpad, holding katrina", the branch picked out in
 // `ink` (a text color class) the way a dialogue picks out its key words.
-export function MoveCaption({ news, ink }: { news: MoveNews; ink: string }) {
+export function MoveCaptionView({
+  news,
+  ink,
+}: {
+  news: MoveNews;
+  ink: string;
+}) {
   const verb = news.kind === "in" ? "Moved in" : "Moved out";
   const where = news.device === null ? "" : ` on ${news.device}`;
   return (

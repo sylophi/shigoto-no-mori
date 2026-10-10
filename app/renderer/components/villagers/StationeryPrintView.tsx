@@ -6,7 +6,7 @@ import { printStyle, type Stationery } from "@/lib/villagers/stationery";
 // on paper that stays put, like the guest book's page. The holder is
 // positioned and clips it. Set its strength with an opacity in
 // `className`.
-export function StationeryPrint({
+export function StationeryPrintView({
   paper,
   still = false,
   className,

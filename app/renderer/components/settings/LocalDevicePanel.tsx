@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
+import type { SettingsFormState } from "@/hooks/config/settingsForm";
 import { localDeviceId } from "@/lib/queryKeys";
 import { AgentsSection } from "./AgentsSection";
 import { CliSection } from "./CliSection";
@@ -8,8 +8,9 @@ import { DataLocationSection } from "./DataLocationSection";
 import { DoctorSection } from "./DoctorSection";
 import { IntegrationToggles, WorktreeToggles } from "./DeviceSettingsSections";
 import { HostPanels } from "./SettingsPanel";
-import type { HostTab } from "./settingsNav";
-import { BuildVersionLine, VersionSection } from "./VersionSection";
+import type { HostTab } from "./settingsSections";
+import { VersionSection } from "./VersionSection";
+import { BuildVersionLineView } from "./VersionSectionView";
 
 // This machine's host sections: the sections a peer's renders too
 // (some only while that peer allows control), plus the danger zone,
@@ -32,7 +33,12 @@ export function LocalDevicePanel({
         general: (
           <>
             <VersionSection
-              version={<BuildVersionLine />}
+              version={
+                <BuildVersionLineView
+                  version={__APP_VERSION__}
+                  commit={__APP_COMMIT__}
+                />
+              }
               installed={__APP_VERSION__}
             />
             <DoctorSection />

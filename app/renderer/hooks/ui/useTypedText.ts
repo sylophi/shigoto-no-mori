@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 
 // How much of `text` is out so far, a letter every `letterMs` after
 // `delayMs`, the way a villager's dialogue box fills in (or a letter
-// writes itself), or all of it at once under reduced motion. For a text
-// that stays put: a new one wants a new component.
+// writes itself), or all of it at once under reduced motion, or drawn
+// on a server (a picture of it). For a text that stays put: a new one
+// wants a new component.
 export function useTypedText(
   text: string,
   { delayMs = 0, letterMs = 28 }: { delayMs?: number; letterMs?: number } = {},
 ): number {
   const [shown, setShown] = useState(() =>
+    typeof window === "undefined" ||
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
       ? text.length
       : 0,

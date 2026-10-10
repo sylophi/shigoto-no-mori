@@ -1,7 +1,7 @@
 import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
 import { cn } from "@/lib/utils";
 import type { VillagerRarity } from "@shared/villagers/rarity";
-import { Confetti } from "./Celebration";
+import { ConfettiView } from "./CelebrationView";
 
 // A paper party hat, tipped on its side: a striped cone with a pom on
 // top, drawn flat in the palette doubutsu remaps.
@@ -22,7 +22,7 @@ function PartyHat({ className }: { className?: string }) {
 
 // A villager's face on their birthday: the usual face, in a party hat.
 // Size it with `className` (a size-* utility): the hat follows.
-export function BirthdayFace({
+export function BirthdayFaceView({
   face,
   className,
 }: {
@@ -39,7 +39,7 @@ export function BirthdayFace({
 
 // Their face on the day throwing confetti, as the worktree page's header
 // shows it (a bigger burst for a legend). Size it with `className`.
-export function PartyFace({
+export function PartyFaceView({
   face,
   rarity,
   className,
@@ -50,8 +50,8 @@ export function PartyFace({
 }) {
   return (
     <span className="relative inline-flex shrink-0">
-      <BirthdayFace face={face} className={className} />
-      <Confetti burst={rarity === "legendary" ? 1.8 : 1} />
+      <BirthdayFaceView face={face} className={className} />
+      <ConfettiView burst={rarity === "legendary" ? 1.8 : 1} />
     </span>
   );
 }

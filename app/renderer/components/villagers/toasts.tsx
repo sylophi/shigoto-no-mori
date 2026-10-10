@@ -1,4 +1,3 @@
-import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   type ExternalToast,
@@ -6,10 +5,7 @@ import {
   Toaster,
   toast,
 } from "sonner";
-import {
-  VillagerFaceView,
-  VillagerSaysView,
-} from "@/components/shared/VillagerSaysView";
+import { VillagerSaysView } from "@/components/shared/VillagerSaysView";
 import { cn } from "@/lib/utils";
 import {
   MOVE_TOAST_MS,
@@ -17,10 +13,17 @@ import {
   type Speaker,
   villagerLine,
 } from "@/lib/villagerVoice";
-import { MovingBox } from "./MovingBox";
-import { NextArrow } from "./NextArrow";
-import { VillagerDialogue } from "./VillagerDialogue";
-import { VillagerLetter } from "./VillagerLetter";
+import { NextArrowView } from "./NextArrowView";
+import { VillagerDialogueView } from "./VillagerDialogueView";
+import {
+  MoveDetailView,
+  MovingBoxBadgeView,
+  SuccessBadgeView,
+  TickingTitleView,
+  ToastFacesView,
+  VillageToasterView,
+} from "./VillageToastsView";
+import { VillagerLetterView } from "./VillagerLetterView";
 
 // The toasts villagers speak in (DESIGN.md, "Village life: rarity").
 
@@ -36,7 +39,7 @@ const VILLAGE_TOASTER = "village";
 //
 // News goes at a click anywhere on it, or Enter on it focused, the way
 // a villager's line goes at a press of A, so it wears no close button,
-// only the arrow a finished line waits on (NextArrow). Its words can't
+// only the arrow a finished line waits on (NextArrowView). Its words can't
 // be selected, unlike the everyday toasts', so a click meant to send it
 // off never lands in a selection instead. Each news toast carries its
 // id as its test id, since sonner puts no other on the card.
@@ -46,18 +49,7 @@ export function VillageToaster({
   classNames: ToastClassnames;
 }) {
   return (
-    <div
-      role="presentation"
-      className="contents"
-      onClick={(event) => {
-        // The rest of a double-click would go to the card sliding up
-        // into this one's place.
-        if (event.detail <= 1) dismissCard(event.target);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") dismissCard(event.target);
-      }}
-    >
+    <VillageToasterView onDismiss={dismissCard}>
       <Toaster
         id={VILLAGE_TOASTER}
         containerAriaLabel="Village news"
@@ -73,7 +65,7 @@ export function VillageToaster({
           },
         }}
       />
-    </div>
+    </VillageToasterView>
   );
 }
 
@@ -138,7 +130,9 @@ export function toastVillagerMove(
   if (news.words !== null) {
     const words = news.words;
     const Moment =
-      speaker.rarity === "legendary" ? VillagerLetter : VillagerDialogue;
+      speaker.rarity === "legendary"
+        ? VillagerLetterView
+        : VillagerDialogueView;
     toast.custom(
       () => <Moment news={news} speaker={speaker} words={words} />,
       lane,
@@ -152,33 +146,23 @@ export function toastVillagerMove(
       title
     ) : (
       // Keyed by the title, so each change starts the tick over.
-      <span key={news.title} className="villager-tick block">
-        {title}
-      </span>
+      <TickingTitleView key={news.title}>{title}</TickingTitleView>
     ),
     {
       ...lane,
       // Moving out, the front face wears a moving box, not the check.
       ...faceOptions(
         news.speakers,
-        news.kind === "out" ? <MovingBoxBadge /> : <SuccessBadge />,
+        news.kind === "out" ? <MovingBoxBadgeView /> : <SuccessBadgeView />,
         joined,
       ),
       // sonner draws an element given as the action as it is, at the
       // end of the row.
       action: (
-        <NextArrow className="mb-0.5 ml-auto self-end text-muted-foreground" />
+        <NextArrowView className="mb-0.5 ml-auto self-end text-muted-foreground" />
       ),
       description: news.detail && (
-        <span className="block truncate">
-          {news.detail}
-          {news.branch && (
-            <>
-              {" "}
-              <span className="font-mono">{news.branch}</span>
-            </>
-          )}
-        </span>
+        <MoveDetailView detail={news.detail} branch={news.branch} />
       ),
     },
   );
@@ -190,7 +174,7 @@ export function toastVillagerMove(
 // front. With none, the toast keeps its plain check.
 function faceOptions(
   speakers: readonly Speaker[],
-  badge: ReactNode = <SuccessBadge />,
+  badge: ReactNode = <SuccessBadgeView />,
   joined: ReadonlySet<string> = new Set(),
 ): ExternalToast {
   const faces = speakers
@@ -200,40 +184,9 @@ function faceOptions(
     .slice(-3);
   if (faces.length === 0) return {};
   return {
-    icon: (
-      <span className="flex">
-        {faces.map((speaker, index) => (
-          <span
-            key={speaker.slug}
-            className={cn(
-              "flex rounded-full bg-popover",
-              index > 0 && "-ml-3 ring-2 ring-popover",
-              joined.has(speaker.slug) && "villager-join",
-            )}
-          >
-            <VillagerFaceView
-              face={speaker.face}
-              className="size-8"
-              badge={index === faces.length - 1 ? badge : undefined}
-            />
-          </span>
-        ))}
-      </span>
-    ),
+    icon: <ToastFacesView faces={faces} badge={badge} joined={joined} />,
     // sonner's icon box is 16px square. The faces need room, and a note
     // under the title keeps them at its top.
     classNames: { icon: "!h-8 !w-auto !self-start" },
   };
-}
-
-function MovingBoxBadge() {
-  return <MovingBox className="absolute -right-1.5 -bottom-1 w-5" />;
-}
-
-function SuccessBadge() {
-  return (
-    <span className="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full bg-emerald-500 text-popover">
-      <Check aria-hidden className="size-3" strokeWidth={3.5} />
-    </span>
-  );
 }

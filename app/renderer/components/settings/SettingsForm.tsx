@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
-import { ScrollText } from "lucide-react";
 import { EditorFooterView } from "@/components/shared/EditorFooterView";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { SectionHeading } from "@/components/ui/section-heading";
 import {
-  fromConfig,
-  type SettingsFormState,
   SettingsSaveError,
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
+import {
+  fromConfig,
+  type SettingsFormState,
+} from "@/hooks/config/settingsForm";
 import {
   pickHostDevice,
   useDeviceRoster,
@@ -40,21 +38,20 @@ import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import { SettingsSectionChips } from "./SettingsSectionChips";
-import { NotificationsSection } from "./NotificationsSection";
+import { NotificationsSectionView } from "./NotificationsSectionView";
 import { SidebarSection } from "./SidebarSection";
-import { MountOnceVisited, SettingsPanel } from "./SettingsPanel";
+import { MountOnceVisited, SettingsPanelView } from "./SettingsPanelView";
+import { landOnStagedUpdate, useActiveSettingsTab } from "./settingsNav";
 import {
   APPEARANCE_TAB,
   GENERAL_TAB,
   isHostTab,
   LAUNCH_TAB,
-  landOnStagedUpdate,
   settingsPanelId,
-  useActiveSettingsTab,
   SECTION_LABELS,
   type SettingsTab,
   VISITORS_TAB,
-} from "./settingsNav";
+} from "./settingsSections";
 import { offersUpdateAll, UpdateAllButton } from "./UpdateAllButton";
 import { VisitorsSection } from "@/components/visitors/VisitorsSection";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
@@ -63,8 +60,12 @@ import {
   useSettingsEditorRegistry,
 } from "./useSettingsEditors";
 import { ChangelogDialog } from "./ChangelogDialog";
-import { BuildVersionLine, ChangelogButton } from "./VersionSection";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import {
+  ClientVersionSectionView,
+  NoDevicesView,
+  type SettingsHeading,
+  SettingsPageView,
+} from "./SettingsFormView";
 
 // The Settings page: one panel per section, picked from the app
 // sidebar (SettingsSidebarNav takes the project tree's place while this
@@ -82,7 +83,7 @@ import { PAGE_BODY } from "@/components/shared/PageShellView";
 // (client config and this device's config save together through
 // useSettingsSave), and each peer seeds its own form from that device's
 // config read, which spans its three host sections. Sections mount on
-// first visit and stay mounted (SettingsPanel), so switching section or
+// first visit and stay mounted (SettingsPanelView), so switching section or
 // device never drops an edit, and the one footer saves and discards
 // every form at once.
 //
@@ -235,133 +236,107 @@ export function SettingsForm({
     ) : undefined;
 
   return (
-    // The page marker picks the settings wallpaper (doubutsu.css), the
-    // same one the loading skeleton in Settings.tsx wears. Visitors
-    // wears its own.
-    <div
-      data-doubutsu-page={heading.page ?? "settings"}
-      className="flex h-full flex-col"
+    <SettingsPageView
+      heading={heading}
+      tabs={tabs}
+      chips={
+        <SettingsSectionChips
+          activeTab={activeTab}
+          update={Object.keys(updates).length > 0}
+        />
+      }
+      saveError={save.error?.message ?? null}
+      footer={
+        <EditorFooterView
+          isDirty={anyDirty}
+          isPending={anyPending}
+          isSuccess={anySuccess}
+          onDiscard={handleDiscardAll}
+          onSave={() => void handleSaveAll()}
+        />
+      }
     >
-      <PageHeaderView
-        eyebrow={heading.eyebrow}
-        title={heading.title}
-        watermark={heading.watermark ?? "設定"}
-        tabs={tabs}
-      />
-      <SettingsSectionChips
-        activeTab={activeTab}
-        update={Object.keys(updates).length > 0}
-      />
-
       <SettingsEditorRegistryProvider registry={registry}>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <SettingsPanel
-            id={settingsPanelId(APPEARANCE_TAB)}
-            active={activeTab === APPEARANCE_TAB}
-          >
-            <AppearanceSection
-              heading="Theme"
-              theme={form.theme}
-              onPick={pickTheme}
-              doubutsu={form.doubutsu}
-              onDoubutsuChange={setDoubutsu}
-              lightTheme={form.lightTheme}
-              onLightThemeChange={pickLightTheme}
-              darkTheme={form.darkTheme}
-              onDarkThemeChange={pickDarkTheme}
-              pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
-              onPauseAnimationsOnBatteryChange={setField(
-                "pauseAnimationsOnBattery",
-              )}
-              villageLife={form.villageLife}
-              onVillageLifeChange={setField("villageLife")}
-              villageNews={form.villageNews}
-              onVillageNewsChange={setField("villageNews")}
-            />
-            <SidebarSection form={form} setForm={setForm} />
-            {hasLocalHost && (
-              <NotificationsSection form={form} setForm={setForm} />
+        <SettingsPanelView
+          id={settingsPanelId(APPEARANCE_TAB)}
+          active={activeTab === APPEARANCE_TAB}
+        >
+          <AppearanceSection
+            heading="Theme"
+            theme={form.theme}
+            onPick={pickTheme}
+            doubutsu={form.doubutsu}
+            onDoubutsuChange={setDoubutsu}
+            lightTheme={form.lightTheme}
+            onLightThemeChange={pickLightTheme}
+            darkTheme={form.darkTheme}
+            onDarkThemeChange={pickDarkTheme}
+            pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
+            onPauseAnimationsOnBatteryChange={setField(
+              "pauseAnimationsOnBattery",
             )}
-            <WorktreePrefixesSection list="hidden" />
-            <WorktreePrefixesSection list="grouped" />
-            {/* The desktop states its build in this device's General
+            villageLife={form.villageLife}
+            onVillageLifeChange={setField("villageLife")}
+            villageNews={form.villageNews}
+            onVillageNewsChange={setField("villageNews")}
+          />
+          <SidebarSection form={form} setForm={setForm} />
+          {hasLocalHost && (
+            <NotificationsSectionView form={form} setForm={setForm} />
+          )}
+          <WorktreePrefixesSection list="hidden" />
+          <WorktreePrefixesSection list="grouped" />
+          {/* The desktop states its build in this device's General
                 section. A hostless client has no such section, and its
                 build is still worth a line, so it goes with the other
                 setting that is about this window. */}
-            {!hasLocalHost && <ClientVersionSection />}
-          </SettingsPanel>
+          {!hasLocalHost && <ClientVersionSection />}
+        </SettingsPanelView>
 
-          {hasLocalHost && (
-            <SettingsPanel
-              id={settingsPanelId(LAUNCH_TAB)}
-              active={activeTab === LAUNCH_TAB}
-            >
-              <LaunchToolsPanel form={form} setForm={setForm} />
-            </SettingsPanel>
-          )}
+        {hasLocalHost && (
+          <SettingsPanelView
+            id={settingsPanelId(LAUNCH_TAB)}
+            active={activeTab === LAUNCH_TAB}
+          >
+            <LaunchToolsPanel form={form} setForm={setForm} />
+          </SettingsPanelView>
+        )}
 
-          {villageLife && (
-            <SettingsPanel
-              id={settingsPanelId(VISITORS_TAB)}
-              active={activeTab === VISITORS_TAB}
-            >
-              <VisitorsSection />
-            </SettingsPanel>
-          )}
+        {villageLife && (
+          <SettingsPanelView
+            id={settingsPanelId(VISITORS_TAB)}
+            active={activeTab === VISITORS_TAB}
+          >
+            <VisitorsSection />
+          </SettingsPanelView>
+        )}
 
-          {hasLocalHost && (
-            <LocalDevicePanel
-              active={hostTabFor(localDeviceId)}
-              form={form}
-              setForm={setForm}
-            />
-          )}
-
-          {devices.map((device) => (
-            // Keyed by device: a different machine is a different form,
-            // seeded from that device's own config read. Mounted on its
-            // first pick, so opening Settings reads no peer's config.
-            <MountOnceVisited
-              key={device.deviceId}
-              visited={hostTabFor(device.deviceId) !== undefined}
-            >
-              <PeerDeviceSettings
-                device={device}
-                active={hostTabFor(device.deviceId)}
-              />
-            </MountOnceVisited>
-          ))}
-
-          {hostTab !== undefined && picked === undefined && (
-            <div className={PAGE_BODY}>
-              <p className="text-sm text-muted-foreground">
-                No devices on this account yet.
-              </p>
-            </div>
-          )}
-        </div>
-      </SettingsEditorRegistryProvider>
-
-      {/* The local save spans several sections, so its failure is shown
-          above the footer where every section can see it. Peer saves
-          report inside their own section. */}
-      {save.error && (
-        <div className="px-6 pb-3">
-          <ErrorBanner
-            message={save.error.message}
-            title="Couldn't save settings"
+        {hasLocalHost && (
+          <LocalDevicePanel
+            active={hostTabFor(localDeviceId)}
+            form={form}
+            setForm={setForm}
           />
-        </div>
-      )}
+        )}
 
-      <EditorFooterView
-        isDirty={anyDirty}
-        isPending={anyPending}
-        isSuccess={anySuccess}
-        onDiscard={handleDiscardAll}
-        onSave={() => void handleSaveAll()}
-      />
-    </div>
+        {devices.map((device) => (
+          // Keyed by device: a different machine is a different form,
+          // seeded from that device's own config read. Mounted on its
+          // first pick, so opening Settings reads no peer's config.
+          <MountOnceVisited
+            key={device.deviceId}
+            visited={hostTabFor(device.deviceId) !== undefined}
+          >
+            <PeerDeviceSettings
+              device={device}
+              active={hostTabFor(device.deviceId)}
+            />
+          </MountOnceVisited>
+        ))}
+
+        {hostTab !== undefined && picked === undefined && <NoDevicesView />}
+      </SettingsEditorRegistryProvider>
+    </SettingsPageView>
   );
 }
 
@@ -383,26 +358,20 @@ function useStagedUpdateLanding(
 function ClientVersionSection() {
   const [changelogOpen, setChangelogOpen] = useState(false);
   return (
-    <section className="space-y-3">
-      <SectionHeading className="mb-1">Web client</SectionHeading>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <div className="font-mono text-sm select-text">
-          <BuildVersionLine />
-        </div>
-        <ChangelogButton
-          icon={ScrollText}
-          label="Changelog"
-          onOpen={() => setChangelogOpen(true)}
-        />
-      </div>
-      {changelogOpen && (
-        <ChangelogDialog
-          installed={__APP_VERSION__}
-          staged={null}
-          onClose={() => setChangelogOpen(false)}
-        />
-      )}
-    </section>
+    <ClientVersionSectionView
+      version={__APP_VERSION__}
+      commit={__APP_COMMIT__}
+      onOpenChangelog={() => setChangelogOpen(true)}
+      changelog={
+        changelogOpen && (
+          <ChangelogDialog
+            installed={__APP_VERSION__}
+            staged={null}
+            onClose={() => setChangelogOpen(false)}
+          />
+        )
+      }
+    />
   );
 }
 
@@ -450,12 +419,7 @@ function HostTabBar({
 // say. A section that is a room of its own (Visitors) also names the
 // watermark and the wallpaper (data-doubutsu-page) it wears in place of
 // the settings ones.
-function headingFor(activeTab: SettingsTab): {
-  eyebrow: string;
-  title: string;
-  watermark?: string;
-  page?: string;
-} {
+function headingFor(activeTab: SettingsTab): SettingsHeading {
   if (activeTab === VISITORS_TAB) {
     return {
       eyebrow: "Village life",

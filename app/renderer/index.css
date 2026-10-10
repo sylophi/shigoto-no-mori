@@ -485,7 +485,7 @@
   animation-play-state: paused;
 }
 
-/* A villager's birthday (villagers/BirthdayParty.tsx): the bunting
+/* A villager's birthday (villagers/BirthdayPartyView.tsx): the bunting
    drops in once, the confetti arcs up and away once (each bit reads its
    arc off --confetti-*), and a legend's balloons drift up past the
    header, swaying. */

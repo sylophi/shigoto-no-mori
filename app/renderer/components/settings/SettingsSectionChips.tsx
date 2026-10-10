@@ -3,16 +3,11 @@
 // as one row of chips under the page header, scrolling sideways past
 // the edge. The same store underneath, so the header and the panels
 // follow a pick here exactly as they follow the sidebar's.
-import { ChipButton } from "@/components/ui/chip-button";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
-import { cn } from "@/lib/utils";
-import { SectionLabel } from "./SettingsSidebarNav";
-import {
-  selectSettingsTab,
-  settingsSections,
-  useSettingsPanelControls,
-  type SettingsSection,
-} from "./settingsNav";
+import { hasLocalHost } from "@/lib/localHost";
+import { SettingsSectionChipsView } from "./SettingsNavView";
+import { selectSettingsTab, useSettingsPanelControls } from "./settingsNav";
+import { settingsSections } from "./settingsSections";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
 
 export function SettingsSectionChips({
@@ -27,31 +22,12 @@ export function SettingsSectionChips({
   const villageLife = useVillageLife();
   const controls = useSettingsPanelControls();
   if (!phone) return null;
-  const sections = settingsSections(update, villageLife);
-  const chip = (section: SettingsSection) => {
-    const active = activeTab === section.id;
-    return (
-      <ChipButton
-        key={section.id}
-        aria-current={active ? "true" : undefined}
-        aria-controls={controls(section.id)}
-        onClick={() => selectSettingsTab(section.id)}
-        className={cn(
-          "max-w-48 shrink-0 py-1.5",
-          active && "bg-accent text-foreground",
-        )}
-      >
-        <SectionLabel section={section} />
-      </ChipButton>
-    );
-  };
   return (
-    <nav
-      aria-label="Settings sections"
-      className="flex shrink-0 [scrollbar-width:none] gap-1.5 overflow-x-auto border-b border-border px-4 py-2"
-    >
-      {sections.client.map(chip)}
-      {sections.host.map(chip)}
-    </nav>
+    <SettingsSectionChipsView
+      sections={settingsSections(update, villageLife, hasLocalHost)}
+      activeId={activeTab}
+      controls={controls}
+      onSelect={selectSettingsTab}
+    />
   );
 }

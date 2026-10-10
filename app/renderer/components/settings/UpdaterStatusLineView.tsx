@@ -19,7 +19,11 @@ const STATUS_TEXT: Record<
 // only surface a status line for the states where the button alone is
 // ambiguous: idle ("you already checked, nothing to do"), downloading
 // ("we're working on it"), and error.
-export function UpdaterStatusLine({ state }: { state: UpdaterState | null }) {
+export function UpdaterStatusLineView({
+  state,
+}: {
+  state: UpdaterState | null;
+}) {
   if (!state) return null;
   if (state.kind === "error") {
     return (

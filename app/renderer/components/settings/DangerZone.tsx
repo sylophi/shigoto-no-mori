@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Flame } from "lucide-react";
 import type { NukeProgress } from "@shigomori/contracts/schemas";
-import { BlockingOverlay } from "@/components/ui/blocking-overlay";
-import { Button } from "@/components/ui/button";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { setOpenProject } from "@/components/sidebar/openProject";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -13,6 +9,7 @@ import {
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@shared/projectPaths";
 import { notifyError } from "@/lib/toast";
+import { DangerZoneView } from "./DangerZoneView";
 
 export function DangerZone() {
   const queryClient = useQueryClient();
@@ -62,56 +59,12 @@ export function DangerZone() {
   };
 
   return (
-    <section className="space-y-3">
-      {nuking && (
-        <BlockingOverlay>{describeNukeProgress(progress)}</BlockingOverlay>
-      )}
-      <SectionHeading className="mb-1">Danger zone</SectionHeading>
-      <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">
-        <div className="space-y-1">
-          <div className="text-sm font-medium text-destructive">
-            Nuke everything
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Force-removes every worktree shigomori created, drops the project
-            registry, and deletes all configs and state under{" "}
-            <span className="font-mono">{root}</span>. The original project
-            repos on disk are not touched.
-          </p>
-        </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          disabled={nuking}
-          onClick={handleNuke}
-        >
-          <Flame />
-          {nuking
-            ? "Nuking…"
-            : armed
-              ? "Click again to confirm"
-              : "Nuke everything"}
-        </Button>
-      </div>
-    </section>
+    <DangerZoneView
+      root={root}
+      nuking={nuking}
+      progress={progress}
+      armed={armed}
+      onNuke={handleNuke}
+    />
   );
-}
-
-// Shown under the BlockingOverlay while the nuke IPC runs:
-// force-removing worktrees and reaping scripts takes seconds, and
-// letting the user keep clicking around (starting scripts, deleting
-// worktrees) mid-wipe invites the races the delete-inflight guards
-// exist to catch.
-function describeNukeProgress(progress: NukeProgress | null): string {
-  if (!progress) return "Preparing…";
-  switch (progress.phase) {
-    case "scripts":
-      return "Stopping running scripts…";
-    case "worktrees":
-      return progress.total > 0
-        ? `Removing worktrees (${progress.done}/${progress.total})…`
-        : "Removing worktrees…";
-    case "wipe":
-      return "Wiping shigomori data…";
-  }
 }

@@ -12,7 +12,7 @@ import { CenteredMessage } from "@/components/ui/centered-message";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { PARTY_HOST } from "@/components/villagers/BirthdayParty";
+import { PARTY_HOST } from "@/components/villagers/BirthdayPartyView";
 import { cn } from "@/lib/utils";
 import { LifecycleBannerView } from "./LifecycleBannerView";
 
@@ -38,7 +38,7 @@ export function WorktreeDetailView({
   scripts,
   footer,
 }: {
-  // The resident's birthday party (BirthdayParty), thrown in the header.
+  // The resident's birthday party (BirthdayPartyView), thrown in the header.
   party?: ReactNode;
   // The mirror's copies as tabs (MirrorCopyTabs), leading the header.
   copyTabs?: ReactNode;
@@ -51,7 +51,7 @@ export function WorktreeDetailView({
   // The marks at the breadcrumb's end: the page's refresh, the kind
   // icon, and the device chip.
   marks: ReactNode;
-  // The resident's face (ResidentFace) beside the title (WorktreeHeader).
+  // The resident's face (ResidentFaceView) beside the title (WorktreeHeader).
   face: ReactNode;
   header: ReactNode;
   mirrorPill: ReactNode;

@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
 // A legendary character's stationery, the paper their letters come on
-// (components/villagers/VillagerLetter.tsx), the way every letter in
+// (components/villagers/VillagerLetterView.tsx), the way every letter in
 // Animal Crossing arrives on its own printed paper. Each is a small
 // tile drawn here, used as a mask so the color stays a theme token:
 // the shapes are black and only their coverage counts. Picked to fit

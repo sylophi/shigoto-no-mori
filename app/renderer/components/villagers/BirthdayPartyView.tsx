@@ -1,12 +1,12 @@
 import { stationeryFor } from "@/lib/villagers/stationery";
 import { useFaceColor } from "@/hooks/villagers/useFaceColor";
 import type { Resident } from "@/hooks/villagers/useResident";
-import { Balloons, Bunting } from "./Celebration";
-import { StationeryPrint } from "./StationeryPrint";
-import { villagerInk } from "./VillagerDialogue";
+import { BalloonsView, BuntingView } from "./CelebrationView";
+import { StationeryPrintView } from "./StationeryPrintView";
+import { villagerInk } from "./VillagerDialogueView";
 
 // The worktree page's header on its villager's birthday, behind the
-// breadcrumb and the title, whose face (ResidentFace) wears the
+// breadcrumb and the title, whose face (ResidentFaceView) wears the
 // party hat. No words: the trimmings say it. The rarer the character,
 // the bigger the party (DESIGN.md, "Village life: rarity"): bunting for
 // a regular villager, bunting and a wash in their own color for a
@@ -16,7 +16,7 @@ import { villagerInk } from "./VillagerDialogue";
 // face's confetti can still fall past the header.
 export const PARTY_HOST = "relative isolate";
 
-export function BirthdayParty({ villager }: { villager: Resident }) {
+export function BirthdayPartyView({ villager }: { villager: Resident }) {
   return (
     <div
       aria-hidden
@@ -28,7 +28,7 @@ export function BirthdayParty({ villager }: { villager: Resident }) {
       ) : villager.rarity === "rare" ? (
         <RareTrimmings face={villager.face} />
       ) : (
-        <Bunting />
+        <BuntingView />
       )}
     </div>
   );
@@ -44,7 +44,7 @@ function RareTrimmings({ face }: { face: string | null }) {
         style={villagerInk(color)}
         className="absolute inset-0 bg-(--villager-ink) [mask-image:linear-gradient(to_left,black,transparent_70%)] opacity-10"
       />
-      <Bunting color={color} />
+      <BuntingView color={color} />
     </>
   );
 }
@@ -56,10 +56,10 @@ function LegendaryTrimmings({ slug }: { slug: string }) {
   return (
     <>
       <div className="absolute inset-0 [mask-image:linear-gradient(to_left,black_20%,transparent_65%)]">
-        <StationeryPrint paper={paper} className="opacity-25" />
+        <StationeryPrintView paper={paper} className="opacity-25" />
       </div>
-      <Balloons />
-      <Bunting count={30} />
+      <BalloonsView />
+      <BuntingView count={30} />
     </>
   );
 }

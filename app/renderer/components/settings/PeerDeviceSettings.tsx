@@ -8,24 +8,29 @@ import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {
   fromConfig,
   type SettingsFormState,
-} from "@/hooks/config/useSettingsSave";
+} from "@/hooks/config/settingsForm";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
-import { cn } from "@/lib/utils";
 import { AgentsSection } from "./AgentsSection";
 import { CliSection } from "./CliSection";
 import { DataLocationSection } from "./DataLocationSection";
 import { DoctorSection } from "./DoctorSection";
 import { IntegrationToggles, WorktreeToggles } from "./DeviceSettingsSections";
 import { HostPanels, type HostSections, onEveryHostTab } from "./SettingsPanel";
-import type { HostTab } from "./settingsNav";
+import type { HostTab } from "./settingsSections";
 import { useRegisterSettingsEditor } from "./useSettingsEditors";
+import {
+  PeerOfflineNoteView,
+  PeerReadOnlyNoteView,
+  PeerSettingsLoadingView,
+  PeerTogglesView,
+  PeerVersionLineView,
+} from "./PeerDeviceSettingsView";
 import { VersionSection } from "./VersionSection";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 // Another device's host sections on the Settings page. Everything under
 // the version routes through the HostScope this mounts (the scoped config
@@ -74,17 +79,13 @@ export function PeerDeviceSettings({
 }
 
 function OfflineNote({ device }: { device: RemoteDevice }) {
-  // Rostered but no session yet ("online" is the one phase that says
-  // the machine itself is up): this window just cannot reach it (a
-  // tunnel still routing, another network). Tell that apart from a
-  // machine that is simply off.
-  const dialing = device.status.phase === "online";
   return (
-    <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
-      {dialing
-        ? `${device.label} is on, but this window hasn't connected to it yet. Its settings load once the connection is up. A brand-new tunnel can take a while to route.`
-        : `${device.label} is offline. Its settings live on that device and load when it reconnects.`}
-    </p>
+    <PeerOfflineNoteView
+      label={device.label}
+      // Rostered but no session yet ("online" is the one phase that
+      // says the machine itself is up).
+      dialing={device.status.phase === "online"}
+    />
   );
 }
 
@@ -93,13 +94,7 @@ function PeerVersion({ device }: { device: RemoteDevice }) {
   return (
     <VersionSection
       installed={device.appVersion}
-      version={
-        device.appVersion === "" ? (
-          <span className="text-muted-foreground">Not reported yet</span>
-        ) : (
-          `v${device.appVersion}`
-        )
-      }
+      version={<PeerVersionLineView appVersion={device.appVersion} />}
     />
   );
 }
@@ -134,7 +129,7 @@ function ReachablePeerSettings({
         Couldn&apos;t load this device&apos;s settings: {errorMessageOf(error)}.
       </EmptyPanel>
     ) : (
-      <p className="text-sm text-muted-foreground">Loading…</p>
+      <PeerSettingsLoadingView />
     );
     return (
       <HostPanels
@@ -220,11 +215,7 @@ function PeerSettingsForm({
   });
 
   const readOnlyNote = readOnly && (
-    // Same shape as the offline note, in the neutral family: this is a
-    // normal permission state, not a warning.
-    <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground select-text">
-      {peerReadOnlyNote(device.label)}
-    </p>
+    <PeerReadOnlyNoteView label={device.label} />
   );
   const saveError = save.error && (
     <ErrorBanner
@@ -232,17 +223,14 @@ function PeerSettingsForm({
       title="Couldn't save the device's settings"
     />
   );
-  // inert rather than a disabled prop on every row: the toggles are
-  // shared verbatim with the local form, and a read-only visitor needs
-  // them readable, just not operable.
   const toggles = (children: React.ReactNode) => (
-    <>
-      {readOnlyNote}
-      <div inert={readOnly} className={cn(readOnly && "opacity-60")}>
-        {children}
-      </div>
-      {saveError}
-    </>
+    <PeerTogglesView
+      readOnly={readOnly}
+      note={readOnlyNote}
+      saveError={saveError}
+    >
+      {children}
+    </PeerTogglesView>
   );
 
   // Offline: the note stands in for the sections. The form state (and

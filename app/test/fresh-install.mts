@@ -31,7 +31,7 @@ import { builtSm } from "./lib/smBinary.mts";
 Object.assign(globalThis, {
   window: { api: { deviceId: "fresh-install-check" } },
 });
-const { fromConfig } = await import("@/hooks/config/useSettingsSave");
+const { fromConfig } = await import("@/hooks/config/settingsForm");
 
 let sandbox: string;
 let smBinary = "";
