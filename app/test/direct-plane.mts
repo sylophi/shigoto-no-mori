@@ -519,7 +519,6 @@ it("brokering serves the roster only: an ask forged from outside the host's live
     from: "ghost",
     frame: sealAsk("ghost", "B", 1, {
       ask: CONNECT_INFO_ASK,
-      expiresAt: Date.now() + 60_000,
       input: { dialableKinds: ["lan"], connectionId: ONE_CONNECTION },
     }).frame,
   });

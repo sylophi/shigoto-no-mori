@@ -4,6 +4,7 @@
 // (host/socket/loopback.ts) for this machine's windows, its shell and
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
+import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import * as HostPushes from "@host/lib/hostPushes";
@@ -42,7 +43,7 @@ import {
 } from "@shared/packaging/cloudflaredDist.mts";
 import * as TunnelService from "@host/direct/cloudflared";
 import { makeConnectInfo } from "@host/direct/connectInfo";
-import { devDialKinds } from "@host/direct/dialKinds";
+import { devDialKinds, devFrontPort } from "@host/direct/dialKinds";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { getDeviceId } from "@host/lib/config/deviceId";
@@ -88,14 +89,17 @@ export const deviceLinkLayer = () =>
       opens: {
         check: (ticket, arrivedAs) => {
           const deviceId = directTickets.check(ticket, arrivedAs);
-          const publicKey =
-            deviceId === null ? undefined : hubServer.peerKey(deviceId);
-          return deviceId === null || publicKey === undefined
-            ? null
-            : { deviceId, publicKey };
+          if (deviceId === null) return null;
+          if (!hubServer.rosterKnown()) return ROSTER_UNAVAILABLE;
+          const publicKey = hubServer.peerKey(deviceId);
+          return publicKey === undefined ? null : { deviceId, publicKey };
         },
         spend: (ticket, arrivedAs) => directTickets.consume(ticket, arrivedAs),
-        keyOf: (deviceId) => hubServer.peerKey(deviceId),
+        keepDevices: (deviceIds) => directTickets.keepDevices(deviceIds),
+        keyOf: (deviceId) =>
+          hubServer.rosterKnown()
+            ? hubServer.peerKey(deviceId)
+            : ROSTER_UNAVAILABLE,
         localKey: () => hubServer.localKey(),
       },
       isCommandGranted: acceptsPeerCommands,
@@ -205,18 +209,16 @@ const directPlane = () =>
     // The candidate sockets ride the `ws` package so a failed dial names
     // its errno (see OpenClientSocket in shared/remote/deviceLink.ts).
     // Neither ws nor Node's global sends an Origin header, so the
-    // peer's upgrade gate reads the two identically. Deflate only
-    // through the tunnel: a LAN link outruns it.
-    openSocket: (url) =>
-      new WsWebSocket(url, { perMessageDeflate: url.startsWith("wss:") }),
+    // peer's upgrade gate reads the two identically. No
+    // permessage-deflate: the link's frames are ciphertext, which does
+    // not compress.
+    openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
     dialableKinds: devDialKinds(),
     host: {
       // A device the roster dropped loses its links and the tickets it
-      // was handed but has not spent.
-      closeHostPeersNotIn: (online) => {
-        directTickets.keepDevices(online);
-        void Graph.runIfUp(onLink((link) => link.closePeersNotIn(online)));
-      },
+      // was handed but has not spent (DeviceLink.closePeersNotIn).
+      closeHostPeersNotIn: (online) =>
+        void Graph.runIfUp(onLink((link) => link.closePeersNotIn(online))),
       tunnelState: () =>
         Graph.readNow(
           onTunnel((tunnel) => tunnel.status),
@@ -235,7 +237,9 @@ export const hubHandlers = () => directPlane().handlers;
 const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
     const current = linkStatus();
-    return current.listening ? current.port : null;
+    return current.listening && current.port !== null
+      ? devFrontPort(current.port)
+      : null;
   },
   mintTickets: (peer, kinds) => directTickets.mint(peer, kinds),
   // The tunnel candidate, advertised only while the cloudflared child
@@ -469,7 +473,7 @@ export async function refreshDirectHost(): Promise<void> {
     const listener = linkStatus();
     const wanted =
       listener.listening && listener.port !== null
-        ? { port: listener.port }
+        ? { port: devFrontPort(listener.port) }
         : null;
     // Nothing to reconcile once the app is quitting: the layer's close
     // has stopped the child.
