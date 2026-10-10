@@ -1,5 +1,7 @@
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as Effect from "effect/Effect";
+import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
+import type { HostServices } from "@host/process/services";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -154,6 +156,16 @@ const gitMoved = (projectId: string) =>
     }),
   );
 
+// The transplant's teardown refused: scripts run in the worktree.
+class ScriptsRunningError extends Schema.TaggedError<ScriptsRunningError>()(
+  "ScriptsRunningError",
+  { scripts: Schema.Natural },
+) {
+  override get message(): string {
+    return `scripts-running: ${this.scripts} script(s) are running in this worktree`;
+  }
+}
+
 class NoMergedLayerError extends Schema.TaggedError<NoMergedLayerError>()(
   "NoMergedLayerError",
   {},
@@ -180,8 +192,8 @@ class RunningWorkError extends Schema.TaggedError<RunningWorkError>()(
   {
     verb: Schema.Literals(["move", "rename"]),
     name: Schema.String,
-    scripts: Schema.Number,
-    terminals: Schema.Number,
+    scripts: Schema.Natural,
+    terminals: Schema.Natural,
   },
 ) {
   override get message(): string {
@@ -304,13 +316,11 @@ export const worktreesHandlers = {
         );
       }
       yield* refuseRunningWork(worktree, "move");
-      return yield* fromPromise(() =>
-        withDeleteInflight(
-          worktreeId,
-          "This worktree is already being removed or moved.",
-          () => moveWorktree(project, worktreeId, destinationPath),
-          (moved) => moveMirrorsOfWorktree(worktreeId, moved),
-        ),
+      return yield* withDeleteInflight(
+        worktreeId,
+        "This worktree is already being removed or moved.",
+        fromPromise(() => moveWorktree(project, worktreeId, destinationPath)),
+        (moved) => fromPromise(() => moveMirrorsOfWorktree(worktreeId, moved)),
       );
     }),
 
@@ -326,74 +336,80 @@ export const worktreesHandlers = {
         );
       }
       yield* refuseRunningWork(worktree, "rename");
-      return yield* fromPromise(() =>
-        withDeleteInflight(
-          worktreeId,
-          "This worktree is already being removed or moved.",
-          () => renameWorktree(project, worktreeId, name),
-          (renamed) => moveMirrorsOfWorktree(worktreeId, renamed),
-        ),
+      return yield* withDeleteInflight(
+        worktreeId,
+        "This worktree is already being removed or moved.",
+        fromPromise(() => renameWorktree(project, worktreeId, name)),
+        (renamed) =>
+          fromPromise(() => moveMirrorsOfWorktree(worktreeId, renamed)),
       );
     }),
 
-  delete: async (
+  delete: (
     { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
     ctx,
-  ) => {
-    const project = await findProjectOrThrow(projectId);
-    // Local delete kills scripts by design (withDeleteInflight reaps
-    // them). The transplant orchestrator refuses instead, since its
-    // teardown must never take down work still running on the source
-    // device. The lookup is app-registry-only, so the CLI stays
-    // ignorant of the flag. "scripts-running" is a stable marker the
-    // orchestrator and the UI match on, not prose.
-    if (refuseRunningScripts) {
-      const running = getRunningScriptWorktrees().find(
-        (entry) => entry.worktreeId === worktreeId,
-      );
-      if (running !== undefined) {
-        throw new Error(
-          `scripts-running: ${running.scriptCount} script(s) are running in this worktree`,
+  ) =>
+    Effect.gen(function* () {
+      const project = yield* fromPromise(() => findProjectOrThrow(projectId));
+      // Local delete kills scripts by design (withDeleteInflight reaps
+      // them). The transplant orchestrator refuses instead, since its
+      // teardown must never take down work still running on the source
+      // device. The lookup is app-registry-only, so the CLI stays
+      // ignorant of the flag. "scripts-running" is a stable marker the
+      // orchestrator and the UI match on, not prose.
+      if (refuseRunningScripts) {
+        const running = getRunningScriptWorktrees().find(
+          (entry) => entry.worktreeId === worktreeId,
         );
+        if (running !== undefined) {
+          return yield* new ScriptsRunningError({
+            scripts: running.scriptCount,
+          });
+        }
       }
-    }
-    // The CLI can't see the app's script registry, so the delete runs
-    // under the shared tombstone protocol (see withDeleteInflight).
-    // The CLI drops the shelf and auto-pull marks with the worktree.
-    // The announcement brackets this call's run only. A second caller
-    // is refused up front (withDeleteInflight would refuse it the
-    // same way), so its "kept" cannot close the first one's removal
-    // under every viewer. The close carries the outcome, so a viewer
-    // drops the row exactly when the delete did.
-    assertWorktreeMutable(
-      worktreeId,
-      "This worktree is already being removed.",
-    );
-    broadcastRemoval?.({ projectId, worktreeId, state: "removing" });
-    let removed = false;
-    try {
-      const result = await withDeleteInflight(
+      // The CLI can't see the app's script registry, so the delete runs
+      // under the shared tombstone protocol (see withDeleteInflight).
+      // The CLI drops the shelf and auto-pull marks with the worktree.
+      // The announcement brackets this call's run only. A second caller
+      // is refused up front (withDeleteInflight would refuse it the
+      // same way), so its "kept" cannot close the first one's removal
+      // under every viewer. The close carries the outcome, so a viewer
+      // drops the row exactly when the delete did.
+      const busy = "This worktree is already being removed.";
+      yield* assertWorktreeMutable(worktreeId, busy);
+      broadcastRemoval?.({ projectId, worktreeId, state: "removing" });
+      let removed = false;
+      return yield* withDeleteInflight(
         worktreeId,
-        "This worktree is already being removed.",
-        () =>
+        busy,
+        fromPromise(() =>
           deleteWorktree(
             project,
             { worktreeId, force, skipCleanup },
             notifierFor(ctx),
           ),
+        ),
         (outcome) =>
-          outcome.ok ? stopMirrorsForWorktree(worktreeId) : Promise.resolve(),
+          outcome.ok
+            ? fromPromise(() => stopMirrorsForWorktree(worktreeId))
+            : Effect.void,
+      ).pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            removed = result.ok;
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() =>
+            broadcastRemoval?.({
+              projectId,
+              worktreeId,
+              state: removed ? "removed" : "kept",
+            }),
+          ),
+        ),
       );
-      removed = result.ok;
-      return result;
-    } finally {
-      broadcastRemoval?.({
-        projectId,
-        worktreeId,
-        state: removed ? "removed" : "kept",
-      });
-    }
-  },
+    }),
 
   // The merged layers' worktrees of the stack `worktreeId` is in, as
   // one removal. The set is read the way the page reads it (the PR map
@@ -426,42 +442,48 @@ export const worktreesHandlers = {
       if (!cleanup) return yield* new NoMergedLayerError();
       const ids = cleanup.worktrees.map((identity) => identity.id);
       const busy = "A worktree of this stack is already being removed.";
-      return yield* fromPromise(async () => {
-        for (const id of ids) assertWorktreeMutable(id, busy);
-        for (const id of ids) {
-          broadcastRemoval?.({ projectId, worktreeId: id, state: "removing" });
-        }
-        let removed: readonly string[] = [];
-        try {
-          const result = await withDeletesInflight(
-            ids,
-            busy,
-            () =>
-              deleteStack(
-                project,
-                { worktreeId: cleanup.target.id, force, skipCleanup },
-                notifierFor(ctx),
-              ),
-            (outcome) =>
-              Promise.all(outcome.removed.map(stopMirrorsForWorktree)),
-          );
-          removed = result.removed;
-          await Promise.all(
-            removed
-              .filter((id) => !ids.includes(id))
-              .map((id) => killScriptsForWorktree(id)),
-          );
-          return result;
-        } finally {
-          for (const id of ids) {
-            broadcastRemoval?.({
-              projectId,
-              worktreeId: id,
-              state: removed.includes(id) ? "removed" : "kept",
-            });
-          }
-        }
-      });
+      for (const id of ids) yield* assertWorktreeMutable(id, busy);
+      for (const id of ids) {
+        broadcastRemoval?.({ projectId, worktreeId: id, state: "removing" });
+      }
+      let removed: readonly string[] = [];
+      return yield* withDeletesInflight(
+        ids,
+        busy,
+        fromPromise(() =>
+          deleteStack(
+            project,
+            { worktreeId: cleanup.target.id, force, skipCleanup },
+            notifierFor(ctx),
+          ),
+        ),
+        (outcome) =>
+          fromPromise(() =>
+            Promise.all(outcome.removed.map(stopMirrorsForWorktree)),
+          ),
+      ).pipe(
+        Effect.tap((result) =>
+          Effect.gen(function* () {
+            removed = result.removed;
+            yield* Effect.forEach(
+              removed.filter((id) => !ids.includes(id)),
+              killScriptsForWorktree,
+              { concurrency: "unbounded", discard: true },
+            );
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            for (const id of ids) {
+              broadcastRemoval?.({
+                projectId,
+                worktreeId: id,
+                state: removed.includes(id) ? "removed" : "kept",
+              });
+            }
+          }),
+        ),
+      );
     }),
 
   setShelved: ({ projectId, worktreeId, shelved }) =>
@@ -766,3 +788,13 @@ async function mutateAndDescribe(
 ): Promise<Worktree> {
   return (await mutateAndDescribeWith(scope, action)).worktree;
 }
+
+// The delete, for the sync teardown that removes a sent source, which is
+// not Effect yet. Removed by step 7's sync PR (V3.md, the host's Promise
+// adapters), which converts that teardown.
+const deletes = PromiseAdapter.make<HostServices>("The worktree deletes");
+export const deleteAdapter = deletes.layer;
+export const deleteWorktreeHere = (
+  removal: Parameters<typeof worktreesHandlers.delete>[0],
+  ctx: HandlerContext,
+) => deletes.run(worktreesHandlers.delete(removal, ctx));

@@ -33,12 +33,7 @@ import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { DropdownMenuItem, StaticMenu } from "../primitives/dropdown-menu.tsx";
 import { LOCAL_DEVICE_ID, THINKPAD_ID } from "../fixtures/fixtures.ts";
 import { projectRows } from "./sidebar.tsx";
-import {
-  deviceById,
-  projectIconSrc,
-  projectNamed,
-  worktreeNamed,
-} from "./world.ts";
+import { deviceById, projectNamed, worktreeNamed } from "./world.ts";
 
 const noop = () => {};
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
@@ -135,12 +130,7 @@ export function SidebarPartsScene() {
                 busy={false}
                 disabled={false}
                 onSelect={noop}
-                icon={
-                  <ProjectIconView
-                    src={projectIconSrc(target.project.name)}
-                    name={target.project.name}
-                  />
-                }
+                icon={<ProjectIconView src={null} name={target.project.name} />}
               />
             )}
           />

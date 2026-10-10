@@ -38,7 +38,7 @@ import * as Processes from "@host/lib/util/processes";
 import * as GitWatcher from "@host/lib/gitWatcher";
 import { startBackgroundFetch } from "@host/lib/git/backgroundFetch";
 import { repairCliLinks } from "@host/lib/cli/install";
-import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
+import * as OrphanSweep from "@host/lib/scripts/persistence";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import {
   announceProjectChanged,
@@ -60,6 +60,7 @@ import {
 } from "./wires";
 import { lifetime, onQuit, starts } from "@host/lib/util/lifetimes";
 import * as Captures from "./captures";
+import { deleteAdapter } from "@host/ipc/modules/worktrees";
 
 // What the user started through a script must not outlive the app,
 // orphaned to launchd. A delete in flight loses its cleanup scripts
@@ -72,21 +73,11 @@ const scripts = (hurried: () => boolean) =>
   onQuit(
     "the scripts",
     Effect.suspend(() => {
-      if (hurried()) {
-        return Effect.sync(() => signalAllScriptsBestEffort());
-      }
-      return Effect.forEach(
-        getInflightDeleteIds(),
-        (worktreeId) =>
-          Effect.tryPromise(() => killScriptsForWorktree(worktreeId)).pipe(
-            Effect.ignore,
-          ),
-        { concurrency: "unbounded", discard: true },
-      ).pipe(
-        Effect.andThen(
-          Effect.promise(() => killAllScripts({ graceMs: 1_500 })),
-        ),
-      );
+      if (hurried()) return signalAllScriptsBestEffort;
+      return Effect.forEach(getInflightDeleteIds(), killScriptsForWorktree, {
+        concurrency: "unbounded",
+        discard: true,
+      }).pipe(Effect.andThen(killAllScripts({ graceMs: 1_500 })));
     }),
   );
 
@@ -133,7 +124,8 @@ function onExternalStateChange() {
   // The app's only chance to notice an `sm rm` run in a terminal, which
   // leaves a script the app started there running in a deleted cwd and
   // holding its port.
-  void reapScriptsForRemovedWorktrees()
+  void Captures.scripts
+    .run(reapScriptsForRemovedWorktrees())
     .then((removed) => {
       for (const worktree of removed) {
         broadcastAll(scriptsContract, "stoppedForRemovedWorktree", {
@@ -271,17 +263,14 @@ const scriptsAndFoundation = (options: {
     // last run left running is reaped here. It claims the record file
     // synchronously, before any script can spawn, and kills in the
     // background.
-    Layer.provideMerge(
-      starts("the orphan script sweep", startOrphanScriptSweep),
-    ),
+    Layer.provideMerge(OrphanSweep.layer),
     // Every terminal, each saved for the next start as it closes with
     // the quit.
-    Layer.provideMerge(Terminals.adapter),
     Layer.provideMerge(Captures.terminals.layer),
     Layer.provideMerge(Terminals.layer({ start: terminalStart })),
     // Every script run, each in a scope the quit's policy above has
     // already closed or shortened.
-    Layer.provideMerge(ScriptRuns.adapter),
+    Layer.provideMerge(Captures.scripts.layer),
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(foundation(options.engine)),
   );
@@ -293,6 +282,8 @@ export const layer = (options: {
   readonly engine: Parameters<typeof Engine.layer>[0];
 }) =>
   scriptGate.pipe(
+    // The worktree deletes' Promise face, for the sync teardown.
+    Layer.provideMerge(deleteAdapter),
     Layer.provideMerge(portForwards),
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit

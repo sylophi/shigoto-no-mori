@@ -13,6 +13,7 @@ import react from "@vitejs/plugin-react";
 import { reactCompiler } from "./vite.reactCompiler";
 import { dedupe } from "./vite.dedupe";
 import tailwindcss from "@tailwindcss/vite";
+import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
 import { ACCOUNT_ENV_KEYS } from "@shigomori/contracts/accountServiceConfig";
 import { fixedDevServerPort } from "./scripts/lib/portsEnvFile.mts";
@@ -198,6 +199,8 @@ export default defineConfig(({ mode }) => {
       __APP_VERSION__: JSON.stringify(version),
       __APP_COMMIT__: JSON.stringify(commit),
     },
+    // The package's stylesheet stops at the theme root.
+    css: { postcss: { plugins: [insideTheRoot()] } },
     plugins: [
       tailwindcss(),
       react(),

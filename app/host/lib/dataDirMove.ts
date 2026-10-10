@@ -25,7 +25,6 @@ import { findProjectInsideDataDir, listProjects } from "./projects";
 import {
   clearDeleteInflight,
   getBusyOperations,
-  killAllScripts,
   markDeleteInflight,
 } from "./scripts";
 import { tempPathFor, unlinkIfExists } from "./util/atomicJson";
@@ -52,7 +51,11 @@ export async function moveDataDir(
   // Electron-side pre-rename hook: the caller closes its fs watchers on
   // the data dir here -- they're moot anyway, the app relaunches after
   // the move.
-  opts: { beforeMove?: () => void | Promise<void> } = {},
+  opts: {
+    beforeMove?: () => void | Promise<void>;
+    // Every script's kill chain, waited for (host/lib/scripts).
+    killAllScripts: () => Promise<void>;
+  },
 ): Promise<void> {
   const oldDir = dataDir();
   // Resolved first: they throw when this session's data dir came from
@@ -147,7 +150,7 @@ export async function moveDataDir(
   try {
     // Scripts running inside the worktrees we're about to move would
     // keep cwds pointing at the old location. Reap them first.
-    await killAllScripts();
+    await opts.killAllScripts();
     // Stage the pointer BEFORE moving anything: a move that succeeds
     // but leaves the pointer unwritable would strand the data where no
     // boot can find it. Staged last of the preconditions so a failure

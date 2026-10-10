@@ -100,7 +100,6 @@ import {
   fakeRemoteUrls,
   fakeRunningScripts,
   addLiveEdgeRuns,
-  projectIconFor,
   repoDescriptionFor,
   type FakeWorktree,
   worktree as worktreeFixture,
@@ -516,10 +515,9 @@ function hostHandlersFor(
       remote: ["origin/main"],
     }),
     "projects:pickWorktreeName": () => "tender-tanuki",
-    "projects:icon": ({ projectId }) =>
-      projectIconFor(
-        forest.projects.find((project) => project.id === projectId)?.name ?? "",
-      ),
+    // No fixture repo has an icon, so every project wears the app's
+    // letter tile, as the scenes draw it.
+    "projects:icon": () => null,
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
     "worktrees:idleAgents": ({ worktreeId }) => {
       const worktree = findWorktree(worktreeId);

@@ -4,6 +4,8 @@
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
 import type * as Ports from "@host/lib/ports";
+import type * as OrphanSweep from "@host/lib/scripts/persistence";
+import type * as ScriptRuns from "@host/lib/scripts/pty";
 import type * as Sharing from "@host/lib/sharing";
 import type * as Terminals from "@host/lib/terminals/Terminals";
 import type * as Terrier from "@host/lib/terrier";
@@ -15,6 +17,8 @@ export type HostServices =
   | GithubCli.GithubCli
   | Views.Services
   | Ports.Ports
+  | OrphanSweep.OrphanSweep
+  | ScriptRuns.ScriptRuns
   | Sharing.Sharing
   | Terminals.Terminals
   | Terrier.Terrier

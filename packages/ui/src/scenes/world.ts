@@ -15,7 +15,6 @@ import {
   FAKE_APP_VERSION,
   forests,
   LOCAL_DEVICE_ID,
-  projectIconFor,
 } from "../fixtures/fixtures.ts";
 
 // A device of the account, as the views draw it: this device has no
@@ -74,13 +73,6 @@ export function worktreeNamed(project: Project, name: string): Worktree {
     if (worktree) return worktree;
   }
   throw new Error(`no fixture worktree ${name} in ${project.name}`);
-}
-
-// A project's icon as ProjectIconView takes it: the fixture's logo as a
-// data URL, or null for a repo with none (the generated tile).
-export function projectIconSrc(name: string): string | null {
-  const icon = projectIconFor(name);
-  return icon === null ? null : `data:${icon.mime};base64,${icon.base64}`;
 }
 
 // A villager's face, standing in for the downloaded villager data,

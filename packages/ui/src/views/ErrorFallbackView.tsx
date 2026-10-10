@@ -24,7 +24,7 @@ export function ErrorFallbackView({
     <div
       className={cn(
         "flex items-center justify-center",
-        isApp ? "h-dvh bg-background p-6 text-foreground" : "h-full p-8",
+        isApp ? "h-full bg-background p-6 text-foreground" : "h-full p-8",
       )}
     >
       <div className={cn("w-full space-y-4", isApp ? "max-w-md" : "max-w-sm")}>

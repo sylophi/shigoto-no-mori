@@ -17,7 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterAll, beforeAll } from "vitest";
@@ -27,8 +27,14 @@ import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as ScriptRuns from "../../host/lib/scripts/pty.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
 import * as Terrier from "../../host/lib/terrier.ts";
+import * as HostPushes from "../../host/lib/hostPushes.ts";
+import * as Sharing from "../../host/lib/sharing.ts";
+import * as OrphanSweep from "../../host/lib/scripts/persistence.ts";
+import * as Views from "../../host/lib/views.ts";
+import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/ports.ts";
 import * as Villagers from "../../host/lib/villagers.ts";
+import { deleteAdapter } from "../../host/ipc/modules/worktrees.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
 import * as Processes from "../../host/lib/util/processes.ts";
 
@@ -91,13 +97,28 @@ const engine = Engine.adapter.pipe(
 // (host/process/services.ts) are here too, for a proof that runs a
 // handler or serves one (runHost, hostContext).
 const runtime = ManagedRuntime.make(
-  Processes.adapter.pipe(
-    Layer.provideMerge(Terminals.adapter),
+  deleteAdapter.pipe(
+    Layer.provideMerge(Processes.adapter),
     Layer.provideMerge(Terminals.layer({ start: terminalStart })),
     Layer.provideMerge(
-      Layer.mergeAll(Ports.layer, Terrier.layer, Villagers.deviceLayer),
+      Layer.mergeAll(
+        Ports.layer,
+        Terrier.layer,
+        Villagers.deviceLayer,
+        Views.layer,
+        Sharing.layer({ announce: () => {} }),
+        // Nothing a previous run left behind to sweep.
+        Layer.succeed(
+          OrphanSweep.OrphanSweep,
+          OrphanSweep.OrphanSweep.of({
+            takeReport: Effect.succeed({ stopped: 0 }),
+          }),
+        ),
+      ),
     ),
-    Layer.provideMerge(ScriptRuns.adapter),
+    Layer.provideMerge(
+      Layer.mergeAll(HostPushes.layer, EngineStoreChanges.layer),
+    ),
     Layer.provideMerge(ScriptRuns.layer),
     Layer.provideMerge(FileSync.adapter),
     Layer.provideMerge(FileSync.layer(() => null)),
