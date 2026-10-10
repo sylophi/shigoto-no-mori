@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
-import { Check, Loader2, Search } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBranches } from "@/hooks/git/useBranches";
@@ -8,21 +8,26 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { type BranchEntry } from "@/components/shared/BranchCombobox";
 import { rankByScore } from "@/lib/fuzzyMatch";
+import { cn } from "@/lib/utils";
 import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
+import { IconButton } from "@/components/ui/icon-button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
-// Switching the worktree's branch, opened from BranchMenu.
+// Switching the worktree's branch, from its own button beside the name
+// or from BranchTitle's phone menu.
 export function BranchSwitcher({
   worktree,
   anchorRef,
   open,
   onOpenChange,
+  className,
 }: {
   worktree: Worktree;
   anchorRef: React.RefObject<HTMLElement | null>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  className: string;
 }) {
   const { data: branches, isFetching: branchesFetching } = useBranches(
     worktree.projectId,
@@ -86,6 +91,21 @@ export function BranchSwitcher({
       onOpenChange={onOpenChange}
       autoHighlight
     >
+      <SimpleTooltip tip="Switch branch">
+        <Combobox.Trigger
+          render={
+            <IconButton
+              aria-label="Switch branch"
+              className={cn(
+                className,
+                "data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100",
+              )}
+            />
+          }
+        >
+          <ChevronsUpDown aria-hidden className="size-3.5" />
+        </Combobox.Trigger>
+      </SimpleTooltip>
       <Combobox.Portal>
         <Combobox.Positioner
           anchor={anchorRef}

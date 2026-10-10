@@ -20,7 +20,7 @@ import { PullRequestTitleLink } from "./pullRequests/PullRequestIdentity";
 import { MERGE_VERB } from "./pullRequests/pullRequestShared";
 
 // The worktree page's header: what the work is called (useWorktreeTitle),
-// then one line with its branch (renamed and switched from one menu).
+// then one line with its branch (renamed, switched and copied from it).
 // Untitled work is called by its branch alone. While a PR names the
 // work, the page names it once and the PR fills in the same two lines:
 // its number and state beside the title, and on the branch's line
@@ -196,7 +196,7 @@ function useBaseFits(
           // Widths that round.
           2;
       }
-      // BranchTitle's name and its menu button. Absent while the
+      // BranchTitle's name and its buttons. Absent while the
       // rename field stands in, and then the answer holds.
       const name = branch.querySelector<HTMLElement>("[data-branch-name]");
       const row = name?.parentElement;
