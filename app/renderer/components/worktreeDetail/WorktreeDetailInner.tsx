@@ -47,6 +47,8 @@ import type {
   WorktreeFooterState,
 } from "./WorktreeDetailFooterView";
 import { WorktreeDetailView } from "./WorktreeDetailView";
+import { TerminalButton } from "./TerminalButton";
+import { TerminalDrawer } from "@/components/terminal/TerminalDrawer";
 import { WorktreeHeader } from "./WorktreeHeader";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { GitSection } from "./git/GitSection";
@@ -273,6 +275,7 @@ export function WorktreeDetailInner({
           leading={
             <>
               <FilesButton worktree={worktree} />
+              <TerminalButton worktree={worktree} />
               <MirrorAction worktree={worktree} />
               <Transfers part="footer" {...transfers} />
             </>
@@ -280,6 +283,7 @@ export function WorktreeDetailInner({
           options={<Transfers part="option" {...transfers} />}
         />
       }
+      drawer={<TerminalDrawer worktree={worktree} />}
     />
   );
 }

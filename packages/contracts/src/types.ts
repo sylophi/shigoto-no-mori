@@ -2,7 +2,7 @@
 // that serves it and the client that calls it. Both key a call by its
 // name, its channel without the module prefix. A client subscribes to a
 // push as `on` and the push's capitalized name. A view is served as a
-// stream, and only the RPC transport has a client for it.
+// stream, and watched with an observer on a wire that carries views.
 import type * as Stream from "effect/Stream";
 import type { Decoded, Encoded } from "./codec.ts";
 import type {
@@ -57,7 +57,19 @@ export type ViewHandlers<M extends ContractModule, R> = {
   ) => Stream.Stream<Decoded<PayloadOf<V>>, unknown, R>;
 };
 
+// Who hears a view through a client: each value, then its end, with
+// the failure when it did not end on its own.
+export type ViewObserver<A> = {
+  readonly value: (value: A) => void;
+  readonly end: (failure?: unknown) => void;
+};
+
 export type Client<M extends ContractModule> = {
+  [V in ViewsOf<M> as KeyOf<V["_tag"]>]: (
+    input: Encoded<InputOf<V>>,
+    observer: ViewObserver<Decoded<PayloadOf<V>>>,
+  ) => () => void;
+} & {
   [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
     ...args: Args<Encoded<InputOf<R>>>
   ) => Promise<Decoded<OutputOf<R>>>;

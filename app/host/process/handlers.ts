@@ -16,7 +16,11 @@ import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
+import type { HubHandlers } from "@shared/hub/bridgeHandlers";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { coalesce } from "@host/lib/util/coalesce";
@@ -490,6 +494,23 @@ export function registerHostHandlers(): void {
   // over the keeper-held direct sessions, and the peerPush and
   // statusChanged fan-outs. Built in wires.ts, which owns every dep.
   registerContract(hubContract, hubHandlers());
+  registerViews(hubContract, {
+    watchPeer: (input: Parameters<HubHandlers["watchPeer"]>[0]) =>
+      Stream.callback<unknown, unknown>((queue) =>
+        Effect.acquireRelease(
+          Effect.sync(() =>
+            hubHandlers().watchPeer(input, {
+              value: (value) => Queue.offerUnsafe(queue, value),
+              end: (failure) =>
+                failure === undefined
+                  ? Queue.endUnsafe(queue)
+                  : Queue.failCauseUnsafe(queue, Cause.fail(failure)),
+            }),
+          ),
+          (stop) => Effect.sync(stop),
+        ),
+      ),
+  });
   // Every peer reach of the host (host/ipc/peerSync.ts), riding
   // peerTransportFor above.
   setPeerReach({

@@ -438,6 +438,12 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     registrarOpts,
   );
   registerContract(hubContract, hubHandlers, tab.server, registrarOpts);
+  tab.view("hub:watchPeer", (input, observer) =>
+    hubHandlers.watchPeer(
+      input as Parameters<typeof hubHandlers.watchPeer>[0],
+      observer,
+    ),
+  );
   registerContract(
     sharedSettingsContract,
     sharedSettingsHandlers,
