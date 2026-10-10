@@ -297,10 +297,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     await service.revoke(record.credential, targetDeviceId);
     // Revoking THIS browser invalidates its own credential, so the
     // local sign-out follows immediately rather than waiting for the
-    // hub to refuse the next call. Callers revoking self MUST end
-    // the Clerk session first (DevicesPage's SelfRevokeButton does):
-    // with the session still live, ClerkAccountSync sees "signed in,
-    // not enrolled" and re-enrolls, silently undoing the revoke.
+    // hub to refuse the next call. Callers revoking self end the
+    // Clerk session first (DevicesPage's SelfRevokeButton does), so no
+    // session is left live with no device under it.
     if (targetDeviceId === deviceId) store.clear();
     accountChanged();
   }

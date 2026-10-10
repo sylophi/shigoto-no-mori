@@ -96,13 +96,10 @@ Every profile enrolls a device on the dev hub. Ending a window,
 `--fresh` and deleting folders are local: the device and its tunnel
 stay on the account until revoked. So revoke first, then end.
 
-A window launched with `--fresh --clone-login` in this run can revoke
-the others and then itself. Not one that booted with its credential
-on disk (a relaunch): it holds a live Clerk session and no enrollment
-attempt armed, so ClerkAccountSync re-enrolls it the moment the
-credential clears. Revoke such a window from another device, and
-never with its **Sign out** button in a cloned window (`dev-app.md`,
-"Rules").
+Any window can revoke the others and then itself: a window that saw
+its device enrolled does not enroll it again while its Clerk session
+lives. Never use the **Sign out** button in a cloned window
+(`dev-app.md`, "Rules").
 
 ```json
 { "session": "a", "steps": [
