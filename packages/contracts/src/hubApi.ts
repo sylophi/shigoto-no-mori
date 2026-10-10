@@ -236,15 +236,17 @@ export class LoginAuth extends HttpApiMiddleware.Service<
   error: HubLoginRejectedError,
 }) {}
 
-// The enrolled device a credential belongs to, its account, and its
-// kind: a browser profile is a web device, which holds a connection
-// per tab, and anything else a desktop, which holds one.
+// The enrolled device a credential belongs to, its account, its kind
+// (a browser profile is a web device, which holds a connection per
+// tab, and anything else a desktop, which holds one), and the hash of
+// the credential presented, which the tickets it mints are bound to.
 export class HubDevice extends Context.Service<
   HubDevice,
   {
     readonly deviceId: string;
     readonly accountId: string;
     readonly kind: DeviceKind;
+    readonly credentialHash: string;
   }
 >()("sm/contracts/HubDevice") {}
 

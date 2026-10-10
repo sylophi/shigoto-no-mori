@@ -46,18 +46,19 @@ export function tunnelEnvOf(env: Env): TunnelEnv | null {
 // and all, so the name IS the ownership check, and a device picks its
 // own deviceId: at 128 bits nobody can search for one that lands on
 // another device's name, where the old 48 made that an offline search.
+// For the same reason a tunnel made under the old width is not looked
+// up at all, not even to tear it down: a name that short could be
+// another device's. Such a tunnel is idle configuration once its
+// device re-provisions under the new name, and is removed from the
+// Cloudflare dashboard.
 const NAME_HEX = 32;
-// The old width, for teardown only: a device provisioned before the
-// widening still has a tunnel under it. Delete once none remain.
-const LEGACY_NAME_HEX = 12;
 
 async function tunnelNameFor(
   accountId: string,
   deviceId: string,
-  hexWidth = NAME_HEX,
 ): Promise<string> {
   const digest = await sha256Hex(`${accountId}:${deviceId}`);
-  return `sm-${digest.slice(0, hexWidth)}`;
+  return `sm-${digest.slice(0, NAME_HEX)}`;
 }
 
 const CF_API_BASE = "https://api.cloudflare.com/client/v4";
@@ -240,10 +241,7 @@ export async function teardownTunnel(
   deviceId: string,
 ): Promise<void> {
   const api = cfApi(cf, cfFetch);
-  const names = await Promise.all([
-    tunnelNameFor(accountId, deviceId),
-    tunnelNameFor(accountId, deviceId, LEGACY_NAME_HEX),
-  ]);
+  const name = await tunnelNameFor(accountId, deviceId);
   // Deletes what a finder found, if anything.
   const deleteFound = async (
     find: Promise<{ id: string } | null>,
@@ -256,16 +254,14 @@ export async function teardownTunnel(
       // Best-effort, see above.
     }
   };
-  await Promise.all(
-    names.flatMap((name) => [
-      deleteFound(
-        api.findTunnel(name),
-        (id) => `/accounts/${cf.accountId}/cfd_tunnel/${id}?cascade=true`,
-      ),
-      deleteFound(
-        api.findDnsRecord(`${name}.${cf.domain}`),
-        (id) => `/zones/${cf.zoneId}/dns_records/${id}`,
-      ),
-    ]),
-  );
+  await Promise.all([
+    deleteFound(
+      api.findTunnel(name),
+      (id) => `/accounts/${cf.accountId}/cfd_tunnel/${id}?cascade=true`,
+    ),
+    deleteFound(
+      api.findDnsRecord(`${name}.${cf.domain}`),
+      (id) => `/zones/${cf.zoneId}/dns_records/${id}`,
+    ),
+  ]);
 }

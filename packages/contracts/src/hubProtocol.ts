@@ -102,9 +102,22 @@ export const MAX_ACCOUNT_DEVICES = 16;
 // which guesses were close. DEVICE_REVOKED is terminal, the client
 // must not retry without re-enrolling. SUPERSEDED means a newer socket
 // for the same deviceId took over, the losing side must not fight it.
+// CREDENTIAL_ROTATED closes a device's sockets when it enrolls again,
+// and RATE_LIMITED a socket sending faster than any real use does: the
+// client redials on both, the first with its new credential.
 export const CLOSE_TICKET_REJECTED = 4101;
 export const CLOSE_DEVICE_REVOKED = 4102;
 export const CLOSE_SUPERSEDED = 4103;
+export const CLOSE_CREDENTIAL_ROTATED = 4104;
+export const CLOSE_RATE_LIMITED = 4105;
+
+// How many sockets one device may hold on the hub at once. A desktop
+// holds one (its host process carries the window's and the terminal's
+// hub traffic), and a browser profile one per tab, so this sits far
+// above any real count while bounding what a device claiming to be a
+// web client can make the object fan presence out to. Past it, the
+// device's oldest socket gives way to the new one.
+export const MAX_DEVICE_CONNECTIONS = 32;
 
 // A hub device id, the enrollment UUID, bounded to the DO accept-tag
 // limit (workerd hard-caps a websocket accept tag at 256 chars, so this
