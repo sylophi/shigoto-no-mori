@@ -28,23 +28,6 @@ export const MERGE_VERB: Record<PullRequestDetail["state"], string> = {
   CLOSED: "wanted to merge into",
 };
 
-export const TONE_TEXT: Record<PullRequestTone, string> = {
-  emerald: "text-emerald-500",
-  violet: "text-violet-500",
-  rose: "text-rose-500",
-  slate: "text-muted-foreground",
-  amber: "text-amber-500",
-};
-
-// The tint behind a tone's text, for a pill.
-export const TONE_FILL: Record<PullRequestTone, string> = {
-  emerald: "bg-emerald-500/10",
-  violet: "bg-violet-500/10",
-  rose: "bg-rose-500/10",
-  slate: "bg-muted",
-  amber: "bg-amber-500/10",
-};
-
 export const CHECK_BUCKET_ICON: Record<
   PullRequestCheckBucket,
   { Icon: typeof CircleCheck; tone: PullRequestTone; label: string }

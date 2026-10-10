@@ -1,25 +1,11 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
-import type { PullRequestTone } from "../../lib/pullRequest.ts";
-
-// Superset of PullRequestTone so the PR badge and sync-state badges
-// share one pill primitive. Add new tones as new states show up.
-type PillTone = PullRequestTone | "amber" | "sky" | "indigo";
-
-const TONE_CLASSES: Record<PillTone, string> = {
-  emerald: "text-emerald-500",
-  violet: "text-violet-500",
-  rose: "text-rose-500",
-  slate: "text-muted-foreground",
-  amber: "text-amber-500",
-  sky: "text-sky-500",
-  indigo: "text-indigo-500",
-};
+import { TONE_MARK, type Tone } from "../../primitives/status-dot.tsx";
 
 interface StatusPillProps {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
-  tone: PillTone;
+  tone: Tone;
   tip: string;
   "aria-label": string;
   children?: ReactNode;
@@ -41,7 +27,7 @@ export function StatusPillView({
         className={cn(
           "inline-flex shrink-0 items-center text-3xs",
           children != null && "tabular gap-0.5",
-          TONE_CLASSES[tone],
+          TONE_MARK[tone],
         )}
       >
         <Icon aria-hidden className="size-3" />

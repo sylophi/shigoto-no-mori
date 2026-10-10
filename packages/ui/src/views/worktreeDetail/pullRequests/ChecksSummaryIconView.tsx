@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, CircleSlash, Loader2 } from "lucide-react";
 import { cn } from "../../../lib/utils.ts";
 import type { PullRequestTone } from "../../../lib/pullRequest.ts";
-import { TONE_TEXT } from "./pullRequestShared.ts";
+import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 
 export function ChecksSummaryIconView({ tone }: { tone: PullRequestTone }) {
   const Icon =
@@ -17,7 +17,7 @@ export function ChecksSummaryIconView({ tone }: { tone: PullRequestTone }) {
       aria-hidden
       className={cn(
         "size-3.5 shrink-0",
-        TONE_TEXT[tone],
+        TONE_MARK[tone],
         tone === "amber" && "animate-spin",
       )}
     />
