@@ -130,7 +130,7 @@ function diffPage({
   );
 }
 
-function header(
+function pageHeader(
   title: ReactNode,
   subtitle: ReactNode,
   extra?: {
@@ -220,7 +220,7 @@ export function ChangesPageScene() {
         }
       />
     ),
-    header: header(
+    header: pageHeader(
       "Uncommitted changes",
       <WorktreeDiffSubtitleView
         changedCount={FILES.length}
@@ -248,7 +248,7 @@ export function CommitPageScene() {
         className="min-h-0 flex-1"
       />
     ),
-    header: header(
+    header: pageHeader(
       commit?.subject ?? "Commit",
       <CommitBylineView commit={commit} hash={commit?.hash} />,
       {
@@ -305,7 +305,7 @@ export function DiffPartsScene() {
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex flex-col gap-5">
         <Part label="Titles">
-          {header(
+          {pageHeader(
             <PullRequestDiffTitleView
               title="Aggregate worktrees across devices"
               number={148}
@@ -317,11 +317,11 @@ export function DiffPartsScene() {
               deletions={96}
             />,
           )}
-          {header(
+          {pageHeader(
             "All branch changes",
             <BranchDiffSubtitleView commits={4} base="origin/main" />,
           )}
-          {header(
+          {pageHeader(
             "Commit",
             <CommitBylineView commit={undefined} hash="5eed5ab" />,
           )}
