@@ -11,12 +11,12 @@
 import { UnknownProjectError } from "@shigomori/contracts/errors";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import type { Project, ProjectRow } from "@shigomori/contracts/schemas";
-import * as EngineCalls from "@host/lib/engineCalls";
-import {
-  findWorktreeIdentityOrThrow,
-  listWorktreeIdentities,
-  type WorktreeIdentity,
-} from "../git/worktrees";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import { face } from "@host/lib/engineCalls";
+import * as Ops from "@host/lib/engineOps";
+import { findWorktreeIdentity } from "../git/worktrees";
 import { dataDir, toAbsolute } from "../util/paths";
 
 let snapshot: readonly ProjectRow[] = [];
@@ -24,45 +24,41 @@ let snapshot: readonly ProjectRow[] = [];
 // remembers as icon-less, so an icon added while the app was closed
 // shows up.
 let iconsRescanned = false;
-let running: Promise<readonly ProjectRow[]> | null = null;
-let queued: Promise<readonly ProjectRow[]> | null = null;
 
-async function listOnce(): Promise<readonly ProjectRow[]> {
-  const rows = await EngineCalls.listProjects({
-    refreshIcons: !iconsRescanned,
-  });
-  iconsRescanned = true;
-  snapshot = rows;
-  return rows;
-}
+// Reads run one at a time. A caller is answered by a read that started
+// after it asked, never by an older one: a refresh that follows a
+// registry write must see that write. Callers that asked while a read
+// ran share the next one.
+const reads = Semaphore.makeUnsafe(1);
+let asked = 0;
+let answered = 0;
 
-// Re-reads the list. A caller arriving while a read is in flight waits
-// for one that starts after it, never for the older answer: a refresh
-// that follows a registry write must see that write.
-export function refreshProjects(): Promise<readonly ProjectRow[]> {
-  if (running === null) {
-    running = listOnce().finally(() => {
-      running = null;
-    });
-    return running;
-  }
-  queued ??= running
-    .catch(() => undefined)
-    .then(() => {
-      queued = null;
-      return refreshProjects();
-    });
-  return queued;
-}
+// Re-reads the list.
+export const refresh = Effect.suspend(() => {
+  const ask = ++asked;
+  return Effect.suspend(() => {
+    if (answered >= ask) return Effect.succeed(snapshot);
+    const covers = asked;
+    return Ops.listProjects({ refreshIcons: !iconsRescanned }).pipe(
+      Effect.tap((rows) =>
+        Effect.sync(() => {
+          iconsRescanned = true;
+          snapshot = rows;
+          answered = covers;
+        }),
+      ),
+    );
+  }).pipe(reads.withPermits(1));
+});
 
-// Registers a repo through the CLI (`sm projects add`), then re-reads
+// Registers a repo with the engine (`sm projects add`), then re-reads
 // the list so the sync readers (the git watcher's reconcile right after
 // the IPC call settles) see the new project.
-export async function registerProject(path: string): Promise<Project> {
-  const project = await EngineCalls.addProject(path);
-  await refreshProjects();
+export const addProject = Effect.fnUntraced(function* (path: string) {
+  const project = yield* Ops.addProject(path);
+  yield* refresh;
   return project;
-}
+});
 
 // The fields a lookup needs, without the list's decorations.
 function toProject(row: ProjectRow): Project {
@@ -75,15 +71,15 @@ function toProject(row: ProjectRow): Project {
 }
 
 // Points a project at its moved repo (`sm projects relocate`), then
-// re-reads the list for the same reason as registerProject.
-export async function relocateProject(
+// re-reads the list for the same reason as addProject.
+export const relocateProject = Effect.fnUntraced(function* (
   id: string,
   path: string,
-): Promise<Project> {
-  const project = await EngineCalls.relocateProject(id, path);
-  await refreshProjects();
+) {
+  const project = yield* Ops.relocateProject(id, path);
+  yield* refresh;
   return project;
-}
+});
 
 // The last-read list, for the sync callers. Empty until the first
 // refresh (main awaits one at boot).
@@ -92,15 +88,12 @@ export function loadProjects(): readonly Project[] {
 }
 
 // A freshly read list, for the flows that act on every project (nuke,
-// the data dir move).
-export async function listProjects(): Promise<readonly Project[]> {
-  return (await refreshProjects()).map(toProject);
-}
+// the data dir move, a project's removal).
+export const freshProjects = Effect.map(refresh, (rows) => rows.map(toProject));
 
 // The sidebar's list: the rows as ProjectsList serves them.
-export async function listProjectsWithStatus(): Promise<readonly Project[]> {
-  const rows = await refreshProjects();
-  return rows.map((row) =>
+export const listProjectsWithStatus = Effect.map(refresh, (rows) =>
+  rows.map((row) =>
     Object.assign(toProject(row), {
       pathExists: row.pathExists,
       lastUsed: row.lastUsed,
@@ -108,22 +101,32 @@ export async function listProjectsWithStatus(): Promise<readonly Project[]> {
       identity: row.identity,
       remote: row.remote,
     }),
-  );
+  ),
+);
+
+class NoLocalBranchesError extends Schema.TaggedError<NoLocalBranchesError>()(
+  "NoLocalBranchesError",
+  { path: Schema.String },
+) {
+  override get message(): string {
+    return `No local branches found in ${this.path}`;
+  }
 }
 
 // The primary ref every row of a project is measured against, which
 // the CLI resolves once per project (the configured override first):
 // what projects:defaultBranch answers, and what a clone of the project
 // on another device is made of (host/lib/sync/cloneFromPeer.ts).
-export async function primaryRefOf(project: Project): Promise<string> {
-  const [first] = await listWorktreeIdentities(project.id, {
-    primaryRef: true,
-  });
+export const primaryRef = Effect.fnUntraced(function* (project: Project) {
+  const [first] = yield* Ops.listWorktreeIdentities(
+    { projectId: project.id },
+    { primaryRef: true },
+  );
   if (first?.primaryRef === undefined) {
-    throw new Error(`No local branches found in ${project.path}`);
+    return yield* new NoLocalBranchesError({ path: project.path });
   }
   return first.primaryRef;
-}
+});
 
 // Resolves which LOCAL project a peer's project corresponds to, by repo
 // identity (shared/git/repoIdentity.mts). First registry match wins: two
@@ -162,37 +165,43 @@ export function findProjectInsideDataDir(
   return projects.find((p) => isSameOrInside(toAbsolute(p.path), root));
 }
 
-export async function findProjectOrThrow(projectId: string): Promise<Project> {
+// The project `projectId` names, or the entity-gone error.
+export const findProject = Effect.fnUntraced(function* (projectId: string) {
   const known = snapshot.find((p) => p.id === projectId);
   if (known !== undefined) return toProject(known);
-  const fresh = (await refreshProjects()).find((p) => p.id === projectId);
-  if (fresh === undefined) throw new UnknownProjectError({ projectId });
+  const fresh = (yield* refresh).find((p) => p.id === projectId);
+  if (fresh === undefined) return yield* new UnknownProjectError({ projectId });
   return toProject(fresh);
-}
+});
 
 // The preamble every worktree-scoped IPC handler opens with, so a change
 // to how a worktree is resolved lands in one place.
-export async function findProjectAndWorktreeOrThrow(
+export const findProjectAndWorktree = Effect.fnUntraced(function* (
   projectId: string,
   worktreeId: string,
-): Promise<{ project: Project; worktree: WorktreeIdentity }> {
-  const project = await findProjectOrThrow(projectId);
-  const worktree = await findWorktreeIdentityOrThrow(project.id, worktreeId);
+) {
+  const project = yield* findProject(projectId);
+  const worktree = yield* findWorktreeIdentity(project.id, worktreeId);
   return { project, worktree };
-}
+});
 
 // The same preamble for the handlers that only need where the worktree
 // is: the read-only git surface (a diff, a status, a log).
-export async function findWorktreePathOrThrow({
-  projectId,
-  worktreeId,
-}: {
+export const findWorktreePath = (scope: {
   projectId: string;
   worktreeId: string;
-}): Promise<string> {
-  const { worktree } = await findProjectAndWorktreeOrThrow(
-    projectId,
-    worktreeId,
+}) =>
+  Effect.map(
+    findProjectAndWorktree(scope.projectId, scope.worktreeId),
+    ({ worktree }) => worktree.path,
   );
-  return worktree.path;
-}
+
+// The Promise forms, for the host code not converted yet: removed with
+// the narrowed engine face (engineCalls.ts) in step 7's B4c PR.
+export const refreshProjects = face(() => refresh);
+export const registerProject = face(addProject);
+export const listProjects = face(() => freshProjects);
+export const primaryRefOf = face(primaryRef);
+export const findProjectOrThrow = face(findProject);
+export const findProjectAndWorktreeOrThrow = face(findProjectAndWorktree);
+export const findWorktreePathOrThrow = face(findWorktreePath);

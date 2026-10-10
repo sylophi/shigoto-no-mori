@@ -135,7 +135,7 @@ const refused = () => Promise.reject(new Error("not in this check"));
 let project: Project;
 let projectId: string;
 const primaryId = async () => {
-  const [primary] = await listWorktrees(projectId);
+  const [primary] = await runHost(listWorktrees(projectId));
   assert.ok(primary !== undefined);
   return primary.id;
 };
