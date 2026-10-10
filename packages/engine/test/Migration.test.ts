@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { StoreMigration } from "@shigomori/contracts/schemas/migration";
+import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import { afterEach, beforeEach, it } from "vitest";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
@@ -35,7 +35,7 @@ const v2Project = (locked: ReadonlyArray<string>) => {
 };
 
 // Each distinct value, the way a screen draws them.
-const distinct = (seen: ReadonlyArray<StoreMigration>) =>
+const distinct = (seen: ReadonlyArray<MigrationProgress>) =>
   seen.filter(
     (value, i) => JSON.stringify(value) !== JSON.stringify(seen[i - 1]),
   );

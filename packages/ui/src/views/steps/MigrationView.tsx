@@ -1,10 +1,11 @@
 // The v3 migration, on the page a window shows in place of the app
 // while it runs: the store's import, the move into `wt/` with its count
-// and the worktree on the move, and this device's sign-in, a button
-// only once its session has lapsed. Continue ends it past a stuck step;
-// with nothing stuck the app opens by itself.
-import type { Migration } from "@shigomori/contracts/schemas/migration";
-import { migrationEnded } from "./migrationEnded.ts";
+// and the worktree on the move, and this device's sign-in for its key,
+// a button only once its session has lapsed. With every step done the
+// app opens by itself; past a stuck step or a sign-in left for later,
+// Continue opens it.
+import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
+import { migrationEnded, type SignInStep } from "./migrationEnded.ts";
 import {
   SignInStepView,
   StepActionView,
@@ -17,22 +18,23 @@ import {
 
 export function MigrationView({
   migration,
-  signingIn,
+  signIn,
   onSignIn,
   onContinue,
 }: {
-  migration: Migration;
-  signingIn: boolean;
+  migration: MigrationProgress;
+  // The device key's enrollment, while it is due.
+  signIn: SignInStep | null;
   onSignIn: () => void;
   onContinue: () => void;
 }) {
-  const { import: imported, worktrees, signIn } = migration;
-  const { ended, stuck } = migrationEnded(migration);
+  const { import: imported, worktrees } = migration;
+  const { canContinue } = migrationEnded(migration, signIn);
   return (
     <StepsPageView
       title="Moving to 3.0"
       footer={
-        ended && stuck ? (
+        canContinue ? (
           <StepActionView label="Continue" onClick={onContinue} />
         ) : undefined
       }
@@ -64,8 +66,8 @@ export function MigrationView({
       )}
       {signIn !== null && (
         <SignInStepView
-          state={signingIn ? "running" : signIn.state}
-          asks={signIn.lapsed && signIn.state !== "done"}
+          state={signIn.state}
+          asks={signIn.asks}
           onSignIn={onSignIn}
         />
       )}

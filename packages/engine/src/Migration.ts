@@ -5,7 +5,7 @@
 // (WtFolder.ts). It is built before them, so a process can show it
 // while the store is still opening.
 import type {
-  StoreMigration,
+  MigrationProgress,
   WorktreeMoveStep,
 } from "@shigomori/contracts/schemas/migration";
 import * as Context from "effect/Context";
@@ -17,11 +17,11 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 export class Migration extends Context.Service<
   Migration,
   {
-    readonly current: Effect.Effect<StoreMigration>;
+    readonly current: Effect.Effect<MigrationProgress>;
     // The current value, then each change.
-    readonly changes: Stream.Stream<StoreMigration>;
+    readonly changes: Stream.Stream<MigrationProgress>;
     readonly update: (
-      f: (migration: StoreMigration) => StoreMigration,
+      f: (migration: MigrationProgress) => MigrationProgress,
     ) => Effect.Effect<void>;
   }
 >()("sm/engine/Migration") {}
@@ -35,14 +35,14 @@ export const WAITING_MOVE: WorktreeMoveStep = {
 };
 
 // Whether every step this start owes has ended, done or stuck.
-export const finished = (migration: StoreMigration) =>
+export const finished = (migration: MigrationProgress) =>
   migration.planned &&
   [migration.import, migration.worktrees].every(
     (step) => step === null || step.state === "done" || step.state === "stuck",
   );
 
 const make = Effect.gen(function* () {
-  const ref = yield* SubscriptionRef.make<StoreMigration>({
+  const ref = yield* SubscriptionRef.make<MigrationProgress>({
     planned: false,
     import: null,
     worktrees: null,

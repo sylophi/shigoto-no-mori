@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
-import type { StoreMigration } from "@shigomori/contracts/schemas/migration";
+import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -188,7 +188,7 @@ export type Sandbox = {
   // A start of the engine as a new process makes one, on a graph of its
   // own, which closes once it is up: each value its migration takes,
   // from before the store opens.
-  readonly start: () => Promise<ReadonlyArray<StoreMigration>>;
+  readonly start: () => Promise<ReadonlyArray<MigrationProgress>>;
   // A run of the doctor as the terminal builds it, which opens the
   // store inside the run.
   readonly doctor: (input: Doctor.RunInput) => Promise<Doctor.DoctorDocument>;
@@ -252,7 +252,7 @@ export function sandbox(
 
   const start = () =>
     Effect.gen(function* () {
-      const seen: StoreMigration[] = [];
+      const seen: MigrationProgress[] = [];
       const migration = yield* Migration.Migration;
       const watching = yield* Deferred.make<void>();
       yield* migration.changes.pipe(

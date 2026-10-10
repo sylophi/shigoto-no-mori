@@ -18,12 +18,14 @@ const macfs = join(dirname(process.execPath), "macfs");
 // path).
 const sm = process.execPath;
 
-type StoreMigration = Effect.Success<Migration.Migration["Service"]["current"]>;
+type MigrationProgress = Effect.Success<
+  Migration.Migration["Service"]["current"]
+>;
 
 const worktrees = (n: number) => `${n} ${n === 1 ? "worktree" : "worktrees"}`;
 
 // The move's line, once it has ended.
-const moveLine = (step: StoreMigration["worktrees"], binaryName: string) => {
+const moveLine = (step: MigrationProgress["worktrees"], binaryName: string) => {
   if (step === null || step.total === 0) return null;
   if (step.state === "done") return `Moved ${worktrees(step.moved)} into wt/.`;
   if (step.state !== "stuck") return null;
@@ -34,7 +36,7 @@ const moveLine = (step: StoreMigration["worktrees"], binaryName: string) => {
 };
 
 // Each step's line, once it has ended.
-const lines = (migration: StoreMigration, binaryName: string) => ({
+const lines = (migration: MigrationProgress, binaryName: string) => ({
   import:
     migration.import?.state === "done"
       ? "Imported the projects and settings from v2."

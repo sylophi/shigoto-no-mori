@@ -32,25 +32,11 @@ export type WorktreeMoveStep = typeof WorktreeMoveStepSchema.Type;
 // import of its JSON files into the store, and the move of its
 // worktrees into `wt/`. A step it doesn't owe is null. Until `planned`,
 // it is still finding out (the store opening), and a start that owes
-// nothing reads planned with both null.
-const StoreMigrationSchema = Schema.Struct({
+// nothing reads planned with both null. This device's sign-in for its
+// key is the window's own (useEnrollment), not the host's.
+export const MigrationSchema = Schema.Struct({
   planned: Schema.Boolean,
   import: Schema.NullOr(Schema.Struct({ state: MigrationStepStateSchema })),
   worktrees: Schema.NullOr(WorktreeMoveStepSchema),
 });
-export type StoreMigration = typeof StoreMigrationSchema.Type;
-
-// The whole migration a window shows: the engine's steps, and this
-// device's sign-in to the account it was enrolled on (its new key and
-// its registration with the hub), which goes by itself while the
-// session lives and waits on the person once it has lapsed.
-export const MigrationSchema = Schema.Struct({
-  ...StoreMigrationSchema.fields,
-  signIn: Schema.NullOr(
-    Schema.Struct({
-      state: MigrationStepStateSchema,
-      lapsed: Schema.Boolean,
-    }),
-  ),
-});
-export type Migration = typeof MigrationSchema.Type;
+export type MigrationProgress = typeof MigrationSchema.Type;

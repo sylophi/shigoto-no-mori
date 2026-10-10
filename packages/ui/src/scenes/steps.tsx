@@ -21,8 +21,8 @@ function migration(pose: MigrationPose) {
     return (
       <SceneWindowFrame sidebar={null}>
         <MigrationView
-          migration={MIGRATION_POSES[pose]}
-          signingIn={false}
+          migration={MIGRATION_POSES[pose].migration}
+          signIn={MIGRATION_POSES[pose].signIn}
           onSignIn={noop}
           onContinue={noop}
         />

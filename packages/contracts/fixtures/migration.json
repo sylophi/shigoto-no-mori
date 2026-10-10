@@ -2,10 +2,22 @@
   "MigrationSchema": {
     "accepts": [
       {
-        "planned": true,
+        "planned": false,
         "import": null,
-        "worktrees": null,
-        "signIn": null
+        "worktrees": null
+      },
+      {
+        "planned": true,
+        "import": {
+          "state": "done"
+        },
+        "worktrees": {
+          "state": "running",
+          "moved": 3,
+          "total": 6,
+          "current": "happy-hummingbird",
+          "stuck": []
+        }
       },
       {
         "planned": true,
@@ -23,33 +35,44 @@
               "reason": "cannot move a locked working tree"
             }
           ]
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "planned": true,
+          "import": null,
+          "worktrees": null,
+          "signIn": null
         },
-        "signIn": {
-          "state": "waiting",
-          "lapsed": true
+        "output": {
+          "planned": true,
+          "import": null,
+          "worktrees": null
         }
       }
     ],
     "rejects": [
       {
+        "planned": true
+      },
+      {
         "planned": true,
         "import": {
-          "state": "done"
+          "state": "later"
         },
-        "worktrees": {
-          "state": "running",
-          "moved": 3,
-          "total": 6,
-          "current": "happy-hummingbird",
-          "stuck": []
-        }
+        "worktrees": null
       },
       {
         "planned": true,
         "import": null,
-        "worktrees": null,
-        "signIn": {
-          "state": "done"
+        "worktrees": {
+          "state": "running",
+          "moved": 3,
+          "total": 6,
+          "current": 1,
+          "stuck": []
         }
       }
     ]

@@ -1,10 +1,11 @@
-// The v3 migration's states, as the host's view gives them, for the
-// scenes and the fake host's `?migration=` pose: six worktrees on the
-// move, one of them locked.
+// The v3 migration's states, as the host's view gives them with the
+// window's sign-in beside them, for the scenes and the fake host's
+// `?migration=` pose: six worktrees on the move, one of them locked.
 import type {
-  Migration,
+  MigrationProgress,
   WorktreeMoveStep,
 } from "@shigomori/contracts/schemas/migration";
+import type { SignInStep } from "../views/steps/migrationEnded.ts";
 
 const MOVE: WorktreeMoveStep = {
   state: "waiting",
@@ -19,50 +20,57 @@ const LOCKED = {
   reason: "cannot move a locked working tree",
 };
 
+const MOVED = { ...MOVE, state: "done", moved: 6, total: 6 } as const;
+
 export const MIGRATION_POSES = {
   waiting: {
-    planned: true,
-    import: { state: "running" },
-    worktrees: MOVE,
-    signIn: { state: "waiting", lapsed: false },
+    migration: {
+      planned: true,
+      import: { state: "running" },
+      worktrees: MOVE,
+    },
+    signIn: { state: "waiting", asks: false },
   },
   moving: {
-    planned: true,
-    import: { state: "done" },
-    worktrees: {
-      state: "running",
-      moved: 3,
-      total: 6,
-      current: "happy-hummingbird",
-      stuck: [],
+    migration: {
+      planned: true,
+      import: { state: "done" },
+      worktrees: {
+        state: "running",
+        moved: 3,
+        total: 6,
+        current: "happy-hummingbird",
+        stuck: [],
+      },
     },
-    signIn: { state: "waiting", lapsed: false },
+    signIn: { state: "waiting", asks: false },
   },
   stuck: {
-    planned: true,
-    import: { state: "done" },
-    worktrees: {
-      state: "stuck",
-      moved: 5,
-      total: 6,
-      current: null,
-      stuck: [LOCKED],
+    migration: {
+      planned: true,
+      import: { state: "done" },
+      worktrees: {
+        state: "stuck",
+        moved: 5,
+        total: 6,
+        current: null,
+        stuck: [LOCKED],
+      },
     },
-    signIn: { state: "done", lapsed: false },
+    signIn: { state: "done", asks: false },
   },
   signIn: {
-    planned: true,
-    import: { state: "done" },
-    worktrees: { ...MOVE, state: "done", moved: 6, total: 6 },
-    signIn: { state: "waiting", lapsed: true },
+    migration: { planned: true, import: { state: "done" }, worktrees: MOVED },
+    signIn: { state: "waiting", asks: true },
   },
   done: {
-    planned: true,
-    import: { state: "done" },
-    worktrees: { ...MOVE, state: "done", moved: 6, total: 6 },
-    signIn: { state: "done", lapsed: false },
+    migration: { planned: true, import: { state: "done" }, worktrees: MOVED },
+    signIn: { state: "done", asks: false },
   },
-} satisfies Record<string, Migration>;
+} satisfies Record<
+  string,
+  { migration: MigrationProgress; signIn: SignInStep | null }
+>;
 
 export type MigrationPose = keyof typeof MIGRATION_POSES;
 

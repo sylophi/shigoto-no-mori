@@ -718,11 +718,7 @@
       "import": {
         "state": "done"
       },
-      "worktrees": null,
-      "signIn": {
-        "state": "running",
-        "lapsed": true
-      }
+      "worktrees": null
     }
   },
   "mirror:applyGitState": {
