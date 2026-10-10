@@ -81,7 +81,7 @@ const TP_SM = projectNamed(THINKPAD_ID, "shigoto-no-mori");
 const GECKO = worktreeNamed(TP_SM, "gentle-gecko");
 const BADGER = worktreeNamed(SM, "brave-badger");
 const GECKO_TITLE = worktreeTitle(GECKO, posedPullRequestDetail(GECKO.branch));
-const WORKTREES_BASE = "~/.sm/worktrees/shigoto-no-mori";
+const WORKTREES_BASE = "~/.sm/wt/shigoto-no-mori";
 
 const TRANSPLANT_STEPS = [
   "Review & destination",
@@ -408,7 +408,7 @@ const PLAN = {
 export function FlowStepsScene() {
   const landed = {
     ...GECKO,
-    path: `/Users/rin/.sm/worktrees/shigoto-no-mori/${GECKO.name}`,
+    path: `/Users/rin/.sm/wt/shigoto-no-mori/${GECKO.name}`,
   };
   const session = mirrorSessionFixture(BADGER, THINKPAD_ID, GECKO);
   return (

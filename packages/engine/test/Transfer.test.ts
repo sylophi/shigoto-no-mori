@@ -217,7 +217,7 @@ const seed = () => {
   box.write("registry.json", {
     projects: [{ id: "P1", name: "repo", path: repo }],
   });
-  const fox = join(repo, ".shigomori", "worktrees", "fox");
+  const fox = join(repo, ".shigomori", "wt", "fox");
   box.git(repo, "worktree", "add", "-q", "-b", "fox", fox);
   return { repo, fox };
 };
@@ -437,7 +437,7 @@ describe("send, bring and mirror", () => {
             cloneInto: "~/code",
             projectId: "P1",
             worktreeId: worktreeIdFromPath(
-              join(box.home, "repo", ".shigomori", "worktrees", "fox"),
+              join(box.home, "repo", ".shigomori", "wt", "fox"),
             ),
           },
         },

@@ -20,7 +20,7 @@ export const LAYOUT_OPTIONS: LayoutOption[] = [
   {
     value: "in-project",
     label: "In project",
-    description: "Worktrees live inside the primary at .shigomori/worktrees/.",
+    description: "Worktrees live inside the primary at .shigomori/wt/.",
   },
   {
     value: "custom",
