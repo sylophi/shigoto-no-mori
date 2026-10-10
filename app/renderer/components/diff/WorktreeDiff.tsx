@@ -46,7 +46,7 @@ import { DiffPage } from "./DiffPage";
 import { WorktreeDiffSubtitleView } from "./DiffTitlesView";
 import { ChangesFooterView, CleanTreeMessageView } from "./WorktreeDiffView";
 import { LastCommitStripView } from "./LastCommitStripView";
-import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
+import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 
 export function WorktreeDiff() {
   const { projectId, worktreeId, nav, worktree, goBack, missing } =

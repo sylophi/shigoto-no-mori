@@ -5,11 +5,11 @@
 // nothing here may reach window, the router or a query.
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import type { DeviceBarTab } from "@/components/shared/DeviceTabBarView";
+import type { DeviceBarTab } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import {
   deviceStatusView,
   type DeviceStatusView,
-} from "@/lib/remote/deviceStatus";
+} from "@shigomori/ui/lib/deviceStatus.ts";
 import {
   accountDevices,
   FAKE_APP_VERSION,

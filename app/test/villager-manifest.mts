@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { VillagerManifest } from "@shared/villagers/manifest";
-import { LEGENDARY_VILLAGERS } from "@shared/villagers/rarity";
+import { LEGENDARY_VILLAGERS } from "@shigomori/ui/lib/villagers/rarity.ts";
 import { appRoot, repoRoot } from "./lib/checkKit.mts";
 import { it } from "vitest";
 

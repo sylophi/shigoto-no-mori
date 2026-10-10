@@ -12,14 +12,14 @@
 // machine it is showing. A radio group: one pick at a time, arrows
 // move it, the way the device tabs do.
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceLeadView } from "@/components/shared/DeviceGlyphView";
+import { DeviceLeadView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import type { StatusTone } from "@shigomori/ui/primitives/status-dot.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
-import { useRovingPick } from "@/hooks/ui/useRovingPick";
+import { useRovingPick } from "@shigomori/ui/hooks/useRovingPick.ts";
 import { deviceAbbrev } from "@/lib/deviceAbbrev";
-import { deviceTitle } from "@/lib/remote/deviceStatus";
+import { deviceTitle } from "@shigomori/ui/lib/deviceStatus.ts";
 import { cn } from "@shigomori/ui/lib/utils.ts";
 
 // The All pill's id.

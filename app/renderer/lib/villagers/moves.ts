@@ -40,7 +40,7 @@ import {
   netMoves,
   type Speaker,
   worktreeMoves,
-} from "@/lib/villagerVoice";
+} from "@shigomori/ui/lib/villagerVoice.ts";
 import { speakersFor } from "./speakers";
 import { recordVisits } from "./visitLog";
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   FolderPickerView,
   type FolderPickerProps,
-} from "@/components/shared/FolderPickerView";
+} from "@shigomori/ui/views/shared/FolderPickerView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useHostScope } from "@/hooks/remote/useHostScope";

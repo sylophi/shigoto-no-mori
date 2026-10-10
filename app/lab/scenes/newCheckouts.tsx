@@ -8,7 +8,7 @@ import {
   AddProjectHeaderView,
   AddProjectNoDeviceView,
   type AddProjectMode,
-} from "@/components/AddProjectModalView";
+} from "@shigomori/ui/views/AddProjectModalView.tsx";
 import { AddExistingFormView } from "@/components/addProject/AddExistingFormView";
 import { CloneFormView } from "@/components/addProject/CloneFormView";
 import { CreateFormView } from "@/components/addProject/CreateFormView";
@@ -21,13 +21,13 @@ import {
   NewWorktreeFormView,
 } from "@/components/newWorktree/NewWorktreeView";
 import { PullRequestSourceView } from "@/components/newWorktree/PullRequestPickerView";
-import { BranchComboboxView } from "@/components/shared/BranchComboboxView";
-import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
-import { ProjectDevicePageView } from "@/components/shared/ProjectDevicePageView";
+import { BranchComboboxView } from "@shigomori/ui/views/shared/BranchComboboxView.tsx";
+import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
+import { ProjectDevicePageView } from "@shigomori/ui/views/shared/ProjectDevicePageView.tsx";
 import {
   VillagerFaceView,
   VillagerSaysView,
-} from "@/components/shared/VillagerSaysView";
+} from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
 import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import {

@@ -3,14 +3,16 @@
 // provider mounted, a peer's under one), so the same row, console and
 // detail-page code shows and drives runs on whichever device the
 // surrounding subtree names.
+import type {
+  ScriptActivityKind,
+  ScriptRunState,
+} from "@shigomori/ui/lib/scriptRun.ts";
 import { useSyncExternalStore } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { localDeviceId } from "@/lib/queryKeys";
 import {
   EMPTY_STATE,
-  type ScriptActivityKind,
   type ScriptKey,
-  type ScriptRunState,
   type ScriptRunsStore,
   scriptRunsFor,
 } from "@/store/scriptRuns";

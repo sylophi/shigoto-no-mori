@@ -1,8 +1,6 @@
 import { useState } from "react";
 import type { Worktree } from "@shigomori/contracts/schemas";
 
-export const WORKTREE_DELETED_MESSAGE = "This worktree was deleted.";
-
 // True once a worktree sub-page's worktree has dropped out of the list
 // after this mount saw it: deleted while open (here, on the device
 // holding it, from the CLI). The detail page leaves on its own instead.

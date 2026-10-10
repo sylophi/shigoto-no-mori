@@ -6,7 +6,7 @@ import {
   useDeviceTabs,
   usePickedDevice,
 } from "@/components/shared/DeviceTabs";
-import { DeviceTabBarView } from "@/components/shared/DeviceTabBarView";
+import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -17,7 +17,7 @@ import {
   type AddProjectMode,
   AddProjectHeaderView,
   AddProjectNoDeviceView,
-} from "./AddProjectModalView";
+} from "@shigomori/ui/views/AddProjectModalView.tsx";
 
 // Standalone host for the add-project flow (File → Add project…, ⌘N, and
 // the sidebar ＋ button). The shortcut is a native menu accelerator in

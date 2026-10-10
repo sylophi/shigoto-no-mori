@@ -31,7 +31,7 @@ import type {
   MirrorSession,
 } from "@shigomori/contracts/modules/mirror";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
-import { DeviceGlyphView } from "@/components/shared/DeviceGlyphView";
+import { DeviceGlyphView } from "@shigomori/ui/views/shared/DeviceGlyphView.tsx";
 import { RelativeDate } from "@shigomori/ui/primitives/relative-date.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { Skeleton } from "@shigomori/ui/primitives/skeleton.tsx";

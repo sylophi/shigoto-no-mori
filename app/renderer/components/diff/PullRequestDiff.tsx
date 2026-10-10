@@ -1,13 +1,13 @@
 import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
-import { SubPageNotFoundView } from "@/components/shared/SubPageNotFoundView";
+import { SubPageNotFoundView } from "@shigomori/ui/views/shared/SubPageNotFoundView.tsx";
 import { DiffPage } from "./DiffPage";
 import {
   PullRequestDiffSubtitleView,
   PullRequestDiffTitleView,
 } from "./DiffTitlesView";
-import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
+import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 
 export function PullRequestDiff() {
   const { projectId, worktree, goBack, missing } = useRouteWorktree();

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import { DeviceChip } from "@/components/shared/DeviceChip";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
@@ -14,11 +15,7 @@ import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeTitle } from "@/hooks/worktrees/useWorktreeTitle";
-import {
-  scriptKey,
-  type ScriptRunState,
-  type ScriptSlot,
-} from "@/store/scriptRuns";
+import { scriptKey, type ScriptSlot } from "@/store/scriptRuns";
 import {
   CREATE_PHASE_LABEL,
   useWorktreeCreatePhase,

@@ -1,7 +1,7 @@
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { isBirthdayOn } from "@/lib/villagers/birthdays";
 import { useToday } from "@/hooks/ui/useToday";
-import { residentOf, type Speaker } from "@/lib/villagerVoice";
+import { residentOf, type Speaker } from "@shigomori/ui/lib/villagerVoice.ts";
 import { useVillagerFace, useVillagerProfiles } from "./useVillagers";
 
 // The character whose home a worktree is (residentOf), with their face,

@@ -54,11 +54,11 @@ import { SidebarToolbarView } from "@/components/sidebar/SidebarToolbarView";
 import { ProjectSortMenuView } from "@/components/sidebar/SidebarToolbarView";
 import type { WorktreeEntry } from "@/components/sidebar/useWorktreeEntry";
 import { WorktreeRowView } from "@/components/sidebar/WorktreeRowView";
-import { ProjectIconView } from "@/components/shared/ProjectIconView";
+import { ProjectIconView } from "@shigomori/ui/views/shared/ProjectIconView.tsx";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import type { SidebarMarks } from "@/hooks/config/useSidebarMarks";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import {
   accountDevices,

@@ -18,9 +18,9 @@ import {
   type RefObject,
 } from "react";
 import { AlertTriangle, GitPullRequest } from "lucide-react";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { PinnedMarkView } from "@/components/shared/PinnedMarkView";
+import { PageHeaderView } from "@shigomori/ui/views/shared/PageHeaderView.tsx";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
+import { PinnedMarkView } from "@shigomori/ui/views/shared/PinnedMarkView.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";

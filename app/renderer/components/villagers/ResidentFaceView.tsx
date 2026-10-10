@@ -1,4 +1,4 @@
-import { VillagerFaceView } from "@/components/shared/VillagerSaysView";
+import { VillagerFaceView } from "@shigomori/ui/views/shared/VillagerSaysView.tsx";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import type { Resident } from "@/hooks/villagers/useResident";
 import { PartyFaceView } from "./BirthdayFaceView";

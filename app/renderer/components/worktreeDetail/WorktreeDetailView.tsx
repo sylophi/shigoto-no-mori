@@ -5,8 +5,8 @@ import {
   PAGE_HEADER_PADDING,
   PAGE_HEADER_TABS_PADDING,
   PAGE_HEADER_TABS_ROW,
-} from "@/components/shared/PageHeaderView";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+} from "@shigomori/ui/views/shared/PageHeaderView.tsx";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 import { SectionHeading } from "@shigomori/ui/primitives/section-heading.tsx";

@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import { Button } from "@shigomori/ui/primitives/button.tsx";
 import { Checkbox } from "@shigomori/ui/primitives/checkbox.tsx";
-import { ToggleRowView } from "@/components/shared/ToggleRowView";
+import { ToggleRowView } from "@shigomori/ui/views/shared/ToggleRowView.tsx";
 import { Input } from "@shigomori/ui/primitives/input.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import {
   SegmentedControl,
   type SegmentedOption,
 } from "@shigomori/ui/primitives/segmented-control.tsx";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
+import { PAGE_BODY } from "@shigomori/ui/views/shared/PageShellView.tsx";
 import {
   sanitizeBranchName,
   sanitizeWorktreeNameInput,

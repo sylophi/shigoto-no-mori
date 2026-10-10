@@ -1,4 +1,4 @@
-import { FirstRunView } from "./FirstRunView";
+import { FirstRunView } from "@shigomori/ui/views/FirstRunView.tsx";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { ProjectGrid } from "./home/ProjectGrid";
