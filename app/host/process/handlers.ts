@@ -115,7 +115,7 @@ import { cliHandlers } from "@host/ipc/modules/cli";
 import { sharingHandlers, sharingViews } from "@host/ipc/modules/sharing";
 import { terminalsHandlers, terminalsViews } from "@host/ipc/modules/terminals";
 import { controlHandlers, controlTransfers } from "@host/ipc/modules/control";
-import { setControlImpl } from "@host/lib/control/peers";
+import { listDevicesFailure, setControlImpl } from "@host/lib/control/peers";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
 import { agentsHandlers } from "@host/ipc/modules/agents";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
@@ -798,7 +798,10 @@ export function registerHostHandlers(): void {
   // stored credential, and the peers are reached through the seam
   // above.
   setControlImpl({
-    listDevices: Effect.tryPromise(listAccountDevices),
+    listDevices: Effect.tryPromise({
+      try: listAccountDevices,
+      catch: listDevicesFailure,
+    }),
     directPeers: Effect.map(
       Effect.promise(async () => hubHandlers().status(undefined, undefined)),
       (status) =>
