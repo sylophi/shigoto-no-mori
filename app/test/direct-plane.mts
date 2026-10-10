@@ -663,7 +663,7 @@ it("a refusing candidate cannot deny the dial: a far end that refuses has proved
   assert.equal(connection.remoteDeviceId, "B");
 });
 
-it("serialized hellos: with two reachable candidates the slow one never hellos, the winner's session survives (no supersede), and the winner's ticket is spent", async () => {
+it("serialized hellos: with two reachable candidates the slow one never hellos, the winner's session survives (no supersede), and the loser's ticket stays unspent", async () => {
   const listener = await startDirectListener(trackTest);
   // The SAME listener behind a delayed route and a direct one. The
   // slow candidate's socket opens well after the fast one won: if
@@ -704,9 +704,13 @@ it("serialized hellos: with two reachable candidates the slow one never hellos, 
     "still the winner",
     "the slow candidate's late hello superseded the winning session",
   );
-  // Each candidate's socket opens with its own ticket, so the loser
-  // spends at most its own, whether it opened before it was abandoned
-  // or not: what matters is that it never said hello.
+  // A ticket is spent by the hello that links, so the loser, which
+  // never said one, left its own pending.
+  assert.equal(
+    await consumeTicket(listener.tickets, slowTicket, "A"),
+    true,
+    "the abandoned candidate spent its ticket",
+  );
   assert.equal(await consumeTicket(listener.tickets, fastTicket, "A"), false);
 });
 
@@ -929,9 +933,9 @@ it("a machine that answers at an advertised LAN address learns the ticket and no
   assert.ok(first !== undefined, "the impostor saw nothing");
   assert.ok(first.includes(ticket), "the ticket opens the socket in clear");
 
-  // Replayed at the real listener, the first frame spends the ticket
-  // and draws an answer only A can read: nothing the impostor sends
-  // after it authenticates, and the socket closes.
+  // Replayed at the real listener, the first frame draws an answer only
+  // A can read: nothing the impostor sends after it authenticates, and
+  // the socket closes.
   const closedWith = await new Promise<number>((resolve) => {
     const socket = new WsClient(`ws://127.0.0.1:${listener.port}`);
     socket.on("open", () => socket.send(first));
@@ -940,10 +944,12 @@ it("a machine that answers at an advertised LAN address learns the ticket and no
     socket.on("error", () => {});
   });
   assert.equal(closedWith, CLOSE_HANDSHAKE_FAILED);
+  // Spending nothing: the ticket is still the real device's to link
+  // with.
   assert.equal(
     await consumeTicket(listener.tickets, ticket, "A"),
-    false,
-    "a replayed first frame left its ticket pending",
+    true,
+    "a replayed first frame spent the ticket",
   );
 });
 
@@ -1143,6 +1149,13 @@ it("per-connection ticket bookkeeping: one connection's mint replaces only its o
     mintTickets(store, "F", 1, "lan", i.toString(16).padStart(32, "0"));
   }
   assert.equal(await consumeTicket(store, entryAt(oldest, 0), "F"), false);
+  // A device the roster dropped keeps none of its tickets, and the
+  // devices it still names keep theirs.
+  const dropped = mintTickets(store, "D", 1);
+  const kept = mintTickets(store, "K", 1);
+  store.keepDevices(["K"]);
+  assert.equal(await consumeTicket(store, entryAt(dropped, 0), "D"), false);
+  assert.equal(await consumeTicket(store, entryAt(kept, 0), "K"), true);
   // The global backstop refuses the overflowing mint outright and
   // never evicts another peer's pending tickets (an eviction would
   // feed the per-IP lockout against the innocent peer's dial).

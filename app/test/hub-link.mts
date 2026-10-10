@@ -41,7 +41,10 @@ import { fromBase64Url, toBase64Url } from "@shared/crypto/deviceKey";
 import { generateKeyPair, HandshakeState } from "@shared/crypto/noise";
 import {
   CONNECT_INFO_ASK,
+  freshAsk,
+  MAX_SEEN_ASKS,
   relayPrologue,
+  type SeenAsks,
   HubAskRefusedError,
   HubAskTimeoutError,
   HubLinkDownError,
@@ -295,6 +298,20 @@ it("replay: an ask read once is not answered again under another id, nor one pas
   );
   await delay(150);
   assert.equal(served, 1, "a replayed or expired ask was served");
+});
+
+it("replay record: full of asks yet to expire, it refuses a new one rather than forget one, and takes asks again once they expire", () => {
+  const seen: SeenAsks = new Map();
+  const now = 1_000_000;
+  for (let i = 0; i < MAX_SEEN_ASKS; i += 1) {
+    assert.equal(freshAsk(seen, `ask-${i}`, now + 60_000, now), true);
+  }
+  assert.equal(freshAsk(seen, "one more", now + 60_000, now), false);
+  // The first ask recorded is still remembered, so its replay is too.
+  assert.equal(freshAsk(seen, "ask-0", now + 60_000, now), false);
+  // Past every expiry, the record has room again.
+  const later = now + 10 * 60_000;
+  assert.equal(freshAsk(seen, "one more", later + 60_000, later), true);
 });
 
 it("keys: an ask sealed with a key other than the roster's gets no answer, and a tampered answer is refused", async () => {

@@ -101,6 +101,12 @@ export type DirectListenerOpts = {
 export type DirectListener = {
   binding: WsServerBinding;
   tickets: ConnectTicketStore;
+  // `sweep: false` leaves the links be and `dropTickets: false` the
+  // tickets, for a check of what the hello does on its own.
+  rosterNow(
+    online: readonly string[],
+    only?: { sweep?: boolean; dropTickets?: boolean },
+  ): Promise<void>;
   acceptsCommands(): boolean;
   setAccepts(next: boolean): void;
   sharesData(): boolean;
@@ -123,6 +129,13 @@ export async function startDirectListener(
   opts: DirectListenerOpts = {},
 ): Promise<DirectListener> {
   const tickets = createConnectTicketStore(opts.ticketOpts);
+  // The roster's keys: the test keys (hubStub.mts) unless the check
+  // names others, and none for a device a roster (rosterNow) left out.
+  let roster: ReadonlySet<string> | null = null;
+  const rosterKey = (deviceId: string): Uint8Array | undefined =>
+    roster !== null && !roster.has(deviceId)
+      ? undefined
+      : (opts.peerKey?.(deviceId) ?? testDeviceKey(deviceId).pair.publicKey);
   let accepts = false;
   const sharing = Effect.runSync(SubscriptionRef.make(true));
   const registrar = DeviceLink.createLinkRegistrar();
@@ -139,17 +152,17 @@ export async function startDirectListener(
               // The roster's keys are the test keys (hubStub.mts), the
               // listener's its device id's.
               opens: {
-                admit: (ticket, arrivedAs) => {
-                  const deviceId = tickets.consume(ticket, arrivedAs);
-                  return deviceId === null
+                check: (ticket, arrivedAs) => {
+                  const deviceId = tickets.check(ticket, arrivedAs);
+                  const publicKey =
+                    deviceId === null ? undefined : rosterKey(deviceId);
+                  return deviceId === null || publicKey === undefined
                     ? null
-                    : {
-                        deviceId,
-                        publicKey:
-                          opts.peerKey?.(deviceId) ??
-                          testDeviceKey(deviceId).pair.publicKey,
-                      };
+                    : { deviceId, publicKey };
                 },
+                spend: (ticket, arrivedAs) =>
+                  tickets.consume(ticket, arrivedAs),
+                keyOf: rosterKey,
                 localKey: () => testDeviceKey(opts.deviceId ?? "B").pair,
               },
               isCommandGranted: () => accepts,
@@ -235,6 +248,14 @@ export async function startDirectListener(
   return {
     binding,
     tickets,
+    // What the host does as the hub's roster changes (host/process/
+    // wires.ts): the keys follow it, the dropped devices' tickets go,
+    // and their links close.
+    rosterNow: async (online, only = {}) => {
+      roster = new Set(online);
+      if (only.dropTickets !== false) tickets.keepDevices(online);
+      if (only.sweep !== false) await binding.closePeersNotIn(online);
+    },
     acceptsCommands: () => accepts,
     setAccepts: (next) => {
       accepts = next;

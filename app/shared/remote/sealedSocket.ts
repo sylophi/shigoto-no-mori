@@ -8,8 +8,9 @@
 // The dialer's first frame names this link's version, then carries the
 // connect ticket in clear and the handshake's first message; the ticket is the prologue too, so a
 // handshake replayed under another ticket does not open. The listener
-// spends the ticket before any crypto runs (`admit`), which names the
-// device it was minted for and the key the hub's roster holds for it;
+// checks the ticket before any crypto runs (`admit`), which names the
+// device it was minted for and the key the hub's roster holds for it,
+// and spends it only on the hello the open socket then sends;
 // the handshake then proves the dialer holds that key, and the dialer
 // sealed to the listener's own key, which it took from the same roster.
 // Until the handshake is done the socket reads as connecting, and any
@@ -18,6 +19,7 @@
 // Pure: no node builtins, so the host, the desktop dialer and the web
 // client run the same code.
 import type * as Socket from "effect/socket/Socket";
+import { sameKey } from "@shared/crypto/deviceKey";
 import {
   HandshakeState,
   type KeyPair,
@@ -37,6 +39,9 @@ export const CLOSE_HANDSHAKE_FAILED = 4004;
 const CLOSE_PROTOCOL_ERROR = 1002;
 
 const EMPTY = new Uint8Array(0);
+
+// What sealing adds to a frame: its tag.
+export const SEAL_OVERHEAD_BYTES = 16;
 const utf8 = new TextEncoder();
 
 function prologueOf(ticket: string): Uint8Array {
@@ -96,12 +101,6 @@ function bytesOf(data: unknown): Uint8Array | null {
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   return null;
-}
-
-function sameKey(a: Uint8Array | null, b: Uint8Array): boolean {
-  return (
-    a !== null && a.length === b.length && a.every((byte, i) => byte === b[i])
-  );
 }
 
 type Listener = (event: Socket.WebSocketEvent) => void;
@@ -239,10 +238,12 @@ export function sealDialer(
   return sealed.socket;
 }
 
-// The listener's end: spends the ticket, reads the dialer's first
+// The listener's end: checks the ticket, reads the dialer's first
 // message, checks the key it proves is the roster's for the device the
 // ticket was minted for, and answers. `admit` answers that key, or null
-// for a ticket that is not good; `refused` hears every failure, for the
+// for a ticket that is not good, spending nothing: the listener spends
+// the ticket on the hello this socket then sends, and `opened` hears the
+// ticket and the key the handshake proved once it has; `refused` hears every failure, for the
 // listener's log, and whether it was a guess (a ticket or a key that
 // did not hold), which alone counts toward the listener's lockout: a
 // device on another version is refused, not suspected.
@@ -251,6 +252,7 @@ export function sealListener(
   options: {
     readonly localKey: KeyPair;
     readonly admit: (ticket: string) => Promise<Uint8Array | null>;
+    readonly opened: (ticket: string, publicKey: Uint8Array) => void;
     readonly refused: (reason: string, guessed: boolean) => void;
   },
 ): Socket.WebSocketLike {
@@ -286,6 +288,7 @@ export function sealListener(
             throw new NoiseError("the handshake is not done");
           }
           ws.send(onWire(message));
+          options.opened(first.ticket, peerKey);
           sealed.established(transport);
         } catch {
           refuse("the first message did not open", true);

@@ -29,6 +29,20 @@ export function newDeviceKey(): { privateKey: string; publicKey: string } {
   };
 }
 
+// Whether two public keys are the same. They are public, so no
+// constant-time compare is needed.
+export function sameKey(
+  a: Uint8Array | null | undefined,
+  b: Uint8Array | null | undefined,
+): boolean {
+  return (
+    a != null &&
+    b != null &&
+    a.length === b.length &&
+    a.every((byte, i) => byte === b[i])
+  );
+}
+
 export function deviceKeyPair(privateKey: string): KeyPair {
   return keyPairFromPrivateKey(fromBase64Url(privateKey));
 }

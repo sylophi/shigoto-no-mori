@@ -268,6 +268,22 @@ it("carries a frame at the device link's cap, and bounds handshake messages", ()
   assert.throws(() => i.writeMessage(new Uint8Array(65535)), NoiseError);
 });
 
+it("refuses to seal or open once a direction's nonce runs out", () => {
+  const { initiatorSide, responderSide } = handshake();
+  const ad = new Uint8Array(0);
+  // The counter's last value, as if that many frames had gone by.
+  Reflect.set(initiatorSide.send, "n", Number.MAX_SAFE_INTEGER);
+  assert.throws(
+    () => initiatorSide.send.encryptWithAd(ad, text("x")),
+    NoiseError,
+  );
+  Reflect.set(responderSide.receive, "n", Number.MAX_SAFE_INTEGER);
+  assert.throws(
+    () => responderSide.receive.decryptWithAd(ad, new Uint8Array(17)),
+    NoiseError,
+  );
+});
+
 it("stores a device key as base64url and gets the same pair back", () => {
   const key = newDeviceKey();
   assert.match(key.publicKey, /^[A-Za-z0-9_-]{43}$/);
