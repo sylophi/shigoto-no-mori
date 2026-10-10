@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
-import type { CommitDraft } from "@/lib/commitDraft";
+import { isEmptyDraft, type CommitDraft } from "@/lib/commitDraft";
 
 // What amend mode does to the composer's draft. On the way in, the
 // commit's own message is loaded into an empty draft (a draft with text
@@ -43,7 +43,7 @@ export function useAmendDraft({
 
   if (amending && hash && message && parked?.hash !== hash) {
     setParked({ hash, draft });
-    if (!draft.summary && !draft.description) setDraft(message);
+    if (isEmptyDraft(draft)) setDraft(message);
   } else if (!amending && parked) {
     setParked(null);
     setDraft(parked.draft);
