@@ -599,6 +599,29 @@ describe("at a terminal", () => {
   });
 });
 
+describe("the v3 migration", () => {
+  it("says one line per step at the first run, and nothing after", async () => {
+    const repo = box.repo("repo", { "README.md": "hi\n" });
+    box.write("registry.json", {
+      projects: [{ id: "P1", name: "repo", path: repo }],
+    });
+    const v2 = join(box.side("cli"), "worktrees", "repo");
+    for (const name of ["a", "b"]) {
+      box.git(repo, "worktree", "add", "-q", "-b", name, join(v2, name));
+    }
+    box.git(repo, "worktree", "lock", join(v2, "b"));
+    const first = await runAt(box.home, "--json", "list");
+    assert.equal(first.code, 0, first.stderr);
+    const name = flavorNames("dev").binaryName;
+    assert.deepEqual(first.stderr.trimEnd().split("\n"), [
+      "Imported the projects and settings from v2.",
+      `Moved 1 of 2 worktrees into wt/; b (cannot move a locked working tree) stayed, for \`${name} doctor --fix\`.`,
+    ]);
+    const second = await runAt(box.home, "--json", "list");
+    assert.equal(second.stderr, "");
+  });
+});
+
 describe("doctor", () => {
   it("still gives its checklist when the store won't open", async () => {
     writeFileSync(join(box.home, "seed", "store.db"), "not a database");
@@ -952,6 +975,8 @@ describe("projects relocate", () => {
         { id: "B", name: "beta", path: beta },
       ],
     });
+    // The first run imports the 2.x files, and says so.
+    await runAt(box.home, "--json", "list");
     const usage = await runAt(box.home, "projects", "relocate");
     assert.equal(usage.code, 2);
     assert.equal(
@@ -1010,6 +1035,8 @@ describe("worktrees rename", () => {
     for (const name of ["fox", "owl"]) {
       box.git(alpha, "worktree", "add", "-q", "-b", name, join(base, name));
     }
+    // The first run imports the 2.x files, and says so.
+    await runAt(box.home, "--json", "list");
     const usage = await runAt(box.home, "worktrees", "rename");
     assert.equal(usage.code, 2);
     assert.equal(

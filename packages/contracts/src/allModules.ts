@@ -12,6 +12,7 @@ import { globalConfigContract } from "./modules/globalConfig.ts";
 import { hygieneContract } from "./modules/hygiene.ts";
 import { launchersContract } from "./modules/launchers.ts";
 import { menuContract } from "./modules/menu.ts";
+import { migrationContract } from "./modules/migration.ts";
 import { mirrorContract } from "./modules/mirror.ts";
 import { navContract } from "./modules/nav.ts";
 import { packageScriptsContract } from "./modules/packageScripts.ts";
@@ -55,6 +56,7 @@ export const allContractModules = [
   hygieneContract,
   launchersContract,
   menuContract,
+  migrationContract,
   mirrorContract,
   navContract,
   packageScriptsContract,

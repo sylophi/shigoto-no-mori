@@ -42,6 +42,7 @@ import { decode } from "@shigomori/contracts/codec";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
+import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import {
   MIRROR_HISTORY_LIMIT,
   summarizeIgnores,
@@ -106,6 +107,10 @@ import {
   worktree as worktreeFixture,
 } from "@shigomori/ui/fixtures/fixtures.ts";
 import { endpointState } from "@shigomori/ui/fixtures/mirrorFixtures.ts";
+import {
+  MIGRATION_POSES,
+  type MigrationPose,
+} from "@shigomori/ui/fixtures/stepsFixtures.ts";
 import {
   FAKE_DETECTED,
   FAKE_LAUNCHERS,
@@ -1452,6 +1457,16 @@ const directSessions = new Set<string>();
 // ?downloading=sm,tp,mini the ones fetching it.
 const stagedUpdates = new Set<string>();
 const downloadingUpdates = new Set<string>();
+// ?migration=waiting|moving|stuck|done: the v3 migration in that state
+// (stepsFixtures.ts), for its page (?to=/migration). Without it there is
+// nothing to migrate.
+function posedMigration(): MigrationProgress {
+  const pose = new URLSearchParams(location.search).get("migration");
+  return pose !== null && pose in MIGRATION_POSES
+    ? MIGRATION_POSES[pose as MigrationPose].migration
+    : { planned: true, import: null, worktrees: null };
+}
+
 // ?notSharing=tp,mini: the devices with sharing off, which then serve
 // this page nothing.
 const notSharing = new Set<string>();
@@ -1698,11 +1713,15 @@ export function installFakeHostBridge(
   // matching the real browser bridge's shape.
   const localForest = forests[LOCAL_DEVICE_ID];
   if (localForest === undefined) throw new Error("[fake-host] no local forest");
-  const localHost = createFixtureWire("host", (emit) =>
-    WEB_SHELL
-      ? // A browser still keeps its own copy of the shared settings.
-        sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
-      : hostHandlersFor(localForest, emit),
+  const localHost = createFixtureWire(
+    "host",
+    (emit) =>
+      WEB_SHELL
+        ? // A browser still keeps its own copy of the shared settings.
+          sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
+        : hostHandlersFor(localForest, emit),
+    (channel) =>
+      channel === "migration:watch" ? Stream.make(posedMigration()) : undefined,
   );
 
   const webDevice: DeviceInfo = {
@@ -1723,15 +1742,21 @@ export function installFakeHostBridge(
   // signed-out window to show), for the settings that need an account.
   const signedOut =
     !WEB_SHELL && new URLSearchParams(location.search).get("signedOut") === "1";
+  // ?deviceKey=due|lapsed poses a device enrolled before device keys,
+  // which reads signed out until it enrolls again: with its session live
+  // (the enrollment goes by itself, a second and a half), or lapsed.
+  let keyDue = ["due", "lapsed"].includes(
+    new URLSearchParams(location.search).get("deviceKey") ?? "",
+  );
   const accountStatus = () => ({
     configured: true,
-    signedIn: !signedOut,
+    signedIn: !signedOut && !keyDue,
     accountId: signedOut ? "" : FAKE_ACCOUNT_ID,
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
     deviceIcon: deviceIcon ?? detectedIcon(),
     detectedDeviceIcon: detectedIcon(),
     sharedSignIn: false,
-    needsDeviceKey: false,
+    needsDeviceKey: keyDue,
   });
 
   // The engine's forward table, mutated by start/stop so the switches
@@ -1812,7 +1837,12 @@ export function installFakeHostBridge(
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },
-    "account:enroll": () => accountStatus(),
+    "account:enroll": async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      keyDue = false;
+      client.emit("account:changed", { accountId: accountStatus().accountId });
+      return accountStatus();
+    },
     "account:signOut": () => undefined,
     // ?view=inbox poses the sidebar layout over whatever the fake host session
     // has saved, so a shot can open on either view.

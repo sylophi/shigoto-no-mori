@@ -32,6 +32,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import * as Paths from "@shigomori/engine/Paths";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
+import * as Migration from "@shigomori/engine/Migration";
 import * as Store from "@shigomori/engine/Store";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -140,6 +141,7 @@ const launch = () =>
     Terminals.layer({ start }).pipe(
       Layer.provideMerge(SavedTerminals.layer),
       Layer.provide(Store.layer((filename) => SqliteClient.make({ filename }))),
+      Layer.provide(Migration.layer),
       Layer.provide(Paths.layer("prod")),
       Layer.provideMerge(NodeServices.layer),
       Layer.provide(

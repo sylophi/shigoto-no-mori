@@ -1,0 +1,80 @@
+{
+  "MigrationSchema": {
+    "accepts": [
+      {
+        "planned": false,
+        "import": null,
+        "worktrees": null
+      },
+      {
+        "planned": true,
+        "import": {
+          "state": "done"
+        },
+        "worktrees": {
+          "state": "running",
+          "moved": 3,
+          "total": 6,
+          "current": "happy-hummingbird",
+          "stuck": []
+        }
+      },
+      {
+        "planned": true,
+        "import": {
+          "state": "done"
+        },
+        "worktrees": {
+          "state": "stuck",
+          "moved": 5,
+          "total": 6,
+          "current": null,
+          "stuck": [
+            {
+              "name": "gentle-gecko",
+              "reason": "cannot move a locked working tree"
+            }
+          ]
+        }
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "planned": true,
+          "import": null,
+          "worktrees": null,
+          "signIn": null
+        },
+        "output": {
+          "planned": true,
+          "import": null,
+          "worktrees": null
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "planned": true
+      },
+      {
+        "planned": true,
+        "import": {
+          "state": "later"
+        },
+        "worktrees": null
+      },
+      {
+        "planned": true,
+        "import": null,
+        "worktrees": {
+          "state": "running",
+          "moved": 3,
+          "total": 6,
+          "current": 1,
+          "stuck": []
+        }
+      }
+    ]
+  }
+}

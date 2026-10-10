@@ -6,6 +6,7 @@ import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { engineLayer } from "@shigomori/engine/layer";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
+import * as Migration from "@shigomori/engine/Migration";
 import * as Store from "@shigomori/engine/Store";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
@@ -51,22 +52,13 @@ export const layer = (options: {
     Layer.provide(
       ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv())),
     ),
+    // The v3 migration the store and the move into `wt/` report to.
+    Layer.provideMerge(Migration.layer),
     // The scope a run outlives its caller in (EngineRuns, below).
     Layer.merge(runsLayer),
   );
 
 export type Services = Layer.Success<ReturnType<typeof layer>>;
-
-// The engine as an effect found it, for the Promise code the effect
-// hands it (the source link's protocol, the mirror's git follower):
-// what that code asks of the engine runs on the effect's own engine.
-export type Handle = Context.Context<Services>;
-export const handle: Effect.Effect<Handle, never, Services> =
-  Effect.context<Services>();
-export const runWith =
-  (engine: Handle) =>
-  <A, E>(effect: Effect.Effect<A, E, Services>): Promise<A> =>
-    Effect.runPromiseWith(engine)(effect);
 
 type Ids = { readonly projectId?: string; readonly worktreeId?: string };
 

@@ -22,6 +22,7 @@ import { randomBytes } from "node:crypto";
 import { Resolver } from "node:dns";
 import type { LookupFunction } from "node:net";
 import { join } from "node:path";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { WebSocket } from "ws";
 import { mintHexId } from "@host/lib/hexId";
@@ -158,18 +159,18 @@ function listPayload(count: number) {
 // byte channel, the channel's window the only flow control.
 const BUNDLE_BYTES = 10_000_000 + 12_345;
 const bundle = randomBytes(BUNDLE_BYTES);
-async function sendPieces(link: Link): Promise<void> {
-  for (
-    let offset = 0;
-    offset < BUNDLE_BYTES;
-    offset += CHANNEL_MAX_WRITE_BYTES
-  ) {
-    // oxlint-disable-next-line no-await-in-loop -- the channel's window
-    await link.writeBytes(
-      bundle.subarray(offset, offset + CHANNEL_MAX_WRITE_BYTES),
-    );
-  }
-}
+const sendPieces = (link: Link) =>
+  Effect.gen(function* () {
+    for (
+      let offset = 0;
+      offset < BUNDLE_BYTES;
+      offset += CHANNEL_MAX_WRITE_BYTES
+    ) {
+      yield* link.writeBytes(
+        bundle.subarray(offset, offset + CHANNEL_MAX_WRITE_BYTES),
+      );
+    }
+  });
 
 const decodeBundleAnswer = Schema.decodeUnknownSync(BundleAnswerSchema);
 
@@ -205,18 +206,24 @@ async function main() {
         if (port === BUNDLE_DOWN.port) {
           // The source's end of a pull's link: the bundle down, then
           // done.
-          void (async () => {
-            await link.write({ bundle: { bytes: BUNDLE_BYTES } });
-            await sendPieces(link);
-            await link.read();
-            link.end();
-          })().catch(() => link.reset());
+          void Effect.runPromise(
+            Effect.gen(function* () {
+              yield* link.write({ bundle: { bytes: BUNDLE_BYTES } });
+              yield* sendPieces(link);
+              yield* link.read;
+              link.end();
+            }),
+          ).catch(() => link.reset());
           return;
         }
         // The destination's end of a push: it asks, the bytes come up.
-        await link.write({ ask: "bundle" });
-        await link.readBytes(BUNDLE_BYTES, async () => {});
-        link.end();
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            yield* link.write({ ask: "bundle" });
+            yield* link.readBytes(BUNDLE_BYTES, () => Effect.void);
+            link.end();
+          }),
+        );
       });
     },
   });
@@ -348,8 +355,10 @@ async function main() {
   await measure(`${megabytes} MB bundle down a link`, async () => {
     const { channelId, bundleLink } = openLink();
     await transport.invoke("forward:open", { ...BUNDLE_DOWN, channelId });
-    const header = decodeBundleAnswer(await bundleLink.read());
-    await bundleLink.readBytes(header.bundle.bytes, async () => {});
+    const header = decodeBundleAnswer(await Effect.runPromise(bundleLink.read));
+    await Effect.runPromise(
+      bundleLink.readBytes(header.bundle.bytes, () => Effect.void),
+    );
     bundleLink.end();
   });
   await measure(`${megabytes} MB bundle up a link`, async () => {
@@ -358,8 +367,9 @@ async function main() {
       ...BUNDLE_UP,
       channelId,
     });
-    await bundleLink.read();
-    await sendPieces(bundleLink);
+    await Effect.runPromise(
+      Effect.andThen(bundleLink.read, sendPieces(bundleLink)),
+    );
     bundleLink.end();
     await received;
   });

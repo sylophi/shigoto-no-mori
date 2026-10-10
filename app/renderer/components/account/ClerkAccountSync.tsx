@@ -7,10 +7,14 @@
 //   (skipCache, so the device hub never sees one mid-expiry) and
 //   exchange it for a device credential via account:enroll. One
 //   automatic attempt per Clerk user per session (armedFor), re-armed
-//   by a sign-out. A failure (hub down, mint failed) surfaces as the
-//   mutation's error toast, and the account UI offers a manual retry
-//   (the enroll-retry button in AccountSection). Main's
+//   by the Clerk session ending. A failure (hub down, mint failed)
+//   surfaces as the mutation's error toast, and the account UI offers
+//   a manual retry (the enroll-retry button in AccountSection). Main's
 //   in-flight guard is the authoritative dedupe for re-fired effects.
+//   Having seen the device enrolled under the user counts as that
+//   attempt: a credential that then goes while the session lives was
+//   signed out (by this window, another tab of the profile, or another
+//   device), and enrolling again would undo that sign-out.
 // - Clerk signed in as a DIFFERENT user than the stored credential:
 //   sign the account layer out first (the device hub refuses a
 //   cross-account re-enroll of the same deviceId), then the effect
@@ -30,10 +34,11 @@
 //   phase), so a sign-out that fails does not loop. A window whose
 //   sign-in is shared (status.sharedSignIn: a --clone-login dev
 //   profile) drops the account layer only, since ending the Clerk
-//   session would sign every window holding the clone out too, and
-//   arms the enroll guard so the branch above does not re-enroll it on
-//   the spot. Any other block (a refused ticket, a superseded socket)
-//   is not a verdict on the account and changes nothing here.
+//   session would sign every window holding the clone out too, and the
+//   enroll guard, armed since it saw the device enrolled, keeps the
+//   branch above from enrolling it again on the spot. Any other block
+//   (a refused ticket, a superseded socket) is not a verdict on the
+//   account and changes nothing here.
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/react";
 import {
@@ -86,7 +91,6 @@ export function ClerkAccountSync() {
     }
     if (!enrolled || signedOutForBlock.current || signingOut) return;
     signedOutForBlock.current = true;
-    if (sharedSignIn) armedFor.current = userId ?? null;
     // The one word the user gets on why every peer just vanished: the
     // registry's own banner says it too, but that page is replaced by
     // the signed-out panel the moment the sign-out lands.
@@ -96,17 +100,19 @@ export function ClerkAccountSync() {
       duration: 15_000,
     });
     signOutNow();
-  }, [revoked, enrolled, sharedSignIn, signingOut, signOutNow, userId]);
+  }, [revoked, enrolled, signingOut, signOutNow]);
 
   useEffect(() => {
     if (!isLoaded || enrolled === undefined || !configured) return;
     if (isSignedIn && userId) {
       sawSession.current = true;
-      if (enrolled && accountId !== userId) {
+      if (enrolled && accountId === userId) {
+        armedFor.current = userId;
+      } else if (enrolled) {
         // Stale other-account credential (a failed sign-out, Clerk
         // account switching): release it before enrolling.
         if (!signOutPending) signOutMutate();
-      } else if (!enrolled && armedFor.current !== userId) {
+      } else if (armedFor.current !== userId) {
         armedFor.current = userId;
         enrollMutate(() => getToken({ skipCache: true }));
       }
