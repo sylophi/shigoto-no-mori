@@ -54,6 +54,7 @@ import {
   type DeviceFields,
 } from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
+import { createHubTrace } from "../hub/trace";
 import {
   isConfigured,
   resolveServiceConfig,
@@ -108,10 +109,10 @@ export type WebBridge = {
   refreshHub(): Promise<void>;
   // The liveness probe for the hub socket and every direct session,
   // fired by the install when the page comes back to the foreground
-  // or the browser reports the network back: a socket that died while
-  // the tab was hidden or offline is found and redialed in seconds
-  // instead of the sidebar reading "Connected" off a corpse until the
-  // next heartbeat tick.
+  // or the browser reports the network gone or back: a socket that
+  // died while the tab was hidden or offline is found and redialed in
+  // seconds instead of the sidebar reading "Connected" off a corpse
+  // until the next heartbeat tick.
   probe(): void;
   // Tears the hub socket down (tab teardown, tests), along with the
   // direct plane it fronts and the tab's client runtime.
@@ -145,12 +146,15 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // and mint no lan ticket for this caller), no connectInfo server
   // (web/hub/connection.ts), and no host half (no direct listener, no cloudflared, so the
   // status snapshot carries no tunnel state).
+  const traceHub = createHubTrace();
   const directPlane = createDirectPlane({
     connection: () => connection,
     localDeviceId: () => deviceId,
     localAppVersion: () => deps.appVersion,
-    broadcastStatus: (status) =>
-      broadcastAll(hubContract, "statusChanged", status, tab.server),
+    broadcastStatus: (status) => {
+      traceHub(status);
+      broadcastAll(hubContract, "statusChanged", status, tab.server);
+    },
     broadcastPeerPush: (push) =>
       broadcastAll(hubContract, "peerPush", push, tab.server),
     dialableKinds: deps.dialableKinds ?? ["tunnel"],
@@ -293,10 +297,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     await service.revoke(record.credential, targetDeviceId);
     // Revoking THIS browser invalidates its own credential, so the
     // local sign-out follows immediately rather than waiting for the
-    // hub to refuse the next call. Callers revoking self MUST end
-    // the Clerk session first (DevicesPage's SelfRevokeButton does):
-    // with the session still live, ClerkAccountSync sees "signed in,
-    // not enrolled" and re-enrolls, silently undoing the revoke.
+    // hub to refuse the next call. Callers revoking self end the
+    // Clerk session first (DevicesPage's SelfRevokeButton does), so no
+    // session is left live with no device under it.
     if (targetDeviceId === deviceId) store.clear();
     accountChanged();
   }
