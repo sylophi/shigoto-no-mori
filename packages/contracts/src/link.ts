@@ -144,7 +144,7 @@ const hostSideClientModules = new Set(["hub", "portForward"]);
 export const isHostSide = (module: ContractModule): boolean =>
   scopeOf(module) === "host" || hostSideClientModules.has(nameOf(module));
 
-const handshake = new Set(["link:challenge", "link:hello"]);
+const handshake = new Set(["link:hello"]);
 
 type Calls = ReturnType<typeof callsOf>;
 

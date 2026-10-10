@@ -17,6 +17,7 @@ import {
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
+import * as Exit from "effect/Exit";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
@@ -28,16 +29,12 @@ import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type * as Scope from "effect/Scope";
 import type { ClientTransport, Link } from "@shared/ipc/transport";
-import { log } from "@shared/log";
 import { type ChannelMux, createChannelMux } from "./channels";
 import { type FlatClient, linkTransport, rpcLink } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
 import { LinkGroup } from "@shigomori/contracts/link";
-import {
-  handshakeProof,
-  newHandshakeNonce,
-  proofsMatch,
-} from "@shigomori/contracts/proof";
+import type { KeyPair } from "@shared/crypto/noise";
+import { CLOSE_HANDSHAKE_FAILED, sealDialer } from "./sealedSocket";
 
 // A dial that failed before the welcome. `blocked` is the verdict the
 // keeper and the hub supervisor key on: a refused ticket, the wrong
@@ -73,8 +70,17 @@ export type OpenClientSocket = (url: string) => Socket.WebSocketLike;
 export type DeviceLinkOptions = {
   // ws:// or wss:// URL of the peer's listener.
   url: string;
-  // The single-use connect ticket. It never travels (proof.ts).
+  // The single-use connect ticket the socket opens with, or on the
+  // loopback the host's token, which the hello carries.
   ticket: string;
+  // This connection's id, which the host tells it apart by: the one
+  // its ticket was asked for (shared/hub/directDial.ts). A fresh one
+  // when not given.
+  connectionId?: string;
+  // A peer's link is sealed (sealedSocket.ts): this device's key pair,
+  // and the key the hub's roster names for the peer. The loopback's is
+  // not.
+  seal?: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array };
   appVersion: string;
   localDeviceId: string;
   // The peer this dial means to reach: a welcome from any other device
@@ -115,12 +121,12 @@ export type DeviceConnection = {
   remoteAppVersion: string;
 };
 
-// A dial in two steps. Opening is free: the challenge spends no ticket
-// and supersedes nothing, so a dialer opens every candidate at once.
-// The hello spends the ticket and, on the host, supersedes the device's
-// older link, so the dialer says it on one candidate at a time.
+// A dial in two steps. Opening spends the candidate's own ticket and
+// supersedes nothing, so a dialer opens every candidate at once. The
+// hello supersedes the device's older link on the host, so the dialer
+// says it on one candidate at a time.
 export type PendingDeviceConnection = {
-  // Settles once the peer answered the challenge, or failed to.
+  // Settles once the socket opened, its handshake done, or failed to.
   whenOpen: Promise<void>;
   // Says hello and settles with the link. Idempotent.
   authenticate(): Promise<DeviceConnection>;
@@ -131,8 +137,8 @@ export type PendingDeviceConnection = {
 
 // A link dialed in the caller's scope: open, said hello on, and up
 // until the scope closes or the link drops (`dropped`). `gate`, for
-// openDevice's two steps, hears the challenge answered and holds the
-// hello until it is let through.
+// openDevice's two steps, hears the socket open and holds the hello
+// until it is let through.
 type DialedDevice = Omit<DeviceConnection, "close"> & {
   // The link's Effect face, which `transport` is the Promise face of.
   readonly link: Link;
@@ -143,7 +149,7 @@ type DialedDevice = Omit<DeviceConnection, "close"> & {
 export const dialDevice = (
   options: DeviceLinkOptions,
   gate?: {
-    readonly opened: Deferred.Deferred<string, RemoteConnectError>;
+    readonly opened: Deferred.Deferred<void, RemoteConnectError>;
     readonly helloAsked: Deferred.Deferred<void>;
   },
 ): Effect.Effect<DialedDevice, RemoteConnectError, Scope.Scope> => {
@@ -165,6 +171,7 @@ export const dialDevice = (
 
   return Effect.gen(function* () {
     const ws = options.openSocket(options.url);
+
     ws.addEventListener("error", (event) => {
       const cause = (event as { error?: unknown }).error;
       const code =
@@ -186,6 +193,26 @@ export const dialDevice = (
     ws.addEventListener("close", (event) => {
       closeCode = event.code ?? null;
     });
+    // Sealed after the listeners above, so the close code is known by
+    // the time anything reading the sealed socket hears the close.
+    const wire =
+      options.seal === undefined
+        ? ws
+        : sealDialer(ws, { ticket: options.ticket, ...options.seal });
+    // Open once the socket is, its handshake done where it is sealed.
+    let socketOpened = false;
+    ws.addEventListener("open", () => {
+      socketOpened = true;
+    });
+    const open = yield* Deferred.make<void>();
+    if (wire.readyState === 1) Deferred.doneUnsafe(open, Exit.void);
+    else {
+      wire.addEventListener(
+        "open",
+        () => Deferred.doneUnsafe(open, Exit.void),
+        { once: true },
+      );
+    }
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         try {
@@ -196,7 +223,7 @@ export const dialDevice = (
       }),
     );
     const dropped = yield* Deferred.make<void>();
-    const socket = yield* Socket.fromWebSocket(Effect.succeed(ws), {
+    const socket = yield* Socket.fromWebSocket(Effect.succeed(wire), {
       openTimeout: options.deadlineMs,
     });
     const protocol = yield* RpcClient.makeProtocolSocket({
@@ -227,34 +254,45 @@ export const dialDevice = (
       client(tag, payload) as Effect.Effect<unknown, unknown>;
     const runFork = yield* FiberSet.makeRuntime<never>();
 
-    const hostNonce = yield* call("link:challenge", undefined).pipe(
-      Effect.map((answer) => (answer as { nonce: string }).nonce),
+    yield* Deferred.await(open).pipe(
       Effect.raceFirst(
         Deferred.await(dropped).pipe(
           Effect.andThen(Effect.fail("dropped" as const)),
         ),
       ),
+      Effect.timeoutOrElse({
+        duration: options.deadlineMs,
+        orElse: () => Effect.fail("timeout" as const),
+      }),
+      // The host closing the handshake refused this socket's ticket or
+      // key: blocked, like a refused hello. Anything else at that
+      // address proved nothing.
       Effect.mapError(() =>
-        connectError("the peer did not answer the challenge"),
+        closeCode === CLOSE_HANDSHAKE_FAILED
+          ? connectError(
+              "the peer refused the connect ticket",
+              true,
+              new LinkRefusedError(),
+            )
+          : connectError(
+              options.seal === undefined || !socketOpened
+                ? "the socket did not open"
+                : "the peer did not complete the handshake",
+            ),
       ),
     );
     if (gate !== undefined) {
-      yield* Deferred.succeed(gate.opened, hostNonce);
+      yield* Deferred.succeed(gate.opened, undefined);
       yield* Deferred.await(gate.helloAsked);
     }
 
-    const clientNonce = newHandshakeNonce();
-    const proof = yield* Effect.promise(() =>
-      handshakeProof(options.ticket, "client", hostNonce, clientNonce),
-    );
     const welcome = (yield* call("link:hello", {
       deviceId: options.localDeviceId,
       deviceKind: options.deviceKind ?? "desktop",
-      connectionId: newConnectionId(),
+      connectionId: options.connectionId ?? newConnectionId(),
       appVersion: options.appVersion,
       protocolVersion: options.protocolVersion ?? PROTOCOL_VERSION,
-      nonce: clientNonce,
-      proof,
+      ...(options.seal === undefined ? { token: options.ticket } : {}),
     }).pipe(
       Effect.mapError((error) =>
         isProtocolVersionMismatchError(error)
@@ -263,20 +301,7 @@ export const dialDevice = (
             ? connectError("the peer refused the connect ticket", true, error)
             : connectError(`the hello failed: ${errorMessageOf(error)}`),
       ),
-    )) as { deviceId: string; appVersion: string; proof: string };
-    const want = yield* Effect.promise(() =>
-      handshakeProof(options.ticket, "host", hostNonce, clientNonce),
-    );
-    // An impostor squatting one address retires that candidate only,
-    // so a bad proof is not a blocking verdict.
-    if (!proofsMatch(welcome.proof, want)) {
-      log.warn(
-        `[link] welcome proof did not match the connect ticket (peer claimed ${welcome.deviceId} at ${options.url})`,
-      );
-      return yield* Effect.fail(
-        connectError("the welcome proof did not match the connect ticket"),
-      );
-    }
+    )) as { deviceId: string; appVersion: string };
     // The wrong machine answered (a stale address, a NAT surprise).
     // Redialing the same address cannot change who lives there.
     if (welcome.deviceId !== options.expectedDeviceId) {
@@ -337,7 +362,7 @@ export const dialDevice = (
 export function openDevice(
   options: DeviceLinkOptions,
 ): PendingDeviceConnection {
-  const opened = Deferred.makeUnsafe<string, RemoteConnectError>();
+  const opened = Deferred.makeUnsafe<void, RemoteConnectError>();
   const helloAsked = Deferred.makeUnsafe<void>();
   const welcomed = Deferred.makeUnsafe<DeviceConnection, RemoteConnectError>();
   let established = false;

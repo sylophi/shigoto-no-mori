@@ -29,7 +29,10 @@ sealed as a Noise handshake message to the addressed device's key
 (`app/shared/hub/link.ts`), as the envelope's `frame`: a string the
 object copies without reading, under the same size limit. A frame
 that is not a string is dropped like any malformed envelope. So the
-hub reads only the addressing: who sent it, to whom, and the ask's id. The HTTP routes are the shared
+hub reads only the addressing: who sent it, to whom, and the ask's id.
+A sealed ask names its expiry inside, and the device it is addressed to
+answers each ask once, so one the hub replays, under any id, is
+dropped. The HTTP routes are the shared
 `HubApi` (`packages/contracts/src/hubApi.ts`), served on Effect's
 `http-api` and called by the app through the client derived from it,
 and the socket's envelopes are `packages/contracts/src/hubProtocol.ts`.

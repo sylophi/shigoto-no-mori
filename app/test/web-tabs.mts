@@ -5,7 +5,9 @@
 // REAL direct listener: both link to the host, each calls it and hears
 // its pushes, and neither link ends the other's. A tab reloading (its
 // bridge gone, a new one over the same storage) leaves its sibling
-// linked.
+// linked. Two tabs dialing at the same moment both link: the host keeps
+// a set of tickets per connection, so one tab's ask does not void the
+// other's.
 //
 // The stub hub keys a web device's sockets by connection, as the
 // Durable Object does: every tab keeps its hub socket, the hub relays to
@@ -46,6 +48,7 @@ async function boot() {
   );
   const listener = await startDirectListener(track, {
     deviceId: "A",
+    peerKey: () => PROFILE_KEY.pair.publicKey,
     registerHandlers: (binding) => {
       binding.handle(
         ECHO,
@@ -164,4 +167,13 @@ it("a tab reloading leaves its sibling linked", async () => {
   await linked(reloaded);
   assert.equal(await echo(reloaded, "back"), "back");
   assert.equal(await echo(staying, "stayed"), "stayed");
+});
+
+it("two tabs dialing at once both link: each holds its own tickets", async () => {
+  const { tab } = await boot();
+  const first = tab();
+  const second = tab();
+  await Promise.all([linked(first), linked(second)]);
+  assert.equal(await echo(first, "one"), "one");
+  assert.equal(await echo(second, "two"), "two");
 });

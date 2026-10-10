@@ -40,6 +40,7 @@ import {
 import { openDevice } from "@shared/remote/deviceLink";
 import { appRoot, delay, makeTracker } from "../lib/checkKit.mts";
 import { mintTicket, startDirectListener } from "../lib/directBoot.mts";
+import { testDeviceKey } from "../lib/hubStub.mts";
 import { startShapedLink, type ShapedLink } from "./lib/shapedLink.mts";
 
 function flag(name: string, fallback: number): number {
@@ -262,6 +263,10 @@ async function main() {
     return openDevice({
       url: link.url,
       ticket,
+      seal: {
+        localKey: testDeviceKey("bench-client").pair,
+        remoteKey: testDeviceKey("bench-host").pair.publicKey,
+      },
       appVersion: "0.0.0",
       localDeviceId: "bench-client",
       expectedDeviceId: "bench-host",
@@ -297,7 +302,7 @@ async function main() {
     }
   }
   const connection = await measure(
-    "connect (open + challenge + hello + welcome)",
+    "connect (open + handshake + hello + welcome)",
     connect,
   );
   const deflate = noDeflate ? "off" : "on";

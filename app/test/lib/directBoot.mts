@@ -50,7 +50,7 @@ import type {
 } from "@shared/ipc/transport";
 import { WebSocket as WsClient } from "ws";
 import { type DeviceConnection, openDevice } from "@shared/remote/deviceLink";
-import { startStubHub, type StubHub } from "./hubStub.mts";
+import { startStubHub, type StubHub, testDeviceKey } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";
 import { type Track, waitFor } from "./checkKit.mts";
 
@@ -77,6 +77,9 @@ type WsServerBinding = Omit<DeviceLink.LinkRegistrar, "handle"> &
 export type DirectListenerOpts = {
   ticketOpts?: ConnectTicketStoreOpts;
   deviceId?: string;
+  // The key the roster names for a dialing device, where it is not
+  // its test key (a web profile's, from its stored envelope).
+  peerKey?: (deviceId: string) => Uint8Array;
   registerHandlers?: (binding: WsServerBinding) => void;
   start?: Partial<WsServerStartOpts>;
   // The switch's one exception (WsServerTicketAuth.isInvited): the
@@ -133,8 +136,22 @@ export async function startDirectListener(
             services: Effect.succeed(services),
             registrar,
             auth: {
-              matchTicket: (deviceId, arrivedAs, matches) =>
-                tickets.consumeProven(deviceId, arrivedAs, matches),
+              // The roster's keys are the test keys (hubStub.mts), the
+              // listener's its device id's.
+              opens: {
+                admit: (ticket, arrivedAs) => {
+                  const deviceId = tickets.consume(ticket, arrivedAs);
+                  return deviceId === null
+                    ? null
+                    : {
+                        deviceId,
+                        publicKey:
+                          opts.peerKey?.(deviceId) ??
+                          testDeviceKey(deviceId).pair.publicKey,
+                      };
+                },
+                localKey: () => testDeviceKey(opts.deviceId ?? "B").pair,
+              },
               isCommandGranted: () => accepts,
               ...(opts.isInvited === undefined
                 ? {}
@@ -236,17 +253,23 @@ export async function startDirectListener(
   };
 }
 
-// Mints `count` connect tickets of one candidate kind for `peer`,
-// failing the check when the store refuses. A loopback dial with no
-// CF-Connecting-IP arrives as a "lan" candidate, hence the default.
+// The connection a check's tickets are minted for, unless it names
+// another.
+export const ONE_CONNECTION = "c".repeat(32);
+
+// Mints `count` connect tickets of one candidate kind for `peer`'s
+// `connectionId`, failing the check when the store refuses. A loopback
+// dial with no CF-Connecting-IP arrives as a "lan" candidate, hence the
+// default.
 export function mintTickets(
   store: Pick<ConnectTicketStore, "mint">,
   peer: string,
   count: number,
   kind: DirectCandidateKind = "lan",
+  connectionId = ONE_CONNECTION,
 ): string[] {
   const tickets = store.mint(
-    peer,
+    { deviceId: peer, connectionId },
     Array.from({ length: count }, () => kind),
   );
   assert.ok(tickets !== null, `the store refused to mint for ${peer}`);
@@ -498,6 +521,10 @@ export async function dialListener(
   const connection = await openDevice({
     url: `ws://127.0.0.1:${listener.port}`,
     ticket: mintTicket(listener.tickets, deviceId),
+    seal: {
+      localKey: testDeviceKey(deviceId).pair,
+      remoteKey: testDeviceKey(opts.hostDeviceId ?? "B").pair.publicKey,
+    },
     appVersion: "1.0.0",
     localDeviceId: deviceId,
     expectedDeviceId: opts.hostDeviceId ?? "B",

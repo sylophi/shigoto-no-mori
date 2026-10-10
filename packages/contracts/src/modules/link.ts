@@ -12,25 +12,19 @@ import { strict } from "../schemas/strict.ts";
 // and mirror streams ride. Every other call on a link is a contract
 // module's, served once the hello is accepted (app/host/socket/).
 //
-// The handshake proves the connect ticket without sending it: the
-// ticket minted for one candidate address over the hub (modules/
-// direct.ts) is answered by whoever holds that address on the dialer's
-// network, so the dialer asks for the host's nonce (challenge), sends
-// its own with an HMAC of both under the ticket (hello), and trusts
-// the answer only once the host's HMAC of the same pair checks out
-// (proof.ts). A challenge spends nothing, so a dialer
-// asks every candidate at once and says hello on one at a time.
+// Between devices the socket under these calls is sealed: the connect
+// ticket and a Noise handshake open it, and every frame after is
+// encrypted (app/shared/remote/sealedSocket.ts), so both ends know
+// who the other is before the hello. The hello names the connection
+// and supersedes the device's older links, so a dialer opens every
+// candidate at once and says hello on one at a time. On the loopback,
+// which never leaves the machine, the hello carries the host's token
+// instead (app/host/socket/loopback.ts).
 //
 // The hello carries the protocol version (protocol.ts). A host on
 // another version refuses it with ProtocolVersionMismatchError.
 
-// A nonce: 16 random bytes as hex.
-const NonceSchema = HexId32Schema;
-// An HMAC-SHA-256, as hex.
-const ProofSchema = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
 const AppVersionSchema = Schema.String.check(Schema.isMaxLength(64));
-
-const ChallengeSchema = strict(Schema.Struct({ nonce: NonceSchema }));
 
 // What kind of device dials: a desktop app, which holds one link to a
 // host (a second supersedes the first: two app instances on one root),
@@ -48,8 +42,10 @@ const HelloSchema = strict(
     connectionId: HexId32Schema,
     appVersion: AppVersionSchema,
     protocolVersion: Schema.Int,
-    nonce: NonceSchema,
-    proof: ProofSchema,
+    // The loopback's token (loopback.json), compared by the host and
+    // nothing else, so whatever a stale file holds is refused there. A
+    // device link has none: its ticket opened the socket.
+    token: Schema.optional(Schema.String.check(Schema.isMaxLength(64))),
   }),
 );
 
@@ -57,7 +53,6 @@ const WelcomeSchema = strict(
   Schema.Struct({
     deviceId: DeviceIdSchema,
     appVersion: AppVersionSchema,
-    proof: ProofSchema,
   }),
 );
 
@@ -99,7 +94,6 @@ const link = { remote: true, gated: false } as const;
 export const linkContract = defineContract(
   "link",
   "host",
-  invoke("challenge", VoidSchema, ChallengeSchema, link),
   invoke("hello", HelloSchema, WelcomeSchema, link),
   // Answers at once: a probe of a link that may have died unseen.
   invoke("ping", VoidSchema, VoidSchema, link),

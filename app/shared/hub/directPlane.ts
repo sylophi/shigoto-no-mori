@@ -19,6 +19,7 @@
 // Pure aside from the injected deps (no electron, no node builtins),
 // like the pieces it composes.
 
+import type { KeyPair } from "@shared/crypto/noise";
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import { callOf, channelOf, payloadOf } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
@@ -51,6 +52,8 @@ const SHARING_CHANGED = callOf(sharingContract, "changed");
 // ONLY (see createDirectPlane below).
 type DirectPlaneConnection = {
   status(): HubConnectionStatus;
+  localKey(): KeyPair | null;
+  peerKey(deviceId: string): Uint8Array | undefined;
   askConnectInfo(
     deviceId: string,
     input: unknown,
@@ -144,6 +147,8 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
         deps.connection().askConnectInfo(deviceId, input, timeoutMs),
       localDeviceId: deps.localDeviceId(),
       localAppVersion: deps.localAppVersion(),
+      localKey: () => deps.connection().localKey(),
+      peerKey: (deviceId) => deps.connection().peerKey(deviceId),
       // Pushes received on a direct connection are the ONLY peer
       // pushes there are (the device hub carries none), tagged with the
       // peer's deviceId and fanned through the owner's peerPush sink

@@ -22,6 +22,7 @@ import type {
   HubConnectOpts,
   HubConnectionStatus,
 } from "@shared/hub/connectionTypes";
+import type { KeyPair } from "@shared/crypto/noise";
 import { toText } from "./rawData";
 
 export type HubConnectionOpts = {
@@ -52,6 +53,10 @@ export type HubConnectionBinding = {
   status(): HubConnectionStatus;
   // The wake-time liveness probe (shared/hub/connection.ts).
   probe(): void;
+  // This device's key pair and a peer's roster key, for the device
+  // link's handshakes (shared/hub/connection.ts).
+  localKey(): KeyPair | null;
+  peerKey(deviceId: string): Uint8Array | undefined;
 };
 
 // The node ws half of the shared socket adapter. Everything ws-specific

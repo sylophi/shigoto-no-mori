@@ -173,8 +173,9 @@ function frameOf(text: string): RelayFrame {
   return frame;
 }
 
-const connectInfoAsk = (input?: unknown) => ({
+const connectInfoAsk = (input?: unknown, expiresAt = Date.now() + 60_000) => ({
   ask: CONNECT_INFO_ASK,
+  expiresAt,
   ...(input === undefined ? {} : { input }),
 });
 
@@ -251,9 +252,49 @@ it("framing: a void input and a void result ride as absent fields", async () => 
   const { a, rawB } = await bootWithRawPeer(trackTest);
   const pending = a.connection.askConnectInfo("B", undefined, ASK_MS);
   const ask = openAsk("A", "B", (await rawB.nextHub()).frame);
-  assert.deepEqual(ask.payload, { ask: CONNECT_INFO_ASK });
+  assert.deepEqual(Object.keys(fields(ask.payload)).toSorted(), [
+    "ask",
+    "expiresAt",
+  ]);
   rawB.send("A", sealAnswer(ask.handshake, ask.id, { ok: true }));
   assert.equal(await pending, undefined);
+});
+
+it("replay: an ask read once is not answered again under another id, nor one past its expiry, and the original's answer stands", async () => {
+  const stub = await startStubHub(trackTest);
+  let served = 0;
+  await bootDevice(
+    stub,
+    "B",
+    {
+      serveConnectInfo: (caller, input) => {
+        served += 1;
+        return testServer(caller, input);
+      },
+    },
+    trackTest,
+  );
+  const raw = rawDevice(stub, "C");
+  trackTest(() => raw.close());
+  await raw.opened;
+  await delay(50);
+  const ask = sealAsk("C", "B", 1, connectInfoAsk("first"));
+  raw.send("B", ask.frame);
+  assert.deepEqual(openAnswer(ask.handshake, (await raw.nextHub()).frame), {
+    ok: true,
+    result: "first",
+  });
+  // The same sealed ask, its cleartext id changed.
+  const replay = frameOf(ask.frame);
+  raw.send("B", encodeRelayFrame({ ...replay, id: 2 }));
+  // An ask past its expiry, sealed afresh.
+  raw.send(
+    "B",
+    sealAsk("C", "B", 3, connectInfoAsk("stale", Date.now() - 10 * 60_000))
+      .frame,
+  );
+  await delay(150);
+  assert.equal(served, 1, "a replayed or expired ask was served");
 });
 
 it("keys: an ask sealed with a key other than the roster's gets no answer, and a tampered answer is refused", async () => {
@@ -323,7 +364,11 @@ it("one ask only: an unknown ask is refused while connectInfo is answered for th
   trackTest(() => raw.close());
   await raw.opened;
   await delay(50);
-  const unknown = sealAsk("C", "B", 1, { ask: "invokeAnything", input: "x" });
+  const unknown = sealAsk("C", "B", 1, {
+    ask: "invokeAnything",
+    expiresAt: Date.now() + 60_000,
+    input: "x",
+  });
   raw.send("B", unknown.frame);
   const refused = fields(
     openAnswer(unknown.handshake, (await raw.nextHub()).frame),
