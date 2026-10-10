@@ -1,14 +1,11 @@
-import type { ComponentType, ReactNode, SVGProps } from "react";
 import {
   Copy,
   FileDiff,
   Folder,
   GitPullRequest,
-  Play,
   Plus,
   SquarePen,
 } from "lucide-react";
-import { Kbd } from "@/components/ui/kbd";
 import { LauncherIconView } from "@/components/shared/LauncherIconView";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { openPullRequest } from "@/components/worktreeDetail/pullRequests/pullRequestShared";
@@ -23,10 +20,15 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { worktreeSyncView } from "@/lib/syncState";
-import { cn } from "@/lib/utils";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import type { LauncherEntry } from "@shigomori/contracts/schemas";
-import { PaletteGroup, PaletteItem, usePaneHasKeys } from "./PaletteItem";
+import { PaletteGroupView } from "./PaletteItemView";
+import {
+  iconOf,
+  ScriptVerbView,
+  VerbGroupView,
+  type Verb,
+} from "./PaletteVerbsView";
 import type { PaletteRow } from "./PaletteRows";
 import type {
   PaletteEntry,
@@ -91,64 +93,6 @@ export function PaletteVerbs({
   }
 }
 
-interface Verb {
-  key: string;
-  label: string;
-  icon: ReactNode;
-  run: () => void;
-  // The key that runs it wherever the keys are (a tool's ⌘ digit).
-  keys?: string;
-  // The key that runs it from the list (↩, ⌘↩), not shown once the
-  // pane has the keys and ↩ runs whichever verb is highlighted.
-  listKeys?: string;
-  // What the query matches, when not the label.
-  search?: string;
-  disabled?: boolean;
-  tip?: string;
-}
-
-const ICON_CLASS = "size-3.5 shrink-0 text-muted-foreground/80";
-const iconOf = (Icon: ComponentType<SVGProps<SVGSVGElement>>) => (
-  <Icon className={ICON_CLASS} />
-);
-
-// A group of verbs, filtered by the query the way the worktree list
-// is, each group on its own so the groups keep their places.
-function VerbGroup({
-  heading,
-  query,
-  verbs,
-}: {
-  heading: string;
-  query: string;
-  verbs: readonly Verb[];
-}) {
-  const hasKeys = usePaneHasKeys();
-  const shown = rankByScore(query, verbs, (verb) => verb.search ?? verb.label);
-  if (shown.length === 0) return null;
-  return (
-    <PaletteGroup heading={heading}>
-      {shown.map((verb) => {
-        const keys = verb.keys ?? (hasKeys ? undefined : verb.listKeys);
-        return (
-          <PaletteItem
-            key={verb.key}
-            value={verb.key}
-            onSelect={verb.run}
-            disabled={verb.disabled}
-            tip={verb.tip}
-            className="text-xs"
-          >
-            {verb.icon}
-            <span className="min-w-0 flex-1 truncate">{verb.label}</span>
-            {keys && <Kbd className="ml-auto shrink-0">{keys}</Kbd>}
-          </PaletteItem>
-        );
-      })}
-    </PaletteGroup>
-  );
-}
-
 // Its pages first, then its tools, its git move and its scripts. The
 // scripts and the git move run on the machine it lives on, so they
 // mount in that device's scope: a peer asleep has no session to run
@@ -200,7 +144,7 @@ function WorktreeVerbs({
   }
   return (
     <>
-      <VerbGroup heading="Go to" query={query} verbs={opens} />
+      <VerbGroupView heading="Go to" query={query} verbs={opens} />
       {launchers && (
         <LauncherVerbs
           entry={entry}
@@ -215,7 +159,7 @@ function WorktreeVerbs({
           <ScriptVerbs entry={entry} query={query} actions={actions} />
         </MaybeHostScope>
       )}
-      <VerbGroup
+      <VerbGroupView
         heading="More"
         query={query}
         verbs={[
@@ -249,7 +193,7 @@ function LauncherVerbs({
 }) {
   const { mutate: launch } = useLaunch();
   return (
-    <VerbGroup
+    <VerbGroupView
       heading="Launch"
       query={query}
       verbs={launchers.map((launcher, i) => ({
@@ -287,7 +231,7 @@ function SyncVerbs({
   const { move } = worktreeSyncView(worktree);
   if (!move || move.disabledReason) return null;
   return (
-    <VerbGroup
+    <VerbGroupView
       heading="Git"
       query={query}
       verbs={[
@@ -325,7 +269,7 @@ function ScriptVerbs({
   const scripts = rankByScore(query, sorted, (script) => script.name);
   if (scripts.length === 0) return null;
   return (
-    <PaletteGroup heading="Scripts">
+    <PaletteGroupView heading="Scripts">
       {scripts.map((script) => (
         <ScriptVerb
           key={script.name}
@@ -335,13 +279,12 @@ function ScriptVerbs({
           actions={actions}
         />
       ))}
-    </PaletteGroup>
+    </PaletteGroupView>
   );
 }
 
-// Runs the script and lands on its console, so the output is what you
-// see next. One already running just opens the console. Its own row,
-// not a Verb: each script asks its runner whether it is busy.
+// A script's verb: its own row, not a Verb, since each script asks its
+// runner whether it is busy.
 function ScriptVerb({
   entry,
   name,
@@ -359,27 +302,17 @@ function ScriptVerb({
     slot,
   );
   return (
-    <PaletteItem
-      className="text-xs"
-      value={`script:${name}`}
+    <ScriptVerbView
+      name={name}
+      command={command}
+      busy={busy}
       disabled={!busy && !canRun}
+      tip={disabledReason ?? command}
       onSelect={() => {
         if (!busy) start();
         actions.go(entry, "script", { scriptKey: slotToParam(slot) });
       }}
-      tip={disabledReason ?? command}
-    >
-      <Play className={ICON_CLASS} />
-      <span className="shrink-0 font-mono">{name}</span>
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate text-right font-mono text-2xs text-muted-foreground",
-          busy && "text-emerald-500",
-        )}
-      >
-        {busy ? "running" : command}
-      </span>
-    </PaletteItem>
+    />
   );
 }
 
@@ -420,7 +353,7 @@ function ProjectVerbs({
     listKeys: lead ? undefined : "↩",
     run: () => actions.openCreateForm(project.id, device?.deviceId),
   });
-  return <VerbGroup heading={project.name} query={query} verbs={verbs} />;
+  return <VerbGroupView heading={project.name} query={query} verbs={verbs} />;
 }
 
 function PageVerbs({
@@ -433,7 +366,7 @@ function PageVerbs({
   actions: PaletteActions;
 }) {
   return (
-    <VerbGroup
+    <VerbGroupView
       heading={page.label}
       query={query}
       verbs={[
@@ -462,7 +395,7 @@ function CreateVerbs({
 }) {
   const [first] = row.targets;
   return (
-    <VerbGroup
+    <VerbGroupView
       heading={`New worktree ${row.branch}`}
       query={query}
       verbs={[

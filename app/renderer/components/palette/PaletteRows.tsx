@@ -1,36 +1,23 @@
-import { Fragment, type ReactNode } from "react";
-import { Loader2, Plus } from "lucide-react";
-import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import {
   useAllowAgentWorking,
   useShowDeviceBadges,
 } from "@/hooks/config/useSidebarMarks";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import {
-  DeviceBadgeView,
-  MirrorBadgeView,
-} from "@/components/sidebar/DeviceBadgeView";
-import { ownerOf } from "@/components/sidebar/buildSidebarRows";
-import { PullRequestPillView } from "@/components/sidebar/PullRequestPillView";
-import { StatusIndicatorView } from "@/components/sidebar/StatusIndicatorView";
+
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { matchPositions } from "@/lib/fuzzyMatch";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
-import { worktreeTitle } from "@/lib/worktreeTitle";
-import {
-  isAgentWorking,
-  worktreeLastActivityAt,
-  type Project,
-} from "@shigomori/contracts/schemas";
+import { isAgentWorking, type Project } from "@shigomori/contracts/schemas";
 import type {
   PaletteEntry,
   PalettePage,
   PaletteProject,
 } from "./buildPaletteEntries";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  CreateRowView,
+  PageRowView,
+  ProjectRowView,
+  WorktreeRowView,
+} from "./PaletteRowsView";
 
 // Everything the list can hold: the worktrees, the projects and pages a
 // query names, and, for a query, the worktree it could make.
@@ -46,7 +33,7 @@ export type PaletteRow =
       targets: [Project, ...Project[]];
     };
 
-export function PaletteRowView({
+export function PaletteRowContent({
   row,
   query,
   now,
@@ -63,17 +50,13 @@ export function PaletteRowView({
     case "project":
       return <ProjectRow item={row.item} query={query} />;
     case "page":
-      return <PageRow page={row.page} query={query} />;
+      return <PageRowView page={row.page} query={query} />;
     case "create":
       return <CreateRow row={row} creating={creating} />;
   }
 }
 
-// The sidebar's reading of a worktree: project and folder under the
-// branch with its last activity, its one most pressing status (the
-// sidebar's rows have the room for both), and the device badge a peer's
-// row wears (or the mirror badge a local pair wears). The letters the
-// query matched are marked.
+// A worktree's row, with its status read off the sidebar's settings.
 function WorktreeRow({
   entry,
   query,
@@ -83,22 +66,24 @@ function WorktreeRow({
   query: string;
   now: number;
 }) {
-  const { worktree, project, device, mirror, pr } = entry;
+  const { worktree, project, device } = entry;
   const allowAgentWorking = useAllowAgentWorking();
   const showBadge = useShowDeviceBadges();
-  const activeAt = worktreeLastActivityAt(worktree);
-  // The sidebar's line: what the work is called, the branch without.
-  const title = worktreeTitle(worktree, pr);
-  const status = worktree.mergedIntoPrimary
-    ? "merged"
-    : isAgentWorking(worktree, allowAgentWorking)
-      ? "agent working"
-      : worktree.shelved
-        ? "shelved"
-        : undefined;
   return (
-    <RowLayout
-      dim={device !== undefined && !device.reachable}
+    <WorktreeRowView
+      entry={entry}
+      query={query}
+      now={now}
+      status={
+        worktree.mergedIntoPrimary
+          ? "merged"
+          : isAgentWorking(worktree, allowAgentWorking)
+            ? "agent working"
+            : worktree.shelved
+              ? "shelved"
+              : undefined
+      }
+      showBadge={showBadge}
       icon={
         <ProjectIcon
           projectId={worktree.projectId}
@@ -106,53 +91,17 @@ function WorktreeRow({
           deviceId={device?.deviceId}
         />
       }
-      title={
-        title !== null ? (
-          <Highlight text={title} query={query} />
-        ) : (
-          <span className="font-mono">
-            {worktree.detached ? (
-              <BranchLabel branch={worktree.branch} detached />
-            ) : (
-              <Highlight text={worktree.branch} query={query} />
-            )}
-          </span>
-        )
-      }
-      detail={
-        <>
-          <Highlight text={project.name} query={query} /> ·{" "}
-          {title !== null && !worktree.detached && (
-            <>
-              <span className="font-mono">
-                <Highlight text={worktree.branch} query={query} />
-              </span>{" "}
-              ·{" "}
-            </>
-          )}
-          <Highlight text={worktree.name} query={query} />
-          {activeAt > 0 && ` · ${formatRelativeTime(activeAt, now)}`}
-          {status && ` · ${status}`}
-        </>
-      }
-    >
-      <PullRequestPillView pr={pr} />
-      <StatusIndicatorView worktree={worktree} />
-      <WorktreeKindIcon worktree={worktree} />
-      {device && <DeviceBadgeView badge={device} />}
-      {mirror && <MirrorBadgeView mirror={mirror} showBadge={showBadge} />}
-    </RowLayout>
+      kindIcon={<WorktreeKindIcon worktree={worktree} />}
+    />
   );
 }
 
-// A project under its owner, the sidebar's header for it, so a query
-// naming the owner shows why the project is in the list.
 function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
-  const { project, device, worktreeCount, deviceCount } = item;
-  const owner = ownerOf(project);
+  const { project, device } = item;
   return (
-    <RowLayout
-      dim={device !== undefined && !device.reachable}
+    <ProjectRowView
+      item={item}
+      query={query}
       icon={
         <ProjectIcon
           projectId={project.id}
@@ -160,35 +109,6 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
           deviceId={device?.deviceId}
         />
       }
-      title={<Highlight text={project.name} query={query} />}
-      detail={
-        <>
-          {owner && (
-            <>
-              <Highlight text={owner.name} query={query} /> ·{" "}
-            </>
-          )}
-          {worktreeCount > 0
-            ? pluralize(worktreeCount, "worktree")
-            : "No worktrees"}
-          {deviceCount > 1 && ` on ${deviceCount} devices`}
-        </>
-      }
-    >
-      {device && <DeviceBadgeView badge={device} />}
-    </RowLayout>
-  );
-}
-
-function PageRow({ page, query }: { page: PalettePage; query: string }) {
-  const Icon = page.icon;
-  return (
-    <RowLayout
-      icon={
-        <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-      }
-      title={<Highlight text={page.label} query={query} />}
-      detail={page.parent}
     />
   );
 }
@@ -203,88 +123,12 @@ function CreateRow({
   const [target] = row.targets;
   // What quickCreate forks from.
   const { data: base } = useDefaultBranch(target.id);
-  const Icon = creating ? Loader2 : Plus;
   return (
-    <RowLayout
-      icon={
-        <span className="inline-flex size-4 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
-          <Icon
-            aria-hidden
-            className={cn("size-3", creating && "animate-spin")}
-          />
-        </span>
-      }
-      title={
-        <>
-          {creating ? "Creating " : "New worktree "}
-          <span className="font-mono">{row.branch}</span>
-        </>
-      }
-      detail={`in ${target.name}${base ? `, from ${base}` : ""}`}
+    <CreateRowView
+      branch={row.branch}
+      projectName={target.name}
+      base={base}
+      creating={creating}
     />
-  );
-}
-
-function RowLayout({
-  icon,
-  title,
-  detail,
-  dim,
-  children,
-}: {
-  icon: ReactNode;
-  title: ReactNode;
-  detail?: ReactNode;
-  dim?: boolean;
-  children?: ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-1 items-center gap-2",
-        dim && "opacity-60",
-      )}
-    >
-      {icon}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <SimpleTooltip whenTruncated lazy tip={title}>
-          <span className="truncate text-xs">{title}</span>
-        </SimpleTooltip>
-        {detail && (
-          <SimpleTooltip whenTruncated lazy tip={detail}>
-            <span className="truncate text-3xs text-muted-foreground">
-              {detail}
-            </span>
-          </SimpleTooltip>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// `text` with the letters the query matched drawn heavier and
-// underlined, so a row shows why it is in the list.
-function Highlight({ text, query }: { text: string; query: string }) {
-  const positions = matchPositions(query, text);
-  if (!positions) return text;
-  const marked = new Set(positions);
-  const runs: { start: number; text: string; marked: boolean }[] = [];
-  for (let i = 0; i < text.length; i++) {
-    const last = runs.at(-1);
-    if (last && last.marked === marked.has(i)) last.text += text[i];
-    else runs.push({ start: i, text: text[i] ?? "", marked: marked.has(i) });
-  }
-  return runs.map((run) =>
-    run.marked ? (
-      <mark
-        key={run.start}
-        className="bg-transparent font-semibold text-current underline decoration-primary/70 decoration-2 underline-offset-2"
-      >
-        {run.text}
-      </mark>
-    ) : (
-      <Fragment key={run.start}>{run.text}</Fragment>
-    ),
   );
 }

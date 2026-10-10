@@ -1,18 +1,13 @@
-import { Play, Square } from "lucide-react";
-import { BackButton } from "@/components/ui/back-button";
-import { Button } from "@/components/ui/button";
 import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
-import { CenteredMessage } from "@/components/ui/centered-message";
 import { peerOutputHiddenNote } from "@/lib/commandAccessCopy";
 import { assertNever } from "@/lib/utils";
 import { slotLabel, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ConsoleBody } from "./ConsoleBody";
-import { ScriptStatusBadgeView } from "@/components/shared/ScriptStatusBadgeView";
+import { ScriptConsolePageView } from "./ScriptConsoleView";
 
 interface InnerProps {
   worktree: Worktree;
@@ -38,70 +33,21 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
   const outputOnly = busy && !state.interactive;
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-col gap-3 border-b border-border px-6 pt-7 pb-4">
-        <BackButton onClick={onBack} label={backLabel} />
-        <div className="flex items-start justify-between gap-6">
-          <div className="min-w-0 flex-1 space-y-1">
-            <SimpleTooltip whenTruncated tip={label}>
-              <h1 className="truncate font-mono text-xl font-medium tracking-tight">
-                {label}
-              </h1>
-            </SimpleTooltip>
-            {command && (
-              <SimpleTooltip whenTruncated tip={command}>
-                <p className="truncate font-mono text-xs text-muted-foreground select-text">
-                  {command}
-                </p>
-              </SimpleTooltip>
-            )}
-            <div className="min-h-[1rem]">
-              <ScriptStatusBadgeView state={state} variant="header" />
-            </div>
-            {outputOnly && (
-              <p className="text-xs text-muted-foreground">
-                Output only: this run was started by the CLI, so the console
-                can't send it input.
-              </p>
-            )}
-          </div>
-          {/* A peer that takes no commands from here neither runs nor
-              stops scripts, nor shows their output (useScriptRunner). */}
-          {canRun && (
-            <div className="shrink-0">
-              {busy ? (
-                <Button
-                  variant="outline-destructive"
-                  size="sm"
-                  onClick={stop}
-                  disabled={state.cancelling}
-                >
-                  <Square />
-                  {state.cancelling ? "Stopping…" : "Stop"}
-                </Button>
-              ) : (
-                <Button size="sm" onClick={start}>
-                  <Play />
-                  {state.status === "idle" ? "Run" : "Run again"}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
-
-      {canRun ? (
-        <ConsoleBody
-          runKey={key}
-          state={state}
-          onClear={canClear ? clear : null}
-        />
-      ) : (
-        <CenteredMessage className="h-auto flex-1 px-6 text-center">
-          {peerOutputHiddenNote()}
-        </CenteredMessage>
-      )}
-    </div>
+    <ScriptConsolePageView
+      back={{ label: backLabel, onClick: onBack }}
+      label={label}
+      command={command}
+      state={state}
+      outputOnly={outputOnly}
+      run={canRun ? { busy, onStart: start, onStop: stop } : null}
+      hiddenNote={canRun ? null : peerOutputHiddenNote()}
+    >
+      <ConsoleBody
+        runKey={key}
+        state={state}
+        onClear={canClear ? clear : null}
+      />
+    </ScriptConsolePageView>
   );
 }
 

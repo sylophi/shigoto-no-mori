@@ -70,14 +70,10 @@ const recording = vi.hoisted(() => {
 vi.mock("react/jsx-runtime", recording);
 vi.mock("react/jsx-dev-runtime", recording);
 
-// The areas not split yet (V3.md, step 6) leave this list as their
-// PRs land.
 const views = import.meta.glob<Record<string, unknown>>(
   "../renderer/components/**/*View.tsx",
   { eager: true },
 );
-
-const PENDING = ["files/", "live/", "palette/", "scriptConsole/"];
 
 // An intrinsic element opening (<div, <span ...>), not a type argument
 // (useState<string>), which follows an identifier.
@@ -96,7 +92,6 @@ it("renders every scene, and every view in one", () => {
   const undrawn: string[] = [];
   for (const [file, module] of Object.entries(views)) {
     const path = file.replace("../renderer/components/", "");
-    if (PENDING.some((area) => path.startsWith(area))) continue;
     for (const [name, value] of Object.entries(module)) {
       if (!name.endsWith("View") || typeof value !== "function") continue;
       if (!drawn.has(value)) undrawn.push(`${path}#${name}`);
@@ -111,7 +106,6 @@ it("keeps markup out of containers", () => {
   for (const file of walk(root, /\.tsx$/)) {
     const path = relative(root, file);
     if (path.startsWith("ui/") || path.endsWith("View.tsx")) continue;
-    if (PENDING.some((area) => path.startsWith(area))) continue;
     const tag = MARKUP.exec(stripComments(readFileSync(file, "utf8")));
     if (tag) offenders.push(`${path} <${tag[1]}>`);
   }

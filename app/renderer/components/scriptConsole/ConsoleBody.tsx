@@ -2,12 +2,11 @@ import { useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
-import { Trash2 } from "lucide-react";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { openExternalUrl } from "@/lib/openExternal";
 import type { ScriptKey, ScriptRunState } from "@/store/scriptRuns";
 import { readTerminalTheme, sameTheme } from "./terminalTheme";
-import { IconButton } from "@/components/ui/icon-button";
+import { ConsoleBodyView, ConsoleTerminalView } from "./ScriptConsoleView";
 
 // Refits during a window drag are coalesced to this. The first fit of
 // a terminal runs at once so it never paints at xterm's default grid.
@@ -26,39 +25,18 @@ interface ConsoleBodyProps {
 }
 
 export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
-  if (state.status === "idle") {
-    return (
-      <div className="flex flex-1 items-center justify-center px-6 text-sm text-muted-foreground">
-        No runs yet. Press Run to start.
-      </div>
-    );
-  }
-
   return (
-    <div className="relative min-h-0 flex-1 bg-background">
+    <ConsoleBodyView
+      idle={state.status === "idle"}
+      starting={state.status === "starting" && !state.hasOutput}
+      onClear={onClear}
+    >
       <ConsoleTerminal
         key={`${runKey}:${state.startedAt ?? 0}`}
         runKey={runKey}
         state={state}
       />
-      {state.status === "starting" && !state.hasOutput && (
-        <div className="pointer-events-none absolute top-3 left-4 font-mono text-xs text-muted-foreground">
-          Starting…
-        </div>
-      )}
-      {onClear && (
-        <IconButton
-          onClick={onClear}
-          aria-label="Clear log"
-          // Above the terminal, whose hover-revealed scrollbar shares
-          // this corner once the output overflows (the terminal wrapper
-          // isolates xterm's own z-indexes, so any positive value wins).
-          className="absolute top-2 right-3 z-10 text-muted-foreground/60"
-        >
-          <Trash2 className="size-3.5" />
-        </IconButton>
-      )}
-    </div>
+    </ConsoleBodyView>
   );
 }
 
@@ -222,23 +200,5 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     }
   }, [runKey, scriptRuns, state.status, state.interactive]);
 
-  // Padding lives on the wrapper: the fit addon sizes the grid from the
-  // host's box width, so padding on the host itself would be counted as
-  // usable columns. `isolate` keeps xterm's internal z-indexes from
-  // competing with the console's own controls. xterm's stylesheet paints
-  // its viewport black and the theme background only reaches the scroll
-  // element inside it, so the strip below the last full row would show
-  // black. Letting the console's background through fixes that.
-  return (
-    <div
-      data-slot="script-console"
-      data-keyboard-surface="raw"
-      className="isolate h-full w-full px-4 py-3 font-mono text-xs"
-    >
-      <div
-        ref={hostRef}
-        className="h-full w-full [&_.xterm]:h-full [&_.xterm-viewport]:bg-transparent"
-      />
-    </div>
-  );
+  return <ConsoleTerminalView hostRef={hostRef} />;
 }

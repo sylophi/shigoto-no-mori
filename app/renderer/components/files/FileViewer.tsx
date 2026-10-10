@@ -1,25 +1,16 @@
 import { getFiletypeFromFileName, preloadHighlighter } from "@pierre/diffs";
-import { File } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
-import { FolderOpen, Loader2 } from "lucide-react";
-import { CODE_STYLE, CODE_THEME } from "@/components/diff/codeTheme";
-import { CenteredMessage } from "@/components/ui/centered-message";
-import { CopyButton } from "@/components/ui/copy-button";
-import { IconButton } from "@/components/ui/icon-button";
+import { CODE_THEME } from "@/components/diff/codeTheme";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { useWorktreeFile } from "@/hooks/worktrees/useWorktreeFile";
 import { formatBytes } from "@/lib/formatBytes";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 import type { WorktreeFile } from "@shigomori/contracts/schemas";
-
-// Past this many lines a file shows as plain text: highlighting it
-// would hold the window for seconds, all at once on the main thread.
-const TOKENIZE_MAX_LINES = 10_000;
+import { CodeFileView, FileViewerView } from "./FileViewerView";
 
 // The files page's pane: one file, read whole and highlighted by the
-// same renderer the diffs use. Read-only by design (PRODUCT.md: the
-// app doesn't own the editor).
+// same renderer the diffs use.
 export function FileViewer({
   projectId,
   worktreeId,
@@ -38,57 +29,37 @@ export function FileViewer({
     worktreeId,
     path,
   );
-  const cut = path.lastIndexOf("/");
-  const name = path.slice(cut + 1);
-
+  const name = path.slice(path.lastIndexOf("/") + 1);
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-        <span className="min-w-0 flex-1 truncate font-mono text-xs select-text">
-          {cut >= 0 && (
-            <span className="text-muted-foreground">
-              {path.slice(0, cut + 1)}
-            </span>
-          )}
-          {name}
-        </span>
-        {data && data.kind !== "missing" && (
-          <span className="tabular shrink-0 text-2xs text-muted-foreground">
-            {formatBytes(data.size)}
-          </span>
-        )}
-        <CopyButton value={path} label="Copy path" />
-        {revealRoot !== null && (
-          <IconButton
-            onClick={() => {
+    <FileViewerView
+      path={path}
+      size={data && data.kind !== "missing" ? data.size : null}
+      onReveal={
+        revealRoot === null
+          ? null
+          : () => {
               window.api.shell
                 .showItemInFolder({ path: `${revealRoot}/${path}` })
                 .catch((err: unknown) =>
                   notifyError("Couldn't reveal the file", err),
                 );
-            }}
-            aria-label="Reveal in Finder"
-            className="shrink-0 p-0.5"
-          >
-            <FolderOpen aria-hidden className="size-3.5" />
-          </IconButton>
-        )}
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        {isPending ? (
-          <CenteredMessage>
-            <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
-            Reading file…
-          </CenteredMessage>
-        ) : isError || data.kind !== "text" || data.contents.length === 0 ? (
-          <CenteredMessage className="px-6 text-center">
-            {isError ? "Couldn't read file." : placeholderFor(data)}
-          </CenteredMessage>
-        ) : (
-          <CodeFile name={name} contents={data.contents} />
-        )}
-      </div>
-    </div>
+            }
+      }
+      reading={isPending}
+      message={
+        isPending
+          ? null
+          : isError
+            ? "Couldn't read file."
+            : data.kind !== "text" || data.contents.length === 0
+              ? placeholderFor(data)
+              : null
+      }
+    >
+      {data?.kind === "text" && (
+        <CodeFile name={name} contents={data.contents} />
+      )}
+    </FileViewerView>
   );
 }
 
@@ -136,18 +107,5 @@ function CodeFile({ name, contents }: { name: string; contents: string }) {
   // A language that fails to load still shows the file, unhighlighted,
   // so only the wait holds it back.
   if (isPending) return null;
-  return (
-    <div data-slot="file-view" className="p-2 select-text" style={CODE_STYLE}>
-      <File
-        file={{ name, contents }}
-        options={{
-          ...CODE_THEME,
-          themeType: resolved,
-          disableFileHeader: true,
-          overflow: "scroll",
-          tokenizeMaxLength: TOKENIZE_MAX_LINES,
-        }}
-      />
-    </div>
-  );
+  return <CodeFileView name={name} contents={contents} themeType={resolved} />;
 }
