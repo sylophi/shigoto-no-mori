@@ -84,7 +84,12 @@ import {
   SharingGate,
 } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
-import { SEAL_OVERHEAD_BYTES, sealListener } from "@shared/remote/sealedSocket";
+import {
+  CLOSE_TRY_AGAIN,
+  ROSTER_UNAVAILABLE,
+  SEAL_OVERHEAD_BYTES,
+  sealListener,
+} from "@shared/remote/sealedSocket";
 import { sameKey } from "@shared/crypto/deviceKey";
 import {
   HELLO_TIMEOUT_MS,
@@ -108,20 +113,31 @@ export type WsServerTicketAuth = {
   readonly opens:
     | {
         // What a ticket opens, spending nothing: the device it was
-        // minted for and the key the hub's roster holds for it, or null.
+        // minted for and the key the hub's roster holds for it, or null,
+        // or ROSTER_UNAVAILABLE while the roster cannot be read.
         readonly check: (
           ticket: string,
           arrivedAs: DirectCandidateKind,
-        ) => { deviceId: string; publicKey: Uint8Array } | null;
+        ) =>
+          | { deviceId: string; publicKey: Uint8Array }
+          | null
+          | typeof ROSTER_UNAVAILABLE;
         // Spends the ticket on its socket's hello, answering the device
         // it was minted for, or null when it is no longer pending.
         readonly spend: (
           ticket: string,
           arrivedAs: DirectCandidateKind,
         ) => string | null;
+        // Drops the pending tickets of every device not in the roster,
+        // as the roster sweep (closePeersNotIn) runs.
+        readonly keepDevices: (deviceIds: readonly string[]) => void;
         // The key the roster holds for a device now, which the hello
         // rechecks: a device removed since its handshake links nothing.
-        readonly keyOf: (deviceId: string) => Uint8Array | undefined;
+        // ROSTER_UNAVAILABLE while the roster cannot be read, which says
+        // nothing against the device.
+        readonly keyOf: (
+          deviceId: string,
+        ) => Uint8Array | undefined | typeof ROSTER_UNAVAILABLE;
         readonly localKey: () => KeyPair | null;
       }
     | { readonly token: string };
@@ -532,10 +548,14 @@ export const make = (options: {
           });
 
         // A refusal answered, then the socket cut once it flushed.
-        const killSoon = (connection: Connection, reason: string) =>
+        const killSoon = (
+          connection: Connection,
+          reason: string,
+          code = CLOSE_HELLO_FAILED,
+        ) =>
           Effect.sync(() =>
             setTimeout(
-              () => connection.kill(CLOSE_HELLO_FAILED, reason),
+              () => connection.kill(code, reason),
               REJECT_TERMINATE_DELAY_MS,
             ).unref(),
           );
@@ -572,12 +592,32 @@ export const make = (options: {
             // nothing. The loopback's carries the token.
             const opens = auth.opens;
             const opened = connection.opened;
+            const rosterKey =
+              "token" in opens || opened === null
+                ? undefined
+                : opens.keyOf(opened.deviceId);
+            // The hub out of reach is no verdict on this device: the
+            // socket closes to be dialed again, its ticket kept and
+            // nothing counted against its address.
+            if (rosterKey === ROSTER_UNAVAILABLE) {
+              log.warn(
+                `[link] could not check a hello from ${connection.ip}: the account's roster is unavailable`,
+              );
+              yield* killSoon(
+                connection,
+                "the account's roster is unavailable",
+                CLOSE_TRY_AGAIN,
+              );
+              return yield* new RemoteCallError({
+                text: "The account's device list is unavailable. Try again.",
+              });
+            }
             const admitted =
               "token" in opens
                 ? payload.token === opens.token
                 : opened !== null &&
                   payload.deviceId === opened.deviceId &&
-                  sameKey(opens.keyOf(opened.deviceId), opened.publicKey) &&
+                  sameKey(rosterKey, opened.publicKey) &&
                   opens.spend(opened.ticket, connection.arrivalKind) ===
                     opened.deviceId;
             if (!admitted) {
@@ -898,10 +938,10 @@ export const make = (options: {
           port: opts.port,
           // A frame at the cap, sealed, carries its tag too.
           maxPayload: MAX_INBOUND_FRAME_BYTES + SEAL_OVERHEAD_BYTES,
-          // A browser offers it, and so does the desktop dialer on a
-          // tunnel candidate, where a diff or a log is worth the CPU. A
-          // LAN dial does not ask: its link outruns the deflate.
-          perMessageDeflate: { threshold: 1024 },
+          // No permessage-deflate: every frame is ciphertext, which does
+          // not compress, so deflate would only add to each frame and
+          // push one at the cap past it.
+          perMessageDeflate: false,
           verifyClient: (info: { req: IncomingMessage }) => {
             const origin = info.req.headers.origin;
             const allowed = isAllowedOrigin(origin, opts.allowedOrigin);
@@ -982,12 +1022,17 @@ export const make = (options: {
                     ? ws
                     : sealListener(ws, {
                         localKey,
-                        admit: async (ticket) =>
-                          opens.check(ticket, arrivalKind)?.publicKey ?? null,
+                        admit: async (ticket) => {
+                          const peer = opens.check(ticket, arrivalKind);
+                          return peer === ROSTER_UNAVAILABLE
+                            ? peer
+                            : (peer?.publicKey ?? null);
+                        },
                         opened: (ticket, publicKey) => {
                           const peer = opens.check(ticket, arrivalKind);
                           if (
                             peer !== null &&
+                            peer !== ROSTER_UNAVAILABLE &&
                             sameKey(peer.publicKey, publicKey)
                           ) {
                             connection.opened = { ticket, ...peer };
@@ -1171,6 +1216,8 @@ export const make = (options: {
       closePeersNotIn: (online) =>
         Effect.sync(() => {
           const live = new Set(online);
+          // A device the roster dropped spends nothing it was handed.
+          if (!("token" in auth.opens)) auth.opens.keepDevices(online);
           // Linked or still to say hello: a socket whose handshake proved
           // a device the roster dropped goes too.
           for (const connection of current?.connections.values() ?? []) {

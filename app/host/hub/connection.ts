@@ -57,6 +57,7 @@ export type HubConnectionBinding = {
   // link's handshakes (shared/hub/connection.ts).
   localKey(): KeyPair | null;
   peerKey(deviceId: string): Uint8Array | undefined;
+  rosterKnown(): boolean;
 };
 
 // The node ws half of the shared socket adapter. Everything ws-specific

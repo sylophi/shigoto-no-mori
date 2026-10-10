@@ -82,40 +82,33 @@ export function relayPrologue(askerId: string, askedId: string): Uint8Array {
 // and its tag.
 const ANSWER_OVERHEAD_BYTES = 32 + 16;
 
-// How long an ask is good for, past any timeout an asker waits it out
-// with, and how far two devices' clocks may disagree.
-const ASK_LIFETIME_MS = 60_000;
-const CLOCK_SKEW_MS = 120_000;
+// How long a device remembers an ask it has answered, from when it
+// received it, on its own clock: no time is compared across devices,
+// so one whose clock is off is answered like any other. A replay within
+// the window is turned away. One older than it opens nothing a fresh
+// ask from the same device could not: it reaches a connection whose
+// tickets were long since spent, or replaces that connection's pending
+// set as a fresh ask would, which keying the tickets per connection
+// already bounds (host/direct/tickets.ts).
+export const SEEN_ASK_RETENTION_MS = 10 * 60_000;
 
-// The asks a device has read, by their handshake hash, each until it
-// expires: what turns a replayed ask away. Kept by the hub connection,
-// so it outlives the link a socket redial replaces. Bounded: while it is
-// full, a new ask is refused until an entry expires, since forgetting
-// one that has not would let it be replayed.
+// The asks a device has read, by their handshake hash, each until its
+// retention ends: what turns a replayed ask away. Kept by the hub
+// connection, so it outlives the link a socket redial replaces.
+// Bounded: while it is full, a new ask is refused until an entry
+// lapses, since forgetting one that has not would let it be replayed.
 export const MAX_SEEN_ASKS = 4096;
 
 export type SeenAsks = Map<string, number>;
 
-// Whether an ask with this hash and expiry is one to answer, noting it
-// if so.
-export function freshAsk(
-  seen: SeenAsks,
-  hash: string,
-  expiresAt: number,
-  now: number,
-): boolean {
+// Whether an ask with this handshake hash, received now, is one to
+// answer, noting it if so.
+export function freshAsk(seen: SeenAsks, hash: string, now: number): boolean {
   for (const [key, until] of seen) {
-    if (until < now) seen.delete(key);
+    if (until <= now) seen.delete(key);
   }
-  if (
-    seen.has(hash) ||
-    expiresAt < now - CLOCK_SKEW_MS ||
-    expiresAt > now + ASK_LIFETIME_MS + CLOCK_SKEW_MS
-  ) {
-    return false;
-  }
-  if (seen.size >= MAX_SEEN_ASKS) return false;
-  seen.set(hash, expiresAt + CLOCK_SKEW_MS);
+  if (seen.has(hash) || seen.size >= MAX_SEEN_ASKS) return false;
+  seen.set(hash, now + SEEN_ASK_RETENTION_MS);
   return true;
 }
 
@@ -371,18 +364,15 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       return;
     }
     // A replayed ask opens like the original, so it is told apart by
-    // its handshake, which no other ask shares, and its expiry.
+    // its handshake, which no other ask shares.
     if (
       !freshAsk(
         deps.seenAsks,
         toBase64Url(handshake.handshakeHash()),
-        ask.expiresAt,
         Date.now(),
       )
     ) {
-      warnDrop(
-        () => `dropping a replayed or expired ask from ${truncateId(from)}`,
-      );
+      warnDrop(() => `dropping a repeated ask from ${truncateId(from)}`);
       return;
     }
     let payload = utf8Encoder.encode(JSON.stringify(answerFor(from, ask)));
@@ -433,11 +423,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         }, timeoutMs),
       });
       try {
-        const ask: AskPayload = {
-          ask: CONNECT_INFO_ASK,
-          expiresAt: Date.now() + ASK_LIFETIME_MS,
-          input,
-        };
+        const ask: AskPayload = { ask: CONNECT_INFO_ASK, input };
         const payload = utf8Encoder.encode(JSON.stringify(ask));
         // Sealed, it only grows, so an ask over the limit already is
         // refused before the handshake's own bound would be.

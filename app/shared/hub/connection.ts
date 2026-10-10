@@ -116,6 +116,9 @@ type HubConnectionCore = {
   // undefined while signed out or the socket is down.
   localKey(): KeyPair | null;
   peerKey(deviceId: string): Uint8Array | undefined;
+  // Whether the roster is known at all: false while the hub socket is
+  // down, when a missing key says nothing about the device.
+  rosterKnown(): boolean;
   // Ask the device hub to prove the socket is still there NOW, under
   // the short probe window: fired on a wake from sleep or a tab coming
   // back. A socket that fails it is torn down and reported to the
@@ -462,6 +465,10 @@ export function createHubConnectionCore(
 
     peerKey(deviceId) {
       return link?.publicKeyOf(deviceId);
+    },
+
+    rosterKnown() {
+      return link !== null;
     },
 
     askConnectInfo(deviceId, input, timeoutMs) {
