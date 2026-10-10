@@ -9,7 +9,7 @@ import { AddExistingForm } from "@/components/addProject/AddExistingForm";
 import { useOpenAddedProject } from "@/components/addProject/useOpenAddedProject";
 import { useSignInStep } from "@/components/steps/useSignInStep";
 import { useMarkWelcomed } from "@/hooks/config/useWelcomed";
-import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
+import { useProjects } from "@/hooks/projects/useProjects";
 import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
@@ -129,8 +129,8 @@ function useCliStep(): {
 
 // terrier's repos beside the picker, whatever this device's terrier
 // switch says, those not added already. A pick turns the switch on,
-// which lists them all as projects, adds the one picked as the picker
-// adds one, and opens it.
+// which lists them all as projects, and opens the one picked once the
+// list has it.
 function useTerrierPick(
   projects: ReadonlyArray<{ id: string; path: string }> | undefined,
 ) {
@@ -144,25 +144,32 @@ function useTerrierPick(
   });
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
-  const addProject = useAddProject();
-  const openAdded = useOpenAddedProject();
-  const pick = useMutation({
-    mutationFn: async (path: string) => {
-      await api.globalConfig.writeDeviceSettings({ patch: { terrier: true } });
-      const project = await addProject.mutateAsync({ path, terrier: false });
-      await openAdded(project.id);
-    },
-    meta: { errorTitle: "Couldn't add the project" },
+  const [picked, setPicked] = useState<string | null>(null);
+  const turnOn = useMutation({
+    mutationFn: () =>
+      api.globalConfig.writeDeviceSettings({ patch: { terrier: true } }),
+    onError: () => setPicked(null),
+    meta: { errorTitle: "Couldn't turn terrier on" },
   });
+  const openAdded = useOpenAddedProject();
+  const added = projects?.find((project) => project.path === picked);
+  const opened = useRef(false);
+  useEffect(() => {
+    if (added === undefined || opened.current) return;
+    opened.current = true;
+    void openAdded(added.id);
+  }, [added, openAdded]);
   const taken = new Set(projects?.map((project) => project.path));
   return {
     repos: listed
       .filter((repo) => !taken.has(repo.path))
       .map((repo) => ({ name: repo.name, path: tildify(repo.path, home) })),
-    picked: pick.isPending ? (pick.variables ?? null) : null,
+    picked,
     pick: (shown: string) => {
       const repo = listed.find((it) => tildify(it.path, home) === shown);
-      if (repo !== undefined) pick.mutate(repo.path);
+      if (repo === undefined) return;
+      setPicked(repo.path);
+      turnOn.mutate();
     },
   };
 }
