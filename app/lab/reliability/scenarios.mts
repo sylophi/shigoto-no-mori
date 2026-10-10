@@ -435,17 +435,20 @@ const twoTabsRedial: Scenario = {
 
 const tokenExpiry: Scenario = {
   name: "token-expiry",
-  does: "Every tab's wall clock jumps two hours ahead, past the Clerk session token's minute and a hub ticket's minute, and the network drops and comes back so every connection is dialed again on the moved clock; then the tab mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry.",
+  does: "Every tab sleeps (hidden and frozen) with the network gone for 75 s, past the Clerk session token's minute and a hub ticket's minute, then wakes on a changed network, so every connection is dialed again after its tokens lapsed; then the tab mints a fresh Clerk token and lists the account's devices. The device's hub credential has no expiry. Real time passes, rather than a page clock moving, which would skew the tab against every other device.",
   boundMs: 30_000,
   async run(lab) {
-    await forEachTab(lab, (tab) => tab.advanceClock(2 * 60 * 60 * 1000));
-    lab.note("clocks moved two hours ahead");
+    await forEachTab(lab, (tab) => tab.setHidden(true));
+    await forEachTab(lab, (tab) => tab.setFrozen(true));
     lab.network.down();
-    await forEachTab(lab, (tab) => tab.setOffline(true));
     changeHost(lab);
-    await sleep(10_000);
+    lab.note("tabs asleep for 75 s");
+    await sleep(75_000);
     lab.network.restore({ cut: true });
-    await forEachTab(lab, (tab) => tab.setOffline(false));
+    await forEachTab(lab, async (tab) => {
+      await tab.setFrozen(false);
+      await tab.setHidden(false);
+    });
     const restored = Date.now();
     await forEachTab(lab, async (tab) => {
       const fresh = await tab.page.evaluate(async () => {
