@@ -34,7 +34,6 @@ import * as Views from "../../host/lib/views.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import * as Ports from "../../host/lib/ports.ts";
 import * as Villagers from "../../host/lib/villagers.ts";
-import { deleteAdapter } from "../../host/ipc/modules/worktrees.ts";
 import { terminalStart } from "../../host/ipc/scriptRun.ts";
 import * as Processes from "../../host/lib/util/processes.ts";
 
@@ -97,8 +96,7 @@ const engine = Engine.adapter.pipe(
 // (host/process/services.ts) are here too, for a proof that runs a
 // handler or serves one (runHost, hostContext).
 const runtime = ManagedRuntime.make(
-  deleteAdapter.pipe(
-    Layer.provideMerge(Processes.adapter),
+  Processes.adapter.pipe(
     Layer.provideMerge(Terminals.layer({ start: terminalStart })),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -120,7 +118,6 @@ const runtime = ManagedRuntime.make(
       Layer.mergeAll(HostPushes.layer, EngineStoreChanges.layer),
     ),
     Layer.provideMerge(ScriptRuns.layer),
-    Layer.provideMerge(FileSync.adapter),
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.layer),
     Layer.provideMerge(engine),
