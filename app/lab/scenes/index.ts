@@ -49,6 +49,9 @@ import {
   NewWorktreeScene,
 } from "./newCheckouts";
 import { ChangesPageScene, CommitPageScene, DiffPartsScene } from "./diffPages";
+import { FilesPageScene, FilesPartsScene } from "./files";
+import { LivePageScene, LiveQuietScene } from "./live";
+import { PalettePickedScene, PaletteScene } from "./palette";
 import { PullRequestPartsScene } from "./pullRequests";
 import { SidebarPartsScene } from "./sidebarParts";
 import { TerminalPartsScene } from "./terminal";
@@ -107,6 +110,12 @@ export const scenes = {
   changesPage: { Scene: ChangesPageScene, ...DESKTOP },
   commitPage: { Scene: CommitPageScene, ...DESKTOP },
   diffParts: { Scene: DiffPartsScene, size: [1300, 900] },
+  filesPage: { Scene: FilesPageScene, ...DESKTOP },
+  filesParts: { Scene: FilesPartsScene, size: [900, 700] },
+  livePage: { Scene: LivePageScene, size: [1300, 900], window: "desktop" },
+  liveQuiet: { Scene: LiveQuietScene, ...DESKTOP },
+  palette: { Scene: PaletteScene, ...DESKTOP },
+  palettePicked: { Scene: PalettePickedScene, ...DESKTOP },
   crash: { Scene: CrashScene, size: [480, 360] },
   projectPage: { Scene: ProjectPageScene, ...DESKTOP },
   peerProjectPage: { Scene: PeerProjectPageScene, ...DESKTOP },

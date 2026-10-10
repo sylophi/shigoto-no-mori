@@ -1,15 +1,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
-import { EyeOff, Files, RotateCw } from "lucide-react";
-import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeaderView";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { WorktreeMissingView } from "@/components/shared/WorktreeMissingView";
-import { BackButton } from "@/components/ui/back-button";
-import { CenteredMessage } from "@/components/ui/centered-message";
-import { ChipButton } from "@/components/ui/chip-button";
-import { IconButton } from "@/components/ui/icon-button";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
@@ -20,9 +13,16 @@ import { peerFilesHiddenNote } from "@/lib/commandAccessCopy";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { withMember } from "@/lib/toggleSet";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { ancestorsOf, FileTree } from "./FileTree";
+import { FileTree } from "./FileTree";
+import { ancestorsOf } from "./treePaths";
 import { FileViewer } from "./FileViewer";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  FilesHeaderView,
+  FilesNoteView,
+  FilesPageView,
+  FilesTreeSheetView,
+  HideIgnoredToggleView,
+} from "./WorktreeFilesView";
 
 // Kept across worktrees and launches, like the diff's line wrap.
 const HIDE_IGNORED_STORAGE_KEY = "files.hideIgnored";
@@ -32,14 +32,14 @@ export function WorktreeFiles() {
   if (!worktree) {
     return <WorktreeMissingView {...missing} />;
   }
-  return <FilesView worktree={worktree} onBack={goBack} />;
+  return <WorktreeFilesPage worktree={worktree} onBack={goBack} />;
 }
 
 // A worktree's files, browsed read-only: the folder tree in the app
 // sidebar (SidebarTakeover), the picked file filling the page. The
 // pick lives in the route's search (`path`), so a link can open the
 // page on a file.
-function FilesView({
+function WorktreeFilesPage({
   worktree,
   onBack,
 }: {
@@ -99,18 +99,8 @@ function FilesView({
     onToggleFolder: toggleFolder,
     onSelectFile: selectFile,
   };
-  // Beside the tree: the sidebar's back row, or the header on a phone,
-  // which has no sidebar.
   const hideIgnoredToggle = (
-    <SimpleTooltip tip="Hide ignored files">
-      <IconButton
-        onClick={toggleHideIgnored}
-        aria-pressed={hideIgnored}
-        aria-label="Hide ignored files"
-      >
-        <EyeOff aria-hidden className="size-4" />
-      </IconButton>
-    </SimpleTooltip>
+    <HideIgnoredToggleView hidden={hideIgnored} onToggle={toggleHideIgnored} />
   );
   // Reveal is this machine's Finder, so only a local page offers it.
   const viewer = selected !== null && (
@@ -123,81 +113,56 @@ function FilesView({
   );
 
   return (
-    <div className="flex h-full flex-col">
-      <SidebarTakeover
-        back={{ label: backLabel, onClick: onBack }}
-        actions={canCommand && hideIgnoredToggle}
-      >
-        {canCommand && <FileTree {...treeProps} className="min-h-0 flex-1" />}
-      </SidebarTakeover>
-      <header
-        className={`flex flex-col gap-3 border-b border-border ${PAGE_HEADER_PADDING}`}
-      >
-        {/* A wide viewport's way back is the sidebar's first row. */}
-        {phone && <BackButton onClick={onBack} label={backLabel} />}
-        <div className="flex items-start justify-between gap-6">
-          <div className="min-w-0 flex-1 space-y-1">
-            <h1 className="truncate text-xl font-medium tracking-tight phone:text-lg">
-              Files
-            </h1>
-            <SimpleTooltip whenTruncated tip={worktree.name}>
-              <p className="truncate font-mono text-xs text-muted-foreground select-text">
-                {worktree.name}
-              </p>
-            </SimpleTooltip>
-          </div>
-          {canCommand && (
-            <div className="flex shrink-0 items-center gap-2 self-center">
-              {phone && selected !== null && (
-                <ChipButton
-                  onClick={() => setTreeSheetOpen(true)}
-                  aria-label="Browse files"
-                  className="py-1.5"
-                >
-                  <Files aria-hidden className="size-3.5" />
-                </ChipButton>
-              )}
-              {phone && hideIgnoredToggle}
-              <ChipButton
-                onClick={refresh}
-                aria-label="Refresh files"
-                className="py-1.5"
-              >
-                <RotateCw aria-hidden className="size-3.5" />
-              </ChipButton>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {!canCommand ? (
-        <CenteredMessage className="px-6 text-center">
-          {peerFilesHiddenNote()}
-        </CenteredMessage>
-      ) : phone ? (
-        // No width beside the viewer on a phone: the tree is the page
-        // until a file is picked, and a sheet after.
-        viewer || <FileTree {...treeProps} className="min-h-0 w-full flex-1" />
-      ) : (
-        viewer || (
-          <CenteredMessage className="min-h-0 flex-1 bg-background px-6">
-            Pick a file to view it.
-          </CenteredMessage>
+    <FilesPageView
+      takeover={
+        <SidebarTakeover
+          back={{ label: backLabel, onClick: onBack }}
+          actions={canCommand && hideIgnoredToggle}
+        >
+          {canCommand && <FileTree {...treeProps} className="min-h-0 flex-1" />}
+        </SidebarTakeover>
+      }
+      header={
+        <FilesHeaderView
+          worktreeName={worktree.name}
+          back={phone ? { label: backLabel, onClick: onBack } : null}
+          controls={
+            canCommand
+              ? {
+                  onBrowse:
+                    phone && selected !== null
+                      ? () => setTreeSheetOpen(true)
+                      : null,
+                  hideIgnored: phone && hideIgnoredToggle,
+                  onRefresh: refresh,
+                }
+              : null
+          }
+        />
+      }
+      body={
+        !canCommand ? (
+          <FilesNoteView peerNote={peerFilesHiddenNote()} />
+        ) : phone ? (
+          // No width beside the viewer on a phone: the tree is the page
+          // until a file is picked, and a sheet after.
+          viewer || (
+            <FileTree {...treeProps} className="min-h-0 w-full flex-1" />
+          )
+        ) : (
+          viewer || <FilesNoteView peerNote={null} />
         )
-      )}
-
-      {phone && (
-        <Sheet open={treeSheetOpen} onOpenChange={setTreeSheetOpen}>
-          <SheetContent
-            side="bottom"
-            showCloseButton={false}
-            className="gap-0 p-0"
+      }
+      sheet={
+        phone && (
+          <FilesTreeSheetView
+            open={treeSheetOpen}
+            onOpenChange={setTreeSheetOpen}
           >
-            <SheetTitle className="sr-only">Files</SheetTitle>
             <FileTree {...treeProps} className="h-[70dvh] w-full" />
-          </SheetContent>
-        </Sheet>
-      )}
-    </div>
+          </FilesTreeSheetView>
+        )
+      }
+    />
   );
 }

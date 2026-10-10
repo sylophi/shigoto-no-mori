@@ -25,7 +25,7 @@ const RESTING_ITEM_CLASS = cn(
 // One row in either pane: a cmdk item in the pane holding the keys, a
 // resting button in the other. `selected` marks the resting pane's row
 // the other pane is about (the worktree whose verbs are showing).
-export function PaletteItem({
+export function PaletteItemView({
   value,
   onSelect,
   disabled,
@@ -73,7 +73,7 @@ export function PaletteItem({
 // A heading over a run of items, in cmdk's group when the pane holds
 // the keys (so its filtering hides an empty one) and the same look
 // when it doesn't.
-export function PaletteGroup({
+export function PaletteGroupView({
   heading,
   children,
 }: {

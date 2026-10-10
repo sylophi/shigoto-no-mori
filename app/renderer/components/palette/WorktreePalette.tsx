@@ -1,21 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useParams } from "@tanstack/react-router";
-import { Command, useCommandState } from "cmdk";
-import { ArrowDown, ArrowUp } from "lucide-react";
-import { KbdHint } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
-import {
-  EMPTY_CLASS,
-  INPUT_CLASS,
-  keepFocusInInput,
-  MODAL_COMMAND_CLASS,
-} from "@/components/ui/cmdk-classes";
-import { BranchLabel } from "@/components/ui/branch-label";
+
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { DeviceBadgeView } from "@/components/sidebar/DeviceBadgeView";
 import { useDeviceBadges } from "@/components/sidebar/deviceBadges";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { rowDeviceId } from "@/lib/routePaths";
 import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
@@ -35,7 +24,6 @@ import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
 import { hasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
 import { scoreFields } from "@/lib/fuzzyMatch";
-import { cn } from "@/lib/utils";
 import {
   buildPaletteEntries,
   createTargets,
@@ -49,10 +37,11 @@ import {
   rankPalettePages,
   rankPaletteProjects,
 } from "./buildPaletteEntries";
-import { PaletteGroup, PaletteItem, PaneKeysProvider } from "./PaletteItem";
-import { PaletteRowView, type PaletteRow } from "./PaletteRows";
+import { PaletteGroupView, PaletteItemView } from "./PaletteItemView";
+import { PaletteRowContent, type PaletteRow } from "./PaletteRows";
 import { PaletteVerbs, type GoTo, type PaletteActions } from "./PaletteVerbs";
 import { usePalettePages } from "./usePalettePages";
+import { PaletteDialogView, PickedChipView } from "./WorktreePaletteView";
 
 // ⌘K: every worktree on every machine, one fuzzy list, and beside it
 // what the highlighted one offers. ↩ jumps to it, ⌘↩ opens its
@@ -428,19 +417,19 @@ function PaletteDialog({
   }
   const listItems = (list: PaletteRow[]) =>
     list.map((row) => (
-      <PaletteItem
+      <PaletteItemView
         key={row.key}
         value={row.key}
         selected={picked?.row.key === row.key}
         onSelect={() => (picked ? back(row.key) : enter(row))}
       >
-        <PaletteRowView
+        <PaletteRowContent
           row={row}
           query={listQuery}
           now={now}
           creating={row.kind === "create" && creating?.branch === row.branch}
         />
-      </PaletteItem>
+      </PaletteItemView>
     ));
 
   return (
@@ -451,209 +440,62 @@ function PaletteDialog({
       // shows: typing and moving the highlight leave the frame still.
       popoverClassName="h-full max-w-3xl"
     >
-      {/* Keyed by stage: the pane holding the keys changes, and a fresh
-          mount keeps the highlight it is handed. */}
-      <Command
-        key={picked ? "verbs" : "list"}
-        label="Worktrees"
-        loop
-        shouldFilter={false}
-        value={highlighted}
-        onValueChange={setHighlighted}
-        className={cn(MODAL_COMMAND_CLASS, "flex-1")}
-      >
-        <div
-          data-slot="search-row"
-          className="flex items-center gap-2 border-b border-border px-3 py-2"
-        >
-          {picked && <PickedChip row={picked.row} onBack={() => back()} />}
-          {picked ? (
-            <Command.Input
-              // oxlint-disable-next-line jsx-a11y/no-autofocus -- the verbs just took the keys
-              autoFocus
-              value={query}
-              onValueChange={onQueryChange}
-              onKeyDown={onInputKeyDown}
-              placeholder="Search actions…"
-              className={INPUT_CLASS}
+      <PaletteDialogView
+        picked={picked !== null}
+        highlighted={highlighted}
+        onHighlight={setHighlighted}
+        chip={
+          picked && (
+            <PickedChipView
+              row={picked.row}
+              icon={
+                picked.row.kind === "worktree" && (
+                  <ProjectIcon
+                    projectId={picked.row.entry.worktree.projectId}
+                    name={picked.row.entry.project.name}
+                    deviceId={picked.row.entry.device?.deviceId}
+                    className="size-3"
+                  />
+                )
+              }
+              onBack={() => back()}
             />
-          ) : (
-            <ListInput
-              value={query}
-              onValueChange={onQueryChange}
-              onKeyDown={onInputKeyDown}
+          )
+        }
+        query={query}
+        onQueryChange={onQueryChange}
+        onInputKeyDown={onInputKeyDown}
+        list={
+          groups.length > 1
+            ? groups.map((group) => (
+                // A heading can come twice (projects above and below
+                // the worktrees), its first row never.
+                <PaletteGroupView
+                  key={group.rows[0]?.key}
+                  heading={group.heading}
+                >
+                  {listItems(group.rows)}
+                </PaletteGroupView>
+              ))
+            : listItems(rows)
+        }
+        emptyList={
+          entries.length === 0 ? "No worktrees yet." : "No worktrees match."
+        }
+        verbs={
+          paneRow && (
+            <PaletteVerbs
+              key={paneRow.key}
+              row={paneRow}
+              query={picked ? query.trim() : ""}
+              actions={actions}
+              launchers={launchers}
+              settled={paneSettled}
             />
-          )}
-        </div>
-
-        {/* The panes scroll, not the list: cmdk's sizer (the list's one
-            child) is the row that holds them, filling what's left. */}
-        <Command.List
-          onMouseDown={keepFocusInInput}
-          className="flex min-h-0 flex-1 flex-col [&>[cmdk-list-sizer]]:flex [&>[cmdk-list-sizer]]:min-h-0 [&>[cmdk-list-sizer]]:flex-1"
-        >
-          <div
-            className={cn(
-              "min-w-0 flex-1 overflow-y-auto p-2",
-              picked && "opacity-60 phone:hidden",
-            )}
-          >
-            <PaneKeysProvider value={!picked}>
-              {groups.length > 1
-                ? groups.map((group) => (
-                    // A heading can come twice (projects above and below
-                    // the worktrees), its first row never.
-                    <PaletteGroup
-                      key={group.rows[0]?.key}
-                      heading={group.heading}
-                    >
-                      {listItems(group.rows)}
-                    </PaletteGroup>
-                  ))
-                : listItems(rows)}
-            </PaneKeysProvider>
-            {!picked && (
-              <Command.Empty className={EMPTY_CLASS}>
-                {entries.length === 0
-                  ? "No worktrees yet."
-                  : "No worktrees match."}
-              </Command.Empty>
-            )}
-          </div>
-          <div
-            data-slot="palette-verbs"
-            className={cn(
-              "w-64 shrink-0 overflow-y-auto border-l border-border bg-muted/30 p-2 phone:w-auto phone:flex-1 phone:border-l-0",
-              !picked && "phone:hidden",
-            )}
-          >
-            <PaneKeysProvider value={picked !== null}>
-              {paneRow && (
-                <PaletteVerbs
-                  key={paneRow.key}
-                  row={paneRow}
-                  query={picked ? query.trim() : ""}
-                  actions={actions}
-                  launchers={launchers}
-                  settled={paneSettled}
-                />
-              )}
-            </PaneKeysProvider>
-            {picked && (
-              <Command.Empty className={EMPTY_CLASS}>
-                No actions match.
-              </Command.Empty>
-            )}
-          </div>
-        </Command.List>
-
-        <div
-          data-slot="footer-row"
-          className="flex items-center gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
-        >
-          <KbdHint
-            keys={[<ArrowUp key="up" />, <ArrowDown key="down" />]}
-            label="Navigate"
-          />
-          <KbdHint
-            keys={["↩"]}
-            label={
-              picked ? "Run" : current?.kind === "create" ? "Create" : "Open"
-            }
-          />
-          {picked ? (
-            <KbdHint keys={["⌫"]} label="Back" />
-          ) : (
-            <>
-              {current?.kind === "worktree" && (
-                <KbdHint keys={["⌘↩"]} label="Changes" />
-              )}
-              <KbdHint keys={["⇥"]} label="Actions" />
-            </>
-          )}
-        </div>
-      </Command>
+          )
+        }
+        current={current?.kind}
+      />
     </ModalShell>
   );
-}
-
-// The list's input. Not cmdk's own: cmdk moves the highlight to the
-// first row on every change of its query, including the one that puts
-// the list's query back after the verbs, which would lose the row they
-// were for. The dialog picks the top match itself as the query changes.
-function ListInput({
-  value,
-  onValueChange,
-  onKeyDown,
-}: {
-  value: string;
-  onValueChange: (value: string) => void;
-  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
-}) {
-  const activeId = useCommandState((state) => state.selectedItemId);
-  return (
-    <input
-      // oxlint-disable-next-line jsx-a11y/no-autofocus -- the palette just opened
-      autoFocus
-      type="text"
-      aria-activedescendant={activeId}
-      aria-label="Search worktrees"
-      autoComplete="off"
-      autoCorrect="off"
-      spellCheck={false}
-      value={value}
-      onChange={(e) => onValueChange(e.target.value)}
-      onKeyDown={onKeyDown}
-      placeholder="Search worktrees, projects, devices, PRs…"
-      className={INPUT_CLASS}
-    />
-  );
-}
-
-// The row whose verbs have the keys, ahead of their query. A click (or
-// ⌫) goes back to the list.
-function PickedChip({ row, onBack }: { row: PaletteRow; onBack: () => void }) {
-  return (
-    <SimpleTooltip tip="Back (⌫)">
-      <button
-        type="button"
-        onClick={onBack}
-        onMouseDown={keepFocusInInput}
-        className="flex max-w-[50%] shrink-0 items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-xs"
-      >
-        <PickedLabel row={row} />
-      </button>
-    </SimpleTooltip>
-  );
-}
-
-function PickedLabel({ row }: { row: PaletteRow }) {
-  switch (row.kind) {
-    case "worktree": {
-      const { worktree, project, device } = row.entry;
-      return (
-        <>
-          <ProjectIcon
-            projectId={worktree.projectId}
-            name={project.name}
-            deviceId={device?.deviceId}
-            className="size-3"
-          />
-          <span className="truncate font-mono">
-            <BranchLabel
-              branch={worktree.branch}
-              detached={worktree.detached}
-            />
-          </span>
-          {device && <DeviceBadgeView badge={device} />}
-        </>
-      );
-    }
-    case "project":
-      return <span className="truncate">{row.item.project.name}</span>;
-    case "page":
-      return <span className="truncate">{row.page.label}</span>;
-    case "create":
-      return <span className="truncate font-mono">{row.branch}</span>;
-  }
 }

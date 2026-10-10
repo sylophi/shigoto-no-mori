@@ -8,10 +8,8 @@
 // live is a card (liveModel.ts), filed under its device. Every list is
 // kept live by its own broadcast (hooks/live/useLiveActivity.ts).
 import { useMutation } from "@tanstack/react-query";
-import { Radio, Square } from "lucide-react";
+import { Square } from "lucide-react";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
-import { PAGE_BODY } from "@/components/shared/PageShellView";
-import { PageHeaderView } from "@/components/shared/PageHeaderView";
 import {
   type HostScripts,
   useLiveMirrors,
@@ -27,6 +25,7 @@ import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
 import { pluralize } from "@/lib/pluralize";
 import { notifyError, toast } from "@/lib/toast";
 import { DeviceHeading, LiveCard } from "./LiveCard";
+import { LiveDeviceSectionView, LivePageView } from "./LivePageView";
 import { buildLive, countLive, type LiveDevice } from "./liveModel";
 
 // "1 agent needs you, with 2 scripts, 1 port forward and 1 mirror
@@ -63,49 +62,35 @@ export function LivePage() {
   const loading = hosts.some((host) => host.loading);
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeaderView
-        eyebrow={
-          summary !== ""
-            ? summary
-            : loading
-              ? "Asking your devices…"
-              : "Nothing running"
-        }
-        title="Live"
-        watermark="稼働"
-        trailing={<StopAllScripts hosts={hosts} />}
-      />
-      <div className={PAGE_BODY}>
-        {devices.length === 0 ? (
-          loading ? null : (
-            <Quiet />
-          )
-        ) : (
-          <div className="flex flex-col gap-8">
-            {devices.map((device) => (
-              <section
-                key={device.deviceId}
-                aria-label={multiDevice ? undefined : "Live"}
-                className="flex flex-col gap-3"
-              >
-                {multiDevice && (
-                  <DeviceHeading
-                    deviceId={device.deviceId}
-                    summary={summarize([device])}
-                  />
-                )}
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,--spacing(88)),1fr))] items-start gap-4">
-                  {device.cards.map((card) => (
-                    <LiveCard key={card.key} card={card} />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+    <LivePageView
+      eyebrow={
+        summary !== ""
+          ? summary
+          : loading
+            ? "Asking your devices…"
+            : "Nothing running"
+      }
+      trailing={<StopAllScripts hosts={hosts} />}
+      state={devices.length > 0 ? "devices" : loading ? "loading" : "quiet"}
+    >
+      {devices.map((device) => (
+        <LiveDeviceSectionView
+          key={device.deviceId}
+          heading={
+            multiDevice && (
+              <DeviceHeading
+                deviceId={device.deviceId}
+                summary={summarize([device])}
+              />
+            )
+          }
+        >
+          {device.cards.map((card) => (
+            <LiveCard key={card.key} card={card} />
+          ))}
+        </LiveDeviceSectionView>
+      ))}
+    </LivePageView>
   );
 }
 
@@ -168,22 +153,4 @@ function stopAllLabel(stoppable: number, readOnly: number): string {
   if (readOnly > 0) return `Stop ${pluralize(stoppable, "script")}`;
   if (stoppable === 1) return "Stop the script";
   return `Stop all ${stoppable} scripts`;
-}
-
-// Nothing live anywhere: say what would show here.
-function Quiet() {
-  return (
-    <div className="flex flex-col items-center gap-3 py-16 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Radio aria-hidden className="size-5" />
-      </span>
-      <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium">All quiet in the forest</p>
-        <p className="max-w-sm text-xs text-muted-foreground">
-          Agents waiting on you, dev servers and other scripts, forwarded ports
-          and mirrors show up here, on any of your devices.
-        </p>
-      </div>
-    </div>
-  );
 }
