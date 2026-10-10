@@ -50,7 +50,7 @@ import {
   ServerEnvelopeSchema,
   utf8ByteLength,
 } from "@shigomori/contracts/hubProtocol";
-import { fromBase64Url, toBase64Url } from "@shared/crypto/deviceKey";
+import { fromBase64Url, sameKey, toBase64Url } from "@shared/crypto/deviceKey";
 import { HandshakeState, type KeyPair } from "@shared/crypto/noise";
 import { log } from "@shared/log";
 
@@ -89,15 +89,16 @@ const CLOCK_SKEW_MS = 120_000;
 
 // The asks a device has read, by their handshake hash, each until it
 // expires: what turns a replayed ask away. Kept by the hub connection,
-// so it outlives the link a socket redial replaces. Bounded: an ask
-// past the cap pushes out the oldest.
-const MAX_SEEN_ASKS = 4096;
+// so it outlives the link a socket redial replaces. Bounded: while it is
+// full, a new ask is refused until an entry expires, since forgetting
+// one that has not would let it be replayed.
+export const MAX_SEEN_ASKS = 4096;
 
 export type SeenAsks = Map<string, number>;
 
 // Whether an ask with this hash and expiry is one to answer, noting it
 // if so.
-function freshAsk(
+export function freshAsk(
   seen: SeenAsks,
   hash: string,
   expiresAt: number,
@@ -113,10 +114,7 @@ function freshAsk(
   ) {
     return false;
   }
-  if (seen.size >= MAX_SEEN_ASKS) {
-    const oldest = seen.keys().next();
-    if (!oldest.done) seen.delete(oldest.value);
-  }
+  if (seen.size >= MAX_SEEN_ASKS) return false;
   seen.set(hash, expiresAt + CLOCK_SKEW_MS);
   return true;
 }
@@ -229,13 +227,6 @@ type PendingAsk = {
 // cannot flood the log with a huge forged `from`.
 function truncateId(id: string): string {
   return id.length > 64 ? `${id.slice(0, 64)}...` : id;
-}
-
-// Public keys, so no constant-time compare is needed.
-function sameKey(a: Uint8Array | null, b: Uint8Array): boolean {
-  return (
-    a !== null && a.length === b.length && a.every((byte, i) => byte === b[i])
-  );
 }
 
 function refusal(message: string, code?: string): AnswerPayload {
