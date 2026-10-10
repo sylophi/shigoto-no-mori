@@ -60,7 +60,7 @@ no more of a long page: make the viewport taller instead.
 
 ```json
 { "session": "ui", "steps": [
-  { "goto": "/?theme=light&checks=failing&to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum" },
+  { "goto": "/?theme=light&checks=failing&to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/a10000000002" },
   { "expect": "happy-hummingbird" },
   { "shot": "checks-failing" }
 ] }
@@ -84,7 +84,7 @@ Poses ride the URL:
 
 - `?theme=light|dark`, `?doubutsu=0|1`: appearance, seeded pre-paint.
   `?light=<id>` and `?dark=<id>` pick each appearance's doubutsu
-  palette (the ids in `shared/themes.ts`, default `cream` and
+  palette (the ids in `packages/ui/src/lib/themes.ts`, default `cream` and
   `charcoal`).
 - `?peers=sm:connected,tp:connected,mini:online,pc:offline`: presence
   per device key (`sm` Studio Mac, `tp` Thinkpad, `mini` Mini, `pc`
@@ -130,9 +130,9 @@ Poses ride the URL:
   (e.g. `?updatedFrom=2.0.1`, whose "What's new" lists 2.0.2 and 2.0.3).
 - `?checks=<variant>`: the CI rollup on PR #148 (worktree
   `happy-hummingbird`,
-  `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum`), with
+  `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/a10000000002`), with
   the merge state GitHub would pair with it. Variants are the keys of
-  `FAKE_CHECK_POSES` in `pullRequestFixtures.ts`: `none`,
+  `FAKE_CHECK_POSES` in the fixtures' `pullRequestFixtures.ts`: `none`,
   `single-passed`, `single-failing`, `passed`, `passed-some-skipped`,
   `all-skipped`, `auto-merge`, `pending`, `failing`, `failing-blocked`,
   `failing-and-pending`, `many`. Absent, it keeps two passing checks.
@@ -180,11 +180,18 @@ back in each reply.
 
 ## Fixtures
 
-Fixtures live in `fixtures.ts`. Each device has a small disk
+Fixtures live in `@shigomori/ui` (`packages/ui/src/fixtures`), the
+same fixture world the scenes draw: `fixtures.ts` for the devices,
+projects and worktrees, and one file per area beside it. A worktree's
+id is twelve hex digits, as the contracts require: Studio Mac's
+`shigoto-no-mori` worktrees start `a1` (`a10000000002` is
+`happy-hummingbird`). Each device has a small disk
 there (`fakeDisks`) for the add-project dialog to browse, and adding or
 cloning on one really registers the project, so it folds into the
-sidebar the way a real one would. `bridge.ts` serves them and
-answers any unhandled channel with a schema-derived stub (fabricated
+sidebar the way a real one would. `bridge.ts` serves them as the links
+of the page's client runtime (`renderer/lib/runtime`), in place of the
+shell's and the host's, and answers any unhandled channel with a
+schema-derived stub (fabricated
 arms allowed: this is a fake, not the fail-closed web bridge). The sync
 verbs really mutate the fixture world, so the transplant and mirror
 flows show their outcome: a posed mirror session cycles every few

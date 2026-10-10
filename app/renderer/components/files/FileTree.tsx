@@ -3,8 +3,8 @@ import {
   FileTreeNoteView,
   FileTreeRowsView,
   FileTreeView,
-} from "./FileTreeView";
-import { ancestorsOf } from "./treePaths";
+} from "@shigomori/ui/views/files/FileTreeView.tsx";
+import { ancestorsOf } from "@shigomori/ui/views/files/treePaths.ts";
 
 // What every level of the tree reads the same: which worktree, what is
 // open and picked, and what a click does. Only the folder and its

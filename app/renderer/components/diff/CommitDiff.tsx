@@ -3,13 +3,13 @@ import { useBranchHistory } from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
-import { NO_REWRITE } from "@/lib/commitRewrite";
+import { NO_REWRITE } from "@shigomori/ui/lib/commitRewrite.ts";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { CommitDetails, CommitSteps } from "./CommitDetails";
 import { GitPageSidebar } from "@/components/worktreeDetail/git/GitPageSidebar";
 import { MergeButton } from "@/components/worktreeDetail/git/MergeDialog";
 import { DiffPage } from "./DiffPage";
-import { CommitBylineView } from "./DiffTitlesView";
+import { CommitBylineView } from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
 
 export function CommitDiff() {
   const { projectId, hash, worktree, goBack, missing } = useRouteWorktree();

@@ -85,7 +85,7 @@ function PopoverClose({
   return <PopoverPrimitive.Close {...props} />;
 }
 
-// A popover drawn open in place, for a scene (lab/scenes): Base UI's
+// A popover drawn open in place, for a scene (src/scenes): Base UI's
 // popup needs an open popover and a portal, neither of which draws on a
 // server, so this is its surface, and a close inside draws as a plain
 // button. Placed by its parent, where the live one floats.

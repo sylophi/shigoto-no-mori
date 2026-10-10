@@ -21,7 +21,7 @@ import {
   resolveDoubutsuPicks,
   type DoubutsuPicks,
   type ThemeOption,
-} from "@shared/themes";
+} from "@shigomori/ui/lib/themes.ts";
 import { it } from "vitest";
 
 // A catalog's ids, each swatch's variants after it, as the schema

@@ -4,12 +4,10 @@
 // the proof can drive it (test/new-worktree-menu.mts).
 import type { Project } from "@shigomori/contracts/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import type { ProjectGroupOrder } from "../buildSidebarRows";
-import {
-  projectListSections,
-  type ProjectSection,
-} from "../projectListSections";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
+import type { ProjectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import { projectListSections } from "@shigomori/ui/views/sidebar/projectListSections.ts";
+import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
 // Every device's projects, whatever the device filter shows: creating
 // is not browsing. Only the checkouts that can take a create are

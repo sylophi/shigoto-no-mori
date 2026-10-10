@@ -19,19 +19,20 @@ build in v1 terms and verify in both.
 
 Doubutsu comes in palettes, picked per appearance under its switch (a
 light one and a dark one, `lightTheme` / `darkTheme` beside `doubutsu`
-in client config, the catalog in `shared/themes.ts`). The pick lands as
-`data-palette` on `<html>`: `packages/ui/src/styles/doubutsu.css`
-carries the defaults (cream, charcoal) and
-`packages/ui/src/styles/palettes.css` the rest, each remapping the
-surface tokens and its accent: `--primary` and `--ring` (switches, the
-loud button) and the emerald steps, so the online dots, the device tiles
-and every other positive status wear the palette's hue. A rule in
-doubutsu.css reaches every color through a token, never a literal, so a
-palette can move it. Settings paints its swatches with the same blocks
-(`[data-theme-scope]` beside `:root`), so a new palette is one CSS block
-plus a catalog entry. Palettes that differ in a detail (latte's greens)
-can wait as variants: ids of their own behind one swatch, left out of
-the picker and reached only by Ctrl+Alt+Shift+L (shared/themes.ts).
+in client config, the catalog in `packages/ui/src/lib/themes.ts`). The
+pick lands as `data-palette` on `<html>`:
+`packages/ui/src/styles/doubutsu.css` carries the defaults (cream,
+charcoal) and `packages/ui/src/styles/palettes.css` the rest, each
+remapping the surface tokens and its accent: `--primary` and `--ring`
+(switches, the loud button) and the emerald steps, so the online dots,
+the device tiles and every other positive status wear the palette's hue.
+A rule in doubutsu.css reaches every color through a token, never a
+literal, so a palette can move it. Settings paints its swatches with the
+same blocks (`[data-theme-scope]` beside `:root`), so a new palette is
+one CSS block plus a catalog entry. Palettes that differ in a detail
+(latte's greens) can wait as variants: ids of their own behind one
+swatch, left out of the picker and reached only by Ctrl+Alt+Shift+L
+(packages/ui/src/lib/themes.ts).
 
 Rules that keep both themes cheap to maintain:
 
@@ -98,11 +99,13 @@ Every component is one of two things. A **view** takes data and
 callbacks as props and only draws; it imports nothing that needs the
 running app (no queries, atoms, stores, router, `window.api`). A
 **container** binds data to a view and has no markup of its own beyond
-composing views. The marketing site renders the views over fixture
-scenes, and the lab's `scenes` proof renders every view in Node with no
-`window`, so a view that reaches for the runtime fails the commit.
-This is the v3 rule: the split, the proof and the marketing site that
-depend on it land in step 6 (`V3.md`).
+composing views. Views live in `@shigomori/ui` (`packages/ui/src/views`),
+which cannot import the app: what a view needs from the app's hooks or
+store is a type defined in the package, and a link it opens goes
+through `useOutside`. Containers stay in `renderer/components`. The
+marketing site renders the views over fixture scenes, and the lab's
+`scenes` proof renders every view in Node with no `window`, so a view
+that reaches for the runtime fails the commit.
 
 - Name the view `<Thing>View`; the container keeps the plain name and
   the public props the rest of the app already uses.

@@ -4,7 +4,7 @@ import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useDeviceBadges } from "@/components/sidebar/deviceBadges";
-import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
+import { worktreeRowKey } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { rowDeviceId } from "@/lib/routePaths";
 import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
@@ -36,12 +36,19 @@ import {
   rankPaletteEntries,
   rankPalettePages,
   rankPaletteProjects,
-} from "./buildPaletteEntries";
-import { PaletteGroupView, PaletteItemView } from "./PaletteItemView";
-import { PaletteRowContent, type PaletteRow } from "./PaletteRows";
+} from "@shigomori/ui/views/palette/buildPaletteEntries.ts";
+import {
+  PaletteGroupView,
+  PaletteItemView,
+} from "@shigomori/ui/views/palette/PaletteItemView.tsx";
+import { PaletteRowContent } from "./PaletteRows";
+import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import { PaletteVerbs, type GoTo, type PaletteActions } from "./PaletteVerbs";
 import { usePalettePages } from "./usePalettePages";
-import { PaletteDialogView, PickedChipView } from "./WorktreePaletteView";
+import {
+  PaletteDialogView,
+  PickedChipView,
+} from "@shigomori/ui/views/palette/WorktreePaletteView.tsx";
 
 // ⌘K: every worktree on every machine, one fuzzy list, and beside it
 // what the highlighted one offers. ↩ jumps to it, ⌘↩ opens its

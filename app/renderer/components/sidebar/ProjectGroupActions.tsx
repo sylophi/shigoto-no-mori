@@ -28,7 +28,7 @@ import {
 } from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
-import { DeviceMenuRowView } from "./DeviceMenuRowView";
+import { DeviceMenuRowView } from "@shigomori/ui/views/sidebar/DeviceMenuRowView.tsx";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useSetProjectPinned } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
@@ -45,8 +45,8 @@ import {
   type ProjectMenuRemoveArm,
 } from "./ProjectMenuItems";
 import { QuickCreateButton } from "./QuickCreateButton";
-import { ProjectActionsView } from "./ProjectActionsView";
-import type { RemoteProjectMember } from "./sidebarRow";
+import { ProjectActionsView } from "@shigomori/ui/views/sidebar/ProjectActionsView.tsx";
+import type { RemoteProjectMember } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
 export interface GroupMember {
   deviceId: string;

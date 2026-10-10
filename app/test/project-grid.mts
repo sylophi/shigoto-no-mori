@@ -18,15 +18,15 @@ import {
   projectGroupKey,
   projectGroupOrder,
   worktreeRowKey,
-} from "@/components/sidebar/buildSidebarRows";
-import { buildGrid } from "@/components/home/gridModel";
-import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+} from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import { buildGrid } from "@shigomori/ui/views/home/gridModel.ts";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import type {
   Project,
   PullRequest,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { worktree as fakeWorktree } from "../lab/fake-host/fixtures.ts";
+import { worktree as fakeWorktree } from "@shigomori/ui/fixtures/fixtures.ts";
 import { it } from "vitest";
 
 const PEER = "peer-device";

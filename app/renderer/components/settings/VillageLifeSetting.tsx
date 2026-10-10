@@ -1,8 +1,8 @@
 import { useVillagerDataStatus } from "@/hooks/villagers/useVillagerData";
-import { villageLifeShows } from "@shared/villageLife";
-import { VillageLifeSettingView } from "./VillageLifeSettingView";
+import { villageLifeShows } from "@shigomori/ui/lib/villageLife.ts";
+import { VillageLifeSettingView } from "@shigomori/ui/views/settings/VillageLifeSettingView.tsx";
 import { VillagerDataControl } from "./VillagerDataControl";
-import { villageLifeRow } from "./villagerDataView";
+import { villageLifeRow } from "@shigomori/ui/views/settings/villagerDataView.ts";
 
 // Village life's switches (VillageLifeSettingView) over the villager
 // data's state on this device.

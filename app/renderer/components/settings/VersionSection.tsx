@@ -7,7 +7,7 @@ import { ChangelogDialog } from "./ChangelogDialog";
 import {
   RestartToUpdateButtonView,
   VersionSectionView,
-} from "./VersionSectionView";
+} from "@shigomori/ui/views/settings/VersionSectionView.tsx";
 
 // A device's Version section (VersionSectionView), talking to the
 // updater of the surrounding host scope: this window's own with no

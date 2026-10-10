@@ -1,7 +1,7 @@
 // The launch tools for the worktree (LauncherRowView), ⌘1..⌘9 included.
 import { useNavigate } from "@tanstack/react-router";
 import { selectSettingsTab } from "@/components/settings/settingsNav";
-import { LAUNCH_TAB } from "@/components/settings/settingsSections";
+import { LAUNCH_TAB } from "@shigomori/ui/views/settings/settingsSections.ts";
 import {
   useLaunch,
   useLauncherForProject,

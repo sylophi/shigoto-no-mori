@@ -5,10 +5,8 @@ import { EmptyPanel } from "@shigomori/ui/primitives/empty-panel.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
-import {
-  fromConfig,
-  type SettingsFormState,
-} from "@/hooks/config/settingsForm";
+import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
+import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
@@ -21,7 +19,7 @@ import { DataLocationSection } from "./DataLocationSection";
 import { DoctorSection } from "./DoctorSection";
 import { IntegrationToggles, WorktreeToggles } from "./DeviceSettingsSections";
 import { HostPanels, type HostSections, onEveryHostTab } from "./SettingsPanel";
-import type { HostTab } from "./settingsSections";
+import type { HostTab } from "@shigomori/ui/views/settings/settingsSections.ts";
 import { useRegisterSettingsEditor } from "./useSettingsEditors";
 import {
   PeerOfflineNoteView,
@@ -29,7 +27,7 @@ import {
   PeerSettingsLoadingView,
   PeerTogglesView,
   PeerVersionLineView,
-} from "./PeerDeviceSettingsView";
+} from "@shigomori/ui/views/settings/PeerDeviceSettingsView.tsx";
 import { VersionSection } from "./VersionSection";
 
 // Another device's host sections on the Settings page. Everything under

@@ -1,5 +1,5 @@
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import { DeviceMenuRowView } from "./DeviceMenuRowView";
+import { DeviceMenuRowView } from "@shigomori/ui/views/sidebar/DeviceMenuRowView.tsx";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,

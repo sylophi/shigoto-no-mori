@@ -22,10 +22,10 @@ import assert from "node:assert/strict";
 import {
   buildSidebarRows,
   projectGroupOrder,
-} from "@/components/sidebar/buildSidebarRows";
-import type { SidebarRow } from "@/components/sidebar/sidebarRow";
-import { sortProjects } from "@/lib/sortProjects";
-import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+} from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import type { SidebarRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import {
   ProjectSortModeSchema,
   type Project,

@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
-import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import {
   useQuickCreateWorktree,
@@ -10,8 +10,8 @@ import {
 } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import type { Project } from "@shigomori/contracts/schemas";
-import type { ProjectGroupOrder } from "../buildSidebarRows";
-import { DeviceBadgeView } from "../DeviceBadgeView";
+import type { ProjectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import { DeviceBadgeView } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
   useGroupCreator,
   useGroupMembers,
@@ -19,14 +19,15 @@ import {
   type GroupMember,
   type LiveMember,
 } from "../ProjectGroupActions";
-import type { ProjectListRow, ProjectSection } from "../projectListSections";
+import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import type { ProjectListRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { buildCreateSections } from "./createTargets";
 import {
   CreateMenuListView,
   CreateMenuView,
   CreateTargetItemView,
   NewWorktreeButtonView,
-} from "./NewWorktreeButtonView";
+} from "@shigomori/ui/views/sidebar/inbox/NewWorktreeButtonView.tsx";
 
 interface NewWorktreeButtonProps {
   projects: readonly Project[];

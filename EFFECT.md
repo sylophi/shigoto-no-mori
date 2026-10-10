@@ -99,11 +99,12 @@ export const layer = Layer.effect(Registry, make);
   module: the engine's, the host's, the shell's, the terminal's. No
   module builds a runtime to hand out, and no feature gets a runtime
   of its own.
-- A renderer client (a desktop window) is one
-  `ManagedRuntime` over its links (`app/renderer/lib/runtime`), built
-  as the page boots and disposed as it goes. Its calls, views and
-  pushes run on it, so a view's fiber is interrupted when its
-  subscriber stops, and nothing outlives the page.
+- A renderer client (a desktop window, a web client tab, the lab's
+  fake host) is one `ManagedRuntime` over its links
+  (`app/renderer/lib/runtime`), built as the page boots and disposed
+  as it goes. Its calls, views and pushes run on it, so a view's fiber
+  is interrupted when its subscriber stops, and nothing outlives the
+  page.
 - A host handler answers with an effect on the services of the host's
   graph (`app/host/process/services.ts`), run where the call is served
   (`registerHostContract`), and a view reads with one (`Views.view`).

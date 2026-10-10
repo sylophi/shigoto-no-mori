@@ -33,21 +33,21 @@ import {
   type GroupIdSet,
   projectGroupKey,
   remoteGroupKeyOf,
-} from "./buildSidebarRows";
+} from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { useForestSources } from "./forestSources";
 import { DeviceFilterBar } from "./DeviceFilterBar";
-import { buildInboxRows } from "./inbox/buildInboxRows";
+import { buildInboxRows } from "@shigomori/ui/views/sidebar/inbox/buildInboxRows.ts";
 import { useShareInboxOrder } from "./inbox/inboxOrder";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { useLeaveInboxForPage } from "./inbox/useLeaveInboxForPage";
 import { setOpenProject, useOpenProject } from "./openProject";
-import { ProjectDragPreviewView } from "./ProjectDragPreviewView";
+import { ProjectDragPreviewView } from "@shigomori/ui/views/sidebar/ProjectDragPreviewView.tsx";
 import type {
   GroupShelf,
   InboxShelf,
   SidebarRow,
   SidebarViewModel,
-} from "./sidebarRow";
+} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import {
   ForestSlotView,
   InboxCreateRowView,
@@ -56,7 +56,7 @@ import {
   SidebarEmptyStateView,
   SidebarScrollerView,
   ViewPaneView,
-} from "./SidebarFrameView";
+} from "@shigomori/ui/views/sidebar/SidebarFrameView.tsx";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";

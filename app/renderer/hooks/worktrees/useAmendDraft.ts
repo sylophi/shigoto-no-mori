@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
-import type { CommitDraft } from "@/lib/commitDraft";
+import type { CommitDraft } from "@shigomori/ui/views/diff/CommitComposerView.tsx";
 
 // What amend mode does to the composer's draft. On the way in, the
 // commit's own message is loaded into an empty draft (a draft with text

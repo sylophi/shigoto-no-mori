@@ -14,8 +14,8 @@ import { useWorktreeName } from "@/hooks/worktrees/useWorktreeTitle";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import type { DiffChangesControls } from "./changesControls";
-import { DiffFileIndexView } from "./DiffFileIndexView";
+import type { DiffChangesControls } from "@shigomori/ui/views/diff/changesControls.ts";
+import { DiffFileIndexView } from "@shigomori/ui/views/diff/DiffFileIndexView.tsx";
 import {
   DiffFileRowView,
   DiffFilesSheetView,
@@ -23,8 +23,12 @@ import {
   DiffPageView,
   DiffPaneView,
   type DiffStyle,
-} from "./DiffPageView";
-import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
+} from "@shigomori/ui/views/diff/DiffPageView.tsx";
+import {
+  changeEntries,
+  fileKey,
+  patchEntries,
+} from "@shigomori/ui/lib/patchFiles.ts";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import { readStored, writeStored } from "@/lib/localStorage";

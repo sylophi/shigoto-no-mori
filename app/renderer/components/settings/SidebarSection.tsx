@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import type { SettingsFormState } from "@/hooks/config/settingsForm";
+import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { terrierMarksHere } from "@/hooks/config/useSidebarMarks";
-import { SidebarSectionView } from "./SidebarSectionView";
+import { SidebarSectionView } from "@shigomori/ui/views/settings/SidebarSectionView.tsx";
 
 // The sidebar settings (SidebarSectionView), with what the account and
 // this device's terrier switch allow.

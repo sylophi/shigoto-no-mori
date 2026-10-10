@@ -3,10 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import type { CommitRewrite } from "@shigomori/ui/views/worktreeDetail/git/commitRewrite.ts";
+import type { CommitRewrite } from "@shigomori/ui/lib/commitRewrite.ts";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActions";
-import { CommitDetailsView, CommitStepsView } from "./CommitDetailsView";
+import {
+  CommitDetailsView,
+  CommitStepsView,
+} from "@shigomori/ui/views/diff/CommitDetailsView.tsx";
 
 // Under a commit's title on its page: the rest of its message, and what
 // can be done with it, as buttons rather than a menu to find. The moves

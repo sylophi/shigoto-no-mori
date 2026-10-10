@@ -219,6 +219,9 @@ catalogs:
     '@fontsource/zen-maru-gothic':
       specifier: ^5.2.8
       version: 5.2.8
+    '@pierre/diffs':
+      specifier: ^1.4.3
+      version: 1.4.3
     '@types/node':
       specifier: ^24.13.5
       version: 24.13.5
@@ -345,7 +348,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.2(effect@4.0.2)
       '@pierre/diffs':
-        specifier: ^1.4.3
+        specifier: 'catalog:'
         version: 1.4.3(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@shigomori/contracts':
         specifier: workspace:*
@@ -679,6 +682,9 @@ importers:
       '@fontsource/zen-maru-gothic':
         specifier: 'catalog:'
         version: 5.2.8
+      '@pierre/diffs':
+        specifier: 'catalog:'
+        version: 1.4.3(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@shigomori/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -706,6 +712,9 @@ importers:
       dompurify:
         specifier: 'catalog:'
         version: 3.4.15
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.2
       lucide-react:
         specifier: 'catalog:'
         version: 1.23.0(react@19.2.7)
@@ -10163,12 +10172,35 @@ snapshots:
     transitivePeerDependencies:
       - '@shikijs/themes'
 
+  '@pierre/diffs@1.4.3(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@pierre/theme': 2.0.0
+      '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.3.1)
+      '@shikijs/transformers': 4.3.1
+      diff: 9.0.0
+      hast-util-to-html: 9.0.5
+      lru_map: 0.4.1
+      shiki: 4.3.1
+    optionalDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+    transitivePeerDependencies:
+      - '@shikijs/themes'
+
   '@pierre/theme@2.0.0': {}
 
   '@pierre/theming@1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.3.1)':
     optionalDependencies:
       '@pierre/theme': 2.0.0
       '@shikijs/themes': 4.3.1
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      shiki: 4.3.1
+
+  '@pierre/theming@1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.3.1)':
+    optionalDependencies:
+      '@pierre/theme': 2.0.0
+      '@shikijs/themes': 4.4.3
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       shiki: 4.3.1

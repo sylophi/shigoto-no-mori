@@ -26,7 +26,7 @@ import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { isOverlayOpen } from "@/lib/dom";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
-import { worktreeSyncView } from "@/lib/syncState";
+import { worktreeSyncView } from "@shigomori/ui/lib/syncState.ts";
 import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
 import {
   changeKey,
@@ -40,12 +40,15 @@ import {
   changedFilePaths,
   includedFiles,
   type DiffChangesControls,
-} from "./changesControls";
-import { CommitComposerView } from "./CommitComposerView";
+} from "@shigomori/ui/views/diff/changesControls.ts";
+import { CommitComposerView } from "@shigomori/ui/views/diff/CommitComposerView.tsx";
 import { DiffPage } from "./DiffPage";
-import { WorktreeDiffSubtitleView } from "./DiffTitlesView";
-import { ChangesFooterView, CleanTreeMessageView } from "./WorktreeDiffView";
-import { LastCommitStripView } from "./LastCommitStripView";
+import { WorktreeDiffSubtitleView } from "@shigomori/ui/views/diff/DiffTitlesView.tsx";
+import {
+  ChangesFooterView,
+  CleanTreeMessageView,
+} from "@shigomori/ui/views/diff/WorktreeDiffView.tsx";
+import { LastCommitStripView } from "@shigomori/ui/views/diff/LastCommitStripView.tsx";
 import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 
 export function WorktreeDiff() {
