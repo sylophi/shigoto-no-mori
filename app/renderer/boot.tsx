@@ -64,6 +64,7 @@ import {
 } from "./hooks/worktrees/useWorktreeMutations";
 import "./app.css";
 import { themeRoot } from "./lib/themeRoot";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 
 // Not render blocking, unlike app.css (see fonts.css). A failed fetch
 // leaves the fallback face, which is what text paints in meanwhile.
@@ -222,7 +223,7 @@ function startLocalHost(queryClient: QueryClient): void {
     .then(({ stopped }) => {
       if (stopped === 0) return;
       toast.warning(
-        `Stopped ${stopped} script${stopped === 1 ? "" : "s"} left running by a previous session`,
+        `Stopped ${pluralize(stopped, "script")} left running by a previous session`,
         {
           id: "orphan-scripts",
           description: "Shigoto no Mori closed while they were still running.",

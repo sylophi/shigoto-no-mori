@@ -10,6 +10,7 @@ import type { DiskUsageTotals } from "./tidyModel.ts";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { TIDY_SORT_OPTIONS, type TidySort } from "./tidyModel.ts";
 import { TidyStatView } from "./TidyStatView.tsx";
+import { pluralize } from "../../lib/pluralize.ts";
 
 export function TidyPageView({
   tabs,
@@ -86,7 +87,7 @@ export function TidyBodyView({
     ? `measuring ${disk.measuredCount} of ${disk.totalCount}…`
     : disk.partial
       ? "approximate"
-      : `across ${rowProjects} ${rowProjects === 1 ? "project" : "projects"}`;
+      : `across ${pluralize(rowProjects, "project")}`;
 
   return (
     <>
@@ -184,7 +185,7 @@ export function TidyBodyView({
                   >
                     {batchRunning
                       ? "Removing…"
-                      : `Remove ${selectedCount} ${selectedCount === 1 ? "worktree" : "worktrees"}`}
+                      : `Remove ${pluralize(selectedCount, "worktree")}`}
                   </Button>
                 </div>
               </div>

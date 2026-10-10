@@ -4,6 +4,7 @@
 // error can never vanish from the web tree without a trace.
 import { useEffect } from "react";
 import { toast } from "@/lib/toast";
+import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 
 export function useFanOutErrorToast(failedCount: number): void {
   useEffect(() => {
@@ -13,7 +14,7 @@ export function useFanOutErrorToast(failedCount: number): void {
       return;
     }
     toast.error(
-      `Couldn't load worktrees for ${failedCount} ${failedCount === 1 ? "project" : "projects"}`,
+      `Couldn't load worktrees for ${pluralize(failedCount, "project")}`,
       { id },
     );
   }, [failedCount]);

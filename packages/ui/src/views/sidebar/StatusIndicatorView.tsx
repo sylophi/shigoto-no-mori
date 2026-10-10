@@ -2,6 +2,7 @@ import { FileDiff } from "lucide-react";
 import { worktreeSyncView } from "../../lib/syncState.ts";
 import type { Worktree } from "@shigomori/contracts/schemas/index";
 import { StatusPillView } from "./StatusPillView.tsx";
+import { pluralize } from "../../lib/pluralize.ts";
 
 interface StatusIndicatorProps {
   worktree: Worktree;
@@ -22,8 +23,7 @@ export function StatusIndicatorView({ worktree }: StatusIndicatorProps) {
 // unconditionally alongside the remote pill.
 export function ChangedFilesPillView({ worktree }: StatusIndicatorProps) {
   if (worktree.changedCount === 0) return null;
-  const noun = worktree.changedCount === 1 ? "file" : "files";
-  const label = `${worktree.changedCount} ${noun} changed`;
+  const label = `${pluralize(worktree.changedCount, "file")} changed`;
   return (
     <StatusPillView icon={FileDiff} tone="amber" tip={label} aria-label={label}>
       {worktree.changedCount}
