@@ -22,7 +22,7 @@ import {
   combineFanOut,
   resolveForestScope,
   type HostForestScope,
-} from "@/hooks/worktrees/useWorktrees";
+} from "@/hooks/remote/hostForestScope";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { ownBranchPullRequests } from "@shigomori/ui/lib/pullRequest.ts";
 

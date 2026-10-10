@@ -5,18 +5,21 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Api from "./Api";
-import type { ClientLinks } from "./ClientLinks";
+import { ClientLinks } from "./ClientLinks";
 
 export type Client = {
   readonly api: Api.ClientApi;
+  // The links themselves, for the atoms (atoms.ts, which the boot
+  // hands them to).
+  readonly links: ClientLinks["Service"];
   readonly dispose: () => Promise<void>;
 };
 
 const runtimeOf = (links: Layer.Layer<ClientLinks>) =>
-  ManagedRuntime.make(Api.layer.pipe(Layer.provide(links)));
+  ManagedRuntime.make(Api.layer.pipe(Layer.provideMerge(links)));
 
-const api = Effect.gen(function* () {
-  return yield* Api.Api;
+const built = Effect.gen(function* () {
+  return { api: yield* Api.Api, links: yield* ClientLinks };
 });
 
 export async function startClient(
@@ -24,7 +27,7 @@ export async function startClient(
 ): Promise<Client> {
   const runtime = runtimeOf(links);
   return {
-    api: await runtime.runPromise(api),
+    ...(await runtime.runPromise(built)),
     dispose: () => runtime.dispose(),
   };
 }
@@ -33,7 +36,7 @@ export async function startClient(
 // itself, and the lab's fixtures.
 export function startClientNow(links: Layer.Layer<ClientLinks>): Client {
   const runtime = runtimeOf(links);
-  return { api: runtime.runSync(api), dispose: () => runtime.dispose() };
+  return { ...runtime.runSync(built), dispose: () => runtime.dispose() };
 }
 
 // The page going ends its client. One the browser keeps to come back

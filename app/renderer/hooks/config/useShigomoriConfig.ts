@@ -5,7 +5,7 @@ import {
   combineFanOut,
   resolveForestScope,
   type HostForestScope,
-} from "@/hooks/worktrees/useWorktrees";
+} from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 // Scope rule as worktreesQueryOptions: a peer's config caches under its

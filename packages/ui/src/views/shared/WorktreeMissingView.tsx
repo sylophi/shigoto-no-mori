@@ -20,7 +20,7 @@ export function WorktreeMissingView({
   isPending: boolean;
   isError: boolean;
   deleted: boolean;
-  refetch: () => Promise<unknown>;
+  refetch: () => void;
   onBack: () => void;
   message?: string;
 }) {
@@ -30,7 +30,7 @@ export function WorktreeMissingView({
       <SubPageNotFoundView
         onBack={onBack}
         message="Couldn't load worktrees."
-        action={{ label: "Retry", onClick: () => void refetch() }}
+        action={{ label: "Retry", onClick: refetch }}
       />
     );
   }

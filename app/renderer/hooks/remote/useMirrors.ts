@@ -11,6 +11,7 @@
 // they are mounted under, which is that device's: its own page, or the
 // far end's page re-scoped to it (useWorktreeMirrorLinks).
 import type { QueryClient } from "@tanstack/react-query";
+import { useRegistry } from "@/lib/runtime/viewHooks";
 import {
   queryOptions,
   skipToken,
@@ -461,6 +462,7 @@ export function useSetMirrorIgnores() {
 export function useMirrorControls() {
   const { api } = useHostScope();
   const queryClient = useQueryClient();
+  const registry = useRegistry();
   // Stop removes the copy with the session: the runner's peer, the
   // session's remote side, which may be this machine. A copy here the
   // renderer forgets the way a delete does. A copy elsewhere is that
@@ -507,6 +509,7 @@ export function useMirrorControls() {
       if (removed && session.deviceId === localDeviceId) {
         forgetDeletedWorktree(
           queryClient,
+          registry,
           localDeviceId,
           session.projectId,
           session.worktreeId,

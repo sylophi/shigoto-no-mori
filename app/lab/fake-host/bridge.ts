@@ -63,6 +63,7 @@ import type {
 import type { Link } from "@shared/ipc/transport";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { disposeWithPage, startClientNow } from "@/lib/runtime/client";
@@ -146,8 +147,11 @@ declare global {
 
 type FixtureWire = {
   link: Link;
-  // A call's answer, for the hub hop's fixture (hub:invokePeer).
+  // A call's answer, for the hub hop's fixture (hub:invokePeer), after
+  // which `touch` has the wire's views read again, as a call over its
+  // link does.
   answer: (channel: string, input: unknown) => Promise<unknown>;
+  touch: () => void;
   emit: (channel: string, payload: unknown) => void;
 };
 
@@ -157,12 +161,24 @@ type FixtureWire = {
 function createFixtureWire(
   scope: ContractScope,
   handlersFor: (emit: FixtureWire["emit"]) => FixtureHandlers,
+  // A view the wire serves itself (the hub hop's), in place of the one
+  // emulated below.
+  ownView?: (
+    channel: string,
+    input: unknown,
+  ) => Stream.Stream<unknown, unknown> | undefined,
 ): FixtureWire {
   const fanOut = pushFanOut();
   const index = invokeIndexFor(scope);
+  // Every push on the wire, whatever its channel, for the views.
+  const moved = new Set<() => void>();
+  const emit: FixtureWire["emit"] = (channel, payload) => {
+    fanOut.emit(channel, payload);
+    for (const listener of moved) listener();
+  };
   // Read by channel name off the wire, which loses the link between a
   // channel and its input type. The parse below restores it.
-  const handlers = handlersFor(fanOut.emit) as Record<
+  const handlers = handlersFor(emit) as Record<
     string,
     ((input: unknown) => unknown) | undefined
   >;
@@ -193,19 +209,57 @@ function createFixtureWire(
     // failure as it is.
     link: {
       local: true,
+      // A call may move the fixture world the way a host's store write
+      // does, so the views read again after it.
       call: (channel, input) =>
         Effect.callback<unknown, unknown>((resume) => {
           answer(channel, input).then(
-            (value) => resume(Effect.succeed(value)),
+            (value) => {
+              resume(Effect.succeed(value));
+              for (const listener of moved) listener();
+            },
             (error: unknown) => resume(Effect.fail(error)),
           );
         }),
-      view: (channel) =>
-        Stream.die(new Error(`[fake-host] no fixture serves ${channel}`)),
+      // A host view (host/lib/views.ts) re-reads the query beside it on
+      // what moved: here, the module's list (or its settings' read) on
+      // any push or call on the wire, sent on when it changed.
+      view: (channel, input) => {
+        const own = ownView?.(channel, input);
+        if (own !== undefined) return own;
+        const module = channel.slice(0, channel.indexOf(":"));
+        const query = [`${module}:list`, `${module}:read`].find(
+          (candidate) => candidate !== channel && index.has(candidate),
+        );
+        if (query === undefined) {
+          return Stream.die(
+            new Error(`[fake-host] no fixture serves ${channel}`),
+          );
+        }
+        const pushes = Stream.callback<void>((queue) =>
+          Effect.acquireRelease(
+            Effect.sync(() => {
+              const listener = () => {
+                Queue.offerUnsafe(queue, undefined);
+              };
+              moved.add(listener);
+              return listener;
+            }),
+            (listener) => Effect.sync(() => moved.delete(listener)),
+          ),
+        );
+        return Stream.concat(Stream.make(undefined), pushes).pipe(
+          Stream.mapEffect(() => Effect.promise(() => answer(query, input))),
+          Stream.changesWith((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+        );
+      },
       pushes: fanOut.pushes,
     },
     answer,
-    emit: fanOut.emit,
+    touch: () => {
+      for (const listener of moved) listener();
+    },
+    emit,
   };
 }
 
@@ -1602,7 +1656,7 @@ function hubSnapshot(): HubStatus {
 
 export function installFakeHostBridge(
   opts: { webShell?: boolean; villageLife?: boolean } = {},
-) {
+): ClientLinks["Service"] {
   WEB_SHELL = opts.webShell === true;
   villageLife =
     opts.villageLife ??
@@ -1622,10 +1676,13 @@ export function installFakeHostBridge(
     if (forest.deviceId === selfDeviceId) continue;
     peerWires.set(
       forest.deviceId,
-      createFixtureWire("host", () =>
-        hostHandlersFor(forest, (channel, payload) =>
-          pushFromPeer(forest.deviceId, channel, payload),
-        ),
+      // Heard on the peer's own wire (its views) and, the way the real
+      // bridge delivers a peer's, as a peer push on the client wire.
+      createFixtureWire("host", (emit) =>
+        hostHandlersFor(forest, (channel, payload) => {
+          emit(channel, payload);
+          pushFromPeer(forest.deviceId, channel, payload);
+        }),
       ),
     );
   }
@@ -1784,7 +1841,7 @@ export function installFakeHostBridge(
       if (notSharing.has(deviceId)) {
         return Promise.reject(new NotSharingError());
       }
-      return wire.answer(channel, input);
+      return wire.answer(channel, input).finally(wire.touch);
     },
     "shell:openExternal": ({ url }) => {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -1843,7 +1900,28 @@ export function installFakeHostBridge(
     },
   };
 
-  const client = createFixtureWire("client", () => clientHandlers);
+  const client = createFixtureWire(
+    "client",
+    () => clientHandlers,
+    (channel, input) => {
+      if (channel !== "hub:watchPeer") return undefined;
+      const hop = input as {
+        deviceId: string;
+        channel: string;
+        input?: unknown;
+      };
+      const wire = peerWires.get(hop.deviceId);
+      if (wire === undefined) {
+        return Stream.fail(
+          new Error(`[fake-host] unknown peer ${hop.deviceId}`),
+        );
+      }
+      // The peer's SharingGate.
+      if (notSharing.has(hop.deviceId))
+        return Stream.fail(new NotSharingError());
+      return wire.link.view(hop.channel, hop.input);
+    },
+  );
   pushFromPeer = (deviceId, channel, payload) =>
     client.emit("hub:peerPush", { deviceId, channel, payload });
 
@@ -1946,7 +2024,7 @@ export function installFakeHostBridge(
       if (deviceId === selfDeviceId) {
         localHost.emit("git:externalChange", undefined);
       } else {
-        pushFromPeer(deviceId, "git:externalChange", undefined);
+        mirrorWires.get(deviceId)?.("git:externalChange", undefined);
       }
     },
     emitClient: client.emit,
@@ -1964,4 +2042,6 @@ export function installFakeHostBridge(
       ignores: [],
     });
   }
+
+  return fixtureClient.links;
 }

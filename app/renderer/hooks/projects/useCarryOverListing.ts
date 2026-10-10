@@ -4,7 +4,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   resolveForestScope,
   type HostForestScope,
-} from "@/hooks/worktrees/useWorktrees";
+} from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 // One folder of a project, unioned across the primary and every

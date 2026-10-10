@@ -3,11 +3,9 @@
 // sit on different machines (one worktree here, the next on the
 // laptop), and each machine's host removes its own through
 // `sm rm --stack`, so the cleanup is one call per device. The devices
-// are the repo's holders (deviceTargets), their rows the sidebar's own
-// listings under the sidebar's calm refetch, so this costs no extra
-// fetch. A device is asked only while it can be commanded from
+// are the repo's holders (deviceTargets), their rows the views the
+// sidebar already streams, so this costs no extra fetch. A device is asked only while it can be commanded from
 // here, which its holder entry already says.
-import { useQueries } from "@tanstack/react-query";
 import {
   type PullRequestStack,
   stackCleanupFor,
@@ -16,8 +14,11 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
-import { CALM_REFETCH } from "@/hooks/remote/useRemoteForests";
-import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
+import {
+  someWorktreesAtom,
+  worktreeListKey,
+} from "@/hooks/worktrees/useWorktrees";
+import { useViews } from "@/lib/runtime/viewHooks";
 
 interface StackCleanupDevice {
   deviceId: string;
@@ -54,15 +55,14 @@ export function useStackCleanup(
   const holders = useDeviceTargets(stack ? project : undefined).filter(
     isHolder,
   );
-  const listings = useQueries({
-    queries: holders.map((holder) => ({
-      ...worktreesQueryOptions(holder.project.id, {
-        deviceId: holder.deviceId,
-        api: holder.api,
-      }),
-      ...CALM_REFETCH,
-    })),
-  });
+  const listings = useViews(
+    someWorktreesAtom,
+    holders.map((holder) =>
+      holder.api === undefined
+        ? null
+        : worktreeListKey(holder.deviceId, holder.project.id),
+    ),
+  );
   if (!stack) return null;
   const devices = holders.flatMap((holder, index): StackCleanupDevice[] => {
     const rows = listings[index]?.data;

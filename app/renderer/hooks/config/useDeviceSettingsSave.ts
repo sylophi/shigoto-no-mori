@@ -1,8 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { GlobalConfig } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
-  changesWorktreeRows,
   invalidateDeviceSettingsQueries,
   toDeviceSettingsPatch,
 } from "./useSettingsSave";
@@ -11,7 +9,7 @@ import type { SettingsFormState } from "@shigomori/ui/views/settings/settingsFor
 // Save for the device-managed keys of whichever device the surrounding
 // HostScope names: one idempotent patch of every key it edits through
 // the scoped api, then the shared post-save fan-out (config, launcher
-// catalogs, gh readiness/PRs, projects) against that device's registry.
+// catalogs, gh readiness/PRs) against that device's registry.
 // No per-key diff and no second store: the patch write is cheap enough
 // that an unchanged key riding along costs nothing. A refused save (the
 // host revoked command access mid-edit) surfaces through the central
@@ -30,16 +28,7 @@ export function useDeviceSettingsSave() {
       api.globalConfig.writeDeviceSettings({
         patch: toDeviceSettingsPatch(state),
       }),
-    // Read before the write lands, while the cached config is still
-    // the one the form was seeded from.
-    onMutate: (state) => ({
-      worktreeRowsChanged: changesWorktreeRows(
-        queryClient.getQueryData<GlobalConfig>(keys.globalConfig()) ?? {},
-        state,
-      ),
-    }),
-    onSuccess: (_, __, { worktreeRowsChanged }) =>
-      invalidateDeviceSettingsQueries(queryClient, keys, worktreeRowsChanged),
+    onSuccess: () => invalidateDeviceSettingsQueries(queryClient, keys),
     meta: { errorTitle: "Couldn't save settings" },
   });
 }
