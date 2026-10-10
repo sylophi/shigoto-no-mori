@@ -24,7 +24,7 @@ async function refExists(
   }
 }
 
-export function localBranchExists(
+function localBranchExists(
   run: GitRunner,
   projectPath: string,
   branch: string,
@@ -32,7 +32,7 @@ export function localBranchExists(
   return refExists(run, projectPath, `refs/heads/${branch}`);
 }
 
-export function remoteRefExists(
+function remoteRefExists(
   run: GitRunner,
   projectPath: string,
   ref: string,
@@ -40,7 +40,7 @@ export function remoteRefExists(
   return refExists(run, projectPath, `refs/remotes/${ref}`);
 }
 
-export async function listRemotes(
+async function listRemotes(
   run: GitRunner,
   projectPath: string,
 ): Promise<string[]> {

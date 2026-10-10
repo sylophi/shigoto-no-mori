@@ -3,6 +3,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { envSetting } from "@shared/config";
+import * as Effect from "effect/Effect";
 import { listRemoteEntries } from "../git/remotes";
 
 export interface GithubRepoInfo {
@@ -77,13 +78,13 @@ export function parseRemoteUrl(url: string): GithubRepoInfo | null {
 // fetching a head from the wrong one lands different code under the
 // right branch name. Pass the PR's own URL. It names the repo gh
 // actually answered from.
-export async function remoteNameForUrl(
+export const remoteNameForUrl = Effect.fnUntraced(function* (
   cwd: string,
   url: string,
-): Promise<string | null> {
+) {
   const target = parseRemoteUrl(url);
   if (!target) return null;
-  for (const entry of await listRemoteEntries(cwd)) {
+  for (const entry of yield* listRemoteEntries(cwd)) {
     const parsed = parseRemoteUrl(entry.url);
     // GitHub treats owner and repo case-insensitively, and a remote
     // typed by hand often disagrees with the API's casing.
@@ -97,7 +98,7 @@ export async function remoteNameForUrl(
     }
   }
   return null;
-}
+});
 
 function sameName(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();

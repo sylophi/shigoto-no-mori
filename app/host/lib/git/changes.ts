@@ -11,8 +11,16 @@ import type {
   StagedState,
 } from "@shigomori/contracts/schemas";
 import { isUntracked } from "@shigomori/contracts/schemas";
-import { createLimiter } from "@shared/util/limit";
-import { chunked, run, runLenient, splitZ, type RunOptions } from "./core";
+import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
+import {
+  chunked,
+  GitRefusal,
+  run,
+  runLenient,
+  splitZ,
+  type RunOptions,
+} from "./core";
 import { refuseMidOperation } from "./operation";
 import { verifyRev } from "./refs";
 import { log } from "@shared/log";
@@ -27,24 +35,20 @@ const DISCARD_REF_PREFIX = "refs/shigomori/discards/";
 // take index.lock. `--literal-pathspecs` because every path here came
 // out of `git status` and is a filename, not a pattern: without it a
 // file called `a[1].txt` is a glob.
-export async function runChunked(
+export const runChunked = (
   worktreePath: string,
   args: string[],
   paths: readonly string[],
   options?: RunOptions,
-): Promise<string[]> {
-  const outputs: string[] = [];
-  for (const chunk of chunked(paths)) {
-    // oxlint-disable-next-line no-await-in-loop -- index writes take index.lock, so chunks have to run one after another
-    const output = await run(
+) =>
+  // Index writes take index.lock, so chunks run one after another.
+  Effect.forEach(chunked(paths), (chunk) =>
+    run(
       worktreePath,
       ["--literal-pathspecs", ...args, "--", ...chunk],
       options,
-    );
-    outputs.push(output);
-  }
-  return outputs;
-}
+    ),
+  );
 
 // --- status ------------------------------------------------------------
 
@@ -80,16 +84,17 @@ function kindOf(x: string, y: string): ChangeKind {
 // index.lock for each, so two quick discards, or a discard racing a
 // commit, would otherwise fail on the lock instead of waiting. A failed task
 // doesn't block the queue.
-const indexQueues = new Map<string, ReturnType<typeof createLimiter>>();
+const indexLocks = new Map<string, Semaphore.Semaphore>();
 
-export function onIndex<T>(
+export const onIndex = <A, E, R>(
   worktreePath: string,
-  task: () => Promise<T>,
-): Promise<T> {
-  const queue = indexQueues.get(worktreePath) ?? createLimiter(1);
-  indexQueues.set(worktreePath, queue);
-  return queue(task);
-}
+  task: Effect.Effect<A, E, R>,
+) =>
+  Effect.suspend(() => {
+    const lock = indexLocks.get(worktreePath) ?? Semaphore.makeUnsafe(1);
+    indexLocks.set(worktreePath, lock);
+    return task.pipe(lock.withPermits(1));
+  });
 
 // --- line counts -------------------------------------------------------
 
@@ -162,29 +167,35 @@ async function countUntracked(
 // files are counted from disk, one at a time so a worktree with an
 // unignored build directory holds one file's bytes in memory rather
 // than all of them. The two reads don't depend on each other.
-async function countsFor(
+const countsFor = Effect.fnUntraced(function* (
   worktreePath: string,
   files: readonly ChangedFile[],
-): Promise<ChangedFile[]> {
-  const readUntracked = async () => {
+) {
+  const readUntracked = Effect.promise(async () => {
     const counted = new Map<string, ChangeCounts | undefined>();
     for (const file of files.filter(isUntracked)) {
       // oxlint-disable-next-line no-await-in-loop -- one file's bytes in memory at a time, not every file's
       counted.set(file.path, await countUntracked(worktreePath, file.path));
     }
     return counted;
-  };
-  const [tracked, untracked] = await Promise.all([
-    runLenient(worktreePath, [
-      "-c",
-      "core.quotePath=false",
-      "diff",
-      "HEAD",
-      "--numstat",
-      "-z",
-    ]).then(parseNumstat),
-    readUntracked(),
-  ]);
+  });
+  const [tracked, untracked] = yield* Effect.all(
+    [
+      Effect.map(
+        runLenient(worktreePath, [
+          "-c",
+          "core.quotePath=false",
+          "diff",
+          "HEAD",
+          "--numstat",
+          "-z",
+        ]),
+        parseNumstat,
+      ),
+      readUntracked,
+    ],
+    { concurrency: 2 },
+  );
   return files.map((file) => {
     // Look up by what the row is, not just its path: `git rm --cached f`
     // leaves a staged deletion and an untracked file both called f, and
@@ -194,7 +205,7 @@ async function countsFor(
       : tracked.get(file.path);
     return counts ? { ...file, counts } : file;
   });
-}
+});
 
 // `git status --porcelain=v2 -z`, one file per entry. This is the one
 // status parser. The sidebar's per-worktree count runs it too.
@@ -205,13 +216,13 @@ async function countsFor(
 // `status.showUntrackedFiles = no` keeps that scan cheap (see
 // getWorkingTreeChanges). `counts` is a second pass over the tree and
 // is off by default for the same reason.
-export async function listChangedFiles(
+export const listChangedFiles = Effect.fnUntraced(function* (
   worktreePath: string,
   options: { untracked?: "all"; counts?: boolean } = {},
-): Promise<ChangedFile[]> {
+) {
   const args = ["status", "--porcelain=v2", "-z"];
   if (options.untracked) args.push(`--untracked-files=${options.untracked}`);
-  const stdout = await run(worktreePath, args);
+  const stdout = yield* run(worktreePath, args);
   const fields = splitZ(stdout);
   const files: ChangedFile[] = [];
   for (let i = 0; i < fields.length; i++) {
@@ -251,59 +262,55 @@ export async function listChangedFiles(
   // Git emits status in its own order. Sort by path once here so the
   // rail, the commit and the page's first pick all agree.
   files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  return options.counts ? countsFor(worktreePath, files) : files;
-}
+  return options.counts ? yield* countsFor(worktreePath, files) : files;
+});
 
 // What the changes page reads: every file as its own row, with counts.
-export function listChangesForPage(
-  worktreePath: string,
-): Promise<ChangedFile[]> {
-  return listChangedFiles(worktreePath, { untracked: "all", counts: true });
-}
+export const listChangesForPage = (worktreePath: string) =>
+  listChangedFiles(worktreePath, { untracked: "all", counts: true });
 
 // --- commit ------------------------------------------------------------
 
 // A commit's message split the way the composer holds it. `%s` and `%b`
 // are git's own split, and a NUL between them survives any subject a
 // human could type.
-export async function readCommitMessage(
-  worktreePath: string,
-  hash: string,
-): Promise<CommitMessage> {
-  const stdout = await run(worktreePath, [
-    "show",
-    "-s",
-    "--format=%s%x00%b",
-    "--end-of-options",
-    hash,
-    "--",
-  ]);
-  const cut = stdout.indexOf("\0");
-  if (cut < 0) return { summary: stdout.trim(), description: "" };
-  return {
-    summary: stdout.slice(0, cut).trim(),
-    description: stdout.slice(cut + 1).trim(),
-  };
-}
+export const readCommitMessage = (worktreePath: string, hash: string) =>
+  Effect.map(
+    run(worktreePath, [
+      "show",
+      "-s",
+      "--format=%s%x00%b",
+      "--end-of-options",
+      hash,
+      "--",
+    ]),
+    (stdout): CommitMessage => {
+      const cut = stdout.indexOf("\0");
+      if (cut < 0) return { summary: stdout.trim(), description: "" };
+      return {
+        summary: stdout.slice(0, cut).trim(),
+        description: stdout.slice(cut + 1).trim(),
+      };
+    },
+  );
 
 // --- undo --------------------------------------------------------------
 
-function isAncestor(
+const isAncestor = (
   worktreePath: string,
   ancestor: string,
   descendant: string,
-): Promise<boolean> {
-  return run(worktreePath, [
+) =>
+  run(worktreePath, [
     "merge-base",
     "--is-ancestor",
     "--end-of-options",
     ancestor,
     descendant,
-  ]).then(
-    () => true,
-    () => false,
+  ]).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
   );
-}
 
 // `git reset --soft`: HEAD moves and nothing else does, so the commits
 // between come back as staged changes and no file content is touched.
@@ -318,63 +325,78 @@ function isAncestor(
 // back.
 //
 // Returns where HEAD was, for the redo.
-export function resetSoft(
+export const resetSoft = (
   worktreePath: string,
   target: string,
   expectHead: string | undefined,
-): Promise<string> {
-  return onIndex(worktreePath, async () => {
-    await refuseMidOperation(worktreePath);
-    const [head, expected] = await Promise.all([
-      verifyRev(worktreePath, "HEAD"),
-      expectHead ? verifyRev(worktreePath, expectHead) : undefined,
-    ]);
-    if (expected !== undefined && head !== expected) {
-      throw new Error(
-        "The branch has moved on since this was loaded. Reload and try again.",
+) =>
+  onIndex(
+    worktreePath,
+    Effect.gen(function* () {
+      yield* refuseMidOperation(worktreePath);
+      const [head, expected] = yield* Effect.all(
+        [
+          verifyRev(worktreePath, "HEAD"),
+          expectHead
+            ? verifyRev(worktreePath, expectHead)
+            : Effect.succeed(undefined),
+        ],
+        { concurrency: 2 },
       );
-    }
-    const backwards = await isAncestor(worktreePath, target, head);
-    const forwards =
-      !backwards && expectHead !== undefined
-        ? await isAncestor(worktreePath, head, target)
-        : false;
-    if (!backwards && !forwards) {
-      throw new Error("That commit isn't on this branch's history.");
-    }
-    const [older, newer] = backwards ? [target, head] : [head, target];
-    // One merge, stepped over to its first parent and back: the merge
-    // comes off (or goes back on) whole.
-    const firstParent = await verifyRev(worktreePath, `${newer}^1`).catch(
-      () => undefined,
-    );
-    const wholeMerge =
-      firstParent !== undefined &&
-      (await verifyRev(worktreePath, older)) === firstParent &&
-      (await verifyRev(worktreePath, `${newer}^2`).then(
-        () => true,
-        () => false,
-      ));
-    if (wholeMerge) {
-      await run(worktreePath, ["reset", "--keep", "--end-of-options", target]);
-      return head;
-    }
-    const merges = (
-      await run(worktreePath, [
+      if (expected !== undefined && head !== expected) {
+        return yield* new GitRefusal({
+          reason:
+            "The branch has moved on since this was loaded. Reload and try again.",
+        });
+      }
+      const backwards = yield* isAncestor(worktreePath, target, head);
+      const forwards =
+        !backwards && expectHead !== undefined
+          ? yield* isAncestor(worktreePath, head, target)
+          : false;
+      if (!backwards && !forwards) {
+        return yield* new GitRefusal({
+          reason: "That commit isn't on this branch's history.",
+        });
+      }
+      const [older, newer] = backwards ? [target, head] : [head, target];
+      // One merge, stepped over to its first parent and back: the merge
+      // comes off (or goes back on) whole.
+      const firstParent = yield* verifyRev(worktreePath, `${newer}^1`).pipe(
+        Effect.orElseSucceed(() => undefined),
+      );
+      const wholeMerge =
+        firstParent !== undefined &&
+        (yield* verifyRev(worktreePath, older)) === firstParent &&
+        (yield* verifyRev(worktreePath, `${newer}^2`).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        ));
+      if (wholeMerge) {
+        yield* run(worktreePath, [
+          "reset",
+          "--keep",
+          "--end-of-options",
+          target,
+        ]);
+        return head;
+      }
+      const merges = (yield* run(worktreePath, [
         "rev-list",
         "--merges",
         "--count",
         "--end-of-options",
         `${older}..${newer}`,
-      ])
-    ).trim();
-    if (merges !== "0") {
-      throw new Error("Can't undo across a merge commit.");
-    }
-    await run(worktreePath, ["reset", "--soft", "--end-of-options", target]);
-    return head;
-  });
-}
+      ])).trim();
+      if (merges !== "0") {
+        return yield* new GitRefusal({
+          reason: "Can't undo across a merge commit.",
+        });
+      }
+      yield* run(worktreePath, ["reset", "--soft", "--end-of-options", target]);
+      return head;
+    }),
+  );
 
 // --- discard -----------------------------------------------------------
 
@@ -385,79 +407,79 @@ export function resetSoft(
 // and wrap it in a commit. The ref keeps the objects alive through gc
 // and shows up in `git for-each-ref` for anyone recovering by hand.
 // restoreDiscard is the app's own way back.
-export async function snapshotPaths(
-  worktreePath: string,
-  paths: readonly string[],
-): Promise<string> {
-  const scratch = await mkdtemp(join(tmpdir(), "shigomori-discard-"));
-  const env = {
-    GIT_INDEX_FILE: join(scratch, "index"),
-    // The snapshot commit's own identity, so a repo with no user.name
-    // configured can still discard safely.
-    GIT_AUTHOR_NAME: "Shigoto no Mori",
-    GIT_AUTHOR_EMAIL: "shigomori@localhost",
-    GIT_COMMITTER_NAME: "Shigoto no Mori",
-    GIT_COMMITTER_EMAIL: "shigomori@localhost",
-  };
-  try {
-    const head = (
-      await runLenient(worktreePath, [
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        "HEAD",
-      ])
-    ).trim();
-    // An unborn branch has no HEAD tree to start from, so the snapshot
-    // becomes a root commit of just the discarded files.
-    await run(
-      worktreePath,
-      head ? ["read-tree", "HEAD"] : ["read-tree", "--empty"],
-      { env },
-    );
-    await runChunked(worktreePath, ["add", "-A"], paths, { env });
-    const tree = (await run(worktreePath, ["write-tree"], { env })).trim();
-    const args = [
-      "commit-tree",
-      tree,
-      "-m",
-      `Discarded from ${basename(worktreePath)}: ${paths.length} file${paths.length === 1 ? "" : "s"}`,
-    ];
-    if (head) args.push("-p", head);
-    const commit = (await run(worktreePath, args, { env })).trim();
-    await run(worktreePath, [
-      "update-ref",
-      `${DISCARD_REF_PREFIX}${Date.now()}`,
-      commit,
-    ]);
-    await pruneDiscardSnapshots(worktreePath);
-    return commit;
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
-  }
-}
+export const snapshotPaths = (worktreePath: string, paths: readonly string[]) =>
+  Effect.acquireUseRelease(
+    Effect.promise(() => mkdtemp(join(tmpdir(), "shigomori-discard-"))),
+    (scratch) =>
+      Effect.gen(function* () {
+        const env = {
+          GIT_INDEX_FILE: join(scratch, "index"),
+          // The snapshot commit's own identity, so a repo with no
+          // user.name configured can still discard safely.
+          GIT_AUTHOR_NAME: "Shigoto no Mori",
+          GIT_AUTHOR_EMAIL: "shigomori@localhost",
+          GIT_COMMITTER_NAME: "Shigoto no Mori",
+          GIT_COMMITTER_EMAIL: "shigomori@localhost",
+        };
+        const head = (yield* runLenient(worktreePath, [
+          "rev-parse",
+          "--verify",
+          "--quiet",
+          "HEAD",
+        ])).trim();
+        // An unborn branch has no HEAD tree to start from, so the
+        // snapshot becomes a root commit of just the discarded files.
+        yield* run(
+          worktreePath,
+          head ? ["read-tree", "HEAD"] : ["read-tree", "--empty"],
+          { env },
+        );
+        yield* runChunked(worktreePath, ["add", "-A"], paths, { env });
+        const tree = (yield* run(worktreePath, ["write-tree"], { env })).trim();
+        const args = [
+          "commit-tree",
+          tree,
+          "-m",
+          `Discarded from ${basename(worktreePath)}: ${paths.length} file${paths.length === 1 ? "" : "s"}`,
+        ];
+        if (head) args.push("-p", head);
+        const commit = (yield* run(worktreePath, args, { env })).trim();
+        yield* run(worktreePath, [
+          "update-ref",
+          `${DISCARD_REF_PREFIX}${Date.now()}`,
+          commit,
+        ]);
+        yield* pruneDiscardSnapshots(worktreePath);
+        return commit;
+      }),
+    (scratch) =>
+      Effect.promise(() => rm(scratch, { recursive: true, force: true })),
+  );
 
 // Ref names are millisecond timestamps of equal width, so a reverse
 // name sort is newest first. Best effort: a failed prune only leaves an
 // extra ref behind.
-async function pruneDiscardSnapshots(worktreePath: string): Promise<void> {
-  try {
-    const stdout = await run(worktreePath, [
+const pruneDiscardSnapshots = (worktreePath: string) =>
+  Effect.gen(function* () {
+    const stdout = yield* run(worktreePath, [
       "for-each-ref",
       "--format=%(refname)",
       "--sort=-refname",
       DISCARD_REF_PREFIX,
     ]);
     const refs = stdout.split("\n").filter(Boolean);
-    await Promise.all(
-      refs
-        .slice(DISCARD_SNAPSHOTS_KEPT)
-        .map((ref) => run(worktreePath, ["update-ref", "-d", ref])),
+    yield* Effect.forEach(
+      refs.slice(DISCARD_SNAPSHOTS_KEPT),
+      (ref) => run(worktreePath, ["update-ref", "-d", ref]),
+      { concurrency: "unbounded", discard: true },
     );
-  } catch (err) {
-    log.warn("[changes] discard snapshot prune failed:", err);
-  }
-}
+  }).pipe(
+    Effect.catch((err) =>
+      Effect.sync(() =>
+        log.warn("[changes] discard snapshot prune failed:", err),
+      ),
+    ),
+  );
 
 // Throw away the working-tree changes to `paths`, snapshotting them
 // first so the toast can offer an undo. If the snapshot fails the
@@ -468,89 +490,94 @@ async function pruneDiscardSnapshots(worktreePath: string): Promise<void> {
 // it, and clean the rest, which by then is exactly the untracked set.
 // Two lists because `restore` refuses paths git doesn't know and
 // `clean` ignores paths it does.
-export function discardChanges(
+export const discardChanges = (
   worktreePath: string,
   paths: readonly string[],
-): Promise<string> {
-  return onIndex(worktreePath, async () => {
-    const snapshot = await snapshotPaths(worktreePath, paths);
-    await runChunked(worktreePath, ["reset", "-q"], paths);
-    const tracked = new Set(
-      (await runChunked(worktreePath, ["ls-files", "-z"], paths)).flatMap(
-        splitZ,
-      ),
-    );
-    const untracked = paths.filter((p) => !tracked.has(p));
-    if (tracked.size > 0) {
-      await runChunked(worktreePath, ["restore", "--worktree"], [...tracked]);
-    }
-    if (untracked.length > 0) {
-      // -d: an untracked path can be the last file in a fresh directory.
-      await runChunked(worktreePath, ["clean", "-fdq"], untracked);
-      // `clean` walks past a nested repository without a word, and the
-      // snapshot holds only its gitlink, so "discarded" would be a lie
-      // there. Say what stayed instead.
-      const left = (
-        await runChunked(
+) =>
+  onIndex(
+    worktreePath,
+    Effect.gen(function* () {
+      const snapshot = yield* snapshotPaths(worktreePath, paths);
+      yield* runChunked(worktreePath, ["reset", "-q"], paths);
+      const tracked = new Set(
+        (yield* runChunked(worktreePath, ["ls-files", "-z"], paths)).flatMap(
+          splitZ,
+        ),
+      );
+      const untracked = paths.filter((p) => !tracked.has(p));
+      if (tracked.size > 0) {
+        yield* runChunked(
+          worktreePath,
+          ["restore", "--worktree"],
+          [...tracked],
+        );
+      }
+      if (untracked.length > 0) {
+        // -d: an untracked path can be the last file in a fresh directory.
+        yield* runChunked(worktreePath, ["clean", "-fdq"], untracked);
+        // `clean` walks past a nested repository without a word, and the
+        // snapshot holds only its gitlink, so "discarded" would be a lie
+        // there. Say what stayed instead.
+        const left = (yield* runChunked(
           worktreePath,
           ["ls-files", "-z", "--others", "--exclude-standard"],
           untracked,
-        )
-      ).flatMap(splitZ);
-      if (left.length > 0) {
-        throw new Error(
-          `Couldn't remove ${left.slice(0, 3).join(", ")}${left.length > 3 ? ` (+${left.length - 3} more)` : ""}. A nested git repository has to be removed by hand.`,
-        );
+        )).flatMap(splitZ);
+        if (left.length > 0) {
+          return yield* new GitRefusal({
+            reason: `Couldn't remove ${left.slice(0, 3).join(", ")}${left.length > 3 ? ` (+${left.length - 3} more)` : ""}. A nested git repository has to be removed by hand.`,
+          });
+        }
       }
-    }
-    return snapshot;
-  });
-}
+      return snapshot;
+    }),
+  );
 
 // Put a discard back. The snapshot's diff against its parent is the
 // exact set of paths that went: additions and edits are checked out
 // from the snapshot into the working tree, and a file the user had
 // deleted is deleted again. Working tree only, so what comes back is
 // unstaged, the same as if it had been edited by hand.
-export function restoreDiscard(
-  worktreePath: string,
-  snapshot: string,
-): Promise<void> {
-  return onIndex(worktreePath, async () => {
-    // `--root` makes a parentless snapshot (an unborn-branch discard)
-    // diff against the empty tree instead of printing nothing.
-    // `--no-commit-id` keeps the hash out of the output.
-    const stdout = await run(worktreePath, [
-      "diff-tree",
-      "-r",
-      "-z",
-      "--root",
-      "--no-commit-id",
-      "--no-renames",
-      "--name-status",
-      "--end-of-options",
-      snapshot,
-      "--",
-    ]);
-    const fields = splitZ(stdout);
-    const restore: string[] = [];
-    const remove: string[] = [];
-    for (let i = 0; i + 1 < fields.length; i += 2) {
-      const status = fields[i];
-      const path = fields[i + 1];
-      if (!status || !path) continue;
-      if (status.startsWith("D")) remove.push(path);
-      else restore.push(path);
-    }
-    if (restore.length > 0) {
-      await runChunked(
-        worktreePath,
-        ["restore", "--worktree", `--source=${snapshot}`],
-        restore,
+export const restoreDiscard = (worktreePath: string, snapshot: string) =>
+  onIndex(
+    worktreePath,
+    Effect.gen(function* () {
+      // `--root` makes a parentless snapshot (an unborn-branch discard)
+      // diff against the empty tree instead of printing nothing.
+      // `--no-commit-id` keeps the hash out of the output.
+      const stdout = yield* run(worktreePath, [
+        "diff-tree",
+        "-r",
+        "-z",
+        "--root",
+        "--no-commit-id",
+        "--no-renames",
+        "--name-status",
+        "--end-of-options",
+        snapshot,
+        "--",
+      ]);
+      const fields = splitZ(stdout);
+      const restore: string[] = [];
+      const remove: string[] = [];
+      for (let i = 0; i + 1 < fields.length; i += 2) {
+        const status = fields[i];
+        const path = fields[i + 1];
+        if (!status || !path) continue;
+        if (status.startsWith("D")) remove.push(path);
+        else restore.push(path);
+      }
+      if (restore.length > 0) {
+        yield* runChunked(
+          worktreePath,
+          ["restore", "--worktree", `--source=${snapshot}`],
+          restore,
+        );
+      }
+      yield* Effect.promise(() =>
+        Promise.all(
+          remove.map((path) => rm(join(worktreePath, path), { force: true })),
+        ),
       );
-    }
-    await Promise.all(
-      remove.map((path) => rm(join(worktreePath, path), { force: true })),
-    );
-  });
-}
+    }),
+  );

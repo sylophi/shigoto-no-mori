@@ -152,7 +152,7 @@ const make = Effect.gen(function* () {
     (cwd: string) =>
       Effect.gen(function* () {
         const [remotes, hosts] = yield* Effect.all(
-          [Effect.promise(() => listRemoteEntries(cwd)), knownHosts],
+          [listRemoteEntries(cwd).pipe(withSpawner), knownHosts],
           { concurrency: 2 },
         );
         for (const { url } of remotes) {

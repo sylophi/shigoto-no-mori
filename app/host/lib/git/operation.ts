@@ -7,7 +7,8 @@ import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { GitOperationState } from "@shigomori/contracts/schemas";
 import { onIndex } from "./changes";
-import { run, splitZ } from "./core";
+import * as Effect from "effect/Effect";
+import { GitRefusal, run, splitZ } from "./core";
 
 // The files git leaves in a worktree's own git dir while an operation
 // waits on the user, in the order they are named when several are
@@ -55,60 +56,67 @@ const CONTINUABLE = new Set([
   "squash",
 ]);
 
-export async function gitDirOf(worktreePath: string): Promise<string> {
-  return (await run(worktreePath, ["rev-parse", "--absolute-git-dir"])).trim();
-}
-
-export async function conflictedPaths(worktreePath: string): Promise<string[]> {
-  return splitZ(
-    await run(worktreePath, ["diff", "--name-only", "--diff-filter=U", "-z"]),
+export const gitDirOf = (worktreePath: string) =>
+  Effect.map(run(worktreePath, ["rev-parse", "--absolute-git-dir"]), (out) =>
+    out.trim(),
   );
-}
+
+export const conflictedPaths = (worktreePath: string) =>
+  Effect.map(
+    run(worktreePath, ["diff", "--name-only", "--diff-filter=U", "-z"]),
+    splitZ,
+  );
 
 // `merge --squash` leaves no MERGE_HEAD, only the message it made in
 // SQUASH_MSG, which a commit or a reset clears but a discard of the
 // files doesn't. So it is a squash under way only while the index holds
 // one: conflicted, or staged and not yet committed. Otherwise the
 // message is cleared here.
-async function squashPending(
+const squashPending = Effect.fnUntraced(function* (
   worktreePath: string,
   gitDir: string,
   conflicted: number,
-): Promise<boolean> {
-  const message = await stat(join(gitDir, "SQUASH_MSG")).then(
-    () => true,
-    () => false,
+) {
+  const message = yield* Effect.promise(() =>
+    stat(join(gitDir, "SQUASH_MSG")).then(
+      () => true,
+      () => false,
+    ),
   );
   if (!message) return false;
-  if (conflicted > 0 || (await hasStagedChanges(worktreePath))) return true;
+  if (conflicted > 0 || (yield* hasStagedChanges(worktreePath))) return true;
   // Its changes gone (discarded file by file, which leaves the message
   // behind), the message is git's leftover, and staged work later on
   // would otherwise read as the squash.
-  await rm(join(gitDir, "SQUASH_MSG"), { force: true });
+  yield* Effect.promise(() => rm(join(gitDir, "SQUASH_MSG"), { force: true }));
   return false;
-}
+});
 
-export async function hasStagedChanges(worktreePath: string): Promise<boolean> {
-  const staged = await run(worktreePath, [
-    "diff",
-    "--cached",
-    "--name-only",
-    "-z",
-  ]);
-  return staged !== "";
-}
+export const hasStagedChanges = (worktreePath: string) =>
+  Effect.map(
+    run(worktreePath, ["diff", "--cached", "--name-only", "-z"]),
+    (staged) => staged !== "",
+  );
 
 // Refuses a move that rewrites history, makes a commit or starts a
 // merge while git waits on the user mid-operation or over conflicted
 // files, where git might go along with it, or refuse in a way that reads
 // like the move's own stop.
-export async function refuseMidOperation(worktreePath: string): Promise<void> {
-  const { operation, conflicted } = await readOperation(worktreePath);
+export const refuseMidOperation = Effect.fnUntraced(function* (
+  worktreePath: string,
+) {
+  const { operation, conflicted } = yield* readOperation(worktreePath);
   if (operation !== null) {
-    throw new Error(`Finish or abort the ${operation} first.`);
+    return yield* new GitRefusal({
+      reason: `Finish or abort the ${operation} first.`,
+    });
   }
-  if (conflicted > 0) throw new Error("Resolve the conflicted files first.");
-}
+  if (conflicted > 0) {
+    return yield* new GitRefusal({
+      reason: "Resolve the conflicted files first.",
+    });
+  }
+});
 
 // The branch a rebase replays, which git keeps in its state dir while
 // HEAD is detached for the replay.
@@ -125,97 +133,112 @@ async function rebasingBranch(gitDir: string): Promise<string | null> {
   return name === undefined ? null : name.slice("refs/heads/".length);
 }
 
-export async function readOperation(
+export const readOperation = Effect.fnUntraced(function* (
   worktreePath: string,
-): Promise<GitOperationState> {
-  const [gitDir, conflictedList] = await Promise.all([
-    gitDirOf(worktreePath),
-    conflictedPaths(worktreePath),
-  ]);
+) {
+  const [gitDir, conflictedList] = yield* Effect.all(
+    [gitDirOf(worktreePath), conflictedPaths(worktreePath)],
+    { concurrency: 2 },
+  );
   const conflicted = conflictedList.length;
   const operation =
-    (await operationInProgress(gitDir)) ??
-    ((await squashPending(worktreePath, gitDir, conflicted)) ? "squash" : null);
+    (yield* Effect.promise(() => operationInProgress(gitDir))) ??
+    ((yield* squashPending(worktreePath, gitDir, conflicted))
+      ? "squash"
+      : null);
   return {
     operation,
     continuable: operation !== null && CONTINUABLE.has(operation),
     conflicted,
-    rebasing: operation === "rebase" ? await rebasingBranch(gitDir) : null,
-  };
-}
+    rebasing:
+      operation === "rebase"
+        ? yield* Effect.promise(() => rebasingBranch(gitDir))
+        : null,
+  } satisfies GitOperationState;
+});
 
 // The editor stays shut: a continue takes the message git prepared.
 const NO_EDITOR = { env: { GIT_EDITOR: "true" } };
 
-export function continueOperation(worktreePath: string): Promise<void> {
-  return onIndex(worktreePath, async () => {
-    const { operation, conflicted } = await readOperation(worktreePath);
-    if (conflicted > 0) {
-      throw new Error("Resolve the conflicted files first.");
-    }
-    switch (operation) {
-      // Strip, or the "# Conflicts:" list git adds to the message
-      // stays in it, as an editor would have dropped it.
-      case "merge":
-        await run(
-          worktreePath,
-          ["commit", "--no-edit", "--cleanup=strip"],
-          NO_EDITOR,
-        );
-        return;
-      case "squash":
-        await run(worktreePath, [
-          "commit",
-          "--file",
-          join(await gitDirOf(worktreePath), "SQUASH_MSG"),
-        ]);
-        return;
-      case "rebase":
-        await run(worktreePath, ["rebase", "--continue"], NO_EDITOR);
-        return;
-      // A pick or revert that came out empty once its conflicts were
-      // settled is skipped, as a rebase drops one: git won't commit it.
-      case "cherry-pick":
-      case "revert":
-        if (!(await hasStagedChanges(worktreePath))) {
-          await run(worktreePath, [operation, "--skip"]);
+export const continueOperation = (worktreePath: string) =>
+  onIndex(
+    worktreePath,
+    Effect.gen(function* () {
+      const { operation, conflicted } = yield* readOperation(worktreePath);
+      if (conflicted > 0) {
+        return yield* new GitRefusal({
+          reason: "Resolve the conflicted files first.",
+        });
+      }
+      switch (operation) {
+        // Strip, or the "# Conflicts:" list git adds to the message
+        // stays in it, as an editor would have dropped it.
+        case "merge":
+          yield* run(
+            worktreePath,
+            ["commit", "--no-edit", "--cleanup=strip"],
+            NO_EDITOR,
+          );
           return;
-        }
-        await run(worktreePath, [operation, "--continue"], NO_EDITOR);
-        return;
-      default:
-        throw new Error("There is nothing here to continue.");
-    }
-  });
-}
+        case "squash":
+          yield* run(worktreePath, [
+            "commit",
+            "--file",
+            join(yield* gitDirOf(worktreePath), "SQUASH_MSG"),
+          ]);
+          return;
+        case "rebase":
+          yield* run(worktreePath, ["rebase", "--continue"], NO_EDITOR);
+          return;
+        // A pick or revert that came out empty once its conflicts were
+        // settled is skipped, as a rebase drops one: git won't commit it.
+        case "cherry-pick":
+        case "revert":
+          if (!(yield* hasStagedChanges(worktreePath))) {
+            yield* run(worktreePath, [operation, "--skip"]);
+            return;
+          }
+          yield* run(worktreePath, [operation, "--continue"], NO_EDITOR);
+          return;
+        default:
+          return yield* new GitRefusal({
+            reason: "There is nothing here to continue.",
+          });
+      }
+    }),
+  );
 
-export function abortOperation(worktreePath: string): Promise<void> {
-  return onIndex(worktreePath, async () => {
-    const { operation } = await readOperation(worktreePath);
-    switch (operation) {
-      case "merge":
-      case "rebase":
-      case "cherry-pick":
-      case "revert":
-        await run(worktreePath, [operation, "--abort"]);
-        return;
-      case "git am":
-        await run(worktreePath, ["am", "--abort"]);
-        return;
-      case "squash":
-        await run(worktreePath, ["reset", "--merge"]);
-        return;
-      case "bisect":
-        await run(worktreePath, ["bisect", "reset"]);
-        return;
-      case "cherry-pick or revert":
-        await run(worktreePath, ["cherry-pick", "--abort"]);
-        return;
-      default:
-        throw new Error("There is nothing here to abort.");
-    }
-  });
-}
+export const abortOperation = (worktreePath: string) =>
+  onIndex(
+    worktreePath,
+    Effect.gen(function* () {
+      const { operation } = yield* readOperation(worktreePath);
+      switch (operation) {
+        case "merge":
+        case "rebase":
+        case "cherry-pick":
+        case "revert":
+          yield* run(worktreePath, [operation, "--abort"]);
+          return;
+        case "git am":
+          yield* run(worktreePath, ["am", "--abort"]);
+          return;
+        case "squash":
+          yield* run(worktreePath, ["reset", "--merge"]);
+          return;
+        case "bisect":
+          yield* run(worktreePath, ["bisect", "reset"]);
+          return;
+        case "cherry-pick or revert":
+          yield* run(worktreePath, ["cherry-pick", "--abort"]);
+          return;
+        default:
+          return yield* new GitRefusal({
+            reason: "There is nothing here to abort.",
+          });
+      }
+    }),
+  );
 
 // Settles one conflicted file with one side's version, or as it stands,
 // and stages it.
@@ -224,39 +247,45 @@ export function abortOperation(worktreePath: string): Promise<void> {
 // everywhere but a rebase: there HEAD is the branch being replayed onto
 // and "theirs" is the worktree's own commit. A side that deleted the
 // file settles it as a removal.
-export function resolveConflict(
+export const resolveConflict = (
   worktreePath: string,
   path: string,
   side: "mine" | "theirs" | "as-is",
-): Promise<void> {
-  return onIndex(worktreePath, async () => {
-    if (side === "as-is") {
-      await run(worktreePath, ["--literal-pathspecs", "add", "--", path]);
-      return;
-    }
-    const operation = await operationInProgress(await gitDirOf(worktreePath));
-    const ours = (side === "mine") !== (operation === "rebase");
-    try {
-      await run(worktreePath, [
+) =>
+  onIndex(
+    worktreePath,
+    Effect.gen(function* () {
+      const add = run(worktreePath, ["--literal-pathspecs", "add", "--", path]);
+      if (side === "as-is") {
+        yield* add;
+        return;
+      }
+      const gitDir = yield* gitDirOf(worktreePath);
+      const operation = yield* Effect.promise(() =>
+        operationInProgress(gitDir),
+      );
+      const ours = (side === "mine") !== (operation === "rebase");
+      // A side that deleted the file has no version to check out.
+      const checkedOut = yield* run(worktreePath, [
         "--literal-pathspecs",
         "checkout",
         ours ? "--ours" : "--theirs",
         "--",
         path,
-      ]);
-    } catch (err) {
-      if (!/does not have (our|their) version/.test((err as Error).message)) {
-        throw err;
-      }
-      await run(worktreePath, [
-        "--literal-pathspecs",
-        "rm",
-        "--quiet",
-        "--",
-        path,
-      ]);
-      return;
-    }
-    await run(worktreePath, ["--literal-pathspecs", "add", "--", path]);
-  });
-}
+      ]).pipe(
+        Effect.as(true),
+        Effect.catchIf(
+          (error) => /does not have (our|their) version/.test(error.reason),
+          () =>
+            run(worktreePath, [
+              "--literal-pathspecs",
+              "rm",
+              "--quiet",
+              "--",
+              path,
+            ]).pipe(Effect.as(false)),
+        ),
+      );
+      if (checkedOut) yield* add;
+    }),
+  );

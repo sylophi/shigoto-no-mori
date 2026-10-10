@@ -25,6 +25,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
+import { promised } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
@@ -35,14 +36,17 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const { mergeBranch, mergeKeepingConflicts, readMergePreview } =
-  await import("../host/lib/git/merge.ts");
+const { mergeBranch, mergeKeepingConflicts, readMergePreview } = promised(
+  await import("../host/lib/git/merge.ts"),
+);
 const { abortOperation, continueOperation, readOperation, resolveConflict } =
-  await import("../host/lib/git/operation.ts");
-const { readBranchHistory } = await import("../host/lib/git/worktrees.ts");
-const { getCommitDiff } = await import("../host/lib/git/diff.ts");
-const { revertCommit } = await import("../host/lib/git/history.ts");
-const { resetSoft } = await import("../host/lib/git/changes.ts");
+  promised(await import("../host/lib/git/operation.ts"));
+const { readBranchHistory } = promised(
+  await import("../host/lib/git/worktrees.ts"),
+);
+const { getCommitDiff } = promised(await import("../host/lib/git/diff.ts"));
+const { revertCommit } = promised(await import("../host/lib/git/history.ts"));
+const { resetSoft } = promised(await import("../host/lib/git/changes.ts"));
 
 const git = sandboxGit(gitEnv);
 

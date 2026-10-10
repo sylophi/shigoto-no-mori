@@ -20,11 +20,9 @@ import {
   splitRemoteRefSync,
 } from "../git/remotes";
 import type { WorktreeIdentity } from "../git/worktrees";
-import { createLimiter } from "@shared/util/limit";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import * as Ops from "../engineOps";
-import { fromPromise } from "../util/fromPromise";
 import { ttlEffectCache } from "../util/ttlCache";
 
 interface HeadCommit {
@@ -36,21 +34,20 @@ interface HeadCommit {
 }
 
 // The commit HEAD points at. Both fields null for an empty repo.
-async function getHeadCommit(worktreePath: string): Promise<HeadCommit> {
-  try {
-    const stdout = await run(worktreePath, ["log", "-1", "--format=%ct%n%h"]);
-    const [seconds, hash] = stdout.trim().split("\n");
-    const at = Number(seconds);
-    return {
-      // Floored to a whole millisecond: the IPC schema takes safe ints,
-      // so a malformed %ct must not reach the boundary as a float.
-      at: Number.isFinite(at) ? Math.floor(at * 1000) : null,
-      hash: hash?.trim() || null,
-    };
-  } catch {
-    return { at: null, hash: null };
-  }
-}
+const getHeadCommit = (worktreePath: string) =>
+  run(worktreePath, ["log", "-1", "--format=%ct%n%h"]).pipe(
+    Effect.map((stdout): HeadCommit => {
+      const [seconds, hash] = stdout.trim().split("\n");
+      const at = Number(seconds);
+      return {
+        // Floored to a whole millisecond: the IPC schema takes safe ints,
+        // so a malformed %ct must not reach the boundary as a float.
+        at: Number.isFinite(at) ? Math.floor(at * 1000) : null,
+        hash: hash?.trim() || null,
+      };
+    }),
+    Effect.orElseSucceed((): HeadCommit => ({ at: null, hash: null })),
+  );
 
 // Commits on HEAD that `primaryRef` doesn't have, or null when the
 // count couldn't be taken.
@@ -61,22 +58,14 @@ async function getHeadCommit(worktreePath: string): Promise<HeadCommit> {
 // those into 0 would preselect them as "every commit is already in
 // main", which is the one mistake this surface must not make. Unparsable
 // output is treated the same way, failing safe like `contentAlreadyIn`.
-async function countUniqueCommits(
-  worktreePath: string,
-  primaryRef: string,
-): Promise<number | null> {
-  try {
-    const stdout = await run(worktreePath, [
-      "rev-list",
-      "--count",
-      `${primaryRef}..HEAD`,
-    ]);
-    const count = Number(stdout.trim());
-    return Number.isInteger(count) && count >= 0 ? count : null;
-  } catch {
-    return null;
-  }
-}
+const countUniqueCommits = (worktreePath: string, primaryRef: string) =>
+  run(worktreePath, ["rev-list", "--count", `${primaryRef}..HEAD`]).pipe(
+    Effect.map((stdout) => {
+      const count = Number(stdout.trim());
+      return Number.isInteger(count) && count >= 0 ? count : null;
+    }),
+    Effect.orElseSucceed(() => null),
+  );
 
 // Does this worktree hold untracked files?
 //
@@ -85,21 +74,13 @@ async function countUniqueCommits(
 // the question that setting suppresses, and is only asked for the rows
 // that would otherwise be ticked. `--exclude-standard` keeps it off
 // ignored paths, so node_modules costs nothing.
-async function hasUntrackedFiles(worktreePath: string): Promise<boolean> {
-  try {
-    const stdout = await run(worktreePath, [
-      "ls-files",
-      "--others",
-      "--exclude-standard",
-      "-z",
-    ]);
-    return stdout.length > 0;
-  } catch {
+const hasUntrackedFiles = (worktreePath: string) =>
+  run(worktreePath, ["ls-files", "--others", "--exclude-standard", "-z"]).pipe(
+    Effect.map((stdout) => stdout.length > 0),
     // Unreadable cuts the same way as dirty: assume there is something
     // to lose.
-    return true;
-  }
-}
+    Effect.orElseSucceed(() => true),
+  );
 
 // Would merging this worktree into `primaryRef` change anything?
 //
@@ -115,25 +96,25 @@ async function hasUntrackedFiles(worktreePath: string): Promise<boolean> {
 //
 // The primary's own tree OID is a per-project constant, so it is
 // resolved once by `primaryRefCandidates` rather than per worktree.
-async function contentAlreadyIn(
+const contentAlreadyIn = (
   projectPath: string,
   candidate: PrimaryCandidate,
   head: string,
-): Promise<boolean> {
-  if (!candidate.tree) return false;
-  try {
-    const merged = await runLenient(projectPath, [
-      "merge-tree",
-      "--write-tree",
-      candidate.ref,
-      head,
-    ]);
-    const mergedTree = merged.split("\n", 1)[0]?.trim();
-    return Boolean(mergedTree) && mergedTree === candidate.tree;
-  } catch {
-    return false;
-  }
-}
+) =>
+  candidate.tree === null
+    ? Effect.succeed(false)
+    : runLenient(projectPath, [
+        "merge-tree",
+        "--write-tree",
+        candidate.ref,
+        head,
+      ]).pipe(
+        Effect.map((merged) => {
+          const mergedTree = merged.split("\n", 1)[0]?.trim();
+          return Boolean(mergedTree) && mergedTree === candidate.tree;
+        }),
+        Effect.orElseSucceed(() => false),
+      );
 
 // Every ref that counts as "the primary branch" for containment.
 //
@@ -154,45 +135,47 @@ interface PrimaryCandidate {
   tree: string | null;
 }
 
-async function primaryRefCandidates(
+const primaryRefCandidates = Effect.fnUntraced(function* (
   projectPath: string,
   primaryRef: string | null,
   remotes: string[],
-): Promise<PrimaryCandidate[]> {
+) {
   if (!primaryRef) return [];
   const split = splitRemoteRefSync(primaryRef, remotes);
   const refs = [primaryRef];
   if (split && split.branch !== primaryRef) {
-    if (await localBranchExists(projectPath, split.branch)) {
+    if (yield* localBranchExists(projectPath, split.branch)) {
       refs.push(split.branch);
     }
   }
-  return Promise.all(
-    refs.map(async (ref) => ({
-      ref,
-      tree: await treeOf(projectPath, ref).catch(() => null),
-    })),
+  return yield* Effect.forEach(
+    refs,
+    (ref) =>
+      treeOf(projectPath, ref).pipe(
+        Effect.orElseSucceed(() => null),
+        Effect.map((tree): PrimaryCandidate => ({ ref, tree })),
+      ),
+    { concurrency: "unbounded" },
   );
-}
+});
 
 // The untracked scan is worth a git call only where the answer changes
 // something, and that is exactly here: a worktree reported as contained
 // is one the page ticks on its own, so this is the last chance to notice
 // files that exist nowhere else.
-async function contained(
-  worktreePath: string,
-  facts: WorktreeHygiene,
-): Promise<WorktreeHygiene> {
-  return { ...facts, untracked: await hasUntrackedFiles(worktreePath) };
-}
+const contained = (worktreePath: string, facts: WorktreeHygiene) =>
+  Effect.map(
+    hasUntrackedFiles(worktreePath),
+    (untracked): WorktreeHygiene => ({ ...facts, untracked }),
+  );
 
-async function hygieneFor(
+const hygieneFor = Effect.fnUntraced(function* (
   identity: WorktreeIdentity,
   projectPath: string,
   candidates: PrimaryCandidate[],
   primaryBranch: string | null,
-): Promise<WorktreeHygiene> {
-  const head = await getHeadCommit(identity.path);
+) {
+  const head = yield* getHeadCommit(identity.path);
   const base: WorktreeHygiene = {
     worktreeId: identity.id,
     lastCommitAt: head.at,
@@ -228,9 +211,9 @@ async function hygieneFor(
   // names the branch the work actually landed in. If none contains it,
   // fall back to the canonical ref's numbers.
   let fallback: WorktreeHygiene | null = null;
+  // One candidate after another: their priority order matters.
   for (const candidate of candidates) {
-    // oxlint-disable-next-line no-await-in-loop -- candidate priority order matters
-    const uniqueCommits = await countUniqueCommits(
+    const uniqueCommits = yield* countUniqueCommits(
       identity.path,
       candidate.ref,
     );
@@ -240,21 +223,20 @@ async function hygieneFor(
     if (uniqueCommits === 0) {
       // Fully contained already. The merge-tree probe would only
       // confirm what the commit count just proved.
-      return contained(identity.path, {
+      return yield* contained(identity.path, {
         ...base,
         primaryRef: candidate.ref,
         uniqueCommits: 0,
         contentAlreadyInPrimary: true,
       });
     }
-    // oxlint-disable-next-line no-await-in-loop -- candidate priority order matters
-    const alreadyIn = await contentAlreadyIn(
+    const alreadyIn = yield* contentAlreadyIn(
       projectPath,
       candidate,
       identity.branch,
     );
     if (alreadyIn) {
-      return contained(identity.path, {
+      return yield* contained(identity.path, {
         ...base,
         primaryRef: candidate.ref,
         uniqueCommits,
@@ -265,12 +247,12 @@ async function hygieneFor(
   }
 
   return fallback ?? base;
-}
+});
 
 // Probes run through a shared window because this is asked for every
 // project at once: a machine with five projects would otherwise start
 // forty independent git chains, `merge-tree` included, in one burst.
-const gitProbes = createLimiter(6);
+const gitProbes = Semaphore.makeUnsafe(6);
 
 export const collectProjectHygiene = Effect.fnUntraced(function* (
   projectId: string,
@@ -283,27 +265,26 @@ export const collectProjectHygiene = Effect.fnUntraced(function* (
   // a linked worktree that has it checked out can be recognised and kept
   // off the tick list.
   const [identities, remotes] = yield* Effect.all(
-    [identityCache.get(projectId), fromPromise(() => listRemotes(projectPath))],
+    [identityCache.get(projectId), listRemotes(projectPath)],
     { concurrency: 2 },
   );
   // Resolved once per project by the engine and carried on every
   // identity.
   const primaryRef = identities[0]?.primaryRef ?? null;
   const primaryBranch = identities[0]?.primaryBranch ?? null;
-  return yield* fromPromise(async () => {
-    const candidates = await primaryRefCandidates(
-      projectPath,
-      primaryRef,
-      remotes,
-    );
-    return Promise.all(
-      identities.map((identity) =>
-        gitProbes(() =>
-          hygieneFor(identity, projectPath, candidates, primaryBranch),
-        ),
+  const candidates = yield* primaryRefCandidates(
+    projectPath,
+    primaryRef,
+    remotes,
+  );
+  return yield* Effect.forEach(
+    identities,
+    (identity) =>
+      hygieneFor(identity, projectPath, candidates, primaryBranch).pipe(
+        gitProbes.withPermits(1),
       ),
-    );
-  });
+    { concurrency: "unbounded" },
+  );
 });
 
 // The worktree identities (with the project's primary ref), cached for

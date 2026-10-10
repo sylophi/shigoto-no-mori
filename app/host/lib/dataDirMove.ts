@@ -242,24 +242,25 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
           () => undefined,
         );
       }
-
-      // Re-link git's worktree metadata (each worktree's .git file and
-      // the repo's .git/worktrees/<name>/gitdir both record absolute
-      // paths). Repair is idempotent and re-runnable from the repo by
-      // hand, so a failure here shouldn't undo an otherwise complete
-      // move.
-      await Promise.all(
-        repairTargets
-          .filter(({ moved }) => moved.length > 0)
-          .map(({ project, moved }) =>
-            run(project.path, [
-              "worktree",
-              "repair",
-              ...moved.map((m) => m.newPath),
-            ]).catch(() => undefined),
-          ),
-      );
     });
+
+    // Re-link git's worktree metadata (each worktree's .git file and
+    // the repo's .git/worktrees/<name>/gitdir both record absolute
+    // paths). Repair is idempotent and re-runnable from the repo by
+    // hand, so a failure here shouldn't undo an otherwise complete
+    // move.
+    yield* Effect.forEach(
+      repairTargets.filter(({ moved }) => moved.length > 0),
+      ({ project, moved }) =>
+        Effect.ignore(
+          run(project.path, [
+            "worktree",
+            "repair",
+            ...moved.map((m) => m.newPath),
+          ]),
+        ),
+      { concurrency: "unbounded", discard: true },
+    );
   }).pipe(
     Effect.onError(() =>
       Effect.gen(function* () {

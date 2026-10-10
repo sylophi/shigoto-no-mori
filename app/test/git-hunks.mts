@@ -20,6 +20,7 @@ import {
   tempDir,
 } from "./lib/checkKit.mts";
 import { it } from "vitest";
+import { promised } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
@@ -30,9 +31,11 @@ scrubProcessGitEnv({
   GIT_COMMITTER_EMAIL: "sm@example.test",
 });
 
-const { discardHunks, readHunks } = await import("../host/lib/git/hunks.ts");
-const { restoreDiscard } = await import("../host/lib/git/changes.ts");
-const { commitPicks } = await import("../host/lib/git/commit.ts");
+const { discardHunks, readHunks } = promised(
+  await import("../host/lib/git/hunks.ts"),
+);
+const { restoreDiscard } = promised(await import("../host/lib/git/changes.ts"));
+const { commitPicks } = promised(await import("../host/lib/git/commit.ts"));
 
 const git = sandboxGit(gitEnv);
 

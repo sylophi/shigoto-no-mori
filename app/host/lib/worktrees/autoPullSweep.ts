@@ -15,7 +15,7 @@
 // the upstream now tracks, refuse on. A worktree with a script the
 // app started in it is left alone too: the tree moving under a running
 // dev server is the one way a pull the user never clicked could bite.
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
 import { fastForwardToUpstream, hasUncommittedOrUntracked } from "../git/sync";
 import { getUpstreamCounts, type WorktreeIdentity } from "../git/worktrees";
 
@@ -41,24 +41,31 @@ const skipped = (reason: AutoPullSkipReason): AutoPullOutcome => ({
 // nothing local stands in the way. `busy` is the caller's knowledge of
 // processes the app started in this worktree. Git cannot see those,
 // and it is required so no caller forgets to ask.
-export async function autoPullWorktree(
+export const autoPullWorktree = Effect.fnUntraced(function* (
   worktree: Pick<WorktreeIdentity, "path" | "detached">,
   options: { busy: boolean },
-): Promise<AutoPullOutcome> {
+) {
   if (worktree.detached) return skipped("detached");
-  const counts = await getUpstreamCounts(worktree.path);
+  const counts = yield* getUpstreamCounts(worktree.path);
   if (counts === null) return skipped("no-upstream");
   if (counts.behind === 0) return skipped("synced");
   if (counts.ahead > 0) return skipped("ahead");
   if (options.busy) return skipped("busy");
-  try {
-    if (await hasUncommittedOrUntracked(worktree.path)) return skipped("dirty");
-    await fastForwardToUpstream(worktree.path);
-  } catch (error) {
-    return { kind: "failed", message: errorMessageOf(error) };
-  }
-  return { kind: "pulled", commits: counts.behind };
-}
+  return yield* Effect.gen(function* () {
+    if (yield* hasUncommittedOrUntracked(worktree.path)) {
+      return skipped("dirty");
+    }
+    yield* fastForwardToUpstream(worktree.path);
+    return { kind: "pulled", commits: counts.behind } as AutoPullOutcome;
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed<AutoPullOutcome>({
+        kind: "failed",
+        message: error.message,
+      }),
+    ),
+  );
+});
 
 export interface AutoPullSweepResult {
   pulled: { worktree: WorktreeIdentity; commits: number }[];
@@ -72,15 +79,14 @@ export interface AutoPullSweepResult {
 // app-started process in them. Marks for worktrees that no longer
 // exist simply match nothing, so an `sm rm` in a terminal leaves no
 // pull behind.
-export async function sweepAutoPull(
+export const sweepAutoPull = Effect.fnUntraced(function* (
   identities: readonly WorktreeIdentity[],
   busyWorktreeIds: ReadonlySet<string>,
-): Promise<AutoPullSweepResult> {
+) {
   const result: AutoPullSweepResult = { pulled: [], failed: [] };
   for (const worktree of identities) {
     if (!worktree.autoPull) continue;
-    // oxlint-disable-next-line no-await-in-loop -- one git at a time, by design (see above)
-    const outcome = await autoPullWorktree(worktree, {
+    const outcome = yield* autoPullWorktree(worktree, {
       busy: busyWorktreeIds.has(worktree.id),
     });
     if (outcome.kind === "pulled") {
@@ -90,4 +96,4 @@ export async function sweepAutoPull(
     }
   }
   return result;
-}
+});

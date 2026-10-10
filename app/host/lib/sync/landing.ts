@@ -37,7 +37,6 @@ import {
 } from "@host/lib/projects";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
 import { cancellable, step } from "@host/lib/sync/moves";
-import { fromPromise } from "@host/lib/util/fromPromise";
 import {
   attachLinkFarEnd,
   incomingRefFor,
@@ -94,7 +93,7 @@ const refuseLandingCollision = Effect.fnUntraced(function* (
 ) {
   const [{ local }, existing] = yield* Effect.all(
     [
-      fromPromise(() => listBranches(project.path)),
+      listBranches(project.path),
       Ops.listWorktreeIdentities({ projectId: project.id }),
     ],
     { concurrency: 2 },
@@ -269,7 +268,7 @@ export const landWorktree = (
 
     // 4. Fetch what's missing. Tip already here + clean worktree means
     // nothing crosses at all.
-    const tipIsLocal = yield* step(() => hasCommit(project.path, branchTip));
+    const tipIsLocal = yield* hasCommit(project.path, branchTip);
     const wantRefs = [
       ...(tipIsLocal ? [] : [`refs/heads/${branch}`]),
       ...(captured ? [dirtyRefFor(sourceWorktreeId)] : []),
@@ -287,7 +286,7 @@ export const landWorktree = (
         // corruption.
         const haves = tipIsLocal
           ? [branchTip]
-          : yield* step(() => localBranchTips(project.path));
+          : yield* localBranchTips(project.path);
         // The fetch opens the transfer step itself with its (0, total)
         // frame, so only the nothing-to-fetch case needs a bare tick.
         yield* step((stepSignal) =>
@@ -308,7 +307,7 @@ export const landWorktree = (
         progress({ step: "transfer" });
       }
       if (tipIsLocal) {
-        yield* step(() => updateRef(project.path, incomingRef, branchTip));
+        yield* updateRef(project.path, incomingRef, branchTip);
       }
 
       // 5 and 6. The create on the incoming ref, then the capture
@@ -332,7 +331,7 @@ export const landWorktree = (
       );
       const captureTree =
         captured && capture.commit !== undefined
-          ? yield* step(() => treeOf(project.path, capture.commit as string))
+          ? yield* treeOf(project.path, capture.commit as string)
           : undefined;
       return {
         worktree,
@@ -349,11 +348,7 @@ export const landWorktree = (
       };
     }).pipe(
       // Swept success or fail.
-      Effect.ensuring(
-        Effect.promise(() =>
-          deleteRef(project.path, incomingRef).catch(() => {}),
-        ),
-      ),
+      Effect.ensuring(Effect.ignore(deleteRef(project.path, incomingRef))),
     );
   });
 
@@ -482,9 +477,9 @@ const landIncoming = (
     if (capture !== undefined) {
       const sourceDirtyRef = dirtyRefFor(capture.sourceWorktreeId);
       const localDirtyRef = dirtyRefFor(worktree.id);
-      yield* step(() => updateRef(project.path, localDirtyRef, capture.commit));
+      yield* updateRef(project.path, localDirtyRef, capture.commit);
       if (localDirtyRef !== sourceDirtyRef) {
-        yield* step(() => deleteRef(project.path, sourceDirtyRef));
+        yield* deleteRef(project.path, sourceDirtyRef);
       }
       dirtyApplied = yield* Ops.dirtyApply(project, worktree.id).pipe(
         Effect.withSpan("Landing.apply"),
@@ -516,8 +511,8 @@ const rollBackLanded = (
     yield* Ops.forceRemoveWorktree(project, worktree.id, {
       timeoutMs: ROLLBACK_CLEANUP_MS,
     });
-    yield* Effect.promise(() =>
-      deleteAnyLocalBranch(project.path, worktree.branch, true).catch(() => {}),
+    yield* Effect.ignore(
+      deleteAnyLocalBranch(project.path, worktree.branch, true),
     );
   }).pipe(
     Effect.catch((error) =>

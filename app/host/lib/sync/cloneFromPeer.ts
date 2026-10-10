@@ -18,9 +18,12 @@ import {
   type SyncCloneInto,
   SyncBundleRefSchema,
 } from "@shigomori/contracts/modules/sync";
-import { checkNewCheckoutDestination } from "@host/lib/git/clone";
-import { run } from "@host/lib/git/core";
-import { deleteRef, updateRef } from "@host/lib/git/refs";
+import {
+  checkNewCheckoutDestination,
+  deleteRef,
+  run,
+  updateRef,
+} from "@host/lib/git/promises";
 import { expandHome } from "@host/lib/util/paths";
 import { throwIfCancelled } from "./moves";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";

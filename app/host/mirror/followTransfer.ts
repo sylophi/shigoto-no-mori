@@ -8,7 +8,7 @@
 // pull asks for the peer's own head, a push lands this side's.
 import type { Project } from "@shigomori/contracts/schemas";
 import type * as Engine from "@host/lib/engine";
-import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
+import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/promises";
 import { offerSource, withPeerSource } from "@host/lib/sync/sourceLink";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
 import {

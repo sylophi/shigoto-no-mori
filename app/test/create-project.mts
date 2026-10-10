@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "vitest";
+import { promised } from "./lib/gitPromises.mts";
 import {
   sandboxGit,
   scrubbedGitEnv,
@@ -31,7 +32,7 @@ const IDENTITY = {
 const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv(IDENTITY);
 
-const { createRepo } = await import("../host/lib/git/init.ts");
+const { createRepo } = promised(await import("../host/lib/git/init.ts"));
 const { CreateProjectPayloadSchema } =
   await import("@shigomori/contracts/schemas/project");
 

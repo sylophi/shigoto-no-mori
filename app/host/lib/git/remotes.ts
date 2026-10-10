@@ -1,82 +1,76 @@
-import {
-  listRemotes as listRemotesWith,
-  localBranchExists as localBranchExistsWith,
-  remoteRefExists as remoteRefExistsWith,
-  resolveDefaultRef as resolveDefaultRefWith,
-} from "@shared/git/defaultBranch.mts";
-import { run } from "./core";
+// A repo's remotes and remote-tracking refs, as the app's git runner
+// reads them. The primary ref a worktree row is measured against is the
+// engine's.
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import { type GitError, run } from "./core";
 
-// The ref probes the repo identity shares with
-// shared/git/defaultBranch.mts, bound to the app's git runner. The
-// primary ref a worktree row is measured against is the engine's.
-export function localBranchExists(
-  projectPath: string,
-  branch: string,
-): Promise<boolean> {
-  return localBranchExistsWith(run, projectPath, branch);
-}
+const refExists = (projectPath: string, fullRef: string) =>
+  run(projectPath, ["show-ref", "--verify", "--quiet", fullRef]).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+  );
 
-export function remoteRefExists(
-  projectPath: string,
-  ref: string,
-): Promise<boolean> {
-  return remoteRefExistsWith(run, projectPath, ref);
-}
+export const localBranchExists = (projectPath: string, branch: string) =>
+  refExists(projectPath, `refs/heads/${branch}`);
 
-export function listRemotes(projectPath: string): Promise<string[]> {
-  return listRemotesWith(run, projectPath);
-}
+export const remoteRefExists = (projectPath: string, ref: string) =>
+  refExists(projectPath, `refs/remotes/${ref}`);
+
+export const listRemotes = (projectPath: string) =>
+  run(projectPath, ["remote"]).pipe(
+    Effect.map((stdout) =>
+      stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    ),
+    Effect.orElseSucceed((): string[] => []),
+  );
 
 // Every row of `git remote -v` as a name + URL pair. git emits two rows
 // per remote, fetch and push. Both are kept because a remote can push
 // somewhere other than it fetches, and callers classifying hosts want to
 // see either side. Identical rows are de-duped.
-export async function listRemoteEntries(
-  projectPath: string,
-): Promise<{ name: string; url: string }[]> {
-  try {
-    const stdout = await run(projectPath, ["remote", "-v"]);
-    const entries: { name: string; url: string }[] = [];
-    const seen = new Set<string>();
-    for (const line of stdout.split("\n")) {
-      const match = line.match(/^(\S+)\s+(\S+)\s+\(/);
-      const name = match?.[1];
-      const url = match?.[2];
-      if (!name || !url || seen.has(`${name}\t${url}`)) continue;
-      seen.add(`${name}\t${url}`);
-      entries.push({ name, url });
-    }
-    return entries;
-  } catch {
-    return [];
-  }
-}
-
-// Qualified, fallback-free variant for repo identity. See
-// shared/git/defaultBranch.mts for the contract split.
-export function resolveDefaultRef(
-  projectPath: string,
-  override?: string,
-): Promise<string | null> {
-  return resolveDefaultRefWith(run, projectPath, override);
-}
+export const listRemoteEntries = (projectPath: string) =>
+  run(projectPath, ["remote", "-v"]).pipe(
+    Effect.map((stdout) => {
+      const entries: { name: string; url: string }[] = [];
+      const seen = new Set<string>();
+      for (const line of stdout.split("\n")) {
+        const match = line.match(/^(\S+)\s+(\S+)\s+\(/);
+        const name = match?.[1];
+        const url = match?.[2];
+        if (!name || !url || seen.has(`${name}\t${url}`)) continue;
+        seen.add(`${name}\t${url}`);
+        entries.push({ name, url });
+      }
+      return entries;
+    }),
+    Effect.orElseSucceed((): { name: string; url: string }[] => []),
+  );
 
 // Coalesces overlapping callers onto a single in-flight fetch so the
 // focus-driven sweep and the periodic refresh can't dogpile a slow
 // remote.
-const fetchInflight = new Map<string, Promise<void>>();
+const fetchInflight = new Map<string, Deferred.Deferred<void, GitError>>();
 
-export async function fetchAllRemotes(projectPath: string): Promise<void> {
-  const existing = fetchInflight.get(projectPath);
-  if (existing) return existing;
-  const p = run(projectPath, ["fetch", "--all", "--quiet", "--prune"])
-    .then(() => undefined)
-    .finally(() => {
-      fetchInflight.delete(projectPath);
-    });
-  fetchInflight.set(projectPath, p);
-  return p;
-}
+export const fetchAllRemotes = (projectPath: string) =>
+  Effect.suspend(() => {
+    const existing = fetchInflight.get(projectPath);
+    if (existing) return Deferred.await(existing);
+    const fetching = Deferred.makeUnsafe<void, GitError>();
+    fetchInflight.set(projectPath, fetching);
+    return run(projectPath, ["fetch", "--all", "--quiet", "--prune"]).pipe(
+      Effect.asVoid,
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          fetchInflight.delete(projectPath);
+          Deferred.doneUnsafe(fetching, exit);
+        }),
+      ),
+    );
+  });
 
 // Splits a remote-tracking ref like "origin/main" or "fork/feat/x" into
 // (remote, branch). Returns null if no configured remote matches.
@@ -99,10 +93,9 @@ export function splitRemoteRefSync(
 
 // Single-string snapshot of every remote-tracking ref + its SHA. Compared
 // before/after a fetch to skip the broadcast when nothing actually moved.
-export async function snapshotRemoteRefs(projectPath: string): Promise<string> {
-  return run(projectPath, [
+export const snapshotRemoteRefs = (projectPath: string) =>
+  run(projectPath, [
     "for-each-ref",
     "--format=%(objectname) %(refname)",
     "refs/remotes/",
   ]);
-}

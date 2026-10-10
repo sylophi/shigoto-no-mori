@@ -9,7 +9,6 @@ import {
 import { run } from "../git/core";
 import { getMergeBaseDiff } from "../git/diff";
 import { hasCommit } from "../git/refs";
-import { fromPromise } from "../util/fromPromise";
 import { isCommandError, stderrOf, stdoutOf } from "../util/processes";
 import { gh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
@@ -124,14 +123,12 @@ const getLocalPullRequestDiff = Effect.fnUntraced(function* (
   );
   const pr = yield* decodeGhPrCommits(raw);
   const oids = [pr.baseRefOid, pr.headRefOid];
-  const present = yield* Effect.forEach(
-    oids,
-    (oid) => fromPromise(() => hasCommit(cwd, oid)),
-    { concurrency: "unbounded" },
-  );
+  const present = yield* Effect.forEach(oids, (oid) => hasCommit(cwd, oid), {
+    concurrency: "unbounded",
+  });
   const missing = oids.filter((_, i) => !present[i]);
   if (missing.length > 0) {
-    const remote = yield* fromPromise(() => remoteNameForUrl(cwd, pr.url));
+    const remote = yield* remoteNameForUrl(cwd, pr.url);
     if (!remote) {
       return yield* new GhActionError({
         reason:
@@ -139,20 +136,16 @@ const getLocalPullRequestDiff = Effect.fnUntraced(function* (
           `remote points at ${pr.url} to fetch it from.`,
       });
     }
-    yield* fromPromise(() =>
-      run(cwd, [
-        "fetch",
-        "--quiet",
-        "--no-tags",
-        "--no-write-fetch-head",
-        remote,
-        ...missing,
-      ]),
-    );
+    yield* run(cwd, [
+      "fetch",
+      "--quiet",
+      "--no-tags",
+      "--no-write-fetch-head",
+      remote,
+      ...missing,
+    ]);
   }
-  return yield* fromPromise(() =>
-    getMergeBaseDiff(cwd, pr.baseRefOid, pr.headRefOid),
-  );
+  return yield* getMergeBaseDiff(cwd, pr.baseRefOid, pr.headRefOid);
 });
 
 // Flips a PR between draft and ready for review. `gh pr ready` toggles

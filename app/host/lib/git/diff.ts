@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import { PATCH_MAX_BUFFER, run, runLenient } from "./core";
 
 // The diff of one file in the working tree, read as the changes page
@@ -15,11 +16,11 @@ import { PATCH_MAX_BUFFER, run, runLenient } from "./core";
 // `paths` is the file, preceded by its old name when git records a
 // rename. Handing over both is what makes the pair one entry rather
 // than an unexplained addition.
-export async function getFileDiff(
+export const getFileDiff = Effect.fnUntraced(function* (
   worktreePath: string,
   paths: readonly string[],
   untracked: boolean,
-): Promise<string> {
+) {
   const file = paths[paths.length - 1];
   if (file === undefined) return "";
   // A path is a filename and never a pattern. Without this a file called
@@ -32,7 +33,7 @@ export async function getFileDiff(
   // the file is an untracked change. A symlink is safe to let through:
   // `--no-index` prints where it points, never what is there.
   if (untracked) {
-    const listed = await runLenient(worktreePath, [
+    const listed = yield* runLenient(worktreePath, [
       ...pathspecOpts,
       "ls-files",
       "--others",
@@ -48,20 +49,17 @@ export async function getFileDiff(
   const args = untracked
     ? ["diff", "--no-index", "--no-color", "--", "/dev/null", file]
     : ["diff", "HEAD", "--no-color", "--", ...paths];
-  return runLenient(worktreePath, [...pathspecOpts, ...args], {
+  return yield* runLenient(worktreePath, [...pathspecOpts, ...args], {
     maxBuffer: PATCH_MAX_BUFFER,
   });
-}
+});
 
 // Unified patch of a single commit, with the commit metadata stripped
 // (`--format=`) so the output feeds straight into @pierre/diffs'
 // `parsePatchFiles`. A merge's is against its first parent, what it
 // brought into the branch, as a plain patch rather than git's combined
 // one. Empty for a commit that changes nothing.
-export async function getCommitDiff(
-  worktreePath: string,
-  hash: string,
-): Promise<string> {
+export function getCommitDiff(worktreePath: string, hash: string) {
   // `--end-of-options` is what actually pins `hash` to the revision slot.
   // A trailing `--` only bounds the pathspec list, so on its own it would
   // still let a hash like `--output=FILE` be parsed as a flag and hand a
@@ -85,11 +83,7 @@ export async function getCommitDiff(
 // against its merge base with `base`, so whatever landed on the base
 // since the branch forked stays out of it. Both have to be commits this
 // repository already holds.
-export async function getMergeBaseDiff(
-  repoPath: string,
-  base: string,
-  head: string,
-): Promise<string> {
+export function getMergeBaseDiff(repoPath: string, base: string, head: string) {
   return run(
     repoPath,
     ["diff", "--no-color", "--end-of-options", `${base}...${head}`],

@@ -24,6 +24,7 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
+import { promised } from "./lib/gitPromises.mts";
 import { delay, type Track, waitFor } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
@@ -51,8 +52,9 @@ const setAutoPull = (...args: Parameters<typeof Ops.setAutoPull>) =>
   onSandboxEngine(Ops.setAutoPull(...args));
 const setShelved = (...args: Parameters<typeof Ops.setShelved>) =>
   onSandboxEngine(Ops.setShelved(...args));
-const { autoPullWorktree } =
-  await import("../host/lib/worktrees/autoPullSweep.ts");
+const { autoPullWorktree } = promised(
+  await import("../host/lib/worktrees/autoPullSweep.ts"),
+);
 
 // What the store holds for the shelf, read on the engine's own
 // connection.

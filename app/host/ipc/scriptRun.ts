@@ -102,8 +102,9 @@ export const terminalStart = (owner: TerminalOwner) => {
     } satisfies Start;
   }).pipe(
     // Anything but the worktree or project being gone is a defect.
-    Effect.catch((cause) =>
-      isEntityGoneError(cause) ? Effect.fail(cause) : Effect.die(cause),
+    Effect.catchIf(
+      (cause) => !isEntityGoneError(cause),
+      (cause) => Effect.die(cause),
     ),
   );
 };
