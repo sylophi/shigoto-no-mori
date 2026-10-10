@@ -38,7 +38,6 @@ import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import type { Project } from "@shigomori/contracts/schemas";
 import { loadProjects } from "@host/lib/projects";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 
 const DEBOUNCE_MS = 300;
 
@@ -181,17 +180,3 @@ const make = (deps: GitWatcherDeps) =>
 
 export const layer = (deps: GitWatcherDeps) =>
   Layer.effect(GitWatcher, make(deps));
-
-// For the callers that are not Effect yet.
-const promiseAdapter = PromiseAdapter.make<GitWatcher>("The git watcher");
-export const adapter = promiseAdapter.layer;
-
-export function reconcileGitWatchers(): void {
-  void promiseAdapter
-    .run(
-      Effect.gen(function* () {
-        yield* (yield* GitWatcher).reconcile;
-      }),
-    )
-    .catch(() => {});
-}

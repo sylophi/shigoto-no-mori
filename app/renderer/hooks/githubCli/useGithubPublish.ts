@@ -27,7 +27,6 @@ export function usePublishRepo() {
     onSuccess: (_data, { projectId }) =>
       Promise.all(
         [
-          keys.projects(),
           keys.pullRequestsForProject(projectId),
           keys.repoDescription(projectId),
           keys.repoMergeConfig(projectId),

@@ -25,7 +25,7 @@ import { getDeviceId } from "@host/lib/config/deviceId";
 import { storeFailureReport } from "@host/lib/storeFailure";
 import * as Observability from "@host/lib/util/observability";
 import { initDataDir } from "@host/lib/util/paths";
-import { loopback } from "@host/socket/loopback";
+import { loopbackAddress } from "./captures";
 import {
   flavorOf,
   HOST_FACTS_FLAG,
@@ -172,7 +172,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   await shell.ready({
-    ...(await loopback.address()),
+    ...(await loopbackAddress()),
     deviceId: getDeviceId(),
   });
 }

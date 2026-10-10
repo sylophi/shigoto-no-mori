@@ -159,6 +159,7 @@ import {
   onPeerPush,
 } from "./wires";
 import { log, logFailure } from "@shared/log";
+import * as Captures from "./captures";
 
 // The pull/transplant orchestrations' and the port-forward engine's
 // peer reach, routed through the SAME invokePeer path (and so the same
@@ -279,7 +280,7 @@ function listening<T>(value: T | null): T {
   return value;
 }
 
-const { mirrorDaemon } = MirrorDaemon;
+const { mirrorDaemon } = Captures;
 export const mirrorDaemonLayer = MirrorDaemon.layer({
   dataDir: fileSyncDir,
   gatewayAddress: () => listening(mirrorGateway.address()),

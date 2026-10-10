@@ -74,11 +74,6 @@ export function watchHost(
     api.git.onFetchActive(({ projectId, active }) => {
       noteGitFetchActive(deviceId, projectId, active);
     }),
-    // A project action was recorded there, so the usage sorts reorder
-    // live.
-    api.projects.onUsageBumped(() => {
-      void queryClient.invalidateQueries({ queryKey: keys.projects() });
-    }),
     // Its PR sweep moved one project's map. The githubCli domain sits
     // outside the git-state sweeps (a PR is not git state), so the
     // rows, inbox entries and any open page of its PRs refresh off this

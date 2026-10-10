@@ -5,7 +5,7 @@ import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 // The icon belongs to (device, project), not to a project alone, so the
-// query takes the same scope pair projectsQueryOptions does: the key
+// query takes the scope pair resolveForestScope reads: the key
 // registry derives from the device id, and the queryFn calls that
 // device's api. Disabled while the device has no api, so an offline
 // peer still serves the icon its last session cached rather than

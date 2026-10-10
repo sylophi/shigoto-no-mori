@@ -1,60 +1,35 @@
 // Every registered remote device's forest at once, for the sidebar's
 // merged tree -- the only place a peer's forest is read, since remote
 // work is meant to look local rather than live on a page of its own.
-// One projects query per device, then one worktrees, one pull-request
-// map and one project-config query per (device, project) -- the same
-// three reads the local sidebar makes per project, so the inbox can
-// file a peer's worktree exactly as it files a local one (its PR tells
-// merged from live, its config says whether the primary shows). All
-// scope the SHARED local options builders to a peer
-// (they derive the key registry from the device id via queryKeysFor,
-// and their queryFns call that device's api instead of window.api), so
-// a peer's rows land under the same keys the device-scoped worktree
-// pages read and the two can never disagree. Devices stay in the list
-// whether or not a direct session is up: the options gate fetching on
-// the api being present, and a disconnected device serves whatever its
-// last session cached -- the same staleness contract every query in the
-// app has.
-//
-// This fan-out is always mounted, so it refetches calmly: the peer's
-// push watch (lib/hostWatch.ts) invalidates its rows the moment that
-// peer pings, an open remote worktree
-// page keeps its own fresher observers on the same keys, and any
-// observer wanting a refetch refreshes this one's rows for free. Focus
-// refetch stays on as the belt the local forest has too (a dropped
-// push under backpressure would otherwise leave an always-mounted row
-// stale for good), gated by the stale window below so a quick alt-tab
-// does not re-list every peer.
+// Each peer's projects and each (device, project)'s worktrees are the
+// host views the device-scoped pages read (useProjects, useWorktrees),
+// streamed over the hub hop, so the two can never disagree; its pull
+// request map and project config are requests, a query per (device,
+// project), so the inbox can file a peer's worktree exactly as it files
+// a local one (its PR tells merged from live, its config says whether
+// the primary shows). A device stays in the list whether or not a
+// direct session is up: its views are asked again until one is, and
+// meanwhile read what they last had.
 import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import { useQueries } from "@tanstack/react-query";
 import type { Project } from "@shigomori/contracts/schemas";
 import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
 import { showPrimaryInInbox } from "@shigomori/ui/lib/showPrimaryInInbox.ts";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
-import { projectsQueryOptions } from "@/hooks/projects/useProjects";
+import { projectsAtom } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
-import type { RemoteDevice, RemoteDeviceApi } from "@/lib/remote/devices";
+import type { RemoteDevice } from "@/lib/remote/devices";
+import { combineFanOut } from "@/hooks/remote/hostForestScope";
 import {
-  combineFanOut,
-  worktreesQueryOptions,
+  someWorktreesAtom,
+  worktreeListKey,
 } from "@/hooks/worktrees/useWorktrees";
+import { useViews, viewsOf } from "@/lib/runtime/viewHooks";
 import { useRemoteDevices } from "./useRemoteDevices";
 
-// A peer's projects, scoped off the shared local builder. The base meta
-// is overridden to stay silent because a peer that is merely asleep
-// would otherwise toast on every disabled-to-enabled transition. The
-// sidebar shows a device's rows as stale instead. Note this swallows a
-// genuine listing failure too: such a device contributes zero items and
-// simply reads as empty.
-function remoteProjectsQueryOptions(
-  deviceId: string,
-  api: RemoteDeviceApi | undefined,
-) {
-  return {
-    ...projectsQueryOptions({ deviceId, api }),
-    meta: { silentError: true },
-  };
-}
+// The peers' projects, each as its host streams it: a peer with no
+// session reads nothing, and its rows stay as the sidebar last had them.
+const peersProjectsAtom = viewsOf((deviceId) => projectsAtom(deviceId));
 
 export interface RemoteForests {
   items: RemoteForestItem[];
@@ -65,15 +40,7 @@ export interface RemoteForests {
   loading: boolean;
 }
 
-// Calm by default: the always-mounted sidebar keeps the forests fresh,
-// so a page that mounts a second observer must not re-list every peer.
-export const CALM_REFETCH = { staleTime: 30_000, refetchOnMount: false };
-
 export interface RemoteForestsOptions {
-  // True for the sidebar itself, the one observer that keeps the
-  // forests fresh: on a shell where it can unmount (the phone layout's
-  // forest page) its remount must re-list.
-  refetchOnMount?: boolean;
   // True while the inbox shows: its per-project config read
   // (showPrimaryInInbox) is the one fact the tree never needs, so it
   // is asked for only then rather than on every device and project at
@@ -92,50 +59,47 @@ export interface RemoteProjectPair {
 // "Create on" pick) and have no use for the worktree, PR and config
 // fan-outs the forests add on top. The forests compose this, so the
 // two can never list different projects.
-export function useRemoteProjects(
-  refetch: { staleTime?: number; refetchOnMount?: boolean } = CALM_REFETCH,
-): { pairs: RemoteProjectPair[]; loading: boolean } {
+export function useRemoteProjects(): {
+  pairs: RemoteProjectPair[];
+  loading: boolean;
+} {
   // A peer that isn't sharing lists nothing.
   const devices = useRemoteDevices().filter(
     (device) => device.status.phase !== "notSharing",
   );
-  const projectQueries = useQueries({
-    queries: devices.map((device) => ({
-      ...remoteProjectsQueryOptions(device.deviceId, device.api),
-      ...refetch,
-    })),
-    combine: combineFanOut,
-  });
+  const projectViews = useViews(
+    peersProjectsAtom,
+    devices.map((device) =>
+      device.api === undefined ? null : device.deviceId,
+    ),
+  );
   // A checkout the peer reports missing is left out, the same gate the
   // local fan-outs apply: every read on it would only throw.
   return {
     pairs: devices.flatMap((device, index) =>
-      (projectQueries[index]?.data ?? [])
+      (projectViews[index]?.data ?? [])
         .filter((project) => project.pathExists !== false)
         .map((project) => ({ device, project })),
     ),
-    loading: projectQueries.some((query) => query.isLoading),
+    loading: projectViews.some((view) => view.isLoading),
   };
 }
 
 export function useRemoteForests(
   options: RemoteForestsOptions = {},
 ): RemoteForests {
-  const { inboxFacts = false, ...overrides } = options;
-  const refetch = { ...CALM_REFETCH, ...overrides };
+  const { inboxFacts = false } = options;
   // Flattened (device, project) pairs, so the worktree fan-out is one
-  // flat useQueries whatever shape the forests have.
-  const { pairs, loading: projectsLoading } = useRemoteProjects(refetch);
-  const worktreeQueries = useQueries({
-    queries: pairs.map(({ device, project }) => ({
-      ...worktreesQueryOptions(project.id, {
-        deviceId: device.deviceId,
-        api: device.api,
-      }),
-      ...refetch,
-    })),
-    combine: combineFanOut,
-  });
+  // flat read whatever shape the forests have.
+  const { pairs, loading: projectsLoading } = useRemoteProjects();
+  const worktreeQueries = useViews(
+    someWorktreesAtom,
+    pairs.map(({ device, project }) =>
+      device.api === undefined
+        ? null
+        : worktreeListKey(device.deviceId, project.id),
+    ),
+  );
   // Both served from the peer's own caches (the PR sweep's map, the
   // project.json read), so neither costs it a git or gh call. Neither
   // refetches on its own: the PR map refreshes off the peer's

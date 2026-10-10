@@ -3,6 +3,7 @@
 // name, its channel without the module prefix. A client subscribes to a
 // push as `on` and the push's capitalized name. A view is served as a
 // stream, and watched with an observer on a wire that carries views.
+import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type { Decoded, Encoded } from "./codec.ts";
 import type {
@@ -42,12 +43,23 @@ type Args<I> = [I] extends [void]
 // `Args<I>` here would let a void-input handler typecheck as
 // `(ctx) => ...` and silently receive `undefined` at runtime.
 // Handlers that don't need either argument can drop them via TypeScript
-// variance (callbacks with fewer params are assignable).
-export type Handlers<M extends ContractModule, Ctx = unknown> = {
+// variance (callbacks with fewer params are assignable). A side that
+// serves its calls in a layer graph (the host) names the services in
+// `Services`, and its handlers may answer with an effect on them.
+export type Handlers<
+  M extends ContractModule,
+  Ctx = unknown,
+  Services = never,
+> = {
   [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
     input: Decoded<InputOf<R>>,
     context: Ctx,
-  ) => Promise<Decoded<OutputOf<R>>> | Decoded<OutputOf<R>>;
+  ) =>
+    | Promise<Decoded<OutputOf<R>>>
+    | Decoded<OutputOf<R>>
+    | ([Services] extends [never]
+        ? never
+        : Effect.Effect<Decoded<OutputOf<R>>, unknown, Services>);
 };
 
 // What serves a module's views: each one's stream, from its input.

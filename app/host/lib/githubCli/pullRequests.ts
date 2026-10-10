@@ -1,6 +1,6 @@
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import {
   isFromThisRepository,
@@ -19,12 +19,12 @@ import {
   pullRequestsEqual,
   summarizeChecks,
 } from "@shigomori/contracts/schemas";
-import { execGh } from "./exec";
+import { gh } from "./exec";
 import {
   checkedOutPullRequest,
   checkedOutPullRequests,
 } from "./pullRequestCheckout";
-import { ghReadyForRepo } from "./GithubCli";
+import { GithubCli } from "./GithubCli";
 
 const GhPrListItemSchema = Schema.Struct({
   number: PullRequestSchema.fields.number,
@@ -40,7 +40,7 @@ const GhPrListItemSchema = Schema.Struct({
 });
 type GhPrListItem = typeof GhPrListItemSchema.Type;
 const decodeGhPrList = Schema.decodeUnknownOption(
-  Schema.Array(GhPrListItemSchema),
+  Schema.fromJsonString(Schema.Array(GhPrListItemSchema)),
 );
 
 const PR_CACHE_TTL_MS = 5 * 60_000;
@@ -52,29 +52,23 @@ const prCache = new Map<
 
 // Runs `gh pr list ...` with the standard JSON projection. Returns the
 // parsed rows on success or null on any failure (gh exit, JSON, schema).
-async function runGhPrList(
-  cwd: string,
-): Promise<readonly GhPrListItem[] | null> {
-  try {
-    const { stdout } = await execGh(
-      [
-        "pr",
-        "list",
-        "--state",
-        "all",
-        "--limit",
-        String(PR_LIST_LIMIT),
-        "--json",
-        "number,url,title,state,isDraft,headRefName,baseRefName,isCrossRepository",
-      ],
-      { cwd },
-    );
-    const parsed: unknown = JSON.parse(stdout);
-    return Option.getOrNull(decodeGhPrList(parsed));
-  } catch {
-    return null;
-  }
-}
+const runGhPrList = (cwd: string) =>
+  gh(
+    [
+      "pr",
+      "list",
+      "--state",
+      "all",
+      "--limit",
+      String(PR_LIST_LIMIT),
+      "--json",
+      "number,url,title,state,isDraft,headRefName,baseRefName,isCrossRepository",
+    ],
+    { cwd },
+  ).pipe(
+    Effect.map(({ stdout }) => Option.getOrNull(decodeGhPrList(stdout))),
+    Effect.orElseSucceed((): readonly GhPrListItem[] | null => null),
+  );
 
 function toPullRequest(item: GhPrListItem): PullRequest {
   return {
@@ -111,41 +105,48 @@ function checkedOutMark(pr: {
 // sweep in fetch.ts. This read path just serves whatever's there.
 // Toggle + readiness checks gate the cache too, so flipping the
 // integration off takes effect immediately.
-export async function listProjectPullRequests(
-  cwd: string,
-): Promise<Map<string, PullRequest>> {
-  if (!(await ghReadyForRepo(cwd))) return new Map();
-  const cached = prCache.get(cwd);
-  if (cached && cached.expires > Date.now()) return cached.value;
-  return refreshProjectPullRequests(cwd);
-}
+export const listProjectPullRequests = Effect.fn("PullRequests.list")(
+  function* (cwd: string) {
+    if (!(yield* (yield* GithubCli).readyForRepo(cwd))) {
+      return new Map<string, PullRequest>();
+    }
+    const cached = prCache.get(cwd);
+    if (cached && cached.expires > (yield* Clock.currentTimeMillis)) {
+      return cached.value;
+    }
+    return yield* refreshProjectPullRequests(cwd);
+  },
+);
 
 // Bypass the cache and repopulate. Used by the background sweep.
-export async function refreshProjectPullRequests(
-  cwd: string,
-): Promise<Map<string, PullRequest>> {
-  if (!(await ghReadyForRepo(cwd))) return cacheAndReturn(cwd, new Map());
-  const [rows, checkedOut] = await Promise.all([
-    runGhPrList(cwd),
-    checkedOutPullRequests(cwd),
-  ]);
-  if (rows === null) {
-    // Transient gh / network failure. Preserve the previous map so the
-    // sidebar dots don't blink out on a single bad sweep. Fall through
-    // to caching empty only when we've never had a value.
-    const previous = prCache.get(cwd)?.value;
-    return previous ?? cacheAndReturn(cwd, new Map());
-  }
-  // gh returns PRs newest-first; first hit per branch wins so we surface
-  // the freshest PR when a branch has been reused, of those isKept.
-  const map = new Map<string, PullRequest>();
-  for (const item of rows) {
-    if (map.has(item.headRefName)) continue;
-    if (!isKept(item, checkedOut.get(item.headRefName))) continue;
-    map.set(item.headRefName, toPullRequest(item));
-  }
-  return cacheAndReturn(cwd, map);
-}
+export const refreshProjectPullRequests = Effect.fn("PullRequests.refresh")(
+  function* (cwd: string) {
+    if (!(yield* (yield* GithubCli).readyForRepo(cwd))) {
+      return cacheAndReturn(cwd, new Map());
+    }
+    const [rows, checkedOut] = yield* Effect.all(
+      [runGhPrList(cwd), checkedOutPullRequests(cwd)],
+      { concurrency: 2 },
+    );
+    if (rows === null) {
+      // Transient gh / network failure. Preserve the previous map so the
+      // sidebar dots don't blink out on a single bad sweep. Fall through
+      // to caching empty only when we've never had a value.
+      const previous = prCache.get(cwd)?.value;
+      return previous ?? cacheAndReturn(cwd, new Map());
+    }
+    // gh returns PRs newest-first; first hit per branch wins so we
+    // surface the freshest PR when a branch has been reused, of those
+    // isKept.
+    const map = new Map<string, PullRequest>();
+    for (const item of rows) {
+      if (map.has(item.headRefName)) continue;
+      if (!isKept(item, checkedOut.get(item.headRefName))) continue;
+      map.set(item.headRefName, toPullRequest(item));
+    }
+    return cacheAndReturn(cwd, map);
+  },
+);
 
 export function readCachedProjectPullRequests(
   cwd: string,
@@ -228,9 +229,19 @@ const GhPrDetailSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
 });
-const decodeGhPrDetails = Schema.decodeUnknownResult(
-  Schema.Array(GhPrDetailSchema),
+const decodeGhPrDetails = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Array(GhPrDetailSchema)),
 );
+
+// gh answered a branch's pull requests in a shape this build can't read.
+class PullRequestShapeError extends Schema.TaggedError<PullRequestShapeError>()(
+  "PullRequestShapeError",
+  { branch: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Unexpected gh pr list output for ${this.branch}`;
+  }
+}
 
 const PASSED_CONCLUSIONS = new Set(["SUCCESS"]);
 const NEUTRAL_CONCLUSIONS = new Set(["NEUTRAL"]);
@@ -301,24 +312,23 @@ function autoMergeMethod(
 // transient gh / network / parse failure so callers can distinguish
 // "no PR" (null) from "we don't know". The renderer uses that to
 // avoid clobbering the sidebar's project-wide PR map.
-export async function getWorktreePullRequest(
-  cwd: string,
-  branch: string,
-): Promise<PullRequestDetail | null> {
-  if (!(await ghReadyForRepo(cwd))) return null;
-  const [detail, extras] = await Promise.all([
-    runGhPrListDetail(cwd, branch),
-    fetchGraphqlExtras(cwd, branch),
-  ]);
-  if (!detail) return null;
-  const match = extras?.find((pr) => pr.number === detail.number);
-  if (!match) return detail;
-  return {
-    ...detail,
-    body: detail.body && withSignedImages(detail.body, match.bodyHTML),
-    reviews: toReviews(match),
-  };
-}
+export const getWorktreePullRequest = Effect.fn("PullRequests.forBranch")(
+  function* (cwd: string, branch: string) {
+    if (!(yield* (yield* GithubCli).readyForRepo(cwd))) return null;
+    const [detail, extras] = yield* Effect.all(
+      [runGhPrListDetail(cwd, branch), fetchGraphqlExtras(cwd, branch)],
+      { concurrency: 2 },
+    );
+    if (!detail) return null;
+    const match = extras?.find((pr) => pr.number === detail.number);
+    if (!match) return detail;
+    return {
+      ...detail,
+      body: detail.body && withSignedImages(detail.body, match.bodyHTML),
+      reviews: toReviews(match),
+    } satisfies PullRequestDetail;
+  },
+);
 
 // The reviews come from GraphQL, beside the gh pr list call, for two
 // fields gh pr list doesn't offer: latestOpinionatedReviews, which keeps
@@ -391,47 +401,45 @@ const GqlExtrasPullRequestSchema = Schema.Struct({
 type GqlExtrasPullRequest = typeof GqlExtrasPullRequestSchema.Type;
 
 const decodeGqlExtrasResponse = Schema.decodeUnknownOption(
-  Schema.Struct({
-    data: Schema.Struct({
-      repository: Schema.Struct({
-        pullRequests: Schema.Struct({
-          nodes: Schema.Array(GqlExtrasPullRequestSchema),
+  Schema.fromJsonString(
+    Schema.Struct({
+      data: Schema.Struct({
+        repository: Schema.Struct({
+          pullRequests: Schema.Struct({
+            nodes: Schema.Array(GqlExtrasPullRequestSchema),
+          }),
         }),
       }),
     }),
-  }),
+  ),
 );
 
 // The branch's newest PRs with their reviews and rendered bodies, or
 // null on any failure: the PR shows without the reviews chip then.
-async function fetchGraphqlExtras(
-  cwd: string,
-  branch: string,
-): Promise<readonly GqlExtrasPullRequest[] | null> {
-  try {
-    const { stdout } = await execGh(
-      [
-        "api",
-        "graphql",
-        "-F",
-        "owner={owner}",
-        "-F",
-        "repo={repo}",
-        "-f",
-        `head=${branch}`,
-        "-f",
-        `query=${EXTRAS_QUERY}`,
-      ],
-      { cwd },
-    );
-    return decodeGqlExtrasResponse(JSON.parse(stdout)).pipe(
-      Option.map((response) => response.data.repository.pullRequests.nodes),
-      Option.getOrNull,
-    );
-  } catch {
-    return null;
-  }
-}
+const fetchGraphqlExtras = (cwd: string, branch: string) =>
+  gh(
+    [
+      "api",
+      "graphql",
+      "-F",
+      "owner={owner}",
+      "-F",
+      "repo={repo}",
+      "-f",
+      `head=${branch}`,
+      "-f",
+      `query=${EXTRAS_QUERY}`,
+    ],
+    { cwd },
+  ).pipe(
+    Effect.map(({ stdout }) =>
+      decodeGqlExtrasResponse(stdout).pipe(
+        Option.map((response) => response.data.repository.pullRequests.nodes),
+        Option.getOrNull,
+      ),
+    ),
+    Effect.orElseSucceed((): readonly GqlExtrasPullRequest[] | null => null),
+  );
 
 const isReviewerState = Schema.is(PullRequestReviewerStateSchema);
 
@@ -506,36 +514,35 @@ function withSignedImages(body: string, bodyHTML: string): string {
 // throws on gh / JSON / schema failure so the renderer can
 // distinguish "no PR" from "couldn't load." Ten, so a newer fork's PR
 // can't hide the branch's own (isKept).
-async function runGhPrListDetail(
+const runGhPrListDetail = Effect.fnUntraced(function* (
   cwd: string,
   branch: string,
-): Promise<PullRequestDetail | null> {
-  const [{ stdout }, checkedOut] = await Promise.all([
-    execGh(
-      [
-        "pr",
-        "list",
-        "--state",
-        "all",
-        "--head",
-        branch,
-        "--limit",
-        "10",
-        "--json",
-        "number,url,title,body,state,isDraft,isCrossRepository,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
-      ],
-      { cwd },
-    ),
-    checkedOutPullRequest(cwd, branch),
-  ]);
-  const parsed: unknown = JSON.parse(stdout);
-  const validated = decodeGhPrDetails(parsed);
-  if (Result.isFailure(validated)) {
-    throw new Error(
-      `Unexpected gh pr list output for ${branch}: ${validated.failure.message}`,
-    );
-  }
-  const first = validated.success.find((pr) => isKept(pr, checkedOut));
+) {
+  const [{ stdout }, checkedOut] = yield* Effect.all(
+    [
+      gh(
+        [
+          "pr",
+          "list",
+          "--state",
+          "all",
+          "--head",
+          branch,
+          "--limit",
+          "10",
+          "--json",
+          "number,url,title,body,state,isDraft,isCrossRepository,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
+        ],
+        { cwd },
+      ),
+      checkedOutPullRequest(cwd, branch),
+    ],
+    { concurrency: 2 },
+  );
+  const validated = yield* decodeGhPrDetails(stdout).pipe(
+    Effect.mapError((cause) => new PullRequestShapeError({ branch, cause })),
+  );
+  const first = validated.find((pr) => isKept(pr, checkedOut));
   if (!first) return null;
   const checkList: PullRequestCheck[] = first.statusCheckRollup.map((item) => ({
     name: item.name ?? item.context ?? "check",
@@ -561,5 +568,5 @@ async function runGhPrListDetail(
     changedFiles: first.changedFiles,
     checks: summarizeChecks(checkList),
     checkList,
-  };
-}
+  } satisfies PullRequestDetail;
+});

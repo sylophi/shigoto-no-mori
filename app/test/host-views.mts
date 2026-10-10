@@ -40,7 +40,11 @@ import { killAllScripts, startScript } from "../host/lib/scripts/index.ts";
 import { sharedSettingsCopy } from "../host/lib/sharedSettings/store.ts";
 import { initDataDirAt } from "../host/lib/util/paths.ts";
 import { setMirrorImpl, type MirrorImpl } from "../host/mirror/registry.ts";
-import { engineDataDir } from "./lib/adapters.mts";
+import {
+  engineDataDir,
+  hostContext,
+  type Services as HostServices,
+} from "./lib/adapters.mts";
 import {
   makeTracker,
   sandboxGit,
@@ -70,7 +74,10 @@ afterAll(async () => {
   await teardown();
 });
 
-type Services = StoreChanges.StoreChanges | HostPushes.HostPushes;
+type Services =
+  | StoreChanges.StoreChanges
+  | HostPushes.HostPushes
+  | HostServices;
 
 // A view watched: `next` is its next value, `push` makes a host push as
 // the broadcast seam would, `tick` moves the clock past the store's
@@ -108,9 +115,11 @@ const watch = <A,>(
     }).pipe(
       Effect.scoped,
       // The store's tick runs on the TestClock the body moves.
+      // The host's services beneath, the proof file's own.
       Effect.provide(
         Layer.mergeAll(StoreChanges.layer, HostPushes.layer).pipe(
           Layer.provideMerge(TestClock.layer()),
+          Layer.provideMerge(Layer.effectContext(Effect.promise(hostContext))),
         ),
       ),
     ),

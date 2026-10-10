@@ -137,6 +137,19 @@ that reaches for the runtime fails the commit.
   lays out by the window's width, a container query (`@min-[48rem]:`),
   never the viewport's (`md:`). The host API comes through the runtime,
   not `window.api`. `@shigomori/ui`'s boundary proof holds all three.
+- A container's data is one of two kinds. A **host view**, a stream
+  the host serves (the `watch` views, `terminals:list`), is an atom
+  (`@effect/atom-react`) on the client's runtime
+  (`renderer/lib/runtime/atoms.ts`): it is live, so nothing
+  invalidates it. A **request**, a value the host computes when asked
+  (branches, history, changes, diffs, files, pull requests, the
+  account, launchers, villagers, the updater), is a React Query query.
+  A family becomes an atom only once the host serves a view of it, and
+  it gets one when the data is a live state rather than a computed
+  read: a diff is a read and stays a query. A push never feeds a
+  reactivity key, which would be invalidation under another name.
+  Atoms live in the app's hooks and containers, never in
+  `@shigomori/ui`.
 
 ## Sizing: one density in the components, the phone's in phone.css
 

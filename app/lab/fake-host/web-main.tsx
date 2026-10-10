@@ -10,6 +10,6 @@ applyPose();
 
 // Fake host stand-in for web/preload.ts: the web page boots on the fixture
 // window.api instead of the real hub-backed bridge.
-installFakeHostBridge({ webShell: true });
+const links = installFakeHostBridge({ webShell: true });
 
-void import("../../web/boot");
+void import("../../web/boot").then(({ bootWeb }) => bootWeb(links));

@@ -20,7 +20,6 @@ import { readGlobalConfig } from "../config/global";
 import { listRemoteEntries } from "../git/remotes";
 import { answersFor } from "../util/cacheTtl";
 import * as Processes from "../util/processes";
-import * as PromiseAdapter from "../util/promiseAdapter";
 import { gh } from "./exec";
 import { ghHostsPath, type GithubRepoInfo, parseRemoteUrl } from "./remote";
 
@@ -270,22 +269,3 @@ const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(GithubCli, make);
-
-// The Promise face, for the githubCli handlers and the PR code.
-const promiseAdapter = PromiseAdapter.forService(GithubCli, "gh");
-export const adapter = promiseAdapter.layer;
-const { call } = promiseAdapter;
-
-export const getGithubCliReadiness = () => call((cli) => cli.readiness);
-export const ghUnavailableReason = () => call((cli) => cli.unavailableReason);
-export const ghReady = async () => (await ghUnavailableReason()) === null;
-export const getGithubRepoInfo = (cwd: string) => call((cli) => cli.repo(cwd));
-export const githubHostOf = (url: string) => call((cli) => cli.hostOf(url));
-export const evictGithubRepoInfo = (cwd: string) =>
-  call((cli) => cli.evictRepo(cwd));
-export const ghReadyForRepo = (cwd: string) =>
-  call((cli) => cli.readyForRepo(cwd));
-export const getRepoMergeConfig = (cwd: string) =>
-  call((cli) => cli.mergeConfig(cwd));
-export const getRepoDescription = (cwd: string) =>
-  call((cli) => cli.description(cwd));

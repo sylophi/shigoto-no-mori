@@ -17,7 +17,6 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { LoopbackGroup } from "@shigomori/contracts/link";
 import { mintHexId } from "@host/lib/hexId";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 import { type LinkRegistrar, make as makeLink } from "./server";
 
 // The engine's Control.ts reads this name and shape.
@@ -121,15 +120,3 @@ const make = (options: {
 
 export const layer = (options: Parameters<typeof make>[0]) =>
   Layer.effect(Loopback, make(options));
-
-// For the data-folder move and the data wipe, which are not Effect yet.
-const promiseAdapter = PromiseAdapter.forService(Loopback, "The loopback");
-export const adapter = promiseAdapter.layer;
-
-export const loopback = {
-  address: () => promiseAdapter.call((it) => it.address),
-  unpublish: () =>
-    promiseAdapter.runIfOpen(Effect.flatMap(Loopback, (it) => it.unpublish)),
-  publish: () =>
-    promiseAdapter.runIfOpen(Effect.flatMap(Loopback, (it) => it.publish)),
-};

@@ -1,7 +1,10 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cloneUrlOf } from "@shigomori/contracts/predicates/remoteUrl";
-import { ghReady, githubHostOf } from "@host/lib/githubCli/GithubCli";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
+import { GithubCli } from "@host/lib/githubCli/GithubCli";
+import { fromPromise } from "@host/lib/util/fromPromise";
 import { isENOENT, pathExists } from "@host/lib/util/paths";
 import { run } from "./core";
 
@@ -32,12 +35,14 @@ export async function checkNewCheckoutDestination(
 // path. The payload schema has already held the source to a real remote
 // or a GitHub `owner/repo` (cloned over https), and the name to one
 // segment.
-export async function cloneRepo(
+export const cloneRepo = Effect.fn("clone")(function* (
   source: string,
   parentDir: string,
   name: string,
-): Promise<string> {
-  const dest = await checkNewCheckoutDestination(parentDir, name);
+) {
+  const dest = yield* fromPromise(() =>
+    checkNewCheckoutDestination(parentDir, name),
+  );
   const url = cloneUrlOf(source);
   // Over https to a GitHub host, with the device's gh signed in, gh is
   // git's credential helper, so a private repository clones without
@@ -45,9 +50,10 @@ export async function cloneRepo(
   // into the new checkout's config too, scoped to that host the way
   // setup-git scopes it, so the app's later fetches and pushes sign in
   // the same way. The URL stays as given.
-  const host = /^https:\/\//i.test(url) ? await githubHostOf(url) : null;
+  const cli = yield* GithubCli;
+  const host = /^https:\/\//i.test(url) ? yield* cli.hostOf(url) : null;
   const ghCredentials =
-    host !== null && (await ghReady())
+    host !== null && (yield* cli.unavailableReason) === null
       ? [
           "-c",
           `credential.https://${host}.helper=`,
@@ -64,16 +70,23 @@ export async function cloneRepo(
   // packaged app has no terminal for ssh to ask on, so it fails there
   // too, and the clone has no timeout beyond that.
   // `--` ends the options: the URL and name come from the caller.
-  await run(parentDir, ["clone", ...ghCredentials, "--", url, name], {
-    env: { GIT_TERMINAL_PROMPT: "0" },
-  }).catch((error: unknown) => {
+  yield* Effect.tryPromise({
+    try: () =>
+      run(parentDir, ["clone", ...ghCredentials, "--", url, name], {
+        env: { GIT_TERMINAL_PROMPT: "0" },
+      }),
     // Refusing to prompt, git names the URL it wanted a password for,
     // userinfo and all, and a pasted token sits there. The message goes
     // to a toast, so that part is dropped.
-    if (error instanceof Error) {
-      error.message = error.message.replace(/(https?:\/\/)[^/\s'"]*@/gi, "$1");
-    }
-    throw error;
+    catch: (error) => {
+      if (error instanceof Error) {
+        error.message = error.message.replace(
+          /(https?:\/\/)[^/\s'"]*@/gi,
+          "$1",
+        );
+      }
+      return callFailureOf(error);
+    },
   });
   return dest;
-}
+});

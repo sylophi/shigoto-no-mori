@@ -10,6 +10,6 @@ import { applyPose } from "./pose";
 // applied after mount.
 applyPose();
 
-installFakeHostBridge();
+const links = installFakeHostBridge();
 
-void import("./boot");
+void import("./boot").then(({ bootFakeHost }) => bootFakeHost(links));

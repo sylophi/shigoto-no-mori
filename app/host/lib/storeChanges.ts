@@ -8,7 +8,6 @@ import type { Table } from "@shigomori/engine/StoreChanges";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as PromiseAdapter from "./util/promiseAdapter";
 
 // The tables behind the rows a project's pages show. The usage log and
 // the shared settings have pushes of their own (projects:usageBumped,
@@ -41,19 +40,3 @@ export const layer = (onChange: () => void) =>
       );
     }),
   );
-
-// For the data-folder move, which is not Effect yet.
-const promiseAdapter = PromiseAdapter.forService(
-  StoreChanges.StoreChanges,
-  "The store changes",
-);
-export const adapter = promiseAdapter.layer;
-
-// Changes that are not up have nothing to release.
-export function releaseStore(): Promise<void> {
-  return promiseAdapter.runIfOpen(
-    Effect.gen(function* () {
-      yield* (yield* StoreChanges.StoreChanges).release;
-    }),
-  );
-}
