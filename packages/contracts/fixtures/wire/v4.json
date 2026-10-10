@@ -2104,6 +2104,58 @@
     },
     "success": []
   },
+  "terminals:attach": {
+    "payload": {
+      "terminalId": "^"
+    },
+    "success": {
+      "kind": "output",
+      "data": ",",
+      "seq": 2
+    }
+  },
+  "terminals:close": {
+    "payload": {
+      "terminalId": "7"
+    }
+  },
+  "terminals:list": {
+    "success": {
+      "terminals": [
+        {
+          "terminalId": "0",
+          "owner": {
+            "kind": "device"
+          },
+          "cwd": "v",
+          "openedAt": -3.920363497664199e-232
+        }
+      ]
+    }
+  },
+  "terminals:open": {
+    "payload": {
+      "owner": {
+        "kind": "device"
+      }
+    },
+    "success": {
+      "terminalId": "p:"
+    }
+  },
+  "terminals:resize": {
+    "payload": {
+      "terminalId": "6",
+      "cols": 583,
+      "rows": 7
+    }
+  },
+  "terminals:write": {
+    "payload": {
+      "terminalId": "$",
+      "data": "0"
+    }
+  },
   "terrier:readiness": {
     "success": {
       "installed": true,

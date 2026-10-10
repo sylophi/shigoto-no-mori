@@ -26,6 +26,7 @@ import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
 import * as Registry from "./Registry.ts";
+import * as SavedTerminals from "./SavedTerminals.ts";
 import * as Scripts from "./Scripts.ts";
 import * as ShellIntegration from "./ShellIntegration.ts";
 import * as SharedSettings from "./SharedSettings.ts";
@@ -93,6 +94,7 @@ const services = (options: EngineOptions) =>
         Identity.layer,
         Icons.layer,
         SharedSettings.layer,
+        SavedTerminals.layer,
       ),
     ),
     Layer.provideMerge(Git.layer),
