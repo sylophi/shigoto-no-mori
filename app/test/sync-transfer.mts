@@ -69,6 +69,7 @@ import { type PeerChannels, setPeerReach } from "@host/ipc/peerSync";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import * as Effect from "effect/Effect";
 import { runHost } from "./lib/adapters.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import {
@@ -1730,16 +1731,19 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
     }
     // Its teardown runs on the sending side, against that side's own
     // registry, on the receipt the peer's landing made.
-    const loneTorn = await asOtherDevice(() =>
+    const loneTorn = await asOtherDevice(async () =>
       runHost(
-        syncHandlers.teardownSource(
-          {
-            direction: "send",
-            deviceId: "A",
-            projectId: loneProjectId,
-            worktreeId: loneWt.worktreeId,
-          },
-          pullCtx,
+        Effect.provide(
+          syncHandlers.teardownSource(
+            {
+              direction: "send",
+              deviceId: "A",
+              projectId: loneProjectId,
+              worktreeId: loneWt.worktreeId,
+            },
+            pullCtx,
+          ),
+          await otherEngine.context(),
         ),
       ),
     );
