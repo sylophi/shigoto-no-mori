@@ -27,14 +27,14 @@
  * 2. data-slot attributes set by our components, the preferred hook.
  *    When building new UI that doubutsu must restyle, add a slot here
  *    rather than targeting utility classes:
- *      button (+ data-variant)   ui/button.tsx
+ *      button (+ data-variant)   primitives/button.tsx
  *      input, textarea           primitives/input.tsx, primitives/textarea.tsx
- *      checkbox (+ data-variant) ui/checkbox.tsx
- *      switch                    ui/switch.tsx
+ *      checkbox (+ data-variant) primitives/checkbox.tsx
+ *      switch                    primitives/switch.tsx
  *      chip                      primitives/chip-button.tsx
  *      segmented-control         primitives/segmented-control.tsx
  *      combobox-trigger/-popup   shared/BranchCombobox.tsx
- *      modal-shell               ui/modal-shell.tsx
+ *      modal-shell               primitives/modal-shell.tsx
  *      palette-verbs             palette/WorktreePalette.tsx
  *      search-row, footer-row    popup search strips and footers: the
  *                                palette, the pickers, addProject/,
@@ -46,12 +46,12 @@
  *      file-view                 files/FileViewer.tsx
  *      live-card                 live/LiveCard.tsx
  *      accept-commands-panel     remote/AcceptCommandsToggle.tsx
- *      sheet-content             ui/sheet.tsx
- *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
- *      dropdown-menu-sub-trigger (+ data-variant)   ui/dropdown-menu.tsx
- *      popover-content           ui/popover.tsx
+ *      sheet-content             primitives/sheet.tsx
+ *      dropdown-menu-content/-item/-separator   primitives/dropdown-menu.tsx
+ *      dropdown-menu-sub-trigger (+ data-variant)   primitives/dropdown-menu.tsx
+ *      popover-content           primitives/popover.tsx
  *      sidebar-project-row       sidebar/ProjectRow.tsx
- *      sidebar-project-pick      sidebar/ProjectHeader.tsx
+ *      sidebar-project-pick      sidebar/ProjectHeaderView.tsx
  *      project-tile              shared/ProjectIcon.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
@@ -63,7 +63,7 @@
  *                                villagers/VillagerLetterView.tsx
  *      visitor-guest-book, visitor-sticker, visitor-sticker-button
  *                                visitors/GuestBook.tsx,
- *                                visitors/VisitorSticker.tsx
+ *                                visitors/VisitorStickerView.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
  *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy|devices|
@@ -107,7 +107,7 @@
  * (settings/ThemePickerView.tsx), whatever the window wears.
  *
  * The two blocks here are the default palettes, cream and charcoal.
- * The other picks (renderer/palettes.css) override the same tokens
+ * The other picks (palettes.css) override the same tokens
  * under `data-palette` on the same element. A rule elsewhere in this
  * file must reach a color through a token, never a literal, or the
  * picks can't move it.

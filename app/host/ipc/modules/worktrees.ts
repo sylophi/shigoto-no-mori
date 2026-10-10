@@ -6,7 +6,8 @@ import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { GithubCli } from "@host/lib/githubCli/GithubCli";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
+import type { ViewHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import * as Views from "@host/lib/views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
@@ -658,7 +659,7 @@ export const worktreesHandlers = {
     Effect.flatMap(findProject(input.projectId), (project) =>
       Ops.finishWorktree(project, input.worktreeId),
     ),
-} satisfies Handlers<
+} satisfies EffectHandlers<
   typeof worktreesContract,
   HandlerContext,
   | Terminals

@@ -37,12 +37,12 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 
 // `sm doctor` for the scoped device, behind Settings' health check
 // button: the same checklist a terminal prints (install, data folder,
-// processes, projects), run by that machine's own CLI each time the
-// dialog opens. The CLI owns every check and every word, so this only
-// draws the findings: problems first, in the CLI's groups, with a
-// project's several problems gathered under its name, and the passing
-// checks folded away behind a toggle. Repair runs `--fix --yes`, which
-// only ever applies the repairs the CLI calls unambiguous (the rows
+// processes, projects), run by that machine's engine each time the
+// dialog opens. The engine's Doctor owns every check and every word, so
+// this only draws the findings: problems first, in the doctor's groups,
+// with a project's several problems gathered under its name, and the
+// passing checks folded away behind a toggle. Repair runs `--fix --yes`,
+// which only ever applies the repairs the doctor calls unambiguous (the rows
 // tagged repairable), behind a click-again confirm.
 // The dialog's content (DoctorDialog puts it in a ModalShell).
 export function DoctorDialogView({

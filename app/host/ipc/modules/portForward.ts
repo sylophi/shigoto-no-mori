@@ -1,7 +1,9 @@
 import { portForwardContract } from "@shigomori/contracts/modules/portForward";
-import type { Handlers } from "@shigomori/contracts/types";
+import type { EffectHandlers } from "@shared/ipc/registerContract";
 import type { PortForwardEngine } from "@host/portForward/engine";
 import { implSlot } from "@host/lib/util/implSlot";
+import { callFailureOf } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
 
 // Thin shell over the engine (host/portForward/engine.ts), injected at
 // start: the wiring (the bridge's direct peer sessions, the changed
@@ -16,12 +18,14 @@ const {
 );
 export { setPortForwardEngine };
 
-export const portForwardHandlers: Handlers<typeof portForwardContract> = {
-  start: (input) => engine().startForward(input),
-  stop: ({ forwardId }) => {
-    engine().stopForward(forwardId);
-  },
-  list: () => ({ forwards: engine().listForwards() }),
+export const portForwardHandlers: EffectHandlers<typeof portForwardContract> = {
+  start: (input) =>
+    Effect.tryPromise({
+      try: () => engine().startForward(input),
+      catch: callFailureOf,
+    }),
+  stop: ({ forwardId }) => Effect.sync(() => engine().stopForward(forwardId)),
+  list: () => Effect.sync(() => ({ forwards: engine().listForwards() })),
 };
 
 // Quit's teardown (host/process/layer.ts): the listeners die

@@ -8,14 +8,9 @@ import * as Updater from "@shigomori/engine/Updater";
 import type { Flavor } from "@shigomori/engine/flavor";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as PromiseAdapter from "@host/lib/util/promiseAdapter";
 
 export const layer = (flavor: Flavor) =>
   Updater.layer(flavor).pipe(
     Layer.provide(FetchHttpClient.layer),
     Layer.provideMerge(Paths.layer(flavor)),
   );
-
-// The Promise face, for main/electron/updater.ts.
-export const { layer: adapter, run } =
-  PromiseAdapter.make<Updater.Updater>("The updater");

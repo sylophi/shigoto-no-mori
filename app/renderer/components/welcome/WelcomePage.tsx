@@ -10,6 +10,8 @@ import { useOpenAddedProject } from "@/components/addProject/useOpenAddedProject
 import { useSignInStep } from "@/components/steps/useSignInStep";
 import { useMarkWelcomed } from "@/hooks/config/useWelcomed";
 import { useProjects } from "@/hooks/projects/useProjects";
+import { useMigration } from "@/hooks/useMigration";
+import { migrationOwed } from "@shigomori/contracts/schemas/migration";
 import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
@@ -55,7 +57,22 @@ function Welcome() {
     if (firstList === "some") void navigate({ to: "/", replace: true });
   }, [firstList, navigate]);
 
-  if (firstList === "some") return null;
+  // Drawn once the shell says this start migrates nothing (it knows from
+  // the host's first moment): a device moving from v2 is past its first
+  // run, and goes on (AppShell takes it to the migration's page).
+  const migration = useMigration();
+  const fresh =
+    migration !== undefined &&
+    migration !== null &&
+    migration.planned &&
+    !migrationOwed(migration);
+  const migrated =
+    migration === null || (migration !== undefined && migrationOwed(migration));
+  useEffect(() => {
+    if (migrated) void navigate({ to: "/", replace: true });
+  }, [migrated, navigate]);
+
+  if (firstList === "some" || !fresh) return null;
   return (
     <OnboardingView
       signIn={signIn}

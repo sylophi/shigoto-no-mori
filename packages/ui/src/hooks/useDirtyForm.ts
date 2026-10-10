@@ -25,7 +25,7 @@ export function useDirtyForm<T>(initial: T) {
     latest.current = { form, savedSnapshot };
   });
 
-  // Rebase onto a value that changed underneath the form (e.g. main
+  // Rebase onto a value that changed underneath the form (e.g. the host
   // rewrote the config while a draft was open). Clean form: adopt `next`
   // wholesale. Dirty form: move the snapshot to `next` so Save diffs
   // against reality instead of a stale baseline, and let the caller merge

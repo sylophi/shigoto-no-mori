@@ -1462,6 +1462,7 @@ const downloadingUpdates = new Set<string>();
 // ?migration=waiting|moving|stuck|done: the v3 migration in that state
 // (stepsFixtures.ts), for its page (?to=/migration). Without it there is
 // nothing to migrate.
+let migrationContinued = false;
 function posedMigration(): MigrationProgress {
   const pose = new URLSearchParams(location.search).get("migration");
   return pose !== null && pose in MIGRATION_POSES
@@ -1726,15 +1727,11 @@ export function installFakeHostBridge(
   // matching the real browser bridge's shape.
   const localForest = forests[LOCAL_DEVICE_ID];
   if (localForest === undefined) throw new Error("[fake-host] no local forest");
-  const localHost = createFixtureWire(
-    "host",
-    (emit) =>
-      WEB_SHELL
-        ? // A browser still keeps its own copy of the shared settings.
-          sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
-        : hostHandlersFor(localForest, emit),
-    (channel) =>
-      channel === "migration:watch" ? Stream.make(posedMigration()) : undefined,
+  const localHost = createFixtureWire("host", (emit) =>
+    WEB_SHELL
+      ? // A browser still keeps its own copy of the shared settings.
+        sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
+      : hostHandlersFor(localForest, emit),
   );
 
   const webDevice: DeviceInfo = {
@@ -1849,6 +1846,11 @@ export function installFakeHostBridge(
       }
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
+    },
+    "migration:read": () => (migrationContinued ? null : posedMigration()),
+    "migration:continue": () => {
+      migrationContinued = true;
+      client.emit("migration:changed", null);
     },
     "account:enroll": async () => {
       await new Promise((resolve) => setTimeout(resolve, 1_500));

@@ -47,7 +47,7 @@ export function pullRequestMutationKey(keys: QueryKeyRegistry) {
 }
 
 // Answer to the sweep broadcast: the sweep already refreshed the
-// project map in main, so the renderer refetches that, then re-asks
+// project map in the host, so the renderer refetches that, then re-asks
 // only the open worktree pages whose PR the new map disagrees with. A
 // PR flipped to draft or ready (or merged) on github.com thus reaches
 // an open page within a sweep, not at the next focus. Cascading to
@@ -93,8 +93,8 @@ export async function syncProjectPullRequests(
 }
 
 // Branch -> PR for a project, feeding the sidebar dots. The background
-// sweep in main/electron/fetch.ts refreshes it and broadcasts
-// GithubCliProjectPullRequestsRefreshed only when the data actually
+// sweep in the host's backgroundFetch.ts refreshes it and broadcasts
+// githubCli:projectPullRequestsRefreshed only when the data actually
 // changed; syncProjectPullRequests above refetches it off that
 // broadcast. The open worktree page reads its PR through
 // useWorktreePullRequest, and checks this map only to decide whether to

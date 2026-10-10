@@ -662,11 +662,6 @@
       "launcherId": "-1"
     }
   },
-  "link:challenge": {
-    "success": {
-      "nonce": "5522b2bfe1691d0be54865cfae75e20b"
-    }
-  },
   "link:end": {
     "payload": {
       "channelId": "eb5947651a11954b34b554dfaec19d20"
@@ -679,13 +674,11 @@
       "connectionId": "7b66588ad2db51677716fe0b8cdc437a",
       "appVersion": "20",
       "protocolVersion": -2,
-      "nonce": "e3ebcb1123466353e60bd9ce4df1a77f",
-      "proof": "0b1fc786f5d17dc21700e19a8aff162926e814f4e09078869db4f61566c21134"
+      "token": "0123456789abcdef0123456789abcdef"
     },
     "success": {
       "deviceId": "0",
-      "appVersion": "I2",
-      "proof": "e56051fa93f5353be3624caf53e7e638ad0050867af61239a408a82c9e5f0fdb"
+      "appVersion": "I2"
     }
   },
   "link:ping": {},
@@ -712,13 +705,38 @@
       "enabled": false
     }
   },
-  "migration:watch": {
+  "migration:changed": {
+    "payload": {
+      "planned": false,
+      "import": null,
+      "worktrees": null
+    }
+  },
+  "migration:continue": {},
+  "migration:read": {
     "success": {
       "planned": false,
-      "import": {
-        "state": "done"
-      },
-      "worktrees": null
+      "import": null,
+      "worktrees": {
+        "state": "done",
+        "moved": 1.986711582562313e-9,
+        "total": 9.4e-323,
+        "current": "\t",
+        "stuck": []
+      }
+    }
+  },
+  "migration:read": {
+    "success": {
+      "planned": false,
+      "import": null,
+      "worktrees": {
+        "state": "done",
+        "moved": 1.986711582562313e-9,
+        "total": 9.4e-323,
+        "current": "\t",
+        "stuck": []
+      }
     }
   },
   "mirror:applyGitState": {
@@ -1849,6 +1867,21 @@
     "payload": {
       "message": "0",
       "storeReport": "e"
+    }
+  },
+  "shellCalls:migration": {
+    "payload": {
+      "planned": true,
+      "import": {
+        "state": "running"
+      },
+      "worktrees": {
+        "state": "stuck",
+        "moved": -8e-323,
+        "total": 1.7976931348623123e308,
+        "current": null,
+        "stuck": []
+      }
     }
   },
   "shellCalls:ready": {

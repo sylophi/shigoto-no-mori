@@ -31,9 +31,7 @@ const canonical = (value: unknown): string =>
 // client's or the fake host's, hands over as it is), and the value back
 // through the device link's binary codec. The link's own calls
 // (modules/link.ts) never cross a registrar, and carry
-
 // bytes, which their samples hold as JSON's base64.
-
 export function wireForms(
   schema: Schema.Codec<unknown, unknown>,
   value: unknown,

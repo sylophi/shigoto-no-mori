@@ -5,27 +5,18 @@
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { busyRemoteRefusal } from "@shared/busy";
-import { setCliImpl } from "@host/ipc/modules/cli";
+import * as Effect from "effect/Effect";
 import { setRuntimeImpl } from "@host/ipc/modules/runtime";
-import { requireCliBinary } from "@host/lib/cli/binary";
-import { cliLinkStatus, installCliLinks } from "@host/lib/cli/install";
-import { hookPathEnv } from "@host/lib/cli/shell";
 import { onGlobalConfigChange } from "@host/lib/config/global";
 import { getBusyOperations } from "@host/lib/scripts";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
-import { publishLoopback, releaseStore, unpublishLoopback } from "./captures";
-import { hostFacts } from "./facts";
+import * as Graph from "./graph";
+import * as Loopback from "@host/socket/loopback";
+import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { shellCalls } from "./shell";
 import { broadcastAll, refreshDirectHost } from "./wires";
 
 export function installHostImpls(): void {
-  setCliImpl({
-    cliLinkStatus,
-    installCliLinks,
-    hookPathEnv,
-    appVersion: () => hostFacts().appVersion,
-    binaryPath: requireCliBinary,
-  });
   // Reconcile the listener on every config change, whatever the path:
   // the write handler, an external CLI write picked up by the store
   // watcher, and nuke wiping config.json all fan out through
@@ -37,12 +28,19 @@ export function installHostImpls(): void {
     void refreshDirectHost();
   });
   setRuntimeImpl({
-    releaseStore,
+    releaseStore: Effect.promise(() =>
+      Graph.runIfUp(
+        Effect.flatMap(StoreChanges.StoreChanges, (it) => it.release),
+      ),
+    ),
     stopUpdaterBridge: () => void shellCalls().stopUpdaterBridge(),
-    unpublishLoopback,
+    unpublishLoopback: Effect.promise(() =>
+      Graph.runIfUp(Effect.flatMap(Loopback.Loopback, (it) => it.unpublish)),
+    ),
     broadcastNukeProgress: (progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
-    afterDataWipe: () => void publishLoopback(),
+    afterDataWipe: () =>
+      void Graph.runIfUp(Effect.flatMap(Loopback.Loopback, (it) => it.publish)),
     relaunchAppUnattended: () => void shellCalls().relaunch(),
     unattendedMoveRefusal: () => busyRemoteRefusal(getBusyOperations(), "move"),
   });

@@ -1,5 +1,5 @@
 // The stack a worktree's PR sits in, read off the project-wide PR map
-// the sidebar already holds (shared/pullRequestStack.ts), so no extra
+// the sidebar already holds (contracts' pullRequestStack.ts), so no extra
 // gh call: the sweep's map carries every PR's base. The trunk is the
 // project's primary checkout's branch, which keeps a long-lived
 // "main -> production" PR from reading as the bottom of every stack.

@@ -4,12 +4,17 @@
 // LoopbackGroup (@shigomori/contracts/link): every host call, its pushes
 // and views, and the control contract's ops.
 //
-// Other accounts on this machine can reach loopback, so its handshake
-// asks for a token minted as the host starts, standing in for a peer's
-// connect ticket in the same proof, so the token never travels. The
-// host publishes the port and the token in <dataDir>/loopback.json,
-// owner-only, which is what names an app instance (flavor and dev
-// profile) to the terminal, and hands them to whoever asks (address).
+// Other accounts on this machine can reach loopback, so its hello
+// carries a token minted as the host starts. The host publishes the
+// port and the token in <dataDir>/loopback.json, owner-only, which is
+// what names an app instance (flavor and dev profile) to the terminal,
+// and hands them to whoever asks (address).
+//
+// A token in the clear is enough here, where a peer's link needs a
+// sealed socket: loopback traffic never leaves the machine, so only
+// this machine's own processes see it, and a dialer learns the port
+// from the same owner-only file as the token, so nothing else can stand
+// in for the listener it dials.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,7 +22,11 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { LoopbackGroup } from "@shigomori/contracts/link";
 import { mintHexId } from "@host/lib/hexId";
-import { type LinkRegistrar, make as makeLink } from "./server";
+import {
+  type LateServices,
+  type LinkRegistrar,
+  make as makeLink,
+} from "./server";
 
 // The engine's Control.ts reads this name and shape.
 export const LOOPBACK_FILE = "loopback.json";
@@ -58,6 +67,7 @@ const make = (options: {
   // The one page origin the listener admits beside an origin-less dial:
   // the desktop window's (its renderer scheme), which dials it too.
   readonly allowedOrigin?: string;
+  readonly services: LateServices;
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -66,9 +76,9 @@ const make = (options: {
       registrar: options.registrar,
       group: LoopbackGroup,
       local: true,
+      services: options.services,
       auth: {
-        matchTicket: async (_deviceId, _arrivedAs, matches) =>
-          (await matches(token)) ? token : null,
+        opens: { token },
         // Its callers command this machine as its owner.
         isCommandGranted: () => true,
       },

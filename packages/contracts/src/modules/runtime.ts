@@ -10,7 +10,6 @@ import {
 // in the client-scoped modules: theme preview and relaunch on window,
 // appearance on clientConfig.
 // nuke stays on the loopback (remote false): wiping a machine is
-
 // for whoever sits at it. moveDataDir rides the wire behind the command
 // grant, so a peer's Settings page can relocate that device's data
 // folder. The host relaunches itself after such a call, since the peer
