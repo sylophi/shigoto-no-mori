@@ -104,6 +104,7 @@ import {
 import { LinkGroup } from "@shigomori/contracts/link";
 import {
   CLOSE_HANDSHAKE_FAILED,
+  CLOSE_TRY_AGAIN,
   SEAL_OVERHEAD_BYTES,
   sealDialer,
 } from "@shared/remote/sealedSocket";
@@ -291,11 +292,13 @@ const rejection = (promise: Promise<unknown>) =>
 async function rawLink(
   track: Track,
   listener: DirectListener,
-  opts: { pingInterval?: number; ticket?: string } = {},
+  opts: { pingInterval?: number; ticket?: string; deflate?: boolean } = {},
 ) {
   const scope = Scope.makeUnsafe();
   track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  const ws = new WebSocket(`ws://127.0.0.1:${listener.port}`);
+  const ws = new WebSocket(`ws://127.0.0.1:${listener.port}`, {
+    perMessageDeflate: opts.deflate ?? false,
+  });
   const closed = new Promise<number>((resolve) =>
     ws.on("close", (code) => resolve(code)),
   );
@@ -525,6 +528,37 @@ it("Origin gate: origin-less, loopback and the configured web origin link, while
   }
 });
 
+it("frame cap: a call's frame of 1 MiB crosses the real listener, sealed, whether or not the dialer offers compression", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  for (const deflate of [false, true]) {
+    // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
+    const raw = await rawLink(track, listener, { deflate });
+    // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
+    assert.ok(Exit.isSuccess(await raw.hello()));
+    // A served call with nearly a mebibyte in its payload: the frame
+    // sits just under the cap, where compression would have pushed the
+    // sealed frame over it, and the answer arrives on the same link.
+    // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
+    const answer = await Effect.runPromiseExit(
+      raw.call("projects:defaultBranch", {
+        projectId: "p".repeat((1 << 20) - 128),
+      }),
+    );
+    assert.ok(
+      !(
+        Exit.isFailure(answer) &&
+        String(Cause.squash(answer.cause)).includes("1009")
+      ),
+      `the frame closed the socket (compression ${deflate ? "offered" : "off"})`,
+    );
+    // oxlint-disable-next-line no-await-in-loop -- one dialer at a time
+    assert.deepEqual(await Effect.runPromise(raw.call("git:sweep")), {
+      leaseMs: 5,
+    });
+  }
+});
+
 it("frame cap: an inbound frame over 1 MiB and its tag closes the socket", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
@@ -539,10 +573,10 @@ it("frame cap: an inbound frame over 1 MiB and its tag closes the socket", async
 it("roster: a device dropped after its handshake links nothing: its hello is refused, the sweep closes its socket before any hello, and its pending tickets go", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
-  // Its handshake done, then the roster drops it, and neither the sweep
-  // nor the ticket drop has run: the hello itself refuses.
+  // Its handshake done, then the roster drops it, and the sweep has not
+  // run: the hello itself refuses.
   const unswept = await rawLink(track, listener);
-  await listener.rosterNow([HOST], { sweep: false, dropTickets: false });
+  await listener.rosterNow([HOST], { sweep: false });
   assert.ok(failureOf(await unswept.hello()) instanceof LinkRefusedError);
   // The sweep closes a socket still to say hello.
   await listener.rosterNow([HOST, CLIENT]);
@@ -554,6 +588,34 @@ it("roster: a device dropped after its handshake links nothing: its hello is ref
   await listener.rosterNow([HOST, CLIENT]);
   const refused = await dialFails(listener, { ticket: pending });
   assert.ok(refused.refusal instanceof LinkRefusedError);
+});
+
+it("hub outage: a hello or a dial the listener cannot check against the roster closes to be dialed again, counts nothing toward the lockout, and the device links once the roster is back", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  // A handshake done while the roster was there, its hello after it
+  // went, past the lockout's threshold.
+  for (let n = 0; n < 6; n++) {
+    listener.rosterUnavailable(false);
+    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
+    const raw = await rawLink(track, listener);
+    listener.rosterUnavailable(true);
+    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
+    const refusal = failureOf(await raw.hello());
+    assert.ok(refusal instanceof RemoteCallError, String(refusal));
+    // oxlint-disable-next-line no-await-in-loop -- one socket at a time
+    assert.equal(await raw.closed, CLOSE_TRY_AGAIN);
+  }
+  // Dials while it is gone: refused at the socket, not blocked.
+  for (let n = 0; n < 6; n++) {
+    // oxlint-disable-next-line no-await-in-loop -- one dial at a time
+    const refused = await dialFails(listener);
+    assert.equal(refused.blocked, false);
+    assert.equal(refused.code, CLOSE_TRY_AGAIN);
+  }
+  listener.rosterUnavailable(false);
+  const connection = await dial(track, listener);
+  assert.deepEqual(await invoke(connection, "git:sweep"), { leaseMs: 5 });
 });
 
 it("tickets: a ticket survives a socket whose handshake fails and one whose first message is replayed, and only the hello that links spends it", async () => {

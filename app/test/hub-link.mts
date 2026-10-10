@@ -44,6 +44,7 @@ import {
   freshAsk,
   MAX_SEEN_ASKS,
   relayPrologue,
+  SEEN_ASK_RETENTION_MS,
   type SeenAsks,
   HubAskRefusedError,
   HubAskTimeoutError,
@@ -176,9 +177,8 @@ function frameOf(text: string): RelayFrame {
   return frame;
 }
 
-const connectInfoAsk = (input?: unknown, expiresAt = Date.now() + 60_000) => ({
+const connectInfoAsk = (input?: unknown) => ({
   ask: CONNECT_INFO_ASK,
-  expiresAt,
   ...(input === undefined ? {} : { input }),
 });
 
@@ -255,15 +255,12 @@ it("framing: a void input and a void result ride as absent fields", async () => 
   const { a, rawB } = await bootWithRawPeer(trackTest);
   const pending = a.connection.askConnectInfo("B", undefined, ASK_MS);
   const ask = openAsk("A", "B", (await rawB.nextHub()).frame);
-  assert.deepEqual(Object.keys(fields(ask.payload)).toSorted(), [
-    "ask",
-    "expiresAt",
-  ]);
+  assert.deepEqual(Object.keys(fields(ask.payload)), ["ask"]);
   rawB.send("A", sealAnswer(ask.handshake, ask.id, { ok: true }));
   assert.equal(await pending, undefined);
 });
 
-it("replay: an ask read once is not answered again under another id, nor one past its expiry, and the original's answer stands", async () => {
+it("replay: an ask is judged by when it arrives, not by any clock: one sent from a clock two hours ahead is answered, and the same ask replayed under another id within the window is not", async () => {
   const stub = await startStubHub(trackTest);
   let served = 0;
   await bootDevice(
@@ -277,41 +274,47 @@ it("replay: an ask read once is not answered again under another id, nor one pas
     },
     trackTest,
   );
-  const raw = rawDevice(stub, "C");
-  trackTest(() => raw.close());
-  await raw.opened;
-  await delay(50);
-  const ask = sealAsk("C", "B", 1, connectInfoAsk("first"));
-  raw.send("B", ask.frame);
-  assert.deepEqual(openAnswer(ask.handshake, (await raw.nextHub()).frame), {
-    ok: true,
-    result: "first",
-  });
-  // The same sealed ask, its cleartext id changed.
-  const replay = frameOf(ask.frame);
-  raw.send("B", encodeRelayFrame({ ...replay, id: 2 }));
-  // An ask past its expiry, sealed afresh.
-  raw.send(
-    "B",
-    sealAsk("C", "B", 3, connectInfoAsk("stale", Date.now() - 10 * 60_000))
-      .frame,
+  const a = await bootDevice(stub, "A", {}, trackTest);
+  await waitFor(
+    () => a.connection.status().onlineDeviceIds.includes("B"),
+    "A to see B",
   );
+  const before = stub.receivedCount();
+  // A's clock two hours ahead while it seals and sends its ask, and
+  // right again before B reads it.
+  const realNow = Date.now;
+  Date.now = () => realNow() + 2 * 60 * 60_000;
+  const answer = a.connection.askConnectInfo("B", "from ahead", ASK_MS);
+  Date.now = realNow;
+  assert.equal(await answer, "from ahead");
+  // The same sealed ask, its cleartext id changed.
+  const sent = stub.received.slice(before).find((entry) => entry.from === "A");
+  assert.ok(sent !== undefined);
+  const replay = frameOf(sent.frame);
+  stub.injectTo("B", {
+    t: "relay",
+    from: "A",
+    frame: encodeRelayFrame({ ...replay, id: replay.id + 1 }),
+  });
   await delay(150);
-  assert.equal(served, 1, "a replayed or expired ask was served");
+  assert.equal(served, 1, "a replayed ask was served");
 });
 
-it("replay record: full of asks yet to expire, it refuses a new one rather than forget one, and takes asks again once they expire", () => {
+it("replay record: an ask is remembered for the window from its receipt, and a full record refuses a new one rather than forget one", () => {
   const seen: SeenAsks = new Map();
   const now = 1_000_000;
+  assert.equal(freshAsk(seen, "ask", now), true);
+  assert.equal(freshAsk(seen, "ask", now + SEEN_ASK_RETENTION_MS - 1), false);
+  assert.equal(freshAsk(seen, "ask", now + SEEN_ASK_RETENTION_MS), true);
+  seen.clear();
   for (let i = 0; i < MAX_SEEN_ASKS; i += 1) {
-    assert.equal(freshAsk(seen, `ask-${i}`, now + 60_000, now), true);
+    assert.equal(freshAsk(seen, `ask-${i}`, now), true);
   }
-  assert.equal(freshAsk(seen, "one more", now + 60_000, now), false);
+  assert.equal(freshAsk(seen, "one more", now), false);
   // The first ask recorded is still remembered, so its replay is too.
-  assert.equal(freshAsk(seen, "ask-0", now + 60_000, now), false);
-  // Past every expiry, the record has room again.
-  const later = now + 10 * 60_000;
-  assert.equal(freshAsk(seen, "one more", later + 60_000, later), true);
+  assert.equal(freshAsk(seen, "ask-0", now), false);
+  // Past the window, the record has room again.
+  assert.equal(freshAsk(seen, "one more", now + SEEN_ASK_RETENTION_MS), true);
 });
 
 it("keys: an ask sealed with a key other than the roster's gets no answer, and a tampered answer is refused", async () => {
@@ -383,7 +386,6 @@ it("one ask only: an unknown ask is refused while connectInfo is answered for th
   await delay(50);
   const unknown = sealAsk("C", "B", 1, {
     ask: "invokeAnything",
-    expiresAt: Date.now() + 60_000,
     input: "x",
   });
   raw.send("B", unknown.frame);

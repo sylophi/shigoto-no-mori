@@ -8,6 +8,7 @@
 //
 // Run: pnpm test noise.
 import assert from "node:assert/strict";
+import { chacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { it } from "vitest";
 import {
   generateKeyPair,
@@ -277,9 +278,17 @@ it("refuses to seal or open once a direction's nonce runs out", () => {
     () => initiatorSide.send.encryptWithAd(ad, text("x")),
     NoiseError,
   );
+  // A frame that does authenticate at that nonce, sealed with the
+  // direction's own key, is still refused.
   Reflect.set(responderSide.receive, "n", Number.MAX_SAFE_INTEGER);
+  const key = Reflect.get(responderSide.receive, "k") as Uint8Array;
+  const nonce = new Uint8Array(12);
+  const view = new DataView(nonce.buffer);
+  view.setUint32(4, Number.MAX_SAFE_INTEGER % 2 ** 32, true);
+  view.setUint32(8, Math.floor(Number.MAX_SAFE_INTEGER / 2 ** 32), true);
+  const authentic = chacha20poly1305(key, nonce, ad).encrypt(text("x"));
   assert.throws(
-    () => responderSide.receive.decryptWithAd(ad, new Uint8Array(17)),
+    () => responderSide.receive.decryptWithAd(ad, authentic),
     NoiseError,
   );
 });

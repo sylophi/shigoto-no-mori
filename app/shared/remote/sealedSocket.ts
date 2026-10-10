@@ -33,6 +33,14 @@ import {
 // dialed (deviceLink.ts reads it as the blocked verdict).
 export const CLOSE_HANDSHAKE_FAILED = 4004;
 
+// The listener's close when it cannot check a ticket now (the account's
+// roster is unavailable, the hub out of reach): the standard "try again
+// later", which a dialer reads as nothing against the ticket.
+export const CLOSE_TRY_AGAIN = 1013;
+
+// What a ticket check answers while the roster is unavailable.
+export const ROSTER_UNAVAILABLE = "roster unavailable";
+
 // The dialer's own close when the far end failed it: an answer that did
 // not open or a frame that did not authenticate. Whoever answered at
 // that address proved nothing, so another candidate may still win.
@@ -117,7 +125,7 @@ function sealedSocket(
   // Handshake frames, until the transport is set.
   onHandshakeFrame: (handler: (frame: Uint8Array) => void) => void;
   established: (transport: TransportCiphers) => void;
-  fail: (reason: string) => void;
+  fail: (reason: string, code?: number) => void;
 } {
   if ("binaryType" in ws) {
     (ws as { binaryType: string }).binaryType = "arraybuffer";
@@ -136,11 +144,11 @@ function sealedSocket(
     }
   };
 
-  const fail = (reason: string) => {
+  const fail = (reason: string, code = failCode) => {
     if (failed) return;
     failed = true;
     try {
-      ws.close(failCode, reason);
+      ws.close(code, reason);
     } catch {
       // Already closing.
     }
@@ -251,7 +259,9 @@ export function sealListener(
   ws: Socket.WebSocketLike,
   options: {
     readonly localKey: KeyPair;
-    readonly admit: (ticket: string) => Promise<Uint8Array | null>;
+    readonly admit: (
+      ticket: string,
+    ) => Promise<Uint8Array | null | typeof ROSTER_UNAVAILABLE>;
     readonly opened: (ticket: string, publicKey: Uint8Array) => void;
     readonly refused: (reason: string, guessed: boolean) => void;
   },
@@ -272,6 +282,13 @@ export function sealListener(
     if (first === "malformed") return refuse("a malformed first frame");
     void options.admit(first.ticket).then(
       (peerKey) => {
+        if (peerKey === ROSTER_UNAVAILABLE) {
+          options.refused("the account's roster is unavailable", false);
+          return sealed.fail(
+            "the account's roster is unavailable",
+            CLOSE_TRY_AGAIN,
+          );
+        }
         if (peerKey === null) return refuse("the ticket was refused", true);
         const handshake = new HandshakeState({
           initiator: false,

@@ -415,12 +415,11 @@ export function decodeRelayFrame(text: string): RelayFrame | null {
 }
 
 // What the sealed messages carry, as JSON. An undefined input or result
-// rides as an absent field. An ask names when it expires, in epoch
-// milliseconds on the asker's clock: an IK first message can be
-// replayed, so the answering device turns away one it has read before
-// until then, and any past it.
+// rides as an absent field. An IK first message can be replayed, so the
+// answering device turns away one it has read before (link.ts,
+// SEEN_ASK_RETENTION_MS).
 //
-//   ask:    { ask, expiresAt, input? }
+//   ask:    { ask, input? }
 //   answer: { ok: true, result? } | { ok: false, message, code? }
 //
 // Bounded like every string a hostile peer could inflate.
@@ -428,7 +427,6 @@ const AskNameSchema = Schema.String.check(Schema.isMaxLength(64));
 
 export const AskPayloadSchema = Schema.Struct({
   ask: AskNameSchema,
-  expiresAt: Schema.Int,
   input: Schema.optional(Schema.Unknown),
 });
 export type AskPayload = typeof AskPayloadSchema.Type;
