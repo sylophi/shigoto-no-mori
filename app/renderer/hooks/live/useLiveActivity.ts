@@ -3,10 +3,12 @@
 // scripts each host runs, the forwards this machine holds, the
 // mirrors every host runs. (The agents waiting on you come off the
 // worktree lists, lib/agentWatch.ts.) Each part is read the way its own
-// surfaces read it and kept live by its own broadcast (scripts:changed
-// through lib/hostWatch.ts, portForward:changed, mirror:changed), so
-// nothing here polls.
-import { queryOptions, skipToken, useQueries } from "@tanstack/react-query";
+// surfaces read it: the scripts and the mirrors as their hosts' views
+// (scripts:watch, mirror:watch), the forwards off portForward:changed,
+// so nothing here polls.
+import { callOf } from "@shigomori/contracts/contract";
+import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import * as Atom from "effect/reactivity/Atom";
 import type {
   MirrorDaemonStatus,
   MirrorListResult,
@@ -18,7 +20,9 @@ import type { HostApi } from "@/hooks/remote/useHostScope";
 import { useEveryHostMirrors } from "@/hooks/remote/useMirrors";
 import { usePortForwardCount } from "@/hooks/remote/usePortForwards";
 import { useEveryHost } from "@/hooks/remote/useRemoteDevices";
-import { queryKeysFor } from "@/lib/queryKeys";
+import { hostViewAtom } from "@/lib/runtime/atoms";
+import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
+import { localDeviceId } from "@/lib/queryKeys";
 
 // A host's running scripts. The api is undefined while a peer has no
 // session.
@@ -30,46 +34,45 @@ export type HostScripts = {
   loading: boolean;
 };
 
-// One device's running scripts, the read every surface that lists or
+// One device's running scripts, the view every surface that lists or
 // adopts them shares (the Live page, a worktree's script buttons and
-// console), refreshed by the device's scripts:changed.
-export function runningScriptsQueryOptions(
+// console).
+const runningScriptsAtom = Atom.family((deviceId: string) =>
+  hostViewAtom({
+    deviceId,
+    localDeviceId,
+    view: callOf(scriptsContract, "watch"),
+    input: undefined,
+  }),
+);
+
+// One device's runs, nothing while it has no api.
+export function useDeviceRunningScripts(
   deviceId: string,
   api: HostApi | undefined,
-) {
-  return queryOptions({
-    queryKey: queryKeysFor(deviceId).runningScripts(),
-    queryFn:
-      api === undefined
-        ? skipToken
-        : async () => (await api.scripts.list()).runs,
-    // Kept fresh by the device's scripts:changed and the sweep when its
-    // session lands, so a focus or a new reader need not ask again.
-    staleTime: Infinity,
-    // A peer whose app predates the list refuses it for good.
-    retry: false,
-    meta: { silentError: true },
-  });
+): readonly RunningScript[] | undefined {
+  return useView(api === undefined ? null : runningScriptsAtom(deviceId)).data
+    ?.runs;
 }
+
+const hostsScriptsAtom = viewsOf((deviceId) => runningScriptsAtom(deviceId));
 
 // Every host's running scripts. A peer out of reach lists none: its
 // last list could name a dev server that has since stopped, and
 // nothing here could stop it anyway. A peer whose app predates the
-// list refuses the read, and lists none too.
+// view ends it, and lists none too.
 export function useRunningScripts(): HostScripts[] {
   const hosts = useEveryHost();
-  return useQueries({
-    queries: hosts.map(({ deviceId, api }) =>
-      runningScriptsQueryOptions(deviceId, api),
-    ),
-    combine: (results) =>
-      hosts.map(({ deviceId, api }, index) => ({
-        deviceId,
-        api,
-        runs: api === undefined ? NO_RUNS : (results[index]?.data ?? NO_RUNS),
-        loading: api !== undefined && results[index]?.isPending === true,
-      })),
-  });
+  const views = useViews(
+    hostsScriptsAtom,
+    hosts.map(({ deviceId, api }) => (api === undefined ? null : deviceId)),
+  );
+  return hosts.map(({ deviceId, api }, index) => ({
+    deviceId,
+    api,
+    runs: api === undefined ? NO_RUNS : (views[index]?.data?.runs ?? NO_RUNS),
+    loading: api !== undefined && views[index]?.isPending === true,
+  }));
 }
 
 const NO_RUNS: RunningScript[] = [];

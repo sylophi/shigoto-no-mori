@@ -186,8 +186,6 @@ function buildQueryKeys(deviceId: string) {
     // The merged pool + custom port list with its liveness probe. Polled
     // while a detail page shows it, so a dev server starting or
     // stopping on the host shows up without a refetch trigger.
-    worktreePorts: (projectId: string, worktreeId: string) =>
-      host("worktreePorts", projectId, worktreeId),
     terrierReadiness: () => host("terrierReadiness"),
     // The villager data (host/lib/villagers.ts): this device's own,
     // read by its own window only, so only the local registry's are
@@ -291,18 +289,10 @@ function buildQueryKeys(deviceId: string) {
     // broadcast, which a remote scope receives over its direct session.
     updaterState: () => host("updater"),
 
-    // Host-scoped: the mirrors a device initiates and the streams it
-    // serves are facts about that device, read through its api and
-    // driven by its own mirror:changed broadcast.
-    mirrors: () => host("mirrors"),
-    // Under the mirrors prefix, so the same changed broadcast refreshes
-    // the thread. Keyed by the local worktree like the host keeps it.
-    mirrorHistory: (worktreeId: string) =>
-      host("mirrors", "history", worktreeId),
-
-    // Host-scoped: the scripts running on a device, whoever started
-    // them, driven by its own scripts:changed broadcast.
-    runningScripts: () => host("runningScripts"),
+    // Host-scoped: a mirror's thread of events, keyed by the local
+    // worktree like the host keeps it. (The mirror list itself is the
+    // host's view, hooks/remote/useMirrors.ts.)
+    mirrorHistory: (worktreeId: string) => host("mirrorHistory", worktreeId),
 
     // Client-scoped: the port-forward engine (its listeners and conns)
     // lives in this app instance's main process, whichever device a
@@ -381,10 +371,10 @@ const externalChangeExempt = new Set([
   "doctor",
   "fs",
   "githubCli",
-  // Driven by its own changed broadcast, like portForwards and updater.
-  "mirrors",
+  // Re-read on its own beat while on screen.
+  "mirrorHistory",
+  // Driven by its own changed broadcast, like updater.
   "portForwards",
-  "runningScripts",
   "runtime",
   // Written off its own changed broadcast, like updater.
   "sharedSettings",

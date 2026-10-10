@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
-import { useQuery } from "@tanstack/react-query";
-import { runningScriptsQueryOptions } from "@/hooks/live/useLiveActivity";
+import { useDeviceRunningScripts } from "@/hooks/live/useLiveActivity";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
@@ -57,15 +56,11 @@ export function useScriptRunner(
   const { canCommand: canRun } = useCommandAccess();
   const key = scriptKey(worktree.projectId, worktree.id, slot);
   const held = useScriptRunState(key);
-  const listed = useQuery({
-    ...runningScriptsQueryOptions(deviceId, api),
-    select: (runs) =>
-      runs.find(
-        (run) => scriptKey(run.projectId, run.worktreeId, run.slot) === key,
-      ),
-  }).data;
+  const listed = useDeviceRunningScripts(deviceId, api)?.find(
+    (run) => scriptKey(run.projectId, run.worktreeId, run.slot) === key,
+  );
   // A run this window holds wins: the list lags a start or a restart
-  // here by a broadcast and a read, and can still name the run before.
+  // here by the view's next value, and can still name the run before.
   const heldBusy = held.status === "starting" || held.status === "running";
   const elsewhere =
     listed !== undefined && listed.runId !== held.runId && !heldBusy
