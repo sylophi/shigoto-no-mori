@@ -37,7 +37,7 @@ import {
   includedFiles,
   type DiffChangesControls,
 } from "./changesControls";
-import type { IndexEntry } from "@/lib/patchFiles";
+import type { IndexEntry } from "@shigomori/ui/lib/indexEntry.ts";
 
 // Below this many files a list is short enough to scan, and a filter
 // field (with a patch's fold-all beside it) would only be one more row

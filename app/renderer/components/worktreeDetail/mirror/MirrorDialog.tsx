@@ -28,17 +28,20 @@ import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { LandedPath } from "../flow/FlowChrome";
-import { usePeerDestination } from "../flow/peerTargets";
-import type { DestinationPick, PeerTarget } from "../flow/PullReviewView";
+import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
+import type { DestinationPick } from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
 import {
   type FlowStage,
   type Landing,
   LANDS_HERE,
   stepHeadline,
-} from "../flow/pullSteps";
+} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import { selectionSummary, sessionSummary } from "../flow/ignoreChoice";
-import { describeMirror } from "./mirrorStatus";
-import { MirrorHeadlineView, MirrorLiveView } from "./MirrorDialogView";
+import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
+import {
+  MirrorHeadlineView,
+  MirrorLiveView,
+} from "@shigomori/ui/views/worktreeDetail/mirror/MirrorDialogView.tsx";
 import { MirrorReview } from "./MirrorReview";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;

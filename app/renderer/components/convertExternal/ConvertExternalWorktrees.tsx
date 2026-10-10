@@ -15,7 +15,7 @@ import {
   worktreePathFor,
 } from "@shigomori/contracts/git/worktreeLayout";
 import { ConvertExternalView } from "@shigomori/ui/views/convertExternal/ConvertExternalView.tsx";
-import { withToggled } from "@/lib/toggleSet";
+import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 import { isConvertRefusedError } from "@shigomori/contracts/errors";
 
 // For detached HEADs `worktree.branch` is a short SHA. Pass it

@@ -5,7 +5,7 @@ import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForwa
 import { useForwardLocalPort } from "@/hooks/config/useForwardLocalPort";
 import { usePortForwardControl } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
-import { ForwardControlView } from "./ForwardControlView";
+import { ForwardControlView } from "@shigomori/ui/views/worktreeDetail/ports/ForwardControlView.tsx";
 
 export function ForwardControl({
   deviceId,

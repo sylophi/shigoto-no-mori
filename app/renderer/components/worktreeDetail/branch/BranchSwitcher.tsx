@@ -9,7 +9,7 @@ import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { localBranchOf } from "@shigomori/contracts/git/branches";
 import { isRealBranch, type Worktree } from "@shigomori/contracts/schemas";
-import { BranchSwitcherView } from "./BranchSwitcherView";
+import { BranchSwitcherView } from "@shigomori/ui/views/worktreeDetail/branch/BranchSwitcherView.tsx";
 
 export function BranchSwitcher({
   worktree,

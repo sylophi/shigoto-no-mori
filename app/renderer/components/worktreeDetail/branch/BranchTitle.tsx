@@ -5,7 +5,10 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
-import { BranchMenuView, BranchTitleView } from "./BranchTitleView";
+import {
+  BranchMenuView,
+  BranchTitleView,
+} from "@shigomori/ui/views/worktreeDetail/branch/BranchTitleView.tsx";
 
 export function BranchTitle({
   worktree,

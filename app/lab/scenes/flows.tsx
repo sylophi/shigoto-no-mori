@@ -7,21 +7,20 @@ import { ArrowRight, type LucideIcon, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
 import { ModalBox } from "@shigomori/ui/primitives/modal-shell.tsx";
-import type { HostApi } from "@/hooks/remote/useHostScope";
 import { changeEntries } from "@/lib/patchFiles";
 import { worktreeTitle } from "@/lib/worktreeTitle";
-import { MirrorConflictsChipView } from "@/components/worktreeDetail/MirrorConflictsView";
+import { MirrorConflictsChipView } from "@shigomori/ui/views/worktreeDetail/MirrorConflictsView.tsx";
 import {
   MirrorLineView,
   MirrorPillView,
   MirrorStatusChipView,
-} from "@/components/worktreeDetail/MirrorPillView";
-import { PullFlowFrameView } from "@/components/worktreeDetail/flow/PullFlowFrameView";
+} from "@shigomori/ui/views/worktreeDetail/MirrorPillView.tsx";
+import { PullFlowFrameView } from "@shigomori/ui/views/worktreeDetail/flow/PullFlowFrameView.tsx";
 import {
   LeaveOutPickerView,
   LeaveOutTrailingView,
-} from "@/components/worktreeDetail/flow/LeaveOutPickerView";
-import { PullProgressView } from "@/components/worktreeDetail/flow/PullProgressView";
+} from "@shigomori/ui/views/worktreeDetail/flow/LeaveOutPickerView.tsx";
+import { PullProgressView } from "@shigomori/ui/views/worktreeDetail/flow/PullProgressView.tsx";
 import {
   CloneLinesView,
   DestinationCardView,
@@ -32,31 +31,31 @@ import {
   PullReviewStepView,
   SetupRowView,
   SourceCardView,
-} from "@/components/worktreeDetail/flow/PullReviewView";
+} from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
 import {
   type FlowStage,
   LANDS_HERE,
   landsOnPeer,
-} from "@/components/worktreeDetail/flow/pullSteps";
+} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import {
   MirrorHeadlineView,
   MirrorLiveView,
-} from "@/components/worktreeDetail/mirror/MirrorDialogView";
+} from "@shigomori/ui/views/worktreeDetail/mirror/MirrorDialogView.tsx";
 import {
   MirrorHistoryListView,
   MirrorIgnoresApplyView,
   MirrorManageDialogView,
   MirrorPairStripView,
   type StopConfirm,
-} from "@/components/worktreeDetail/mirror/MirrorManageDialogView";
-import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
-import { TransplantHeadlineView } from "@/components/worktreeDetail/transplant/TransplantDialogView";
-import { TransplantFinishView } from "@/components/worktreeDetail/transplant/TransplantFinishView";
+} from "@shigomori/ui/views/worktreeDetail/mirror/MirrorManageDialogView.tsx";
+import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
+import { TransplantHeadlineView } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantDialogView.tsx";
+import { TransplantFinishView } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantFinishView.tsx";
 import {
   CarryOverListView,
   ChangedFilesView,
   TransplantDetailsView,
-} from "@/components/worktreeDetail/transplant/TransplantReviewView";
+} from "@shigomori/ui/views/worktreeDetail/transplant/TransplantReviewView.tsx";
 import {
   pullLandingBranch,
   pullWorktreeName,
@@ -283,8 +282,7 @@ const peerTarget = (
   return {
     ...device,
     isThisDevice: false,
-    // Any api reads as reachable: the pick only asks whether there is one.
-    api: target.block === undefined ? ({} as HostApi) : undefined,
+    ready: target.block === undefined,
     ...target,
   };
 };

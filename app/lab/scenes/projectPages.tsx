@@ -58,7 +58,7 @@ import {
   sumBytes,
   summarize,
 } from "@shigomori/ui/views/tidy/tidyModel.ts";
-import { LeaveOutPickerView } from "@/components/worktreeDetail/flow/LeaveOutPickerView";
+import { LeaveOutPickerView } from "@shigomori/ui/views/worktreeDetail/flow/LeaveOutPickerView.tsx";
 import { LocationFormView } from "@shigomori/ui/views/worktreeLocation/LocationFormView.tsx";
 import {
   LocationPaneView,

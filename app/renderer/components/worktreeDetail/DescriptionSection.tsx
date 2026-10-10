@@ -2,7 +2,7 @@
 // long one is cut down.
 import { useState } from "react";
 import { useIsTruncated } from "@shigomori/ui/hooks/useIsTruncated.ts";
-import { DescriptionSectionView } from "./DescriptionSectionView";
+import { DescriptionSectionView } from "@shigomori/ui/views/worktreeDetail/DescriptionSectionView.tsx";
 
 export function DescriptionSection({ description }: { description: string }) {
   const [expanded, setExpanded] = useState(false);

@@ -23,7 +23,7 @@ import { ResultsPanelView } from "@shigomori/ui/views/addProject/ResultsPanelVie
 import { useTerrierOptIn } from "./TerrierOptIn";
 import { useBrowseState } from "./useBrowseState";
 import { useOpenAddedProject } from "./useOpenAddedProject";
-import { withToggled } from "@/lib/toggleSet";
+import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 import { AddExistingFormView } from "@shigomori/ui/views/addProject/AddExistingFormView.tsx";
 
 interface AddExistingFormProps {

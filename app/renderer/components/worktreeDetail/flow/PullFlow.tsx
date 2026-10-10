@@ -17,11 +17,18 @@ import { localDeviceId } from "@/lib/queryKeys";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useLandingTarget } from "./cloneDestination";
 import { usePullChoice } from "./ignoreChoice";
-import { PullFlowFrameView, stageStep } from "./PullFlowFrameView";
+import {
+  PullFlowFrameView,
+  stageStep,
+} from "@shigomori/ui/views/worktreeDetail/flow/PullFlowFrameView.tsx";
 import { PullProgress } from "./PullProgress";
-import type { PullProgressProps } from "./PullProgressView";
-import type { DestinationPick } from "./PullReviewView";
-import { type FlowStage, type Landing, useClock } from "./pullSteps";
+import type { PullProgressProps } from "@shigomori/ui/views/worktreeDetail/flow/PullProgressView.tsx";
+import type { DestinationPick } from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
+import {
+  type FlowStage,
+  type Landing,
+  useClock,
+} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 
 type Landed = { worktree: { projectId: string; id: string } };
 

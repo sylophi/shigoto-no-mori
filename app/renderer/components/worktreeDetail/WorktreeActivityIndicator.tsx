@@ -4,7 +4,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useProjectGitFetching } from "@/hooks/git/useProjectGitFetching";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { WorktreeActivityIndicatorView } from "./WorktreeActivityIndicatorView";
+import { WorktreeActivityIndicatorView } from "@shigomori/ui/views/worktreeDetail/WorktreeActivityIndicatorView.tsx";
 
 // The page's one refresh (WorktreeActivityIndicatorView), spinning
 // through whatever the page is waiting on.

@@ -27,9 +27,9 @@ import {
 import { DestinationProvider } from "@/hooks/remote/useHostScope";
 import { modeOf, selectionSummary } from "../flow/ignoreChoice";
 import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
-import type { DestinationPick, PeerTarget } from "../flow/PullReviewView";
-import { usePeerDestination } from "../flow/peerTargets";
-import { TransplantHeadlineView } from "./TransplantDialogView";
+import type { DestinationPick } from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
+import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
+import { TransplantHeadlineView } from "@shigomori/ui/views/worktreeDetail/transplant/TransplantDialogView.tsx";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantReview } from "./TransplantReview";
 import {
@@ -37,7 +37,7 @@ import {
   type Landing,
   LANDS_HERE,
   stepHeadline,
-} from "../flow/pullSteps";
+} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 
 const STEPS = [
   "Review & destination",

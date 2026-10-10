@@ -26,7 +26,7 @@ import {
 } from "./DiffPageView";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
-import { withMember } from "@/lib/toggleSet";
+import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import { readStored, writeStored } from "@/lib/localStorage";
 
 // Kept across diffs and launches: whether long lines fit the pane is a

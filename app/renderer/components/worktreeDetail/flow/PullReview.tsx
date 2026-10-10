@@ -28,7 +28,7 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { worktreeTitle } from "@/lib/worktreeTitle";
-import type { LandingTarget } from "./cloneDestination";
+import type { LandingTarget } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import { useCreatePlan } from "./createPlan";
 import type { PullChoiceState } from "./ignoreChoice";
 import { PullLeaveOut } from "./PullLeaveOut";
@@ -41,8 +41,11 @@ import {
   PullReviewStepView,
   SetupRowView,
   SourceCardView,
-} from "./PullReviewView";
-import { type Landing, LANDS_HERE } from "./pullSteps";
+} from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
+import {
+  type Landing,
+  LANDS_HERE,
+} from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 
 // Where the pull would refuse at step 2 (host/ipc/modules/sync.ts
 // runPullWorktree): the landing device already has the branch, checked

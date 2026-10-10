@@ -43,8 +43,8 @@ import {
   type MirrorNames,
   MirrorPairStripView,
   type StopConfirm,
-} from "./MirrorManageDialogView";
-import type { MirrorLook } from "./mirrorStatus";
+} from "@shigomori/ui/views/worktreeDetail/mirror/MirrorManageDialogView.tsx";
+import type { MirrorLook } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 
 export function MirrorManageDialog({
   session,

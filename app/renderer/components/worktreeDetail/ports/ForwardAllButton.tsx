@@ -18,7 +18,7 @@ import { notifyError } from "@/lib/toast";
 import {
   type ForwardAllMode,
   ForwardAllButtonView,
-} from "./ForwardAllButtonView";
+} from "@shigomori/ui/views/worktreeDetail/ports/ForwardAllButtonView.tsx";
 
 type Mode = ForwardAllMode;
 

@@ -35,7 +35,7 @@ import {
   exchangeSharedSettings,
   mergeSharedSettings,
   sharedSettingKeys,
-} from "@shared/sharedSettings";
+} from "@shigomori/contracts/sharedSettings";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
 import { queryKeys } from "@/lib/queryKeys";

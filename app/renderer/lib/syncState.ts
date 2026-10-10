@@ -5,6 +5,7 @@
 // so a new kind fails typecheck here until it says what it shows. The
 // remote marker's "Up to date" stays outside on purpose: it stands in for
 // the pill where the pill has nothing to say, and is the marker's own.
+import type { SyncTone } from "@shigomori/ui/views/worktreeDetail/SyncActionButtonView.tsx";
 import {
   ArrowDown,
   ArrowDownUp,
@@ -21,8 +22,6 @@ import {
   type RemoteSyncState,
   type Worktree,
 } from "@shigomori/contracts/schemas";
-
-export type SyncTone = "violet" | "emerald" | "sky" | "indigo" | "rose";
 
 // The sidebar's compact mark: icon and an optional count, in the tone.
 interface SyncBadge {
