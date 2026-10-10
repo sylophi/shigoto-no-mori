@@ -3,25 +3,23 @@ import * as Schema from "effect/Schema";
 // Where one step of the v3 migration is: not started, under way,
 // finished, or finished with something it couldn't do (the step says
 // what).
-export const MigrationStepStateSchema = Schema.Literals([
+const MigrationStepStateSchema = Schema.Literals([
   "waiting",
   "running",
   "done",
   "stuck",
 ]);
-export type MigrationStepState = typeof MigrationStepStateSchema.Type;
 
 // A worktree the move into `wt/` left in its v2 folder, and why in
 // git's words (a locked worktree, a folder in use).
-export const StuckWorktreeSchema = Schema.Struct({
+const StuckWorktreeSchema = Schema.Struct({
   name: Schema.String,
   reason: Schema.String,
 });
-export type StuckWorktree = typeof StuckWorktreeSchema.Type;
 
 // The move of v2's worktrees into `wt/`: how many of the migration's
 // moves are made, and the one under way.
-export const WorktreeMoveStepSchema = Schema.Struct({
+const WorktreeMoveStepSchema = Schema.Struct({
   state: MigrationStepStateSchema,
   moved: Schema.Number,
   total: Schema.Number,
@@ -35,7 +33,7 @@ export type WorktreeMoveStep = typeof WorktreeMoveStepSchema.Type;
 // worktrees into `wt/`. A step it doesn't owe is null. Until `planned`,
 // it is still finding out (the store opening), and a start that owes
 // nothing reads planned with both null.
-export const StoreMigrationSchema = Schema.Struct({
+const StoreMigrationSchema = Schema.Struct({
   planned: Schema.Boolean,
   import: Schema.NullOr(Schema.Struct({ state: MigrationStepStateSchema })),
   worktrees: Schema.NullOr(WorktreeMoveStepSchema),
