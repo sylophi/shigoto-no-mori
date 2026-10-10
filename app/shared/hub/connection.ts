@@ -123,8 +123,9 @@ type HubConnectionCore = {
   // the short probe window: fired on a wake from sleep or a tab coming
   // back. A socket that fails it is torn down and reported to the
   // supervisor exactly like a drop, so the redial starts in seconds
-  // instead of whenever the OS notices the dead flow. A no-op while
-  // nothing is established.
+  // instead of whenever the OS notices the dead flow. While nothing is
+  // established, a supervisor in backoff dials now: fired on the
+  // network coming back too, the first attempt is immediate.
   probe(): void;
 };
 
@@ -504,7 +505,10 @@ export function createHubConnectionCore(
       }),
 
     probe: () => {
-      live?.probe();
+      // A live socket gets its verdict within the probe's window, and a
+      // supervisor waiting out its backoff dials now.
+      if (live !== null) live.probe();
+      else current?.supervisor.dialNow();
     },
 
     status: () => {

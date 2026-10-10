@@ -53,7 +53,9 @@ import * as Schedule from "effect/Schedule";
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
+  makeWake,
   restartSchedule,
+  type Wake,
 } from "@shared/remote/supervisor";
 import { isTerminalDialError, NoDialableCandidateError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -88,6 +90,10 @@ export type DirectKeeper = {
   // dial failure, cleared the moment a dial succeeds), for the
   // bridge's no-session rejection. Null when none applies.
   unavailableReason(deviceId: string): string | null;
+  // The network is back, or the machine awake: every peer waiting out
+  // the shared ladder dials now. A refused peer keeps its slow ladder,
+  // which is what keeps it clear of the host's lockout.
+  dialNow(): void;
   // Quit latch: end every peer's loop and ignore everything after, so a
   // pending retry cannot dial mid-teardown.
   stop(): void;
@@ -101,6 +107,8 @@ type PeerState = {
   lastFailure: string | null;
   // Refused dials in a row, for the refusal ladder.
   refusals: number;
+  // Cuts its wait on the shared ladder short.
+  wake: Wake;
 };
 
 // An attempt's answer for a refused dial, which the schedule reads as
@@ -188,19 +196,20 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
       dropped: null,
       lastFailure: null,
       refusals: 0,
+      wake: makeWake(),
     };
     state.loop = run(
       attempt(deviceId, state).pipe(
         Effect.repeat(
           restartSchedule(BACKOFF_LADDER_MS).pipe(
             Schedule.modifyDelay(({ input, duration }) =>
-              Effect.succeed(
-                input === REFUSED
-                  ? Duration.millis(
+              input === REFUSED
+                ? Effect.succeed(
+                    Duration.millis(
                       backoffDelayMs(REFUSED_LADDER_MS, state.refusals - 1),
-                    )
-                  : duration,
-              ),
+                    ),
+                  )
+                : Effect.as(state.wake.wait(duration), Duration.zero),
             ),
           ),
         ),
@@ -255,6 +264,10 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
 
     unavailableReason(deviceId) {
       return states.get(deviceId)?.lastFailure ?? null;
+    },
+
+    dialNow() {
+      for (const state of states.values()) state.wake.now();
     },
 
     stop() {

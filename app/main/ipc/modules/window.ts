@@ -5,7 +5,7 @@ import { applyThemeSource } from "../../electron/clientConfig";
 import { showNotification } from "../../electron/notifications";
 import { relaunchApp } from "../../electron/relaunch";
 import { noteShowing, openWindow } from "../../electron/windows";
-import { hostAddress } from "../../hostProcess";
+import { host, hostAddress } from "../../hostProcess";
 
 export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
   // Track the renderer's applied theme (including unsaved previews) so
@@ -34,5 +34,9 @@ export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
 
   showing: ({ route }, { windowId }) => {
     noteShowing(windowId, route);
+  },
+
+  networkChanged: () => {
+    void host().wake();
   },
 };

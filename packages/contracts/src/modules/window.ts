@@ -53,4 +53,7 @@ export const windowContract = defineContract(
   // The page this window shows now, which the shell reopens it on at
   // the next start.
   invoke("showing", RoutePayloadSchema, VoidSchema),
+  // The window's Chromium saw the network go or come back: the shell
+  // wakes its host, as on a resume from sleep.
+  invoke("networkChanged", VoidSchema, VoidSchema),
 );

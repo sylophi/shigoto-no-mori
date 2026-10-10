@@ -176,6 +176,7 @@ import {
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
+  createSupervisor,
   STABLE_CONNECTION_MS,
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
@@ -810,6 +811,9 @@ it("a genuine ticket refusal is blocked and terminal, and the keeper asks again 
   keeper.reconcile(["B"]);
   await clock.settle();
   assert.equal(dials.length, 1);
+  // The network coming back hurries no refusal toward the lockout.
+  keeper.dialNow();
+  await clock.settle();
   await clock.advance(1_999);
   assert.equal(dials.length, 1, "a refusal was asked again within 2 s");
   await clock.advance(1);
@@ -1968,6 +1972,53 @@ it("a listener-less peer is a TERMINAL verdict: the browser binding's no-listene
   await clock.settle();
   assert.equal(dials.length, 2, "the roster round trip did not redial");
   keeper.stop();
+});
+
+it("dial now: the network coming back ends a peer's wait on the shared ladder, and the hub supervisor's backoff, at once; outside a wait it does nothing", async () => {
+  const { keeper, clock, dials } = stubKeeper(new Error("listener down"));
+  keeper.reconcile(["B"]);
+  await clock.settle();
+  // Up the ladder to its top rung, the 16 s wait a long outage leaves.
+  for (const delayMs of BACKOFF_LADDER_MS.slice(0, -1)) {
+    // oxlint-disable-next-line no-await-in-loop -- the ladder is sequential by nature
+    await clock.advance(delayMs);
+  }
+  const climbed = dials.length;
+  assert.equal(climbed, BACKOFF_LADDER_MS.length);
+  await clock.advance(1_000);
+  keeper.dialNow();
+  await clock.settle();
+  assert.equal(dials.length, climbed + 1, "dial now waited out the rung");
+  // The ladder goes on from where it was: the next failure waits the
+  // top rung again, not the bottom.
+  await clock.advance(lastOf(BACKOFF_LADDER_MS) - 1);
+  assert.equal(dials.length, climbed + 1);
+  await clock.advance(1);
+  assert.equal(dials.length, climbed + 2);
+  keeper.stop();
+
+  const hubClock = testClock();
+  let connects = 0;
+  const statuses: SupervisorStatus[] = [];
+  const supervisor = createSupervisor({
+    context: hubClock.context,
+    classifyClose: () => null,
+    connect: () => {
+      connects += 1;
+      return Promise.reject(new Error("hub unreachable"));
+    },
+    onStatus: (status) => statuses.push(status),
+  });
+  // Outside a backoff (nothing started yet) it does nothing.
+  supervisor.dialNow();
+  supervisor.start();
+  await hubClock.settle();
+  assert.equal(connects, 1);
+  assert.equal(statuses.at(-1)?.phase, "backoff");
+  supervisor.dialNow();
+  await hubClock.settle();
+  assert.equal(connects, 2, "the supervisor waited out its backoff");
+  supervisor.stop();
 });
 
 it("keeper discipline: eager dial on roster entry, the exact shared ladder on transient failures (capped, forever), roster exit cancels, and a stable session's drop resets the ladder", async () => {
