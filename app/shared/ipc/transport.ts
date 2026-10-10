@@ -1,4 +1,6 @@
 import type { ContractModule } from "@shigomori/contracts/contract";
+import type * as Effect from "effect/Effect";
+import type * as Stream from "effect/Stream";
 import type * as Tracer from "effect/Tracer";
 import type { LinkChannels } from "@shigomori/contracts/link";
 import type {
@@ -33,6 +35,26 @@ export type ClientTransport = {
   // every result and push with the call's schema (buildClient.ts), the
   // check the serving side makes of its inputs.
   readonly local?: boolean;
+};
+
+// The same connection as Effects and Streams, which a client runtime
+// runs its calls, views and pushes on (renderer/lib/runtime). A call
+// fails with what its Promise face rejects with: the contract error it
+// was sent as, or the link gone. Interrupting it cancels the call on
+// the far side. `linkTransport` (shared/remote/rpcTransport.ts) is the
+// Promise face over it.
+export type Link = {
+  readonly local?: boolean;
+  readonly call: (
+    channel: string,
+    input: unknown,
+    span?: Tracer.AnySpan,
+  ) => Effect.Effect<unknown, unknown>;
+  readonly view: (
+    channel: string,
+    input: unknown,
+  ) => Stream.Stream<unknown, unknown>;
+  readonly pushes: (channel: string) => Stream.Stream<unknown>;
 };
 
 // What a caller may hand an invoke on the device link: `signal`

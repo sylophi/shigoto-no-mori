@@ -99,6 +99,11 @@ export const layer = Layer.effect(Registry, make);
   module: the engine's, the host's, the shell's, the terminal's. No
   module builds a runtime to hand out, and no feature gets a runtime
   of its own.
+- A renderer client (a desktop window) is one
+  `ManagedRuntime` over its links (`app/renderer/lib/runtime`), built
+  as the page boots and disposed as it goes. Its calls, views and
+  pushes run on it, so a view's fiber is interrupted when its
+  subscriber stops, and nothing outlives the page.
 - During the migration a converted subsystem keeps its Promise
   interface for unconverted callers through one named adapter next to
   its layer. The adapter is deleted when the last caller moves.
