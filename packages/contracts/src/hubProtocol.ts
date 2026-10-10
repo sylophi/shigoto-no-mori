@@ -10,7 +10,7 @@
 // only the connectInfo ask and its answer (below, and
 // shared/hub/link.ts), but nothing the hub does may depend on that
 // shape. Contract data never rides this wire: the device hub is
-// orchestration only, and data flows over the direct sockets it
+// orchestration only, and data flows over the device links it
 // brokers.
 //
 // TRUST MODEL: the device hub is our own managed service, not an
@@ -19,8 +19,8 @@
 // connect tickets, and the DO authenticates the account when it burns
 // the ticket, so every deliverable peer is by construction a device of
 // the same account. That is why an ask carries no credential.
-// Authorization stays host-local: mutating calls ride the direct
-// sockets only, where dispatch gates them on the host's command-access
+// Authorization stays host-local: mutating calls ride the device
+// links only, where CommandGate holds them to the host's command-access
 // switch, and the hub wire itself answers nothing but connectInfo. The
 // size and count bounds in this file are sanity bounds that keep a bug
 // or a runaway client from ballooning allocations.
@@ -42,7 +42,8 @@ import { PortNumberSchema } from "./schemas/ports.ts";
 // JSON. The device hub carries orchestration only: the connectInfo ask
 // and answer, and presence, all small control frames, so this is a
 // control-frame budget rather than a data budget. Contract data rides
-// the direct sockets and never this wire. An oversize forward is
+// the device links and never this wire. An oversize forward is
+
 // answered with a `too-large` nack to the sender. The worst legitimate
 // frame is a connectInfo answer (a handful of URLs and tickets), far
 // under this, and the worst-case presence roster fits too (asserted in
@@ -95,7 +96,7 @@ export const MAX_ONLINE_DEVICES = 64;
 export const MAX_ACCOUNT_DEVICES = 16;
 
 // Application close codes for the hub socket. Deliberately disjoint
-// from the direct socket's 4001-4003 (frames.ts) so a log line's code
+// from the device link's 4002-4003 (host/socket/server.ts) so a log line's code
 // names its transport. TICKET_REJECTED covers unknown, expired and
 // replayed tickets alike: every case means "mint a fresh ticket and
 // reconnect", and distinguishing them would only tell an attacker
@@ -115,9 +116,8 @@ export const DeviceIdSchema = Schema.NonEmptyString.check(
 );
 
 // The hub socket's liveness pair: the device sends the bare text
-// HUB_PING on the shared heartbeat cadence (HEARTBEAT_INTERVAL_MS in
-// shared/ipc/socket/frames.ts, the same rule the direct sockets
-// follow) and the Durable Object answers HUB_PONG through the
+// HUB_PING on the hub connection's heartbeat (shared/hub/heartbeat.ts)
+// and the Durable Object answers HUB_PONG through the
 // hibernation runtime's auto-response, so a ping never wakes the
 // object and never costs a request. Bare text rather than an envelope
 // on purpose: the auto-response matches an exact string, and neither
@@ -324,7 +324,7 @@ export const ServerEnvelopeSchema = Schema.Union([
 ]);
 export type ServerEnvelope = typeof ServerEnvelopeSchema.Type;
 
-// The one sanctioned serializer, mirroring frames.ts: undefined
+// The one sanctioned serializer: undefined
 // fields are omitted and come back as undefined, so an opaque frame
 // value survives the device hub hop unchanged.
 export function encodeEnvelope(

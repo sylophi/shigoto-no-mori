@@ -2,7 +2,7 @@
 // one stager at a time, across the terminal and the app's periodic
 // check. A pidfile rather than a lock with a timeout, since staging
 // holds it for a whole download, and a crashed holder is told by its
-// pid being dead. The Go sm takes the same file the same way.
+// pid being dead. A v2 Go sm takes the same file the same way.
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";

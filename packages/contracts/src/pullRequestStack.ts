@@ -237,7 +237,7 @@ export function pullRequestStackPosition(
 }
 
 // The project's primary branch, off the listing it already carries:
-// the CLI resolves it once per listing (Worktree.primaryBranch) and
+// the engine resolves it once per listing (Worktree.primaryBranch) and
 // leaves it out when it cannot. A listing without it falls back to the
 // primary checkout's branch, which is right whenever that checkout is
 // on the primary branch.

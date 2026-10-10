@@ -100,7 +100,7 @@ export const worktreeFlags = {
 
 // The worktree a command names, else the one at the cwd, and where the
 // command runs. Named by nothing, a person at a terminal picks from a
-// menu where Go offers one: outside every worktree, in the primary
+// menu where the Go sm offered one: outside every worktree, in the primary
 // checkout, or with -p naming a project the cwd isn't in. `primaryOk`
 // is off for the commands that refuse the primary checkout.
 export const resolveWorktree = (
@@ -180,7 +180,7 @@ export const absolute = (raw: string) =>
 
 // Whether the command runs at or below `path`: the shell a removal or a
 // move leaves standing in a folder that is gone.
-// The shell's own $PWD counts, as Go's Getwd prefers it: through a
+// The shell's own $PWD counts, as Go's Getwd preferred it: through a
 // symlinked folder it names the path the shell sees.
 export const cwdInside = (path: string) => {
   const pwd = process.env.PWD ?? "";

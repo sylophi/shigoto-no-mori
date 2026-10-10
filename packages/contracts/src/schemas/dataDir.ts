@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 // The JSON documents a 2.x data dir keeps at its top level, which the
 // engine's store imports once (packages/engine/src/migrations). Each
 // key is decoded on its own, since a key one build can't read must not
-// cost the others. Each is as lenient as the Go sm's read of it.
+// cost the others. Each is as lenient as the v2 Go sm's read of it.
 
 // registry.json: the projects, the manual order and the worktree marks.
 export const RegistryFileSchema = Schema.Struct({
@@ -45,8 +45,8 @@ export const ShelfSnapshotSchema = Schema.Struct({
 const UseLogSchema = Schema.Array(Schema.Int);
 
 // state.json: use logs and the package scripts' arrangement, by project
-// id. Before registry.json existed it held the projects and the shelf
-// too.
+// id.
+
 export const StateFileSchema = Schema.Struct({
   projectUseLog: Schema.Record(Schema.String, UseLogSchema),
   launcherUseLog: Schema.Record(Schema.String, UseLogSchema),

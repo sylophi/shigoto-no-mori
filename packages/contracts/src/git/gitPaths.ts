@@ -1,6 +1,6 @@
 // Pure helpers for matching repo-relative paths against git's ignored-path
-// listings. Shared so the renderer's carry-over picker and the main
-// process's .worktreeinclude resolution agree on what "gitignored" means.
+// listings. Shared so the renderer's carry-over picker and the host's
+// .worktreeinclude resolution agree on what "gitignored" means.
 
 // A path is gitignored if it appears in the leaf list directly, if its
 // directory form (path + "/") does, or if any ancestor folder is a fully

@@ -17,8 +17,8 @@ import { CallFailureSchema } from "./errors.ts";
 import type { GrantId } from "./grants.ts";
 
 // Every contract module tags its calls with the side that serves them.
-// "host" calls run on the process that owns the projects, which may
-// live on another machine one day. "client" calls stay on the machine
+// "host" calls run on the process that owns the projects, this
+// machine's or a peer's. "client" calls stay on the machine
 // the window runs on (native dialogs, shell, app menu). Remoteness is
 // a property of the transport a scope is wired to, never of the calls
 // themselves.
@@ -37,9 +37,9 @@ export const Scope = Context.Service<"sm/contracts/Scope", ContractScope>(
 );
 
 // Exposure axis, independent of scope. Only calls annotated true reach
-// a remote websocket peer (main/ipc/register.ts routes them to the ws
-// binding). A host-scoped invoke MUST say, so a new call can never
-// silently join the remote surface by inheriting a default. Anything
+// a peer (LinkGroup in link.ts). A host-scoped invoke MUST say, so a
+// new call can never silently join the remote surface by inheriting a
+// default. Anything
 // other than exactly true is local-only. On a push, only one annotated
 // true reaches remote peers, so a push carrying host-only detail is
 // local by default.
@@ -47,9 +47,10 @@ export const Remote = Context.Service<"sm/contracts/Remote", boolean>(
   "sm/contracts/Remote",
 );
 
-// The gate axis for the direct listener. Gated true marks a call served
+// The gate axis for the device link. Gated true marks a call served
 // to another device only while this host's command-access switch is on
-// (host/socket/server.ts's dispatch gate, the one place that decides).
+// (CommandGate in link.ts, the one place that decides).
+
 // That is every call that changes state the user owns (writes files or
 // config, runs a script, moves a branch or a worktree), and also a few
 // READS kept behind the switch because of what they disclose:

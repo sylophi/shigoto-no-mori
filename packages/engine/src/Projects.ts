@@ -216,7 +216,7 @@ const make = Effect.gen(function* () {
         (name) => isFolder(path.join(dir, name)),
         { concurrency: 16 },
       );
-      // One folder at a time, as Go walks: a wide tree can't run out of
+      // One folder at a time, as Go walked: a wide tree can't run out of
       // file handles, which would read as folders with nothing in them.
       const nested = yield* Effect.forEach(folders, (name) =>
         walk(path.join(dir, name), depth + 1),

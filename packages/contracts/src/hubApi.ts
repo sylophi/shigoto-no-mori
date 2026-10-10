@@ -1,5 +1,5 @@
 // The hub Worker's HTTP API, one definition for both sides: the Worker
-// serves it (hub/src/api.ts) and the app calls it through the client
+// serves it (hub/src/worker.ts) and the app calls it through the client
 // derived from it (app/shared/account/service.ts), so a route, a body
 // or a refusal cannot drift between them. The socket the devices hold
 // to their account's Durable Object is hubProtocol.ts.

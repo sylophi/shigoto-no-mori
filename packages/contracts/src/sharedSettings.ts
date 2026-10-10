@@ -1,6 +1,6 @@
 // The merge behind shared settings (packages/contracts/src/schemas/sharedSettings.ts):
 // pure functions over two copies of the document, shared by every
-// place a copy lives (the host's registry.json, a browser's
+// place a copy lives (the host's store, a browser's
 // localStorage) and by the renderer that carries entries between them.
 //
 // Each entry is a last-writer-wins register. Merging is commutative,
@@ -317,8 +317,7 @@ export function worktreeSortValues(doc: SharedSettingsDoc): [string, string][] {
 }
 
 // Where a copy is kept. `transact` runs `next` on the stored copy
-// atomically (under the registry lock on a host) and stores its answer
-// unless that is undefined.
+// atomically and stores its answer unless that is undefined.
 export type SharedSettingsStorage = {
   read(): SharedSettingsDoc;
   transact(

@@ -83,7 +83,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const names = flavorNames(flavor);
-  // Unset reads as the working directory, as it does for the Go sm.
+  // Unset reads as the working directory, as it did for the Go sm.
   const home = yield* Config.String("HOME").pipe(Config.withDefault("."));
   // A `~/` path, joined to the home directory and cleaned as Go's
   // filepath.Join cleans it. Any other path as it is.
