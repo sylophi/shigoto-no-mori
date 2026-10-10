@@ -10,23 +10,25 @@ import {
   rowDeviceId,
   WORKTREE_ROUTE_PATHS,
 } from "@/lib/routePaths";
-import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
+import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
+import { drawerKey, openScriptTab } from "@/store/terminalDrawer";
 
 // The worktree pages' params, read non-strictly because the pages
 // share them across five routes (the router can only type params
-// against ONE route). `hash` exists only under the commit page and
-// `scriptKey` only under the console. Keeping the one unavoidable cast
-// here gives the pages a single seam instead of a copy each.
+// against ONE route). `hash` exists only under the commit page.
+// Keeping the one unavoidable cast here gives the pages a single seam
+// instead of a copy each.
 export function useScopedWorktreeParams() {
   return useParams({ strict: false }) as {
     projectId: string;
     worktreeId: string;
     hash: string;
-    scriptKey: string;
   };
 }
 
-type WorktreePage = keyof typeof WORKTREE_ROUTE_PATHS;
+// The worktree's pages, and a script's console, which is a tab of the
+// page's terminal drawer.
+type WorktreePage = keyof typeof WORKTREE_ROUTE_PATHS | "script";
 
 interface WorktreePageParams {
   projectId: string;
@@ -51,6 +53,17 @@ export function useWorktreeNav() {
     replace = false,
     search?: Record<string, unknown>,
   ) => {
+    if (page === "script") {
+      const slot = paramToSlot(params.scriptKey ?? "");
+      if (slot !== null) {
+        openScriptTab(drawerKey(on, params.projectId, params.worktreeId), slot);
+      }
+      goOn(on, "detail", {
+        projectId: params.projectId,
+        worktreeId: params.worktreeId,
+      });
+      return;
+    }
     void navigate({
       to: WORKTREE_ROUTE_PATHS[page],
       params: { ...params, deviceId: on },
@@ -138,11 +151,25 @@ export function useWorktreeNav() {
       );
     },
 
-    // The script's console, on the device this page is scoped to: a
-    // run on a peer streams back over its direct session, so its
-    // console is a page of that device like the diffs are.
+    // The script's console, on the device this page is scoped to: its
+    // worktree's page, with the console's tab picked in the drawer. A
+    // run on a peer streams back over its direct session.
     toScript(projectId: string, worktreeId: string, slot: ScriptSlot) {
       go("script", { projectId, worktreeId, scriptKey: slotToParam(slot) });
+    },
+
+    // The same on a NAMED device (the Live page, which spans them).
+    toScriptOn(
+      on: string,
+      projectId: string,
+      worktreeId: string,
+      slot: ScriptSlot,
+    ) {
+      goOn(on, "script", {
+        projectId,
+        worktreeId,
+        scriptKey: slotToParam(slot),
+      });
     },
 
     // Explicitly a NAMED device's page, whatever the surrounding scope:

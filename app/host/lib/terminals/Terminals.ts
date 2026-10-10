@@ -125,6 +125,9 @@ export class Terminals extends Context.Service<
     ) => Effect.Effect<void, UnknownTerminalError>;
     // Closes the terminals whose worktree, or its project, is gone.
     readonly closeMissing: Effect.Effect<void>;
+    // How many terminals run something in the foreground: what a quit
+    // asks about.
+    readonly busy: Effect.Effect<number>;
   }
 >()("sm/host/Terminals") {}
 
@@ -478,6 +481,28 @@ const make = (options: {
         );
         yield* PubSub.publish(session.events, { kind: "size", ...size });
       }),
+      // A shell is busy while its terminal's foreground process group
+      // is not its own: a job it started holds the terminal.
+      busy: Effect.gen(function* () {
+        const pids = [...sessions.values()].map((session) => session.pty.pid);
+        if (pids.length === 0) return 0;
+        const { stdout } = yield* Processes.exec("ps", [
+          "-o",
+          "pid=,tpgid=",
+          "-p",
+          pids.join(","),
+        ]).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
+          ),
+          Effect.orElseSucceed(() => ({ stdout: "" })),
+        );
+        return stdout
+          .split("\n")
+          .map((line) => line.trim().split(/\s+/).map(Number))
+          .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid).length;
+      }).pipe(Effect.withSpan("Terminals.busy")),
       closeMissing: Effect.gen(function* () {
         const missing: string[] = [];
         for (const session of sessions.values()) {
@@ -508,6 +533,12 @@ export const adapter = promiseAdapter.layer;
 
 // Settles at once while the service is not up: there is nothing to
 // close then.
+// What a quit asks about.
+export const busyTerminals = (): Promise<number> =>
+  promiseAdapter
+    .run(Effect.flatMap(Terminals, (terminals) => terminals.busy))
+    .catch(() => 0);
+
 export const closeMissingTerminals = () =>
   promiseAdapter.runIfOpen(
     Effect.flatMap(Terminals, (terminals) => terminals.closeMissing),

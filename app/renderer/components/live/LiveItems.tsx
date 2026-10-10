@@ -9,7 +9,6 @@
 // another local port, and its stop, which never needs the peer.
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
 import type { RunningScript, Worktree } from "@shigomori/contracts/schemas";
 import { RunnerScope } from "@/components/worktreeDetail/mirror/MirrorAction";
@@ -24,10 +23,10 @@ import {
   useDeviceProperName,
 } from "@/hooks/remote/useRemoteDevices";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { openExternalUrl } from "@/lib/openExternal";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
-import { slotLabel, slotToParam } from "@/store/scriptRuns";
+import { slotLabel } from "@/store/scriptRuns";
 import {
   DeviceNameView,
   ForwardItemView,
@@ -52,7 +51,7 @@ export function ScriptItem({
   deviceId: string;
   run: RunningScript;
 }) {
-  const navigate = useNavigate();
+  const { toScriptOn } = useWorktreeNav();
   const { state, canRun, start, stop } = useScriptRunner(
     { projectId: run.projectId, id: run.worktreeId },
     run.slot,
@@ -74,15 +73,7 @@ export function ScriptItem({
       since={run.startedAt}
       readOnlyNote={canRun ? null : peerReadOnlyNote(deviceName)}
       onOutput={() =>
-        void navigate({
-          to: WORKTREE_ROUTE_PATHS.script,
-          params: {
-            deviceId,
-            projectId: run.projectId,
-            worktreeId: run.worktreeId,
-            scriptKey: slotToParam(run.slot),
-          },
-        })
+        toScriptOn(deviceId, run.projectId, run.worktreeId, run.slot)
       }
       restart={
         run.slot.kind === "package"

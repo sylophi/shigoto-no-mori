@@ -1,6 +1,7 @@
 // The terminal's parts: a worktree page's drawer with its tabs over a
-// shell fed a fixture prompt, a device's own terminals on their page,
-// and the sidebar's list of them.
+// script's console, a device's own terminals on their page over a
+// shell fed a fixture prompt, and the sidebar's list of them.
+import { ScriptConsoleView } from "@/components/scriptConsole/ScriptConsoleView";
 import { DeviceTerminalsPageView } from "@/components/terminal/DeviceTerminalsPageView";
 import { TerminalDrawerView } from "@/components/terminal/TerminalDrawerView";
 import { TerminalTabsView } from "@/components/terminal/TerminalTabsView";
@@ -81,15 +82,33 @@ export function TerminalPartsScene() {
             tabs={[
               { id: "a", label: "Terminal 1" },
               { id: "b", label: "Terminal 2" },
-              { id: "c", label: "dev", ended: true },
+              { id: "script:dev", label: "dev" },
             ]}
-            selectedId="b"
+            selectedId="script:dev"
             onSelect={() => {}}
             onClose={() => {}}
             onNew={() => {}}
             onHide={() => {}}
           >
-            {shell}
+            <ScriptConsoleView
+              command="vite --port 5173"
+              state={{
+                runId: "r",
+                status: "running",
+                hasOutput: true,
+                interactive: true,
+                exitCode: null,
+                startedAt: 0,
+                endedAt: null,
+                cancelling: false,
+              }}
+              busy
+              readOnlyNote={null}
+              onRun={() => {}}
+              onStop={() => {}}
+              onClear={null}
+              terminal={shell}
+            />
           </TerminalTabsView>
         </TerminalDrawerView>
       </div>
