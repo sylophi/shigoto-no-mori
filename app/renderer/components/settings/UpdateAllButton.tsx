@@ -1,7 +1,7 @@
 import { useUpdateAll } from "@/hooks/system/useUpdater";
 import type { OutdatedDevice } from "@/lib/updates";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
-import { UpdateAllButtonView } from "./UpdateAllButtonView";
+import { UpdateAllButtonView } from "@shigomori/ui/views/settings/UpdateAllButtonView.tsx";
 
 // Update all (UpdateAllButtonView) over the devices behind.
 export function UpdateAllButton({ outdated }: { outdated: Outdated }) {

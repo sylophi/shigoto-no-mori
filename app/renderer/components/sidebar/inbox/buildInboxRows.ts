@@ -22,9 +22,13 @@ import {
   remoteWorktreeKey,
   worktreeRowKey,
 } from "../buildSidebarRows";
-import type { SidebarDeviceBadge } from "../DeviceBadgeView";
+import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
-import type { InboxShelf, SidebarRow, SidebarViewModel } from "../sidebarRow";
+import type {
+  InboxShelf,
+  SidebarRow,
+  SidebarViewModel,
+} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { byInboxRank, inboxRank, type InboxRank } from "./inboxRank";
 
 interface BuildInboxRowsArgs {

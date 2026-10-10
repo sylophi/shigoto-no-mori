@@ -2,7 +2,7 @@ import {
   compareAppVersions,
   isPrereleaseVersion,
   releaseVersionOf,
-} from "@shared/releases";
+} from "@shigomori/contracts/releaseVersions";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
 
 // Which devices are behind the newest app release, for the update toast

@@ -13,7 +13,7 @@ import {
 import {
   SidebarDeviceTerminalsView,
   SidebarTerminalsView,
-} from "@/components/sidebar/SidebarTerminalsView";
+} from "@shigomori/ui/views/sidebar/SidebarTerminalsView.tsx";
 import { THINKPAD_ID } from "../fake-host/fixtures";
 import { deviceById } from "./world";
 

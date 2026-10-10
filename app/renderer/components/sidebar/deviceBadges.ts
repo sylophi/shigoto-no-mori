@@ -2,7 +2,7 @@
 // device registry.
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
-import type { SidebarDeviceBadge } from "./DeviceBadgeView";
+import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 
 // Every peer on the account as a badge, by device id: the lookup behind
 // a badge that names a device by id alone (a local row's mirror). Off

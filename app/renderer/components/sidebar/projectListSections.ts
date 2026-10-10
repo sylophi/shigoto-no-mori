@@ -3,21 +3,12 @@
 // section of their own. What the home page's grid and the inbox's
 // New worktree menu list, so neither can disagree with the tree about
 // what there is or where it sits.
+import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+
 import {
   buildSidebarRows,
   type BuildSidebarRowsArgs,
 } from "./buildSidebarRows";
-import type { SidebarRow } from "./sidebarRow";
-
-export type ProjectListRow = Extract<SidebarRow, { kind: "project" }>;
-
-export interface ProjectSection {
-  key: string;
-  // The owner's name, null for the pinned projects and for a list that
-  // isn't split.
-  label: string | null;
-  rows: ProjectListRow[];
-}
 
 const NO_SHELVES = {
   agentWorking: new Set<string>(),

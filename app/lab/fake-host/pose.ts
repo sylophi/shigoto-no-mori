@@ -3,7 +3,7 @@
 //   ?theme=light|dark        (default light)
 //   ?doubutsu=0|1            (default 1, matching the product default)
 //   ?light=<id>, ?dark=<id>  the doubutsu palette of each appearance
-//                            (the ids in shared/themes.ts, default
+//                            (the ids in packages/ui/src/lib/themes.ts, default
 //                            cream and charcoal)
 //   ?updatedFrom=<version>   the build the window last ran (below)
 // The other params are read where they are answered: ?peers by the
@@ -19,7 +19,7 @@ import {
   DEFAULT_LIGHT_THEME,
   LIGHT_THEME_IDS,
   type LightTheme,
-} from "../../shared/themes";
+} from "@shigomori/ui/lib/themes.ts";
 
 function pickOf<Id extends string>(
   raw: string | null,

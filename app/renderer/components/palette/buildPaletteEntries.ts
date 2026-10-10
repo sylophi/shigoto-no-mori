@@ -1,49 +1,46 @@
+import type {
+  PaletteEntry,
+  PalettePage,
+  PaletteProject,
+} from "@shigomori/ui/views/palette/paletteEntries.ts";
+
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
+
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
+
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
+
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
+
 import { rankByScore, scoreFields } from "@shigomori/ui/lib/fuzzyMatch.ts";
-import type { LucideIcon } from "lucide-react";
+
 import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
+
 import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
+
 import { isHiddenByPrefix } from "@shigomori/contracts/sharedSettings";
+
 import {
   isAgentWorking,
   worktreeLastActivityAt,
   type Project,
-  type PullRequest,
   type Worktree,
 } from "@shigomori/contracts/schemas";
+
 import {
   deviceBadgeOf,
   mirrorBadgeLookup,
   mirrorPairsOf,
-  ownerOf,
   projectGroupKey,
   worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
-import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadgeView";
-import { worktreeTitle } from "@/lib/worktreeTitle";
+import { ownerOf } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
-// One worktree the palette can land on, wherever it lives.
-export interface PaletteEntry {
-  // The sidebar's own row key, so a worktree has one identity in both.
-  key: string;
-  worktree: Worktree;
-  project: Project;
-  // The peer it lives on. Undefined for this machine's own.
-  device: SidebarDeviceBadge | undefined;
-  // The peer a local worktree is mirrored with (its peer row folds in).
-  mirror: SidebarDeviceBadge | undefined;
-  // The pull request open (or once open) for its branch.
-  pr: PullRequest | undefined;
-  // Matches a hidden-worktree prefix: listed only for a query.
-  hidden: boolean;
-  // Merged, shelved or agent working: still found, but below the work in
-  // progress.
-  sunk: boolean;
-}
+import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
+
+import { worktreeTitle } from "@shigomori/ui/lib/worktreeTitle.ts";
 
 export interface PaletteList {
   entries: PaletteEntry[];
@@ -197,23 +194,6 @@ const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
 
 const entryWeight = (entry: PaletteEntry) => (entry.sunk ? 0.5 : 1);
 
-// A project the query names, standing for its checkouts on every
-// device: one row per sidebar group, however many machines hold it.
-export interface PaletteProject {
-  key: string;
-  // The checkout the row names: this device's when it has one.
-  project: Project;
-  // The peer that checkout is on. Undefined for this machine's own.
-  device: SidebarDeviceBadge | undefined;
-  // Where ↩ goes: its worktree the list would put first. Undefined
-  // for a project with none, whose ↩ is its new-worktree page.
-  lead: PaletteEntry | undefined;
-  // This device's checkout, when it has one: where a quick create goes.
-  localProject: Project | undefined;
-  worktreeCount: number;
-  deviceCount: number;
-}
-
 // Where a project opens, here and on its home page tile
 // (home/gridModel.ts): of its worktrees in the list's order, the first
 // that isn't shelved, merged or hidden, one on a device that can be
@@ -329,20 +309,6 @@ export function leadingCount<T>(
     (item) => scoreFields(query, fields(item)) < top,
   );
   return trailing < 0 ? ranked.length : trailing;
-}
-
-// A page of the app the query names: one the sidebar's footer leads to,
-// or a section of Settings.
-export interface PalettePage {
-  key: string;
-  label: string;
-  icon: LucideIcon;
-  // Settings, for a section of it: where the row says it is, and what
-  // the query can name it by too ("settings appearance").
-  parent?: string;
-  // What else it goes by ("Devices" for the account).
-  aliases?: readonly string[];
-  open: () => void;
 }
 
 export const pageFields = ({ label, parent, aliases = [] }: PalettePage) =>

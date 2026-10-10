@@ -6,7 +6,7 @@ import {
   type LightTheme,
   LIGHT_THEMES,
   nextVariant,
-} from "@shared/themes";
+} from "@shigomori/ui/lib/themes.ts";
 import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { queryKeys } from "@/lib/queryKeys";
@@ -14,12 +14,12 @@ import { usePalette } from "./usePalette";
 import { useTheme } from "./useTheme";
 
 // Ctrl+Alt+Shift+L, the hidden way to a palette's variants
-// (shared/themes.ts): steps the saved light pick through its swatch's
-// cycle and saves it at once. Every build has it. It listens only while
-// the window shows that saved pick (light, doubutsu on, no preview
+// (packages/ui/src/lib/themes.ts): steps the saved light pick through its
+// swatch's cycle and saves it at once. Every build has it. It listens only
+// while the window shows that saved pick (light, doubutsu on, no preview
 // staged over it) and the caller enables it, which AppShell does off
-// Settings, whose form keeps a staged copy of the pick its Save would
-// write back.
+// Settings, whose form keeps a staged copy of the pick its Save would write
+// back.
 export function usePaletteVariantHotkey(enabled: boolean): void {
   const queryClient = useQueryClient();
   const { resolved } = useTheme();

@@ -1,3 +1,4 @@
+import type { SidebarMarks } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
 import { useQuery } from "@tanstack/react-query";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { hasLocalHost } from "@/lib/localHost";
@@ -75,19 +76,6 @@ export function useMarkAgentsWaiting(): boolean {
 // (buildSidebarRows' inline). Off unless switched on.
 export function useInlineWorktrees(): boolean {
   return useClientFlag(inlineWorktrees);
-}
-
-// The marks this window's sidebar rows wear (Settings, Appearance), in
-// one read, for the containers that hand them to the rows' views.
-export interface SidebarMarks {
-  // Terrier's paw on a terrier-sourced project.
-  terrier: boolean;
-  // A peer's badge on its rows and project headers.
-  deviceBadges: boolean;
-  // An agent waiting on you, on its worktree's row.
-  agentsWaiting: boolean;
-  // Agent-working worktrees filed on their own shelf.
-  allowAgentWorking: boolean;
 }
 
 export function useSidebarMarks(): SidebarMarks {

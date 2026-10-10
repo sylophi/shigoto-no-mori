@@ -1,3 +1,4 @@
+import { type Owner, ownerOf } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import {
   placeByStack,
   pullRequestStackFor,
@@ -21,14 +22,14 @@ import type {
   Worktree,
   WorktreeSortMode,
 } from "@shigomori/contracts/schemas";
-import type { SidebarDeviceBadge } from "./DeviceBadgeView";
+import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
   GROUP_SHELVES,
   type GroupShelf,
   type RemoteProjectMember,
   type SidebarRow,
   type SidebarViewModel,
-} from "./sidebarRow";
+} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { sortByProject } from "@/lib/sortProjects";
 import { sortWorktrees } from "@/lib/sortWorktrees";
 
@@ -623,24 +624,6 @@ interface ProjectGroup {
   pullRequests: Record<string, PullRequest> | undefined;
   local: boolean;
   remote: RemoteForestItem[];
-}
-
-type Owner = { key: string; host: string; name: string; repo: string };
-
-// Who a project belongs to, off its remote's `host/owner/repo`: the
-// org or user account, keyed by host too (one name on two hosts is two
-// owners) and case-folded (hosts treat owner names that way). `repo`
-// is the rest of the path, the repo's own name. Null when the project
-// has no network remote, or its path has no owner segment.
-export function ownerOf(project: Project): Owner | null {
-  const [host, owner, ...repo] = project.remote?.split("/") ?? [];
-  if (!host || !owner || repo.length === 0) return null;
-  return {
-    key: `${host}/${owner}`.toLowerCase(),
-    host,
-    name: owner,
-    repo: repo.join("/"),
-  };
 }
 
 const isPinned = ([header]: SidebarRow[]) =>

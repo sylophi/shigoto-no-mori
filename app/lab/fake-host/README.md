@@ -84,7 +84,7 @@ Poses ride the URL:
 
 - `?theme=light|dark`, `?doubutsu=0|1`: appearance, seeded pre-paint.
   `?light=<id>` and `?dark=<id>` pick each appearance's doubutsu
-  palette (the ids in `shared/themes.ts`, default `cream` and
+  palette (the ids in `packages/ui/src/lib/themes.ts`, default `cream` and
   `charcoal`).
 - `?peers=sm:connected,tp:connected,mini:online,pc:offline`: presence
   per device key (`sm` Studio Mac, `tp` Thinkpad, `mini` Mini, `pc`

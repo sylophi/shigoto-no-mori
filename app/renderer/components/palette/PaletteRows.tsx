@@ -1,37 +1,28 @@
+import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
+
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
+
 import {
   useAllowAgentWorking,
   useShowDeviceBadges,
 } from "@/hooks/config/useSidebarMarks";
+
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { isAgentWorking, type Project } from "@shigomori/contracts/schemas";
-import type {
-  PaletteEntry,
-  PalettePage,
-  PaletteProject,
-} from "./buildPaletteEntries";
+
+import { isAgentWorking } from "@shigomori/contracts/schemas";
+
+import type { PaletteProject } from "@shigomori/ui/views/palette/paletteEntries.ts";
+
+import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
+
 import {
   CreateRowView,
   PageRowView,
   ProjectRowView,
   WorktreeRowView,
-} from "./PaletteRowsView";
-
-// Everything the list can hold: the worktrees, the projects and pages a
-// query names, and, for a query, the worktree it could make.
-export type PaletteRow =
-  | { kind: "worktree"; key: string; entry: PaletteEntry }
-  | { kind: "project"; key: string; item: PaletteProject }
-  | { kind: "page"; key: string; page: PalettePage }
-  | {
-      kind: "create";
-      key: string;
-      branch: string;
-      // Where it can go, the one ↩ picks first.
-      targets: [Project, ...Project[]];
-    };
+} from "@shigomori/ui/views/palette/PaletteRowsView.tsx";
 
 export function PaletteRowContent({
   row,

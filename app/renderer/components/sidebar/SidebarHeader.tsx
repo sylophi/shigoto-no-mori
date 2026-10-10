@@ -3,7 +3,7 @@
 // a one-way peek at prod styling, reset on unmount (window reload).
 import { useState } from "react";
 import { hasLocalHost } from "@/lib/localHost";
-import { SidebarHeaderView } from "./SidebarHeaderView";
+import { SidebarHeaderView } from "@shigomori/ui/views/sidebar/SidebarHeaderView.tsx";
 
 export function SidebarHeader() {
   // A client fact off the preload bridge, not runtime.info: the badge

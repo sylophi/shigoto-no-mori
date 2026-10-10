@@ -3,7 +3,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
-import { AgentsSectionView } from "./AgentsSectionView";
+import { AgentsSectionView } from "@shigomori/ui/views/settings/AgentsSectionView.tsx";
 
 // The agent hooks section (AgentsSectionView), installed and removed
 // through the scoped device right away.
