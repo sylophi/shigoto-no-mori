@@ -41,8 +41,11 @@ export function fakeHostBaseConfig(opts: {
     // The contracts package is served as source. Prebundled, it carries a
     // copy of effect's Schema of its own, and the renderer's Schema calls
     // fail on schemas built by that copy.
+    // The ui package is source the app imports, so the scanner crawls it
+    // too: a dependency only it imports (Base UI's dialog) is served raw
+    // otherwise, and its CommonJS imports fail in the page.
     optimizeDeps: {
-      entries: [opts.entry],
+      entries: [opts.entry, "../../../packages/ui/src/**/*.{ts,tsx}"],
       exclude: ["@shigomori/contracts"],
     },
     define: {
