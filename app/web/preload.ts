@@ -49,12 +49,16 @@ export function installWebBridge(): WebBridge {
     }
   });
   // A tab coming back to the foreground, or the browser reporting the
-  // network back, is when a socket that died meanwhile should be found
-  // out at once: probe both planes so dead sessions redial in seconds
-  // (the desktop does the same on the power monitor's resume).
+  // network gone or back, is when a socket that died meanwhile should be
+  // found out at once: probe both planes so dead sessions redial in
+  // seconds (the desktop does the same on the power monitor's resume),
+  // and a network the browser knows is gone reads as reconnecting
+  // within the probe's window rather than as connected until the
+  // heartbeat gives up.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") bridge.probe();
   });
   window.addEventListener("online", () => bridge.probe());
+  window.addEventListener("offline", () => bridge.probe());
   return bridge;
 }
