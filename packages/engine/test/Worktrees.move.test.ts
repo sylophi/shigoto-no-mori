@@ -1,6 +1,5 @@
-// `worktrees move` out of a v2 root into `wt`: the worktree stays
-// managed, and what is kept under its id follows it (real git on a
-// sandbox data dir).
+// `worktrees move` into `wt`: the worktree is managed there, and what
+// is kept under its id follows it (real git on a sandbox data dir).
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -16,10 +15,10 @@ beforeEach(() => {
 });
 afterEach(() => box.remove());
 
-it("moves a worktree from a v2 root into wt, managed, its id carried over", async () => {
+it("moves a worktree into wt, managed, its id carried over", async () => {
   const repo = box.repo("proj", { "README.md": "hi\n" });
   const dataDir = box.side("engine");
-  const from = join(dataDir, "worktrees", "proj", "fox");
+  const from = join(box.home, "elsewhere", "fox");
   const to = join(dataDir, "wt", "proj", "fox");
   box.git(repo, "worktree", "add", "-q", "-b", "fox", from);
   const moved = (await box.engine(
@@ -29,7 +28,7 @@ it("moves a worktree from a v2 root into wt, managed, its id carried over", asyn
       const project = yield* registry.register({ name: "proj", path: repo });
       const found = yield* worktrees.identities(project);
       const fox = found.find(({ name }) => name === "fox");
-      assert.ok(fox && !fox.isExternal);
+      assert.ok(fox?.isExternal);
       yield* worktrees.setAutoPull(fox, true);
       const result = yield* worktrees.move({ project, worktree: fox }, to);
       return {
@@ -49,5 +48,5 @@ it("moves a worktree from a v2 root into wt, managed, its id carried over", asyn
   assert.equal(moved.previousId, moved.oldId);
   assert.notEqual(moved.worktree.id, moved.oldId);
   assert.deepEqual(moved.autoPull, [moved.worktree.id]);
-  assert.ok(!existsSync(join(dataDir, "worktrees", "proj")));
+  assert.ok(!existsSync(from));
 });
