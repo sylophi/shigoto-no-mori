@@ -66,10 +66,7 @@ export function useCommitActions(
       squash.isPending ||
       creating,
     revert: (commit: CommitSummary) =>
-      revert.mutate(
-        { projectId, worktreeId, hash: commit.hash },
-        { onSuccess: () => say(worktree, `Reverted ${commit.hash}`) },
-      ),
+      revert.mutate({ projectId, worktreeId, hash: commit.hash }),
     cherryPickInto: (target: Worktree, commit: CommitSummary) =>
       cherryPick.mutate(
         { projectId, worktreeId: target.id, hash: commit.hash },
@@ -83,12 +80,7 @@ export function useCommitActions(
     squash: (commit: CommitSummary, head: string) =>
       squash.mutate(
         { projectId, worktreeId, hash: commit.hash, expectHead: head },
-        {
-          onSuccess: (rewritten) => {
-            say(worktree, "Squashed into the commit before");
-            onRewritten?.(rewritten);
-          },
-        },
+        { onSuccess: (rewritten) => onRewritten?.(rewritten) },
       ),
     reword: (commit: CommitSummary, head: string) =>
       setRewording({ hash: commit.hash, head }),
