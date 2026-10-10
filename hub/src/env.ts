@@ -27,7 +27,7 @@ export interface Env {
   TICKET_TTL_MS?: string;
   // Per-device tunnel provisioning. All four must be set for POST
   // /tunnel to work. Any unset means the tunnel route answers
-  // HubTunnelUnconfiguredError and everything else works as before. All
+  // HubTunnelUnconfiguredError and everything else still works. All
   // four are wrangler secrets (dashboard-set plain vars do not survive
   // a deploy). The API token needs Cloudflare Tunnel edit and DNS edit
   // on the tunnel zone. See README.md.

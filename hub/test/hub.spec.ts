@@ -336,11 +336,10 @@ describe("relaying", () => {
     const b = await enrollAndConnect("acct-big", "dev-big-b");
     await a.socket.untilPresence(["dev-big-a", "dev-big-b"]);
     await b.socket.untilPresence(["dev-big-a", "dev-big-b"]);
-    // A send right at the device hub's control-frame cap (64 KiB since
-    // the wire went orchestration-only), whose forward, naming the
-    // sender where the send named the target, lands just past it: a
-    // legitimate broker frame is far smaller, so anything here is a
-    // client aiming data at the wrong wire and gets the nack.
+    // A send right at the device hub's control-frame cap (64 KiB), whose
+    // forward, naming the sender where the send named the target, lands
+    // just past it: a legitimate broker frame is far smaller, so anything
+    // here is a client aiming data at the wrong wire and gets the nack.
     const overhead = encodeEnvelope({
       t: "relay",
       to: "dev-big-b",

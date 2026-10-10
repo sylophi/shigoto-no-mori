@@ -57,7 +57,7 @@ const KEY_TAG_PREFIX = "key:";
 // dev hub, a socket sends at most two messages a second (a dial's
 // connectInfo ask and its answer, per peer), so a socket of an account
 // at its device cap asks at most 30 in a burst, and these sit ten times
-// above that. Terminal and file traffic ride the direct sockets, never
+// above that. Terminal and file traffic ride the device links, never
 // this one. The bucket lives in memory: an object that hibernated was
 // idle, so starting it full again loses nothing.
 const RELAY_BURST = 300;
