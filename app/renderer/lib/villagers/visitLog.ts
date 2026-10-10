@@ -25,13 +25,9 @@
 // residents of the day, a device not heard from yet included, stay
 // before it, and a copy is still found against what it copied.
 import type { QueryClient } from "@tanstack/react-query";
-import type { Project, Worktree } from "@shigomori/contracts/schemas";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { readStored, readStoredJson, writeStored } from "@/lib/localStorage";
-import {
-  hostKeyDeviceId,
-  isWorktreeListKey,
-  queryKeysFor,
-} from "@/lib/queryKeys";
+import { heldProjects, heldWorktreeLists } from "@/lib/viewFeed";
 import { keyOf, residentOf } from "@shigomori/ui/lib/villagerVoice.ts";
 import {
   createExternalStore,
@@ -87,46 +83,20 @@ function visitKey(deviceId: string, worktree: Worktree): string {
   return `${deviceId}:${keyOf(worktree)}:${worktree.createdAt ?? ""}`;
 }
 
-// Every worktree list the window holds, with the device it is from.
-function cachedLists(
-  queryClient: QueryClient,
-): { deviceId: string; list: readonly Worktree[] }[] {
-  return queryClient
-    .getQueryCache()
-    .findAll({ predicate: (query) => isWorktreeListKey(query.queryKey) })
-    .flatMap((query) => {
-      const list = query.state.data as readonly Worktree[] | undefined;
-      return list === undefined
-        ? []
-        : [{ deviceId: String(hostKeyDeviceId(query.queryKey)), list }];
-    });
-}
-
 // The repo a device's project is a checkout of, or null when unknown.
-function repoOf(
-  queryClient: QueryClient,
-  deviceId: string,
-  projectId: string,
-): string | null {
-  const projects = queryClient.getQueryData<readonly Project[]>(
-    queryKeysFor(deviceId).projects(),
-  );
+function repoOf(deviceId: string, projectId: string): string | null {
   return (
-    projects?.find((project) => project.id === projectId)?.identity ?? null
+    heldProjects(deviceId)?.find((project) => project.id === projectId)
+      ?.identity ?? null
   );
 }
 
 // Whether `worktree` is a copy of a counted worktree on another device
 // (see the header).
-function isCopy(
-  queryClient: QueryClient,
-  held: VisitLog,
-  deviceId: string,
-  worktree: Worktree,
-): boolean {
-  const repo = repoOf(queryClient, deviceId, worktree.projectId);
+function isCopy(held: VisitLog, deviceId: string, worktree: Worktree): boolean {
+  const repo = repoOf(deviceId, worktree.projectId);
   if (repo === null) return false;
-  return cachedLists(queryClient).some(
+  return heldWorktreeLists().some(
     (other) =>
       other.deviceId !== deviceId &&
       other.list.some(
@@ -134,7 +104,7 @@ function isCopy(
           candidate.name === worktree.name &&
           !candidate.isPrimary &&
           held[visitKey(other.deviceId, candidate)] != null &&
-          repoOf(queryClient, other.deviceId, candidate.projectId) === repo,
+          repoOf(other.deviceId, candidate.projectId) === repo,
       ),
   );
 }
@@ -166,7 +136,7 @@ export async function recordVisits(
       continue;
     }
     next[key] =
-      quiet(worktree) || isCopy(queryClient, next, deviceId, worktree)
+      quiet(worktree) || isCopy(next, deviceId, worktree)
         ? null
         : { slug, at: worktree.createdAt ?? Date.now() };
   }
@@ -184,7 +154,7 @@ export async function recordCachedVisits(
   // Each one reads the log and writes it back in one step, after its
   // await, so they can run together.
   await Promise.all(
-    cachedLists(queryClient).map(({ deviceId, list }) =>
+    heldWorktreeLists().map(({ deviceId, list }) =>
       recordVisits(queryClient, deviceId, list, quiet),
     ),
   );

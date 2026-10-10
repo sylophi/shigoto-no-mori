@@ -25,16 +25,12 @@ import { useDeviceFilter } from "./deviceFilter";
 export function useForestSources({
   arrangeMode = false,
   inboxFacts = false,
-  warm = false,
 }: {
   // Arranging is about this machine's project order and ignores the
   // filter.
   arrangeMode?: boolean;
   // The inbox's extra facts about the peers' worktrees.
   inboxFacts?: boolean;
-  // Mounted beside the always-mounted sidebar, so its cache is warm:
-  // read it rather than re-probing git for every project on mount.
-  warm?: boolean;
 } = {}) {
   const { data: projects = [], isLoading } = useProjects();
   const sortMode = useProjectSort();
@@ -46,19 +42,13 @@ export function useForestSources({
   // arrange mode and arrange mode is only reachable via the manual sort,
   // where the orders match.
   const orderedProjects = sortProjects(projects, sortMode);
-  // Subscribed here rather than inside the row builders so the two
-  // views share one set of observers. Toggling the view then costs
-  // nothing: the builders are plain functions over these results, and
-  // the queries (which re-probe git for every project on mount) never
-  // unmount.
-  const worktreeQueries = useAllProjectWorktrees(
-    orderedProjects,
-    warm ? { refetchOnMount: false } : {},
-  );
+  // Read here rather than inside the row builders so the two views
+  // share one set of reads. Toggling the view then costs nothing: the
+  // builders are plain functions over these results.
+  const worktreeQueries = useAllProjectWorktrees(orderedProjects);
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
   // Peers' forests, merged in beside the local rows.
   const { items: remoteItems, loading: remoteLoading } = useRemoteForests({
-    refetchOnMount: !warm,
     inboxFacts,
   });
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);

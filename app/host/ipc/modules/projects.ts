@@ -5,6 +5,7 @@ import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Views from "@host/lib/views";
+import { gitContract } from "@shigomori/contracts/modules/git";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
@@ -119,12 +120,23 @@ export const projectsViews: ViewHandlers<
   typeof projectsContract,
   Views.Services
 > = {
-  // The usage log orders the list; terrier's identities and a missing
-  // folder are not the store's, and show on the next write.
+  // The usage log orders the list, and the device config says whether
+  // terrier's projects join it. A project's remote is git's, which the
+  // git watcher announces (a publish's push). Terrier's identities and
+  // a missing folder are neither, and show on the next of these.
   watch: () =>
     Views.view(
       listProjectsWithStatus,
-      Views.wrote("projects", "project_order", "project_config", "usage"),
+      Views.either(
+        Views.wrote(
+          "projects",
+          "project_order",
+          "project_config",
+          "usage",
+          "device_config",
+        ),
+        Views.pushed(gitContract, "projectChanged"),
+      ),
     ),
 };
 

@@ -116,13 +116,13 @@ export function AppShell() {
 }
 
 // The wide layout's sidebar is always mounted and keeps every peer's
-// listing fresh. The phone layout's forest is a page that unmounts on
-// every tab switch. One calm observer here keeps the cache warm, so
-// coming back to the forest paints from it instead of from "Loading
-// forests…" while every peer is re-listed. It stands in for the
-// forest's other standing job too: opening the project of the page on
-// screen (openProject.ts), so the Projects tab comes back inside the
-// project just visited.
+// views streaming. The phone layout's forest is a page that unmounts on
+// every tab switch. One reader here keeps them streaming, so coming
+// back to the forest paints at once instead of from "Loading forests…"
+// while every peer's views start again. It stands in for the forest's
+// other standing job too: opening the project of the page on screen
+// (openProject.ts), so the Projects tab comes back inside the project
+// just visited.
 function ForestKeepalive() {
   const { items } = useRemoteForests();
   const { data: projects = [] } = useProjects();

@@ -7,6 +7,6 @@
 // hoist above the install call, so it goes through a dynamic import.
 import { installWebBridge } from "./preload";
 
-installWebBridge();
+const bridge = installWebBridge();
 
-void import("./boot");
+void import("./boot").then(({ bootWeb }) => bootWeb(bridge.links));
