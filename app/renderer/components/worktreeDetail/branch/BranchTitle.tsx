@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, Pencil, X } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
+import { CopyButton } from "@/components/ui/copy-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,10 +42,15 @@ const SIZES = {
   },
 } as const;
 
+// The branch's buttons wait for the cursor.
+const HOVER_ONLY =
+  "shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 focus-visible:opacity-100";
+
 // The branch, renamed in place. The page's title, unless the work has
 // a title of its own (useWorktreeTitle), and then a line under it.
-// Rename, switch and copy sit behind one button, so the line keeps its
-// room for what's beside it (WorktreeHeader).
+// Rename, switch and copy sit beside it, and behind one button on a
+// phone, so the name keeps the room. Only copy on a peer that takes no
+// commands from here.
 export function BranchTitle({
   worktree,
   subtitle = false,
@@ -57,13 +63,18 @@ export function BranchTitle({
   const [draft, setDraft] = useState<string | null>(null);
   const editing = draft !== null;
   const rename = useRenameBranch();
+  const { canCommand } = useCommandAccess();
+  const [switching, setSwitching] = useState(false);
+  // A detached head has no branch to rename, but can switch onto one.
+  const canRename = canCommand && !worktree.detached;
+  const copyLabel = worktree.detached ? "Copy commit hash" : "Copy branch name";
   const titleRef = useRef<HTMLHeadingElement>(null);
   const size = SIZES[subtitle ? "subtitle" : "title"];
   const Heading = size.heading;
 
   const begin = () => {
     // Detached HEAD has no branch to rename, so guard against any caller
-    // (incl. future keybindings) that bypasses the menu, which hides it.
+    // (incl. future keybindings) that bypasses the hidden pencil button.
     if (worktree.detached) return;
     rename.reset();
     setDraft(worktree.branch);
@@ -137,7 +148,7 @@ export function BranchTitle({
   }
 
   return (
-    <div className="group/branch flex min-w-0 items-center gap-1.5">
+    <div className="group/copy flex min-w-0 items-center gap-1.5">
       <SimpleTooltip
         whenTruncated
         tip={
@@ -156,24 +167,51 @@ export function BranchTitle({
           />
         </Heading>
       </SimpleTooltip>
-      <BranchMenu worktree={worktree} anchorRef={titleRef} onRename={begin} />
+      <div className="contents phone:hidden">
+        {canRename && (
+          <IconButton
+            onClick={begin}
+            aria-label="Rename branch"
+            className={HOVER_ONLY}
+          >
+            <Pencil className="size-3.5" />
+          </IconButton>
+        )}
+        {/* Mounted on a phone too, where the menu opens it. */}
+        {canCommand && (
+          <BranchSwitcher
+            worktree={worktree}
+            anchorRef={titleRef}
+            open={switching}
+            onOpenChange={setSwitching}
+            className={HOVER_ONLY}
+          />
+        )}
+        <CopyButton value={worktree.branch} label={copyLabel} />
+      </div>
+      <BranchMenu
+        branch={worktree.branch}
+        copyLabel={copyLabel}
+        onRename={canRename ? begin : undefined}
+        onSwitch={canCommand ? () => setSwitching(true) : undefined}
+      />
     </div>
   );
 }
 
-// Rename, switch and copy behind one button. Only copy on a peer that
-// takes no commands from here.
+// The phone's stand-in for the buttons beside the branch. Rename and
+// switch only where BranchTitle offers them.
 function BranchMenu({
-  worktree,
-  anchorRef,
+  branch,
+  copyLabel,
   onRename,
+  onSwitch,
 }: {
-  worktree: Worktree;
-  anchorRef: React.RefObject<HTMLElement | null>;
-  onRename: () => void;
+  branch: string;
+  copyLabel: string;
+  onRename?: () => void;
+  onSwitch?: () => void;
 }) {
-  const [switching, setSwitching] = useState(false);
-  const { canCommand } = useCommandAccess();
   // Set when an item hands focus on (the rename field, the switcher),
   // so the closing menu doesn't take it back to its button.
   const handedOff = useRef(false);
@@ -182,52 +220,42 @@ function BranchMenu({
     action();
   };
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <IconButton
-              aria-label="Branch actions"
-              className="shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/branch:opacity-100 focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
-            >
-              <ChevronDown aria-hidden className="size-3.5" />
-            </IconButton>
-          }
-        />
-        <DropdownMenuContent
-          align="start"
-          sideOffset={4}
-          finalFocus={() => {
-            const keep = handedOff.current;
-            handedOff.current = false;
-            return !keep;
-          }}
-        >
-          {/* A detached head has no branch to rename, but can switch
-              onto one. */}
-          {canCommand && !worktree.detached && (
-            <DropdownMenuItem onClick={handOff(onRename)}>
-              Rename branch
-            </DropdownMenuItem>
-          )}
-          {canCommand && (
-            <DropdownMenuItem onClick={handOff(() => setSwitching(true))}>
-              Switch branch…
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            onClick={() => void navigator.clipboard.writeText(worktree.branch)}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <IconButton
+            aria-label="Branch actions"
+            className="hidden shrink-0 text-muted-foreground/50 data-[popup-open]:bg-accent data-[popup-open]:text-foreground phone:block"
           >
-            {worktree.detached ? "Copy commit hash" : "Copy branch name"}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <BranchSwitcher
-        worktree={worktree}
-        anchorRef={anchorRef}
-        open={switching}
-        onOpenChange={setSwitching}
+            <ChevronDown aria-hidden className="size-3.5" />
+          </IconButton>
+        }
       />
-    </>
+      <DropdownMenuContent
+        align="start"
+        sideOffset={4}
+        finalFocus={() => {
+          const keep = handedOff.current;
+          handedOff.current = false;
+          return !keep;
+        }}
+      >
+        {onRename && (
+          <DropdownMenuItem onClick={handOff(onRename)}>
+            Rename branch
+          </DropdownMenuItem>
+        )}
+        {onSwitch && (
+          <DropdownMenuItem onClick={handOff(onSwitch)}>
+            Switch branch…
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          onClick={() => void navigator.clipboard.writeText(branch)}
+        >
+          {copyLabel}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
