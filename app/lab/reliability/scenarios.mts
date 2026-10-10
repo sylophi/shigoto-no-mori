@@ -450,11 +450,17 @@ async function outageShown(lab: Lab, boundMs: number): Promise<number> {
   return Date.now() - since;
 }
 
-// Notes when each desktop window stops reading the host as Connected,
-// until `until`.
-async function noteWindowsOutage(lab: Lab, since: number, until: number) {
+// How long the desktop windows took to stop reading the host as
+// Connected once the network went: the OS's offline word, passed to the
+// host, has it probe every link (a verdict within 5 s) instead of
+// waiting out a heartbeat. Answers what broke that bound.
+async function windowsOutageShown(
+  lab: Lab,
+  since: number,
+  boundMs: number,
+): Promise<string[]> {
   const pending = new Set(lab.windows);
-  while (pending.size > 0 && Date.now() < until) {
+  while (pending.size > 0 && Date.now() - since < boundMs) {
     for (const tab of pending) {
       if (!(await showsConnected(lab, tab).catch(() => true))) {
         lab.note(
@@ -465,17 +471,15 @@ async function noteWindowsOutage(lab: Lab, since: number, until: number) {
     }
     await sleep(500);
   }
-  for (const tab of pending) {
-    lab.note(
-      `${tab.name} still read the host as Connected when it came back`,
-      "warning",
-    );
-  }
+  return [...pending].map(
+    (tab) =>
+      `${tab.name} still read the host as Connected ${boundMs / 1000} s into the outage`,
+  );
 }
 
 const networkDrop: Scenario = {
   name: "network-drop",
-  does: "The clients' network goes for 20 to 60 s (every flow stalls, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. The terminal lists and sends meanwhile.",
+  does: "The clients' network goes for 20 to 60 s (every flow stalls, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. A tab has to stop reading the host as Connected within 10 s and a window within 15 s. The terminal lists and sends meanwhile.",
   boundMs: 30_000,
   async run(lab, random) {
     const ms = between(random, 20_000, 60_000);
@@ -484,11 +488,10 @@ const networkDrop: Scenario = {
     lab.network.down();
     await forEachPage(lab, (tab) => tab.setOffline(true));
     changeHost(lab);
-    const windows = noteWindowsOutage(lab, down, down + ms);
+    const windows = windowsOutageShown(lab, down, 15_000);
     const shown = await outageShown(lab, 10_000);
     lab.note(`the tabs showed the outage after ${shown} ms`);
-    const broke = await terminalDuringOutage(lab);
-    await windows;
+    const broke = [...(await terminalDuringOutage(lab)), ...(await windows)];
     await sleep(Math.max(0, down + ms - Date.now()));
     lab.network.restore({ cut: true });
     await forEachPage(lab, (tab) => tab.setOffline(false));
@@ -890,13 +893,11 @@ export const SOAK_SCENARIOS: readonly Scenario[] = [
   reloadAndThirdWindow,
   twoTabsRedial,
   tokenExpiry,
+  clockSkew,
 ];
 
-// clock-skew joins the soak once a skewed device connects (V3.md, the
-// reliability pass).
 export const ALL_SCENARIOS: readonly Scenario[] = [
   ...SOAK_SCENARIOS,
-  clockSkew,
   signOutWithSibling,
 ];
 
