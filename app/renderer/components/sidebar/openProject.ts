@@ -9,12 +9,15 @@
 // stays open. A module store rather than sidebar state, like the device
 // filter: the phone layout unmounts the forest between its tabs, and
 // coming back should find the same project open. Session-only, since
-// the project of the page on screen opens on its own (below).
+// the project of the page on screen opens on its own (below). Each
+// window follows its own page, and the windows of one page (the
+// marketing site's frames) share the open project.
 import { useEffect } from "react";
 import { useParams } from "@tanstack/react-router";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
 import { rowDeviceId } from "@/lib/routePaths";
+import { useWindowRoot } from "@/lib/themeRoot";
 import {
   createExternalStore,
   useExternalStore,
@@ -24,16 +27,24 @@ import { projectGroupKey } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts
 const store = createExternalStore<{
   // Null on the list.
   key: string | null;
-  // The page whose project was last opened for it, so each page is
-  // followed once. Beside the key rather than in a component, so a
-  // forest that remounts under the same page does not follow it again.
-  followed: string | null;
-}>({ key: null, followed: null });
+  // By window (its theme root), the page whose project was last opened
+  // for it, so each page is followed once. Beside the key rather than in
+  // a component, so a forest that remounts under the same page does not
+  // follow it again.
+  followed: ReadonlyMap<HTMLElement, string>;
+}>({ key: null, followed: new Map() });
 
 // Null goes back to the list.
 export function setOpenProject(groupKey: string | null): void {
-  const { key, followed } = store.get();
-  if (key !== groupKey) store.publish({ key: groupKey, followed });
+  const state = store.get();
+  if (state.key !== groupKey) store.publish({ ...state, key: groupKey });
+}
+
+function withFollowed(root: HTMLElement, page: string | null) {
+  const followed = new Map(store.get().followed);
+  if (page === null) followed.delete(root);
+  else followed.set(root, page);
+  return followed;
 }
 
 // The open project, following the page on screen: the project a page
@@ -56,7 +67,9 @@ export function useOpenProject(
   // Undefined off a project's pages, and until the project is listed.
   onScreenKey: string | undefined;
 } {
-  const { key, followed } = useExternalStore(store);
+  const { key, followed: followedBy } = useExternalStore(store);
+  const root = useWindowRoot();
+  const followed = followedBy.get(root) ?? null;
   const { deviceId, projectId, worktreeId } = usePageOnScreen();
   const page =
     deviceId === undefined || projectId === undefined
@@ -64,16 +77,18 @@ export function useOpenProject(
       : `${deviceId}:${projectId}:${worktreeId ?? ""}`;
   const onScreenKey = groupKeyOnScreen(deviceId, projectId, projects, remote);
   // Waits, render after render, for the page's project to be listed.
-  const following =
+  const follow =
     page !== null && page !== followed && onScreenKey !== undefined;
   useEffect(() => {
-    if (following) store.publish({ key: onScreenKey, followed: page });
+    if (follow) {
+      store.publish({ key: onScreenKey, followed: withFollowed(root, page) });
+    }
     // Off the project's pages, the next visit to one is a new page.
     else if (page === null && followed !== null) {
-      store.publish({ key, followed: null });
+      store.publish({ ...store.get(), followed: withFollowed(root, null) });
     }
   });
-  return { openKey: following ? onScreenKey : key, onScreenKey };
+  return { openKey: follow ? onScreenKey : key, onScreenKey };
 }
 
 // The device, project and worktree the page on screen belongs to, as
