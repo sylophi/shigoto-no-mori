@@ -18,9 +18,8 @@
 // project itself down. The page renders it in two parts, the way it
 // does the local footer's (PeerTransferActions.tsx).
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { RefreshCw, Shovel } from "lucide-react";
 import type { TransferPartProps } from "./PeerTransferActions";
-import { OptionActionView } from "@shigomori/ui/views/worktreeDetail/WorktreeOptionsView.tsx";
+import { TransferActionsView } from "@shigomori/ui/views/worktreeDetail/TransferActionsView.tsx";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -30,9 +29,7 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
-import { FooterActionButtonView } from "@shigomori/ui/views/worktreeDetail/FooterActionButtonView.tsx";
 import { NoIdentityNoteView } from "@shigomori/ui/views/worktreeDetail/NoIdentityNoteView.tsx";
-import { LABEL_RANK } from "@shigomori/ui/views/worktreeDetail/FooterVerbView.tsx";
 import { MirrorDialog } from "./mirror/MirrorDialog";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 
@@ -77,12 +74,6 @@ function TransferActions(props: ButtonsProps) {
   );
 }
 
-// Muted footer text, the shape the read-only note in the same footer
-// uses. It truncates on a narrow window, and then its tooltip shows it
-// whole. The
-// branch names spell out DEFAULT_BRANCH_CANDIDATES in
-// shared/git/defaultBranch.mts (the renderer bundle cannot import .mts),
-// so a change there changes this sentence.
 function TransferButtons({
   worktree,
   project,
@@ -100,23 +91,6 @@ function TransferButtons({
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
   const blocker = useMirrorHereBlocker(deviceLabel);
-  if (part === "option") {
-    // Transplant is destructive on the remote side, so it opens the
-    // review dialog: the dialog is the confirmation. Not while
-    // mirrored, like the local footer's.
-    return (
-      buttons &&
-      !worktree.isPrimary &&
-      !mirrored && (
-        <OptionActionView
-          icon={<Shovel />}
-          label="Transplant"
-          description="Move this worktree to this device."
-          onClick={() => setOpen("transplant")}
-        />
-      )
-    );
-  }
   const dialog = {
     worktree,
     project,
@@ -126,28 +100,31 @@ function TransferButtons({
     onClose: () => setOpen(null),
   };
   return (
-    <>
-      {/* Mirror is the peer's send followed by a live two-way mirror
-          between its worktree and the new copy here, both run on the
-          peer, which holds the original, asked for through this
-          device's own start (which invites them past its switch) and
-          driven by the mirror dialog. It only exists in the app: the
-          copy lands on this machine, which a browser is not. A mirror
-          withdraws the button, not an OPEN dialog: the mirror it
-          starts is what withdraws it, and the dialog's last step (the
-          report) must stay up. */}
-      {buttons && canForwardPorts && !mirrored && (
-        <FooterActionButtonView
-          rank={LABEL_RANK.mirrorTo}
-          icon={<RefreshCw />}
-          label="Mirror"
-          tip="Keep a live copy of this worktree on this device"
-          disabledReason={blocker}
-          onClick={() => setOpen("mirror")}
-        />
-      )}
-      {open === "mirror" && <MirrorDialog {...dialog} />}
-      {open === "transplant" && <TransplantDialog {...dialog} />}
-    </>
+    <TransferActionsView
+      part={part}
+      here
+      // Mirror is the peer's send followed by a live two-way mirror
+      // between its worktree and the new copy here, both run on the
+      // peer, which holds the original, asked for through this device's
+      // own start (which invites them past its switch) and driven by
+      // the mirror dialog. It only exists in the app: the copy lands on
+      // this machine, which a browser is not. A mirror withdraws the
+      // button, not an OPEN dialog: the mirror it starts is what
+      // withdraws it, and the dialog's last step (the report) must
+      // stay up.
+      mirror={buttons && canForwardPorts && !mirrored ? { blocker } : null}
+      // Transplant is destructive on the remote side, so it opens the
+      // review dialog: the dialog is the confirmation. Not while
+      // mirrored, like the local footer's.
+      transplant={buttons && !worktree.isPrimary && !mirrored}
+      dialog={
+        open === "mirror" ? (
+          <MirrorDialog {...dialog} />
+        ) : open === "transplant" ? (
+          <TransplantDialog {...dialog} />
+        ) : null
+      }
+      onOpen={setOpen}
+    />
   );
 }
