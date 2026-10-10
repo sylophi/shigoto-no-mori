@@ -181,22 +181,15 @@ export function createAccountStore(opts: {
     ) {
       return null;
     }
-    try {
-      return {
-        credential: stored.enc
-          ? cipher.decrypt(stored.credential)
-          : stored.credential,
-        accountId: stored.accountId,
-      };
-    } catch {
-      // Decrypt failure (keychain rotated, moved machine) is
-      // unrecoverable for this credential. Treat it as signed out so
-      // the user can sign in again.
-      return null;
-    }
+    const credential = open(stored.enc, stored.credential);
+    return credential === null
+      ? null
+      : { credential, accountId: stored.accountId };
   }
 
-  // One secret as stored, or null when it cannot be opened.
+  // One secret as stored, or null when it cannot be opened: a decrypt
+  // failure (keychain rotated, moved machine) is unrecoverable for it,
+  // so it reads as signed out and the user can sign in again.
   function open(enc: boolean, stored: string): string | null {
     try {
       return enc ? cipher.decrypt(stored) : stored;
